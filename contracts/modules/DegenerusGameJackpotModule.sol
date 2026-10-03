@@ -303,6 +303,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     uint256 private constant ETH_WINNER_GAS_MAX = GasBounds.JACKPOT_ETH_WINNER_GAS_MAX;
     uint256 private constant TICKET_DRAW_GAS_MAX = GasBounds.JACKPOT_TICKET_DRAW_GAS_MAX;
     uint256 private constant TICKET_AWARD_GAS_MAX = GasBounds.JACKPOT_TICKET_AWARD_GAS_MAX;
+    uint256 private constant TICKET_AWARD_CHUNK = GasBounds.JACKPOT_TICKET_AWARD_CHUNK;
 
     // =========================================================================
     // External Entry Points (delegatecall targets)
@@ -694,10 +695,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
 
     /// @dev Regenerating the frozen source draw has no side effects. Awarded
     ///      tickets only enter a queue; they never mutate these source buckets.
+    ///      Awards run in fixed chunks: caller gas picks whether a chunk runs, never its size.
     function _resumeTicketWork(JackpotWork storage work, TicketWorkPlan memory plan,
         MineFlipGas.Meter memory meter, MineFlipGas.Result memory result) private
     {
         uint8 q = work.quadrant;
+        uint256 i = work.winner;
         while (q < 4) {
             uint16 count = plan.counts[q];
             if (count == 0) {
@@ -706,30 +709,35 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
                 result.progressed = true;
                 continue;
             }
+            uint256 n = uint256(count) - i;
+            if (n > TICKET_AWARD_CHUNK) n = TICKET_AWARD_CHUNK;
             uint256 drawBound = 50_000 + uint256(count) * TICKET_DRAW_GAS_MAX;
-            if (!MineFlipGas.canRun(meter, drawBound + TICKET_AWARD_GAS_MAX, JACKPOT_TAIL_GAS)) break;
+            if (!MineFlipGas.canRun(meter, drawBound + n * TICKET_AWARD_GAS_MAX, JACKPOT_TAIL_GAS)) break;
             (address[] memory winners, uint256[] memory indexes) = _randTraitTicket(
                 plan.sourceLvl, EntropyLib.hash2(plan.entropy, q), plan.traits[q], uint8(count),
                 uint8(plan.salt + q), plan.lens[q], plan.deities[q]
             );
-            uint256 i = work.winner;
+            result.progressed = true;
             while (i < winners.length) {
-                if (!MineFlipGas.canRun(meter, TICKET_AWARD_GAS_MAX, JACKPOT_TAIL_GAS)) break;
-                address winner = winners[i];
-                if (winner != address(0)) {
-                    _queueEntries(winner, plan.queueLvl, uint32(plan.entriesEach), true);
-                    emit JackpotTicketWin(winner, plan.queueLvl, plan.traits[q], uint32(plan.entriesEach),
-                        plan.sourceLvl, indexes[i], false);
+                for (uint256 end = i + n; i < end; ++i) {
+                    address winner = winners[i];
+                    if (winner != address(0)) {
+                        _queueEntries(winner, plan.queueLvl, uint32(plan.entriesEach), true);
+                        emit JackpotTicketWin(winner, plan.queueLvl, plan.traits[q], uint32(plan.entriesEach),
+                            plan.sourceLvl, indexes[i], false);
+                    }
                 }
-                ++i;
-                ++result.rewardBasis;
-                result.progressed = true;
+                result.rewardBasis += n;
+                n = winners.length - i;
+                if (n > TICKET_AWARD_CHUNK) n = TICKET_AWARD_CHUNK;
+                if (n != 0 && !MineFlipGas.canRun(meter, n * TICKET_AWARD_GAS_MAX, JACKPOT_TAIL_GAS)) break;
             }
-            if (i != winners.length) { work.winner = uint16(i); break; }
-            work.winner = 0;
+            if (i < winners.length) break;
+            i = 0;
             ++q;
         }
         if (q != work.quadrant) work.quadrant = q;
+        if (i != work.winner) work.winner = uint16(i);
     }
 
     /// @dev Bounded sibling-module award. Early bird passes latched claim units and the

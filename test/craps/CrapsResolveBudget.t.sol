@@ -54,6 +54,12 @@ contract CrapsResolveBudgetTest is CrapsPins {
     // A. What a budget buys
     // ════════════════════════════════════════════════════════════════════════
 
+    /// @dev The last admitted seat flushes every accumulated credit; that chunk stays within 10M.
+    function test_LastSeatAndFullCreditFlushFitPerChunkCeiling() public view {
+        (uint256 seat, uint256 credit, uint256 tail) = craps.seatUnits();
+        assertLe(seat + tail + uint256(craps.resolveMaxSeats()) * credit + 2_000, 10_000_000);
+    }
+
     /// @dev THE BOUNDARIES. Zero settles nothing at all; the smallest nonzero budget settles
     ///      exactly one seat, because the meter is read AFTER a seat rather than before; and a
     ///      budget past what the field costs settles the field and stops there.
@@ -91,7 +97,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
     /// @dev THE SEAT CEILING IS ABSOLUTE, and independent of the budget. It bounds the two credit
     ///      arrays and the loop counter, so no caller can make one call allocate without limit.
     function test_theSeatCeilingBoundsOneCallWhateverTheBudgetIs() public {
-        assertEq(craps.resolveMaxSeats(), 256, "the seat ceiling moved");
+        assertEq(craps.resolveMaxSeats(), 96, "the seat ceiling moved");
         // The suite's fields are far below the ceiling, so this states the rule rather than
         // driving it: the ceiling is a `from + max` clamp on the offered end, above every field
         // any fixture here builds.

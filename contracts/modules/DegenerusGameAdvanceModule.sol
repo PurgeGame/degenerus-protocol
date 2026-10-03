@@ -853,9 +853,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         uint256 reserve = claimablePool;
         if (ethBal <= reserve) return;
         uint256 stakeable = ethBal - reserve;
+        MineFlipGas.requireStipend(500_000);
         try steth.submit{value: stakeable, gas: 500_000}(address(0)) returns (uint256) {}
-        catch (bytes memory reason) {
-            MineFlipGas.rethrowGasFailure(reason);
+        catch {
             emit StEthStakeFailed(stakeable);
         }
     }

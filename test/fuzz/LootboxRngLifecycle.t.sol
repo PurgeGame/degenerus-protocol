@@ -84,9 +84,39 @@ contract LootboxRngLifecycle is DeployProtocol {
         _lastFulfilledReqId = 0;
     }
 
+    /// @dev Answer and publish every mid-day request the miner issues for closed Craps windows
+    ///      until it has no work left today. Publishing one window's word can arm the next closed
+    ///      window and request its word in the same call, so this loops to quiescence.
+    function _settleMiddayRequests() internal {
+        for (uint256 i = 0; i < 64; i++) {
+            uint8 action = game.minerAction();
+            if (action == 0) return; // Idle
+            assertFalse(game.rngLocked(), "only mid-day work is settled here");
+            assertTrue(action != 17, "settling mid-day work must not reach a daily request"); // RequestDaily
+            if (action == 2) {
+                // Wait: the live mid-day request is unanswered.
+                uint256 rid = _readVrfRequestId();
+                assertEq(rid, mockVRF.lastRequestId(), "live request is the coordinator's latest");
+                assertEq(_readRngWordCurrent(), 0, "waiting request has no word yet");
+                mockVRF.fulfillRandomWords(rid, uint256(keccak256(abi.encode("midday", rid))));
+                _lastFulfilledReqId = rid;
+            } else {
+                game.mineFlip();
+            }
+        }
+        fail("mid-day requests did not settle");
+    }
+
     /// @dev Setup for mid-day lootbox RNG: complete a day, make a purchase on the
     ///      new day to create pending lootbox ETH, fund VRF subscription with LINK.
     function _setupForMidDayRng() internal returns (uint256 ts) {
+        return _setupForMidDayRng(false);
+    }
+
+    /// @param quietCraps Fund LINK before the purchase and settle the mid-day requests for
+    ///        closed Craps windows, so the lootbox request under test is the only mid-day
+    ///        work and its publication arms no further window.
+    function _setupForMidDayRng(bool quietCraps) internal returns (uint256 ts) {
         // Complete day 1
         _completeDay(0xDEAD0001);
 
@@ -98,6 +128,11 @@ contract LootboxRngLifecycle is DeployProtocol {
 
         _finishReadBoxes();
 
+        if (quietCraps) {
+            mockVRF.fundSubscription(1, 100e18);
+            _settleMiddayRequests();
+        }
+
         // Purchase with lootbox amount to create pending ETH
         address buyer = makeAddr("lootboxBuyer");
         vm.deal(buyer, 100 ether);
@@ -105,7 +140,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         game.purchase{value: 1.01 ether}(buyer, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
 
         // Fund VRF subscription with LINK
-        mockVRF.fundSubscription(1, 100e18);
+        if (!quietCraps) mockVRF.fundSubscription(1, 100e18);
 
         ts = block.timestamp;
     }
@@ -283,7 +318,9 @@ contract LootboxRngLifecycle is DeployProtocol {
     function test_wordWriteMidDay(uint256 vrfWord) public {
         vm.assume(vrfWord > 1);
 
-        _setupForMidDayRng();
+        // Closed Craps windows are settled first: publishing a window's word can arm the next
+        // closed window and request it in the same call, recycling this word's buffer.
+        _setupForMidDayRng(true);
 
         uint48 indexBefore = _readLootboxRngIndex();
 
@@ -329,26 +366,26 @@ contract LootboxRngLifecycle is DeployProtocol {
         uint256 day4Start = 4 * 86400;
         vm.warp(day4Start);
 
-        // mineFlip on day 4: rngGate sees requestDay < day, redirects stale word
-        // to lootbox via _finalizeLootboxRng. The game processes both days inline.
-        game.mineFlip();
-
-        // Process until unlocked
-        for (uint256 i = 0; i < 50; i++) {
-            if (!game.rngLocked()) break;
-            uint256 latestReqId = mockVRF.lastRequestId();
-            if (latestReqId > _lastFulfilledReqId) {
-                mockVRF.fulfillRandomWords(latestReqId, vrfWord ^ 0xDADA);
-                _lastFulfilledReqId = latestReqId;
-            }
-            game.mineFlip();
-        }
-
-        // The stale word should now be stored at the reserved index.
+        // The stale word should be stored at the reserved index. It is read before day 4's
+        // first call: the call that completes the stale day also issues day 4's request,
+        // which recycles this buffer.
         // The stored value may be the raw VRF word or a derived (keccak256) word
         // depending on whether the stale redirect path or backfill path was taken.
         uint256 storedWord = _readLootboxWord(reservedIndex);
         assertTrue(storedWord != 0, "Stale redirect should store nonzero word at correct index");
+
+        // mineFlip on day 4: rngGate sees requestDay < day, redirects stale word
+        // to lootbox via _finalizeLootboxRng. The game processes both days inline.
+        game.mineFlip();
+
+        // Process the stale day until its request is retired (the completing call may issue
+        // day 4's request); the stale word is still the published word until then.
+        for (uint256 i = 0; i < 50; i++) {
+            if (!game.rngLocked() || _readVrfRequestId() != reqId) break;
+            assertEq(_readLootboxWord(reservedIndex), storedWord, "stale word stays at the reserved index");
+            game.mineFlip();
+        }
+        assertTrue(game.rngWordForDay(3) != 0, "Stale word completes its own day");
     }
 
     /// @notice A coordinator swap re-sends the stalled request for the same reserved index, and
@@ -372,8 +409,8 @@ contract LootboxRngLifecycle is DeployProtocol {
         // The re-sent request is answered two days late and finishes day 3
         vm.warp(5 * 86400);
         newVRF.fundSubscription(1, 100e18);
-        _fulfillAndDrain(newVRF, 0xDEAD0005);
-        assertTrue(_readLootboxWord(reservedIndex) != 0, "the re-sent request's word finalizes the reserved index");
+        uint256 published = _fulfillAndDrain(newVRF, 0xDEAD0005, reservedIndex);
+        assertTrue(published != 0, "the re-sent request's word finalizes the reserved index");
     }
 
     function _deliverCallback(uint256 request, uint256 word) private {
@@ -455,12 +492,23 @@ contract LootboxRngLifecycle is DeployProtocol {
         assertEq(_readLootboxWord(buffer), 0, "reserved entropy cannot publish a word");
     }
 
-    function _fulfillAndDrain(MockVRFCoordinator vrf, uint256 word) internal {
-        vrf.fulfillRandomWords(vrf.lastRequestId(), word);
+    /// @dev Answer the live request and drain its session until its day completes. A late answer
+    ///      can complete its day after the next boundary, and the completing call then issues
+    ///      the next request, so the drain also stops once the request ID moves on. Returns the
+    ///      word published at `index` while the answered request was still live (the next
+    ///      request recycles that buffer).
+    function _fulfillAndDrain(MockVRFCoordinator vrf, uint256 word, uint48 index)
+        internal returns (uint256 published)
+    {
+        uint256 request = vrf.lastRequestId();
+        assertEq(_readVrfRequestId(), request, "answering the live request");
+        vrf.fulfillRandomWords(request, word);
         for (uint256 i = 0; i < 50; i++) {
-            if (!game.rngLocked()) break;
+            if (!game.rngLocked() || _readVrfRequestId() != request) break;
             game.mineFlip();
+            if (_readVrfRequestId() == request && _readLootboxWord(index) != 0) published = _readLootboxWord(index);
         }
+        assertTrue(!game.rngLocked() || _readVrfRequestId() != request, "answered request's day completes");
     }
 
     /// @notice Mid-day rawFulfillRandomWords with word=0 stores 1 at the lootbox index.
@@ -521,7 +569,8 @@ contract LootboxRngLifecycle is DeployProtocol {
     /// @notice Same player with different amounts at different indices produces different entropy.
     ///         Different committed words select different streams; amount does not select the seed.
     function test_entropyUniqueDifferentCommittedWords(uint256 vrfWord) public {
-        vm.assume(vrfWord > 1);
+        // Words 0 and 1 are sentinels for both draws, including the derived second word.
+        vm.assume(vrfWord > 1 && (vrfWord ^ 0xBEEF) > 1);
 
         address buyer = makeAddr("amountBuyer");
         uint48 index1 = _readLootboxRngIndex();
@@ -670,8 +719,9 @@ contract LootboxRngLifecycle is DeployProtocol {
 
     /// @notice Full mid-day lifecycle: purchase -> requestLootboxRng -> VRF fulfill -> openLootBox.
     function test_fullLifecycleMidDayPath() public {
-        // Setup: complete a day first so daily word exists for today
-        _setupForMidDayRng();
+        // Setup: complete a day first so daily word exists for today. Closed Craps windows are
+        // settled first so the publication below arms no further window and requests nothing.
+        _setupForMidDayRng(true);
 
         address buyer = makeAddr("midDayBuyer");
 

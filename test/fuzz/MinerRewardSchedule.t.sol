@@ -11,8 +11,8 @@ contract MinerRewardScheduleHarness is DegenerusGameMinerModule {
         return _minerRewardTerms(elapsed);
     }
 
-    function dueAt(MinerAction action) external view returns (uint256) {
-        return _minerRewardDueAt(action);
+    function dueAt() external view returns (uint256) {
+        return _minerRewardDueAt();
     }
 
     function seed(uint24 processedDay, uint24 preparationDay, uint48 requestTime, uint48 readyAt) external {
@@ -54,44 +54,33 @@ contract MinerRewardScheduleTest is Test {
         _assertTerms(elapsed, 8 gwei, 27500);
     }
 
-    function test_EveryReadConsumerUsesTheAcceptedCallbackAnchor() public {
-        harness.seed(27, 28, 100_000, 200_000);
-        for (uint8 action = uint8(DegenerusGameStorage.MinerAction.Publish);
-            action <= uint8(DegenerusGameStorage.MinerAction.CertifyRead); ++action) {
-            assertEq(harness.dueAt(DegenerusGameStorage.MinerAction(action)), 200_000);
-        }
-        harness.seed(28, 29, 300_000, 200_000);
-        for (uint8 action = uint8(DegenerusGameStorage.MinerAction.Publish);
-            action <= uint8(DegenerusGameStorage.MinerAction.CertifyRead); ++action) {
-            assertEq(harness.dueAt(DegenerusGameStorage.MinerAction(action)), 200_000);
-        }
+    function _reset() private view returns (uint256) {
+        return block.timestamp - (block.timestamp - 82_620) % 1 days;
     }
 
-    function test_DailyAgeStartsAtEarliestOwedResetAndIgnoresPreparationProgress() public {
-        harness.seed(27, 27, 100_000, 1);
-        uint256 expected = (uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) + 27) * 1 days + 82_620;
-        assertEq(harness.dueAt(DegenerusGameStorage.MinerAction.PrepareSubscriptions), expected);
-        assertEq(harness.dueAt(DegenerusGameStorage.MinerAction.RequestDaily), expected);
-        harness.seed(27, 31, 300_000, 200_000);
-        assertEq(harness.dueAt(DegenerusGameStorage.MinerAction.PrepareSubscriptions), expected, "late first miner cannot start a new reward clock");
-        assertEq(harness.dueAt(DegenerusGameStorage.MinerAction.RequestDaily), expected, "partially completed preparation cannot reset age");
-        harness.seed(28, 31, 300_000, 200_000);
-        assertEq(harness.dueAt(DegenerusGameStorage.MinerAction.RequestDaily), expected + 1 days, "completed daily obligation advances the clock");
+    function test_LaterCallbackIsTheClockForEveryAction() public {
+        vm.warp(30 days + 5 hours);
+        uint48 callback = uint48(_reset() + 2 hours);
+        harness.seed(27, 28, 100_000, callback);
+        assertEq(harness.dueAt(), callback, "work waits from the accepted callback");
+        vm.warp(block.timestamp + 6 hours);
+        assertEq(harness.dueAt(), callback, "a late miner cannot restart the clock");
     }
 
-    function test_MaintenanceUsesItsActionableHeadDeadline() public {
-        vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenanceDueAt()"), abi.encode(123_456));
-        harness.seed(27, 28, 100_000, 200_000);
-        assertEq(harness.dueAt(DegenerusGameStorage.MinerAction.Maintenance), 123_456);
-        vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenanceDueAt()"), abi.encode(0));
-        assertEq(harness.dueAt(DegenerusGameStorage.MinerAction.Maintenance), 0, "empty bookkeeping has no invented old deadline");
+    function test_ResetIsTheClockWhenTheLastCallbackIsOlder() public {
+        vm.warp(30 days + 5 hours);
+        harness.seed(27, 28, 100_000, uint48(_reset() - 20 hours));
+        assertEq(harness.dueAt(), _reset(), "reset-time work starts at the base rate");
+        harness.seed(27, 31, 300_000, 0);
+        assertEq(harness.dueAt(), _reset(), "no callback yet still uses the reset");
     }
 
-    function test_OptionalRequestCannotInheritAnOldReadClock() public {
-        harness.seed(27, 28, 100_000, 1);
-        assertEq(harness.dueAt(DegenerusGameStorage.MinerAction.RequestMidday), 0);
-        assertEq(harness.dueAt(DegenerusGameStorage.MinerAction.Idle), 0);
-        assertEq(harness.dueAt(DegenerusGameStorage.MinerAction.Terminal), 0);
-        assertEq(harness.dueAt(DegenerusGameStorage.MinerAction.Wait), 0);
+    function test_ClockIgnoresCallerProgressAndOtherStorage() public {
+        vm.warp(30 days + 5 hours);
+        uint48 callback = uint48(_reset() + 1 hours);
+        harness.seed(27, 27, 100_000, callback);
+        uint256 due = harness.dueAt();
+        harness.seed(28, 31, 900_000, callback);
+        assertEq(harness.dueAt(), due, "daily progress and request time never move the clock");
     }
 }

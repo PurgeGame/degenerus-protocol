@@ -19,10 +19,9 @@ contract DrainPrices is DegenerusGameTicketModule {
 
 /// @notice Analytic cold-write floors for each indivisible checkpoint operation.
 /// @dev These assertions support admission bounds; production execution suites
-///      separately exercise complete calls and measured gas. There is no weighted
-///      write budget or fixed chunk cap: each indivisible operation and its
-///      complete checkpoint tail must fit the caller's remaining gas. The 10M
-///      sizing target below is a benchmark guideline, not a runtime limit.
+///      separately exercise complete calls and measured gas. Each indivisible
+///      operation and its complete checkpoint tail must fit the caller's remaining
+///      gas, and the 10M target below is the per-chunk ceiling for every admitted step.
 contract TicketDrainWorstCaseBound is Test {
     uint256 private constant COLD_SLOAD = 2_100;
     uint256 private constant FRESH_SSTORE = 22_100;
@@ -56,11 +55,11 @@ contract TicketDrainWorstCaseBound is Test {
         assertLe(GasBounds.TICKET_ROUND_MAX + tail, STEP_GAS_TARGET);
         assertLe(GasBounds.TICKET_FOIL_CALL_MAX + tail, STEP_GAS_TARGET);
         // One aligned group and its possible final fractional entry must remain
-        // admissible at the sizing target. Larger budgets can size larger chunks.
+        // admissible, and the largest solo run any budget can admit stays within 10M.
         assertLe(GasBounds.TICKET_SOLO_BASE + 17 * GasBounds.TICKET_ENTRY_MAX + tail,
             STEP_GAS_TARGET);
-        uint256 maxEntries = (STEP_GAS_TARGET - tail - GasBounds.TICKET_SOLO_BASE)
-            / GasBounds.TICKET_ENTRY_MAX;
+        uint256 maxEntries = GasBounds.TICKET_SOLO_MAX_ENTRIES;
+        assertEq(maxEntries % 16, 0, "solo cap preserves aligned group seeds");
         assertGe(maxEntries, 17);
         assertLe(GasBounds.TICKET_SOLO_BASE + maxEntries * GasBounds.TICKET_ENTRY_MAX + tail,
             STEP_GAS_TARGET);

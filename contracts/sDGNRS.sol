@@ -245,6 +245,9 @@ contract sDGNRS {
     ///        on a winning resolving-day coinflip; 0 on a loss or in terminal mode (FLIP ignored).
     event RedemptionClaimed(address indexed player, uint16 roll, uint256 ethPayout, uint256 lootboxEth, uint256 flipPaid);
 
+    /// @notice A live settlement refused by a dependency (e.g. stETH) left the queue with its word kept.
+    event RedemptionParked(address indexed player, uint24 indexed day, bytes reason);
+
     // =====================================================================
     //                          ERC20 METADATA
     // =====================================================================
@@ -403,17 +406,29 @@ contract sDGNRS {
         while (cursor < total) {
             address player = _redemptionPlayers[cursor];
             PendingRedemption memory claim = pendingRedemptions[player][day];
-            uint256 nextMax = 15_000;
-            if (claim.ethValueOwed != 0 || claim.flipEscrow != 0) {
-                (, , uint256 lootbox,) = _redemptionAmounts(claim.ethValueOwed, roll, false);
-                uint256 chunks = lootbox == 0 ? 0 : (lootbox - 1) / 5 ether + 1;
-                nextMax = REDEMPTION_BASE_GAS + chunks * REDEMPTION_CHUNK_GAS;
+            if (claim.ethValueOwed == 0 && claim.flipEscrow == 0) {
+                if (!MineFlipGas.canRun(meter, 15_000, REDEMPTION_TAIL_GAS)) break;
+                _redemptionCursor = uint32(++cursor);
+                continue;
             }
-            if (!MineFlipGas.canRun(meter, nextMax, REDEMPTION_TAIL_GAS)) break;
+            (, , uint256 lootbox,) = _redemptionAmounts(claim.ethValueOwed, roll, false);
+            uint256 chunks = lootbox == 0 ? 0 : (lootbox - 1) / 5 ether + 1;
+            uint256 nextMax = REDEMPTION_BASE_GAS + chunks * REDEMPTION_CHUNK_GAS;
+            // The self-call keeps its whole bound after EIP-150 retention.
+            if (!MineFlipGas.canRun(meter, nextMax + nextMax / 63 + MineFlipGas.CALL_RESERVE,
+                REDEMPTION_TAIL_GAS)) break;
             ++cursor;
             // Commit the frontier before any nested calls, matching manual FIFO settlement.
             _redemptionCursor = uint32(cursor);
-            if (_claimRedemptionFor(player, day, roll, false, word)) ++result.rewardBasis;
+            // A refusing dependency must not hold every later RNG request: park the claim with
+            // its session word and move on. Gas failures still revert the whole transaction.
+            try this.settleRedemptionHead(player, day, roll, word) returns (bool paid) {
+                if (paid) ++result.rewardBasis;
+            } catch (bytes memory reason) {
+                MineFlipGas.rethrowGasFailure(reason);
+                _parkedRedemptionWord[player][day] = word;
+                emit RedemptionParked(player, day, reason);
+            }
         }
         result.progressed = cursor != initialCursor;
         result.done = cursor == total;
@@ -430,6 +445,24 @@ contract sDGNRS {
         _redemptionQueueDay = 0;
         address[] storage players = _redemptionPlayers;
         assembly ("memory-safe") { sstore(players.slot, 0) }
+    }
+
+    /// @dev Self-call target of the miner drain, so a refused claim rolls back alone.
+    function settleRedemptionHead(address player, uint24 day, uint16 roll, uint256 word) external returns (bool) {
+        if (msg.sender != address(this)) revert Unauthorized();
+        return _claimRedemptionFor(player, day, roll, false, word);
+    }
+
+    /// @notice Settle a parked claim on its own session word (fixed outcome). Player or approved operator only.
+    /// @dev Terminal claims take the usual direct terminal shape; the word is then unused.
+    function claimParkedRedemption(address player, uint24 day) external {
+        uint256 word = _parkedRedemptionWord[player][day];
+        if (word == 0) revert NoClaim();
+        if (player != msg.sender && !game.isOperatorApproved(player, msg.sender)) revert Unauthorized();
+        bool isTerminal = game.gameOver();
+        if (!isTerminal && game.livenessTriggered()) revert EndingPending();
+        delete _parkedRedemptionWord[player][day];
+        if (!_claimRedemptionFor(player, day, redemptionPeriods[day], isTerminal, word)) revert NoClaim();
     }
 
     /// @dev Advance before external payout calls. Keep the cohort pending through
@@ -1429,5 +1462,7 @@ contract sDGNRS {
     uint24 private _redemptionQueueDay;
     /// @dev Final session words are >1; retain 1 while waiting or consumed for cheaper reuse.
     uint256 private _redemptionWord = 1;
+    /// @dev Session word of a parked live claim, nonzero until it settles.
+    mapping(address => mapping(uint24 => uint256)) private _parkedRedemptionWord;
 
 }

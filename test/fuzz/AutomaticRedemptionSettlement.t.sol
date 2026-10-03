@@ -108,6 +108,54 @@ contract AutomaticRedemptionSettlementTest is DeployProtocol {
         assertTrue(_process(9_000_000));
     }
 
+    /// @dev A dependency refusing one claim must not hold the cohort (and every later RNG
+    ///      request): the claim parks with its word and settles later, once, for its player.
+    function test_RefusedSettlementParksClaimAndCohortCompletes() public {
+        uint24 day = game.currentDayView();
+        _burn(alice, sdgnrs.totalSupply() / 1000);
+        _burn(bob, sdgnrs.totalSupply() / 1000);
+        _resolve(day, 100, 99);
+        uint256 reserved = sdgnrs.pendingRedemptionEthValue();
+        // Strip custody so the live legs must pull stETH that is not there.
+        uint256 eth = address(sdgnrs).balance;
+        uint256 st = mockStETH.balanceOf(address(sdgnrs));
+        vm.deal(address(sdgnrs), 0);
+        vm.prank(address(sdgnrs));
+        mockStETH.transfer(address(0xDEAD), st);
+
+        vm.recordLogs();
+        vm.prank(address(game));
+        assertTrue(_process(9_000_000), "refused claims do not hold the cohort");
+        assertFalse(sdgnrs.redemptionSettlementPending());
+        assertEq(sdgnrs.pendingRedemptionEthValue(), reserved, "parked reservations stay segregated");
+        uint256 parked;
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter == address(sdgnrs)
+                && logs[i].topics[0] == keccak256("RedemptionParked(address,uint24,bytes)")) ++parked;
+        }
+        assertEq(parked, 2);
+        (uint96 a,,) = sdgnrs.pendingRedemptions(alice, day);
+        assertGt(a, 0, "parked claim keeps its record");
+
+        // Custody restored: only the player (or an approved operator) settles, exactly once.
+        vm.deal(address(sdgnrs), eth);
+        vm.prank(address(0xDEAD));
+        mockStETH.transfer(address(sdgnrs), st);
+        vm.expectRevert(sDGNRS.Unauthorized.selector);
+        vm.prank(bob);
+        sdgnrs.claimParkedRedemption(alice, day);
+        uint256 before = game.claimableWinningsOf(alice);
+        vm.prank(alice);
+        sdgnrs.claimParkedRedemption(alice, day);
+        assertGt(game.claimableWinningsOf(alice), before, "parked claim pays its direct half");
+        (a,,) = sdgnrs.pendingRedemptions(alice, day);
+        assertEq(a, 0);
+        vm.expectRevert(sDGNRS.NoClaim.selector);
+        vm.prank(alice);
+        sdgnrs.claimParkedRedemption(alice, day);
+    }
+
     function _claimTranscript() internal returns (bytes32 digest) {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {

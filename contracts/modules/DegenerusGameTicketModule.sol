@@ -28,6 +28,7 @@ contract DegenerusGameTicketModule is DegenerusGameStorage {
     uint256 internal constant ROUND_MAX = GasBounds.TICKET_ROUND_MAX;
     uint256 internal constant SOLO_BASE = GasBounds.TICKET_SOLO_BASE;
     uint256 internal constant ENTRY_MAX = GasBounds.TICKET_ENTRY_MAX;
+    uint256 internal constant SOLO_MAX_ENTRIES = GasBounds.TICKET_SOLO_MAX_ENTRIES;
     uint256 internal constant FOIL_CALL_MAX = GasBounds.TICKET_FOIL_CALL_MAX;
     uint256 internal constant CALL_OVERHEAD = GasBounds.TICKET_CALL_OVERHEAD;
 
@@ -145,7 +146,7 @@ contract DegenerusGameTicketModule is DegenerusGameStorage {
     function _drainQueue(uint24 rk, uint24 lvl, uint256 entropy, MineFlipGas.Meter memory meter)
         private returns (bool progressed, bool done, uint256 emitted)
     {
-        uint24 marker = lvl | (rk & TICKET_FAR_FUTURE_BIT);
+        uint24 marker = lvl | (rk & (TICKET_FAR_FUTURE_BIT | TICKET_SLOT_BIT));
         if (ticketLevel != marker) {
             // Terminal selection may intentionally abandon another level; never
             // reset a continuation of the same authenticated old read cohort.
@@ -212,6 +213,8 @@ contract DegenerusGameTicketModule is DegenerusGameStorage {
         if (actual < available) available = actual;
         if (available <= TAIL + SOLO_BASE + MineFlipGas.CHECK_RESERVE) return (false, false, 0);
         uint256 maxCount = (available - TAIL - SOLO_BASE - MineFlipGas.CHECK_RESERVE) / ENTRY_MAX;
+        // Larger supplied gas resumes more aligned runs, never one larger chunk.
+        if (maxCount > SOLO_MAX_ENTRIES) maxCount = SOLO_MAX_ENTRIES;
         uint256 whole = owed;
         bool finalTail = whole + (rem == 0 ? 0 : 1) <= maxCount;
         if (!finalTail) {

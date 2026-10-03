@@ -992,7 +992,9 @@ contract JackpotBattle is CrapsBattleStorage {
                 Window memory w = _windowTerms(day, (uint256(cur) % _BONUS_SLOTS_PER_DAY) - 1);
                 _armSlot(cur, w);
                 result.progressed = true;
-                break;
+                // Re-examine the armed slot: a field ends maintenance (done) so the same miner
+                // call can request its word; an empty one steps on to the next head.
+                continue;
             }
             uint256 g = _battles[bytes32(uint256(cur))];
             uint256 entrants = uint32(g);

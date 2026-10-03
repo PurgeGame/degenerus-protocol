@@ -367,7 +367,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             work.progressed = true;
         }
         // The admitted bound covers coordinator gas, EIP-150 and all request
-        // bookkeeping. Gas failures are never interpreted as a semantic refusal.
+        // bookkeeping. With its whole stipend guaranteed, any failure is a refusal.
+        MineFlipGas.requireStipend(GasBounds.RNG_REQUEST - 300_000);
         try vrfCoordinator.requestRandomWords{gas: GasBounds.RNG_REQUEST - 300_000}(VRFRandomWordsRequest({
             keyHash: vrfKeyHash, subId: vrfSubscriptionId,
             requestConfirmations: VRF_REQUEST_CONFIRMATIONS,
@@ -388,7 +389,6 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             requested = true;
             work.progressed = true;
         } catch (bytes memory reason) {
-            MineFlipGas.rethrowGasFailure(reason);
             // Native mining bubbles a repeated refusal when nothing else advanced.
             // Compatibility request helpers retain their best-effort boolean result.
             work.refusal = reason;

@@ -3,8 +3,8 @@ pragma solidity 0.8.34;
 
 /// @notice Gas admission at deterministic checkpoints in the permissionless game engine.
 /// @dev Caller gas may select a safe checkpoint, never an outcome. Each operation
-///      must fit its caller's available gas and return reservation. Admission has
-///      no fixed chunk or transaction ceiling.
+///      must fit its caller's available gas and return reservation. A transaction may
+///      run many admitted operations, but no single operation's bound exceeds 10M gas.
 library MineFlipGas {
     uint256 internal constant MIN_REWARDED_GAS = 1_000_000;
     uint256 internal constant CHECK_RESERVE = 2_000;
@@ -60,6 +60,12 @@ library MineFlipGas {
         available -= reserve;
         allowance -= reserve;
         return available < allowance ? available : allowance;
+    }
+
+    /// @dev Guarantees a fixed-stipend call its whole stipend after EIP-150 retention, so a
+    ///      failure it returns is the callee's own refusal, never caller-withheld gas.
+    function requireStipend(uint256 stipend) internal view {
+        if (gasleft() < stipend + stipend / 63 + 2 * CALL_RESERVE) revert InsufficientExecutionGas();
     }
 
     function finish(Meter memory meter) internal view {

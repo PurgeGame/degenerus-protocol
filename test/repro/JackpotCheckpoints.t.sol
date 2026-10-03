@@ -140,12 +140,12 @@ contract JackpotCheckpointsTest is Test {
         h.seed(LVL, WORD, true);
         uint256 snap = vm.snapshotState();
         vm.recordLogs();
-        MineFlipGas.Result memory full = _earlyBird(9_000_000, 10_000_000);
+        MineFlipGas.Result memory full = _earlyBird(12_000_000, 12_500_000);
         bytes32 digestFull = _digest(0, vm.getRecordedLogs());
         uint256 awards = full.rewardBasis;
         while (!full.done) {
             vm.recordLogs();
-            full = _earlyBird(9_000_000, 10_000_000);
+            full = _earlyBird(12_000_000, 12_500_000);
             awards += full.rewardBasis;
             digestFull = _digest(digestFull, vm.getRecordedLogs());
         }
@@ -159,7 +159,7 @@ contract JackpotCheckpointsTest is Test {
         uint256 calls;
         while (!done && calls < 12) {
             vm.recordLogs();
-            MineFlipGas.Result memory result = _earlyBird(3_000_000, 10_000_000);
+            MineFlipGas.Result memory result = _earlyBird(10_200_000, 10_700_000);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             digestSplit = _digest(digestSplit, logs);
             for (uint256 i; i < logs.length; ++i) {
@@ -171,6 +171,7 @@ contract JackpotCheckpointsTest is Test {
                 assertEq(address(uint160(uint256(logs[i].topics[1]))), address(uint160(0x10001 + index)));
             }
             (, , uint16 winner,) = h.progress();
+            assertTrue(winner == 0 || winner == 64, "checkpoint sits on the fixed award chunk");
             inside = inside || winner != 0;
             assertTrue(result.progressed);
             splitAwards += result.rewardBasis;
@@ -187,11 +188,11 @@ contract JackpotCheckpointsTest is Test {
         h.seed(LVL, WORD, true);
         uint256 snap = vm.snapshotState();
         vm.recordLogs();
-        MineFlipGas.Result memory result = _earlyBird(9_000_000, 10_000_000);
+        MineFlipGas.Result memory result = _earlyBird(12_000_000, 12_500_000);
         bytes32 expectedTranscript = _digest(0, vm.getRecordedLogs());
         while (!result.done) {
             vm.recordLogs();
-            result = _earlyBird(9_000_000, 10_000_000);
+            result = _earlyBird(12_000_000, 12_500_000);
             expectedTranscript = _digest(expectedTranscript, vm.getRecordedLogs());
         }
         assertTrue(vm.revertToState(snap));
@@ -202,7 +203,7 @@ contract JackpotCheckpointsTest is Test {
         uint256 calls;
         while (!result.done && calls++ < 12) {
             vm.recordLogs();
-            result = _earlyBird(9_000_000, 10_000_000);
+            result = _earlyBird(12_000_000, 12_500_000);
             actual = _digest(actual, vm.getRecordedLogs());
         }
         assertTrue(result.done);

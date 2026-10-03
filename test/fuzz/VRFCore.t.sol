@@ -92,10 +92,40 @@ contract VRFCore is DeployProtocol {
         _lastFulfilledReqId = 0;
     }
 
+    /// @dev Answer and publish every mid-day request the miner issues for closed Craps windows
+    ///      until it has no work left today. Publishing one window's word can arm the next closed
+    ///      window and request its word in the same call, so this loops to quiescence.
+    function _settleMiddayRequests() internal {
+        for (uint256 i = 0; i < 64; i++) {
+            uint8 action = game.minerAction();
+            if (action == 0) return; // Idle
+            assertFalse(game.rngLocked(), "only mid-day work is settled here");
+            assertTrue(action != 17, "settling mid-day work must not reach a daily request"); // RequestDaily
+            if (action == 2) {
+                // Wait: the live mid-day request is unanswered.
+                uint256 rid = _readVrfRequestId();
+                assertEq(rid, mockVRF.lastRequestId(), "live request is the coordinator's latest");
+                assertEq(_readRngWordCurrent(), 0, "waiting request has no word yet");
+                mockVRF.fulfillRandomWords(rid, uint256(keccak256(abi.encode("midday", rid))));
+                _lastFulfilledReqId = rid;
+            } else {
+                game.mineFlip();
+            }
+        }
+        fail("mid-day requests did not settle");
+    }
+
     /// @dev Setup for mid-day lootbox RNG: complete a day, make a purchase on the
     ///      new day to create pending lootbox ETH, fund VRF subscription with LINK.
     ///      Returns the current timestamp for boundary checks.
     function _setupForMidDayRng() internal returns (uint256 ts) {
+        return _setupForMidDayRng(false);
+    }
+
+    /// @param quietCraps Fund LINK before the purchase and settle the mid-day requests for
+    ///        closed Craps windows, so the lootbox request under test is the only mid-day
+    ///        work and its publication arms no further window.
+    function _setupForMidDayRng(bool quietCraps) internal returns (uint256 ts) {
         // Complete day 1
         _completeDay(0xDEAD0001);
 
@@ -105,6 +135,11 @@ contract VRFCore is DeployProtocol {
         // Complete day 2 so _recordedDailyWord(day2) != 0
         _completeDay(0xDEAD0002);
 
+        if (quietCraps) {
+            mockVRF.fundSubscription(1, 100e18);
+            _settleMiddayRequests();
+        }
+
         // Purchase with lootbox amount to create pending ETH
         address buyer = makeAddr("lootboxBuyer");
         vm.deal(buyer, 100 ether);
@@ -113,7 +148,7 @@ contract VRFCore is DeployProtocol {
 
         // Fund VRF subscription with LINK
         // Admin created subscription 1 during deploy; fund it
-        mockVRF.fundSubscription(1, 100e18);
+        if (!quietCraps) mockVRF.fundSubscription(1, 100e18);
 
         ts = block.timestamp;
     }
@@ -280,7 +315,9 @@ contract VRFCore is DeployProtocol {
 
     /// @notice Mid-day request: vrfRequestId set, cleared after mid-day fulfillment.
     function test_vrfRequestIdLifecycle_middayRequest() public {
-        _setupForMidDayRng();
+        // Closed Craps windows are settled first: publishing a window's word can arm the next
+        // closed window and request it in the same call, which would replace the idle ID.
+        _setupForMidDayRng(true);
 
         // Before mid-day request, vrfRequestId should be 0 (cleared by _unlockRng from day 2)
         assertEq(_readVrfRequestId(), mockVRF.lastRequestId(), "idle request ID is retained before midpoint");
@@ -466,7 +503,8 @@ contract VRFCore is DeployProtocol {
     /// @notice After mid-day VRF fulfills, vrfRequestId and rngRequestTime are cleared,
     ///         allowing daily flow to proceed cleanly.
     function test_midDayFulfillment_clearsState() public {
-        _setupForMidDayRng();
+        // Closed Craps windows are settled first so this publication arms no further window.
+        _setupForMidDayRng(true);
 
         // Fire mid-day request
         game.requestLootboxRng();
@@ -649,6 +687,7 @@ contract VRFCore is DeployProtocol {
         game.mineFlip();
         uint48 requestTime = _readRngRequestTime();
         uint256 oldReqId = _readVrfRequestId();
+        uint24 requestDay = game.currentDayView();
 
         // 19h: not yet
         vm.warp(uint256(requestTime) + 19 hours);
@@ -668,19 +707,21 @@ contract VRFCore is DeployProtocol {
         vm.expectRevert();
         admin.retryGameRng();
 
-        // The retried request's late fulfillment still lands and completes the day
+        // The retried request's late fulfillment still lands and completes the day. It lands
+        // after the next boundary, so the call that completes the day goes on to issue the
+        // next day's daily request (a request is only selected once the prior day completes).
         mockVRF.fulfillRandomWords(retryReqId, 0xC0FFEE01);
         _lastFulfilledReqId = retryReqId;
         for (uint256 i = 0; i < 50; i++) {
-            if (!game.rngLocked()) break;
+            if (!game.rngLocked() || _readVrfRequestId() != retryReqId) break;
             game.mineFlip();
         }
-        assertFalse(game.rngLocked(), "Day completes on the retried request's word");
+        assertTrue(game.rngWordForDay(requestDay) != 0, "Day completes on the retried request's word");
 
         // Next day starts with a fresh retry allowance
-        _finishReadConsumers();
-        vm.warp(vm.getBlockTimestamp() + 1 days);
-        game.mineFlip();
+        assertGt(game.currentDayView(), requestDay, "Clock is past the retried day");
+        assertTrue(game.rngLocked(), "Next day's daily request is issued");
+        assertGt(_readVrfRequestId(), retryReqId, "Next day's request is fresh");
         assertEq(_readRngRequestTime() & 1, 0, "Fresh daily request re-arms the retry");
     }
 

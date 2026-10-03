@@ -144,11 +144,10 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///         so one call can never be made to allocate or iterate without limit — and it is the
     ///         only bound that does not depend on gas being measured correctly.
     ///
-    ///         It is NOT the throughput knob. A production crank stops on its BUDGET long before
-    ///         this; a field deeper than it settles over as many calls as it needs, carried by the
-    ///         slot's cursor. At the cheapest seat the table can produce this is still a very
-    ///         large call, which is why the budget and not the ceiling is what sizes a crank.
-    uint64 internal constant _RESOLVE_MAX_SEATS = 256;
+    ///         A field deeper than it settles over as many calls as it needs, carried by the
+    ///         slot's cursor. It also bounds the credit flush that follows the last admitted
+    ///         seat: SEAT + SETTLE_TAIL + 96 x CREDIT stays below 10M.
+    uint64 internal constant _RESOLVE_MAX_SEATS = 96;
 
     // Safety bounds admit indivisible work; actual consumed gas, never these bounds, is charged.
     // Seat includes the engine's 1,111-roll ceiling, sole-high award and full field finalization.

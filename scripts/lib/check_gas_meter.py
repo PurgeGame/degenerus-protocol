@@ -32,6 +32,8 @@ REVIEWED = {
     ("libraries/MineFlipGas.sol", "spent"): ["return meter.start - gasleft();"],
     ("libraries/MineFlipGas.sol", "canRun"): ["return gasleft() >= required;"],
     ("libraries/MineFlipGas.sol", "forwardable"): ["uint256 available = gasleft();"],
+    ("libraries/MineFlipGas.sol", "requireStipend"): [
+        "if (gasleft() < stipend + stipend / 63 + 2 * CALL_RESERVE) revert InsufficientExecutionGas();"],
     ("modules/DegenerusGameAdvanceModule.sol", "_runJackpotWork"): [
         "gas: MineFlipGas.forwardable(gasleft(), 150_000)"],
     ("modules/DegenerusGameDecimatorModule.sol", "settleDecimatorWinners"): [
@@ -39,7 +41,12 @@ REVIEWED = {
     ("modules/DegenerusGameLootboxModule.sol", "openHumanBoxes"): [
         "uint256 beforeGas = gasleft();", "return (result.rewardBasis, beforeGas - gasleft());"],
     ("modules/DegenerusGameMinerModule.sol", "mineFlip"): [
-        "uint256 rewardStart = gasleft();", "uint256 beforeCall = gasleft();",
+        "uint256 rewardStart = gasleft();",
+        # Entry admission occurs before work or state writes; insufficient gas reverts.
+        "if (gasleft() < WORKER_BOUNDARY + RETURN_RESERVE + MineFlipGas.CHECK_RESERVE) {",
+        "uint256 beforeCall = gasleft();",
+        # Separate caught-refusal and successful-no-progress exits exclude their cost.
+        "unpaidAttemptGas = beforeCall - gasleft();",
         "unpaidAttemptGas = beforeCall - gasleft();",
         "uint256 used = rewardStart - gasleft() - unpaidAttemptGas;"],
     ("modules/DegenerusGameTicketModule.sol", "_solo"): ["uint256 actual = gasleft();"],

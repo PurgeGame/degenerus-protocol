@@ -3,8 +3,9 @@ pragma solidity 0.8.34;
 
 /// @notice Precomputed cold-path admission bounds for the mining engine.
 /// @dev Constants include the named operation only; callers additionally reserve their
-///      complete checkpoint/return tail. These bounds are part of the gas calibration
-///      contract and must be revalidated when an operation or compiler setting changes.
+///      complete checkpoint/return tail. Every operation plus its tail stays at or below
+///      10M gas. These bounds are part of the gas calibration contract and must be
+///      revalidated when an operation or compiler setting changes.
 ///      Numbers are conservative candidates until their cold-path evidence is recorded.
 library MineFlipGasBounds {
     uint256 internal constant ENGINE_BOUNDARY = 100_000;
@@ -12,7 +13,8 @@ library MineFlipGasBounds {
     uint256 internal constant DAILY_GAP = 1_500_000;
     uint256 internal constant DAILY_APPLY = 3_600_000;
     uint256 internal constant RNG_REQUEST = 2_500_000;
-    uint256 internal constant TRANSITION_CLOSE = 1_500_000;
+    // Century close: 32 deity renewals, stETH stake, unlock, recycle and seed arming.
+    uint256 internal constant TRANSITION_CLOSE = 3_000_000;
     uint256 internal constant LEVEL_ONE_DRAW = 2_500_000;
     uint256 internal constant POOL_CONSOLIDATION = 8_100_000;
     uint256 internal constant DAILY_PHASE_TAIL = 150_000;
@@ -35,6 +37,8 @@ library MineFlipGasBounds {
     uint256 internal constant TICKET_ROUND_MAX = 1_850_000;
     uint256 internal constant TICKET_SOLO_BASE = 95_000;
     uint256 internal constant TICKET_ENTRY_MAX = 60_000;
+    // One solo trait run: SOLO_BASE + 160 x ENTRY_MAX + TAIL stays below 10M.
+    uint256 internal constant TICKET_SOLO_MAX_ENTRIES = 160;
     uint256 internal constant TICKET_FOIL_CALL_MAX = 1_550_000;
     uint256 internal constant TICKET_CALL_OVERHEAD = 35_000;
 
@@ -80,6 +84,8 @@ library MineFlipGasBounds {
     uint256 internal constant JACKPOT_ETH_WINNER_GAS_MAX = 40_000;
     uint256 internal constant JACKPOT_TICKET_DRAW_GAS_MAX = 15_000;
     uint256 internal constant JACKPOT_TICKET_AWARD_GAS_MAX = 120_000;
+    // 50k + 128 x DRAW + 64 x AWARD + TAIL = 9.83M, below 10M.
+    uint256 internal constant JACKPOT_TICKET_AWARD_CHUNK = 64;
 
     // CRAPS
     uint256 internal constant CRAPS_SEAT_GAS_MAX = 1_650_000;

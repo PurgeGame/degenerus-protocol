@@ -202,17 +202,12 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     }
 
     function _rewardElapsed() private view returns (uint256) {
-        uint8 action = game.nextMinerAction();
-        uint256 due;
-        if (action >= uint8(DegenerusGameStorage.MinerAction.Publish)
-            && action <= uint8(DegenerusGameStorage.MinerAction.CertifyRead)) {
-            due = uint48(uint256(vm.load(address(game), bytes32(uint256(33)))));
-        } else if (action == uint8(DegenerusGameStorage.MinerAction.PrepareSubscriptions)
-            || action == uint8(DegenerusGameStorage.MinerAction.RequestDaily)) {
-            uint24 processedDay = uint24(uint256(vm.load(address(game), bytes32(0))) >> 24);
-            due = (uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) + processedDay) * 1 days + 82_620;
-        } else if (action == uint8(DegenerusGameStorage.MinerAction.Maintenance)) due = crapsBattle.minerMaintenanceDueAt();
-        return due != 0 && vm.getBlockTimestamp() > due ? vm.getBlockTimestamp() - due : 0;
+        // One clock: the later of the last accepted callback and the current day's reset.
+        uint256 ts = vm.getBlockTimestamp();
+        uint256 due = uint48(uint256(vm.load(address(game), bytes32(uint256(33)))));
+        uint256 reset = ts - (ts - 82_620) % 1 days;
+        if (reset > due) due = reset;
+        return ts > due ? ts - due : 0;
     }
 
     /// @notice A published mid-day ticket cohort earns the same measured-work compensation.

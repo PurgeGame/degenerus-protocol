@@ -83,12 +83,14 @@ commands use raw Hardhat and therefore bypass runner-level pin restoration.
 See [the test usefulness review](TEST_REVIEW.md) for retired checks, repaired
 fixtures and the distinction between model, structural and runtime coverage.
 
-The 10M gas figure is a sizing and benchmark guideline for indivisible work, not a
-runtime chunk or transaction cap. Each checkpoint admits the next chunk only when
-its conservative worst-case cost, complete call/return/flush overhead and safety
-margin fit both the remaining worker allowance and actual available gas. A larger
-supplied budget may admit a chunk above 10M. Network transaction/block limits remain
-separate. Fixture gas limits do not establish cold bounds. Gas may only select safe
+No chunk between two checkpoints may cost more than 10M gas in its worst case,
+including its call/return/flush tail. A transaction may exceed 10M by running several
+admitted chunks. Each checkpoint admits the next chunk only when its conservative
+worst-case cost and tail fit both the remaining worker allowance and actual available
+gas; a larger supplied budget runs more chunks, never a larger one. A protocol path
+with no internal checkpoint (advance, terminal or keeper call) is one chunk and must
+also stay within 10M; batches whose size the caller chooses are sized by that caller.
+Fixture gas limits do not establish cold bounds. Gas may only select safe
 continuation, never a semantic fallback or committed outcome.
 
 ## Deep and symbolic checks

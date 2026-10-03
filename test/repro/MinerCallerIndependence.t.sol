@@ -130,16 +130,16 @@ contract MinerCallerIndependenceTest is DeployProtocol {
 
     function test_AutomaticBelowThresholdNeverSpendsCallerOrSentinelCredit() public pricedBlock {
         _buy(0.5 ether);
-        assertGt(_selectionParity(), 0, "real pending value selects optional request work");
+        assertEq(_selectionParity(), 0, "below-threshold value is not automatic work");
         bytes32 credits = _creditDigest();
         bytes32 state = _commitmentDigest();
         vm.prank(DONOR);
-        vm.expectRevert(bytes4(keccak256("BelowThreshold()")));
+        vm.expectRevert(bytes4(keccak256("NoWork()")));
         game.mineFlip{gas: 15_000_000}();
         assertEq(_creditDigest(), credits, "automatic donor call cannot redeem credit");
         assertEq(_commitmentDigest(), state, "automatic call cannot waive the value threshold");
         vm.prank(OUTSIDER);
-        vm.expectRevert(bytes4(keccak256("BelowThreshold()")));
+        vm.expectRevert(bytes4(keccak256("NoWork()")));
         game.mineFlip{gas: 15_000_000}();
         assertEq(_creditDigest(), credits, "automatic sentinel has no spending authority");
         assertEq(_commitmentDigest(), state);

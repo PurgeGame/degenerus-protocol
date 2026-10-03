@@ -16,7 +16,6 @@ import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 interface IMinerCrapsWork {
     function runCrapsReadWork(uint48 index, uint256 allowance) external returns (MineFlipGas.Result memory);
     function runCrapsMaintenance(uint256 allowance) external returns (MineFlipGas.Result memory);
-    function minerMaintenanceDueAt() external view returns (uint256);
 }
 
 /// @notice The single permissionless state engine. Workers never choose global priority.
@@ -47,7 +46,7 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
         }
         bool rewardEligible = first != MinerAction.Terminal;
         uint256 rewardPrice = PriceLookupLib.priceForLevel(_activeTicketLevel());
-        uint256 rewardDueAt = _minerRewardDueAt(first);
+        uint256 rewardDueAt = _minerRewardDueAt();
         MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.available());
         bool moved;
         uint256 unpaidAttemptGas;
@@ -200,7 +199,7 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
         uint256 reward;
         if (rewardEligible && !gameOver && used >= MineFlipGas.MIN_REWARDED_GAS) {
             // Price only compensation, after work and its gas measurement are complete.
-            uint256 elapsed = rewardDueAt != 0 && block.timestamp > rewardDueAt ? block.timestamp - rewardDueAt : 0;
+            uint256 elapsed = block.timestamp > rewardDueAt ? block.timestamp - rewardDueAt : 0;
             (uint256 cap, uint256 multiplierBps) = _minerRewardTerms(elapsed);
             uint256 rate = block.basefee;
             if (rate > cap) rate = cap;
@@ -221,19 +220,14 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
         multiplierBps = 7_500 + 5_000 * steps;
     }
 
-    /// @dev Snapshot the oldest current obligation's anchor before workers mutate its state.
-    ///      No-op/partial calls never write these clocks. Optional midday requests have no
-    ///      authenticated first-pending timestamp and therefore use the initial reward rate.
-    function _minerRewardDueAt(MinerAction action) internal view returns (uint256) {
-        if (action >= MinerAction.Publish && action <= MinerAction.CertifyRead) {
-            return _lrRead(LR_WORK_READY_SHIFT, LR_WORK_READY_MASK);
-        }
-        if (action == MinerAction.PrepareSubscriptions || action == MinerAction.RequestDaily) {
-            // dailyIdx + 1 first becomes due at this reset, even if the first miner arrives late.
-            return (uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) + dailyIdx) * 1 days + 82_620;
-        }
-        if (action == MinerAction.Maintenance) return IMinerCrapsWork(ContractAddresses.CRAPS).minerMaintenanceDueAt();
-        return 0;
+    /// @dev One clock for every action in a call: the wait since the latest accepted VRF
+    ///      callback, or since the current day's reset when that is later, so the reset's
+    ///      daily work starts at the base rate. Callers cannot move it: only callbacks and
+    ///      the calendar do. Read before work; no worker writes it.
+    function _minerRewardDueAt() internal view returns (uint256 due) {
+        due = _lrRead(LR_WORK_READY_SHIFT, LR_WORK_READY_MASK);
+        uint256 reset = block.timestamp - (block.timestamp - 82_620) % 1 days;
+        if (reset > due) due = reset;
     }
 
     function _middayRefusal(bytes memory data) private pure returns (bool) {

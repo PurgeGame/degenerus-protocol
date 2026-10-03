@@ -98,15 +98,17 @@ contract TerminalRngCheckpointsTest is Test {
         assertTrue(active && published);
     }
 
-    function test_CoordinatorGasFailureRollsBackTimerAndCommitment() public {
+    /// @dev With its whole stipend guaranteed, a coordinator that exhausts it cannot have been
+    ///      starved by the caller: it is a refusal, so the one-shot dead timer arms.
+    function test_CoordinatorGasFailureWithinFullStipendArmsTimerLikeARefusal() public {
         vrf.setMode(2);
-        vm.expectRevert();
-        h.requestTerminalRng{gas: 4_000_000}();
-        (uint24 day, uint48 at, bool active, bool published) = h.identity();
-        assertEq(day, 0);
-        assertEq(at, 0);
+        assertFalse(h.requestTerminalRng{gas: 4_000_000}());
+        (uint24 day, uint48 at, bool active,) = h.identity();
+        assertEq(day, priorDay + 1);
+        assertGt(at, 0);
         assertFalse(active);
-        assertTrue(published);
+        vm.warp(uint256(at) + 14 days + 1);
+        assertTrue(h.dead());
     }
 
     function test_SemanticRefusalRetainsFirstTimerAndEventuallyExpires() public {

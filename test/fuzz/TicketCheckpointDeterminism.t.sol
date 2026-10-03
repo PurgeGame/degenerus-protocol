@@ -23,6 +23,7 @@ contract TicketCheckpointHarness is DegenerusGameTicketModule {
         } else ticketWriteSlot = !ticketWriteSlot;
     }
     function frozenFuture(uint24 lvl) external { earlyTicketLevel = lvl; lastPurchaseDay = true; }
+    function flipSlot() external { ticketWriteSlot = !ticketWriteSlot; }
     function seedBuffer(uint24 lvl) external { _setTicketBufferLevel(lvl); }
     function setSnap(uint8 shift) external { snapShift = shift; }
     function seedFoil(address buyer, uint24 lvl) external {
@@ -109,7 +110,7 @@ contract TicketCheckpointDeterminismTest is Test {
         h.commit(WORD, false);
         compare(1, 2, 1_300_000, true);
     }
-    function test_largerAllowanceExpandsSoloChunksAndPreservesInventory() public {
+    function test_largerAllowanceRunsMoreBoundedSoloChunksAndPreservesInventory() public {
         h.credit(player(0), 1, 300_075);
         h.commit(WORD, false);
         uint256 snap = vm.snapshotState();
@@ -139,13 +140,32 @@ contract TicketCheckpointDeterminismTest is Test {
             ++chunks;
         }
         assertGt(chunks, 1);
-        assertGt(largestBound, 10_000_000, "solo sizing has no fixed 10M clamp");
+        assertLe(largestBound, 10_000_000, "every solo chunk stays within 10M");
         assertEq(entries, count);
         (bytes32 actual, uint256 actualCount) = h.digest(1);
         assertEq(actualCount, count);
         assertEq(actual, expected);
         assertEq(h.control(), control);
     }
+    /// @dev The terminal swap can bring a new read queue to the level of a part-drained
+    ///      cohort. Its checkpoint must not resume on that queue.
+    function test_terminalSwapNeverResumesStaleCheckpointOnNewQueue() public {
+        h.credit(player(0), 1, 600_075);
+        h.commit(WORD, false);
+        h.runTicketWork(1, 1_500_000);
+        assertGt(h.offset(), 0, "fixture: solo run left part-drained");
+        for (uint256 i = 1; i <= 6; ++i) h.credit(player(i), 1, 400);
+        h.flipSlot();
+        h.terminal(1);
+        uint24 anchor = uint24(1 | (1 << 23));
+        for (uint256 calls; calls < 50; ++calls) {
+            MineFlipGas.Result memory r = h.runTicketWork(anchor, FULL);
+            assertTrue(r.progressed || r.done, "terminal drain made no progress");
+            if (r.done) return;
+        }
+        fail("terminal drain must finish the swapped-in queue");
+    }
+
     function test_canonicalSeatsDustAndSurvivors() public {
         uint32[11] memory quantities = [uint32(125), 250, 375, 499, 501, 799, 850, 900, 12025, 40150, 180075];
         for (uint256 i; i < quantities.length; ++i) h.credit(player(i), 1, quantities[i]);

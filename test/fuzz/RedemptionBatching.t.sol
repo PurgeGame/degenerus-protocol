@@ -234,7 +234,7 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         // A caller may fund a safe checkpoint. The remaining physical gas admits
         // the dust claims but cannot admit the next whole human order.
         _commitWord(99);
-        vm.prank(keeper); game.mineFlip{gas: 3_100_000}();
+        vm.prank(keeper); game.mineFlip{gas: 3_300_000}();
         assertFalse(sdgnrs.redemptionSettlementPending());
         (uint256 count, uint256 cursor, bool complete) = _boxState(buyer);
         assertEq(count, 1); assertEq(cursor, 0); assertFalse(complete);

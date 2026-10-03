@@ -118,5 +118,13 @@
     "offset": 0,
     "slot": 11,
     "typeLabel": "uint256"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "_parkedRedemptionWord",
+    "offset": 0,
+    "slot": 12,
+    "typeLabel": "mapping(address => mapping(uint24 => uint256))"
   }
 ]

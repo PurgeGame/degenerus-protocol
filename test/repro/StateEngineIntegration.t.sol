@@ -30,6 +30,8 @@ contract StateEngineIntegrationTest is DeployProtocol {
     bytes32 private constant MINER_WORK = keccak256("MinerWork(address,uint8,uint256,uint256)");
     uint256 private constant HIGH_GAS = 15_000_000;
     uint256 private constant LOW_GAS = 9_500_000;
+    // Admits one fixed ticket-award chunk (9.83M declared) through the miner frames.
+    uint256 private constant TICKET_CHUNK_GAS = 11_000_000;
     bytes32 private constant JACKPOT_ETH = keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)");
     bytes32 private constant JACKPOT_TICKET = keccak256("JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)");
     bytes32 private jackpotTranscript;
@@ -213,7 +215,7 @@ contract StateEngineIntegrationTest is DeployProtocol {
                     if (battle) {
                         (,, bool started,) = IJackpotBattle(address(crapsBattle)).jackpotProgress();
                         if (started) supplied = 3_000_000;
-                    } else supplied = kind == 2 ? 7_500_000 : 2_000_000;
+                    } else supplied = kind == 2 ? 7_500_000 : kind >= 4 ? TICKET_CHUNK_GAS : 2_000_000;
                 }
                 uint256 request = mockVRF.lastRequestId();
                 _coolEngine();

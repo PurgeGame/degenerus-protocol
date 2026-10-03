@@ -192,7 +192,8 @@ ACCESSOR	lootboxRngPacked	_lrRead	storage/DegenerusGameStorage.sol	READ
 ACCESSOR	lootboxRngPacked	_lrWrite	storage/DegenerusGameStorage.sol	WRITE
 GATE	_currentRngWord	_nextMinerAction	storage/DegenerusGameStorage.sol	READ
 GATE	_recordedDailyWord	_nextMinerAction	storage/DegenerusGameStorage.sol	READ
-GATE	lootboxRngPacked	_nextMinerAction	storage/DegenerusGameStorage.sol	READ
+GATE	lootboxRngPacked	_minerMiddayEligible	storage/DegenerusGameStorage.sol	READ
+GATE	_recordedDailyWord	_minerMiddayEligible	storage/DegenerusGameStorage.sol	READ	selector mirror of the mid-day request's recorded-daily-word gate; reads presence only, never a word value
 GATE	rngRequestDay	_nextMinerAction	storage/DegenerusGameStorage.sol	READ	Logical commitment/application identity: set only on fresh normal/terminal boundary, preserved by callback/retry and all consumer checkpoints.
 ACCESSOR	_nudgeCount	_nudgeCount	storage/DegenerusGameStorage.sol	READ	Nine-bit slot-0 accessor; neighboring flags are masked.
 ACCESSOR	rngFlagsAndNudges	_nudgeCount	storage/DegenerusGameStorage.sol	READ	Extract frozen nine-bit count, capped256 by the only production buyer.
