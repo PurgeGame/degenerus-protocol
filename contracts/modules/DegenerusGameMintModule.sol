@@ -1335,12 +1335,12 @@ contract DegenerusGameMintModule is
         uint256 costWei = (priceWei * quantity) / (4 * QTY_SCALE);
         if (costWei < TICKET_MIN_BUYIN_WEI) revert E();
         // IDs through three billion keep lazy registration at the ordinary minimum.
-        // A later first ID from a ticket buy requires a 0.01 ETH-equivalent ticket
+        // A later first ID from a ticket buy requires a 0.04 ETH-equivalent ticket
         // leg, before bonuses. Claimable/afking/FLIP funding uses the same value;
         // unrelated box spend or ETH overpayment does not satisfy this floor.
         // Passes and ticket prizes register through their own unrestricted sinks.
         if (
-            costWei < 0.01 ether &&
+            costWei < 0.04 ether &&
             ticketOwnerId[buyer] == 0 &&
             ticketOwners.length >= 3_000_000_000
         ) revert E();

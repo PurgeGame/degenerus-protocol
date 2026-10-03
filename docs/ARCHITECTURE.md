@@ -275,7 +275,7 @@ with independent absolute-level tags and a nonzero sentinel after consumption. T
 uses 100 physical roots per domain; pending balances use 128 so L and L+100 cannot alias.
 
 IDs through 3,000,000,000 retain lazy registration at the ordinary ticket minimum.
-An ordinary ticket purchase allocating a higher ID must contain at least 0.01 ETH
+An ordinary ticket purchase allocating a higher ID must contain at least 0.04 ETH
 of nominal ticket value before bonus entries. Existing IDs keep the ordinary minimum;
 passes and ticket-producing prizes can allocate freely. The rule applies equally to
 ETH-equivalent ticket value funded by ETH, claimable balance, prepaid AFKING or FLIP.

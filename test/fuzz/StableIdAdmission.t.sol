@@ -37,7 +37,10 @@ contract StableIdAdmissionSeeder is DegenerusGameStorage {
 contract StableIdAdmissionTest is DeployProtocol {
     uint256 private constant CUTOFF = 3_000_000_000;
     uint256 private constant SMALL_BUY = 0.0025 ether;
-    uint256 private constant FIRST_BUY = 0.01 ether;
+    uint256 private constant TICKET_PRICE = 0.01 ether;
+    uint256 private constant FIRST_BUY = 0.04 ether;
+    uint256 private constant FIRST_QTY = 1600;
+    uint256 private constant FIRST_ENTRIES = 16;
     bytes4 private constant E_SELECTOR = bytes4(keccak256("E()"));
 
     DegenerusGameLens private lens;
@@ -54,7 +57,7 @@ contract StableIdAdmissionTest is DeployProtocol {
         vm.deal(alice, 100 ether);
         vm.deal(bob, 100 ether);
         vm.deal(operator, 100 ether);
-        assertEq(game.mintPrice(), FIRST_BUY, "fixture ticket price");
+        assertEq(game.mintPrice(), TICKET_PRICE, "fixture ticket price");
     }
 
     function _seed(bytes memory data) private {
@@ -95,13 +98,16 @@ contract StableIdAdmissionTest is DeployProtocol {
         assertEq(game.entriesOwedView(1, bob), 0);
     }
 
-    function test_ExactOneHundredthTicketLegCreatesNextId() public {
+    function test_ExactFourHundredthsTicketLegCreatesNextId() public {
         _setCount(CUTOFF);
+        vm.expectRevert(E_SELECTOR);
+        _buy(alice, FIRST_QTY - 1, FIRST_BUY - TICKET_PRICE / 400, MintPaymentKind.DirectEth);
+        assertEq(_id(alice), 0, "one unit under the floor allocates no ID");
         uint256 beforeBalance = alice.balance;
-        _buy(alice, 400, FIRST_BUY, MintPaymentKind.DirectEth);
+        _buy(alice, FIRST_QTY, FIRST_BUY, MintPaymentKind.DirectEth);
         assertEq(_id(alice), CUTOFF + 1);
         assertEq(alice.balance, beforeBalance - FIRST_BUY, "ordinary purchase only; no extra registration fee");
-        assertEq(game.entriesOwedView(1, alice), 4);
+        assertEq(game.entriesOwedView(1, alice), FIRST_ENTRIES);
         assertEq(game.afkingFundingOf(alice), 0, "all payment priced as tickets");
     }
 
@@ -120,23 +126,23 @@ contract StableIdAdmissionTest is DeployProtocol {
         vm.expectRevert(E_SELECTOR);
         _buy(alice, 100, 0, MintPaymentKind.Claimable);
         assertEq(game.claimableWinningsOf(alice), FIRST_BUY + 1, "rejected buy preserves all winnings");
-        _buy(alice, 400, 0, MintPaymentKind.Claimable);
+        _buy(alice, FIRST_QTY, 0, MintPaymentKind.Claimable);
         assertEq(_id(alice), CUTOFF + 1);
         assertEq(game.claimableWinningsOf(alice), 1, "normal claimable sentinel remains");
-        assertEq(game.entriesOwedView(1, alice), 4);
+        assertEq(game.entriesOwedView(1, alice), FIRST_ENTRIES);
     }
 
     function test_CombinedPaymentUsesEntireTicketValue() public {
         _setCount(CUTOFF);
-        _claimable(alice, 0.0075 ether + 1);
+        _claimable(alice, 0.0375 ether + 1);
         vm.expectRevert(E_SELECTOR);
         _buy(alice, 100, 0.001 ether, MintPaymentKind.Combined);
         assertEq(_id(alice), 0);
-        assertEq(game.claimableWinningsOf(alice), 0.0075 ether + 1);
-        _buy(alice, 400, SMALL_BUY, MintPaymentKind.Combined);
+        assertEq(game.claimableWinningsOf(alice), 0.0375 ether + 1);
+        _buy(alice, FIRST_QTY, SMALL_BUY, MintPaymentKind.Combined);
         assertEq(_id(alice), CUTOFF + 1);
         assertEq(game.claimableWinningsOf(alice), 1);
-        assertEq(game.entriesOwedView(1, alice), 4);
+        assertEq(game.entriesOwedView(1, alice), FIRST_ENTRIES);
     }
 
     function test_PrepaidAfkingCanFundFirstTicketPurchase() public {
@@ -144,10 +150,10 @@ contract StableIdAdmissionTest is DeployProtocol {
         vm.prank(alice);
         game.depositAfkingFunding{value: FIRST_BUY}(alice);
         assertEq(_id(alice), 0, "prepayment alone remains lazy");
-        _buy(alice, 400, 0, MintPaymentKind.DirectEth);
+        _buy(alice, FIRST_QTY, 0, MintPaymentKind.DirectEth);
         assertEq(_id(alice), CUTOFF + 1);
         assertEq(game.afkingFundingOf(alice), 0);
-        assertEq(game.entriesOwedView(1, alice), 4);
+        assertEq(game.entriesOwedView(1, alice), FIRST_ENTRIES);
     }
 
     function test_FlipPaymentUsesTheSameEthEquivalentFloor() public {
@@ -162,10 +168,10 @@ contract StableIdAdmissionTest is DeployProtocol {
         assertEq(coin.balanceOf(alice), beforeBalance, "rejected redeem burns nothing");
         assertEq(_id(alice), 0);
         vm.prank(alice);
-        game.redeemFlip(alice, 400);
+        game.redeemFlip(alice, FIRST_QTY);
         assertEq(_id(alice), CUTOFF + 1);
-        assertEq(coin.balanceOf(alice), beforeBalance - 1_000 ether);
-        assertEq(game.entriesOwedView(1, alice), 4);
+        assertEq(coin.balanceOf(alice), beforeBalance - 4_000 ether);
+        assertEq(game.entriesOwedView(1, alice), FIRST_ENTRIES);
     }
 
     function test_RegisteredOperatorDoesNotExemptUnregisteredBeneficiary() public {
@@ -178,7 +184,7 @@ contract StableIdAdmissionTest is DeployProtocol {
         game.purchase{value: SMALL_BUY}(alice, 100, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(_id(alice), 0);
         vm.prank(operator);
-        game.purchase{value: FIRST_BUY}(alice, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: FIRST_BUY}(alice, FIRST_QTY, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(_id(alice), CUTOFF + 1, "ID belongs to the beneficiary");
     }
 
@@ -224,13 +230,13 @@ contract StableIdAdmissionTest is DeployProtocol {
     function test_BoonDoesNotInflateTicketValueToAdmissionFloor() public {
         _setCount(CUTOFF);
         _seed(abi.encodeCall(StableIdAdmissionSeeder.grantPurchaseBoon, (alice)));
-        // 0.008 ETH plus a 25% boon would award the entries of 0.01 ETH, but its
+        // 0.032 ETH plus a 25% boon would award the entries of 0.04 ETH, but its
         // priced ticket leg is still below the first-purchase floor.
         vm.expectRevert(E_SELECTOR);
-        _buy(alice, 320, 0.008 ether, MintPaymentKind.DirectEth);
+        _buy(alice, 1280, 0.032 ether, MintPaymentKind.DirectEth);
         assertEq(_id(alice), 0);
-        _buy(alice, 400, FIRST_BUY, MintPaymentKind.DirectEth);
-        assertEq(game.entriesOwedView(1, alice), 5, "failed buy did not consume the 25% boon");
+        _buy(alice, FIRST_QTY, FIRST_BUY, MintPaymentKind.DirectEth);
+        assertEq(game.entriesOwedView(1, alice), 20, "failed buy did not consume the 25% boon");
     }
 
     function test_DeferredPassClaimStillRegistersFreelyAboveCutoff() public {
