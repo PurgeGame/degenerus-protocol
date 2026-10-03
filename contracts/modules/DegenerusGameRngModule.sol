@@ -43,6 +43,7 @@ contract DegenerusGameRngModule is DegenerusGameRngUtils {
         );
         if (!ok) _revertDelegate(result);
         _swapTicketSlot();
+        _swapFoilSlot();
         _freezePool();
         _sealRngWriteBuffer();
         rngRequestDay = day;
@@ -171,8 +172,10 @@ contract DegenerusGameRngModule is DegenerusGameRngUtils {
             bool lastSwapAhead = (lastPurchaseDay && (jackpotFlags & JACKPOT_TURBO) != 0)
                 || (jackpotPhaseFlag && _isFinalJackpotDay(jackpotCounter, jackpotFlags));
             if (!lastSwapAhead) {
-                bool queuedWork = foilQueue[_foilWriteKey()].length != 0;
-                if (!queuedWork) {
+                // Foil packs ride the daily request only: a pending pack is not mid-day work
+                // and the foil cohort does not move here.
+                bool queuedWork;
+                {
                     uint24 t = level;
                     uint24 end = _mintCeiling();
                     for (; t <= end;) {

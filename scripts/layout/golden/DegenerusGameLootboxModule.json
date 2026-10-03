@@ -848,6 +848,14 @@
     "typeLabel": "uint24"
   },
   {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "foilWriteSlot",
+    "offset": 10,
+    "slot": 62,
+    "typeLabel": "bool"
+  },
+  {
     "bytes": "32",
     "encoding": "mapping",
     "label": "deityRecipientBoonCount",

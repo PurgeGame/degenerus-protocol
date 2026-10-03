@@ -148,6 +148,7 @@ OWNER	ticketRound	modules/DegenerusGameTicketModule.sol	drainRounds advances the
 OWNER	ticketSeats	modules/DegenerusGameTicketModule.sol	Canonical ticket round worker fills seats to eight or actual queue end, runs fixed rounds, then drains survivors in order; never rolls a partially filled frontier.
 OWNER	ticketSeats	storage/DegenerusGameStorage.sol	_releaseTicketQueue clears the seats with the drained queue
 OWNER	ticketWriteSlot	modules/DegenerusGameRngUtils.sol	_swapTicketSlot toggles the double-buffer parity; sole writer
+OWNER	foilWriteSlot	modules/DegenerusGameRngUtils.sol	_swapFoilSlot flips the foil cohort at the daily request and the one terminal swap; mid-day requests never move foil packs.
 OWNER	ticketsFullyProcessed	modules/DegenerusGameMinerModule.sol	Miner certifies the complete selected normal ticket/future/foil read window only when native Ticket worker reports done; also clears the midday latch.
 OWNER	ticketsFullyProcessed	modules/DegenerusGameRngModule.sol	Fresh midday early-level activation clears ticket completion while its frozen pool is committed; shared normal swap also clears it.
 OWNER	ticketsFullyProcessed	modules/DegenerusGameRngUtils.sol	Shared normal/terminal _swapTicketSlot clears read-ticket completion.

@@ -155,9 +155,11 @@ Craps freezes its opened window tier, high multiplier, and existing stake echo i
 the scoreboard, so delayed scheduled cleanup reconstructs identical terms after
 the opening-day word retires without storing another word.
 
-Foil purchases freeze level, boost, and activity score and join the normal ticket
-write cohort. The next request freezes that cohort; purchases made after the
-request require a later word. Materialization stores four uint32 lines in the
+Foil purchases freeze level, boost, and activity score and join the foil write
+cohort, which has its own toggle. Only the next daily request (or the single
+terminal swap) freezes that cohort; a mid-day request never moves foil packs, so
+every pack generates from a daily word and its grand is sized inside the daily
+pool freeze. Purchases made after the daily request require a later daily word. Materialization stores four uint32 lines in the
 existing foil record, together with readiness, first eligible draw, and the pack's
 actual generation day. Claims never reconstruct pack lines from a daily word.
 Each `dailyFoilDraw[day & 1]` keeps board bits 0–31 and level bits 64–87, plus a

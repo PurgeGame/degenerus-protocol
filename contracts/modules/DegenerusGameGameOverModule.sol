@@ -316,6 +316,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                     // entry at drainLevel then predates the terminal word. Without the bound a
                     // queue created after the word went public could still be drawn.
                     _swapTicketSlot();
+                    _swapFoilSlot();
                 }
                 // The swap window closes as the terminal request goes out (sent below, or
                 // retried by later calls if the coordinator refuses it).

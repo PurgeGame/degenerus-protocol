@@ -394,7 +394,7 @@ conversion conditions, the ordinary ticket payout remains intact.
 
 Protocol deity grants occur after the deployment sequence. Their perpetual entries
 and protocol boon cohorts have their own pre-request scheduling and closure rules.
-Foil packs generate from their next committed cohort, then compare their four lines
+Foil packs generate from the next daily request's committed cohort (never a mid-day word), then compare their four lines
 against each eligible day's board, purchase and jackpot days alike, at the same face
 table. Two tagged draw slots retain each board, level and payout seed. Match claims
 expire after the logical draw day and following day, even if a stalled draw first

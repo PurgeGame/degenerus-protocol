@@ -4030,14 +4030,17 @@ abstract contract DegenerusGameStorage {
     ///      payout seed [88..215], seed-present flag 216, exact day [217..240].
     mapping(uint24 => uint256) internal dailyFoilDraw;
 
-    /// @dev Normal-ticket read/write cohorts (keys 0/1), frozen before their RNG
-    ///      request. New buys always append to the write half.
+    /// @dev Foil read/write cohorts (keys 0/1), frozen at the daily request only.
+    ///      New buys always append to the write half.
     mapping(uint24 => uint256[]) internal foilQueue;
 
     /// @dev Resumable read cursor and cohort-wide generation/eligibility stamps.
     uint32 internal foilCursor;
     uint24 internal foilGenerationDay;
     uint24 internal foilFirstDrawDay;
+    /// @dev Foil cohort write toggle. Flips at a daily request or the one terminal swap,
+    ///      never at a mid-day request, so packs always generate from a daily word.
+    bool internal foilWriteSlot;
 
     /// @dev Lifetime count of deity boons issued from a given deity to a given
     ///      recipient, keyed [deity][recipient]. Capped at DEITY_RECIPIENT_BOON_CAP
@@ -4116,11 +4119,11 @@ abstract contract DegenerusGameStorage {
     }
 
     function _foilWriteKey() internal view returns (uint24) {
-        return ticketWriteSlot ? 1 : 0;
+        return foilWriteSlot ? 1 : 0;
     }
 
     function _foilReadKey() internal view returns (uint24) {
-        return ticketWriteSlot ? 0 : 1;
+        return foilWriteSlot ? 0 : 1;
     }
 
     /// @dev Paid read-side work must finish before its committed word is released.

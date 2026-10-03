@@ -55,6 +55,7 @@ contract FoilCohortHarness is DegenerusGameFoilPackModule {
     function commit(uint256 word) external {
         require(!_foilDrainPending());
         ticketWriteSlot = !ticketWriteSlot;
+        foilWriteSlot = !foilWriteSlot;
         foilCursor = 0;
         foilGenerationDay = 0;
         foilFirstDrawDay = 0;

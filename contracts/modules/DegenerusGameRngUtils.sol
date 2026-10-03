@@ -28,11 +28,17 @@ abstract contract DegenerusGameRngUtils is DegenerusGameStorage {
 
     function _swapTicketSlot() internal {
         ticketWriteSlot = !ticketWriteSlot;
+        ticketsFullyProcessed = false;
+        _setRngComplete(false);
+    }
+
+    /// @dev Daily request and the one terminal swap only: a mid-day request never moves
+    ///      foil packs, so every pack generates from a daily word.
+    function _swapFoilSlot() internal {
+        foilWriteSlot = !foilWriteSlot;
         foilCursor = 0;
         foilGenerationDay = 0;
         foilFirstDrawDay = 0;
-        ticketsFullyProcessed = false;
-        _setRngComplete(false);
     }
 
     function _finalizeLootboxRng(uint256 rngWord) internal {

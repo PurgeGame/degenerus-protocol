@@ -425,8 +425,8 @@ contract DegenerusGameFoilPackModule is
         uint256 score = _playerActivityScore(buyer, afkLive ? afkStreak : streakSnapshot);
         uint16 multBps = uint16(ActivityCurveLib.foilBoostBps(score));
 
-        // The normal ticket swap freezes this pack before the cohort's request.
-        // Lines and eligibility are stamped later, when that cohort materializes.
+        // The daily request's foil swap freezes this pack before that request; a mid-day
+        // request never moves it. Lines and eligibility are stamped when the cohort materializes.
         foilRecord[lvl & 3][buyer] =
             (uint256(lvl) << _FOIL_LEVEL_SHIFT) |
             (uint256(multBps) << _FOIL_MULT_SHIFT) |
