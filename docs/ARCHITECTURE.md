@@ -218,7 +218,8 @@ entitlement without a newcomer charge.
 At lock, 5% of unrolled gross Added funds the high-roller reserve. The word rolls one
 multiplier for the remaining pool, `(paid units x 8,000 + Added - floor(Added / 20)) x m`:
 90% at 0.5x, 9% at 3x, 0.9% at 20x and 0.1% at 100x, a 1x mean. Awards come from gross
-Added alone, one per 10,000 FLIP, at most 500. The Game draws them in chunks of up to 150:
+Added alone, one per 10,000 FLIP, at most 500. The Game draws them in chunks of up to 50, continuing within the same transaction
+while another full chunk fits the remaining gas:
 each visit picks uniformly among nonempty eligible levels in the 99 unminted levels above
 the mint ceiling, chooses a starting queue position, then walks every holder at that level
 once, wrapping at the end. Levels are selected with replacement between visits, so a wallet

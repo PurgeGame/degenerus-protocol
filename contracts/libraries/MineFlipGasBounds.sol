@@ -20,7 +20,8 @@ library MineFlipGasBounds {
     uint256 internal constant DAILY_PHASE_TAIL = 150_000;
     uint256 internal constant FOIL_PACK = 1_400_000;
 
-    uint256 internal constant JACKPOT_BATTLE_DRAW = 8_200_000;
+    // One 50-entry field checkpoint, including cold initialization or final sealing.
+    uint256 internal constant JACKPOT_BATTLE_DRAW = 3_300_000;
     uint256 internal constant TERMINAL_SETUP = 1_600_000;
     uint256 internal constant TERMINAL_TAIL = 250_000;
     uint256 internal constant TERMINAL_TALLY_RECORD = 25_000;

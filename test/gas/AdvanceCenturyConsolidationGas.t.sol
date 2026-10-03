@@ -352,7 +352,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         // No protocol reads before each call: setUp writes are committed, all accessed storage
         // starts cold, and original-vs-current SSTORE pricing is realistic.
         vm.etch(address(game), type(CenturyNativeGasHost).runtimeCode);
-        _checkWordApply();
+        _checkWordApply(true);
         _driveNativeBattle();
         // The actual Miner can compose further work after consolidation. Pin its
         // aggregate ceiling independently, then restore the exact cold boundary
@@ -365,9 +365,18 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         _checkConsolidation();
     }
 
+    /// @dev Measure the native chunks without imposing a 10M cap on a transaction
+    /// that may legitimately compose several separately admitted chunks.
+    function test_CenturyConsolidationIsolatedColdChunks() public {
+        vm.etch(address(game), type(CenturyNativeGasHost).runtimeCode);
+        _checkWordApply(false);
+        _driveNativeBattle();
+        _checkConsolidation();
+    }
+
     /// @dev The fresh word applies alone: the day's RNG record, the pending sDGNRS redemption, the
     ///      craps day it opens and, in the history variants, the vault's 365-day claim.
-    function _checkWordApply() private {
+    function _checkWordApply(bool measureComposition) private {
         uint8 historyMode = _vaultHistoryMode();
         if (historyMode != 0) {
             // This post-walk loss mint is observable even when later seat funding
@@ -383,11 +392,13 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         while (!host.prepareTicketsOnly{gas: 12_000_000}()) {
             assertLt(++reads, 32, "century ticket prerequisites stalled");
         }
-        uint256 checkpoint = vm.snapshotState();
-        (, uint256 composed,) = _advanceTx(false);
-        emit log_named_uint("century_composed_daily_apply_including_intrinsic", composed);
-        assertLe(composed, CAP, "complete daily-application miner transaction exceeds 10M");
-        vm.revertToState(checkpoint);
+        if (measureComposition) {
+            uint256 checkpoint = vm.snapshotState();
+            (, uint256 composed,) = _advanceTx(false);
+            emit log_named_uint("century_composed_daily_apply_including_intrinsic", composed);
+            assertLe(composed, CAP, "complete daily-application miner transaction exceeds 10M");
+            vm.revertToState(checkpoint);
+        }
         vm.recordLogs();
         host.applyOnly{gas: 12_000_000}();
         uint256 used = _coldCallGas();

@@ -138,9 +138,9 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
     }
 
     /// @dev The daily jackpot battle over unminted future levels, played as one closed craps battle,
-    ///      one bounded step per call. While the field is open a call draws up to
+    ///      one bounded group per checkpoint. While the field is open a call draws groups of up to
     ///      JACKPOT_BATTLE_ENTRANTS awarded entries (see _collectJackpotChunk), reads their saved
-    ///      boards in one batch and appends them; the chunk that reaches the award target, or finds
+    ///      boards in one batch and appends them while another group fits; the chunk that reaches the award target, or finds
     ///      no eligible level, seals the field. Settlement starts in its own subsequent call;
     ///      its available execution gas never stacks on top of field construction. The latch
     ///      clears once the field completes.
@@ -164,17 +164,24 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
             MineFlipGas.finish(meter);
             return result;
         }
-        // The field's semantic cap is 150 seats. The bound includes all cold
+        // Each checkpoint appends at most 50 seats. The bound includes all cold
         // recipient writes, the collision-heavy board dedupe, seal and credits.
         if (!MineFlipGas.canRun(meter, GasBounds.JACKPOT_BATTLE_DRAW, GasBounds.DAILY_PHASE_TAIL)) return result;
         uint256 battleWord = uint256(keccak256(abi.encode(rngWord, lvl, FAR_FUTURE_FLIP_TAG)));
         (uint256 word, uint256 cursor, uint256 remaining) = battle.prepareJackpotBattle(lvl, battleWord);
-        (address[] memory winners, uint256 next, bool exhausted) = _collectJackpotChunk(lvl, word, cursor, remaining);
-        uint256[] memory field = JackpotBattleFieldLib.prepare(winners);
-        bool last = exhausted || winners.length == remaining;
-        battle.appendJackpotBattle(field, next, last);
-        result.progressed = true;
-        result.rewardBasis = winners.length + 1;
+        do {
+            (address[] memory winners, uint256 next, bool exhausted) = _collectJackpotChunk(lvl, word, cursor, remaining);
+            uint256[] memory field = JackpotBattleFieldLib.prepare(winners);
+            bool last = exhausted || winners.length == remaining;
+            battle.appendJackpotBattle(field, next, last);
+            result.progressed = true;
+            result.rewardBasis += winners.length;
+            if (last) break;
+            // Append persists the exact walk position. Read the accepted-unit count back
+            // from the battle, then admit another group only while its full bound fits.
+            (word, cursor, remaining) = battle.prepareJackpotBattle(lvl, battleWord);
+        } while (MineFlipGas.canRun(meter, GasBounds.JACKPOT_BATTLE_DRAW, GasBounds.DAILY_PHASE_TAIL));
+        ++result.rewardBasis;
         // Field construction and simulation are distinct bounded phases even if
         // this append seals an empty field. The next call observes completion.
         MineFlipGas.finish(meter);

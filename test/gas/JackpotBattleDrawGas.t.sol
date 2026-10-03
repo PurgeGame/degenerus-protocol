@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {JackpotBattleFieldLib} from "../../contracts/libraries/JackpotBattleFieldLib.sol";
 import {Test} from "forge-std/Test.sol";
 import {JackpotBattleDrawHarness} from "../fuzz/JackpotBattleDraw.t.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
@@ -22,7 +23,7 @@ contract JackpotBattleDrawGasHarness is JackpotBattleDrawHarness {
                 levels[count++] = candidate;
             }
         }
-        uint256 wanted = remaining < 150 ? remaining : 150;
+        uint256 wanted = remaining < JackpotBattleFieldLib.MAX_CHUNK ? remaining : JackpotBattleFieldLib.MAX_CHUNK;
         if (count == 0) return (new address[](0), 0, true);
         winners = new address[](wanted);
         uint256 ordinal = uint32(cursor);
@@ -64,10 +65,10 @@ contract JackpotBattleDrawGasTest is Test {
         emit log_named_uint("sequential first chunk", newGas);
         if (expectSavings) assertLt(newGas, oldGas);
         else assertLt(newGas, 1_000_000, "singleton selection must stay within its draw allowance");
-        if (target > 150) {
-            h.independent(40, 123456789, oldCursor, target - 150);
+        if (target > JackpotBattleFieldLib.MAX_CHUNK) {
+            h.independent(40, 123456789, oldCursor, target - JackpotBattleFieldLib.MAX_CHUNK);
             oldGas = vm.lastCallGas().gasTotalUsed;
-            h.collect(40, 123456789, cursor, target - 150);
+            h.collect(40, 123456789, cursor, target - JackpotBattleFieldLib.MAX_CHUNK);
             newGas = vm.lastCallGas().gasTotalUsed;
             emit log_named_uint("independent resumed chunk", oldGas);
             emit log_named_uint("sequential resumed chunk", newGas);

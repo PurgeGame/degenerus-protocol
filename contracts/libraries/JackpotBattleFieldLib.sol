@@ -13,7 +13,7 @@ interface ICrapsPreferenceReader {
 ///      The battle receives this frozen field and makes no storage callbacks.
 library JackpotBattleFieldLib {
     /// @dev Most entries one draw call collects and one append accepts; Game and battle share it.
-    uint256 internal constant MAX_CHUNK = 150;
+    uint256 internal constant MAX_CHUNK = 50;
     uint256 internal constant BOARD_SHIFT = 160;
     uint256 internal constant UNITS_SHIFT = 180;
 

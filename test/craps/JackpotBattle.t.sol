@@ -222,6 +222,19 @@ contract JackpotBattleTest is CrapsPins {
         assertEq(remaining, 500);
     }
 
+    function test_AppendRejectsMoreThanOneCheckpoint() public {
+        _lock(1_000_000 ether);
+        vm.startPrank(ContractAddresses.GAME);
+        api.prepareJackpotBattle(7, 123);
+        uint256[] memory field = new uint256[](JackpotBattleFieldLib.MAX_CHUNK + 1);
+        for (uint256 i; i < field.length; ++i) field[i] = uint160(bob) | (uint256(1) << 180);
+        vm.expectRevert(JackpotBattle.BadJackpotField.selector);
+        api.appendJackpotBattle(field, field.length, false);
+        vm.stopPrank();
+        assertEq(_round().drawnCount, 0);
+        assertEq(_round().drawCursor, 0);
+    }
+
     function test_LargeAwardFieldCollectsBeforeAnyPaidSettlement() public {
         _enter(alice, false);
         _lock(1_000_000 ether);

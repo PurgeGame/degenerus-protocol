@@ -86,7 +86,9 @@ Awards come from Added alone: one per 10,000 FLIP of Added, at most 500. Paid vo
 
 ### Draw and seal
 
-The Game draws awards in chunks of up to 150 entries, one chunk per advance.
+The Game draws awards in chunks of up to 50 entries. An advance keeps processing
+chunks while enough gas remains for another complete chunk; otherwise it saves the
+cursor and resumes on the next advance.
 
 - Each visit picks a level uniformly among eligible nonempty far-future queues, chooses a starting position, and walks that level's whole queue circularly. Levels are picked with replacement between visits. Chunk boundaries preserve the unfinished visit.
 - The Game reads all distinct wallets' saved boards in one `extsload(bytes32[])` call. It passes one word per entry: address in bits 0–159, the compact board in 160–179, one unit at bit 180. The battle makes no storage callbacks, and a malformed or empty entry forfeits its award.

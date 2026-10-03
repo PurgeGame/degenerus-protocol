@@ -258,12 +258,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     // Constants — Jackpot Bucket Scaling (Gas Guardrails)
     // -------------------------------------------------------------------------
 
-    /// @dev Domain separator for the daily future jackpot battle's entropy derivation.
-
-    /// @dev Most awarded entries one draw call collects: the chunk the battle accepts.
-
-    /// @dev Most winners of level 1's trait-matched FLIP draw, each paid one equal share.
-
     /// @dev A ticket-leg winner keeps at most 25 whole tickets once the leg's surplus buys a
     ///      full pass; the surplus then goes as whole passes to one fresh winner, and its ETH
     ///      stays in nextPrizePool.

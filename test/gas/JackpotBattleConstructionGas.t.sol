@@ -15,9 +15,27 @@ import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 import {DegenerusGameJackpotDrawModule} from "../../contracts/modules/DegenerusGameJackpotDrawModule.sol";
 import {Vm} from "forge-std/Vm.sol";
 
+/// @dev Foundry isolation resets basefee to zero for a promoted non-static call.
+/// Set it inside that transaction, then measure only the nested, unmodified Game
+/// call. Fixture setup and this adapter are excluded; add mineFlip's 21,064 intrinsic.
+contract BattlePaidMinerProbe {
+    Vm private constant VM = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
+
+    function run(address game, address miner, uint256 supplied)
+        external returns (bool ok, Vm.Gas memory used, bytes memory reason)
+    {
+        VM.fee(1 gwei);
+        VM.prank(miner);
+        (ok, reason) = game.call{gas: supplied}(abi.encodeWithSignature("mineFlip()"));
+        used = VM.lastCallGas();
+    }
+}
+
 /// @dev Test-only storage construction. Every measured worker is the deployed production
 /// bytecode, including Game -> Miner -> Advance -> Jackpot -> Draw -> Craps -> JackpotBattle.
 contract BattleConstructionGameSeed is DegenerusGameStorage {
+    function seedMinerPass(address miner, uint256 packed) external { mintPacked_[miner] = packed; }
+
     function seedSession(uint24 ceiling, uint24 day, uint256 word) external {
         level = ceiling - 1;
         purchaseStartDay = day - 1;
@@ -99,6 +117,7 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
     bytes private gameCode;
     bytes private tableCode;
     uint64 private slot;
+    BattlePaidMinerProbe private paidProbe;
 
     function setUp() public {
         _deployProtocol(false);
@@ -106,6 +125,7 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
         // DeployProtocol exposes test readers. Measurements use the exact production facade.
         tableCode = type(CrapsBattle).runtimeCode;
         vm.warp(100 days + 82_620 + 1 hours);
+        paidProbe = new BattlePaidMinerProbe();
     }
 
     function _seed(uint256 target, uint8 shape) private {
@@ -124,7 +144,7 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
             uint256 count = shape == 0 ? (offset == first ? 500 : 1) : shape;
             address[] memory players = new address[](count);
             for (uint256 i; i < count; ++i) {
-                // Every address has low byte zero. A full unique chunk hits all 11,175
+                // Every address has low byte zero. A full unique chunk hits all 1,225
                 // pairwise exact comparisons in JackpotBattleFieldLib.prepare.
                 players[i] = address(uint160((0x100000 + uint256(offset) * 1000 + i) << 8));
             }
@@ -162,7 +182,7 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
         _cool();
         uint256 start = gasleft();
         MineFlipGas.Result memory result = BattleConstructionGameSeed(address(game)).runDraw{gas: 10_000_000}(
-            CEILING, WORD, 9_000_000
+            CEILING, WORD, GasBounds.JACKPOT_BATTLE_DRAW + GasBounds.DAILY_PHASE_TAIL + 100_000
         );
         used = start - gasleft();
         emit log_named_uint("cold battle worker gas incl facade delegate", used);
@@ -171,13 +191,13 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
         assertLt(used, GasBounds.JACKPOT_BATTLE_DRAW, "full worker must fit atomic admission bound");
     }
 
-    function test_Cold150UniqueCollisionBoardsInitializeAppendSealWithinBound() public {
-        _seed(150, 0);
+    function test_Cold50UniqueCollisionBoardsInitializeAppendSealWithinBound() public {
+        _seed(50, 0);
         uint256 priorComps = coin.crapsCompAllowance();
         vm.recordLogs();
         _worker();
         Vm.Log[] memory entries = vm.getRecordedLogs();
-        address[] memory players = new address[](150);
+        address[] memory players = new address[](50);
         uint256 n;
         for (uint256 i; i < entries.length; ++i) {
             if (entries[i].topics[0] != keccak256("JackpotBattleEntry(uint64,uint256,address,uint256,uint32)")) continue;
@@ -189,12 +209,12 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
             for (uint256 j; j < n; ++j) assertTrue(players[j] != player, "full collision scan requires unique wallets");
             players[n++] = player;
         }
-        assertEq(n, 150);
+        assertEq(n, 50);
         (CrapsBattleStorage.JackpotRound memory round, uint256 board,) =
             JackpotBattle(address(crapsBattle)).jackpotBattleOf(slot);
-        assertEq(round.drawnCount, 150);
-        assertEq(round.drawnUnits, 150);
-        assertEq(uint32(board), 250);
+        assertEq(round.drawnCount, 50);
+        assertEq(round.drawnUnits, 50);
+        assertEq(uint32(board), 150);
         assertEq(round.word, round.drawWord);
         assertGt(round.word, 0);
         assertGt(round.potRemainder, 0, "fresh remainder slot must exercise its write");
@@ -204,18 +224,18 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
     function test_Cold500AwardMaximumResumesAndSealsWithoutRepeatedInitialization() public {
         _seed(500, 0);
         uint256 word;
-        for (uint256 i; i < 4; ++i) {
+        for (uint256 i; i < 10; ++i) {
             _worker();
             (CrapsBattleStorage.JackpotRound memory round,,) = JackpotBattle(address(crapsBattle)).jackpotBattleOf(slot);
             if (i == 0) word = round.drawWord;
             assertEq(round.drawWord, word);
-            assertEq(round.drawnCount, i < 3 ? (i + 1) * 150 : 500);
-            assertEq(round.word == 0, i < 3);
+            assertEq(round.drawnCount, (i + 1) * 50);
+            assertEq(round.word == 0, i < 9);
         }
     }
 
-    function test_ColdSingletonVisitBranchWithinBound() public { _seed(150, 1); _worker(); }
-    function test_ColdFragmentedCircularVisitBranchWithinBound() public { _seed(150, 3); _worker(); }
+    function test_ColdSingletonVisitBranchWithinBound() public { _seed(50, 1); _worker(); }
+    function test_ColdFragmentedCircularVisitBranchWithinBound() public { _seed(50, 3); _worker(); }
 
     function test_ColdCollectionComponentAcrossQueueWordBoundaries() public {
         bytes memory probe = type(BattleConstructionDrawProbe).runtimeCode;
@@ -231,7 +251,7 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
             uint256 used = start - gasleft();
             emit log_named_uint("collection queue length (0 = concentrated500)", shapes[i]);
             emit log_named_uint("cold production collection component", used);
-            assertEq(players.length, 150);
+            assertEq(players.length, 50);
             assertLt(used, 1_500_000, "collection branch calibration envelope");
             assertTrue(vm.revertToState(pristine));
         }
@@ -252,6 +272,7 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
         assertFalse(result.progressed, "insufficient actual gas must defer before prepare");
         vm.etch(address(game), gameCode);
         _cool();
+        vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
         vm.prank(MINER);
         game.mineFlip{gas: GasBounds.JACKPOT_BATTLE_DRAW}();
         (CrapsBattleStorage.JackpotRound memory round,,) = JackpotBattle(address(crapsBattle)).jackpotBattleOf(slot);
@@ -268,10 +289,9 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
         assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.DailyPhase), "fixture must select the real daily phase");
         uint256 beforeReward = coinflip.coinflipAmount(MINER);
         _cool();
-        vm.prank(MINER);
-        uint256 start = gasleft();
-        game.mineFlip{gas: 12_000_000}();
-        uint256 used = start - gasleft() + 21_064;
+        (bool ok, Vm.Gas memory observed,) = paidProbe.run(address(game), MINER, 12_000_000);
+        assertTrue(ok);
+        uint256 used = observed.gasTotalUsed + 21_064;
         emit log_named_uint("cold complete mineFlip battle construction incl intrinsic", used);
         assertLt(used, 10_000_000);
         (CrapsBattleStorage.JackpotRound memory round,, uint64 resolved) =
