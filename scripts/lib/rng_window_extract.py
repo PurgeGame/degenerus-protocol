@@ -271,6 +271,20 @@ def scan_file(path: str, relpath: str):
                 aliases.setdefault(fn, {}).setdefault(alias, set()).update(roots_by_type[typ])
 
     records = []
+    # Computed assembly slots need an explicit root declaration. Require the
+    # named function to reference that root's slot and actually execute sstore.
+    annotation = re.compile(
+        r"(?m)^[ \t]*///[ \t]*@custom:storage-write[ \t]+(\w+)[^\n]*\n"
+        r"(?:[ \t]*///[^\n]*\n)*[ \t]*function[ \t]+(\w+)\b"
+    )
+    for match in annotation.finditer(src):
+        ident, fn = match.groups()
+        body = "\n".join(line for idx, line in enumerate(masked_lines) if fn_by_line[idx] == fn)
+        if not re.search(r"\b" + re.escape(ident) + r"\.slot\b", body) or not re.search(r"\bsstore\s*\(", body):
+            raise ValueError(f"{relpath}: invalid assembly storage-write annotation for {fn}: {ident}")
+        if ident in VRF_WORD_IDENTIFIERS:
+            line = src.count("\n", 0, match.start())
+            records.append((relpath, fn, ident, "WRITE", line + 1, raw_lines[line].strip()))
     for idx, mline in enumerate(masked_lines):
         fn = fn_by_line[idx] if idx < len(fn_by_line) else "<file-scope>"
         code = raw_lines[idx].strip() if idx < len(raw_lines) else ""

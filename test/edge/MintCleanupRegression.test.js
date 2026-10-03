@@ -423,7 +423,7 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
       expect(pending.slot).to.equal("78");
       expect(layout.types[locator.type].label).to.equal("mapping(address => uint32)");
       expect(layout.types[owners.type].label).to.equal("address[]");
-      expect(layout.types[pending.type].label).to.equal("mapping(uint24 => mapping(uint32 => uint256))");
+      expect(layout.types[pending.type].label).to.equal("mapping(uint32 => uint256)");
 
       const { fixture, gameAddr, ticketWriteSlot } = await setupQueuedState();
       const { game, alice } = fixture;

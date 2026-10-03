@@ -51,7 +51,7 @@ contract TicketQueueRingTest is Test {
     function testFuzz_PhysicalKeysPreserveAbsoluteDomains(uint24 lvl, uint8 domain) public view {
         lvl &= 0x3fffff;
         uint24 flags = domain % 3 == 0 ? 0 : (domain % 3 == 1 ? SLOT : FAR);
-        uint24 slot = lvl == 0 ? 0 : (lvl - 1) % 100 + 1;
+        uint24 slot = lvl == 0 ? 0 : (lvl - 1) % (flags == FAR ? 100 : 2) + 1;
         assertEq(h.physical(lvl | flags), slot | flags);
     }
 
@@ -60,7 +60,7 @@ contract TicketQueueRingTest is Test {
             h.setLevel(lvl - 1);
             h.enqueue(ALICE, lvl, 4);
             uint24 key = h.writeKey(lvl);
-            assertEq(h.physical(key), (lvl - 1) % 100 + 1);
+            assertEq(h.physical(key), (lvl - 1) % 2 + 1);
             assertEq(h.count(key), 1);
             h.reveal(key, 7);
             assertEq(h.bucketOwner(lvl, 7, 0), ALICE);

@@ -17,7 +17,7 @@ contract StableOwnersHarness is DegenerusGameStorage {
     function extsload(bytes32 slot) external view returns(bytes32 value) { assembly ("memory-safe") { value := sload(slot) } }
     function id(address p) external view returns(uint32) { return ticketOwnerId[p]; }
     function count() external view returns(uint256) { return ticketOwners.length; }
-    function word(uint24 lvl, address p) external view returns(uint256) { return ticketPending[_ticketPendingStorageKey(lvl)][ticketOwnerId[p]]; }
+    function word(uint24, address p) external view returns(uint256) { return ticketPending[ticketOwnerId[p]]; }
     function len(uint24 key) external view returns(uint256) { return _ticketQueueLength(key); }
     function setLevel(uint24 n) external { level = n; }
     function fill(uint256 n) external { assembly ("memory-safe") { sstore(ticketOwners.slot,n) } }
@@ -64,7 +64,7 @@ contract StableEntryOwnersTest is Test {
         for(uint24 lvl=1;lvl<=385;++lvl) {
             h.setLevel(lvl-1);h.credit(A,lvl,4);(,uint24 wk,)=h.keys(lvl);
             assertEq(h.id(A),1);assertEq(h.count(),1);assertEq(h.len(wk),1);
-            assertEq(h.physical(wk),uint24((lvl-1)%100+1));
+            assertEq(h.physical(wk),uint24((lvl-1)%2+1));
             h.consume(wk,A);assertEq(h.len(wk),0);
         }
     }
@@ -87,7 +87,7 @@ contract StableEntryOwnersTest is Test {
         assertEq(h.word(1,A),h.word(129,A));assertEq(h.owed(oldKey,A),0);
         assertEq(h.total(1,A),0);assertEq(h.total(129,A),8);
         assertEq(uint32(h.owed(newKey,A)>>8),8);
-        assertEq((h.word(129,A)>>126)&0xffffff,129);
+        assertEq((h.word(129,A)>>192)&0xffffff,129);
         h.consume(newKey,A);assertEq(h.word(1,A),uint256(1)<<255);
     }
     function test_CurrentAndCenturyAheadFutureKeepSeparateQueueDomains() public {

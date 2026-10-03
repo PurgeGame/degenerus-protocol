@@ -69,9 +69,9 @@ contract TicketRoutingTest is Test {
 
     function test_MixedRangeAcrossThreeQueueWords() public {
         // level=10, mintCeiling=level+1=11 (lastPurchaseDay defaults false): levels
-        // 9,10,11 route to the write key, 12,13,14 route to the FF key.
-        for (uint160 i; i < 19; ++i) harness.queueTicketRange(address(0xBB00 + i), 9, 6, 3);
-        for (uint24 lvl = 9; lvl <= 14; ++lvl) {
+        // 10,11 route to the write key, 12,13,14,15 route to the FF key.
+        for (uint160 i; i < 19; ++i) harness.queueTicketRange(address(0xBB00 + i), 10, 6, 3);
+        for (uint24 lvl = 10; lvl <= 15; ++lvl) {
             uint24 key = lvl <= 11 ? harness.tqWriteKey(lvl) : harness.tqFarFutureKey(lvl);
             assertEq(harness.getQueueLength(key), 19);
             for (uint160 i; i < 19; ++i) assertEq(harness.getQueueEntry(key, i), address(0xBB00 + i));
@@ -149,18 +149,16 @@ contract TicketRoutingTest is Test {
     // =========================================================================
 
     function testRangeRoutingSplitsCorrectly() public {
-        // level=10, startLevel=9, numLevels=6 -> covers levels 9,10,11,12,13,14
-        // levels 9,10,11 (<= mintCeiling(10)=11) -> write key
-        // levels 12,13,14 (> 11) -> FF key
-        harness.queueTicketRange(buyer, 9, 6, 1);
+        // Current and next levels use near queues; four later levels use future queues.
+        harness.queueTicketRange(buyer, 10, 6, 1);
 
-        // Near-future levels (9, 10, 11) should be in write key
-        for (uint24 lvl = 9; lvl <= 11; lvl++) {
+        // Near-future levels (10, 11) should be in write key
+        for (uint24 lvl = 10; lvl <= 11; lvl++) {
             uint24 writeKey = harness.tqWriteKey(lvl);
             assertEq(harness.getQueueLength(writeKey), 1, "near-future level should be in write key");
         }
-        // Far-future levels (12, 13, 14) should be in FF key
-        for (uint24 lvl = 12; lvl <= 14; lvl++) {
+        // Far-future levels (12, 13, 14, 15) should be in FF key
+        for (uint24 lvl = 12; lvl <= 15; lvl++) {
             uint24 ffKey = harness.tqFarFutureKey(lvl);
             assertEq(harness.getQueueLength(ffKey), 1, "far-future level should be in FF key");
         }

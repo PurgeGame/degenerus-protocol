@@ -112,8 +112,7 @@ async function seedTicketQueue(addr, key, holders) {
 async function entryOwnerRecordSlot(addr, key, player) {
   const id = (await getStorage(addr, mapSlot(BigInt(player), 13n))) & LANE_MASK;
   if (id === 0n) return null;
-  const lvl = BigInt(key) & ((1n << 22n) - 1n);
-  return pad32(mapSlot(id, mapSlot(lvl ? ((lvl - 1n) % 128n) + 1n : 0n, 78n)));
+  return pad32(mapSlot(id, 78n));
 }
 
 async function readEntriesOwed(addr, key, player) {

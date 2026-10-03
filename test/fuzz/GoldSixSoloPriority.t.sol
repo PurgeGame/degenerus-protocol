@@ -8,7 +8,12 @@ import {GoldSixLib} from "../../contracts/libraries/GoldSixLib.sol";
 contract GoldSixSoloPriorityTest is Test {
     JackpotSoloTester private picker;
 
-    function setUp() public { picker = new JackpotSoloTester(); }
+    /// @dev The harness inherits the whole jackpot module and can exceed the deployment-size
+    ///      limit, so its runtime is installed directly, as the Hardhat fixture does.
+    function setUp() public {
+        picker = JackpotSoloTester(makeAddr("jackpot-solo-tester"));
+        vm.etch(address(picker), type(JackpotSoloTester).runtimeCode);
+    }
 
     function testFuzzSurvivingGoldSixWinsAgainstEveryOtherBoard(
         uint8 a, uint8 b, uint8 c, uint256 entropy

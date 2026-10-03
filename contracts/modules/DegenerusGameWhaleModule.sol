@@ -1046,7 +1046,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                 lanes |= uint256(uint32(packed >> OWNER_IDX_SHIFT)) << (count * 32);
                 ++count;
             }
-            uint32 owed = uint32(packed >> 8) + DEITY_PERPETUAL_ENTRIES;
+            uint32 owed = _addOwed(uint32(packed >> 8), DEITY_PERPETUAL_ENTRIES,
+                key & TICKET_FAR_FUTURE_BIT != 0);
             _setEntryOwed(key, uint32(packed >> OWNER_IDX_SHIFT),
                 (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(uint8(packed)));
         }

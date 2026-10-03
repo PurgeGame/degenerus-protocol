@@ -97,8 +97,7 @@ contract DegenerusGameFoilPackModule is
                     count = 0;
                 }
             }
-            uint256 owed = uint256(uint32(packed >> 8)) + DEITY_PERPETUAL_ENTRIES;
-            if (owed > type(uint32).max) owed = type(uint32).max;
+            uint32 owed = _saturateFarFutureOwed(uint256(uint32(packed >> 8)) + DEITY_PERPETUAL_ENTRIES);
             _setEntryOwed(key, uint32(packed >> OWNER_IDX_SHIFT),
                 (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(uint8(packed)));
         }

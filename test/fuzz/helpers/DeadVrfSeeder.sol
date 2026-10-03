@@ -46,7 +46,7 @@ contract DeadVrfSeeder is DegenerusGame, BucketSeed {
     }
 
     function pendingWord(uint24 lvl, address player) external view returns (uint256) {
-        return ticketPending[_ticketPendingStorageKey(lvl)][ticketOwnerId[player]];
+        return ticketPending[ticketOwnerId[player]];
     }
 
     function seedFoil(uint24 lvl, uint24 resolveDay, address player) external returns (uint256 index) {

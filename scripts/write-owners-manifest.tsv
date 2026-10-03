@@ -202,3 +202,4 @@ OWNER	subsFullyProcessed	modules/GameAfkingModule.sol	AFKing worker sets complet
 HELPER	ticketPending	storage/DegenerusGameStorage.sol	Canonical queue helper writes exact physical/tagged owner debt; only committed read drains and permitted write-side acquisition call it.
 OWNER	ticketSoloOffset	modules/DegenerusGameTicketModule.sol	Ticket worker persists aligned immutable-stream offset; queue release or genuine cohort retirement resets it. Same-cohort terminal continuation preserves it.
 HELPER	ticketSoloOffset	storage/DegenerusGameStorage.sol	Ticket worker persists aligned immutable-stream offset; queue release or genuine cohort retirement resets it. Same-cohort terminal continuation preserves it.
+HELPER	farFutureOwed	storage/DegenerusGameStorage.sol	Canonical owed codec preserves neighboring circular lanes, authenticates queue level tags and saturates far-future adds at 2^30-1.

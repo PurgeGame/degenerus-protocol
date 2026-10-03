@@ -178,9 +178,36 @@ contract TicketCheckpointDeterminismTest is Test {
         compare(1, 2, 650_000, true);
     }
     function test_futurePoolSameStreamAcrossBudgets() public {
-        for (uint256 i; i < 11; ++i) h.credit(player(i), 3, uint32(30_025 + i * 331));
+        for (uint256 i; i < 11; ++i) h.credit(player(i), 3, uint32(30_000 + i * 400));
         h.commit(WORD, true);
         compare(3, 0, 900_000, true);
+    }
+    function test_wholeFutureSnapAcrossBudgets() public {
+        for (uint256 i; i < 11; ++i) h.credit(player(i), 3, uint32(400_000 + i * 400));
+        h.setSnap(3);
+        h.commit(WORD, true);
+        compare(3, 0, 1_300_000, true);
+    }
+    function testFuzz_wholeFutureSnapCheckpointParity(uint32 seed, uint8 exponent) public {
+        for (uint256 i; i < 9; ++i) {
+            uint32 entries = 4 * (1 + uint32((uint256(seed) + i * 7) % 32));
+            h.credit(player(i), 3, entries * 100);
+        }
+        h.setSnap(1 + exponent % 8);
+        h.commit(uint256(keccak256(abi.encode(seed))), true);
+        compare(3, 0, 750_000, true);
+    }
+    function test_isolationDigestForWholeFuturePool() public {
+        uint256 entries;
+        for (uint256 i; i < 73; ++i) {
+            h.credit(player(i), 3, uint32(4_000 + i * 400));
+            entries += 40 + i * 4;
+        }
+        h.commit(WORD, true);
+        compare(3, 0, 2_000_000, true);
+        (bytes32 result, uint256 count) = h.digest(3);
+        assertEq(count, entries, "every whole credited entry is generated exactly once");
+        emit log_named_bytes32("OWED8_FUTURE_DIGEST", result);
     }
     function test_snapIsAppliedOnceAcrossSoloCheckpoints() public {
         h.credit(player(0), 1, 600_075);
@@ -219,7 +246,7 @@ contract TicketCheckpointDeterminismTest is Test {
         assertEq(b, d);
     }
     function test_ordinaryFutureAndFoilShareOneCanonicalProducerOrder() public {
-        h.credit(player(0), 3, 100_050); // Frozen-future domain before activation.
+        h.credit(player(0), 3, 100_000); // Frozen-future domain before activation.
         h.frozenFuture(3);
         h.credit(player(1), 3, 100_025); // Ordinary domain after activation.
         h.credit(player(2), 2, 80_075);
@@ -240,7 +267,7 @@ contract TicketCheckpointDeterminismTest is Test {
         h.initialize(2);
         h.seedBuffer(1);
         h.credit(player(0), 1, 40_000);
-        h.credit(player(1), 3, 120_025);
+        h.credit(player(1), 2, 120_025);
         for (uint256 i; i < 8; ++i) h.seedFoil(player(i + 100), 3);
         h.commit(WORD, false);
         compare(3, 3, 2_000_000, true);

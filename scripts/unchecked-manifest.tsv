@@ -6,8 +6,8 @@
 #
 # Classes: BOUNDED (a guard / cap / width argument, named) · NO-OVERFLOW-OP (nothing in the block
 # can leave the range) · WRAP-INTENDED (modular arithmetic on purpose) · SCALE-BOUNDED (no code
-# guard: the only bound is the ETH that must be paid to reach the width — the owed lanes and the
-# pass lanes, a documented design choice at DegenerusGame.sol ~:2406-2408; recorded, not hidden).
+# guard for normal owed and pass lanes: economic scale only. Far-future owed saturates at
+# 2^30-1 through _saturateFarFutureOwed; each mixed-domain row records both cases).
 #
 # Columns: CLASS  file  function  ordinal  head  rationale
 CLASS	file	function	ordinal	head	rationale
@@ -123,11 +123,7 @@ BOUNDED	modules/GameAfkingModule.sol	_runSubscriberWork	10	_pendingBoxCount += u
 BOUNDED	modules/GameAfkingModule.sol	_openAfkingBox	1	--_pendingBoxCount	Paired with the sole stamp increments (:1328, :1532): a box is opened only under lastOpenedDay < lastAutoBoughtDay (gate at :1704 and the marker advance at :1618), so the counter is >= 1 at every decrement.
 NO-OVERFLOW-OP	modules/GameAfkingModule.sol	claimAfkingFlip	1	++i	Loop counter i under i < len = subs.length (calldata array length, bounded by calldata size).
 WRAP-INTENDED	storage/DegenerusGameStorage.sol	_rawDailyRngWord	1	rawWord = finalWord - _nudgeCount()	Undo the modulo2^256 frozen nudge to recover the exact raw word; callback refuses reserved final0/1 without normalization.
-SCALE-BOUNDED	storage/DegenerusGameStorage.sol	_queueEntries	1	owed += entries	economic scale only (caps deliberately removed, DegenerusGame.sol ~:2406-2408): owed is the uint32 lane of entriesOwedPacked (uint48, :590); entries is an uncapped uint32 argument and nothing bounds cumulative owed below 2^32 (paid-wei scale only).
-SCALE-BOUNDED	storage/DegenerusGameStorage.sol	_queueEntriesScaled	1	owed += whole	economic scale only (caps deliberately removed, DegenerusGame.sol ~:2406-2408): whole = entriesScaled/QTY_SCALE (<= 42.9M per call) added into the uncapped uint32 owed lane (:919); nothing bounds cumulative owed below 2^32.
-NO-OVERFLOW-OP	storage/DegenerusGameStorage.sol	_queueEntriesScaled	2	newRem = uint16(rem) + uint16(frac)	`rem` is uint8 (<= 255) and `frac = entriesScaled % QTY_SCALE` < 100 (QTY_SCALE = 100 at Storage:190); both widen into uint16, sum < 355.
-SCALE-BOUNDED	storage/DegenerusGameStorage.sol	_queueEntriesScaled	3	owed += 1	economic scale only (caps deliberately removed, DegenerusGame.sol ~:2406-2408): shares the :922 gap; owed += 1 wraps iff the uncapped uint32 owed lane already sits at 2^32-1 after the whole-part add. Bounded only by paid-wei scale.
-SCALE-BOUNDED	storage/DegenerusGameStorage.sol	_queueEntryRangeStridedCore	1	owed += entriesPerLevel	economic scale only (caps deliberately removed, DegenerusGame.sol ~:2406-2408): entriesPerLevel is an uncapped uint32 parameter accumulated per level into the uint32 owed lane; no guard bounds cumulative owed below 2^32.
-BOUNDED	storage/DegenerusGameStorage.sol	_queueEntryRangeStridedCore	2	lvl += stride	`lvl` is uint24 starting near `level`, advanced numLevels times by stride; callers pass numLevels <= 100, stride <= 4 (Storage:1060-1070, :1889; Whale:362,:790), so lvl stays far below 2^24.
-BOUNDED	storage/DegenerusGameStorage.sol	_ticketPendingStorageKey	1	return lvl == 0 ? 0 : ((lvl - 1) & 127) + 1	Zero level returns before subtraction; nonzero lvl >= 1, and the masked result is at most 127 before adding one.
+SCALE-BOUNDED	storage/DegenerusGameStorage.sol	_addOwed	1	return isFarFuture ? _saturateFarFutureOwed(uint256(owed) + added) : owed + uint32(added)	The single owed-count add. Far-future owed widens the add to uint256 and saturates at 2^30-1 through _saturateFarFutureOwed. Normal uint32 owed retains unchecked accumulation, bounded only by economic scale.
+NO-OVERFLOW-OP	storage/DegenerusGameStorage.sol	_queueEntriesScaled	1	newRem = uint16(rem) + uint16(frac)	`rem` is uint8 (<= 255) and `frac = entriesScaled % QTY_SCALE` < 100 (QTY_SCALE = 100 at Storage:190); both widen into uint16, sum < 355.
+BOUNDED	storage/DegenerusGameStorage.sol	_queueEntryRangeStridedCore	1	lvl += stride	`lvl` is uint24 starting near `level`, advanced numLevels times by stride; callers pass numLevels <= 100, stride <= 4 (Storage:1060-1070, :1889; Whale:362,:790), so lvl stays far below 2^24.
 NO-OVERFLOW-OP	storage/DegenerusGameStorage.sol	_boxOrderCount	1	return ((word >> LB_SMALL_SHIFT) & LB_COUNT_MASK) + ((word >> LB_MED_SHIFT) & LB_COUNT_MAS	Four 8-bit masked fields (LB_COUNT_MASK = 0xFF, Storage:1455) plus 0-or-1, summed in uint256; maximum 1021.

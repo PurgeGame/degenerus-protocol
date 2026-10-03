@@ -202,9 +202,9 @@ contract DegenerusGameTicketModule is DegenerusGameStorage {
         address player = address(uint160(record));
         uint80 packed = uint80(record >> 160);
         uint80 snapDone = shift == 0 ? 0 : SNAP_DONE_BIT;
-        if (snapDone != 0 && packed != 0 && packed & SNAP_DONE_BIT == 0) packed = _snapOwedPacked(packed, shift);
-        uint32 owed = uint32(packed >> 8);
-        uint8 rem = uint8(packed);
+        uint32 owed;
+        uint8 rem;
+        (packed, owed, rem) = _readOwed(packed, snapDone, shift, rk, lvl, qi, player, entropy);
         uint256 stream = TicketEntropy.identity(rk, lvl, qi, player);
         uint256 available = MineFlipGas.remaining(meter);
         // A low-gas miner may commit a shorter aligned prefix. Never consume
@@ -245,6 +245,21 @@ contract DegenerusGameTicketModule is DegenerusGameStorage {
             ticketSoloOffset = uint32(uint256(offset) + whole);
         }
         return (true, complete, emitted);
+    }
+
+    /// @dev The one read of an entry's owed balance for both drain paths: snap it once, then
+    ///      resolve a far-future fraction to a whole entry so no far-future remainder survives.
+    function _readOwed(uint80 packed, uint80 snapDone, uint8 shift, uint24 rk, uint24 lvl,
+        uint256 qi, address player, uint256 entropy) private pure returns (uint80, uint32 owed, uint8 rem)
+    {
+        if (snapDone != 0 && packed != 0 && packed & SNAP_DONE_BIT == 0) packed = _snapOwedPacked(packed, shift);
+        owed = uint32(packed >> 8);
+        rem = uint8(packed);
+        if (rk & TICKET_FAR_FUTURE_BIT != 0 && rem != 0) {
+            if (TicketEntropy.remainder(TicketEntropy.identity(rk, lvl, qi, player), entropy, rem)) ++owed;
+            rem = 0;
+        }
+        return (packed, owed, rem);
     }
 
     function _revertTicket(bytes memory data) private pure {
@@ -452,11 +467,9 @@ contract DegenerusGameTicketModule is DegenerusGameStorage {
         uint256 record = _entryRecord(st.rk, ownerPos);
         address p = address(uint160(record));
         uint80 packed = uint80(record >> 160);
-        if (snapDone != 0 && packed != 0 && packed & SNAP_DONE_BIT == 0) {
-            packed = _snapOwedPacked(packed, shift);
-        }
-        uint32 owed = uint32(packed >> 8);
-        uint8 rem = uint8(packed);
+        uint32 owed;
+        uint8 rem;
+        (packed, owed, rem) = _readOwed(packed, snapDone, shift, st.rk, lvl, physical, p, entropy);
         if (owed == 0) {
             bool win = rem != 0 && TicketEntropy.remainder(
                 TicketEntropy.identity(st.rk, lvl, physical, p), entropy, rem

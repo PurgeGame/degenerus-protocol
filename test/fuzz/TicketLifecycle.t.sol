@@ -2405,15 +2405,12 @@ contract TicketLifecycleTest is DeployProtocol {
 
     /// @notice Read the length of the FF queue for a given level from game contract storage
     function _ffQueueLength(uint24 lvl) internal view returns (uint256) {
-        uint24 ffKey = keyComputer.tqFarFutureKey(lvl);
-        bytes32 slot = keccak256(abi.encode(uint256(ffKey), uint256(TICKET_QUEUE_SLOT)));
-        return uint256(vm.load(address(game), slot));
+        return TicketQueueStorage.length(address(game), keyComputer.tqFarFutureKey(lvl));
     }
 
     /// @notice Read the length of any queue key from game contract storage
     function _queueLength(uint24 key) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(uint256(key), uint256(TICKET_QUEUE_SLOT)));
-        return uint256(vm.load(address(game), slot));
+        return TicketQueueStorage.length(address(game), key);
     }
 
     /// @notice Get the current ticketWriteSlot from game storage

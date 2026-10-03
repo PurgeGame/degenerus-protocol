@@ -18,6 +18,33 @@ class WriteCoverage(unittest.TestCase):
         for line in ("if (root == 2) return;", "uint256 x = root[a][b];", "if (root.member != 0) return;"):
             self.assertEqual(extract.classify_mode(line, "root"), "READ")
 
+    def test_computed_assembly_write_annotation(self):
+        source = """contract Fixture {
+    mapping(uint32 => uint256[13]) internal root;
+    /// @custom:storage-write root
+    function write() external {
+        assembly { mstore(32, root.slot) sstore(keccak256(0, 64), 1) }
+    }
+    function read() external view {
+        assembly { mstore(32, root.slot) let word := sload(keccak256(0, 64)) }
+    }
+}"""
+        saved = extract.VRF_WORD_IDENTIFIERS
+        try:
+            extract.VRF_WORD_IDENTIFIERS = ["root"]
+            with tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "Fixture.sol"
+                path.write_text(source)
+                records = extract.scan_file(str(path), "Fixture.sol")
+                writes = {(fn, ident) for _, fn, ident, mode, *_ in records if mode == "WRITE"}
+                self.assertEqual(writes, {("write", "root")})
+                for invalid in (source.replace("sstore(", "mstore("), source.replace("root.slot", "other.slot")):
+                    path.write_text(invalid)
+                    with self.assertRaises(ValueError):
+                        extract.scan_file(str(path), "Fixture.sol")
+        finally:
+            extract.VRF_WORD_IDENTIFIERS = saved
+
     def test_storage_alias_is_scoped_and_binding_is_not_write(self):
         source = '''contract Fixture {
     struct Work { uint256 cursor; }

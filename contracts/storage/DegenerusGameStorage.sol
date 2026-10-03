@@ -740,8 +740,8 @@ abstract contract DegenerusGameStorage {
     ///      - ticketQueue[_ticketQueueStorageKey(4..5)] read cohorts → swept every advance
     ///      - ticketQueue[_ticketQueueStorageKey(6+)] → far-future space; 6 can mint once level 5 meets its goal
     ///
-    ///      Physical level slots 1..100 repeat every century; absolute logical keys must
-    ///      pass through _ticketQueueStorageKey. ticketQueueLevels authenticates the target.
+    ///      Near queues reuse two parity slots; far-future queues reuse slots 1..100.
+    ///      Logical keys pass through _ticketQueueStorageKey; ticketQueueLevels authenticates them.
     ///      Keys retain their domain flags: bit 23 selects the
     ///      double-buffer write/read half (ticketWriteSlot); tickets targeting > level+1 use the
     ///      disjoint far-future key space (bit 22). Raw-level indices above hold only when
@@ -753,8 +753,7 @@ abstract contract DegenerusGameStorage {
     ///      Readers are length-gated; append overwrites the selected lane after queue reuse.
     mapping(uint24 => uint256[]) internal ticketQueue;
 
-    /// @dev Permanent one-based uint32 wallet ID. Queue membership and owed balances
-    ///      live in ticketPending's separate physical-cohort lanes.
+    /// @dev Permanent one-based uint32 wallet ID, shared by every ticket queue.
     mapping(address => uint32) internal ticketOwnerId;
 
     /// @dev Cursor for ticket queue processing (dual-purpose).
@@ -1168,9 +1167,7 @@ abstract contract DegenerusGameStorage {
     ///      entry units (price/4 each), NOT whole tickets — 4 entries per
     ///      whole ticket. `owed` accumulates entries.
     ///      If buyer has no existing entries at that level, adds them to the queue.
-    ///      `owed` accumulates unchecked in the packed slot's uint32 lane. That ceiling sits
-    ///      at ~1.07 billion whole tickets for a single level (4 entries each), which no
-    ///      reachable purchase or award volume approaches.
+    ///      Far-future owed saturates at 2^30-1; normal cohorts retain uint32 owed.
     /// @param buyer Address to receive entries.
     /// @param targetLevel Level for which entries are queued.
     /// @param entries Number of entries to queue (price/4 units).
@@ -1209,9 +1206,7 @@ abstract contract DegenerusGameStorage {
             _tqAppend(wk, uint32(packed >> OWNER_IDX_SHIFT));
         }
         emit EntriesQueued(buyer, targetLevel, entries);
-        unchecked {
-            owed += entries;
-        }
+        owed = _addOwed(owed, entries, isFarFuture);
         _setEntryOwed(wk, uint32(packed >> OWNER_IDX_SHIFT),
             (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem));
     }
@@ -1274,9 +1269,7 @@ abstract contract DegenerusGameStorage {
 
         uint32 whole = uint32(uint256(entriesScaled) / QTY_SCALE);
         uint8 frac = uint8(uint256(entriesScaled) % QTY_SCALE);
-        unchecked {
-            owed += whole;
-        }
+        owed = _addOwed(owed, whole, isFarFuture);
 
         if (frac != 0) {
             uint16 newRem;
@@ -1284,9 +1277,7 @@ abstract contract DegenerusGameStorage {
                 newRem = uint16(rem) + uint16(frac);
             }
             if (newRem >= QTY_SCALE) {
-                unchecked {
-                    owed += 1;
-                }
+                owed = _addOwed(owed, 1, isFarFuture);
                 newRem -= uint16(QTY_SCALE);
             }
             rem = uint8(newRem);
@@ -1369,9 +1360,7 @@ abstract contract DegenerusGameStorage {
                 }
             }
             if (room) {
-                unchecked {
-                    owed += entriesPerLevel;
-                }
+                owed = _addOwed(owed, entriesPerLevel, isFarFuture);
                 _setEntryOwed(wk, uint32(packed >> OWNER_IDX_SHIFT),
                     (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem));
             }
@@ -1545,7 +1534,11 @@ abstract contract DegenerusGameStorage {
         assembly ("memory-safe") {
             let lvl := and(key, 0x3fffff)
             physical := and(key, 0xc00000)
-            if lvl { physical := or(physical, add(mod(sub(lvl, 1), 100), 1)) }
+            if lvl {
+                let slot := and(sub(lvl, 1), 1)
+                if and(key, 0x400000) { slot := mod(sub(lvl, 1), 100) }
+                physical := or(physical, add(slot, 1))
+            }
         }
     }
 
@@ -1586,30 +1579,55 @@ abstract contract DegenerusGameStorage {
         }
     }
 
-    /// @dev Pending balances retain 128 physical levels independently of the 100-root
-    ///      queue ring, so a delayed current cohort and L+100 never share a balance word.
-    function _ticketPendingStorageKey(uint24 key) internal pure returns (uint24 physical) {
-        uint24 lvl = key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT);
-        unchecked { return lvl == 0 ? 0 : ((lvl - 1) & 127) + 1; }
+    /// @dev Clamp before narrowing so an owed add cannot spill into an adjacent level.
+    function _saturateFarFutureOwed(uint256 owed) internal pure returns (uint32) {
+        return uint32(owed > 0x3fffffff ? 0x3fffffff : owed);
     }
 
-    function _entryLaneShift(uint24 key) internal pure returns (uint256) {
-        return key & TICKET_FAR_FUTURE_BIT != 0 ? 84 : (key & TICKET_SLOT_BIT != 0 ? 42 : 0);
+    /// @dev The one owed-count add: far-future lanes saturate at 2^30-1, normal lanes
+    ///      accumulate unchecked, bounded only by economic scale.
+    function _addOwed(uint32 owed, uint256 added, bool isFarFuture) internal pure returns (uint32) {
+        unchecked {
+            return isFarFuture ? _saturateFarFutureOwed(uint256(owed) + added) : owed + uint32(added);
+        }
+    }
+
+    /// @dev Queue tags authenticate the cycle before reading a reused owner lane.
+    function _farFutureLane(uint24 lvl, uint32 id) internal view returns (uint256 lane) {
+        assembly ("memory-safe") {
+            if lvl {
+                let position := mod(sub(lvl, 1), 100)
+                mstore(0, or(add(position, 1), 0x400000))
+                mstore(32, ticketQueueLevels.slot)
+                let occupying := sload(keccak256(0, 64))
+                if iszero(occupying) { occupying := add(position, 1) }
+                if eq(occupying, lvl) {
+                    mstore(0, id)
+                    mstore(32, farFutureOwed.slot)
+                    lane := and(shr(shl(5, and(position, 7)),
+                        sload(add(keccak256(0, 64), shr(3, position)))), 0xffffffff)
+                }
+            }
+        }
     }
 
     function _entryPacked(uint24 key, uint32 id) internal view returns (uint80 packed) {
-        uint24 physical = _ticketPendingStorageKey(key);
+        if (key & TICKET_FAR_FUTURE_BIT != 0) {
+            uint256 lane = _farFutureLane(key & 0x3fffff, id);
+            if (lane & 0x80000000 != 0) {
+                return (uint80(id) << OWNER_IDX_SHIFT) | uint80((lane & 0x3fffffff) << 8)
+                    | uint80((lane & 0x40000000) << 10);
+            }
+            return 0;
+        }
         assembly ("memory-safe") {
-            mstore(0, physical)
-            mstore(32, ticketPending.slot)
-            mstore(32, keccak256(0, 64))
             mstore(0, id)
+            mstore(32, ticketPending.slot)
             let word := sload(keccak256(0, 64))
-            let shift := 0
-            switch and(key, 0x400000)
-            case 0 { if and(key, 0x800000) { shift := 42 } }
-            default { shift := 84 }
-            if eq(and(shr(add(126, mul(div(shift, 42), 24)), word), 0xffffff), and(key, 0x3fffff)) {
+            let parity := and(key, 1)
+            let shift := mul(parity, 84)
+            if and(key, 0x800000) { shift := add(shift, 42) }
+            if eq(and(shr(add(168, mul(parity, 24)), word), 0xffffff), and(key, 0x3fffff)) {
                 let lane := and(shr(shift, word), 0x3ffffffffff)
                 if and(lane, 0x20000000000) { packed := or(shl(48, id), and(lane, 0x1ffffffffff)) }
             }
@@ -1630,15 +1648,20 @@ abstract contract DegenerusGameStorage {
         }
     }
 
-    /// @dev All queue-domain balances share one word; no owner address is needed.
+    /// @dev Sum both normal cohorts and the authoritative far-future balance.
     function _entriesOwedTotal(uint24 lvl, address player) internal view returns (uint32 total) {
         uint32 id = ticketOwnerId[player];
         if (id == 0) return 0;
-        uint256 word = ticketPending[_ticketPendingStorageKey(lvl)][id];
+        uint256 word = ticketPending[id];
+        uint256 futureLane = _farFutureLane(lvl, id);
         assembly ("memory-safe") {
-            if eq(and(shr(126, word), 0xffffff), lvl) { total := and(shr(8, word), 0xffffffff) }
-            if eq(and(shr(150, word), 0xffffff), lvl) { total := add(total, and(shr(50, word), 0xffffffff)) }
-            if eq(and(shr(174, word), 0xffffff), lvl) { total := add(total, and(shr(92, word), 0xffffffff)) }
+            let parity := and(lvl, 1)
+            if eq(and(shr(add(168, mul(parity, 24)), word), 0xffffff), lvl) {
+                let shift := mul(parity, 84)
+                total := add(and(shr(add(shift, 8), word), 0xffffffff),
+                    and(shr(add(shift, 50), word), 0xffffffff))
+            }
+            total := add(total, and(futureLane, 0x3fffffff))
             total := and(total, 0xffffffff)
         }
     }
@@ -1649,20 +1672,51 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev Reload at writeback and mask only this lane, preserving all other cohorts.
+    /// @custom:storage-write farFutureOwed
     function _setEntryOwed(uint24 key, uint32 id, uint80 packed) internal {
-        uint24 physical = _ticketPendingStorageKey(key);
-        uint256 shift = _entryLaneShift(key);
-        uint256 oldWord = ticketPending[physical][id];
+        if (key & TICKET_FAR_FUTURE_BIT != 0) {
+            uint24 lvl = key & 0x3fffff;
+            if (lvl == 0 || uint8(packed) != 0) revert E();
+            uint256 lane;
+            if (packed != 0) {
+                lane = 0x80000000 | _saturateFarFutureOwed(uint32(packed >> 8))
+                    | ((uint256(packed) >> 10) & 0x40000000);
+            }
+            assembly ("memory-safe") {
+                let position := mod(sub(lvl, 1), 100)
+                let offset := shl(5, and(position, 7))
+                mstore(0, id)
+                mstore(32, farFutureOwed.slot)
+                let target := add(keccak256(0, 64), shr(3, position))
+                sstore(target, or(and(sload(target), not(shl(offset, 0xffffffff))), shl(offset, lane)))
+            }
+            return;
+        }
+        uint256 oldWord = ticketPending[id];
         uint256 next;
         assembly ("memory-safe") {
-            let tagShift := add(126, mul(div(shift, 42), 24))
-            let mask := or(shl(shift, 0x3ffffffffff), shl(tagShift, 0xffffff))
-            next := or(and(oldWord, not(mask)), shl(255, 1))
-            if packed {
-                next := or(next, or(shl(shift, or(and(packed, 0x1ffffffffff), 0x20000000000)), shl(tagShift, and(key, 0x3fffff))))
+            let parity := and(key, 1)
+            let shift := mul(parity, 84)
+            if and(key, 0x800000) { shift := add(shift, 42) }
+            let tagShift := add(168, mul(parity, 24))
+            let tagMask := shl(tagShift, 0xffffff)
+            let pairMask := shl(mul(parity, 84), sub(shl(84, 1), 1))
+            let lvl := and(key, 0x3fffff)
+            let matches := eq(and(shr(tagShift, oldWord), 0xffffff), lvl)
+            next := oldWord
+            if or(matches, packed) {
+                if iszero(matches) {
+                    if and(oldWord, pairMask) {
+                        mstore(0, 0x92bbf6e8)
+                        revert(28, 4)
+                    }
+                }
+                next := or(and(next, not(or(shl(shift, 0x3ffffffffff), tagMask))), shl(255, 1))
+                if packed { next := or(next, shl(shift, or(and(packed, 0x1ffffffffff), 0x20000000000))) }
+                if and(next, pairMask) { next := or(next, shl(tagShift, lvl)) }
             }
         }
-        ticketPending[physical][id] = next;
+        ticketPending[id] = next;
     }
 
     /// @dev Divide a not-yet-snapped owed balance by 2^s, folding the shifted-out
@@ -1692,38 +1746,6 @@ abstract contract DegenerusGameStorage {
         // outcome; keccak gives full low-bit diffusion of the high-bit input.
         uint256 rollEntropy = EntropyLib.hash2(entropy, rollSalt);
         return (rollEntropy % QTY_SCALE) < rem;
-    }
-
-    /// @dev Resolves the zero-owed remainder case for ticket processing. `packed` is
-    ///      the caller's post-snap value; `snapDone` rides the rolled write-back so a
-    ///      budget-split resume sees the balance as already snapped.
-    function _resolveZeroOwedRemainder(
-        uint80 packed,
-        uint24 lvl,
-        uint32 ownerPos,
-        uint256 entropy,
-        uint256 baseKey,
-        uint80 snapDone
-    ) internal returns (uint80 newPacked, bool skip) {
-        uint8 rem = uint8(packed);
-        if (rem == 0) {
-            if (packed != 0) {
-                _setEntryOwed(lvl, ownerPos, 0);
-            }
-            return (0, true);
-        }
-
-        bool win = _rollRemainder(entropy, baseKey, rem);
-        if (!win) {
-            _setEntryOwed(lvl, ownerPos, 0);
-            return (0, true);
-        }
-
-        newPacked = (packed & OWNER_IDX_MASK) | snapDone | (uint80(1) << 8);
-        if (newPacked != packed) {
-            _setEntryOwed(lvl, ownerPos, newPacked);
-        }
-        return (newPacked, false);
     }
 
     // =========================================================================
@@ -4316,14 +4338,14 @@ abstract contract DegenerusGameStorage {
     ///      Cleared only on successful buffer takeover; owner index zero remains valid.
     uint256[2] internal traitBucketLive;
 
-    /// @dev Absolute levels occupying the 100 reusable roots in each queue domain.
-    ///      Zero means the first century: its level is already the physical slot number.
+    /// @dev Absolute levels occupying two roots per near cohort and 100 far-future roots.
+    ///      Zero authenticates the initial level equal to the physical slot number.
     mapping(uint24 => uint24) internal ticketQueueLevels;
 
-    /// @dev Reusable 128-slot pending words keyed by physical level and permanent wallet ID.
-    ///      Lanes A/B/FF occupy 0..125; their full level tags occupy 126..197.
+    /// @dev ticketPending[id] holds even A/B then odd A/B in bits0..167.
+    ///      Even/odd level tags occupy bits168..215.
     ///      Bit255 stays nonzero after all lanes and tags are consumed.
-    mapping(uint24 => mapping(uint32 => uint256)) internal ticketPending;
+    mapping(uint32 => uint256) internal ticketPending;
 
     /// @dev Resolved payload markers, masked before every live decode.
     uint256 internal constant BOX_PROCESSED = uint256(1) << 255;
@@ -4527,6 +4549,9 @@ abstract contract DegenerusGameStorage {
         bool finalDay;
     }
     JackpotWork internal jackpotWork;
+
+    /// @dev 100 circular level lanes per owner: owed[0:29], snap[30], present[31].
+    mapping(uint32 => uint256[13]) internal farFutureOwed;
 
     error AfkingStethPullFailed();
 }

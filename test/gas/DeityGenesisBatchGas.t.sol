@@ -39,9 +39,12 @@ contract DeityGenesisBatchGasTest is DeployProtocol {
             uint24 key = _genesisKey(lvl);
             bytes32 lengthSlot = keccak256(abi.encode(uint256(key), uint256(12)));
             bytes32 wordSlot = keccak256(abi.encode(lengthSlot));
-            bytes32 pendingRoot = keccak256(abi.encode(uint256(lvl), uint256(78)));
-            bytes32 firstRecord = keccak256(abi.encode(uint256(1), pendingRoot));
-            bytes32 secondRecord = keccak256(abi.encode(uint256(2), pendingRoot));
+            bytes32 pendingRoot = bytes32(uint256(78));
+            uint256 owedWrites = lvl == 1 ? 1 : lvl <= 8 ? 7 : lvl >= 97 ? 4 : 8;
+            bytes32 firstRecord = lvl == 1 ? keccak256(abi.encode(uint256(1), pendingRoot))
+                : bytes32(uint256(keccak256(abi.encode(uint256(1), uint256(81)))) + (lvl - 1) / 8);
+            bytes32 secondRecord = lvl == 1 ? keccak256(abi.encode(uint256(2), pendingRoot))
+                : bytes32(uint256(keccak256(abi.encode(uint256(2), uint256(81)))) + (lvl - 1) / 8);
             uint256 lengthWrites;
             uint256 wordWrites;
             uint256 firstRecordWrites;
@@ -54,8 +57,8 @@ contract DeityGenesisBatchGasTest is DeployProtocol {
             }
             assertEq(lengthWrites, 1, "one queue length write for both owners");
             assertEq(wordWrites, 1, "one packed queue word write for both owners");
-            assertEq(firstRecordWrites, 1, "one packed Vault owed write per level");
-            assertEq(secondRecordWrites, 1, "one packed sDGNRS owed write per level");
+            assertEq(firstRecordWrites, owedWrites, "Vault updates each covered lane");
+            assertEq(secondRecordWrites, owedWrites, "sDGNRS updates each covered lane");
             assertEq(uint256(vm.load(address(game), lengthSlot)), 2);
             assertEq(uint256(vm.load(address(game), wordSlot)), 1 | (uint256(2) << 32));
             assertEq(uint32(TQ.owed(address(game), key, address(vault)) >> 8), 4);
@@ -87,8 +90,7 @@ contract DeityGenesisBatchGasTest is DeployProtocol {
         GenesisQueueSeeder(address(game)).queue(address(sdgnrs), 6, 8);
         GenesisQueueSeeder(address(game)).queue(address(vault), 7, 12);
         vm.etch(address(game), original);
-        uint24 farSix = uint24(1 << 22) | 6;
-        TQ.setOwed(address(game), farSix, address(vault), TQ.owed(address(game), farSix, address(vault)) | 37);
+        TQ.setOwed(address(game), 1, address(1001), TQ.owed(address(game), 1, address(1001)) | 37);
 
         game.initProtocolDeity();
 
@@ -104,7 +106,7 @@ contract DeityGenesisBatchGasTest is DeployProtocol {
         for (uint160 i = 1; i <= 7; ++i) {
             assertEq(uint32(TQ.owed(address(game), 1, address(1000 + i)) >> 8), i * 4);
         }
-        assertEq(uint8(TQ.owed(address(game), farSix, address(vault))), 37, "fractional entries survive");
+        assertEq(uint8(TQ.owed(address(game), 1, address(1001))), 37, "fractional entries survive");
     }
 
     function testGenesisCannotSeedExpiredLevelsAfterAdvancement() public {

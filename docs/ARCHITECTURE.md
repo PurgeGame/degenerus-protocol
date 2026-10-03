@@ -274,9 +274,16 @@ has expired at the same retirement boundary.
 `EntryOwnerRegistered` still identifies the level and zero-based owner index when a wallet
 joins a queue; a wallet uses the same global index across levels. The Lens exposes
 `walletIdOf` and `walletOfId` for direct identity lookup. Pending balances are separate:
-one reusable word per wallet ID and physical level slot packs three queue-domain lanes,
-with independent absolute-level tags and a nonzero sentinel after consumption. The queue
-uses 100 physical roots per domain; pending balances use 128 so L and L+100 cannot alias.
+near balances share one reusable word per wallet ID: even/odd levels each have
+read/write lanes and an absolute-level tag. A parity can be rebound only after
+both balances clear. Near queues reuse two roots per cohort. Far-future balances
+use a fixed `uint256[13]` per owner: slot `(level - 1) % 100` selects one of 100
+32-bit lanes, each holding 30 owed bits, snap-done and presence. The existing
+far-future queue tags authenticate each slot's level before reading or topping up.
+Far-future additions saturate at 2^30-1 through one shared clamp before narrowing.
+Thanos fractions round on first drain touch using committed entropy and stable
+identity, before a checkpoint persists the whole balance. Far-future queues
+reuse 100 roots; rebinding a nonempty queue reverts.
 
 IDs through 3,000,000,000 retain lazy registration at the ordinary ticket minimum.
 An ordinary ticket purchase allocating a higher ID must contain at least 0.04 ETH

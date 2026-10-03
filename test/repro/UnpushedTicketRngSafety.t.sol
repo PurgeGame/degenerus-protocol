@@ -13,6 +13,9 @@ contract UnpushedTicketRngHarness is DegenerusGameTicketModule {
     function credit(address player, uint24 lvl, uint32 scaled) external {
         _queueEntriesScaled(player, lvl, scaled, false);
     }
+    function creditWhole(address player, uint24 lvl, uint32 entries) external {
+        _queueEntries(player, lvl, entries, false);
+    }
     function commit(uint256 entropy, bool futurePool) external {
         rngWordCurrent = entropy < 2 ? 2 : entropy;
         _setRngSessionPublished(true);
@@ -69,7 +72,7 @@ contract UnpushedTicketRngSafetyTest is Test {
                 h.credit(address(uint160(0xCA000 + calls)), 2, 425);
                 // This member existed before commitment. Raising its far-future owed
                 // is allowed because the jackpot samples membership, not balance.
-                h.credit(_player(0), 6, topup);
+                h.creditWhole(_player(0), 6, topup);
             }
             (bool done,) = h.processTicketBatch(2);
             ++calls;
@@ -82,7 +85,7 @@ contract UnpushedTicketRngSafetyTest is Test {
 
     function _compare(uint256 entropy, uint256 n, uint32 entries, uint32 topup, bool futurePool) private {
         uint24 target = futurePool ? 3 : 1;
-        for (uint256 i; i < n; ++i) h.credit(_player(i), target, entries * 100 + uint32(i % 3) * 25);
+        for (uint256 i; i < n; ++i) h.credit(_player(i), target, entries * 100 + (futurePool ? 0 : uint32(i % 3) * 25));
         h.credit(_player(0), 6, 400);
         h.commit(entropy, futurePool);
         uint256 snapshot = vm.snapshotState();
@@ -105,7 +108,7 @@ contract UnpushedTicketRngSafetyTest is Test {
             assertEq(uint256(uint32(pending >> 8)) * 100 + uint8(pending), uint256(topup) * adversarialCalls,
                 "new cohort retains all post-commit credit");
         }
-        assertEq(uint32(h.pending(_player(0), 6, true, false) >> 8), 4 + uint32(uint256(topup) * adversarialCalls / 100));
+        assertEq(uint32(h.pending(_player(0), 6, true, false) >> 8), 4 + uint32(uint256(topup) * adversarialCalls));
     }
 
     function test_perEntryPartialDrainsIgnoreKnownWordWriteMutations() public {
