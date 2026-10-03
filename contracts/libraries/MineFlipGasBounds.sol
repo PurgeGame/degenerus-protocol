@@ -81,11 +81,13 @@ library MineFlipGasBounds {
     uint256 internal constant JACKPOT_PLAN_GAS = 120_000;
     uint256 internal constant JACKPOT_FINAL_GAS = 150_000;
     uint256 internal constant JACKPOT_TAIL_GAS = 180_000;
-    uint256 internal constant JACKPOT_ETH_WINNER_GAS_MAX = 40_000;
-    uint256 internal constant JACKPOT_TICKET_DRAW_GAS_MAX = 15_000;
-    uint256 internal constant JACKPOT_TICKET_AWARD_GAS_MAX = 120_000;
-    // 50k + 128 x DRAW + 64 x AWARD + TAIL = 9.83M, below 10M.
-    uint256 internal constant JACKPOT_TICKET_AWARD_CHUNK = 64;
+    // Cold winner with a fresh claimable balance: 30.6k measured.
+    uint256 internal constant JACKPOT_ETH_WINNER_GAS_MAX = 37_000;
+    // Cold draw: 3.4k per winner. Award with a fresh pending word: 37.6k measured.
+    uint256 internal constant JACKPOT_TICKET_DRAW_GAS_MAX = 4_200;
+    uint256 internal constant JACKPOT_TICKET_AWARD_GAS_MAX = 45_000;
+    // One whole quadrant (at most 128 winners): 50k + 128 x (DRAW + AWARD) + TAIL = 6.53M.
+    uint256 internal constant JACKPOT_TICKET_AWARD_CHUNK = 128;
 
     // CRAPS
     uint256 internal constant CRAPS_SEAT_GAS_MAX = 1_650_000;

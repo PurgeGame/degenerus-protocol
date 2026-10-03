@@ -136,7 +136,7 @@ contract JackpotCheckpointsTest is Test {
         assertEq(digestSplit, digestFull, "ordered winners, entry indexes, and amounts match");
     }
 
-    function test_ConcentratedTicketsResumeWithinQuadrantWithoutRedrawingAwards() public {
+    function test_ConcentratedTicketsAwardTheWholeQuadrantInOneChunk() public {
         h.seed(LVL, WORD, true);
         uint256 snap = vm.snapshotState();
         vm.recordLogs();
@@ -155,11 +155,11 @@ contract JackpotCheckpointsTest is Test {
         bytes32 digestSplit;
         uint256 splitAwards;
         bool done;
-        bool inside;
         uint256 calls;
         while (!done && calls < 12) {
             vm.recordLogs();
-            MineFlipGas.Result memory result = _earlyBird(10_200_000, 10_700_000);
+            // The first call stops after setup; the next admits the whole 128-winner quadrant.
+            MineFlipGas.Result memory result = calls == 0 ? _earlyBird(1_000_000, 1_500_000) : _earlyBird(7_000_000, 7_500_000);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             digestSplit = _digest(digestSplit, logs);
             for (uint256 i; i < logs.length; ++i) {
@@ -171,15 +171,15 @@ contract JackpotCheckpointsTest is Test {
                 assertEq(address(uint160(uint256(logs[i].topics[1]))), address(uint160(0x10001 + index)));
             }
             (, , uint16 winner,) = h.progress();
-            assertTrue(winner == 0 || winner == 64, "checkpoint sits on the fixed award chunk");
-            inside = inside || winner != 0;
+            assertEq(winner, 0, "checkpoint sits on a quadrant boundary");
+            assertTrue(result.rewardBasis == 0 || result.rewardBasis == 128, "the quadrant is awarded in one chunk");
             assertTrue(result.progressed);
             splitAwards += result.rewardBasis;
             done = result.done;
             ++calls;
         }
         assertTrue(done);
-        assertTrue(inside, "winner checkpoint exercised");
+        assertEq(calls, 2, "setup checkpoint exercised before the single award chunk");
         assertEq(splitAwards, awards);
         assertEq(digestSplit, digestFull);
     }
