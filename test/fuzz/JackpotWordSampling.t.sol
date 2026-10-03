@@ -78,6 +78,21 @@ contract JackpotWordSamplingTest is Test {
         return expected.length;
     }
 
+    /// @dev Independent doubling reference: 1, doubled at 40, 160, 640, ... ETH, at most `max`.
+    function _mult(uint256 value, uint256 max) private pure returns (uint256 m) {
+        m = 1;
+        uint256 step = 40 ether;
+        while (m < max && value >= step) {
+            m *= 2;
+            step *= 4;
+        }
+    }
+
+    /// @dev Independent model of the ticket winner cap.
+    function _ticketCap(uint256 value) private pure returns (uint256) {
+        return 96 * _mult(value, 4);
+    }
+
     function _checkJackpot(uint256 word, uint256 len, uint256 awards, bool withDeity) private {
         ExpectedDraw memory expected;
         expected.length = len;
@@ -89,7 +104,8 @@ contract JackpotWordSamplingTest is Test {
             // Gold: one virtual entry. Colors 5/6: floor(1%), minimum 1. Colors 0..4: floor(2%), minimum 2.
             expected.effectiveLength += color == 7 ? 1 : (color >= 5 ? (len / 100 < 1 ? 1 : len / 100) : (len / 50 < 2 ? 2 : len / 50));
         }
-        uint256 cap = awards < 128 ? awards : 128;
+        uint256 cap = _ticketCap(awards * 0.08 ether);
+        if (awards < cap) cap = awards;
         if (cap >= 8) cap = (cap / 8) * 8;
         expected.entriesEach = cap == 0 ? 0 : (awards / cap) * 4;
         expected.entropy = uint256(keccak256(abi.encode(

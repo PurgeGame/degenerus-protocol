@@ -531,22 +531,13 @@ describe("SecurityEconHardening", function () {
   // =========================================================================
   // Empty-pool bucket sizing stays safe
   // =========================================================================
-  describe("bucketCountsForPool zero-pool safety", function () {
+  describe("ethWinnerTargets zero-pool safety", function () {
     it("empty jackpot pools do not panic the game", async function () {
       // JackpotBucketLib functions are internal, so this is an integration check:
-      // bucketCountsForPool early-returns all-zero counts when ethPool == 0, and
-      // _processDailyEth skips zero-count buckets. A regression there would revert.
+      // ethWinnerTargets early-returns all-zero counts when the pool is 0, and the
+      // ETH draw skips zero-count buckets. A regression there would revert.
       const { game } = await loadFixture(deployFullProtocol);
 
-      expect(await game.level()).to.equal(0n);
-    });
-
-    it("traitBucketCounts always returns valid base counts for all entropy values", async function () {
-      // Test the rotation: for any entropy & 3, base counts [24,16,8,1] are rotated
-      // This is a structural test: the sum should always be 49 (24+16+8+1)
-      // and all values should be > 0.
-      // We verify indirectly by ensuring the game deploys and initial state is valid.
-      const { game } = await loadFixture(deployFullProtocol);
       expect(await game.level()).to.equal(0n);
     });
   });

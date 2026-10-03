@@ -72,7 +72,7 @@ contract TicketDrainWorstCaseBound is Test {
         uint32 id = 0x01000002;
         bytes32 queueSlot = bytes32(queueBase + 1);
         bytes32 ownerSlot = bytes32(ownerBase + id - 1);
-        bytes32 pendingSlot = keccak256(abi.encode(uint256(id), keccak256(abi.encode(uint256(lvl), uint256(79)))));
+        bytes32 pendingSlot = keccak256(abi.encode(uint256(id), keccak256(abi.encode(uint256(lvl), uint256(78)))));
         vm.store(address(p), bytes32(uint256(67)), bytes32(uint256(id)));
         vm.store(address(p), queueSlot, bytes32(uint256(id) << 32));
         vm.store(address(p), ownerSlot, bytes32(uint256(uint160(address(0xBEEF)))));

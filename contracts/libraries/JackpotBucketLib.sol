@@ -38,123 +38,55 @@ library JackpotBucketLib {
     // Constants — Jackpot Bucket Scaling
     // -------------------------------------------------------------------------
 
-    /// @dev Minimum pool size before scaling kicks in.
-    uint256 internal constant JACKPOT_SCALE_MIN_WEI = 10 ether;
-
-    /// @dev First scale target (2x) by this pool size.
-    uint256 internal constant JACKPOT_SCALE_FIRST_WEI = 50 ether;
-
-    /// @dev Pool size at which the caller's maxScaleBps is reached; cap beyond.
-    ///      Both production callers pass 63_600 bps (6.36x).
-    uint256 internal constant JACKPOT_SCALE_SECOND_WEI = 200 ether;
-
-    /// @dev Scale values in basis points.
-    uint16 internal constant JACKPOT_SCALE_BASE_BPS = 10_000;
-    uint16 internal constant JACKPOT_SCALE_FIRST_BPS = 20_000;
+    /// @dev Winner targets double at 4x, 16x, 64x, ... this budget.
+    uint256 internal constant TARGET_ANCHOR_WEI = 10 ether;
 
     // -------------------------------------------------------------------------
     // Bucket Count Functions
     // -------------------------------------------------------------------------
 
-    /// @dev Computes base winner counts for each of the 4 trait buckets.
-    ///      Base counts [24, 16, 8, 1] rotate by entropy; scaleTraitBucketCounts rounds
-    ///      scaled non-solo payouts to full groups of eight.
-    /// @param entropy Used for rotation offset (bottom 2 bits).
-    /// @return counts Winner counts for each bucket [bucket0, bucket1, bucket2, bucket3].
-    function traitBucketCounts(uint256 entropy) internal pure returns (uint16[4] memory counts) {
-        // Base counts [24,16,8,1] (large/mid/small/solo) rotated by entropy for fairness across
-        // traits: counts[i] = base[(i + offset) & 3]. Unrolled to a 4-way branch on the offset to
-        // skip allocating the base[4] scratch array. The solo bucket (1) lands on soloBucketIndex,
-        // which bucketShares treats as the remainder bucket; its ETH share is set by the caller's
-        // shareBps table. Rotations MUST stay [24,16,8,1]/[16,8,1,24]/[8,1,24,16]/[1,24,16,8].
-        uint8 offset = uint8(entropy & 3);
-        if (offset == 0) {
-            counts[0] = 24;
-            counts[1] = 16;
-            counts[2] = 8;
-            counts[3] = 1;
-        } else if (offset == 1) {
-            counts[0] = 16;
-            counts[1] = 8;
-            counts[2] = 1;
-            counts[3] = 24;
-        } else if (offset == 2) {
-            counts[0] = 8;
-            counts[1] = 1;
-            counts[2] = 24;
-            counts[3] = 16;
-        } else {
-            counts[0] = 1;
-            counts[1] = 24;
-            counts[2] = 16;
-            counts[3] = 8;
+    /// @dev 1, doubled at each fourfold step of `value` from 4 anchors (2 at 40 ETH, 4 at 160,
+    ///      ...), at most `max`.
+    function targetMultiplier(uint256 value, uint256 max) internal pure returns (uint256 m) {
+        m = 1;
+        for (uint256 step = 4 * TARGET_ANCHOR_WEI; m < max && value >= step; step *= 4) m *= 2;
+    }
+
+    /// @dev Target ETH winners for a live draw: base [32, 16, 4, 1] rotated by the bottom two
+    ///      entropy bits (counts[i] = base[(i + offset) & 3]), so the 1 sits on soloBucketIndex.
+    ///      Non-solo bases scale by targetMultiplier(pool, 32): 1,024 / 512 / 128 from
+    ///      10,240 ETH. Zeroes for an empty pool.
+    function ethWinnerTargets(uint256 pool, uint256 entropy) internal pure returns (uint16[4] memory counts) {
+        if (pool == 0) return counts;
+        uint256 m = targetMultiplier(pool, 32);
+        uint256 offset = entropy & 3;
+        for (uint256 i; i < 4; ++i) {
+            // Bytes of 0x01041020, low first: base [32, 16, 4, 1].
+            uint256 b = (uint256(0x01041020) >> (((i + offset) & 3) * 8)) & 0xff;
+            counts[i] = uint16(b > 1 ? b * m : b);
         }
     }
 
-    /// @dev Scales base bucket counts by jackpot size (excluding solo).
-    ///      1x under 10 ETH, linearly to 2x by 50 ETH, linearly to maxScaleBps by 200 ETH, then flat.
-    ///      The solo bucket is never scaled, so the total is bounded by the base geometry times
-    ///      maxScaleBps: round each non-solo count to the nearest eight (ties round up).
-    ///      Base payouts are [24,16,8,1]; the 6.36x ceiling pays [152,104,48,1] = 305.
-    function scaleTraitBucketCounts(
-        uint16[4] memory baseCounts,
-        uint256 ethPool,
-        uint32 maxScaleBps
-    ) internal pure returns (uint16[4] memory) {
-        // Mutate + return baseCounts directly — a named return would alloc a dead uint16[4]
-        // that line-1 immediately aliases to baseCounts.
-        uint256 scaleBps;
-        if (ethPool <= JACKPOT_SCALE_MIN_WEI) {
-            scaleBps = JACKPOT_SCALE_BASE_BPS;
-        } else if (ethPool < JACKPOT_SCALE_FIRST_WEI) {
-            uint256 range = JACKPOT_SCALE_FIRST_WEI - JACKPOT_SCALE_MIN_WEI;
-            uint256 progress = ethPool - JACKPOT_SCALE_MIN_WEI;
-            scaleBps = JACKPOT_SCALE_BASE_BPS + (progress * (JACKPOT_SCALE_FIRST_BPS - JACKPOT_SCALE_BASE_BPS)) / range;
-        } else if (ethPool < JACKPOT_SCALE_SECOND_WEI) {
-            uint256 range = JACKPOT_SCALE_SECOND_WEI - JACKPOT_SCALE_FIRST_WEI;
-            uint256 progress = ethPool - JACKPOT_SCALE_FIRST_WEI;
-            scaleBps = JACKPOT_SCALE_FIRST_BPS + (progress * (uint256(maxScaleBps) - JACKPOT_SCALE_FIRST_BPS)) / range;
-        } else {
-            scaleBps = maxScaleBps;
+    /// @dev Terminal winner counts: [152, 104, 48, 1] rotated like ethWinnerTargets.
+    function terminalWinnerCounts(uint256 entropy) internal pure returns (uint16[4] memory counts) {
+        uint256 offset = entropy & 3;
+        for (uint256 i; i < 4; ++i) {
+            // Bytes of 0x01306898, low first: [152, 104, 48, 1].
+            counts[i] = uint16((uint256(0x01306898) >> (((i + offset) & 3) * 8)) & 0xff);
         }
-
-        for (uint8 i; i < 4; ) {
-            uint16 baseCount = baseCounts[i];
-            if (baseCount > 1) {
-                uint256 scaled = ((uint256(baseCount) * scaleBps + 40_000) / 80_000) * 8;
-                if (scaled > 65_528) scaled = 65_528; // largest uint16 multiple of eight
-                baseCounts[i] = uint16(scaled);
-            }
-            unchecked {
-                ++i;
-            }
-        }
-
-        return baseCounts;
     }
 
-    /// @dev Computes base + scaled bucket counts for a given pool; returns zeroes when pool is empty.
-    function bucketCountsForPool(
-        uint256 ethPool,
-        uint256 entropy,
-        uint32 maxScaleBps
-    ) internal pure returns (uint16[4] memory bucketCounts) {
-        if (ethPool == 0) return bucketCounts;
-        uint16[4] memory baseCounts = traitBucketCounts(entropy);
-        return scaleTraitBucketCounts(baseCounts, ethPool, maxScaleBps);
-    }
-
-    /// @dev Sums the bucket counts.
-    function sumBucketCounts(uint16[4] memory counts) internal pure returns (uint256 total) {
-        total = uint256(counts[0]) + counts[1] + counts[2] + counts[3];
+    /// @dev Total winner cap for a ticket leg worth `value` wei: three non-solo quadrants of
+    ///      32 * targetMultiplier(value, 4) each: 96, 192 from 40 ETH, 384 from 160 ETH.
+    function ticketWinnerCap(uint256 value) internal pure returns (uint256) {
+        return 96 * targetMultiplier(value, 4);
     }
 
     // -------------------------------------------------------------------------
     // Share & Index Functions
     // -------------------------------------------------------------------------
 
-    /// @dev Computes ETH/COIN shares for each bucket.
-    ///      Round non-solo buckets to unit * winnerCount; remainder goes to the override bucket.
+    /// @dev Computes ETH shares for each bucket; the remainder goes to the solo bucket.
     ///      Empty non-remainder buckets (count==0) contribute their computed share to
     ///      `distributed` without receiving ETH, reducing the remainder bucket allocation.
     ///      The caller is responsible for refunding ethPool - paidEth to the source pool.
@@ -162,21 +94,14 @@ library JackpotBucketLib {
         uint256 pool,
         uint16[4] memory shareBps,
         uint16[4] memory bucketCounts,
-        uint8 remainderIdx,
-        uint256 unit
+        uint8 remainderIdx
     ) internal pure returns (uint256[4] memory shares) {
         uint256 distributed;
         for (uint8 i; i < 4; ) {
             if (i != remainderIdx) {
                 uint16 count = bucketCounts[i];
                 uint256 share = (pool * shareBps[i]) / 10_000;
-                if (count != 0) {
-                    if (unit != 0) {
-                        uint256 unitBucket = unit * count;
-                        share = (share / unitBucket) * unitBucket;
-                    }
-                    shares[i] = share;
-                }
+                if (count != 0) shares[i] = share;
                 distributed += share;
             }
             unchecked {
@@ -237,6 +162,22 @@ library JackpotBucketLib {
     // -------------------------------------------------------------------------
     // Jackpot Percentage & Ordering
     // -------------------------------------------------------------------------
+
+    /// @dev Non-solo buckets by count, largest first (ties keep the lower index), then the solo.
+    function bucketOrderSoloLast(uint16[4] memory counts, uint8 solo) internal pure returns (uint8[4] memory order) {
+        uint256 n;
+        for (uint8 i; i < 4; ++i) {
+            if (i == solo) continue;
+            uint256 j = n;
+            while (j != 0 && counts[order[j - 1]] < counts[i]) {
+                order[j] = order[j - 1];
+                --j;
+            }
+            order[j] = i;
+            ++n;
+        }
+        order[3] = solo;
+    }
 
     /// @dev Return bucket order (largest count first; ties keep lower index).
     function bucketOrderLargestFirst(uint16[4] memory counts) internal pure returns (uint8[4] memory order) {

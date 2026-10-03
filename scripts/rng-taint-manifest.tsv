@@ -96,9 +96,9 @@ PURE-DERIVE	PARAM	word	_drawHash	WWXRP.sol	private view keccak(domain, this, day
 EXEMPT-ADVANCE	PARAM	rngWord	resolveIncinerator	WWXRP.sol	msg.sender==GAME; called by _consolidatePoolsAndRewardJackpots on a skipped x00 BAF; entries recorded only while level%100==99, closed by the transition that requests the word
 NOT-RNG	PARAM	word	decode	libraries/CrapsPreferenceLib.sol	packed pass balances and saved board, not randomness; mask bits 64-83, ignore initialized sentinel
 PURE-DERIVE	PARAM	entropy	roundFlipToHundreds	libraries/FlipRoundLib.sol	internal pure Bernoulli round-up on uint32(entropy) % 100; callers pass a per-award tagged hash of a committed word
-PURE-DERIVE	PARAM	entropy	bucketCountsForPool	libraries/JackpotBucketLib.sol	internal pure: traitBucketCounts(entropy) scaled by pool size; the pool is a magnitude
+PURE-DERIVE	PARAM	entropy	ethWinnerTargets	libraries/JackpotBucketLib.sol	internal pure rotation of [32,16,4,1] by entropy & 3, non-solo counts scaled by the pool; the pool is a magnitude
 PURE-DERIVE	PARAM	entropy	soloBucketIndex	libraries/JackpotBucketLib.sol	internal pure (3 - (entropy & 3)) & 3
-PURE-DERIVE	PARAM	entropy	traitBucketCounts	libraries/JackpotBucketLib.sol	internal pure rotation of [25,15,8,1] by entropy & 3
+PURE-DERIVE	PARAM	entropy	terminalWinnerCounts	libraries/JackpotBucketLib.sol	internal pure rotation of [152,104,48,1] by entropy & 3
 PURE-DERIVE	PARAM	entropy	begin	libraries/PackedTicketSampleLib.sol	pure selection of a word and lane rotation from caller-domain-separated entropy; only updates the memory cursor
 PURE-DERIVE	ARG	EntropyLib.hash2	next	libraries/PackedTicketSampleLib.sol	padding redraw hashes the committed group entropy and lane number; valid length and cursor are fixed by the draw, with no actor input
 PURE-DERIVE	PARAM	entropy	remainder	libraries/TicketEntropy.sol	Versioned remainder hash of immutable owner/level/domain/queue-position identity and committed word; the atomic final tail consumes it exactly once.
@@ -189,12 +189,12 @@ EXEMPT-ADVANCE	PARAM	entropy	_computeBucketCounts	modules/DegenerusGameJackpotMo
 PURE-DERIVE	PARAM	randWord	_dailyCurrentPoolBps	modules/DegenerusGameJackpotModule.sol	private pure keccak(randWord, DAILY_CURRENT_BPS_TAG, counter) -> 6-14% budget share
 EXEMPT-ADVANCE	PARAM	randWord	_emitDailyWinningTraits	modules/DegenerusGameJackpotModule.sol	advance seals exact board/level/payout seed for its logical day; already-sealed record returns without writing, emitting or reverting
 PURE-DERIVE	PARAM	entropy	_pickSoloQuadrant	modules/DegenerusGameJackpotModule.sol	internal pure gold-quadrant pick from entropy
-EXEMPT-ADVANCE	PARAM	entropy	_processBucket	modules/DegenerusGameJackpotModule.sol	private advance-stack: _randTraitTicket over lvlTraitEntry[lvl] with the chained entropy
-EXEMPT-ADVANCE	PARAM	randomWord	_randTraitTicket	modules/DegenerusGameJackpotModule.sol	private advance sampler: random aligned words and rotated lanes over the frozen trait bucket plus deity virtual entries; partial-word padding is redrawn over the whole valid range
+EXEMPT-ADVANCE	PARAM	seed	_payEthQuadrant	modules/DegenerusGameJackpotModule.sol	private advance-stack: per-position packed-word sampler over the frozen lvlTraitEntry[lvl] bucket plus deity virtual entries, seeded with the chained quadrant entropy; partial-word padding is redrawn over the whole valid range
 PURE-DERIVE	ARG	EntropyLib.hash2	_resumeEth	modules/DegenerusGameJackpotModule.sol	fixed trait ordinal off the root; ETH share and previous bucket work excluded
-PURE-DERIVE	ARG	JackpotBucketLib.bucketCountsForPool	_resumeEth	modules/DegenerusGameJackpotModule.sol	Pure fixed jackpot allocation plan from the committed root and saved budget; resumed quadrant order cannot change it.
 PURE-DERIVE	ARG	JackpotBucketLib.shareBpsByBucket	_resumeEth	modules/DegenerusGameJackpotModule.sol	Pure fixed jackpot allocation plan from the committed root and saved budget; resumed quadrant order cannot change it.
 PURE-DERIVE	ARG	JackpotBucketLib.soloBucketIndex	_resumeEth	modules/DegenerusGameJackpotModule.sol	pure remainder-bucket index from entropy & 3
+PURE-DERIVE	ARG	JackpotBucketLib.ethWinnerTargets	_resumeEth	modules/DegenerusGameJackpotModule.sol	pure target counts: rotation from entropy & 3, magnitudes from the frozen budget
+PURE-DERIVE	ARG	JackpotBucketLib.terminalWinnerCounts	_resumeEth	modules/DegenerusGameJackpotModule.sol	pure terminal counts: rotation from entropy & 3
 EXEMPT-ADVANCE	PARAM	word	_resumeEth	modules/DegenerusGameJackpotModule.sol	Ordered daily/terminal jackpot worker consumes the committed session root under the daily/terminal freeze; saved payout cursor retains fixed plans across checkpoints.
 PURE-DERIVE	ARG	EntropyLib.hash2	_resumeTicketWork	modules/DegenerusGameJackpotModule.sol	fixed trait ordinal off the root; award size and previous bucket skipped work excluded
 PURE-DERIVE	ARG	JackpotBucketLib.getRandomTraits	_rollBoard	modules/DegenerusGameJackpotModule.sol	pure trait roll from the word
@@ -203,8 +203,8 @@ EXEMPT-ADVANCE	PARAM	entropy	_rollHeroSymbol	modules/DegenerusGameJackpotModule.
 EXEMPT-ADVANCE	PARAM	randWord	_rollMainTraits	modules/DegenerusGameJackpotModule.sol	private view: _rollBoard with the golden-ticket ban quadrant (frozen goldenTicket, dailyIdx); the same board on every roll of a day
 EXEMPT-ADVANCE	PARAM	randWord	_runDailyJackpot	modules/DegenerusGameJackpotModule.sol	delegatecall target of the advance's payDailyJackpot wrapper; randWord = rngGate word; hero pool read at frozen dailyIdx; entry buckets advance-written
 EXEMPT-ADVANCE	PARAM	rngWord	_runTerminalJackpot	modules/DegenerusGameJackpotModule.sol	msg.sender==GAME via the game-over drain; rngWord = rngWordByDay[day] sealed before handleGameOverDrain; winners from lvlTraitEntry[targetLvl] (advance-written)
-EXEMPT-ADVANCE	ARG	EntropyLib.hash2	_runTicketWork	modules/DegenerusGameJackpotModule.sol	Ordered daily/terminal jackpot worker consumes the committed session root under the daily/terminal freeze; saved payout cursor retains fixed plans across checkpoints.
 EXEMPT-ADVANCE	PARAM	word	_runTicketWork	modules/DegenerusGameJackpotModule.sol	Ordered daily/terminal jackpot worker consumes the committed session root under the daily/terminal freeze; saved payout cursor retains fixed plans across checkpoints.
+EXEMPT-ADVANCE	ARG	EntropyLib.hash2	_awardTicketPasses	modules/DegenerusGameJackpotModule.sol	advance-only ticket-leg settlement: each paying quadrant's committed seed (the leg's frozen plan entropy) drives its one pass recipient draw; pass counts never enter the seed
 PURE-DERIVE	PARAM	entropy	_soloAdjustedEntropy	modules/DegenerusGameJackpotModule.sol	private pure: rewrites the low 2 bits so soloBucketIndex lands on the picked quadrant
 EXEMPT-ADVANCE	PARAM	word	_startDailyEth	modules/DegenerusGameJackpotModule.sol	Ordered daily/terminal jackpot worker consumes the committed session root under the daily/terminal freeze; saved payout cursor retains fixed plans across checkpoints.
 PURE-DERIVE	ARG	EntropyLib.hash2	_ticketWorkPlan	modules/DegenerusGameJackpotModule.sol	hash2(randWord, lvl) ticket entropy; pure

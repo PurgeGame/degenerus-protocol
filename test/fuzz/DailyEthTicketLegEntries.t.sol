@@ -11,8 +11,8 @@ import {GoldenTicketHarness, CoinflipRecorder, WwxrpRecorder, ReturnZeroSink} fr
 /// @title DailyEthTicketLegEntries -- the purchase-phase daily jackpot's ticket leg delivers its figure
 /// @notice The daily ETH phase carves four percent of the future pool into a day slice; 75% of the
 ///         slice is the ticket leg, and `_distributePoolBackedTickets` converts HALF of that leg
-///         into entries at the level's price, four per whole ticket, spread over at most 120
-///         winners with equal entry counts. Mutation v78 found no foundry assertion of that count
+///         into entries at the level's price, four per whole ticket, spread with equal entry
+///         counts over at most 96 winners, doubled at 40 and 160 ETH of entry value. Mutation v78 found no foundry assertion of that count
 ///         (a `budget / bps` mutant collapsed the leg to zero entries and survived); this pins the
 ///         delivered total against the arithmetic, winner by winner.
 contract DailyEthTicketLegEntries is Test {
@@ -20,7 +20,6 @@ contract DailyEthTicketLegEntries is Test {
 
     uint24 internal constant LVL = 5;
     uint128 internal constant FUT_POOL = 4000 ether;
-    uint16 internal constant MAX_WINNERS = 120; // PURCHASE_PHASE_TICKET_MAX_WINNERS
     uint256 internal constant TICKET_LEG_BPS = 7500; // PURCHASE_REWARD_JACKPOT_TICKET_BPS
     uint256 internal constant CONVERSION_BPS = 5000; // the pool-backed leg's 50% conversion
 
@@ -80,8 +79,11 @@ contract DailyEthTicketLegEntries is Test {
         uint256 basis = (leg * CONVERSION_BPS) / 10_000;
         uint256 entries = (basis << 2) / PriceLookupLib.priceForLevel(LVL);
         uint256 tickets = entries / 4;
-        assertGe(tickets, MAX_WINNERS, "fixture: enough tickets to fill every winner slot");
-        uint256 each = (tickets / MAX_WINNERS) * 4;
+        uint256 value = entries * (PriceLookupLib.priceForLevel(LVL) >> 2);
+        uint256 maxWinners = value >= 160 ether ? 384 : value >= 40 ether ? 192 : 96;
+        assertGe(tickets, maxWinners, "fixture: enough tickets to fill every winner slot");
+        uint256 each = (tickets / maxWinners) * 4;
+        assertLe(each, 100, "fixture: at most 25 tickets each, so no pass conversion");
 
         bytes32 sig = keccak256("JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)");
         uint256 winners;
@@ -95,9 +97,9 @@ contract DailyEthTicketLegEntries is Test {
             winners++;
             delivered += count;
         }
-        assertEq(winners, MAX_WINNERS, "the leg fills every winner slot");
-        assertEq(delivered, each * MAX_WINNERS, "the delivered total is the winners' shares");
+        assertEq(winners, maxWinners, "the leg fills every winner slot");
+        assertEq(delivered, each * maxWinners, "the delivered total is the winners' shares");
         assertLe(delivered, entries, "never more than the leg converts");
-        assertGt(delivered, entries - 4 * MAX_WINNERS, "and within one sub-ticket per winner of it");
+        assertGt(delivered, entries - 4 * maxWinners, "and within one sub-ticket per winner of it");
     }
 }

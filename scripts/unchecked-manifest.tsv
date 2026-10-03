@@ -67,13 +67,11 @@ NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_pickSoloQuadrant	2	++i	Lo
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_allGold	1	++i	Loop counter of `for (uint8 i; i < 4; )` at :1260; bounded by the literal 4.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_resolveGoldenTicket	1	++golds	uint8 incremented at most once per iteration of the 4-iteration loop at :1322, so golds <= 4.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_resolveGoldenTicket	2	++i	Loop counter of `for (uint8 i; i < 4; )` at :1322; bounded by the literal 4.
-NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_payNormalBucket	1	++i	Loop counter of `for (uint256 i; i < len; )` at :1575 with len = winners.length; array-length bounded.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_rollHeroSymbol	1	++q	Loop counter of `for (uint8 q; q < 4; )` at :1815 (banQuadrant continue arm); bounded by the literal 4.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_rollHeroSymbol	2	idx = (q << 3) | s	q < 4 and s < 8 by the loop bounds at :1815/:1823, so (q<<3)|s <= 31 and fits uint8; index into the 32-slot weights array.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_rollHeroSymbol	3	++s	Loop counter of `for (uint8 s; s < 8; )` at :1823; bounded by the literal 8.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_rollHeroSymbol	4	++q	Tail increment of `for (uint8 q; q < 4; )` at :1815; bounded by the literal 4.
 NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_rollHeroSymbol	5	++idx	Loop counter of `for (uint8 idx; idx < 32; )` at :1856; bounded by the literal 32.
-NO-OVERFLOW-OP	modules/DegenerusGameJackpotModule.sol	_randTraitTicket	1	++i	Loop counter of `for (uint256 i; i < numWinners; )` at :1954 with numWinners a uint8 parameter (<= 255).
 BOUNDED	modules/DegenerusGameLootboxModule.sol	_mergeBoxOrder	1	priorNominal = (sHeld + LB_MED_MULTIPLE * mHeld + LB_LARGE_MULTIPLE * lHeld) * price + cHe	Tier counts <= 255 (LB_COUNT_MASK, Storage:1455), order total <= MAX_BOXES_PER_ORDER=100 (:469), price <= 0.24e18 (PriceLookupLib:44-63), customWei <= 2^48*1e12; products <= ~2.8e28.
 BOUNDED	modules/DegenerusGameLootboxModule.sol	_boostAmount	1	return (capped * bonusBps) / 10_000	capped <= BOX_BOOST_MAX_VALUE = 10 ether by the ternary at :514 and bonusBps <= 10000 (tier table), so the product is <=1e23.
 BOUNDED	modules/DegenerusGameLootboxModule.sol	beginBoxOrder	1	shares = (((costWei * (distress ? 0 : BOX_SPLIT_FUTURE_BPS)) / 10_000) << 128) | ((costWei	costWei <=~2.8e28 (100 boxes x 48-bit custom size x 1e12, cap at :469); costWei*10000 <2^128 and the quotient <2^128, so the low lane fits and the <<128 lane cannot collide.

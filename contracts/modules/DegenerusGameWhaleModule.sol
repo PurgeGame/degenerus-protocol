@@ -1227,36 +1227,34 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     // Whale Pass Claims
     // =========================================================================
 
-    bytes32 private constant EARLY_BIRD_WHALE_TAG = keccak256("early-bird-whale");
+    bytes32 private constant TICKET_WHALE_TAG = keccak256("ticket-jackpot-whale");
     bytes32 private constant QUADRANT_WHALE_TAG = keccak256("jackpot-quadrant-whale");
 
     /// @notice Nested jackpot award against GAME storage, with deferred delivery.
-    /// @dev Early bird supplies half-pass units and never moves pools. A quadrant
-    ///      supplies its original ETH budget; whole passes consume at most 25%,
-    ///      with the exact cost credited to futurePrizePool. JackpotModule includes
-    ///      that spend in its matching current-pool debit, and pays all remaining ETH.
-    /// @param soloQuadrant Early bird: the board's solo quadrant, which the winner is drawn
-    ///        outside of. Unused by a quadrant conversion.
-    /// @return spent Award value credited (early bird ignores this return).
+    /// @dev One recipient from one quadrant's bucket. A ticket leg supplies half-pass units
+    ///      and never moves pools: its ETH already backs nextPrizePool. An ETH quadrant
+    ///      supplies its original ETH budget; whole passes consume at most 25%, with the
+    ///      exact cost credited to futurePrizePool. JackpotModule includes that spend in its
+    ///      matching current-pool debit, and pays all remaining ETH.
+    /// @return spent Award value credited (a ticket leg ignores this return).
     function awardWhalePass(
         uint24 lvl,
-        uint32 traits,
+        uint8 trait,
         uint256 amount,
         uint256 randWord,
-        bool earlyBird,
-        uint8 soloQuadrant
+        bool ticketLeg
     ) external returns (uint256 spent) {
-        uint256 halfPasses = earlyBird ? amount : (amount / (8 * HALF_WHALE_PASS_PRICE)) * 2;
+        uint256 halfPasses = ticketLeg ? amount : (amount / (8 * HALF_WHALE_PASS_PRICE)) * 2;
         if (halfPasses == 0) return 0;
-        address winner = _drawWhalePassWinner(lvl, traits, randWord, earlyBird, soloQuadrant);
+        address winner = _drawWhalePassWinner(lvl, trait, randWord, ticketLeg);
         if (winner == address(0)) return 0;
         whalePassClaims[winner] += halfPasses;
         spent = halfPasses * HALF_WHALE_PASS_PRICE;
-        if (!earlyBird) {
+        if (!ticketLeg) {
             (uint128 next, uint128 future) = _getPrizePools();
             _setPrizePools(next, future + uint128(spent));
         }
-        emit JackpotWhalePassWin(winner, halfPasses, earlyBird ? 4 : 5);
+        emit JackpotWhalePassWin(winner, halfPasses, ticketLeg ? 4 : 5);
     }
 
     /// @dev The deity holding a trait's symbol: the symbol id is the trait's quadrant (bits 7..6)
@@ -1266,67 +1264,25 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         return _traitDeity(trait);
     }
 
-    /// @dev Fresh recipient from frozen GAME inventory. Early bird supplies the day's
-    ///      main board and its solo quadrant: the winner comes from the three other
-    ///      quadrants, preferring eligible gold buckets, and from the solo quadrant only
-    ///      when it is the one active bucket (as the early-bird tickets fall back).
-    ///      Quadrant ETH conversion supplies one trait in the low byte and its bucket
-    ///      entropy. Both preserve real/deity entry weights and exclude award sizes from
-    ///      seeds.
+    /// @dev Fresh recipient from one frozen bucket, weighting real and deity virtual entries
+    ///      alike. Award sizes never enter the seed.
     function _drawWhalePassWinner(
         uint24 lvl,
-        uint32 traits,
+        uint8 trait,
         uint256 randWord,
-        bool earlyBird,
-        uint8 soloQuadrant
+        bool ticketLeg
     ) private view returns (address) {
         uint256 entropy = EntropyLib.hash4(
-            randWord, uint256(earlyBird ? EARLY_BIRD_WHALE_TAG : QUADRANT_WHALE_TAG), dailyIdx, lvl
+            randWord, uint256(ticketLeg ? TICKET_WHALE_TAG : QUADRANT_WHALE_TAG), dailyIdx, lvl
         );
-        uint8 selectedTrait = uint8(traits);
-        if (earlyBird) {
-            uint256 candidates;
-            uint256 count;
-            bool goldOnly;
-            bool soloActive;
-            for (uint8 q; q < 4; ++q) {
-                uint8 trait = uint8(traits >> (q * 8));
-                address deity = _deityOfTrait(trait);
-                if (_bucketLength(lvl, trait) == 0 && deity == address(0)) continue;
-                if (q == soloQuadrant) {
-                    soloActive = true;
-                    continue;
-                }
-                bool gold = ((trait >> 3) & 7) == 7;
-                if (gold && !goldOnly) {
-                    candidates = 0;
-                    count = 0;
-                    goldOnly = true;
-                }
-                if (gold || !goldOnly) {
-                    // At most four quadrant candidates: count < 4 and each trait is one byte.
-                    assembly ("memory-safe") {
-                        candidates := or(candidates, shl(shl(3, count), and(trait, 0xff)))
-                        count := add(count, 1)
-                    }
-                }
-            }
-            if (count != 0) {
-                selectedTrait = uint8(candidates >> ((entropy % count) * 8));
-            } else if (soloActive) {
-                selectedTrait = uint8(traits >> (soloQuadrant * 8));
-            } else {
-                return address(0);
-            }
-        }
-        uint256 len = _bucketLength(lvl, selectedTrait);
-        address deity = _deityOfTrait(selectedTrait);
-        uint256 effectiveLen = len + _deityVirtualCount(selectedTrait, len, deity);
+        uint256 len = _bucketLength(lvl, trait);
+        address deity = _deityOfTrait(trait);
+        uint256 effectiveLen = len + _deityVirtualCount(trait, len, deity);
         if (effectiveLen == 0) return address(0);
         // A single recipient needs no packed-word group/cursor. Sample directly
         // over the same real-plus-virtual entries and resolve the packed owner.
         uint256 index = EntropyLib.hash2(entropy, 1) % effectiveLen;
-        return index < len ? _bucketOwnerAtUnchecked(lvl, selectedTrait, index) : deity;
+        return index < len ? _bucketOwnerAtUnchecked(lvl, trait, index) : deity;
     }
 
     /// @notice Claim deferred whale pass rewards for a player.

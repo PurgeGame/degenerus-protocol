@@ -115,7 +115,7 @@ contract StorageRecyclingLifecycleTest is DeployProtocol {
         uint256 occurrences; uint256 words;
         for (uint256 trait; trait < 256; ++trait) {
             uint256 header = uint256(game.extsload(bytes32(base + trait)));
-            uint256 bits = uint256(game.extsload(bytes32(uint256(76) + (lvl & 1))));
+            uint256 bits = uint256(game.extsload(bytes32(uint256(75) + (lvl & 1))));
             uint256 count = recycled ? ((bits >> trait) & 1 != 0 ? uint32(header) : 0) : header;
             occurrences += count;
             words += (count + 7) / 8;

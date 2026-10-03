@@ -69,7 +69,7 @@ const MINT_MODULE_SOURCE_PATH = path.resolve(
 
 // ---------------------------------------------------------------------------
 // Slot 13 maps wallets to stable IDs; slot 67 is the global immutable address array.
-// Slot 79 holds three pending lanes per logical level and ID. The helper decodes
+// Slot 78 holds three pending lanes per logical level and ID. The helper decodes
 // the selected queue lane; the public accessor independently attests owed totals.
 async function readTicketsOwedSlot(gameAddress, wk, buyer) {
   const slot = await entryOwnerRecordSlot(gameAddress, wk, buyer);

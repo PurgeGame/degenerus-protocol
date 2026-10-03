@@ -340,6 +340,8 @@ bounded stages. The packed queue holds eight owner indices per word and must use
 its codec helpers; Solidity array operations do not express its logical length.
 `PackedTicketSampleLib` samples eight lanes from one selected word, with explicit
 handling of a padded final word. These groups intentionally share a word draw.
+Jackpot ticket and ETH legs award one group per checkpointed step and draw only the
+groups they award, so a resumed quadrant repeats no draw and pays the same winners.
 The BAF trait sampler consumes up to four of these lanes and caches the bucket's
 packed-word root and owner-registry root once per call. A padding redraw loads
 its source word through that cached root or from the header tail; entry weights and sampled order are unchanged.
@@ -352,20 +354,30 @@ to futurePrizePool. The Jackpot module includes that cost in the current-pool
 debit and pays the remaining ETH to the original winners. The solo ETH winner
 still owns any golden-ticket arm. `QuadrantWhalePass` covers the conversion rules.
 
+Purchase-phase and jackpot-phase ETH draws size their winners from the draw's ETH
+budget. The three non-solo quadrants target 32, 16 and 4 winners and double at 40, 160,
+640, 2,560 and 10,240 ETH, up to 1,024, 512 and 128. Each non-solo award is a whole multiple of 0.1 ETH: a quadrant pays fewer winners
+than its target when its share, net of pass conversion, cannot fund 0.1 ETH each, and
+its rounding leftover joins the solo prize, which settles last. An empty bucket's share
+stays unpaid as before. The terminal jackpot keeps its fixed 152/104/48/1 geometry.
+`JackpotWinnerScaling` covers the targets and the worked 5,000 ETH day.
+
 Early-bird pricing still moves the entire 3% future-pool slice to nextPrizePool.
-When the ordinary payout exceeds 45 whole tickets per winning slot and the pooled
-surplus after reserving 45 per slot covers at least one full prize pass (4.5 ETH
-of award value), it caps the immediate awards and latches even half-pass claim
-units. The early-bird settlement stage distributes those tickets over the day's
-board at level + 1, across its three non-solo quadrants, and draws one additional
-recipient from those quadrants, preferring eligible gold buckets, with uniform
-eligible-bucket selection and normal entry/deity weights within the selected bucket.
-Empty gold buckets fall back to eligible non-gold buckets, and the solo quadrant
-serves only when it is the one active bucket. All full passes go to that one player,
-who need not have won immediate tickets. Pass selection uses separate tagged
-entropy from the day's committed word; award amounts do not reroll recipients.
-Settlement moves no ETH and the sub-pass remainder also stays in next. Below
-the conversion conditions, the ordinary ticket payout remains intact.
+Every ticket leg (purchase daily, early bird and jackpot-phase daily) sizes its
+winners from its ticket budget value: 32 per non-solo quadrant, doubling at 40 and
+160 ETH to 128 per quadrant (384 in all); every winner gets
+the same whole tickets, at least one. When that exceeds 25 tickets per winner and the
+surplus after reserving 25 per winner covers at least one full prize pass (4.5 ETH of
+award value), each winner keeps 25 and the surplus converts to even half-pass claim
+units, derived again from the frozen budget at settlement. The leg distributes its
+tickets over its board's three non-solo quadrants (the solo quadrant serves only when it
+is the one active bucket). Its whole passes split across the quadrants that paid tickets
+in proportion to their winners, with rounding passes one each in quadrant order, and each
+such quadrant draws one fresh recipient from its own bucket at normal entry/deity weights.
+A recipient need not have won immediate tickets. Pass selection uses separate tagged
+entropy from the leg's committed quadrant seed; award amounts do not reroll recipients.
+Settlement moves no ETH and the sub-pass remainder also stays in next. Below the
+conversion conditions, the ordinary ticket payout remains intact.
 `EarlyBirdWhalePass` covers the conversion rules.
 
 Protocol deity grants occur after the deployment sequence. Their perpetual entries

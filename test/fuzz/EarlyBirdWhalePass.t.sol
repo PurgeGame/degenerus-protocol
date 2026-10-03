@@ -7,6 +7,7 @@ import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJ
 import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWhaleModule.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
+import {GoldSixLib} from "../../contracts/libraries/GoldSixLib.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -32,11 +33,9 @@ contract EarlyBirdWhaleHarness is DegenerusGameJackpotModule, BucketSeed {
         _seedBucketDistinct(target, trait, n, base);
     }
     function deity(uint8 trait, address who) external { deityBySymbol[(trait >> 6) * 8 + (trait & 7)] = who; }
-    function latch(uint256 entries, uint256 halves) external {
+    function latch(uint256 entries) external {
         dailyTicketBudgetsPacked = (dailyTicketBudgetsPacked & ((uint256(1) << 144) - 1)) | (entries << 144);
-        earlyBirdWhalePasses = halves;
     }
-    function pending() external view returns (uint256) { return earlyBirdWhalePasses; }
     function packed() external view returns (uint256) { return dailyTicketBudgetsPacked; }
     function pools() external view returns (uint128, uint128) { return _getPrizePools(); }
     function liability() external view returns (uint256) { return claimablePool; }
@@ -66,6 +65,9 @@ contract EarlyBirdWhalePassTest is Test {
         uint256 slots;
         uint256 entries;
         bytes32 fingerprint;
+        uint256[4] quadrantSlots;
+        address[4] passWinners;
+        uint256[4] passHalves;
     }
 
     function setUp() public {
@@ -74,14 +76,20 @@ contract EarlyBirdWhalePassTest is Test {
         vm.etch(ContractAddresses.GAME_WHALE_MODULE, address(new DegenerusGameWhaleModule()).code);
     }
 
-    function _traits(uint256 word) private pure returns (uint8[4] memory) {
-        return JackpotBucketLib.getRandomTraits(word);
+    /// @dev The day's main board with no hero wagers: the raw roll, then the gold-six daily rule.
+    function _traits(uint256 word) private pure returns (uint8[4] memory traits) {
+        traits = JackpotBucketLib.getRandomTraits(word);
+        traits[3] = GoldSixLib.daily(traits[3], word);
     }
 
     function _seed(uint256 word, uint8 active, bool oneWallet) private {
+        _seedAt(TARGET, word, active, oneWallet);
+    }
+
+    function _seedAt(uint24 target, uint256 word, uint8 active, bool oneWallet) private {
         uint8[4] memory traits = _traits(word);
         for (uint8 q; q < 4; ++q) {
-            if (active & (1 << q) != 0) h.seed(TARGET, traits[q], address(uint160(oneWallet ? 0xA000 : 0xA000 + q)), 8);
+            if (active & (1 << q) != 0) h.seed(target, traits[q], address(uint160(oneWallet ? 0xA000 : 0xA000 + q)), 8);
         }
     }
 
@@ -92,11 +100,14 @@ contract EarlyBirdWhalePassTest is Test {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] == PASS) {
                 a.winner = address(uint160(uint256(logs[i].topics[1])));
-                uint8 source;
-                (a.halves, source) = abi.decode(logs[i].data, (uint256, uint8));
-                assertEq(source, 4, "early-bird event source");
+                (uint256 halves, uint8 source) = abi.decode(logs[i].data, (uint256, uint8));
+                assertEq(source, 4, "ticket-leg event source");
+                a.passWinners[a.passEvents] = a.winner;
+                a.passHalves[a.passEvents] = halves;
+                a.halves += halves;
                 ++a.passEvents;
             } else if (logs[i].topics[0] == TICKET) {
+                ++a.quadrantSlots[uint256(logs[i].topics[3]) >> 6];
                 (uint32 entries, uint24 source, uint256 index,) = abi.decode(logs[i].data, (uint32, uint24, uint256, bool));
                 assertEq(entries, entriesEach, "equal whole-ticket prize per slot");
                 a.entries += entries;
@@ -106,17 +117,81 @@ contract EarlyBirdWhalePassTest is Test {
         }
     }
 
+    /// @dev Whole passes per quadrant: proportional to its ticket winners, rounding passes
+    ///      one each in quadrant order.
+    function _split(uint256[4] memory slots, uint256 full) private pure returns (uint256[4] memory p) {
+        uint256 total = slots[0] + slots[1] + slots[2] + slots[3];
+        uint256 left = full;
+        for (uint256 q; q < 4; ++q) {
+            p[q] = (full * slots[q]) / total;
+            left -= p[q];
+        }
+        for (uint256 q; left != 0; ++q) {
+            if (slots[q] == 0) continue;
+            ++p[q];
+            --left;
+        }
+    }
+
+    /// @dev One recipient per paying quadrant, drawn from that quadrant's wallets
+    ///      (0xA000 + q under `_seed`), each holding its proportional share.
+    function _checkPassSplit(Awards memory a) private pure {
+        uint256[4] memory want = _split(a.quadrantSlots, a.halves / 2);
+        uint256 recipients;
+        for (uint256 q; q < 4; ++q) if (want[q] != 0) ++recipients;
+        assertEq(a.passEvents, recipients, "one recipient per quadrant holding passes");
+        for (uint256 e; e < a.passEvents; ++e) {
+            uint256 q = uint160(a.passWinners[e]) - 0xA000;
+            assertLt(q, 4, "recipient is a seeded quadrant wallet");
+            assertGt(a.quadrantSlots[q], 0, "only quadrants that paid tickets draw a recipient");
+            assertEq(a.passHalves[e], want[q] * 2, "proportional share");
+        }
+    }
+
+    /// @dev Independent doubling reference: 1, doubled at 40, 160, 640, ... ETH, at most `max`.
+    function _mult(uint256 value, uint256 max) private pure returns (uint256 m) {
+        m = 1;
+        uint256 step = 40 ether;
+        while (m < max && value >= step) {
+            m *= 2;
+            step *= 4;
+        }
+    }
+
+    struct Plan {
+        uint256 slots;
+        uint256 entries;
+        uint256 halves;
+    }
+
+    /// @dev Independent ticket-leg model: 96 winners doubled at 40 and 160 ETH of value, at most
+    ///      the whole tickets, floored to eight; past 25 tickets each, a surplus
+    ///      worth a full pass caps each winner at 25 and converts to whole passes.
+    function _model(uint24 target, uint256 budget) private pure returns (Plan memory m) {
+        uint256 p = PriceLookupLib.priceForLevel(target);
+        uint256 entries = (budget * 4) / p;
+        uint256 tickets = entries / 4;
+        if (tickets == 0) return m;
+        uint256 value = entries * (p / 4);
+        uint256 n = 96 * _mult(value, 4);
+        if (tickets < n) n = tickets;
+        if (n >= 8) n = (n / 8) * 8;
+        uint256 each = tickets / n;
+        if (each > 25) {
+            uint256 full = (value - n * 25 * p) / FULL_PASS;
+            if (full != 0) {
+                each = 25;
+                m.halves = full * 2;
+            }
+        }
+        m.slots = n;
+        m.entries = each * 4;
+    }
+
     function _checkPrice(uint24 target, uint256 budget) private {
         h.price(target, budget, 12345, false);
         uint256 p = PriceLookupLib.priceForLevel(target);
-        uint256 tickets = budget / p;
-        uint256 n = tickets < 128 ? tickets : 128;
-        if (n >= 8) n = n / 8 * 8;
-        uint256 passes;
-        if (n != 0 && tickets / n > 45) passes = (budget - n * 45 * p) / FULL_PASS;
-        uint256 entries = passes == 0 ? budget * 4 / p : n * 180;
-        assertEq(uint64(h.packed() >> 144), entries, "pricing latch");
-        assertEq(h.pending(), passes * 2, "full passes only");
+        assertEq(uint64(h.packed() >> 144), budget * 4 / p, "pricing latches the whole budget");
         (uint128 next, uint128 future) = h.pools();
         uint256 initialFuture = (budget * 100 + 2) / 3;
         assertEq(future, initialFuture - budget, "full 3% debit stays in next");
@@ -127,21 +202,43 @@ contract EarlyBirdWhalePassTest is Test {
         assertEq(h.liability(), 0, "no cash liability from conversion");
     }
 
-    function test_thresholdsAtEveryPriceTier() public {
+    function _checkSettlement(uint24 target, uint256 budget, uint256 word) private returns (Awards memory a) {
+        Plan memory m = _model(target, budget);
+        h.price(target, budget, word, false);
+        a = _draw(word, m.entries);
+        assertEq(a.slots, m.slots, "winner count");
+        assertEq(a.halves, m.halves, "surplus passes");
+        if (m.halves != 0) _checkPassSplit(a);
+    }
+
+    /// @dev For each price tier, the first whole-entry budget whose surplus converts, and one
+    ///      wei below it, settle exactly as the model says. Under 2,496 tickets no winner can
+    ///      hold more than 25, so the search starts there.
+    function test_conversionThresholdsAtEveryPriceTier() public {
+        uint256 word = 1337;
         uint24[7] memory targets = [uint24(2), 5, 10, 30, 60, 90, 100];
         for (uint256 i; i < targets.length; ++i) {
+            _seedAt(targets[i], word, 15, false);
             uint256 p = PriceLookupLib.priceForLevel(targets[i]);
-            uint256 threshold = 46 * 128 * p;
-            uint256 passFloor = 45 * 128 * p + FULL_PASS;
-            if (passFloor > threshold) threshold = passFloor;
-            _checkPrice(targets[i], threshold - 1);
-            assertEq(h.pending(), 0);
-            _checkPrice(targets[i], threshold);
-            assertGt(h.pending(), 0);
-            _checkPrice(targets[i], threshold + 1);
-            _checkPrice(targets[i], 45 * 128 * p);
-            assertEq(h.pending(), 0, "gate resets after a smaller draw");
+            uint256 k = 2_496;
+            while (_model(targets[i], k * p).halves == 0) ++k;
+            uint256 first = (k - 1) * p;
+            while (_model(targets[i], first).halves == 0) first += p / 4;
+            assertEq(_model(targets[i], first - 1).halves, 0, "one wei below the first conversion");
+            uint256 snap = vm.snapshotState();
+            _checkSettlement(targets[i], first - 1, word);
+            assertTrue(vm.revertToState(snap));
+            assertGt(_checkSettlement(targets[i], first, word).halves, 0);
+            assertTrue(vm.revertToState(snap));
         }
+    }
+
+    function testFuzz_settlementMatchesModel(uint8 tier, uint96 amount) public {
+        uint24[7] memory targets = [uint24(2), 5, 10, 30, 60, 90, 100];
+        uint24 target = targets[tier % 7];
+        uint256 budget = bound(uint256(amount), 0, 2_000 ether);
+        _seedAt(target, 1337, 15, false);
+        _checkSettlement(target, budget, 1337);
     }
 
     function testFuzz_exactBudgetAndPoolConservation(uint8 tier, uint96 amount) public {
@@ -149,33 +246,22 @@ contract EarlyBirdWhalePassTest is Test {
         _checkPrice(targets[tier % 7], bound(uint256(amount), 0, 1_000_000 ether));
     }
 
-    function test_surplusUsesExactWeiIncludingOriginalDust() public {
-        // Target 2 (live `level` = 1, the smallest level that ever reaches its own jackpot
-        // phase) still sits in the 0.01 ETH intro tier. At that price, 62.10 ETH buys one
-        // pass after reserving 45 per slot; the old equal-slot awards used only 61.44 ETH
-        // (48 tickets each).
-        _checkPrice(2, 62.10 ether);
-        assertEq(h.pending(), 2);
-        _checkPrice(2, 62.10 ether - 1);
-        assertEq(h.pending(), 0, "retain 48 tickets until a whole pass fits");
-        _checkPrice(TARGET, 234.90 ether);
-        assertEq(h.pending(), 0, "rounding dust alone cannot trigger at 45 each");
-    }
-
     function test_convertedDrawPreservesRecipientsPoolsAndOtherLatches() public {
         uint256 word = 1337;
         _seed(word, 15, false);
-        h.price(TARGET, 256 ether, word, false);
+        h.price(TARGET, 512 ether, word, false);
         uint256 packed = h.packed();
         (uint128 next, uint128 future) = h.pools();
         uint256 liability = h.liability();
         uint256 snap = vm.snapshotState();
-        Awards memory capped = _draw(word, 180);
-        assertEq(capped.slots, 128);
-        assertEq(capped.passEvents, 1);
-        assertEq(capped.halves, 10);
-        assertEq(h.passes(capped.winner), 10);
-        assertEq(h.pending(), 0);
+        Awards memory capped = _draw(word, 100);
+        assertEq(capped.slots, 384);
+        assertEq(capped.passEvents, 3, "one recipient per paying quadrant");
+        assertEq(capped.halves, 56);
+        _checkPassSplit(capped);
+        uint256 credited;
+        for (uint256 e; e < 3; ++e) credited += h.passes(capped.passWinners[e]);
+        assertEq(credited, 56);
         assertEq(h.packed(), packed & ((uint256(1) << 144) - 1));
         (uint128 nextAfter, uint128 futureAfter) = h.pools();
         assertEq(nextAfter, next);
@@ -184,101 +270,74 @@ contract EarlyBirdWhalePassTest is Test {
         Awards memory replay = _draw(word, 0);
         assertEq(replay.slots + replay.passEvents, 0, "no duplicate settlement");
         assertTrue(vm.revertToState(snap));
-        h.latch(256 ether * 4 / 0.04 ether, 0);
-        Awards memory ordinary = _draw(word, 200);
+        // 384 winners at exactly 25 tickets each: the same draw without a pass surplus.
+        h.latch(384 * 25 * 4);
+        Awards memory ordinary = _draw(word, 100);
         assertEq(ordinary.fingerprint, capped.fingerprint, "same ticket recipients and source indices");
     }
 
     function test_duplicateWalletKeepsEveryTicketSlot() public {
         uint256 word = 1337;
         _seed(word, 15, true);
-        h.price(TARGET, 256 ether, word, false);
-        Awards memory a = _draw(word, 180);
-        assertEq(a.slots, 128);
-        assertEq(h.owed(TARGET, address(0xA000)), 128 * 180);
+        h.price(TARGET, 512 ether, word, false);
+        Awards memory a = _draw(word, 100);
+        assertEq(a.slots, 384);
+        assertEq(h.owed(TARGET, address(0xA000)), 384 * 100);
         assertEq(a.winner, address(0xA000));
-        assertEq(h.passes(a.winner), 10);
+        assertEq(h.passes(a.winner), 56);
     }
 
-    function testFuzz_goldPreferenceAndEmptyFallback(uint256 word, uint8 mask) public {
+    /// @dev Every active-bucket shape: tickets skip the solo quadrant unless it is the only
+    ///      active one, and the surplus passes split one recipient per paying quadrant.
+    function testFuzz_passesSplitAcrossPayingQuadrants(uint256 word, uint8 mask) public {
         mask &= 15;
-        uint8[4] memory traits = _traits(word);
         uint8 solo = _soloQuadrant(word);
         _seed(word, mask, false);
-        h.price(TARGET, 256 ether, word, false);
-        Awards memory a = _draw(word, 180);
+        h.price(TARGET, 512 ether, word, false);
+        Awards memory a = _draw(word, 100);
         if (mask == 0) {
             assertEq(a.slots + a.passEvents, 0);
-            assertEq(h.pending(), 0, "empty draw consumes the latch");
+            assertEq(uint64(h.packed() >> 144), 0, "empty draw consumes its field");
             return;
         }
-        assertEq(a.slots, 128);
-        assertEq(a.passEvents, 1);
-        assertEq(a.halves, 10);
-        uint256 chosen = uint160(a.winner) - 0xA000;
-        assertLt(chosen, 4);
-        assertTrue(mask & (1 << chosen) != 0, "selected bucket is active");
-        // The solo quadrant is skipped by the draw entirely, gold or not, unless it is the
-        // only active bucket (the mask has no other bit set).
+        assertEq(a.slots, 384);
+        assertEq(a.halves, 56);
         uint8 nonSoloMask = mask & ~uint8(1 << solo);
-        if (nonSoloMask == 0) {
-            assertEq(chosen, solo, "the solo quadrant is the only active bucket, so it still wins");
-            return;
+        for (uint256 q; q < 4; ++q) {
+            bool pays = nonSoloMask == 0 ? q == solo : (nonSoloMask & (1 << q)) != 0;
+            assertEq(a.quadrantSlots[q] != 0, pays, "tickets land in the eligible quadrants only");
         }
-        assertTrue(chosen != solo, "the solo quadrant never wins while another bucket is active");
-        uint8 activeGold;
-        for (uint8 q; q < 4; ++q) if (nonSoloMask & (1 << q) != 0 && ((traits[q] >> 3) & 7) == 7) activeGold |= uint8(1 << q);
-        if (activeGold != 0) assertTrue(activeGold & (1 << chosen) != 0, "eligible gold always wins");
-        uint8 candidates = activeGold != 0 ? activeGold : nonSoloMask;
-        uint8[] memory quadrants = new uint8[](4);
-        uint256 count;
-        for (uint8 q; q < 4; ++q) if (candidates & (1 << q) != 0) quadrants[count++] = q;
-        uint256 root = uint256(keccak256(abi.encode(word, keccak256("early-bird-whale"), uint256(100), uint256(TARGET))));
-        assertEq(chosen, quadrants[root % count], "equal choice among eligible preferred buckets");
+        _checkPassSplit(a);
     }
 
-    function test_deityOnlyGoldIsEligible() public {
-        uint256 word;
-        uint8[4] memory traits;
-        uint8 goldQ;
-        // _pickSoloQuadrant always prefers a gold quadrant when one exists, so a board with
-        // exactly ONE gold quadrant always has that quadrant AS the solo pick (covered
-        // separately by test_surplusWhalePassSkipsSoloEvenWhenItIsTheOnlyGoldQuadrant): a
-        // deity-only-gold fixture needs a SECOND gold quadrant, so the non-solo one is still
-        // an eligible (and the only eligible) gold candidate.
-        while (true) {
-            traits = _traits(word);
-            uint8 goldCount;
-            uint8[4] memory golds;
-            for (uint8 q; q < 4; ++q) {
-                if (((traits[q] >> 3) & 7) == 7) { golds[goldCount] = q; ++goldCount; }
-            }
-            if (goldCount == 2) {
-                // Gold is always preferred, so the solo pick is one of these two.
-                uint8 solo = _soloQuadrant(word);
-                goldQ = golds[0] == solo ? golds[1] : golds[0];
-                break;
-            }
-            ++word;
-        }
-        _seed(word, uint8(15 ^ (1 << goldQ)), false);
-        address goldDeity = address(0xD00D);
-        h.deity(traits[goldQ], goldDeity);
-        h.price(TARGET, 256 ether, word, false);
-        Awards memory a = _draw(word, 180);
-        assertEq(a.winner, goldDeity);
-        assertEq(a.halves, 10);
+    /// @dev A quadrant active only through its deity pays tickets and its pass to the deity.
+    function test_deityOnlyQuadrantPaysItsDeity() public {
+        uint256 word = 1337;
+        uint8 solo = _soloQuadrant(word);
+        uint8 q = solo == 0 ? 1 : 0;
+        uint8[4] memory traits = _traits(word);
+        _seed(word, uint8(15 ^ (1 << q)), false);
+        address deity = address(0xD00D);
+        h.deity(traits[q], deity);
+        h.price(TARGET, 512 ether, word, false);
+        Awards memory a = _draw(word, 100);
+        assertGt(a.quadrantSlots[q], 0);
+        assertEq(h.owed(TARGET, deity), a.quadrantSlots[q] * 100, "every ticket in the quadrant went to the deity");
+        bool found;
+        for (uint256 e; e < a.passEvents; ++e) if (a.passWinners[e] == deity) found = true;
+        assertTrue(found, "the deity's quadrant draws the deity for its passes");
     }
 
     function testFuzz_passWinnerIndependentOfAwardAmount(uint256 word) public {
         _seed(word, 15, false);
-        h.price(TARGET, 256 ether, word, false);
-        Awards memory first = _draw(word, 180);
         h.price(TARGET, 512 ether, word, false);
-        Awards memory second = _draw(word, 180);
-        assertEq(first.winner, second.winner);
-        assertEq(first.halves, 10);
-        assertEq(second.halves, 124);
+        Awards memory first = _draw(word, 100);
+        h.price(TARGET, 1024 ether, word, false);
+        Awards memory second = _draw(word, 100);
+        assertEq(first.passEvents, second.passEvents);
+        for (uint256 e; e < first.passEvents; ++e) assertEq(first.passWinners[e], second.passWinners[e]);
+        assertEq(first.halves, 56);
+        assertEq(second.halves, 284);
         assertEq(first.fingerprint, second.fingerprint);
     }
 
@@ -287,15 +346,16 @@ contract EarlyBirdWhalePassTest is Test {
         h.seedDistinct(TARGET, trait, 64, 0x100000);
         address deity = address(0xD00D);
         h.deity(trait, deity);
-        h.price(TARGET, 256 ether, word, false);
-        Awards memory a = _draw(word, 180);
-        uint256 root = uint256(keccak256(abi.encode(word, keccak256("early-bird-whale"), uint256(100), uint256(TARGET))));
+        h.price(TARGET, 512 ether, word, false);
+        Awards memory a = _draw(word, 100);
+        uint256 seed = uint256(keccak256(abi.encode(uint256(keccak256(abi.encode(word, uint256(TARGET)))), uint256(0))));
+        uint256 root = uint256(keccak256(abi.encode(seed, keccak256("ticket-jackpot-whale"), uint256(100), uint256(TARGET))));
         uint256 virtuals = ((trait >> 3) & 7) >= 5 ? 1 : 2;
         uint256 index = uint256(keccak256(abi.encode(root, uint256(1)))) % (64 + virtuals);
         address expected = index < 64 ? address(uint160(0x100001 + index)) : deity;
         assertEq(a.winner, expected, "fresh entry-weighted sample including virtual deity entries");
         assertEq(a.passEvents, 1);
-        assertEq(a.halves, 10);
+        assertEq(a.halves, 56);
     }
 
     // -- solo-quadrant exclusion (main board) ----------------------------------
@@ -311,7 +371,7 @@ contract EarlyBirdWhalePassTest is Test {
         uint256 word = 1337;
         uint8 solo = _soloQuadrant(word);
         _seed(word, 15, false);
-        h.price(TARGET, 256 ether, word, false);
+        h.price(TARGET, 512 ether, word, false);
         vm.recordLogs();
         h.payEarlyBirdTickets(word);
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -329,7 +389,7 @@ contract EarlyBirdWhalePassTest is Test {
         uint256 word = 1337;
         uint8 solo = _soloQuadrant(word);
         _seed(word, uint8(1 << solo), false);
-        h.price(TARGET, 256 ether, word, false);
+        h.price(TARGET, 512 ether, word, false);
         vm.recordLogs();
         h.payEarlyBirdTickets(word);
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -347,53 +407,30 @@ contract EarlyBirdWhalePassTest is Test {
         uint256 word = 1337;
         uint8 solo = _soloQuadrant(word);
         _seed(word, 15, false);
-        h.price(TARGET, 256 ether, word, false);
-        Awards memory a = _draw(word, 180);
-        assertEq(a.passEvents, 1, "surplus pass still awarded");
-        uint256 chosen = uint160(a.winner) - 0xA000;
-        assertLt(chosen, 4, "winner drawn from a seeded quadrant wallet");
-        assertTrue(chosen != solo, "the pass winner is never the solo quadrant when others are active");
+        h.price(TARGET, 512 ether, word, false);
+        Awards memory a = _draw(word, 100);
+        assertEq(a.passEvents, 3, "one recipient per paying quadrant");
+        for (uint256 e; e < 3; ++e) {
+            assertTrue(uint160(a.passWinners[e]) - 0xA000 != solo, "no pass recipient from the solo quadrant");
+        }
     }
 
     function test_surplusWhalePassFallsBackToSoloQuadrantWhenItIsTheOnlyActiveBucket() public {
         uint256 word = 1337;
         uint8 solo = _soloQuadrant(word);
         _seed(word, uint8(1 << solo), false);
-        h.price(TARGET, 256 ether, word, false);
-        Awards memory a = _draw(word, 180);
+        h.price(TARGET, 512 ether, word, false);
+        Awards memory a = _draw(word, 100);
         assertEq(a.passEvents, 1, "the pass still pays when the solo bucket is the only one active");
         assertEq(a.winner, address(uint160(0xA000 + solo)), "falls back to the solo quadrant");
-    }
-
-    /// @dev Gold preference must not pull the winner into the solo quadrant even when the solo
-    ///      quadrant is the board's ONLY gold one: the solo skip in _drawWhalePassWinner runs
-    ///      before the gold-preference reset, so the other three (non-gold) quadrants remain
-    ///      the candidate pool.
-    function test_surplusWhalePassSkipsSoloEvenWhenItIsTheOnlyGoldQuadrant() public {
-        uint256 word;
-        uint8[4] memory traits;
-        uint8 solo;
-        uint8 goldQ;
-        while (true) {
-            traits = _traits(word);
-            uint8 goldCount;
-            for (uint8 q; q < 4; ++q) if (((traits[q] >> 3) & 7) == 7) { ++goldCount; goldQ = q; }
-            solo = _soloQuadrant(word);
-            if (goldCount == 1 && goldQ == solo) break;
-            ++word;
-        }
-        _seed(word, 15, false);
-        h.price(TARGET, 256 ether, word, false);
-        Awards memory a = _draw(word, 180);
-        uint256 chosen = uint160(a.winner) - 0xA000;
-        assertTrue(chosen != solo, "gold preference does not pull the winner into the solo quadrant");
     }
 
     function test_turboAndDeferredClaimAggregatesExistingPasses() public {
         uint256 word = 1337;
         _seed(word, 15, false);
-        h.price(TARGET, 256 ether, word, true);
-        Awards memory a = _draw(word, 180);
+        h.price(TARGET, 512 ether, word, true);
+        Awards memory a = _draw(word, 100);
+        uint256 own = h.passes(a.winner);
         h.creditPasses(a.winner, 2);
         bytes memory original = address(h).code;
         bytes memory whaleCode = address(new DegenerusGameWhaleModule()).code;
@@ -401,7 +438,7 @@ contract EarlyBirdWhalePassTest is Test {
         vm.expectRevert(bytes4(keccak256("RngLocked()")));
         DegenerusGameWhaleModule(payable(address(h))).claimWhalePass(a.winner);
         vm.etch(address(h), original);
-        assertEq(h.passes(a.winner), 12, "blocked claim retains all awards");
+        assertEq(h.passes(a.winner), own + 2, "blocked claim retains all awards");
         h.unlock();
         vm.etch(address(h), whaleCode);
         vm.warp(132 days);
@@ -413,8 +450,8 @@ contract EarlyBirdWhalePassTest is Test {
         DegenerusGameWhaleModule(payable(address(h))).claimWhalePass(a.winner);
         vm.etch(address(h), original);
         assertEq(h.passes(a.winner), 0);
-        // 12 half-pass units grant 12 entries at each of 100 levels. Existing
+        // Each half-pass unit grants one entry at each of 100 levels. Existing
         // immediate tickets at TARGET are separate; inspect the later 99 levels.
-        for (uint24 l = TARGET + 1; l < TARGET + 100; ++l) assertEq(h.owed(l, a.winner), 12);
+        for (uint24 l = TARGET + 1; l < TARGET + 100; ++l) assertEq(h.owed(l, a.winner), own + 2);
     }
 }

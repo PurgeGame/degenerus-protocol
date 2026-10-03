@@ -86,19 +86,27 @@ pass cost goes to futurePrizePool. The solo quadrant follows this same full-pass
 rule. These awards concentrate part of the quadrant's prize in one longer-term
 participation claim; they do not create a cash withdrawal claim for that value.
 
-The early-bird jackpot pays tickets to holders of the day's winning traits in the
-board's three non-solo quadrants (the solo quadrant already pays the day's solo ETH
-prize; it serves only when it is the one quadrant with holders). It converts large
-ticket prizes into a mixed award: once its ordinary payout exceeds 45 tickets per
-winning slot and the pooled surplus can cover a full prize pass at the 4.5 ETH
-accounting rate, every slot receives 45 tickets and one separate winner receives all
-surplus full passes. The pass draw uses the same three quadrants and prefers eligible
-gold winning traits, including deity virtual entries; otherwise it draws from the
-other eligible winning traits. The recipient need not have won an immediate ticket
-prize. All early-bird ETH and rounding remainder still go to
+Daily ETH jackpots in both phases scale their winner counts with the day's ETH budget:
+32, 16 and 4 non-solo winners, doubling at 40, 160, 640, 2,560 and 10,240 ETH, up to
+1,024, 512 and 128. Every non-solo prize
+is a whole multiple of 0.1 ETH, so small budgets pay fewer winners rather than smaller
+prizes, and rounding leftovers go to the solo winner. Winning slots can pay the same
+wallet more than once. The terminal jackpot keeps its fixed winner counts.
+
+Every ticket jackpot (the purchase-phase daily, the early bird and the jackpot-phase
+daily) pays tickets to holders of the day's winning traits in the board's three
+non-solo quadrants (the solo quadrant already pays the day's solo ETH prize; it serves
+only when it is the one quadrant with holders). Winner counts double with the ticket
+budget: 96, then 192 from 40 ETH and 384 from 160 ETH. Large
+prizes become a mixed award: once the payout exceeds 25 tickets per winning slot and
+the pooled surplus can cover a full prize pass at the 4.5 ETH accounting rate, every
+slot receives 25 tickets and the surplus full passes split across the quadrants that
+paid tickets, in proportion to their winners, with one separately drawn recipient per
+quadrant (deity virtual entries included). A recipient need not have won an immediate
+ticket prize. All ticket-jackpot ETH and rounding remainder still go to
 nextPrizePool; these passes confer future participation, not a segregated ETH
 reserve or cash claim. They must be claimed under the existing pass rules and
-depend on continued play. Repeated ticket wins each retain their 45-ticket award;
+depend on continued play. Repeated ticket wins each retain their 25-ticket award;
 they do not add chances to the separate pass draw.
 
 After level 0, the purchase target has a **30-day** window: day 30 is the distress

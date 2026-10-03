@@ -293,20 +293,16 @@ interface IDegenerusGameWhaleModule {
     function claimWhalePass(address player) external;
 
     /// @notice Awards early-bird or quadrant passes to one fresh recipient.
-    /// @dev Nested delegatecall from JackpotModule against frozen GAME inventory.
-    ///      Early bird supplies the day's packed main board, its solo quadrant (the winner
-    ///      is drawn outside it unless it is the one active bucket) and amount in half-pass
-    ///      units. Otherwise traits holds one quadrant's trait, amount is its ETH allocation,
-    ///      randWord is its bucket entropy and soloQuadrant is unused. Quadrant pass cost
-    ///      credits future; early bird moves no pools. Returns award value (zero for an
-    ///      empty draw).
+    /// @dev Nested delegatecall from JackpotModule against frozen GAME inventory: one
+    ///      recipient from the bucket of `trait`, drawn with `randWord`. A ticket leg passes
+    ///      half-pass units and moves no pools; an ETH quadrant passes its ETH allocation and
+    ///      its pass cost credits future. Returns award value (zero for an empty draw).
     function awardWhalePass(
         uint24 lvl,
-        uint32 traits,
+        uint8 trait,
         uint256 amount,
         uint256 randWord,
-        bool earlyBird,
-        uint8 soloQuadrant
+        bool ticketLeg
     ) external returns (uint256 spent);
 
     /// @notice sDGNRS's once-per-level automatic whale purchase (afking process STAGE only).

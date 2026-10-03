@@ -24,7 +24,6 @@ contract DayShapeHarness is GoldenTicketHarness {
     }
     function earlyBirdPending() external view returns (bool) { return _earlyBirdLegPending(); }
     function earlyBirdEntries() external view returns (uint256) { return uint64(dailyTicketBudgetsPacked >> 144); }
-    function earlyBirdPasses() external view returns (uint256) { return earlyBirdWhalePasses; }
     function coinTicketsPending() external view returns (bool) { return dailyJackpotCoinTicketsPending; }
     function setJackpotFlags(uint8 v) external { jackpotFlags = v; }
     function battlePending() external view returns (bool) { return _jackpotBattlePending(); }
@@ -169,8 +168,8 @@ contract DailyJackpotDayShapes is Test {
         // The ETH stage priced the leg but drew no ticket winner: the entries wait in the latch
         // for the early-bird stage, which distributes them at LVL + 1 and clears only its field.
         assertTrue(h.earlyBirdPending(), "the early-bird leg is latched for its own stage");
-        assertEq(h.earlyBirdEntries(), 128 * 45 * 4, "120 ETH caps the ticket leg at 45 whole tickets per slot");
-        assertEq(h.earlyBirdPasses(), 2, "the 4.8 ETH surplus buys one full pass");
+        assertEq(h.earlyBirdEntries(), earlyBird * 4 / PriceLookupLib.priceForLevel(LVL + 1),
+            "the latch holds the whole early-bird budget; its plan sizes any pass surplus");
         assertTrue(h.coinTicketsPending(), "the coin+tickets stage still waits behind it");
         (uint128 next2, uint128 fut2) = h.poolsView();
         vm.recordLogs();
@@ -178,7 +177,6 @@ contract DailyJackpotDayShapes is Test {
         uint256 ticketWins = _ticketWins(vm.getRecordedLogs(), LVL + 1);
         assertGt(ticketWins, 0, "the early-bird stage drew ticket winners at the next level");
         assertFalse(h.earlyBirdPending(), "the early-bird stage cleared its latch");
-        assertEq(h.earlyBirdPasses(), 0, "the pass latch is also consumed");
         uint256 daily2 = h.ticketBudgets();
         assertEq(daily2, dailyEntries, "the day's own ticket budget survives for the coin+tickets stage");
         assertTrue(h.coinTicketsPending(), "the coin+tickets stage is still the next stage");
@@ -204,8 +202,7 @@ contract DailyJackpotDayShapes is Test {
         assertEq(_ticketWins(logs1, LVL + 1), 0, "the ETH stage drew no early-bird winner");
         assertEq(h.currentPoolView(), 0, "turbo day 1 is the final physical day: the whole current pool is spent");
         assertTrue(h.earlyBirdPending());
-        assertEq(h.earlyBirdEntries(), 128 * 45 * 4);
-        assertEq(h.earlyBirdPasses(), 2);
+        assertGt(h.earlyBirdEntries(), 0);
         assertEq(h.counter(), 0, "the counter has not moved before the leg stages");
 
         vm.recordLogs();

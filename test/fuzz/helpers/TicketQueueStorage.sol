@@ -8,8 +8,8 @@ library TicketQueueStorage {
     uint256 internal constant QUEUE = 12;
     uint256 internal constant OWED = 13; // Permanent wallet-to-ID lookup.
     uint256 internal constant OWNERS = 67;
-    uint256 internal constant QUEUE_LEVELS = 78;
-    uint256 internal constant PENDING = 79;
+    uint256 internal constant QUEUE_LEVELS = 77;
+    uint256 internal constant PENDING = 78;
     Vm private constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
     function queueKey(uint24 key) internal pure returns (uint24) {

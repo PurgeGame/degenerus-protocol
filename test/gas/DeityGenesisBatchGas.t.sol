@@ -39,7 +39,7 @@ contract DeityGenesisBatchGasTest is DeployProtocol {
             uint24 key = _genesisKey(lvl);
             bytes32 lengthSlot = keccak256(abi.encode(uint256(key), uint256(12)));
             bytes32 wordSlot = keccak256(abi.encode(lengthSlot));
-            bytes32 pendingRoot = keccak256(abi.encode(uint256(lvl), uint256(79)));
+            bytes32 pendingRoot = keccak256(abi.encode(uint256(lvl), uint256(78)));
             bytes32 firstRecord = keccak256(abi.encode(uint256(1), pendingRoot));
             bytes32 secondRecord = keccak256(abi.encode(uint256(2), pendingRoot));
             uint256 lengthWrites;

@@ -83,11 +83,17 @@ library MineFlipGasBounds {
     uint256 internal constant JACKPOT_TAIL_GAS = 180_000;
     // Cold winner with a fresh claimable balance: 30.6k measured.
     uint256 internal constant JACKPOT_ETH_WINNER_GAS_MAX = 37_000;
+    // One sampler group, as for tickets: a quadrant's first group adds 160k for its pass
+    // conversion, gold arm and accounting; continuation groups are 8 x WINNER.
+    uint256 internal constant JACKPOT_ETH_AWARD_CHUNK = 8;
+    // One ticket-leg pass recipient: bucket draw, cold claim write and event.
+    uint256 internal constant JACKPOT_PASS_AWARD_GAS = 100_000;
     // Cold draw: 3.4k per winner. Award with a fresh pending word: 37.6k measured.
     uint256 internal constant JACKPOT_TICKET_DRAW_GAS_MAX = 4_200;
     uint256 internal constant JACKPOT_TICKET_AWARD_GAS_MAX = 45_000;
-    // One whole quadrant (at most 128 winners): 50k + 128 x (DRAW + AWARD) + TAIL = 6.53M.
-    uint256 internal constant JACKPOT_TICKET_AWARD_CHUNK = 128;
+    // One sampler group: eight draws share one packed bucket word. Checkpoints must start a
+    // group, so this stays a multiple of eight. 8 x (DRAW + AWARD) + TAIL = 0.57M.
+    uint256 internal constant JACKPOT_TICKET_AWARD_CHUNK = 8;
 
     // CRAPS
     uint256 internal constant CRAPS_SEAT_GAS_MAX = 1_650_000;

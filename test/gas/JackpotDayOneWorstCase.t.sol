@@ -13,10 +13,10 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 /// @title JackpotDayOneWorstCase — the per-tx gas ceiling of the jackpot-phase DAY-1 daily.
 /// @notice The early-bird day (`jackpotCounter == 0`) carries TWO winner-capped legs, each from its
 ///         own advance tx:
-///           - STAGE_JACKPOT_DAILY_STARTED (10): `_processDailyEth` at the DAILY_ETH_MAX_WINNERS = 305
-///             cap (buckets 152/104/48/1 once `dailyEthBudget >= JACKPOT_SCALE_SECOND_WEI = 200 ETH`),
-///             which also prices the early-bird budget (3% of futurePrizePool, moved future -> next)
-///             and latches its entry count; then
+///           - STAGE_JACKPOT_DAILY_STARTED (10): the ETH draw, its winner targets scaled by the
+///             budget (`JackpotBucketLib.ethWinnerTargets`), which also prices the early-bird
+///             budget (3% of futurePrizePool, moved future -> next) and latches its entry count;
+///             then
 ///           - STAGE_JACKPOT_EARLY_BIRD_TICKETS (14): `payEarlyBirdTickets` at the
 ///             EARLY_BIRD_MAX_WINNERS = 128 cap (32 per bonus quadrant of lvl+1, once the 3%
 ///             covers 128 tickets at priceForLevel(lvl+1)).

@@ -96,17 +96,15 @@ contract SolvencyArithmeticTest is Test {
         uint16 c1,
         uint16 c2,
         uint16 c3,
-        uint8 remainderIdx,
-        uint256 unit
+        uint8 remainderIdx
     ) public pure {
         if (pool > 1e30) return; // realistic ETH range
         if (uint256(s0) + s1 + s2 + s3 > 10_000) return; // shareBps within 100% (as the real splits are)
         if (remainderIdx > 3) return;
-        if (unit > 1e18) return; // realistic unit; avoids unit*count overflow noise
         uint16[4] memory shareBps = [s0, s1, s2, s3];
         uint16[4] memory counts = [c0, c1, c2, c3];
         uint256[4] memory shares =
-            JackpotBucketLib.bucketShares(pool, shareBps, counts, remainderIdx, unit);
+            JackpotBucketLib.bucketShares(pool, shareBps, counts, remainderIdx);
         uint256 sum = shares[0] + shares[1] + shares[2] + shares[3];
         assert(sum <= pool);
     }

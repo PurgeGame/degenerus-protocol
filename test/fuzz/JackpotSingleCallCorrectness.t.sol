@@ -15,9 +15,8 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 ///         `runTerminalJackpot` executes the live `_processDailyEth -> _processBucket ->
 ///         _addClaimableEth` path in THIS contract's storage. The harness only adds a
 ///         `lvlTraitEntry` seeder + read-only accounting views; it overrides NO production
-///         logic. `runTerminalJackpot` already feeds `_processDailyEth` the full
-///         DAILY_ETH_MAX_WINNERS=305 ceiling at the DAILY_JACKPOT_SCALE_MAX_BPS=63_600 max
-///         scale (bucket counts 152/104/48/1), in ONE call -- exactly the JGAS-03 surface.
+///         logic. `runTerminalJackpot` pays the fixed DAILY_ETH_MAX_WINNERS=305 terminal
+///         geometry (bucket counts 152/104/48/1), in ONE call -- exactly the JGAS-03 surface.
 /// @dev Test-only. NO contracts/*.sol is mutated; this harness lives entirely under test/.
 contract JackpotSingleCallHarness is DegenerusGameJackpotModule, BucketSeed {
     /// @dev Push `count` distinct, non-zero holder addresses into lvlTraitEntry[lvl][traitId].
@@ -67,7 +66,6 @@ contract JackpotSingleCallCorrectness is Test {
 
     /// @dev Mirror of the production constants (DegenerusGameJackpotModule).
     uint16 internal constant DAILY_ETH_MAX_WINNERS = 305;
-    uint32 internal constant DAILY_JACKPOT_SCALE_MAX_BPS = 63_600;
     /// @dev FINAL_DAY_SHARES_PACKED = [6000, 1333, 1333, 1334] bps (runTerminalJackpot path).
     uint64 internal constant FINAL_DAY_SHARES_PACKED =
         (uint64(6000)) |
@@ -118,8 +116,7 @@ contract JackpotSingleCallCorrectness is Test {
 
     /// @dev A target level whose +1 price tier is a clean 0.04 ETH (unit = 0.01 ETH).
     uint24 internal constant TARGET_LVL = 110;
-    /// @dev Pool well above the 200-ETH max-scale floor (JACKPOT_SCALE_SECOND_WEI), so the
-    ///      scaleBps pins to DAILY_JACKPOT_SCALE_MAX_BPS and the buckets hit 152/104/48/1.
+    /// @dev Terminal pool; the terminal buckets are the fixed 152/104/48/1.
     uint256 internal constant POOL_WEI = 1000 ether;
 
     function setUp() public {
@@ -138,12 +135,8 @@ contract JackpotSingleCallCorrectness is Test {
         (uint8[4] memory traitIds, uint256 effectiveEntropy) = _deriveTraits(_word());
 
         // Confirm the bucket geometry IS the 305 ceiling (152/104/48/1) BEFORE driving the call.
-        uint16[4] memory bc = JackpotBucketLib.bucketCountsForPool(
-            POOL_WEI,
-            effectiveEntropy,
-            DAILY_JACKPOT_SCALE_MAX_BPS
-        );
-        assertEq(JackpotBucketLib.sumBucketCounts(bc), 305, "max-scale total == 305");
+        uint16[4] memory bc = JackpotBucketLib.terminalWinnerCounts(effectiveEntropy);
+        assertEq(_total(bc), 305, "terminal total == 305");
         _assertCountMultiset(bc, [uint16(152), 104, 48, 1]);
 
         // Seed each of the 4 winning-trait buckets with distinct holders (one disjoint address
@@ -198,17 +191,14 @@ contract JackpotSingleCallCorrectness is Test {
     ///         equals its computed unit-rounded share (exact, none missed/over).
     function testPerBucketExactShareNoDoublePay() public {
         (uint8[4] memory traitIds, uint256 effectiveEntropy) = _deriveTraits(_word());
-        uint16[4] memory bc = JackpotBucketLib.bucketCountsForPool(
-            POOL_WEI, effectiveEntropy, DAILY_JACKPOT_SCALE_MAX_BPS
-        );
+        uint16[4] memory bc = JackpotBucketLib.terminalWinnerCounts(effectiveEntropy);
 
         uint8 soloIdx = JackpotBucketLib.soloBucketIndex(effectiveEntropy);
-        uint256 unit = 0; // runTerminalJackpot pays exact shares (no ticket-unit rounding)
         uint16[4] memory shareBps = JackpotBucketLib.shareBpsByBucket(
             FINAL_DAY_SHARES_PACKED, uint8(effectiveEntropy & 3)
         );
         uint256[4] memory shares = JackpotBucketLib.bucketShares(
-            POOL_WEI, shareBps, bc, soloIdx, unit
+            POOL_WEI, shareBps, bc, soloIdx
         );
 
         _seedAllBuckets(traitIds);
@@ -235,15 +225,13 @@ contract JackpotSingleCallCorrectness is Test {
 
     /// @notice JGAS-03 fuzz: across a range of pools that still reach the 305 ceiling, the single
     ///         call always pays exactly 305 winners and never overpays the pool. (The 305 cap is
-    ///         reached for any pool >= JACKPOT_SCALE_SECOND_WEI = 200 ETH at max scale.)
+    ///         the fixed terminal geometry for any non-empty pool.)
     function testFuzz_SingleCall305AtMaxScale(uint96 extraWei) public {
         uint256 pool = 200 ether + bound(uint256(extraWei), 0, 5000 ether);
         (uint8[4] memory traitIds, uint256 effEntropy) = _deriveTraits(_word());
 
-        uint16[4] memory bc = JackpotBucketLib.bucketCountsForPool(
-            pool, effEntropy, DAILY_JACKPOT_SCALE_MAX_BPS
-        );
-        assertEq(JackpotBucketLib.sumBucketCounts(bc), 305, "any >=200-ETH pool hits the 305 ceiling");
+        uint16[4] memory bc = JackpotBucketLib.terminalWinnerCounts(effEntropy);
+        assertEq(_total(bc), 305, "the terminal geometry is the 305 ceiling");
 
         _seedAllBuckets(traitIds);
         vm.recordLogs();
@@ -274,10 +262,8 @@ contract JackpotSingleCallCorrectness is Test {
         (uint8[4] memory traitIds, uint256 effEntropy) = _deriveTraits(_word());
 
         // Establish this IS the worst case: 305 winners, the maximum the daily-ETH path emits.
-        uint16[4] memory bc = JackpotBucketLib.bucketCountsForPool(
-            POOL_WEI, effEntropy, DAILY_JACKPOT_SCALE_MAX_BPS
-        );
-        assertEq(JackpotBucketLib.sumBucketCounts(bc), 305, "worst case: 305 winners (the hard cap)");
+        uint16[4] memory bc = JackpotBucketLib.terminalWinnerCounts(effEntropy);
+        assertEq(_total(bc), 305, "worst case: 305 winners (the hard cap)");
 
         _seedAllBuckets(traitIds);
 
@@ -313,11 +299,9 @@ contract JackpotSingleCallCorrectness is Test {
 
         // Worst-case-FIRST (assert the scenario IS the max BEFORE measuring):
         //  (a) the bucket geometry reaches exactly the DAILY_ETH_MAX_WINNERS = 305 hard cap;
-        uint16[4] memory bc = JackpotBucketLib.bucketCountsForPool(
-            POOL_WEI, effEntropy, DAILY_JACKPOT_SCALE_MAX_BPS
-        );
+        uint16[4] memory bc = JackpotBucketLib.terminalWinnerCounts(effEntropy);
         assertEq(
-            JackpotBucketLib.sumBucketCounts(bc),
+            _total(bc),
             DAILY_ETH_MAX_WINNERS,
             "JGAS-04 worst case: 305 winners == DAILY_ETH_MAX_WINNERS (the daily-ETH hard cap)"
         );
@@ -424,15 +408,12 @@ contract JackpotSingleCallCorrectness is Test {
     function testNoResumeStageSingleCallFullyResolves() public {
         (uint8[4] memory traitIds, uint256 effEntropy) = _deriveTraits(_word());
         uint8 soloIdx = JackpotBucketLib.soloBucketIndex(effEntropy);
-        uint256 unit = 0; // runTerminalJackpot pays exact shares (no ticket-unit rounding)
-        uint16[4] memory bc = JackpotBucketLib.bucketCountsForPool(
-            POOL_WEI, effEntropy, DAILY_JACKPOT_SCALE_MAX_BPS
-        );
+        uint16[4] memory bc = JackpotBucketLib.terminalWinnerCounts(effEntropy);
         uint16[4] memory shareBps = JackpotBucketLib.shareBpsByBucket(
             FINAL_DAY_SHARES_PACKED, uint8(effEntropy & 3)
         );
         uint256[4] memory shares = JackpotBucketLib.bucketShares(
-            POOL_WEI, shareBps, bc, soloIdx, unit
+            POOL_WEI, shareBps, bc, soloIdx
         );
         // The remainder (solo) bucket gets pool - distributed; the only ETH NOT paid is the
         // per-non-solo-bucket unit-rounding floor dust. There is no cross-call carry.
@@ -519,19 +500,14 @@ contract JackpotSingleCallCorrectness is Test {
         );
     }
 
-    /// @notice JGAS-03 preserved scale: the 6.36x max scale survives byte-faithfully in the
-    ///         JackpotModule. The 305-winner ceiling itself is pinned dynamically against the
-    ///         live bucket geometry by testJgas04WorstCaseFirstReframeWithMargin, which is a
-    ///         stronger check than a source grep.
-    function testPreservedCeilingAndScaleConstants() public view {
-        string memory src = _stripComments(
-            vm.readFile("contracts/modules/DegenerusGameJackpotModule.sol")
-        );
-        assertEq(
-            _countOccurrences(src, "DAILY_JACKPOT_SCALE_MAX_BPS = 63_600"),
-            1,
-            "the 6.36x max scale is preserved"
-        );
+    /// @notice JGAS-03 preserved ceiling: every rotation of the terminal geometry is a
+    ///         permutation of 152/104/48/1 = 305.
+    function testPreservedTerminalCeiling() public pure {
+        for (uint256 r; r < 4; ++r) {
+            uint16[4] memory bc = JackpotBucketLib.terminalWinnerCounts(r);
+            assertEq(_total(bc), DAILY_ETH_MAX_WINNERS, "terminal geometry pays the 305 ceiling");
+            _assertCountMultiset(bc, [uint16(152), 104, 48, 1]);
+        }
     }
 
     // =========================================================================
@@ -609,6 +585,10 @@ contract JackpotSingleCallCorrectness is Test {
     }
 
     /// @dev Assert the bucket-count array is a permutation of the expected multiset.
+    function _total(uint16[4] memory counts) internal pure returns (uint256) {
+        return uint256(counts[0]) + counts[1] + counts[2] + counts[3];
+    }
+
     function _assertCountMultiset(uint16[4] memory got, uint16[4] memory expected) internal pure {
         bool[4] memory used;
         for (uint8 i; i < 4; ++i) {

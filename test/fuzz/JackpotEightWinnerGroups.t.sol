@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
+import {GoldSixLib} from "../../contracts/libraries/GoldSixLib.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 
 contract EightWinnerHarness is DegenerusGameJackpotModule, BucketSeed {
@@ -13,6 +14,7 @@ contract EightWinnerHarness is DegenerusGameJackpotModule, BucketSeed {
         level = 41;
         uint24 source = kind == 1 ? 41 : 42;
         uint8[4] memory traits = JackpotBucketLib.getRandomTraits(word);
+        traits[3] = GoldSixLib.daily(traits[3], word);
         for (uint8 q; q < 4; ++q) {
             if ((mask & (1 << q)) != 0) {
                 _seedBucketDistinct(source, traits[q], 64, uint160(0x10000 + uint256(q) * 0x1000));
@@ -43,12 +45,13 @@ contract JackpotEightWinnerGroupsTest is Test {
             result = keccak256(abi.encode(result, logs[i].topics[1], logs[i].topics[3], source, index));
             ++count;
         }
-        assertEq(count, kind == 0 ? 128 : 96, "both budgets fund the complete draw");
+        assertEq(count, 384, "both budgets are past the 160 ETH sizing cap");
     }
 
+    /// @dev Past the sizing cap the winner count is fixed, so a larger prize keeps every winner.
     function testFuzz_AwardSizeCannotChangeTicketWinners(uint256 word, uint8 kindSeed) public {
         uint8 kind = kindSeed % 2;
-        assertEq(_winnerFingerprint(word, 1024, kind), _winnerFingerprint(word, 2048, kind),
+        assertEq(_winnerFingerprint(word, 2048, kind), _winnerFingerprint(word, 4096, kind),
             "changing each prize's size must preserve the selected ticket occurrences");
     }
 
@@ -61,7 +64,8 @@ contract JackpotEightWinnerGroupsTest is Test {
         if (kind == 0) h.payEarlyBirdTickets(word);
         else h.payDailyJackpotCoinAndTickets(word);
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        uint256 cap = tickets < (kind == 0 ? 128 : 96) ? tickets : (kind == 0 ? 128 : 96);
+        uint256 cap = _ticketCap(tickets * 0.08 ether);
+        if (tickets < cap) cap = tickets;
         if (cap >= 8) cap = (cap / 8) * 8;
         uint256[4] memory groupWords;
         uint256[4] memory laneMasks;
@@ -93,34 +97,40 @@ contract JackpotEightWinnerGroupsTest is Test {
         }
     }
 
+    /// @dev Independent doubling reference: 1, doubled at 40, 160, 640, ... ETH, at most `max`.
+    function _mult(uint256 value, uint256 max) private pure returns (uint256 m) {
+        m = 1;
+        uint256 step = 40 ether;
+        while (m < max && value >= step) {
+            m *= 2;
+            step *= 4;
+        }
+    }
+
+    /// @dev Independent model of the ticket winner cap.
+    function _ticketCap(uint256 value) private pure returns (uint256) {
+        return 96 * _mult(value, 4);
+    }
+
     function testFuzz_TicketGroupsAcrossBudgetsAndEmptyQuadrants(uint256 word, uint16 budget, uint8 mask, uint8 kind) public {
         _draw(word, uint256(budget) % 401, mask & 15, kind % 2);
     }
 
+    /// @dev 1,000 tickets at 0.08 ETH (80 ETH) size 192 winners: 64 in each non-solo quadrant
+    ///      for both legs.
     function test_NormalTicketTables() public {
-        uint256[4] memory counts = _draw(123, 1000, 15, 1);
-        uint256 solo;
-        for (uint256 q; q < 4; ++q) {
-            if (counts[q] == 0) ++solo;
-            else assertEq(counts[q], 32);
-        }
-        assertEq(solo, 1, "main-board solo ETH quadrant stays excluded");
-
-        // Early bird excludes the same solo quadrant now, but its 128-slot cap does not
-        // split evenly across the three remaining buckets: groups of eight rotate 40/40/48.
-        counts = _draw(123, 1000, 15, 0);
-        solo = 0;
-        uint256 total;
-        for (uint256 q; q < 4; ++q) {
-            if (counts[q] == 0) {
-                ++solo;
-            } else {
-                assertTrue(counts[q] == 40 || counts[q] == 48, "early bird splits 40/40/48 across the three active quadrants");
+        for (uint8 kind; kind < 2; ++kind) {
+            uint256[4] memory counts = _draw(123, 1000, 15, kind);
+            uint256 solo;
+            uint256 total;
+            for (uint256 q; q < 4; ++q) {
+                if (counts[q] == 0) ++solo;
+                else assertEq(counts[q], 64);
                 total += counts[q];
             }
+            assertEq(solo, 1, "the day's solo ETH quadrant stays excluded");
+            assertEq(total, 192);
         }
-        assertEq(solo, 1, "early bird excludes the day's solo ETH quadrant too");
-        assertEq(total, 128, "the full early-bird cap is distributed across the three active quadrants");
     }
 
     function test_BudgetEdgesAndSingleActiveQuadrant() public {
@@ -129,38 +139,5 @@ contract JackpotEightWinnerGroupsTest is Test {
             _draw(123, budgets[i], 15, 0);
             _draw(123, budgets[i], 1, 1);
         }
-    }
-
-    function _ethTable(uint256 pool, uint16[4] memory expected) private pure {
-        for (uint256 rotation; rotation < 4; ++rotation) {
-            uint16[4] memory counts = JackpotBucketLib.bucketCountsForPool(pool, rotation, 63_600);
-            for (uint256 q; q < 4; ++q) assertEq(counts[q], expected[(q + rotation) % 4]);
-        }
-    }
-
-    function test_EthTablesAtScaleBoundaries() public pure {
-        _ethTable(0, [uint16(0), 0, 0, 0]);
-        _ethTable(1 wei, [uint16(24), 16, 8, 1]);
-        _ethTable(10 ether, [uint16(24), 16, 8, 1]);
-        _ethTable(50 ether, [uint16(48), 32, 16, 1]);
-        _ethTable(100 ether, [uint16(80), 56, 24, 1]);
-        _ethTable(200 ether, [uint16(152), 104, 48, 1]);
-        _ethTable(1_000_000 ether, [uint16(152), 104, 48, 1]);
-    }
-
-    function testFuzz_EthScalingStaysAlignedMonotoneAndBounded(uint96 rawPool, uint256 entropy) public pure {
-        uint256 pool = uint256(rawPool) % (250 ether);
-        uint16[4] memory counts = JackpotBucketLib.bucketCountsForPool(pool, entropy, 63_600);
-        uint16[4] memory next = JackpotBucketLib.bucketCountsForPool(pool + 1 ether, entropy, 63_600);
-        uint256 total;
-        uint256 solo;
-        for (uint256 q; q < 4; ++q) {
-            total += counts[q];
-            assertGe(next[q], counts[q], "growing budget cannot reduce the winner count");
-            if (counts[q] == 1) ++solo;
-            else assertEq(counts[q] % 8, 0);
-        }
-        assertEq(solo, pool == 0 ? 0 : 1);
-        assertLe(total, 305, "rounding must preserve the full transaction's winner ceiling");
     }
 }

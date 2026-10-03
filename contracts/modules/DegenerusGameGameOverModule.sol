@@ -228,13 +228,12 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             _lrWrite(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK, drainLevel == lvl ? 1 : 2);
             _setRngTerminal();
             rngRequestDay = 0;
-            // Completed quadrants already balanced their source and liabilities.
+            // Completed award groups already balanced their source and liabilities.
             // Retire only the unpaid normal-day continuation; its remaining funds
             // join the terminal pot. No paid award is repeated or clawed back.
             delete jackpotWork;
             dailyTicketBudgetsPacked = 0;
             dailyJackpotCoinTicketsPending = false;
-            earlyBirdWhalePasses = 0;
             (address top, ) = affiliate.affiliateTop(drainLevel);
             terminalAffiliate = top;
             work.progressed = true;
@@ -571,7 +570,6 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
 
         // Latch terminal state
         gameOver = true;
-        earlyBirdWhalePasses = 0;
 
         // Burn unallocated tokens
         charityGameOver.burnAtGameOver();

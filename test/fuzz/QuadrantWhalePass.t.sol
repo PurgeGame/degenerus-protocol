@@ -7,6 +7,7 @@ import {GoldenTicketHarness} from "./GoldenTicketArmResolve.t.sol";
 import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWhaleModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
+import {GoldSixLib} from "../../contracts/libraries/GoldSixLib.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {JackpotBoardFixtures} from "./helpers/JackpotBoardFixtures.sol";
 
@@ -36,6 +37,7 @@ contract QuadrantWhaleHarness is GoldenTicketHarness {
 contract QuadrantWhalePassTest is Test {
     uint24 private constant LVL = 4;
     uint256 private constant PASS_PRICE = 4.5 ether;
+    uint256 private constant UNIT = 0.1 ether;
     uint160 private constant BASE = 0xA00000;
     uint160 private constant DEITY = 0xD00000;
     bytes32 private constant ETH_WIN = keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)");
@@ -44,6 +46,7 @@ contract QuadrantWhalePassTest is Test {
 
     struct Draw {
         uint256[4] eth;
+        uint256[4] each;
         uint256[4] slots;
         uint256[4] halves;
         uint256[4] passEvents;
@@ -60,25 +63,64 @@ contract QuadrantWhalePassTest is Test {
         vm.etch(ContractAddresses.GAME_WHALE_MODULE, address(new DegenerusGameWhaleModule()).code);
     }
 
+    /// @dev The day's main board with no hero wagers: the raw roll, then the gold-six daily rule.
+    function _board(uint256 word) private pure returns (uint8[4] memory traits) {
+        traits = JackpotBucketLib.getRandomTraits(word);
+        traits[3] = GoldSixLib.daily(traits[3], word);
+    }
+
     function _geometry(uint256 word, uint256 ethBudget, bool finalDay)
         private pure returns (uint8[4] memory traits, uint16[4] memory counts, uint256[4] memory shares, uint256 entropy)
     {
-        traits = JackpotBucketLib.getRandomTraits(word);
+        traits = _board(word);
         entropy = EntropyLib.hash2(word, LVL);
         uint8[4] memory gold;
         uint8 n;
         for (uint8 q; q < 4; ++q) if (((traits[q] >> 3) & 7) == 7) gold[n++] = q;
         uint8 solo = n == 0 ? uint8((3 - (entropy & 3)) & 3) : gold[(entropy >> 4) % n];
         entropy = (entropy & ~uint256(3)) | uint256((3 - solo) & 3);
-        counts = JackpotBucketLib.bucketCountsForPool(ethBudget, entropy, 63_600);
+        counts = JackpotBucketLib.ethWinnerTargets(ethBudget, entropy);
         uint64 packed = finalDay ? uint64(6000) | (uint64(1333) << 16) | (uint64(1333) << 32) | (uint64(1334) << 48)
             : uint64(2000) * 0x0001000100010001;
         uint16[4] memory bps = JackpotBucketLib.shareBpsByBucket(packed, uint8(entropy & 3));
-        shares = JackpotBucketLib.bucketShares(ethBudget, bps, counts, solo, 0.005 ether);
+        shares = JackpotBucketLib.bucketShares(ethBudget, bps, counts, solo);
+    }
+
+    struct Expect {
+        uint256[4] slots;
+        uint256[4] eth;
+        uint256[4] full;
+    }
+
+    /// @dev Independent payout model: non-solo quadrants pay at most their target in whole
+    ///      UNITs after pass conversion; the solo pays its net share plus every active
+    ///      non-solo leftover; an empty bucket pays nothing.
+    function _expect(uint8[4] memory traits, uint16[4] memory counts, uint256[4] memory shares, uint8 solo)
+        private view returns (Expect memory e)
+    {
+        uint256 leftover;
+        bool[4] memory active;
+        for (uint8 q; q < 4; ++q) {
+            uint8 t = traits[q];
+            address deity = t == GoldSixLib.TRAIT ? address(0) : h.deityOf(t);
+            active[q] = (h.bucketLength(t) != 0 || deity != address(0)) && shares[q] != 0 && counts[q] != 0;
+            if (!active[q] || q == solo) continue;
+            uint256 full = shares[q] / (4 * PASS_PRICE);
+            uint256 net = shares[q] - full * PASS_PRICE;
+            uint256 n = net / UNIT;
+            if (n > counts[q]) n = counts[q];
+            uint256 each = n == 0 ? 0 : (net / (n * UNIT)) * UNIT;
+            if (n != 0) (e.full[q], e.slots[q], e.eth[q]) = (full, n, n * each);
+            leftover += net - n * each;
+        }
+        if (active[solo]) {
+            uint256 full = shares[solo] / (4 * PASS_PRICE);
+            (e.full[solo], e.slots[solo], e.eth[solo]) = (full, 1, shares[solo] - full * PASS_PRICE + leftover);
+        }
     }
 
     function _seed(uint256 word, uint8 mask, uint256 n) private {
-        uint8[4] memory traits = JackpotBucketLib.getRandomTraits(word);
+        uint8[4] memory traits = _board(word);
         for (uint8 q; q < 4; ++q) {
             if (mask & (1 << q) != 0) h.seedBucket(LVL, traits[q], n, BASE + uint160(q) * 0x10000);
         }
@@ -89,6 +131,8 @@ contract QuadrantWhalePassTest is Test {
             if (logs[i].topics[0] == ETH_WIN) {
                 uint8 q = uint8(uint256(logs[i].topics[3])) >> 6;
                 (uint256 amount, uint256 index) = abi.decode(logs[i].data, (uint256, uint256));
+                if (d.slots[q] == 0) d.each[q] = amount;
+                assertEq(amount, d.each[q], "every winner in a quadrant gets the same award");
                 d.eth[q] += amount;
                 d.ethTotal += amount;
                 ++d.slots[q];
@@ -127,16 +171,23 @@ contract QuadrantWhalePassTest is Test {
         h.payDailyJackpot(true, LVL, word);
         d = _read(vm.getRecordedLogs());
         uint256 spent;
+        uint8 solo = JackpotBucketLib.soloBucketIndex(entropy);
+        Expect memory e = _expect(traits, counts, shares, solo);
         for (uint8 q; q < 4; ++q) {
             uint256 len = h.bucketLength(traits[q]);
-            address deity = h.deityOf(traits[q]);
-            bool active = (len != 0 || deity != address(0)) && counts[q] != 0 && shares[q] >= counts[q];
-            uint256 full = active ? shares[q] / (4 * PASS_PRICE) : 0;
+            // Gold six has no virtual deity entry.
+            address deity = traits[q] == GoldSixLib.TRAIT ? address(0) : h.deityOf(traits[q]);
+            uint256 full = e.full[q];
             uint256 cost = full * PASS_PRICE;
             assertEq(d.halves[q], full * 2, "whole passes from this quadrant's quarter");
             assertEq(d.passEvents[q], full == 0 ? 0 : 1, "one recipient per qualifying quadrant");
-            assertEq(d.slots[q], active ? counts[q] : 0, "original ETH winner count");
-            assertEq(d.eth[q], active ? ((shares[q] - cost) / counts[q]) * counts[q] : 0, "all remainder funds normal ETH prizes");
+            assertEq(d.slots[q], e.slots[q], "ETH winner count");
+            assertEq(d.eth[q], e.eth[q], "ETH paid, with leftovers on the solo");
+            if (q != solo && d.slots[q] != 0) {
+                assertLe(d.slots[q], counts[q], "never above the target");
+                assertGe(d.each[q], UNIT, "at least one unit per award");
+                assertEq(d.each[q] % UNIT, 0, "whole units");
+            }
             if (full != 0) {
                 assertGe(h.whalePassOf(d.passWinner[q]), full * 2, "pass claim credited");
                 uint256 root = uint256(keccak256(abi.encode(
@@ -184,7 +235,7 @@ contract QuadrantWhalePassTest is Test {
             Draw memory d = _run(ethBudget * 5 / 4, word, 0, true);
             uint256 full = targets[i] / 18 ether;
             assertEq(d.halves[solo], full * 2);
-            assertEq(d.eth[solo], targets[i] - full * PASS_PRICE, "sub-pass remainder stays with ETH winner");
+            assertGe(d.eth[solo], targets[i] - full * PASS_PRICE, "sub-pass remainder stays with ETH winner");
         }
     }
 
@@ -200,26 +251,29 @@ contract QuadrantWhalePassTest is Test {
         }
     }
 
-    function test_originalEthDrawMatchesUnconvertedTerminalDraw() public {
+    /// @dev A normal jackpot day at about 42 ETH (no quarter reaches 18 ETH) and at three times
+    ///      that (every quarter converts) share the 40 ETH winner targets, so conversion must
+    ///      leave the ETH draw unchanged.
+    function test_originalEthDrawMatchesUnconvertedDraw() public {
         uint256 word = 1337;
         _seed(word, 15, 512);
+        uint256 bps = 2 * (600 + uint256(keccak256(abi.encodePacked(word, keccak256("daily-current-bps"), uint8(1)))) % 801);
+        uint256 current = 52.5 ether * 10_000 / bps;
         uint256 snap = vm.snapshotState();
-        Draw memory converted = _run(1250 ether, word, 0, true);
+        Draw memory ordinary = _run(current, word, 1, false);
+        assertEq(ordinary.passTotal, 0, "no quarter reaches a whole pass");
+        assertTrue(vm.revertToState(snap));
+        Draw memory converted = _run(3 * current, word, 1, false);
+        for (uint8 q; q < 4; ++q) assertGt(converted.halves[q], 0, "every quarter converts");
         bool fresh;
         for (uint8 q; q < 4; ++q) if (h.claimableOf(converted.passWinner[q]) == 0) fresh = true;
         assertTrue(fresh, "a pass recipient need not be an ETH winner");
-        assertTrue(vm.revertToState(snap));
-        vm.recordLogs();
-        vm.prank(ContractAddresses.GAME);
-        h.runTerminalJackpot(1000 ether, LVL, word);
-        Draw memory ordinary = _read(vm.getRecordedLogs());
         assertEq(converted.fingerprint, ordinary.fingerprint, "conversion preserves the original ETH draw");
-        assertEq(ordinary.passTotal, 0, "terminal jackpot remains all ETH");
     }
 
     function test_deityOnlyBucketsReceiveWholePasses() public {
         uint256 word = 1337;
-        uint8[4] memory traits = JackpotBucketLib.getRandomTraits(word);
+        uint8[4] memory traits = _board(word);
         for (uint8 q; q < 4; ++q) h.setDeity(traits[q], address(DEITY + q));
         Draw memory d = _run(1250 ether, word, 0, true);
         for (uint8 q; q < 4; ++q) assertEq(d.passWinner[q], address(DEITY + q));
@@ -227,7 +281,7 @@ contract QuadrantWhalePassTest is Test {
 
     function testFuzz_realAndVirtualEntriesKeepTheirWeights(uint256 word) public {
         _seed(word, 15, 65);
-        uint8[4] memory traits = JackpotBucketLib.getRandomTraits(word);
+        uint8[4] memory traits = _board(word);
         for (uint8 q; q < 4; ++q) h.setDeity(traits[q], address(DEITY + q));
         _run(1250 ether, word, 0, true);
     }
@@ -244,7 +298,7 @@ contract QuadrantWhalePassTest is Test {
 
     function test_oneWalletCanWinPassesFromMultipleQuadrants() public {
         uint256 word = 1337;
-        uint8[4] memory traits = JackpotBucketLib.getRandomTraits(word);
+        uint8[4] memory traits = _board(word);
         address player = address(BASE + 1);
         for (uint8 q; q < 4; ++q) h.seedRepeated(traits[q], player);
         h.prepare(1250 ether, 0, true);
@@ -254,6 +308,7 @@ contract QuadrantWhalePassTest is Test {
         assertEq(d.passEvents[0], 4, "four awards without wallet deduplication");
         assertEq(h.whalePassOf(player), d.passTotal);
         assertEq(h.claimableOf(player), d.ethTotal);
-        assertEq(d.slots[0] + d.slots[1] + d.slots[2] + d.slots[3], 305);
+        // A 1,000 ETH final-day budget targets 256 + 128 + 32 winners plus the solo.
+        assertEq(d.slots[0] + d.slots[1] + d.slots[2] + d.slots[3], 417);
     }
 }

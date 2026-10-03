@@ -565,7 +565,6 @@ contract ReviewTerminalHarness is DegenerusGameJackpotModule, BucketSeed {
 contract TerminalExactSharesTest is Test {
     ReviewTerminalHarness private h;
     uint24 private constant TLVL = 110;
-    uint32 private constant MAX_BPS = 63_600;
     uint64 private constant FINAL_DAY_SHARES_PACKED =
         (uint64(6000)) | (uint64(1333) << 16) | (uint64(1333) << 32) | (uint64(1334) << 48);
     uint256 private constant HOLDERS = 305;
@@ -594,7 +593,7 @@ contract TerminalExactSharesTest is Test {
         uint256 entropy = EntropyLib.hash2(word, TLVL);
         uint8 soloQuadrant = uint8((3 - (entropy & 3)) & 3);
         uint256 eff = (entropy & ~uint256(3)) | uint256((3 - soloQuadrant) & 3);
-        bc = JackpotBucketLib.bucketCountsForPool(JackpotBucketLib.JACKPOT_SCALE_SECOND_WEI, eff, MAX_BPS);
+        bc = JackpotBucketLib.terminalWinnerCounts(eff);
         shareBps = JackpotBucketLib.shareBpsByBucket(FINAL_DAY_SHARES_PACKED, uint8(eff & 3));
         soloIdx = JackpotBucketLib.soloBucketIndex(eff);
     }

@@ -6,15 +6,15 @@ import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWhaleModule.sol";
 import {GoldenTicketHarness, CoinflipRecorder, WwxrpRecorder, ReturnZeroSink} from "./GoldenTicketArmResolve.t.sol";
 
-/// @title DailyEthBucketTable -- the daily ETH leg's winner table and quarter-price granule
-/// @notice The purchase-phase daily jackpot pays four trait buckets from the 24 / 16 / 8 / 1
-///         table, rotated so the entropy-picked solo quadrant is the ONE-winner bucket and takes
-///         the pool's remainder, and every other bucket's share is floored to whole quarters of
-///         the NEXT level's price per winner. Mutation v78 left the table's figures, the rotation
-///         and the granule's level unasserted in foundry (`12 -> 1`, `6 -> 0`, `& 3 -> + 3` and
-///         `lvl + 1 -> lvl` all survived); this reads them back off `JackpotEthWin`.
+/// @title DailyEthBucketTable -- the daily ETH leg's winner targets and 0.1 ETH awards
+/// @notice The purchase-phase daily jackpot sizes four trait buckets from the 32 / 16 / 4 / 1
+///         targets, doubled at each fourfold step of the ETH budget from 40 ETH and rotated so
+///         the entropy-picked solo quadrant is the ONE-winner bucket. Every other bucket pays
+///         whole 0.1 ETH units per winner and the solo takes its share plus every rounding
+///         leftover. This reads the table, the rotation and the units back off `JackpotEthWin`.
 contract DailyEthBucketTable is Test {
     GoldenTicketHarness internal h;
 
@@ -32,6 +32,7 @@ contract DailyEthBucketTable is Test {
         ReturnZeroSink sink = new ReturnZeroSink();
         vm.etch(ContractAddresses.STETH_TOKEN, address(sink).code);
         vm.etch(ContractAddresses.JACKPOTS, address(sink).code);
+        vm.etch(ContractAddresses.GAME_WHALE_MODULE, address(new DegenerusGameWhaleModule()).code);
         h.setLevel(LVL);
         h.setJackpotCounter(1);
         h.setDailyIdx(10);
@@ -81,7 +82,7 @@ contract DailyEthBucketTable is Test {
         h.payDailyJackpot(false, LVL, word);
         // The priced ticket leg pays from the next advance stage on the same word.
         h.payPurchaseDailyTickets(word);
-        uint256 unit = PriceLookupLib.priceForLevel(LVL + 1) >> 2;
+        uint256 unit = 0.1 ether;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         (uint256[4] memory count, uint256[4] memory total) = _tally(logs, traits, unit);
         uint256[4] memory ticketWinners;
@@ -91,8 +92,13 @@ contract DailyEthBucketTable is Test {
             for (uint8 q; q < 4; q++) if (trait == traits[q]) ticketWinners[q]++;
         }
 
-        // The solo quadrant is the one-winner bucket; the next three around the wheel take
-        // 24, 16 and 8 (`base[(i + offset) & 3]` with the offset pinned to the solo pick).
+        // A 369 ETH leg (between 160 and 640 ETH) quadruples the targets. The solo quadrant is
+        // the one-winner bucket; the next three around the wheel target 128, 64 and 16
+        // (`base[(i + offset) & 3]` with the offset pinned to the solo pick).
+        uint256 slice = uint256(FUT_POOL) / 25;
+        uint256 ethPool = slice - (slice * 7500) / 10_000 - (slice * 200) / 10_000;
+        assertGe(ethPool, 160 ether, "fixture: the leg reaches the fourfold target step");
+        assertLt(ethPool, 640 ether, "fixture: and stays below the next one");
         uint8 solo = 4;
         for (uint8 q; q < 4; q++) {
             if (count[q] == 1) {
@@ -101,36 +107,28 @@ contract DailyEthBucketTable is Test {
             }
         }
         assertLt(solo, 4, "the solo quadrant's bucket has exactly one winner");
-        assertEq(count[(solo + 1) & 3], 24, "the bucket after the solo quadrant takes twenty-four winners");
-        assertEq(count[(solo + 2) & 3], 16, "then sixteen");
-        assertEq(count[(solo + 3) & 3], 8, "then eight");
-        // The solo quadrant took the ETH remainder, so the pool-backed ticket leg skips it and
-        // spreads its winners over the other three.
+        assertEq(count[(solo + 1) & 3], 128, "the bucket after the solo quadrant targets 32 x 4");
+        assertEq(count[(solo + 2) & 3], 64, "then 16 x 4");
+        assertEq(count[(solo + 3) & 3], 16, "then 4 x 4");
+        // The pool-backed ticket leg skips the solo quadrant and spreads its 384 winners over
+        // the other three.
         assertEq(ticketWinners[solo], 0, "no ticket winner in the solo quadrant");
         for (uint8 q; q < 4; q++) {
-            if (q != solo) assertEq(ticketWinners[q], 40, "each other quadrant gets five full words of winners");
+            if (q != solo) assertEq(ticketWinners[q], 128, "each other quadrant gets a third of the winners");
         }
 
-        // Every non-remainder bucket is 20% of the ETH leg floored to whole granules per winner,
-        // and the granule is a quarter of the NEXT level's price.
-        uint256 slice = uint256(FUT_POOL) / 25;
-        uint256 ethPool = slice - (slice * 7500) / 10_000 - (slice * 200) / 10_000;
-        uint256 remainderPaid;
+        // Every non-solo bucket pays its fifth of the leg in whole units per winner.
+        uint256 distributed;
         for (uint8 q; q < 4; q++) {
-            if (q == solo) {
-                remainderPaid = total[q];
-                continue;
-            }
+            if (q == solo) continue;
             uint256 share = (ethPool * 2000) / 10_000;
-            uint256 unitBucket = unit * count[q];
-            assertEq(total[q], (share / unitBucket) * unitBucket, "a bucket pays its fifth floored to granules");
-            assertEq(total[q] % unit, 0, "and every winner's cut is whole granules");
+            uint256 each = (share / (count[q] * unit)) * unit;
+            assertEq(total[q], count[q] * each, "a bucket pays its fifth floored to whole units per winner");
+            distributed += total[q];
         }
         // The solo bucket absorbs the leg's remainder: the 20% no bucket was assigned plus the
-        // three flooring residues.
-        uint256 distributed;
-        for (uint8 q; q < 4; q++) if (q != solo) distributed += total[q];
-        assertEq(remainderPaid, ethPool - distributed, "the solo quadrant takes the whole remainder");
+        // three rounding leftovers.
+        assertEq(total[solo], ethPool - distributed, "the solo quadrant takes the whole remainder");
     }
 
     /// @dev The terminal jackpot pays exact shares (no ticket-unit flooring): its pot is read from

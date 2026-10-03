@@ -43,7 +43,7 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 ///        - stage 8  payDailyJackpot(false) purchase-phase  (JackpotModule.sol:450 _processDailyEth)
 ///        - stage 11 payDailyJackpot(true)  jackpot-phase    (JackpotModule.sol:450 _processDailyEth)
 ///        - stage 12 runTerminalJackpot     game-over        (JackpotModule.sol:280 _processDailyEth)
-///      All three feed `_processDailyEth` the same DAILY_ETH_MAX_WINNERS=305 ceiling at max scale.
+///      The terminal jackpot pays the fixed 152/104/48/1 = 305 geometry measured here.
 contract JackpotStageHarness is DegenerusGameJackpotModule, BucketSeed {
     function seedBucket(uint24 lvl, uint8 traitId, uint256 count, uint160 base) external {
         _seedBucketDistinct(lvl, traitId, count, base);
@@ -136,10 +136,9 @@ contract AdvanceStageWorstCaseGas is Test {
     TicketBatchStageHarness internal tb;
 
     // Production caps, re-attested against the frozen audit subject c4d48008
-    // (JackpotModule: DAILY_ETH_MAX_WINNERS 305, DAILY_COIN_MAX_WINNERS 50,
-    //  DAILY_JACKPOT_SCALE_MAX_BPS 63_600; MintModule: WRITES_BUDGET_SAFE 1000).
+    // (JackpotModule: terminal winners 305, DAILY_COIN_MAX_WINNERS 50;
+    //  MintModule: WRITES_BUDGET_SAFE 1000).
     uint16 internal constant DAILY_ETH_MAX_WINNERS = 305;
-    uint32 internal constant DAILY_JACKPOT_SCALE_MAX_BPS = 63_600;
     uint16 internal constant DAILY_COIN_MAX_WINNERS = 50;
     uint32 internal constant WRITES_BUDGET_SAFE = 1000;
 
@@ -150,7 +149,7 @@ contract AdvanceStageWorstCaseGas is Test {
     /// @dev The real mainnet block gas limit (foundry inflates block_gas_limit to 30e9 for the harness).
     uint256 internal constant MAINNET_BLOCK_GAS_LIMIT = 30_000_000;
 
-    /// @dev Pool well above the 200-ETH max-scale floor so the bucket geometry pins to 152/104/48/1 = 305.
+    /// @dev Terminal pool; the terminal geometry is the fixed 152/104/48/1 = 305.
     uint256 internal constant POOL_WEI = 1000 ether;
     uint24 internal constant TARGET_LVL = 110;
 
@@ -168,11 +167,11 @@ contract AdvanceStageWorstCaseGas is Test {
     }
 
     /// @dev Produce the 4 winning trait ids `runTerminalJackpot` will roll for THIS rngWord, plus the
-    ///      effective entropy `bucketCountsForPool` keys off. We mirror the module's derivation exactly:
+    ///      effective entropy `terminalWinnerCounts` keys off. We mirror the module's derivation exactly:
     ///      `_rollBoard(rngWord, _NO_QUADRANT_BAN)` packs 4 traits (no hero wagers are seeded here, so
     ///      the roll is the unmodified base board); we unpack them and seed those 4 buckets so every
     ///      selected winner resolves to a real holder. Exact trait values do not affect gas (the
-    ///      bucket SIZES are pinned by bucketCountsForPool at max scale).
+    ///      bucket SIZES are pinned by terminalWinnerCounts).
     function _deriveTraits(uint256 rngWord)
         internal
         pure
@@ -208,13 +207,11 @@ contract AdvanceStageWorstCaseGas is Test {
         (uint8[4] memory traitIds, uint256 effEntropy) = _deriveTraits(_word());
 
         // Worst-case-FIRST: assert the bucket geometry IS the 305 hard cap before measuring.
-        uint16[4] memory bc = JackpotBucketLib.bucketCountsForPool(
-            POOL_WEI, effEntropy, DAILY_JACKPOT_SCALE_MAX_BPS
-        );
+        uint16[4] memory bc = JackpotBucketLib.terminalWinnerCounts(effEntropy);
         assertEq(
-            JackpotBucketLib.sumBucketCounts(bc),
+            uint256(bc[0]) + bc[1] + bc[2] + bc[3],
             DAILY_ETH_MAX_WINNERS,
-            "worst case: the >=200 ETH pool reaches the 305-winner hard cap"
+            "worst case: the terminal geometry is the 305-winner hard cap"
         );
 
         _seedAllBuckets(traitIds);
@@ -272,9 +269,7 @@ contract AdvanceStageWorstCaseGas is Test {
         // pays exact shares at a fixed full-size geometry, so a smaller pot no longer thins the
         // winners (the old ticket-unit rounding zeroed small buckets, which this probe relied on).
         (, uint256 eff) = _deriveTraits(_word());
-        uint16[4] memory bcFull = JackpotBucketLib.bucketCountsForPool(
-            JackpotBucketLib.JACKPOT_SCALE_SECOND_WEI, eff, DAILY_JACKPOT_SCALE_MAX_BPS
-        );
+        uint16[4] memory bcFull = JackpotBucketLib.terminalWinnerCounts(eff);
         uint8 qLo = 4;
         for (uint8 q; q < 4; ++q) {
             if (bcFull[q] != 0 && (qLo == 4 || bcFull[q] < bcFull[qLo])) qLo = q;

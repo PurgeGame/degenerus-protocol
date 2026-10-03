@@ -4309,12 +4309,6 @@ abstract contract DegenerusGameStorage {
     ///      occurrence & 255.
     mapping(uint256 => uint256) internal deadClaimed;
 
-    /// @dev Day-one early-bird surplus, latched by pricing and consumed by its own
-    ///      award stage. Even half-pass units (two per full prize pass); the entire
-    ///      early-bird ETH budget still backs nextPrizePool. Appended to preserve
-    ///      every existing delegatecall slot. Cleared at settlement or game over.
-    uint256 internal earlyBirdWhalePasses;
-
     /// @dev FIFO of sealed Decimator battles: head in bits 0..23, tail in 24..47.
     uint256 internal decBattleQueue;
 
@@ -4524,7 +4518,6 @@ abstract contract DegenerusGameStorage {
     ///      and source buckets; only pricing and payout progress need persistence.
     struct JackpotWork {
         uint128 budget;
-        uint128 unit;
         uint128 paid;
         uint32 traits;
         uint24 lvl;

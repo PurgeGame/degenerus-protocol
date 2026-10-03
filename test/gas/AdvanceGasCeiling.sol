@@ -148,15 +148,13 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
 
     // Production caps mirrored from DegenerusGameJackpotModule (the 305-winner geometry).
     uint16 internal constant DAILY_ETH_MAX_WINNERS = 305;
-    uint32 internal constant DAILY_JACKPOT_SCALE_MAX_BPS = 63_600;
 
-    /// @dev Pool funded into the game so the terminal jackpot reaches the full geometry. >> 200 ETH
-    ///      floor so bucketCountsForPool reaches the 305-winner geometry ceiling.
+    /// @dev Pool funded into the game for the terminal jackpot's fixed 305-winner geometry.
     uint256 internal constant GAME_FUNDS = 1000 ether;
 
     /// @notice Derive the winning traits + bucket geometry runTerminalJackpot will actually roll for
     ///         `rngWord` at `lvl` and `GAME_FUNDS`, so the seeded buckets match the live jackpot's roll.
-    /// @dev Mirrors runTerminalJackpot's getRandomTraits + bucketCountsForPool derivation.
+    /// @dev Mirrors runTerminalJackpot's getRandomTraits + terminalWinnerCounts derivation.
     function _deriveJackpot(uint24 lvl, uint256 rngWord)
         internal
         pure
@@ -179,7 +177,7 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
             uint256 solo = (goldQuads >> (((effEntropy >> 4) % goldCount) * 8)) & 255;
             effEntropy = (effEntropy & ~uint256(3)) | ((3 - solo) & 3);
         }
-        bucketCounts = JackpotBucketLib.bucketCountsForPool(GAME_FUNDS, effEntropy, DAILY_JACKPOT_SCALE_MAX_BPS);
+        bucketCounts = JackpotBucketLib.terminalWinnerCounts(effEntropy);
     }
 
     /// @notice (a) Etch the GameSeeder overlay, write a worst-case mineFlip pre-state from the given

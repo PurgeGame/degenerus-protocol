@@ -214,15 +214,6 @@ contract DeadVrfEndingTest is DeployProtocol {
         assertTrue(game.gameOver(), "dead ending reached game over");
     }
 
-    function test_terminalDrainClearsPendingEarlyBirdPasses() public {
-        _seedHoldings();
-        _seeder().seedEarlyBirdPasses(10);
-        _restore();
-        _endGame();
-        assertEq(_seeder().pendingEarlyBirdPasses(), 0);
-        _restore();
-    }
-
     function _state() private returns (uint256 pot, uint256 total, uint256 created, uint256 uncreated, uint256 traits, uint256 left) {
         (pot, total, created, uncreated, traits, left) = _seeder().deadState();
         _restore();

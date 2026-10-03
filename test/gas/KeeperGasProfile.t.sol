@@ -165,7 +165,7 @@ contract KeeperGasProfileTest is DeployProtocol {
     /// @dev Canonical live logical buckets; physical encodings intentionally differ.
     function _bucketDigest() private view returns (bytes32 d) {
         bool tails = vm.envOr("HEADER_TAIL", true);
-        uint256 bitmapSlot = vm.envOr("TAIL_BITMAP_SLOT", uint256(76));
+        uint256 bitmapSlot = vm.envOr("TAIL_BITMAP_SLOT", uint256(75));
         uint256 stamps = uint256(game.extsload(bytes32(uint256(5))));
         for (uint256 parity; parity < 2; ++parity) {
             uint24 lvl = uint24(stamps >> (112 + parity * 24));
@@ -198,7 +198,7 @@ contract KeeperGasProfileTest is DeployProtocol {
         for (uint256 trait; trait < 256; ++trait) {
             uint256 header = uint256(game.extsload(bytes32(base + trait)));
             uint256 bits = vm.envOr("HEADER_TAIL", true)
-                ? uint256(game.extsload(bytes32(vm.envOr("TAIL_BITMAP_SLOT", uint256(76)) + (lvl & 1)))) : 0;
+                ? uint256(game.extsload(bytes32(vm.envOr("TAIL_BITMAP_SLOT", uint256(75)) + (lvl & 1)))) : 0;
             uint256 count = vm.envOr("HEADER_TAIL", true) ? (((bits >> trait) & 1) != 0 ? uint32(header) : 0)
                 : (recycled ? (uint24(header >> 232) == lvl ? (header << 24) >> 24 : 0) : header);
             occurrences += count;

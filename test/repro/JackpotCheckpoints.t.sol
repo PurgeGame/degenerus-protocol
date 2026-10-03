@@ -20,7 +20,8 @@ contract JackpotCheckpointHarness is DegenerusGameJackpotModule, BucketSeed {
         for (uint8 q; q < (concentrated ? 1 : 4); ++q) {
             this.seedOne(lvl, traits[q], uint160(0x10000 + uint256(q) * 0x10000));
         }
-        dailyTicketBudgetsPacked = uint256(128 * 45 * 4) << 144;
+        // 1,000 tickets (40 ETH at 0.04): 192 winners at 5 tickets each.
+        dailyTicketBudgetsPacked = uint256(1000 * 4) << 144;
     }
     function seedOne(uint24 lvl, uint8 trait, uint160 base) external {
         _seedBucketDistinct(lvl, trait, 512, base);
@@ -42,17 +43,16 @@ contract JackpotCheckpointHarness is DegenerusGameJackpotModule, BucketSeed {
     function claimable(address player) external view returns (uint256) { return _claimableOf(player); }
     function pending() external view returns (uint256) { return dailyTicketBudgetsPacked; }
     function terminalGeometry(uint256 word, uint24 lvl, uint256 pool)
-        external pure returns (uint16[4] memory counts, uint256[4] memory shares, uint8[4] memory order)
+        external pure returns (uint16[4] memory counts, uint256[4] memory shares)
     {
         uint8[4] memory traits = JackpotBucketLib.getRandomTraits(word);
         uint256 raw = EntropyLib.hash2(word, lvl);
         uint8 solo = _pickSoloQuadrant(traits, raw);
         uint256 entropy = (raw & ~uint256(3)) | ((3 - solo) & 3);
-        counts = JackpotBucketLib.bucketCountsForPool(JackpotBucketLib.JACKPOT_SCALE_SECOND_WEI, entropy, 63_600);
+        counts = JackpotBucketLib.terminalWinnerCounts(entropy);
         uint64 packed = uint64(6000) | (uint64(1333) << 16) | (uint64(1333) << 32) | (uint64(1334) << 48);
         uint16[4] memory bps = JackpotBucketLib.shareBpsByBucket(packed, uint8(entropy & 3));
-        shares = JackpotBucketLib.bucketShares(pool, bps, counts, solo, 0);
-        order = JackpotBucketLib.bucketOrderLargestFirst(counts);
+        shares = JackpotBucketLib.bucketShares(pool, bps, counts, solo);
     }
 }
 
@@ -111,7 +111,7 @@ contract JackpotCheckpointsTest is Test {
             digestFull = _digest(digestFull, vm.getRecordedLogs());
         }
         assertEq(h.liabilities(), paidFull);
-        (uint16[4] memory counts, uint256[4] memory shares,) = h.terminalGeometry(WORD, LVL, POOL);
+        (uint16[4] memory counts, uint256[4] memory shares) = h.terminalGeometry(WORD, LVL, POOL);
         uint256 expected;
         for (uint8 q; q < 4; ++q) expected += (shares[q] / counts[q]) * counts[q];
         assertEq(paidFull, expected, "only original per-winner rounding remains unpaid");
@@ -136,7 +136,7 @@ contract JackpotCheckpointsTest is Test {
         assertEq(digestSplit, digestFull, "ordered winners, entry indexes, and amounts match");
     }
 
-    function test_ConcentratedTicketsAwardTheWholeQuadrantInOneChunk() public {
+    function test_ConcentratedTicketsAwardInFixedGroups() public {
         h.seed(LVL, WORD, true);
         uint256 snap = vm.snapshotState();
         vm.recordLogs();
@@ -149,37 +149,40 @@ contract JackpotCheckpointsTest is Test {
             awards += full.rewardBasis;
             digestFull = _digest(digestFull, vm.getRecordedLogs());
         }
-        assertEq(awards, 128);
+        assertEq(awards, 192);
         assertEq(h.pending(), 0);
         assertTrue(vm.revertToState(snap));
         bytes32 digestSplit;
         uint256 splitAwards;
         bool done;
+        bool midQuadrant;
         uint256 calls;
-        while (!done && calls < 12) {
+        while (!done && calls < 32) {
             vm.recordLogs();
-            // The first call stops after setup; the next admits the whole 128-winner quadrant.
-            MineFlipGas.Result memory result = calls == 0 ? _earlyBird(1_000_000, 1_500_000) : _earlyBird(7_000_000, 7_500_000);
+            // Small calls stop between eight-winner groups inside the 128-winner quadrant.
+            MineFlipGas.Result memory result = _earlyBird(1_000_000, 1_500_000);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             digestSplit = _digest(digestSplit, logs);
             for (uint256 i; i < logs.length; ++i) {
                 if (logs[i].topics[0] != TICKET_WIN) continue;
                 (uint32 entries, uint24 source, uint256 index, bool rounded) = abi.decode(logs[i].data, (uint32,uint24,uint256,bool));
-                assertEq(entries, 180, "45 whole tickets per original slot");
+                assertEq(entries, 20, "5 whole tickets per slot");
                 assertEq(source, LVL);
                 assertFalse(rounded);
                 assertEq(address(uint160(uint256(logs[i].topics[1]))), address(uint160(0x10001 + index)));
             }
             (, , uint16 winner,) = h.progress();
-            assertEq(winner, 0, "checkpoint sits on a quadrant boundary");
-            assertTrue(result.rewardBasis == 0 || result.rewardBasis == 128, "the quadrant is awarded in one chunk");
+            assertEq(winner % 8, 0, "checkpoint sits on a group start");
+            if (winner != 0) midQuadrant = true;
+            assertEq(result.rewardBasis % 8, 0, "awards land in whole groups");
             assertTrue(result.progressed);
             splitAwards += result.rewardBasis;
             done = result.done;
             ++calls;
         }
         assertTrue(done);
-        assertEq(calls, 2, "setup checkpoint exercised before the single award chunk");
+        assertTrue(midQuadrant, "mid-quadrant checkpoints exercised");
+        assertGt(calls, 2);
         assertEq(splitAwards, awards);
         assertEq(digestSplit, digestFull);
     }

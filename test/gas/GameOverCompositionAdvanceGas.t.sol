@@ -103,10 +103,9 @@ contract GameOverCompositionAdvanceGas is DeployProtocol {
 
     // Production caps mirrored from DegenerusGameJackpotModule.
     uint16 internal constant DAILY_ETH_MAX_WINNERS = 305;
-    uint32 internal constant DAILY_JACKPOT_SCALE_MAX_BPS = 63_600;
 
     uint24 internal constant LVL = 110; // >=10 (no deity-refund loop) + a deep-bucket level
-    uint256 internal constant GAME_FUNDS = 1000 ether; // terminal pool >> 200 ETH floor -> 305 geometry
+    uint256 internal constant GAME_FUNDS = 1000 ether;
 
     function setUp() public {
         _deployProtocol();
@@ -122,7 +121,7 @@ contract GameOverCompositionAdvanceGas is DeployProtocol {
         uint256 rngWord = _word();
         traitIds = JackpotBucketLib.getRandomTraits(rngWord);
         uint256 effEntropy = EntropyLib.hash2(rngWord, LVL + 1);
-        bucketCounts = JackpotBucketLib.bucketCountsForPool(GAME_FUNDS, effEntropy, DAILY_JACKPOT_SCALE_MAX_BPS);
+        bucketCounts = JackpotBucketLib.terminalWinnerCounts(effEntropy);
     }
 
     /// @dev Etch the seeder, write the worst-case pre-state into live game storage, restore real code.

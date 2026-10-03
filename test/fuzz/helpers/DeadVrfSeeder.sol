@@ -8,8 +8,6 @@ import {BucketSeed} from "../../helpers/BucketSeed.sol";
 /// @dev Etch overlay to seed an exact dead-VRF terminal state; every measured call still runs
 ///      the production DegenerusGame runtime (restored after seeding).
 contract DeadVrfSeeder is DegenerusGame, BucketSeed {
-    function seedEarlyBirdPasses(uint256 halves) external { earlyBirdWhalePasses = halves; }
-    function pendingEarlyBirdPasses() external view returns (uint256) { return earlyBirdWhalePasses; }
     function seedDeadStall(uint24 lvl) external {
         TQ.retireCompleted(address(this), lvl);
         uint24 day = _simulatedDayIndex();

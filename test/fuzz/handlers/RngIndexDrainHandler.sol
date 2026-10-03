@@ -55,7 +55,7 @@ abstract contract RngIndexDrainOracle is Test {
     function _bucketLengthOf(DegenerusGame subject, uint24 lvl, uint256 trait) private view returns (uint256) {
         uint256 header = uint256(vm.load(address(subject), _bucketSlot(lvl, trait)));
         uint24 stamp = uint24(uint256(vm.load(address(subject), bytes32(uint256(5)))) >> (112 + (lvl & 1) * 24));
-        uint256 bits = uint256(vm.load(address(subject), bytes32(uint256(76) + (lvl & 1))));
+        uint256 bits = uint256(vm.load(address(subject), bytes32(uint256(75) + (lvl & 1))));
         return stamp == lvl && ((bits >> trait) & 1) != 0 ? uint32(header) : 0;
     }
 

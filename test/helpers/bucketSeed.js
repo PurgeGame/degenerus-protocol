@@ -9,7 +9,7 @@ const OWNER_SLOT = 67n;
 const queueStorageKey = (key) => { const lvl = BigInt(key) & 0x3fffffn; return (BigInt(key) & 0xc00000n) | (lvl === 0n ? 0n : (lvl - 1n) % 100n + 1n); };
 const ownerStorageKey = (lvl) => BigInt(lvl);
 const LANE_MASK = 0xffffffffn;
-const TRAIT_BITMAP_SLOT = 76n;
+const TRAIT_BITMAP_SLOT = 75n;
 
 const pad32 = (v) => hre.ethers.toBeHex(BigInt(v), 32);
 
@@ -96,7 +96,7 @@ async function seedTicketQueue(addr, key, holders) {
   const level = BigInt(key) & ((1n << 22n) - 1n);
   const physical = queueStorageKey(key);
   const lengthSlot = mapSlot(physical, 12n);
-  await setStorage(addr, mapSlot(physical, 78n), level);
+  await setStorage(addr, mapSlot(physical, 77n), level);
   await setStorage(addr, lengthSlot, BigInt(holders.length));
   const base = dataBase(lengthSlot);
   for (let w = 0; w * 8 < lanes.length; ++w) {
@@ -113,7 +113,7 @@ async function entryOwnerRecordSlot(addr, key, player) {
   const id = (await getStorage(addr, mapSlot(BigInt(player), 13n))) & LANE_MASK;
   if (id === 0n) return null;
   const lvl = BigInt(key) & ((1n << 22n) - 1n);
-  return pad32(mapSlot(id, mapSlot(lvl ? ((lvl - 1n) % 128n) + 1n : 0n, 79n)));
+  return pad32(mapSlot(id, mapSlot(lvl ? ((lvl - 1n) % 128n) + 1n : 0n, 78n)));
 }
 
 async function readEntriesOwed(addr, key, player) {

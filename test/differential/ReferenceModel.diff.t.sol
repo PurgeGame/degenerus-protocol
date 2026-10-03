@@ -8,7 +8,7 @@ import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 /// @title Differential reference model — spec-conformance of pure economic math
 /// @notice Implementation-INDEPENDENT re-derivation of the *documented intended rules*, diffed
 ///         against the production libraries. The production code encodes these rules in compressed
-///         forms (a packed nibble table for prices; index-rotation + piecewise-linear scaling for
+///         forms (a packed nibble table for prices; packed-byte rotation + doubling loop for
 ///         buckets). The references below are written straight from the prose spec in the library
 ///         NatSpec — deliberately NOT copying the production encoding — so a shared misreading of the
 ///         intended rule (e.g. a wrong tier boundary) shows up as a diff instead of passing silently.
@@ -52,73 +52,62 @@ contract ReferenceModelDiffTest is Test {
     }
 
     // =====================================================================
-    // Reference 2 — trait bucket base counts (from JackpotBucketLib NatSpec)
+    // Reference 2 — terminal winner counts (from JackpotBucketLib NatSpec)
     // =====================================================================
-    // "Base counts [24, 16, 8, 1] are rotated by entropy for fairness" — rotation offset is the
-    // bottom 2 bits of entropy. The reference re-derives the rotation independently and also asserts
+    // "[152, 104, 48, 1] rotated" — rotation offset is the bottom 2 bits of entropy, and the solo
+    // lands on soloBucketIndex. The reference re-derives the rotation independently and also asserts
     // the multiset invariant (output is always a permutation of the base set).
-    function _refTraitCounts(uint256 entropy) internal pure returns (uint16[4] memory out) {
-        uint16[4] memory base = [uint16(24), 16, 8, 1];
+    function _refRotate(uint16[4] memory base, uint256 entropy) internal pure returns (uint16[4] memory out) {
         uint256 offset = entropy & 3;
         for (uint256 i = 0; i < 4; i++) {
             out[i] = base[(i + offset) % 4];
         }
     }
 
-    function testFuzz_traitCounts_matchSpec(uint256 entropy) public pure {
-        uint16[4] memory got = JackpotBucketLib.traitBucketCounts(entropy);
-        uint16[4] memory want = _refTraitCounts(entropy);
+    function testFuzz_terminalCounts_matchSpec(uint256 entropy) public pure {
+        uint16[4] memory got = JackpotBucketLib.terminalWinnerCounts(entropy);
+        uint16[4] memory want = _refRotate([uint16(152), 104, 48, 1], entropy);
         for (uint256 i = 0; i < 4; i++) {
-            assertEq(got[i], want[i], "trait bucket rotation diverges from spec");
+            assertEq(got[i], want[i], "terminal rotation diverges from spec");
         }
-        // Independent multiset invariant: the result is always a permutation of {24,16,8,1}.
         uint256 sum;
         uint256 prod = 1;
         for (uint256 i = 0; i < 4; i++) {
             sum += got[i];
             prod *= got[i];
         }
-        assertEq(sum, 24 + 16 + 8 + 1, "trait counts must sum to the base total (permutation)");
-        assertEq(prod, uint256(24) * 16 * 8 * 1, "trait counts must be a permutation of the base set");
+        assertEq(sum, 305, "terminal counts must sum to the base total (permutation)");
+        assertEq(prod, uint256(152) * 104 * 48 * 1, "terminal counts must be a permutation of the base set");
+        assertEq(got[JackpotBucketLib.soloBucketIndex(entropy)], 1, "the solo bucket holds the single winner");
     }
 
     // =====================================================================
-    // Reference 3 — pool-size scale multiplier (from JackpotBucketLib NatSpec)
+    // Reference 3 — live ETH winner targets (from JackpotBucketLib NatSpec)
     // =====================================================================
-    // "1x under 10 ETH, linearly to 2x by 50 ETH, linearly to maxScaleBps by 200 ETH, then capped."
-    function _refScaleBps(uint256 ethPool, uint32 maxScaleBps) internal pure returns (uint256) {
-        uint256 MIN = 10 ether;
-        uint256 FIRST = 50 ether;
-        uint256 SECOND = 200 ether;
-        uint256 BASE = 10_000;
-        uint256 TWO = 20_000;
-        if (ethPool < MIN) return BASE;
-        if (ethPool < FIRST) return BASE + ((ethPool - MIN) * (TWO - BASE)) / (FIRST - MIN);
-        if (ethPool < SECOND) return TWO + ((ethPool - FIRST) * (uint256(maxScaleBps) - TWO)) / (SECOND - FIRST);
-        return maxScaleBps;
+    // "Base [32, 16, 4, 1] rotated; non-solo bases scale by 1, doubled at 40 / 160 / 640 / 2,560 /
+    // 10,240 ETH (at most 32); zeroes for an empty pool." Written as an explicit tier table.
+    function _refMultiplier(uint256 pool) internal pure returns (uint256) {
+        if (pool >= 10_240 ether) return 32;
+        if (pool >= 2_560 ether) return 16;
+        if (pool >= 640 ether) return 8;
+        if (pool >= 160 ether) return 4;
+        if (pool >= 40 ether) return 2;
+        return 1;
     }
 
-    /// @notice Compares every scaled bucket against independently rounded base counts,
-    ///         including scales through the production 6.36x ceiling.
-    function testFuzz_scale_matchesSpec(uint256 ethPool, uint32 maxScaleBps) public pure {
-        ethPool = bound(ethPool, 0, 10_000 ether);
-        maxScaleBps = uint32(bound(maxScaleBps, 20_000, 63_600)); // >= 2x per the spec's monotonic curve
-
-        uint16[4] memory base = [uint16(24), 16, 8, 1];
-        uint16[4] memory got =
-            JackpotBucketLib.scaleTraitBucketCounts(base, ethPool, maxScaleBps);
-
-        uint256 scaleBps = _refScaleBps(ethPool, maxScaleBps);
-        // The production scaler mutates `base`; derive expected counts independently.
-        for (uint256 i = 0; i < 3; i++) {
-            uint256 baseCount = (3 - i) * 8;
-            uint256 want = (baseCount * scaleBps) / 10_000;
-            uint256 remainder = want % 8;
-            want = want - remainder + (remainder >= 4 ? 8 : 0);
-            assertEq(uint256(got[i]), want, "bucket scaling diverges from documented piecewise-linear spec");
+    function testFuzz_ethTargets_matchSpec(uint256 pool, uint256 entropy) public pure {
+        pool = bound(pool, 0, 100_000 ether);
+        uint16[4] memory got = JackpotBucketLib.ethWinnerTargets(pool, entropy);
+        if (pool == 0) {
+            for (uint256 i = 0; i < 4; i++) assertEq(got[i], 0, "an empty pool has no targets");
+            return;
         }
-
-        // Solo bucket (base 1) is never scaled.
-        assertEq(uint256(got[3]), 1, "solo bucket must stay 1 (unscaled) per spec");
+        uint16[4] memory base = _refRotate([uint16(32), 16, 4, 1], entropy);
+        uint256 m = _refMultiplier(pool);
+        for (uint256 i = 0; i < 4; i++) {
+            uint256 want = base[i] == 1 ? 1 : base[i] * m;
+            assertEq(uint256(got[i]), want, "ETH target diverges from the documented tier spec");
+        }
+        assertEq(got[JackpotBucketLib.soloBucketIndex(entropy)], 1, "the solo target is never scaled");
     }
 }
