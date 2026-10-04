@@ -47,14 +47,13 @@ library RecyclingState {
     }
     function nudgeCount(address host) internal view returns (uint256) {
         uint256 state = uint256(vm.load(host, bytes32(0))) >> 240;
-        return ((state >> 1) & 127) | (((state >> 9) & 3) << 7);
+        return state & 0xFF;
     }
     function seedNudges(address host, uint256 count) internal {
-        require(count <= 256, "fixture nudge cap");
+        require(count <= 255, "fixture nudge cap");
         uint256 state = uint256(vm.load(host, bytes32(0)));
-        uint256 mask = ((uint256(127) << 1) | (uint256(3) << 9)) << 240;
-        uint256 encoded = ((count & 127) << 1) | ((count >> 7) << 9);
-        vm.store(host, bytes32(0), bytes32((state & ~mask) | (encoded << 240)));
+        uint256 mask = uint256(0xFF) << 240;
+        vm.store(host, bytes32(0), bytes32((state & ~mask) | (count << 240)));
     }
     function pending(address host, uint24 day) internal view returns (bytes32) {
         uint24 stamped = uint24(uint256(vm.load(host, bytes32(uint256(0)))) >> 224);

@@ -176,12 +176,11 @@ contract StorageRecyclingSymbolicTest is Test {
         assertEq(h.wordAt(tag), expected);
     }
     function check_nudge_count_preserves_request_and_selector(uint16 flags, uint16 count_) public {
-        vm.assume(count_ <= 256);
+        vm.assume(count_ <= 255);
         h.seedRng(flags, 2, 0, false);
         h.setNudges(count_);
-        uint16 mask = (uint16(127) << 1) | (uint16(3) << 9);
-        uint16 encoded = uint16((uint256(count_) & 127) << 1) | uint16((uint256(count_) >> 7) << 9);
-        assertEq(h.flags(), (flags & ~mask) | encoded);
+        uint16 mask = uint16(0xFF);
+        assertEq(h.flags(), (flags & ~mask) | count_);
         assertEq(h.nudges(), count_);
     }
 

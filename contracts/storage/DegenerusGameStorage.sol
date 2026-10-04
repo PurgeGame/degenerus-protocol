@@ -101,7 +101,7 @@ interface IGameMinerMaintenance {
  * | [27:28] presaleOver              bool     Coin-presale-box terminal latch       |
  * | [28:29] subsFullyProcessed       bool     Afking STAGE drain-complete flag      |
  * | [29:30] presaleDrained           bool     All presale boxes opened (sweep)      |
- * | [30:32] rngFlagsAndNudges        uint16   Window, completion and nine-bit nudges |
+ * | [30:32] rngFlagsAndNudges        uint16   Eight-bit nudges, completion and window  |
  * +---------------------------------------------------------------------------------+
  *   Total: 32 bytes used (0 bytes padding -- FULL)
  *
@@ -504,18 +504,18 @@ abstract contract DegenerusGameStorage {
     ///      Packed into slot0 so opening can skip the presale-balance read once complete.
     bool internal presaleDrained;
 
-    /// @dev Slot-0 bytes 30..31. Bits 0/8 preserve the former FLIP redemption-window
-    ///      and RNG-complete bit positions. Nudge bits 1..7 and 9..10 hold 0..256;
-    ///      bit11 is spare, bit12 selects write, bit13 marks terminal; bits14/15 identify
-    ///      an active request / published session. All setters preserve neighboring fields.
+    /// @dev Slot-0 bytes 30..31. Bits 0..7 hold the nudge count (0..255); bit8 marks RNG
+    ///      complete, bit9 the FLIP redemption window; bits 10..11 are spare, bit12 selects
+    ///      write, bit13 marks terminal; bits14/15 identify an active request / published
+    ///      session. All setters preserve neighboring fields.
     ///      Complete and published start true; the redemption window and request closed.
     uint16 internal rngFlagsAndNudges = (uint16(1) << 8) | (uint16(1) << 15);
-    uint16 internal constant RNG_NUDGE_CAP = 256;
-    uint16 private constant RNG_NUDGE_BITS = (uint16(127) << 1) | (uint16(3) << 9);
+    uint16 internal constant RNG_NUDGE_CAP = 255;
+    uint16 private constant RNG_NUDGE_BITS = 0xFF;
 
-    function _ticketRedemptionOpen() internal view returns (bool) { return rngFlagsAndNudges & 1 != 0; }
+    function _ticketRedemptionOpen() internal view returns (bool) { return rngFlagsAndNudges & (uint16(1) << 9) != 0; }
     function _setTicketRedemptionOpen(bool on) internal {
-        rngFlagsAndNudges = (rngFlagsAndNudges & ~uint16(1)) | (on ? uint16(1) : 0);
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 9)) | (on ? uint16(1) << 9 : 0);
     }
     function _rngComplete() internal view returns (bool) { return rngFlagsAndNudges & (uint16(1) << 8) != 0; }
     function _setRngComplete(bool on) internal {
@@ -546,12 +546,10 @@ abstract contract DegenerusGameStorage {
     function _setRngTerminal() internal { rngFlagsAndNudges |= uint16(1) << 13; }
 
     function _nudgeCount() internal view returns (uint256) {
-        uint16 state = rngFlagsAndNudges;
-        return ((state >> 1) & 127) | (((state >> 9) & 3) << 7);
+        return rngFlagsAndNudges & RNG_NUDGE_BITS;
     }
     function _setNudgeCount(uint256 count) internal {
-        rngFlagsAndNudges = (rngFlagsAndNudges & ~RNG_NUDGE_BITS)
-            | uint16((count & 127) << 1) | uint16((count >> 7) << 9);
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~RNG_NUDGE_BITS) | uint16(count);
     }
     function _clearAppliedNudges() internal {
         uint16 old = rngFlagsAndNudges;

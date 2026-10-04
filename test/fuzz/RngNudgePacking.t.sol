@@ -19,22 +19,22 @@ contract RngNudgePackingTest is Test {
     NudgePackingHarness h;
     function setUp() public { h = new NudgePackingHarness(); }
     function testFuzz_NudgesAndFlagUpdatesPreserveEveryNeighbor(uint256 state, uint16 count, bool window, bool complete) public {
-        count = uint16(bound(count, 0, 256));
+        count = uint16(bound(count, 0, 255));
         vm.store(address(h), bytes32(0), bytes32(state));
         h.count(count);
-        uint256 nudgeMask = ((uint256(127) << 1) | (uint256(3) << 9)) << 240;
+        uint256 nudgeMask = uint256(0xFF) << 240;
         assertEq(uint256(vm.load(address(h), bytes32(0))) & ~nudgeMask, state & ~nudgeMask);
         h.flags(window, complete);
         (uint256 result, bool gotWindow, bool gotComplete) = h.read();
         assertEq(result, count);
         assertEq(gotWindow, window); assertEq(gotComplete, complete);
-        uint256 changed = nudgeMask | ((uint256(1) | (uint256(1) << 8)) << 240);
+        uint256 changed = nudgeMask | ((uint256(1) << 9) | (uint256(1) << 8)) << 240;
         assertEq(uint256(vm.load(address(h), bytes32(0))) & ~changed, state & ~changed);
     }
-    function test_Exact256IsRepresentableWithBothFlagsSet() public {
-        h.flags(true, true); h.count(256);
+    function test_Exact255IsRepresentableWithBothFlagsSet() public {
+        h.flags(true, true); h.count(255);
         (uint256 count, bool window, bool complete) = h.read();
-        assertEq(count, 256); assertTrue(window && complete);
+        assertEq(count, 255); assertTrue(window && complete);
         h.count(0);
         (count, window, complete) = h.read();
         assertEq(count, 0); assertTrue(window && complete);
@@ -42,17 +42,17 @@ contract RngNudgePackingTest is Test {
 }
 contract RngNudgeCapTest is DeployProtocol {
     function setUp() public { _deployProtocol(); }
-    function test_256thNudgeAcceptedAnd257thRejectedBeforeBurn() public {
-        RecyclingState.seedNudges(address(game), 255);
+    function test_255thNudgeAcceptedAnd256thRejectedBeforeBurn() public {
+        RecyclingState.seedNudges(address(game), 254);
         vm.mockCall(ContractAddresses.COIN, abi.encodeWithSignature("burnCoin(address,uint256)"), abi.encode());
         (uint256 queued, uint256 cost) = game.rngNudgeQuote();
-        assertEq(queued, 255); assertGt(cost, 0);
+        assertEq(queued, 254); assertGt(cost, 0);
         game.reverseFlip(cost);
         (queued, cost) = game.rngNudgeQuote();
-        assertEq(queued, 256); assertEq(cost, 0);
+        assertEq(queued, 255); assertEq(cost, 0);
         vm.mockCallRevert(ContractAddresses.COIN, abi.encodeWithSignature("burnCoin(address,uint256)"), "burn must not run at cap");
         vm.expectRevert(bytes4(keccak256("NudgeCapReached()")));
         game.reverseFlip(0);
-        assertEq(RecyclingState.nudgeCount(address(game)), 256);
+        assertEq(RecyclingState.nudgeCount(address(game)), 255);
     }
 }

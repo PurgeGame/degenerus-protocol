@@ -176,11 +176,8 @@ contract MiddayRngCreditTest is DeployProtocol {
             assertFalse(delivered[i].emitter == address(game) && delivered[i].topics[0] == applied,
                 "callback must not pay for publication");
         }
-        uint256 queueMask = ~uint256(type(uint48).max);
-        assertEq(uint256(game.extsload(bytes32(uint256(33)))) & queueMask, uint256(packed) & queueMask,
-            "callback must not write queue metadata");
-        assertEq(uint48(uint256(game.extsload(bytes32(uint256(33))))), uint48(vm.getBlockTimestamp()),
-            "callback timestamps the newly ready read cohort");
+        assertEq(uint256(game.extsload(bytes32(uint256(33)))), uint256(packed),
+            "callback writes no lootbox RNG state");
         assertEq(game.extsload(bytes32(uint256(4))), requestSlot, "callback retains request ID");
         assertFalse(game.rngComplete(), "delivery alone cannot complete the session");
         assertTrue(game.advanceDue(), "empty cohort still owes a keeper publication");

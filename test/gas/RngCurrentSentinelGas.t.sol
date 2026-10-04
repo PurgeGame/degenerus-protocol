@@ -28,7 +28,7 @@ contract RngCurrentSentinelGasTest is DeployProtocol {
         emit log_named_uint("cold daily callback transaction gas", used);
     }
     function test_ColdDailyCallbackWithZeroNudges() public { _coldDailyNudgeCallback(0); }
-    function test_ColdDailyCallbackWith256Nudges() public { _coldDailyNudgeCallback(256); }
+    function test_ColdDailyCallbackWith255Nudges() public { _coldDailyNudgeCallback(255); }
 
     function test_ColdCallbackAndRequestCrankCostsThroughFourRealDays() public {
         uint256 callbacks; uint256 requests; uint256 cranks; uint256 fulfilled;

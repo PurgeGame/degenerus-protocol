@@ -723,7 +723,7 @@ contract RngWindowFreezeHandler is Test {
 
     function _nudgeCount() private view returns (uint256) {
         uint256 state = uint256(vm.load(address(game), bytes32(0))) >> 240;
-        return ((state >> 1) & 127) | (((state >> 9) & 3) << 7);
+        return state & 0xFF;
     }
 
     function _lootboxRngIndexCursor() internal view returns (uint256) {

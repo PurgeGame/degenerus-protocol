@@ -1890,7 +1890,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (cost != expectedCost) revert NudgeCostChanged();
         coin.burnCoin(msg.sender, cost);
         uint256 newCount = reversals + 1;
-        // The exact 256 cap fits nine bits; the packed setter preserves neighboring flags.
+        // The 255 cap fits the low byte; the packed setter preserves neighboring flags.
         _setNudgeCount(newCount);
         emit ReverseFlip(msg.sender, newCount, cost);
     }
@@ -1944,8 +1944,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         // Addition preserves the uniform distribution. The two reserved final values
         // leave this request waiting for its existing retry path (probability 2 / 2^256).
         if (daily) {
-            // Decode the frozen nine-bit count from the same slot-0 snapshot: no extra SLOAD.
-            unchecked { word += ((flags >> 1) & 127) | (((flags >> 9) & 3) << 7); }
+            // The frozen count is the low byte of the same slot-0 snapshot: no extra SLOAD.
+            unchecked { word += flags & 0xFF; }
         }
         if (word < 2) return;
         rngWordCurrent = word;

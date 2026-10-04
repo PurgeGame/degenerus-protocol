@@ -21,7 +21,7 @@ contract FlipRedeemWindowTest is DeployProtocol {
     uint256 private constant SLOT_0 = 0;
     uint256 private constant JACKPOT_PHASE_SHIFT = 120; // byte 15: jackpotPhaseFlag
     uint256 private constant RNG_LOCKED_SHIFT = 152; // byte 19: rngLockedFlag
-    uint256 private constant WINDOW_OPEN_SHIFT = 240; // byte 30: _ticketRedemptionOpen()
+    uint256 private constant WINDOW_OPEN_SHIFT = 249; // bit 9 of the uint16 at bytes 30..31: _ticketRedemptionOpen()
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2; // [future:128][next:128]
 
     // levelPrizePool[0] = BOOTSTRAP_PRIZE_POOL (DegenerusGame constructor).
@@ -52,12 +52,13 @@ contract FlipRedeemWindowTest is DeployProtocol {
 
     function _windowOpen() internal view returns (bool) {
         uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(SLOT_0))));
-        return ((s0 >> WINDOW_OPEN_SHIFT) & 0xFF) != 0;
+        return ((s0 >> WINDOW_OPEN_SHIFT) & 1) != 0;
     }
 
     function _setFlag(uint256 shift, bool v) internal {
         uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(SLOT_0))));
-        s0 &= ~(uint256(0xFF) << shift);
+        // Whole-byte flags clear their byte; the window latch is a single bit inside the packed uint16.
+        s0 &= ~((shift == WINDOW_OPEN_SHIFT ? uint256(1) : uint256(0xFF)) << shift);
         if (v) s0 |= (uint256(1) << shift);
         vm.store(address(game), bytes32(uint256(SLOT_0)), bytes32(s0));
     }

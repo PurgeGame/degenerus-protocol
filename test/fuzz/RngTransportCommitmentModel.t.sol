@@ -54,7 +54,7 @@ contract RngTransportModelHarness is DegenerusGameRngModule {
         if (flags & (uint16(1) << 14) == 0 || requestId != vrfRequestId || rngWordCurrent != RNG_WORD_WAITING) return;
         uint256 word = randomWords[0];
         if (daily) {
-            unchecked { word += ((flags >> 1) & 127) | (((flags >> 9) & 3) << 7); }
+            unchecked { word += flags & 0xFF; }
         }
         if (word < 2) return;
         rngWordCurrent = word;
@@ -86,7 +86,7 @@ contract RngTransportCommitmentModelTest is Test {
     function testFuzz_TransportMatchesIndependentAcceptanceModel(
         uint256 raw, uint16 count, bool daily, bool write, uint32 logicalDay, uint64 id
     ) public {
-        count = uint16(bound(count, 0, 256));
+        count = uint16(bound(count, 0, 255));
         id = uint64(bound(id, 1, type(uint64).max - 1));
         uint24 day = uint24(bound(logicalDay, 1, type(uint24).max));
         game.seed(address(coordinator), id, daily, count, write, day, ORIGIN);
@@ -114,7 +114,7 @@ contract RngTransportCommitmentModelTest is Test {
     }
 
     function testFuzz_RetryPreservesCommitmentAndRejectsStaleResponse(bool daily, bool write, uint16 count) public {
-        count = uint16(bound(count, 0, 256));
+        count = uint16(bound(count, 0, 255));
         // The coordinator allocates replacement id 1. The old transport ID is deliberately 99.
         game.seed(address(coordinator), 99, daily, count, write, 123, ORIGIN);
         bytes32 fixedInputs = game.commitment();
@@ -164,8 +164,8 @@ contract RngTransportCommitmentModelTest is Test {
 
     function test_ReservedAndModularBoundaryCases() public {
         uint256[6] memory raw = [uint256(0), 1, type(uint256).max, type(uint256).max, type(uint256).max, uint256(0)];
-        uint16[6] memory nudge = [uint16(0), 0, 1, 2, 3, 256];
-        uint256[6] memory expected = [uint256(0), 0, 0, 0, 2, 256];
+        uint16[6] memory nudge = [uint16(0), 0, 1, 2, 3, 255];
+        uint256[6] memory expected = [uint256(0), 0, 0, 0, 2, 255];
         for (uint256 i; i < raw.length; ++i) {
             game.seed(address(coordinator), i + 1, true, nudge[i], false, 1, ORIGIN);
             _deliver(address(coordinator), i + 1, raw[i]);

@@ -30,7 +30,7 @@ contract RngCurrentSentinelTest is DeployProtocol {
 
     function _check(uint256 input, uint64 nudges) private {
         uint256 id = _request();
-        nudges = uint64(bound(nudges, 0, 256));
+        nudges = uint64(bound(nudges, 0, 255));
         RecyclingState.seedNudges(address(game), nudges);
         uint256 expected;
         unchecked { expected = input + nudges; }
