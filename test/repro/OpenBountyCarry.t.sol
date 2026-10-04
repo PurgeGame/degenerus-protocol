@@ -19,7 +19,7 @@ contract OpenBountyCarry is DeployProtocol {
     uint256 private constant SUBOF_SLOT = 52;
     uint256 private constant SUBSCRIBERS_SLOT = 54;
     uint256 private constant CURSOR_SLOT = 56;
-    uint256 private constant PENDING_SHIFT = 224;
+    uint256 private constant PENDING_SHIFT = 184;
     uint256 private _lastFulfilledReqId;
 
     bytes32 private constant STAKE_UPDATED_SIG =

@@ -403,7 +403,7 @@ abstract contract CrapsPins is Test {
         // opens each battle at whatever `block.timestamp` its last iteration left behind, so a
         // fixed step drifts and eventually opens a battle that is already past its close.
         (,, uint256 terms) = c.customBattleOf(slot);
-        uint256 closeAt = (terms >> 73) & 0xFFFFFFFFFF;
+        uint256 closeAt = (terms >> 61) & 0xFFFFFFFFFF;
         if (block.timestamp < closeAt) vm.warp(closeAt);
         uint48 taken = c.closeBattle(slot);
         _setWord(taken, word);

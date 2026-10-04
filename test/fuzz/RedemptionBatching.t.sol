@@ -32,10 +32,10 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
     bytes32 private constant STAKE_UPDATED = keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
 
     /// @dev The miner's one reward clock: the later of the latest VRF request (slot-0
-    ///      rngRequestTime, retry bit masked) and the day reset.
+    ///      rngRequestTime) and the day reset.
     function _rewardElapsed() private view returns (uint256) {
         uint256 ts = vm.getBlockTimestamp();
-        uint256 due = uint48(uint256(vm.load(address(game), bytes32(0))) >> 48) & ~uint48(1);
+        uint256 due = uint48(uint256(vm.load(address(game), bytes32(0))) >> 48);
         uint256 reset = ts - (ts - 82_620) % 1 days;
         if (reset > due) due = reset;
         return ts > due ? ts - due : 0;

@@ -29,6 +29,11 @@ contract MinerRewardScheduleHarness is DegenerusGameMinerModule {
         dailyIdx = processedDay;
         _afkingResetDay = preparationDay;
         rngRequestTime = requestTime;
+        _rearmRngRetry();
+    }
+
+    function markRetrySpent() external {
+        _spendRngRetry();
     }
 }
 
@@ -92,10 +97,10 @@ contract MinerRewardScheduleTest is Test {
 
     function test_LaterRequestIsTheClockForEveryAction() public {
         vm.warp(30 days + 5 hours);
-        uint48 request = uint48(_reset() + 2 hours) & ~uint48(1);
+        uint48 request = uint48(_reset() + 2 hours);
         harness.seed(27, 28, request);
         assertEq(harness.dueAt(), request, "work waits from the request");
-        harness.seed(27, 28, request | 1);
+        harness.markRetrySpent();
         assertEq(harness.dueAt(), request, "a retry keeps the request's origin");
         vm.warp(block.timestamp + 6 hours);
         assertEq(harness.dueAt(), request, "a late miner cannot restart the clock");
@@ -111,7 +116,7 @@ contract MinerRewardScheduleTest is Test {
 
     function test_ClockIgnoresCallerProgress() public {
         vm.warp(30 days + 5 hours);
-        uint48 request = uint48(_reset() + 1 hours) & ~uint48(1);
+        uint48 request = uint48(_reset() + 1 hours);
         harness.seed(27, 27, request);
         uint256 due = harness.dueAt();
         harness.seed(28, 31, request);

@@ -1286,9 +1286,9 @@ contract CrapsBattleTest is CrapsPins {
 
         // And the flag is on the terms the creation event published, at its own bit.
         (,, uint256 terms) = craps.customBattleOf(many);
-        assertTrue(terms & (uint256(1) << 113) != 0, "multi-entry did not reach the published terms");
+        assertTrue(terms & (uint256(1) << 101) != 0, "multi-entry did not reach the published terms");
         (,, uint256 lone) = craps.customBattleOf(single);
-        assertTrue(lone & (uint256(1) << 113) == 0, "single-entry published as multi");
+        assertTrue(lone & (uint256(1) << 101) == 0, "single-entry published as multi");
     }
 
     /// @dev A zero-chip ticket is an open order too: it may move to any later count while the slot

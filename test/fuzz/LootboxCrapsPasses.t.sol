@@ -15,7 +15,7 @@ contract LootboxCrapsPasses is DeployProtocol {
     uint256 constant SLOT_LOOTBOX_WORD = 34;
     uint256 constant SLOT_LOOTBOX_RNG_IDX = 33; // lootboxRngPacked (low 48 bits = lootboxRngIndex)
     uint256 constant SLOT_BOX_PLAYERS = 57;     // mapping(uint48 => address[]) boxPlayers (sweep's discovery queue)
-    uint256 constant SLOT_BOX_CURSORS = 56;     // packed (boxCursor @ byte 7, boxCursorIndex @ byte 13)
+    uint256 constant SLOT_BOX_CURSORS = 56;     // packed (boxCursor @ byte 7, humanReadComplete @ byte 13)
     uint256 constant LB_SCORE_SHIFT = 24;
     uint256 constant LB_CUSTOM_COUNT_SHIFT = 105;
     uint256 constant LB_CUSTOM_SIZE_SHIFT = 113;
@@ -79,7 +79,7 @@ contract LootboxCrapsPasses is DeployProtocol {
         bytes32 cursorSlot = bytes32(SLOT_BOX_CURSORS);
         uint256 cur = uint256(vm.load(address(game), cursorSlot));
         cur &= ~(mask48 << (7 * 8));
-        cur &= ~(mask48 << (13 * 8));
+        cur &= ~(uint256(0xff) << (13 * 8));
         vm.store(address(game), cursorSlot, bytes32(cur));
     }
 

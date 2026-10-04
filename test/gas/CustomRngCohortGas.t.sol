@@ -29,13 +29,13 @@ contract CustomRngCohortGasTest is DeployProtocol {
         _finishReadConsumers();
         crapsBattle.setBattleCreator(address(this), true);
         uint64 slot = crapsBattle.createBattle(300, 25, 1000, 75,
-            uint40(vm.getBlockTimestamp() + 60), true, 256);
+            uint40(vm.getBlockTimestamp() + 60), true, 255);
         for (uint256 i; i < SEATS; ++i) {
             address player = address(uint160(0xC0570000 + i));
             vm.prank(address(game));
             coin.mintForGame(player, 5_000_000 ether); // Includes the inactive-wallet 5% surcharge.
             vm.prank(player);
-            crapsBattle.enterBattle(slot, BOARD, 256);
+            crapsBattle.enterBattle(slot, BOARD, 255);
         }
         vm.warp(vm.getBlockTimestamp() + 60);
         // Craps windows ride the normal RNG round (6d0e64b09): the close binds the field to the

@@ -62,7 +62,7 @@ contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
         _setRngRequestActive(locked);
         _setRngSessionPublished(!locked);
         vrfRequestId = locked ? 777 : 1;
-        rngRequestTime = locked ? uint48(block.timestamp - 120 days) & ~uint48(1) : 1;
+        rngRequestTime = locked ? uint48(block.timestamp - 120 days) : 1;
 
         ticketCursor = 0;
         ticketLevel = 0;

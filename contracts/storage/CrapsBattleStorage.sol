@@ -270,8 +270,9 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     //   bits  28.. 32  bankMult   how many rounds deep the bankroll runs, 1.._MAX_BANKROLL_MULT
     //   bits  33.. 42  goalMult   the target, _MIN_BATTLE_GOAL_MULT.._MAX_GOAL_MULT x the bankroll
     //   bits  43.. 60  stakeUnits the bounty, in _BATTLE_STAKE_UNIT granules
-    //   bits  61.. 72  unused
-    //   bits  73..112  closeTime  when entry shuts and the table may be taken
+    //   bits  61..100  closeTime  when entry shuts and the table may be taken
+    //   bit   101      multi      one address may take as many seats as it pays for
+    //   bits 102..109  highMult   the high-roller multiple, 0 (no high lane) or 2.._MAX_HIGH_MULT
     // The chips left to the dice are not a term: every ticket places zero through seven and
     // scatters the complement, but all play the slot's same ten-chip round.
     uint256 internal constant _CB_PLAYED_MASK = 0xFFFFFFF;
@@ -371,12 +372,12 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      mask makes the three-chip ceiling one board-wide test.
     uint256 internal constant _CHIP_LO_MASK = 0x9249249;
 
-    uint256 internal constant _CB_HIGH_MASK = 0x1FF;
+    uint256 internal constant _CB_HIGH_MASK = 0xFF;
 
-    /// @dev Where the multiple sits in `Window.terms`, above the bounty and the bar, so the match
-    ///      key commits to the whole of a field's economics and a lane read one way at entry and
-    ///      another at settlement keys a different battle instead of mispaying this one.
-    uint256 internal constant _TERM_HIGH_SHIFT = 44;
+    /// @dev Where the multiple sits in `Window.terms`, directly above the 18-bit bounty, so the
+    ///      match key commits to the whole of a field's economics and a lane read one way at entry
+    ///      and another at settlement keys a different battle instead of mispaying this one.
+    uint256 internal constant _TERM_HIGH_SHIFT = 18;
 
     /// @dev Shared sideboard, ONE word per battle:
     ///        bits   0.. 31  how many high seats the field holds
@@ -1084,7 +1085,6 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     );
     uint64[4] internal _fundedCustomSlots;
     mapping(uint48 => uint64[]) internal _rngSlots;
-    uint48[2] private __rngCohortLayoutGap; // Generation stamps removed; preserve later fields.
     uint64[2] internal _rngSlotCursor;
     uint64[2] internal _rngPending;
 

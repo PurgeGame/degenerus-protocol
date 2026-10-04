@@ -149,6 +149,12 @@ contract VRFStallEdgeCases is DeployProtocol {
         return uint48(packed >> 48);
     }
 
+    /// @dev Read the retry-spent flag: rngFlagsAndNudges (slot 0 bytes [30:32]) bit 10.
+    function _readRetrySpent() internal view returns (bool) {
+        uint256 packed = uint256(vm.load(address(game), bytes32(uint256(SLOT_PACKED_0))));
+        return (packed >> 250) & 1 != 0;
+    }
+
     /// @dev Read dailyIdx from packed slot 0, bytes [3:6] (uint24, bit offset 24).
     function _readDailyIdx() internal view returns (uint48) {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(SLOT_PACKED_0))));
@@ -453,7 +459,8 @@ contract VRFStallEdgeCases is DeployProtocol {
         // Verify PRESERVE+RE-ISSUE variables:
         assertTrue(game.rngLocked(), "rngLocked stays true across swap (daily preserved)");
         assertTrue(_readVrfRequestId() != 0, "vrfRequestId re-issued (fresh) on new coordinator");
-        assertEq(_readRngRequestTime(), preSwapStamp | 1, "the same request re-sent: stamp kept, retry spent");
+        assertEq(_readRngRequestTime(), preSwapStamp, "the same request re-sent: stamp kept");
+        assertTrue(_readRetrySpent(), "the re-send spends the retry");
         assertEq(_readRngWordCurrent(), 0, "rngWordCurrent still 0 (re-issued word not yet delivered)");
         // A fresh request exists on the new coordinator
         assertTrue(newVRF.lastRequestId() != 0, "re-issued request exists on new coordinator");

@@ -376,9 +376,6 @@ abstract contract DegenerusGameStorage {
     ///
     ///      SECURITY: Timeout mechanism prevents permanent lockup if VRF fails.
     ///      Note: rngLockedFlag (separate bool) controls the daily RNG lock state.
-    ///      The LSB doubles as the daily retry-spent flag (0 = retry available, 1 = spent);
-    ///      set by the retry (AdvanceModule _finalizeRngRequest) and by a coordinator swap's
-    ///      re-issue (GameOverModule updateVrfCoordinatorAndSub); only a fresh request clears it.
     uint48 internal rngRequestTime = 1;
 
     /// @notice Current jackpot level (starts at 0). Purchase phase targets level + 1.
@@ -505,9 +502,9 @@ abstract contract DegenerusGameStorage {
     bool internal presaleDrained;
 
     /// @dev Slot-0 bytes 30..31. Bits 0..7 hold the nudge count (0..255); bit8 marks RNG
-    ///      complete, bit9 the FLIP redemption window; bits 10..11 are spare, bit12 selects
-    ///      write, bit13 marks terminal; bits14/15 identify an active request / published
-    ///      session. All setters preserve neighboring fields.
+    ///      complete, bit9 the FLIP redemption window, bit10 the request's spent retry; bit11
+    ///      is spare, bit12 selects write, bit13 marks terminal; bits14/15 identify an active
+    ///      request / published session. All setters preserve neighboring fields.
     ///      Complete and published start true; the redemption window and request closed.
     uint16 internal rngFlagsAndNudges = (uint16(1) << 8) | (uint16(1) << 15);
     uint16 internal constant RNG_NUDGE_CAP = 255;
@@ -517,6 +514,11 @@ abstract contract DegenerusGameStorage {
     function _setTicketRedemptionOpen(bool on) internal {
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 9)) | (on ? uint16(1) << 9 : 0);
     }
+    /// @dev One retry per request: set by the retry and by a coordinator swap's re-issue,
+    ///      cleared by every fresh request stamp.
+    function _rngRetrySpent() internal view returns (bool) { return rngFlagsAndNudges & (uint16(1) << 10) != 0; }
+    function _spendRngRetry() internal { rngFlagsAndNudges |= uint16(1) << 10; }
+    function _rearmRngRetry() internal { rngFlagsAndNudges &= ~(uint16(1) << 10); }
     function _rngComplete() internal view returns (bool) { return rngFlagsAndNudges & (uint16(1) << 8) != 0; }
     function _setRngComplete(bool on) internal {
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 8)) | (on ? uint16(1) << 8 : 0);
@@ -613,21 +615,19 @@ abstract contract DegenerusGameStorage {
     ///      SECURITY: Request ID matching prevents replay attacks on RNG.
     uint256 internal vrfRequestId = 1;
 
-    /// @dev Number of reverse flips purchased against current RNG word.
-    ///      Tracks flip activity for jackpot sizing adjustments. Co-resident with
-    ///      lastVrfProcessedTimestamp (both written in _applyDailyRng); bounded by
-    ///      supply/RNG_NUDGE_BASE_COST << 2^64 since every nudge burns >= 100 FLIP.
-    uint24 internal rngRequestDay; // Logical daily identity, independent of transport/retry time.
+    /// @dev Logical day the request in flight belongs to, independent of transport/retry time;
+    ///      zero for a mid-day request and on terminal entry until the terminal request.
+    uint24 internal rngRequestDay;
+    /// @dev Set once the request day's skipped-day gap is backfilled; a fresh request clears it.
     bool internal rngGapApplied;
-    uint32 private __nudgeLayoutGap; // Preserve downstream slot offsets.
 
     /// @dev Timestamp of the last successfully processed VRF word.
     ///      Used by governance to detect VRF stalls (time-based vs day-gap-based); game
     ///      liveness does not read it (a gap behind dailyIdx is itself the stall signal).
-    ///      Initialized in wireVrf(), updated in _applyDailyRng(). Shares the slot
-    ///      with the unused nudge layout gap and ticket buffer stamps.
+    ///      Initialized in wireVrf(), updated in _applyDailyRng(). Shares slot 5 with the
+    ///      request day and the ticket buffer stamps.
     uint48 internal lastVrfProcessedTimestamp;
-    /// @dev Even/odd ticket epochs in previously unused slot-5 bytes 14..19.
+    /// @dev Even/odd ticket epochs: two uint24 levels, slot-5 bytes 10..15.
     uint48 internal ticketBufferLevels;
 
     /// @dev Packed daily jackpot ticket data, handed from one advance stage to the next.
@@ -3958,7 +3958,6 @@ abstract contract DegenerusGameStorage {
     /// @dev True only after every human box and presale leg in the sealed read buffer finishes.
     ///      Fresh requests clear it; retries preserve it and the cursor.
     bool internal humanReadComplete = true;
-    uint40 private __boxFrontierLayoutGap; // Preserve the former six-byte frontier footprint.
 
     /// @dev Physical buffer holding the final presale purchase. Earlier sessions must already
     ///      be settled before this one seals. Completing this buffer releases the residual pool.

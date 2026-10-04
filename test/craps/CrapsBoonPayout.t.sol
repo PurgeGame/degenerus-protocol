@@ -210,7 +210,7 @@ contract CrapsBoonPayoutTest is CrapsPins {
 
     /// @dev A high seat buys H copies of ONE run, so the percentage must run on the SCALED
     ///      payment and the 60,000 ceiling must bite on that. Taking the base pre-scale and
-    ///      multiplying after would pay `H x boonBonus(s.paid)` -- at H = 256 that is hundreds of
+    ///      multiplying after would pay `H x boonBonus(s.paid)` -- at H = 255 that is hundreds of
     ///      thousands of FLIP instead of the 9,000 ceiling, so the two readings are nowhere near
     ///      each other and this pins the right one.
     ///

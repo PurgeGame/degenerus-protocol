@@ -34,7 +34,7 @@ contract TerminalAffiliateSeeder is DegenerusGame, BucketSeed {
     /// @dev The locked daily request, sent today, has its word delivered but not yet applied.
     function deliverPreFreezeWord(uint256 word) external {
         _recordDailyRng(_simulatedDayIndex(), 0);
-        rngRequestTime = uint48(block.timestamp) & ~uint48(1);
+        rngRequestTime = uint48(block.timestamp);
         vrfRequestId = 777;
         rngWordCurrent = word < 2 ? RNG_WORD_WAITING : word;
         // Only the request-active bit grants a request authority (retained ids and stamps are

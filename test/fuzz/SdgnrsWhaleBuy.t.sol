@@ -39,8 +39,8 @@ contract WhaleModuleForwarder {
 contract SdgnrsWhaleBuy is DeployProtocol {
     uint256 private constant GAME_CLAIMABLE_SLOT = 7; // balancesPacked root (low-128 = claimable)
     uint256 private constant CLAIMABLE_POOL_SLOT = 1; // claimablePool uint128 @ slot 1, high-128
-    uint256 private constant CURSOR_SLOT = 56; // cursor slot; _sdgnrsBonusLevel uint24 @ byte 25
-    uint256 private constant SDGNRS_BONUS_OFFBYTES = 25;
+    uint256 private constant CURSOR_SLOT = 56; // cursor slot; _sdgnrsBonusLevel uint24 @ byte 20
+    uint256 private constant SDGNRS_BONUS_OFFBYTES = 20;
     uint256 private constant LEVEL_OFFBYTES = 12; // `level` uint24 @ slot 0, byte 12
     uint256 private constant RNG_LOCKED_OFFBYTES = 19; // `rngLockedFlag` bool @ slot 0, byte 19
     uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint32 => uint256)

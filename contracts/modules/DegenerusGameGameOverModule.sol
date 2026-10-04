@@ -359,7 +359,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         if (!MineFlipGas.canRun(meter, GasBounds.RNG_REQUEST, GasBounds.TERMINAL_TAIL)) return false;
         if (rngRequestDay == 0) {
             rngRequestDay = day > dailyIdx ? day : dailyIdx + 1;
-            rngRequestTime = uint48(block.timestamp) & ~uint48(1);
+            rngRequestTime = uint48(block.timestamp);
+            _rearmRngRetry();
             _setRngSessionPublished(false);
             rngWordCurrent = RNG_WORD_WAITING;
             work.progressed = true;
@@ -1076,12 +1077,12 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             // Daily in flight: KEEP rngLockedFlag=true.
             if (rngWordCurrent == RNG_WORD_WAITING) {
                 // Daily word not yet delivered: re-request on the new coordinator. The swap spends
-                // the vault owner's single retry (the low bit; the stamp itself does not move): the
-                // retry is the last resort before a swap, and re-armed here it could discard the
-                // new coordinator's first answer. A replacement that stalls too is recovered by
+                // the vault owner's single retry (the stamp itself does not move): the retry is the
+                // last resort before a swap, and re-armed here it could discard the new
+                // coordinator's first answer. A replacement that stalls too is recovered by
                 // another swap or reaches the VRF-dead ending.
+                _spendRngRetry();
                 vrfRequestId = _requestVrfWord(VRF_REQUEST_CONFIRMATIONS);
-                rngRequestTime |= 1;
             }
             // else: daily word already delivered and valid -> preserve it; no re-issue
             // (a fresh callback would be rejected by the advance module's

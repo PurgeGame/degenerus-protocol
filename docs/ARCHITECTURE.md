@@ -156,7 +156,7 @@ cannot open until their daily seal; every pending stamp blocks subsequent reques
 Timed player claims retain their own required results independently.
 
 The VRF callback authenticates the active request, adds the frozen daily nudge
-count (0..256, stored in slot 0), and writes only the final word. Midday requests
+count (0..255, stored in slot 0), and writes only the final word. Midday requests
 apply no daily nudge. Final values 0 and 1 are refused and remain retryable;
 1 is the nonzero waiting sentinel. Mandatory keeper publication emits the applied
 word and performs nudge/request cleanup outside the LINK-funded callback. Request

@@ -48,7 +48,8 @@ contract DegenerusGameRngModule is DegenerusGameRngUtils {
         _sealRngWriteBuffer();
         rngRequestDay = day;
         rngGapApplied = false;
-        rngRequestTime = uint48(block.timestamp) & ~uint48(1);
+        rngRequestTime = uint48(block.timestamp);
+        _rearmRngRetry();
         rngWordCurrent = RNG_WORD_WAITING;
         _setRngRequestActive(false);
         uint256 id = _requestVrfWord(VRF_REQUEST_CONFIRMATIONS);
@@ -62,9 +63,9 @@ contract DegenerusGameRngModule is DegenerusGameRngUtils {
         if (address(this) != ContractAddresses.GAME || msg.sender != ContractAddresses.ADMIN) revert OnlyAdmin();
         if (gameOver || _livenessTriggered() || !_rngRetryDue(uint48(block.timestamp))) revert RngNotReady();
         _setRngRequestActive(false);
+        _spendRngRetry();
         uint256 id = _requestVrfWord(rngLockedFlag ? VRF_REQUEST_CONFIRMATIONS : VRF_MIDDAY_CONFIRMATIONS);
         vrfRequestId = id;
-        rngRequestTime |= 1;
         _setRngRequestActive(true);
         emit Advance(STAGE_RNG_REQUESTED, level);
     }
@@ -203,9 +204,8 @@ contract DegenerusGameRngModule is DegenerusGameRngUtils {
         _setRngRequestActive(false);
         _setRngSessionPublished(false);
         rngWordCurrent = RNG_WORD_WAITING;
-        // Even, like every request stamp: the LSB is the retry-spent flag the vault owner's
-        // retry checks, so an odd stamp would read as a retry already used.
-        rngRequestTime = uint48(block.timestamp) & ~uint48(1);
+        rngRequestTime = uint48(block.timestamp);
+        _rearmRngRetry();
         uint256 id = _requestVrfWord(VRF_MIDDAY_CONFIRMATIONS);
         vrfRequestId = id;
         _setRngRequestActive(true);
@@ -247,9 +247,8 @@ contract DegenerusGameRngModule is DegenerusGameRngUtils {
     }
 
     function _rngRetryDue(uint48 ts) private view returns (bool) {
-        uint48 t = rngRequestTime;
-        return _rngRequestActive() && rngWordCurrent == RNG_WORD_WAITING && (t & 1) == 0
-            && uint256(ts) >= uint256(t) + RNG_RETRY_TIMEOUT;
+        return _rngRequestActive() && rngWordCurrent == RNG_WORD_WAITING && !_rngRetrySpent()
+            && uint256(ts) >= uint256(rngRequestTime) + RNG_RETRY_TIMEOUT;
     }
 
     function _requestVrfWord(uint16 confirmations) private returns (uint256 id) {

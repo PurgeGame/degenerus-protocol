@@ -482,7 +482,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
         );
         bytes32 elem = bytes32(uint256(levelSlot) + uint256(traitId));
         uint256 header = uint256(vm.load(address(game), elem));
-        uint48 stamps = uint48(uint256(vm.load(address(game), bytes32(uint256(5)))) >> 112);
+        uint48 stamps = uint48(uint256(vm.load(address(game), bytes32(uint256(5)))) >> 80);
         uint256 bits = uint256(vm.load(address(game), bytes32(uint256(75) + (lvl & 1))));
         if (uint24(stamps >> ((lvl & 1) * 24)) != lvl || ((bits >> traitId) & 1) == 0) return 0;
         uint256 len = uint32(header);

@@ -420,8 +420,10 @@ contract MidDayStallCreditTest is StallCreditBase {
         assertFalse(game.rngLocked(), "retry preserves the original midday mode");
         (uint48 t1, uint256 id1) = _stamps();
         assertTrue(id1 != id && id1 == vrf.lastRequestId(), "a fresh request ID");
-        assertEq(t1, t0 | 1, "retry preserves the original timestamp and spends its allowance");
-        assertEq(_dayOf(t1 & ~uint48(1)), x, "retry remains attached to its original request day");
+        assertEq(t1, t0, "retry preserves the original timestamp");
+        // rngFlagsAndNudges bit 10 (slot-0 bit 250) is the request's retry-spent flag.
+        assertEq((uint256(vm.load(address(game), bytes32(0))) >> 250) & 1, 1, "retry spends its allowance");
+        assertEq(_dayOf(t1), x, "retry remains attached to its original request day");
         _catchUp(x + 1);
     }
 

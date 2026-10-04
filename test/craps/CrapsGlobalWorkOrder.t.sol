@@ -137,13 +137,13 @@ contract CrapsGlobalWorkOrderTest is CrapsPins {
     function test_WarmnessAndChunkBoundariesPreserveFinalResults() public {
         table.resolveSlot(first, 0);
         table.resolveSlot(second, 0);
-        uint64 deep = table.createBattle(300, 25, 1000, 75, uint40(block.timestamp + 60), true, 256);
+        uint64 deep = table.createBattle(300, 25, 1000, 75, uint40(block.timestamp + 60), true, 255);
         uint32 chips = 1 | uint32(1) << 3 | uint32(1) << 6 | uint32(1) << 9
             | uint32(1) << 12 | uint32(1) << 15 | uint32(1) << 18;
         for (uint256 i; i < 160; ++i) {
             address player = address(uint160(0xD0000 + i));
             vm.prank(player);
-            table.enterBattle(deep, chips, 256);
+            table.enterBattle(deep, chips, 255);
         }
         vm.warp(block.timestamp + 60);
         uint48 draw = table.closeBattle(deep);

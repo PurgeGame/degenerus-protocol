@@ -35,13 +35,13 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         }
         assertTrue(game.rngComplete());
         crapsBattle.setBattleCreator(address(this), true);
-        slot = crapsBattle.createBattle(300, 25, 1000, 75, uint40(vm.getBlockTimestamp() + 60), true, 256);
+        slot = crapsBattle.createBattle(300, 25, 1000, 75, uint40(vm.getBlockTimestamp() + 60), true, 255);
         uint32 board = 1 | uint32(1) << 3 | uint32(1) << 6 | uint32(1) << 9
             | uint32(1) << 12 | uint32(1) << 15 | uint32(1) << 18;
         for (uint256 i; i < FIELD; ++i) {
             address player = address(uint160(0xC01000 + i));
             vm.prank(address(game)); coin.mintForGame(player, 100_000_000 ether);
-            vm.prank(player); crapsBattle.enterBattle(slot, board, i == 0 ? 256 : 1);
+            vm.prank(player); crapsBattle.enterBattle(slot, board, i == 0 ? 255 : 1);
         }
         vm.warp(vm.getBlockTimestamp() + 60);
         index = crapsBattle.closeBattle(slot);
@@ -213,7 +213,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         assertTrue(game.rngComplete());
         vm.fee(1 gwei);
         nextSlot = crapsBattle.createBattle(300, 25, 1000, 75,
-            uint40(vm.getBlockTimestamp() + 60), true, 256);
+            uint40(vm.getBlockTimestamp() + 60), true, 255);
         address player = address(0xD00DCAFE);
         vm.prank(address(game)); coin.mintForGame(player, 100_000_000 ether);
         uint32 board = 1 | uint32(1) << 3 | uint32(1) << 6 | uint32(1) << 9

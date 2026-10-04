@@ -249,7 +249,7 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
     ///      reset's daily work starts at the base rate. Callers cannot move it: only requests and
     ///      the calendar do. Read before work; no worker writes it.
     function _minerRewardDueAt() internal view returns (uint256 due) {
-        due = rngRequestTime & ~uint48(1);
+        due = rngRequestTime;
         uint256 reset = block.timestamp - (block.timestamp - 82_620) % 1 days;
         if (reset > due) due = reset;
     }

@@ -24,7 +24,7 @@ contract SdgnrsWhaleBuyStageGas is DeployProtocol {
     uint256 private constant GAME_CLAIMABLE_SLOT = 7;
     uint256 private constant CLAIMABLE_POOL_SLOT = 1;
     uint256 private constant CURSOR_SLOT = 56;
-    uint256 private constant SDGNRS_BONUS_OFFBYTES = 25;
+    uint256 private constant SDGNRS_BONUS_OFFBYTES = 20;
     uint256 private constant LEVEL_OFFBYTES = 12;
 
     uint256 private constant TICKET_QUEUE_SLOT = 12;

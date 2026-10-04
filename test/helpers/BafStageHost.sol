@@ -54,7 +54,7 @@ contract BafStageHost is DegenerusGame, BucketSeed {
         purchaseStartDay = day - 3;
         rngRequestDay = day;
         _recordDailyRng(day, word);
-        rngRequestTime = uint48(block.timestamp) & ~uint48(1);
+        rngRequestTime = uint48(block.timestamp);
         _setRngRequestActive(false);
         _setRngSessionPublished(true);
         dailyTicketBudgetsPacked = 0;

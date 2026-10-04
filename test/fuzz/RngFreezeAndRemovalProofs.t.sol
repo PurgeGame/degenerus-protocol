@@ -949,7 +949,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         uint256 packed = uint256(vm.load(address(game), slot));
         uint256 cursorMask = (uint256(1) << 48) - 1;
         packed &= ~(cursorMask << (7 * 8));   // boxCursor = 0
-        packed &= ~(cursorMask << (13 * 8));  // clear boxCursorIndex field
+        packed &= ~(uint256(0xff) << (13 * 8)); // humanReadComplete = false
         require(index < 2, "binary buffer fixture");
         vm.store(address(game), slot, bytes32(packed));
     }

@@ -485,9 +485,9 @@ contract CrapsProtocolWiringTest is DeployProtocol {
     }
 
     /// @dev Mirror of the miner's one clock (DegenerusGameMinerModule._minerRewardDueAt): the later
-    ///      of the latest VRF request (slot-0 rngRequestTime, retry bit masked) and the current day reset.
+    ///      of the latest VRF request (slot-0 rngRequestTime) and the current day reset.
     function _minerRewardDueAt() internal view returns (uint256 due) {
-        due = uint48(uint256(vm.load(address(game), bytes32(0))) >> 48) & ~uint48(1);
+        due = uint48(uint256(vm.load(address(game), bytes32(0))) >> 48);
         uint256 ts = vm.getBlockTimestamp();
         uint256 reset = ts - (ts - 82_620) % 1 days;
         if (reset > due) due = reset;

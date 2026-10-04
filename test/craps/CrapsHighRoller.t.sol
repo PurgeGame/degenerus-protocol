@@ -200,11 +200,11 @@ contract CrapsHighRollerTest is CrapsPins {
         uint40 close = uint40(vm.getBlockTimestamp() + 1 hours);
         craps.createBattle(L, 2, 10, SU, close, true, 0);
         craps.createBattle(L, 2, 10, SU, close, true, 2);
-        craps.createBattle(L, 2, 10, SU, close, true, 256);
+        craps.createBattle(L, 2, 10, SU, close, true, 255);
         vm.expectRevert(CrapsBattleStorage.BadBattleTerms.selector);
         craps.createBattle(L, 2, 10, SU, close, true, 1);
         vm.expectRevert(CrapsBattleStorage.BadBattleTerms.selector);
-        craps.createBattle(L, 2, 10, SU, close, true, 257);
+        craps.createBattle(L, 2, 10, SU, close, true, 256);
         vm.stopPrank();
     }
 

@@ -81,6 +81,12 @@ contract VRFCore is DeployProtocol {
         return uint48(packed >> 48);
     }
 
+    /// @dev Read the retry-spent flag: rngFlagsAndNudges (slot 0 bytes [30:32]) bit 10.
+    function _readRetrySpent() internal view returns (bool) {
+        uint256 packed = uint256(vm.load(address(game), bytes32(uint256(SLOT_PACKED_0))));
+        return (packed >> 250) & 1 != 0;
+    }
+
     /// @dev Deploy a new MockVRFCoordinator and wire it up via admin prank.
     ///      Resets _lastFulfilledReqId since the new mock has its own request counter.
     function _doCoordinatorSwap() internal returns (MockVRFCoordinator newVRF) {
@@ -700,7 +706,8 @@ contract VRFCore is DeployProtocol {
         uint256 retryReqId = _readVrfRequestId();
         assertTrue(retryReqId != oldReqId, "Retry re-issues the request");
         assertTrue(game.rngLocked(), "Still locked after retry");
-        assertEq(_readRngRequestTime(), requestTime | 1, "same stamp, retry-spent LSB set");
+        assertEq(_readRngRequestTime(), requestTime, "Retry keeps the stamp");
+        assertTrue(_readRetrySpent(), "Retry spends the request's retry");
 
         // Retry spent: another 20h on, even the vault owner gets RngNotReady
         vm.warp(uint256(requestTime) + 40 hours + 1);
@@ -722,7 +729,7 @@ contract VRFCore is DeployProtocol {
         assertGt(game.currentDayView(), requestDay, "Clock is past the retried day");
         assertTrue(game.rngLocked(), "Next day's daily request is issued");
         assertGt(_readVrfRequestId(), retryReqId, "Next day's request is fresh");
-        assertEq(_readRngRequestTime() & 1, 0, "Fresh daily request re-arms the retry");
+        assertFalse(_readRetrySpent(), "Fresh daily request re-arms the retry");
     }
 
     /// @notice A coordinator swap re-issues the stalled request and SPENDS the retry, so the
@@ -738,7 +745,8 @@ contract VRFCore is DeployProtocol {
         uint48 requestTime = _readRngRequestTime();
         vm.warp(uint256(requestTime) + 1 hours);
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
-        assertEq(_readRngRequestTime(), requestTime | 1, "Swap keeps the stamp and spends the retry");
+        assertEq(_readRngRequestTime(), requestTime, "Swap keeps the stamp");
+        assertTrue(_readRetrySpent(), "Swap spends the retry");
         uint256 swapReqId = _readVrfRequestId();
 
         // No retry after the swap, even 20h on

@@ -131,7 +131,7 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
 
   await setSlot(gameAddr, mapSlot(VAULT_DEITY_SYMBOL, deityRoot), 0n);
   await setSlot(gameAddr, mapSlot(SDGNRS_DEITY_SYMBOL, deityRoot), 0n);
-  await setSlot(gameAddr, 5n, (await getSlot(gameAddr, 5n)) | (1n << 136n));
+  await setSlot(gameAddr, 5n, (await getSlot(gameAddr, 5n)) | (1n << 104n));
   const traitLiveSlot = storageRootOf("traitBucketLive") + 1n;
   let traitLive = await getSlot(gameAddr, traitLiveSlot);
   for (const t of traitsOf(WORD)) {

@@ -78,7 +78,7 @@
 # One current word is retained until all automatic consumers finish. Terminal cutover
 # retires normal consumers before replacing it; no normal actor can replace a sealed word.
 CLASS	IDENTIFIER	FUNCTION	FILE	MODE
-# Slot0 flags contain the daily-frozen nine-bit nudge input. Runtime freezes that
+# Slot0 flags contain the daily-frozen eight-bit nudge input. Runtime freezes that
 # count, not the mutable neighboring lifecycle bits; packing fuzz proves isolation.
 ACCESSOR	_dailyWordAt	_bonusBoostBand	CrapsBattle.sol	READ
 ACCESSOR	_dailyWordAt	_bonusDayOf	CrapsBattle.sol	READ
@@ -94,7 +94,7 @@ CONSUMER-SEALED	_dailyWordAt	vaultComp	CrapsBattle.sol	READ
 GATE	_currentRngWord	boxesPending	DegenerusGame.sol	READ	Keeper discovery only; a waiting payload cannot open queues.
 CONSUMER-SEALED	_recordedDailyWord	deityBoonData	DegenerusGame.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
 ACCESSOR	rngWordCurrent	isRngFulfilled	DegenerusGame.sol	READ
-CURSOR	_nudgeCount	reverseFlip	DegenerusGame.sol	READ	Quote-gated counter update before daily lock; exact256 admission cap.
+CURSOR	_nudgeCount	reverseFlip	DegenerusGame.sol	READ	Quote-gated counter update before daily lock; cap-255 admission.
 ACCESSOR	_nudgeCount	rngNudgeQuote	DegenerusGame.sol	READ	View of pending/frozen nudge receipt; no RNG consumer.
 ACCESSOR	_retainedDailyWord	rngWordForDay	DegenerusGame.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
 CURSOR	lootboxRngPacked	setCrapsRngPending	DegenerusGame.sol	READ	CRAPS-only assembly RMW of parity pending bits 250/251, never entropy/index/readiness slices.
@@ -174,7 +174,7 @@ DECL	lootboxRngPacked	<file-scope>	storage/DegenerusGameStorage.sol	DECL
 DECL	rngDayTags	<file-scope>	storage/DegenerusGameStorage.sol	DECL	two ring words and absolute-day tags
 DECL	rngFlagsAndNudges	<file-scope>	storage/DegenerusGameStorage.sol	DECL	Packed nudge and lifecycle bits; initial idle is complete+published.
 ACCESSOR	rngFlagsAndNudges	<file-scope>	storage/DegenerusGameStorage.sol	READ	Simple lifecycle-bit getters; no entropy consumed or nudge input changed.
-ACCESSOR	rngFlagsAndNudges	<file-scope>	storage/DegenerusGameStorage.sol	WRITE	Deployment defaults and masked lifecycle helpers preserve all nine nudge bits; terminal marks unfinished lootbox consumers dead.
+ACCESSOR	rngFlagsAndNudges	<file-scope>	storage/DegenerusGameStorage.sol	WRITE	Deployment defaults and masked lifecycle helpers preserve all eight nudge bits; terminal marks unfinished lootbox consumers dead; retry helpers spend or re-arm the request's one retry.
 DECL	rngRequestDay	<file-scope>	storage/DegenerusGameStorage.sol	DECL	Logical commitment/application identity: set only on fresh normal/terminal boundary, preserved by callback/retry and all consumer checkpoints.
 DECL	rngWordByDay	<file-scope>	storage/DegenerusGameStorage.sol	DECL
 DECL	rngWordCurrent	<file-scope>	storage/DegenerusGameStorage.sol	DECL
@@ -196,7 +196,7 @@ GATE	lootboxRngPacked	_minerMiddayEligible	storage/DegenerusGameStorage.sol	READ
 GATE	_recordedDailyWord	_minerMiddayEligible	storage/DegenerusGameStorage.sol	READ	selector mirror of the mid-day request's recorded-daily-word gate; reads presence only, never a word value
 GATE	rngRequestDay	_nextMinerAction	storage/DegenerusGameStorage.sol	READ	Logical commitment/application identity: set only on fresh normal/terminal boundary, preserved by callback/retry and all consumer checkpoints.
 ACCESSOR	_nudgeCount	_nudgeCount	storage/DegenerusGameStorage.sol	READ	Nine-bit slot-0 accessor; neighboring flags are masked.
-ACCESSOR	rngFlagsAndNudges	_nudgeCount	storage/DegenerusGameStorage.sol	READ	Extract frozen nine-bit count, capped256 by the only production buyer.
+ACCESSOR	rngFlagsAndNudges	_nudgeCount	storage/DegenerusGameStorage.sol	READ	Extract frozen eight-bit count, capped255 by the only production buyer.
 GATE	_recordedDailyWord	_pastDeadlineTriggered	storage/DegenerusGameStorage.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
 GATE	rngRequestDay	_pastDeadlineTriggered	storage/DegenerusGameStorage.sol	READ	Only the current-day active published daily commitment defers the purchase deadline across gap-credit to daily-application checkpoint; older commitments never qualify.
 GATE	rngWordCurrent	_pastDeadlineTriggered	storage/DegenerusGameStorage.sol	READ	Readiness above the reserved waiting sentinel only; protects already committed current-day gap work without deriving an outcome or bypassing deadman and ending latches.

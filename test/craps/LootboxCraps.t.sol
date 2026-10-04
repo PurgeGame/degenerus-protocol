@@ -143,7 +143,7 @@ contract LootboxCrapsTest is CrapsPins {
         assertEq(p.lootboxRngPackedSlot(), 0);
         assertEq(p.lootboxRngWordSlot(), 3);
         (uint256 tickets, uint256 offset, uint256 pending) = p.recyclingSlots();
-        assertEq(tickets, 5); assertEq(offset, 14); assertEq(pending, uint256(3) << 250);
+        assertEq(tickets, 5); assertEq(offset, 10); assertEq(pending, uint256(3) << 250);
         (uint256 ready, uint256 terminalSwap) = p.packedLifecycleBits();
         assertEq(ready, uint256(1) << 255);
         assertEq(terminalSwap, uint256(1) << 253);

@@ -157,7 +157,8 @@ contract DailyRngStallRecovery is DeployProtocol {
         vm.prank(owner);
         admin.retryGameRng();
         assertGt(mockVRF.lastRequestId(), oldId, "Admin route issued the sole replacement");
-        assertEq(uint256(game.extsload(bytes32(0))), uint256(state) | (uint256(1) << 48),
+        // rngFlagsAndNudges bit 10 (slot-0 bit 250) is the request's retry-spent flag.
+        assertEq(uint256(game.extsload(bytes32(0))), uint256(state) | (uint256(1) << 250),
             "only the spent bit changes in lifecycle state; timeout origin stays fixed");
         assertEq(game.extsload(bytes32(uint256(5))), dayAndEpochs, "logical day and ticket epochs stay frozen");
         assertEq(game.extsload(bytes32(uint256(33))), buffer, "buffer identity and pending metadata stay frozen");
@@ -232,7 +233,7 @@ contract DailyRngStallRecovery is DeployProtocol {
         assertGt(_dailyIdx(), sealedBefore, "the retried word must seal the day");
     }
 
-    /// The retry is once-per-stall: the LSB latch spends it, and a second 20-hour wait
+    /// The retry is once-per-stall: the retry-spent flag latches, and a second 20-hour wait
     /// offers nothing more (recovery is then the retried word or a coordinator swap).
     function testDailyRetryIsSingleShot() public {
         vm.pauseGasMetering();

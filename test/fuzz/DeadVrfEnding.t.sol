@@ -45,6 +45,10 @@ contract DeadVrfLivenessHarness is DegenerusGameStorage {
         _lrWrite(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK, 1);
     }
 
+    function markRetrySpent() external {
+        _spendRngRetry();
+    }
+
     function seedMiddayRequest(uint48 t) external {
         rngRequestTime = t;
         _setRngRequestActive(t > 1);
@@ -81,7 +85,7 @@ contract DeadVrfLivenessTest is Test {
 
     function test_stallAcrossDeadlineWaitsForTheVrfDeadWindow() public {
         // Request sent on the deadline day (sealed day before it), never answered.
-        uint48 sent = uint48(block.timestamp - 2 days) & ~uint48(1);
+        uint48 sent = uint48(block.timestamp - 2 days);
         h.seed(5, 32, sent, 3, 0, 0);
         assertFalse(h.liveness(), "past the deadline but behind: the deadline waits");
         vm.warp(uint256(sent) + 14 days - 1);
@@ -92,12 +96,13 @@ contract DeadVrfLivenessTest is Test {
     }
 
     function test_retryBitKeepsTheWindowAndTheDay() public {
-        uint48 sent = uint48(block.timestamp - 2 days) & ~uint48(1);
-        h.seed(5, 32, sent | 1, 3, 0, 0);
+        uint48 sent = uint48(block.timestamp - 2 days);
+        h.seed(5, 32, sent, 3, 0, 0);
+        h.markRetrySpent();
         assertFalse(h.liveness(), "a spent retry does not end the grace");
         vm.warp(uint256(sent) + 14 days - 1);
         assertFalse(h.liveness(), "the retry did not restart or extend the window");
-        vm.warp(uint256(sent) + 14 days + 1); // the stamp carries the retry bit (+1s)
+        vm.warp(uint256(sent) + 14 days);
         assertTrue(h.liveness(), "the window runs from the original send");
     }
 

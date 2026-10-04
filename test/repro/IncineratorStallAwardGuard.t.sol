@@ -91,7 +91,7 @@ contract IncineratorStallAwardGuard is DeployProtocol {
         uint256 s5 = uint256(vm.load(address(game), bytes32(uint256(5))));
         uint48 stamps = uint48(uint256(lvl) << ((lvl & 1) * 24)
             | uint256(lvl + 1) << (((lvl + 1) & 1) * 24));
-        vm.store(address(game), bytes32(uint256(5)), bytes32((s5 & ~(uint256(type(uint48).max) << 112)) | (uint256(stamps) << 112)));
+        vm.store(address(game), bytes32(uint256(5)), bytes32((s5 & ~(uint256(type(uint48).max) << 80)) | (uint256(stamps) << 80)));
         // This teleport skips activation of every earlier bootstrap future cohort,
         // not just the two prepared inventory levels. A fresh 100-level whale pass
         // must be able to reuse those expired roots. Authenticate each logical level

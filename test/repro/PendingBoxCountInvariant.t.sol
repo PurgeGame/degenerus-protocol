@@ -23,7 +23,7 @@ contract PendingBoxCountInvariant is DeployProtocol {
     uint256 private constant SUBOF_SLOT = 52;
     uint256 private constant SUBSCRIBERS_SLOT = 54;
     uint256 private constant CURSOR_SLOT = 56;
-    uint256 private constant PENDING_COUNT_SHIFT = 224;
+    uint256 private constant PENDING_COUNT_SHIFT = 184;
     uint256 private constant OFF_LASTBOUGHT = 7;  // uint24 lastAutoBoughtDay (bytes 7..9)
     uint256 private constant OFF_LASTOPENED = 10; // uint24 lastOpenedDay     (bytes 10..12)
     uint256 private _lastFulfilledReqId;

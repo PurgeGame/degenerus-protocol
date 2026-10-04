@@ -182,6 +182,7 @@ contract FSMAdvanceHarness is DegenerusGameMinerModule {
     }
 
     function requestActive() external view returns (bool) { return _rngRequestActive(); }
+    function retrySpent() external view returns (bool) { return _rngRetrySpent(); }
 
     function wordAt(uint24 day) external view returns (uint256) {
         return _recordedDailyWord(day);
@@ -281,7 +282,7 @@ contract GameFSMSymbolicTest is Test {
         (bool stillLocked, uint48 retryTime, uint256 retryId) = machine.requestState();
         assert(stillLocked && retryId == 2);
         assert(FSMEmptyDependencies(ContractAddresses.VRF_COORDINATOR).requests() == 2);
-        assert(retryTime == (requestTime | 1));
+        assert(retryTime == requestTime && machine.retrySpent());
         assert(machine.level() == uint24(initialLevel) + 1);
         assert(machine.sealedDay() == 30);
         assert(FSMEmptyDependencies(ContractAddresses.GNRUS).charityPicks() == 1);

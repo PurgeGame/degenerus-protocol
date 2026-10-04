@@ -210,17 +210,9 @@
   {
     "bytes": "32",
     "encoding": "inplace",
-    "label": "__rngCohortLayoutGap",
-    "offset": 0,
-    "slot": 26,
-    "typeLabel": "uint48[2]"
-  },
-  {
-    "bytes": "32",
-    "encoding": "inplace",
     "label": "_rngSlotCursor",
     "offset": 0,
-    "slot": 27,
+    "slot": 26,
     "typeLabel": "uint64[2]"
   },
   {
@@ -228,7 +220,7 @@
     "encoding": "inplace",
     "label": "_rngPending",
     "offset": 0,
-    "slot": 28,
+    "slot": 27,
     "typeLabel": "uint64[2]"
   }
 ]

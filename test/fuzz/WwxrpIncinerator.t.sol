@@ -85,7 +85,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
         _setLevel(lvl);
         uint256 s5 = uint256(vm.load(address(game), bytes32(uint256(5))));
         uint48 stamps = uint48(uint256(lvl) << ((lvl & 1) * 24) | uint256(lvl + 1) << (((lvl + 1) & 1) * 24));
-        vm.store(address(game), bytes32(uint256(5)), bytes32((s5 & ~(uint256(type(uint48).max) << 112)) | (uint256(stamps) << 112)));
+        vm.store(address(game), bytes32(uint256(5)), bytes32((s5 & ~(uint256(type(uint48).max) << 80)) | (uint256(stamps) << 80)));
         uint24 ff = 1 << 22;
         uint256 kept100 = TicketQueueStorage.length(address(game), (lvl + 2) | ff);
         uint256 kept101 = TicketQueueStorage.length(address(game), (lvl + 3) | ff);

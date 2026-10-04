@@ -121,11 +121,11 @@ HELPER	prizePoolsPacked	storage/DegenerusGameStorage.sol	_setPrizePools/_addPriz
 INIT	purchaseStartDay	DegenerusGame.sol	constructor seeds the deploy day
 OWNER	purchaseStartDay	modules/DegenerusGameAdvanceModule.sol	advanceGame stamps the new level's start at transition close; rngGate extends by stall gap days; sole runtime writer
 HELPER	rngDayTags	storage/DegenerusGameStorage.sol	paired tag authenticates payload
-OWNER	rngFlagsAndNudges	storage/DegenerusGameStorage.sol	Masked helpers preserve window/complete bits, nine-bit exact256 nudge counter and callback reserved-word receipt.
+OWNER	rngFlagsAndNudges	storage/DegenerusGameStorage.sol	Masked helpers preserve window/complete/retry-spent bits, eight-bit nudge counter (cap 255) and callback reserved-word receipt.
 OWNER	rngLockedFlag	modules/DegenerusGameAdvanceModule.sol	prepareRequestBoundary takes the normal daily lock; _unlockRng releases only after the ordered economic day finishes. Terminal module separately owns terminal retirement/request lock.
 OWNER	rngLockedFlag	modules/DegenerusGameGameOverModule.sol	Successful terminal coordinator request locks daily consumption; no normal completion predicate is called.
-OWNER	rngRequestTime	modules/DegenerusGameGameOverModule.sol	Terminal first attempt arms the refusal timer once; successful request preserves that origin. Coordinator rotation preserves origin and may set the retry-spent LSB.
-OWNER	rngRequestTime	modules/DegenerusGameRngModule.sol	Fresh daily/midday request sets the even actual send timestamp; transport retry changes only the spent LSB. Logical day lives separately in rngRequestDay.
+OWNER	rngRequestTime	modules/DegenerusGameGameOverModule.sol	Terminal first attempt arms the refusal timer once; successful request preserves that origin. Coordinator rotation leaves the origin untouched.
+OWNER	rngRequestTime	modules/DegenerusGameRngModule.sol	Fresh daily/midday request sets the actual send timestamp; transport retry leaves it. Logical day lives separately in rngRequestDay.
 HELPER	rngWordByDay	storage/DegenerusGameStorage.sol	advance helpers record parity word and tag together
 OWNER	rngWordCurrent	modules/DegenerusGameGameOverModule.sol	Successful terminal request invalidates buffered daily payload, as the previous Advance _tryRequestRng did.
 OWNER	rngWordCurrent	modules/DegenerusGameRngModule.sol	Fresh requests set WAIT sentinel1; retry preserves WAIT and published consumers retain the accepted word. The facade callback stores the final word.

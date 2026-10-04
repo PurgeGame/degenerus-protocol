@@ -263,8 +263,8 @@ contract CrapsBattle is CrapsBattleStorage {
             // A high roller buys the WHOLE seat over again — the bankroll it runs and the bounty
             // it posts — which is what makes the lane a race rather than a bigger bet in the same
             // one. Exactly one of those bounties stays in the main pot; the other `H - 1` are what
-            // the high lane plays for. Bounded far below 2^256: a uint128 bankroll by 256 is 136
-            // bits.
+            // the high lane plays for. Bounded far below 2^256: a uint128 bankroll by at most 255
+            // fits 136 bits.
             boonMask = _burnForCraps(
                 player, _tag((uint256(w.bankroll) + w.stakeUnits * _BATTLE_STAKE_UNIT) * multiple, _CRAPS_FLAG_JOIN | flags)
             );

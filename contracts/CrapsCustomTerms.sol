@@ -13,13 +13,13 @@ abstract contract CrapsCustomTerms {
     /// @dev Ceiling imposed by the scoreboard's 18-bit stake field.
     uint256 internal constant _BSTAKE_MAX = 0x3FFFF;
     uint256 internal constant _CB_BANK_SHIFT = 28;
-    uint256 internal constant _CB_CLOSE_SHIFT = 73;
+    uint256 internal constant _CB_CLOSE_SHIFT = 61;
     uint256 internal constant _CB_GOAL_SHIFT = 33;
-    /// @dev A custom battle's high-roller multiple, bits 114..122: literal 0..256, where 0 is a
+    /// @dev A custom battle's high-roller multiple, bits 102..109: literal 0..255, where 0 is a
     ///      battle with no high lane and 1 is not a multiple at all.
-    uint256 internal constant _CB_HIGH_SHIFT = 114;
-    /// @dev Bit 113 of a custom battle's terms: one address may take as many seats as it pays for.
-    uint256 internal constant _CB_MULTI_BIT = 1 << 113;
+    uint256 internal constant _CB_HIGH_SHIFT = 102;
+    /// @dev Bit 101 of a custom battle's terms: one address may take as many seats as it pays for.
+    uint256 internal constant _CB_MULTI_BIT = 1 << 101;
     uint256 internal constant _CB_STAKE_SHIFT = 43;
     /// @notice Maximum custom-battle bankroll depth, in rounds.
     uint256 internal constant _MAX_BANKROLL_MULT = 25;
@@ -27,7 +27,7 @@ abstract contract CrapsCustomTerms {
     uint256 internal constant _MAX_GOAL_MULT = 1000;
     /// @notice The ceiling on a CUSTOM battle's high-roller multiple. A creator names any figure
     ///         from two to here, or zero to run the battle without a high lane at all.
-    uint256 internal constant _MAX_HIGH_MULT = 256;
+    uint256 internal constant _MAX_HIGH_MULT = 255;
     /// @notice The largest round a battle may post. A BLANK ticket leaves all ten chips to the
     ///         dice and they may land on ONE leg, so the whole round has to fit the resolver's
     ///         `uint24` leg — the table maximum `Craps` documents. `_CB_PLAYED_MASK` is only how

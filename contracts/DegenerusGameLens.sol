@@ -604,8 +604,12 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
     ) external view returns (bool found, uint32 position, uint32 nextOffset, uint32 total) {
         require(ownerIndices.length > 0 && ownerIndices.length <= 1024, "indices");
         bytes32 stampSlot;
-        assembly { stampSlot := ticketBufferLevels.slot }
-        uint24 occupyingLevel = uint24(_sload(game, stampSlot) >> (112 + (lvl & 1) * 24));
+        uint256 stampOffset;
+        assembly {
+            stampSlot := ticketBufferLevels.slot
+            stampOffset := ticketBufferLevels.offset
+        }
+        uint24 occupyingLevel = uint24(_sload(game, stampSlot) >> (stampOffset * 8 + (lvl & 1) * 24));
         if (occupyingLevel != lvl) return (false, 0, 0, 0);
         uint256 bitmapBase;
         assembly { bitmapBase := traitBucketLive.slot }

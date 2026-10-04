@@ -22,7 +22,7 @@ contract DeadVrfSeeder is DegenerusGame, BucketSeed {
         vrfRequestId = 777;
         _setRngRequestActive(true);
         _setRngSessionPublished(false);
-        rngRequestTime = uint48(block.timestamp - 15 days) & ~uint48(1);
+        rngRequestTime = uint48(block.timestamp - 15 days);
         ticketsFullyProcessed = true;
         prizePoolFrozen = false;
     }
@@ -84,7 +84,7 @@ contract DeadVrfSeeder is DegenerusGame, BucketSeed {
         vrfRequestId = 777;
         _setRngRequestActive(true);
         _setRngSessionPublished(false);
-        rngRequestTime = uint48(block.timestamp - 30 days) & ~uint48(1);
+        rngRequestTime = uint48(block.timestamp - 30 days);
         _recordDailyRng(s, applied ? word : 0);
         if (applied) coinflip.processCoinflipPayouts(0, word, s);
         ticketsFullyProcessed = true;

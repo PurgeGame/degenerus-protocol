@@ -41,7 +41,7 @@ contract BattleConstructionGameSeed is DegenerusGameStorage {
         purchaseStartDay = day - 1;
         dailyIdx = day - 1;
         rngRequestDay = day;
-        rngRequestTime = uint48(block.timestamp) & ~uint48(1);
+        rngRequestTime = uint48(block.timestamp);
         rngWordCurrent = word;
         rngLockedFlag = true;
         ticketsFullyProcessed = true;

@@ -50,7 +50,7 @@ contract MissingWordDrainHarness is DegenerusGameGameOverModule, BucketSeed {
         jackpotPhaseFlag = true;
         dailyIdx = day - 31;
         rngRequestDay = day;
-        rngRequestTime = uint48(block.timestamp) & ~uint48(1);
+        rngRequestTime = uint48(block.timestamp);
         _lrWrite(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK, 1);
         _lrWrite(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK, 1);
         _setRngTerminal();

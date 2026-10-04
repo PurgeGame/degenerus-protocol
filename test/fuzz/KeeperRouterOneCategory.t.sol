@@ -700,14 +700,14 @@ contract KeeperRouterOneCategory is DeployProtocol {
         assertGt(RecyclingState.currentWord(address(game)), 1, "fixture delivered word");
     }
 
-    /// @dev Park the auto-open frontier (boxCursorIndex byte 13 + boxCursor byte 7, both slot 56)
+    /// @dev Park the auto-open frontier (humanReadComplete byte 13 + boxCursor byte 7, both slot 56)
     ///      at `index` so the relocated sweep begins exactly at this finalized index.
     function _parkBoxFrontier(uint48 index) internal {
         bytes32 slot = bytes32(uint256(56));
         uint256 packed = uint256(vm.load(address(game), slot));
         uint256 cursorMask = (uint256(1) << 48) - 1;
         packed &= ~(cursorMask << (7 * 8));   // boxCursor = 0
-        packed &= ~(cursorMask << (13 * 8));  // clear boxCursorIndex field
+        packed &= ~(uint256(0xff) << (13 * 8)); // humanReadComplete = false
         require(index < 2, "binary buffer fixture");
         vm.store(address(game), slot, bytes32(packed));
     }

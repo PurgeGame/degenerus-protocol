@@ -148,12 +148,12 @@ contract StorageRecyclingSymbolicTest is Test {
     }
     function check_stamp_half_and_neighbors_are_isolated(uint256 prior, uint24 lvl) public {
         h.seedPacked5(prior);
-        uint256 shift = 112 + uint256(lvl & 1) * 24;
+        uint256 shift = 80 + uint256(lvl & 1) * 24;
         uint256 mask = uint256(type(uint24).max) << shift;
         h.stamp(lvl);
         assertEq(h.packed5(), (prior & ~mask) | (uint256(lvl) << shift));
         assertEq(h.stamped(lvl), lvl);
-        assertEq(h.stamped(lvl ^ 1), uint24(prior >> (112 + uint256((lvl ^ 1) & 1) * 24)));
+        assertEq(h.stamped(lvl ^ 1), uint24(prior >> (80 + uint256((lvl ^ 1) & 1) * 24)));
     }
     function check_binary_tag_validation(uint48 index) public { assertEq(h.live(index), index < 2); }
 

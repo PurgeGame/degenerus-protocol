@@ -105,7 +105,7 @@ contract SerializedMidnightProgressTest is MiddayFrozenPoolLatch {
 
     /// @dev The miner clock: the later of the last accepted callback and the current day reset.
     function _rewardDueAt() private view returns (uint256 due) {
-        due = uint48(uint256(vm.load(address(game), bytes32(0))) >> 48) & ~uint48(1);
+        due = uint48(uint256(vm.load(address(game), bytes32(0))) >> 48);
         uint256 ts = vm.getBlockTimestamp();
         uint256 reset = ts - (ts - 82_620) % 1 days;
         if (reset > due) due = reset;

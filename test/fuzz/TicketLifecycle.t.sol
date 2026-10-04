@@ -2338,10 +2338,10 @@ contract TicketLifecycleTest is DeployProtocol {
     uint256 private constant BOX_OPEN_TAG = 0x426f784f70656e;
     /// @dev vrfSubscriptionId at slot 32 (golden layout).
     uint256 private constant VRF_SUB_ID_SLOT = 32;
-    /// @dev ticketBufferLevels (uint48) at slot 5 byte 14: even-parity level stamp in its low 24
+    /// @dev ticketBufferLevels (uint48) at slot 5 byte 10: even-parity level stamp in its low 24
     ///      bits, odd-parity stamp in its high 24 bits.
     uint256 private constant TICKET_BUFFER_LEVELS_SLOT = 5;
-    uint256 private constant TICKET_BUFFER_LEVELS_SHIFT = 112;
+    uint256 private constant TICKET_BUFFER_LEVELS_SHIFT = 80;
 
     /// @dev The raw packed order word of `who` at physical buffer `buffer`.
     function _boxOrderWord(uint48 buffer, address who) internal view returns (uint256) {

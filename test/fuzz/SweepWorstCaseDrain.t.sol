@@ -62,7 +62,7 @@ contract SweepViewer is DegenerusGame {
         _resetLootboxWriteBuffer(_rngWriteBuffer());
         rngWordCurrent = RNG_WORD_WAITING;
         _setRngSessionPublished(false);
-        rngRequestTime = uint48(block.timestamp) & ~uint48(1);
+        rngRequestTime = uint48(block.timestamp);
         vrfRequestId = requestId;
         _setRngRequestActive(true);
     }

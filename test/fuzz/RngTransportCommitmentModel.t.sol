@@ -19,7 +19,7 @@ contract RngTransportModelHarness is DegenerusGameRngModule {
         dailyIdx = _simulatedDayIndex();
         purchaseStartDay = dailyIdx;
         rngRequestDay = logicalDay;
-        rngRequestTime = originalTime & ~uint48(1);
+        rngRequestTime = originalTime;
         rngWordCurrent = RNG_WORD_WAITING;
         rngFlagsAndNudges = (uint16(1) << 14) | (write ? uint16(1) << 12 : 0);
         _setNudgeCount(nudges);
@@ -37,7 +37,8 @@ contract RngTransportModelHarness is DegenerusGameRngModule {
     }
     function visible(uint48 buffer) external view returns (uint256) { return _lootboxWord(buffer); }
     function dead() external view returns (bool) { return _vrfDead(); }
-    function markRetrySpent() external { rngRequestTime |= 1; }
+    function markRetrySpent() external { _spendRngRetry(); }
+    function retrySpent() external view returns (bool) { return _rngRetrySpent(); }
     function deactivate() external { _setRngRequestActive(false); }
 
     /// @dev Mirror of DegenerusGame.rawFulfillRandomWords (the callback lives in the facade,
@@ -127,8 +128,8 @@ contract RngTransportCommitmentModelTest is Test {
         game.retryRng();
         (uint256 id, uint48 stamp,,,,,,,) = game.transport();
         assertEq(id, 1, "replacement request actually reached coordinator");
-        assertEq(stamp & ~uint48(1), ORIGIN, "same original timeout origin");
-        assertEq(stamp & 1, 1, "retry is one-shot");
+        assertEq(stamp, ORIGIN, "same original timeout origin");
+        assertTrue(game.retrySpent(), "retry is one-shot");
         assertEq(game.commitment(), fixedInputs, "same day/kind/nudges/cohort");
         _deliver(address(coordinator), 99, 0xBAD);
         assertEq(_word(), 0, "superseded transport response is stale");
@@ -146,20 +147,19 @@ contract RngTransportCommitmentModelTest is Test {
         assertEq(_word(), 0, "retained id alone grants no callback authority");
     }
 
-    function test_RetryBitCanShiftDeadVrfBoundaryByAtMostOneSecond() public {
+    function test_RetrySpentLeavesDeadVrfBoundary() public {
         game.seed(address(coordinator), 7, false, 0, false, 0, ORIGIN);
         vm.warp(ORIGIN + 14 days - 1);
         assertFalse(game.dead(), "one second before original deadline");
+        game.markRetrySpent();
+        assertFalse(game.dead(), "a spent retry does not move the deadline earlier");
         vm.warp(ORIGIN + 14 days);
-        assertTrue(game.dead(), "original deadline is inclusive");
-        game.markRetrySpent();
-        // Owner-approved tolerance: a packed retry flag may move the boundary by
-        // one second. Repeating it must never restart or further extend the timer.
-        game.markRetrySpent();
-        vm.warp(ORIGIN + 14 days + 1);
-        assertTrue(game.dead(), "retry delay is bounded to one second");
+        assertTrue(game.dead(), "original deadline is inclusive after a spent retry");
+        // Repeating it must never restart or extend the timer.
         game.markRetrySpent();
         assertTrue(game.dead(), "repeated retry marking never refreshes the timer");
+        vm.warp(ORIGIN + 14 days + 1);
+        assertTrue(game.dead(), "deadline stays passed");
     }
 
     function test_ReservedAndModularBoundaryCases() public {

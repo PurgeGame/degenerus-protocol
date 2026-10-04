@@ -65,7 +65,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
     }
 
     function _pending() private view returns (uint256) {
-        return (uint256(game.extsload(bytes32(uint256(56)))) >> 224) & 0xFFFF;
+        return (uint256(game.extsload(bytes32(uint256(56)))) >> 184) & 0xFFFF;
     }
 
     function _openedDay() private view returns (uint24) {

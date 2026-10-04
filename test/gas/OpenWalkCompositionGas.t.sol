@@ -431,11 +431,11 @@ contract OpenWalkCompositionGas is DeployProtocol {
     }
 
     /// @dev RMW the packed cursor slot (56): `_subOpenCursor` (uint16 at bit 16) and
-    ///      `_pendingBoxCount` (uint16 at bit 224), leaving the other six packed fields intact.
+    ///      `_pendingBoxCount` (uint16 at bit 184), leaving the other packed fields intact.
     function _pokeOpenCursorAndPendingCount(uint16 cursor, uint16 pendingCount) internal {
         uint256 w = uint256(vm.load(address(game), bytes32(CURSOR_SLOT)));
         w = (w & ~(uint256(0xFFFF) << 16)) | (uint256(cursor) << 16);
-        w = (w & ~(uint256(0xFFFF) << 224)) | (uint256(pendingCount) << 224);
+        w = (w & ~(uint256(0xFFFF) << 184)) | (uint256(pendingCount) << 184);
         vm.store(address(game), bytes32(CURSOR_SLOT), bytes32(w));
     }
 
