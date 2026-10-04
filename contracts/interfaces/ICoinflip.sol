@@ -70,9 +70,14 @@ interface ICoinflip {
     ///      caller funds the whole stake by burning their own FLIP as a gift credited to
     ///      `player`, leaving the player's winnings untouched. The recycling bonus pays on the
     ///      winnings leg only.
+    ///      Stakes are stored in whole FLIP: the principal is floored to whole FLIP before it is
+    ///      funded (the remainder stays with the funder), bonuses are summed in wei and the total
+    ///      added to the day's stake floors once. CoinflipStakeUpdated reports the accepted stake.
     /// @param player The player making the deposit (address(0) or msg.sender for direct deposit).
-    /// @param amount Amount of FLIP to deposit (must be >= 100 FLIP minimum).
+    /// @param amount Amount of FLIP to deposit (must be >= 100 FLIP minimum); floored to whole FLIP.
     /// @custom:reverts AmountLTMin If amount is non-zero but less than 100 FLIP.
+    /// @custom:reverts StakeAboveDailyCap If the stake with its bonuses would exceed the player's
+    ///                 per-day cap of type(uint32).max whole FLIP; every prior mutation rolls back.
     function depositCoinflip(address player, uint256 amount) external;
 
     /// @notice Claim an exact amount of coinflip winnings as FLIP tokens.
@@ -177,13 +182,17 @@ interface ICoinflip {
     /// @dev Called by authorized creditors (GAME, QUESTS, AFFILIATE, ADMIN, SDGNRS, WWXRP,
     ///      PARIMUTUEL, CRAPS) for rewards.
     ///      Never touches the biggest-flip record (credits carry recordAmount 0).
+    ///      Each credit floors to whole FLIP on its own (two sub-FLIP credits add nothing) and
+    ///      saturates at the player's per-day cap of type(uint32).max whole FLIP rather than
+    ///      reverting; CoinflipStakeUpdated reports the amount the lane accepted.
     /// @param player The player receiving the flip credit.
-    /// @param amount Amount of flip credit to add to next day's stake.
+    /// @param amount Amount of flip credit to add to next day's stake, FLIP wei.
     /// @custom:reverts OnlyFlipCreditors If caller is not an authorized creditor.
     function creditFlip(address player, uint256 amount) external;
 
     /// @notice Credit flips to multiple players in a single call.
     /// @dev Batch version of creditFlip for gas efficiency. Skips zero addresses and amounts.
+    ///      Each leg floors and saturates on its own, as creditFlip does.
     /// @param players Player addresses.
     /// @param amounts Credit amounts corresponding to each player.
     /// @custom:reverts OnlyFlipCreditors If caller is not an authorized creditor.
@@ -232,6 +241,8 @@ interface ICoinflip {
     function fundRecordPool(uint256 amount) external;
 
     /// @notice Arm the x00 seed window if one is due (GAME only, silent when not due).
+    /// @dev Seeds add to each day's whole-FLIP lane and saturate at the per-day cap; the per-day
+    ///      CoinflipStakeUpdated reports what each lane accepted, SeedWindowArmed the nominal seed.
     /// @param lvl The level whose jackpot phase just ended.
     function armCenturySeed(uint24 lvl) external;
 
@@ -264,9 +275,10 @@ interface ICoinflip {
     ) external view returns (uint256 mintable);
 
     /// @notice Get player's current coinflip stake for the next day's flip.
-    /// @dev Returns the stake amount deposited for the upcoming flip day.
+    /// @dev Returns the stake amount deposited for the upcoming flip day. Stakes are whole FLIP
+    ///      (stored as uint32 units), returned in wei.
     /// @param player The player to check.
-    /// @return The stake amount in FLIP for the next flip.
+    /// @return The stake amount in FLIP wei for the next flip.
     function coinflipAmount(address player) external view returns (uint256);
 
     /// @notice Get player's auto-rebuy configuration.

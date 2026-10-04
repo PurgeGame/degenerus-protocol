@@ -72,6 +72,11 @@ contract CoinflipClaimableRebet is DeployProtocol {
         bonus = (amount * RECYCLE_BPS) / 10_000;
     }
 
+    /// @dev Stake lanes hold whole FLIP: each deposit's principal plus bonuses floors once.
+    function _whole(uint256 amount) internal pure returns (uint256) {
+        return (amount / 1 ether) * 1 ether;
+    }
+
     /// @dev Stake `amount` for `player` on day 3 out of a freshly minted wallet balance, then win
     ///      day 3. Leaves the player with a ZERO wallet balance and the whole payout sitting as
     ///      unclaimed winnings — the position the rebet path exists to serve.
@@ -114,7 +119,7 @@ contract CoinflipClaimableRebet is DeployProtocol {
         assertEq(coinflip.previewClaimCoinflips(player), 0, "the bank funded the whole stake");
         assertEq(
             coinflip.coinflipAmount(player),
-            payout + _recyclingBonus(payout) + recordClaim,
+            _whole(payout + _recyclingBonus(payout) + recordClaim),
             "recycled principal plus its 0.75% bonus rides day 4 (beside the record claim)"
         );
     }
@@ -136,7 +141,7 @@ contract CoinflipClaimableRebet is DeployProtocol {
         );
         assertEq(
             coinflip.coinflipAmount(player),
-            draw + _recyclingBonus(draw),
+            _whole(draw + _recyclingBonus(draw)),
             "bonus keys on the drawn slice, not on the whole bank"
         );
     }
@@ -149,14 +154,15 @@ contract CoinflipClaimableRebet is DeployProtocol {
 
         assertEq(
             coinflip.coinflipAmount(player),
-            payout + _recyclingBonus(payout),
+            _whole(payout + _recyclingBonus(payout)),
             "the full recycled payout earns the flat 0.75%"
         );
     }
 
     /// @notice The bonus is a flat rate, so splitting a recycle across several deposits earns
-    ///         exactly what recycling it in one deposit earns. Nothing is gained or lost by
-    ///         chunking, and the same percentage reaches a whale and a minnow.
+    ///         what recycling it in one deposit earns, less only the sub-FLIP dust each
+    ///         deposit's whole-FLIP stake floors away. Nothing is gained by chunking, and the
+    ///         same percentage reaches a whale and a minnow.
     function test_SplittingARecycleEarnsTheSameAsOneDeposit() public {
         uint256 payout = _bankAWin(100_000 ether);
         uint256 half = payout / 2;
@@ -173,11 +179,14 @@ contract CoinflipClaimableRebet is DeployProtocol {
             _recyclingBonus(payout),
             "the rate is size-independent: two halves bonus exactly as one whole"
         );
+        uint256 split = coinflip.coinflipAmount(player);
         assertEq(
-            coinflip.coinflipAmount(player),
-            payout + _recyclingBonus(payout),
-            "split recycling earns no more and no less than a single deposit"
+            split,
+            _whole(half + _recyclingBonus(half)) * 2,
+            "each half floors its own stake"
         );
+        assertLe(split, _whole(payout + _recyclingBonus(payout)), "split recycling earns no more than one deposit");
+        assertGe(split + 2 ether, _whole(payout + _recyclingBonus(payout)), "and loses at most the floored dust");
     }
 
     // ---------------------------------------------------------------- 3. FRESH
@@ -221,7 +230,7 @@ contract CoinflipClaimableRebet is DeployProtocol {
         assertEq(coinflip.previewClaimCoinflips(player), 0, "the bank leg was fully drawn");
         assertEq(
             coinflip.coinflipAmount(player),
-            amount + _recyclingBonus(payout),
+            _whole(amount + _recyclingBonus(payout)),
             "bonus keys on the recycled leg, not the wallet-funded remainder"
         );
     }
@@ -261,7 +270,7 @@ contract CoinflipClaimableRebet is DeployProtocol {
         assertEq(coinflip.previewClaimCoinflips(player), 0, "operator approval reaches the bank");
         assertEq(
             coinflip.coinflipAmount(player),
-            payout + _recyclingBonus(payout),
+            _whole(payout + _recyclingBonus(payout)),
             "operator-routed rebet earns the recycling bonus too"
         );
     }
@@ -310,7 +319,7 @@ contract CoinflipClaimableRebet is DeployProtocol {
         assertEq(carryAfter, expectedCarry, "the carry is a separate bucket, untouched");
         assertEq(
             coinflip.coinflipAmount(player),
-            draw + _recyclingBonus(draw),
+            _whole(draw + _recyclingBonus(draw)),
             "the drawn bank leg earns the recycling bonus"
         );
     }
@@ -368,7 +377,7 @@ contract CoinflipClaimableRebet is DeployProtocol {
         assertEq(carryAfter, carryBefore, "the live carry is unreachable from the deposit path");
         assertEq(
             coinflip.coinflipAmount(player),
-            draw + _recyclingBonus(draw),
+            _whole(draw + _recyclingBonus(draw)),
             "the stake landed on tomorrow, whose word cannot exist yet"
         );
         assertEq(

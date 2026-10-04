@@ -33,14 +33,14 @@ contract FlipEmissionSeeds is DeployProtocol {
         _deployProtocol();
     }
 
-    /// @dev coinflipStakePacked is internal at root slot 0 and banks 2 days per slot
-    ///      (key = day>>1, 128-bit wei lanes: low = even day, high = odd day). Read the
-    ///      packed word and decode `day`'s lane.
+    /// @dev coinflipStakePacked is internal at root slot 0 and banks 8 days per slot
+    ///      (key = day>>3, 32-bit whole-FLIP lanes, lane = day & 7). Read the packed word
+    ///      and decode `day`'s lane back to wei.
     function _stakeOf(uint24 day, address player) internal view returns (uint256) {
-        bytes32 inner = keccak256(abi.encode(uint256(day >> 1), uint256(0)));
+        bytes32 inner = keccak256(abi.encode(uint256(day >> 3), uint256(0)));
         bytes32 slot = keccak256(abi.encode(player, uint256(inner)));
         uint256 word = uint256(vm.load(address(coinflip), slot));
-        return uint128(word >> ((uint256(day) & 1) * 128));
+        return uint256(uint32(word >> ((uint256(day) & 7) * 32))) * 1 ether;
     }
 
     /// @dev Resolve day `epoch` as the GAME with a win (bit 0 = 1) or loss (bit 0 = 0) word.

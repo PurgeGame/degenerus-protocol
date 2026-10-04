@@ -32,7 +32,8 @@ contract VaultHistorySeeder is Coinflip {
         s.autoRebuyStop = 1 ether;
         s.autoRebuyCarry = 0;
         for (uint24 day = 35; day <= 399; ++day) {
-            _setFlipStake(day, player, sufficient ? 1000 ether : 1);
+            // Stake lanes hold whole FLIP: the insufficient history stakes 1 FLIP a day.
+            _setFlipStake(day, player, sufficient ? 1000 ether : 1 ether);
             _storeDayResult(day, 150, day != 200);
         }
     }

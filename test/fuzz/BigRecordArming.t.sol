@@ -309,8 +309,8 @@ contract BigRecordArmingTest is DeployProtocol {
 
         assertEq(
             coinflip.coinflipAmount(rival) - coinflip.coinflipAmount(bystander),
-            expected,
-            "the claim joins the buyer's own purchase flip credit"
+            (expected / 1 ether) * 1 ether,
+            "the claim joins the buyer's own purchase flip credit (whole-FLIP stake lane)"
         );
     }
 

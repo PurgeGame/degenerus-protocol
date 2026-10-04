@@ -55,7 +55,7 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
     address internal player;
     address internal regularPlayer;
     // 1472 puts the regular 365-day window across 13 packed result words;
-    // the deep exit still clamps to days 1..1460 (46 result words, 731 stake words).
+    // the deep exit still clamps to days 1..1460 (46 result words, 183 stake words).
     uint24 internal constant COLD_LATEST = 1472;
     uint256 internal constant DEEP_INTRINSIC = 21_448;
     uint256 internal constant REGULAR_INTRINSIC = 21_704;
@@ -92,7 +92,7 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
         vm.store(address(coinflip), slot, bytes32(w));
     }
 
-    /// @dev coinflipStakePacked slot 0: 2 days/slot, 128-bit lanes, keyed by day>>1 then player.
+    /// @dev coinflipStakePacked slot 0: 8 days/slot, 32-bit whole-FLIP lanes, keyed by day>>3 then player.
     function _stakeSlotByKey(uint24 key, address p) internal pure returns (bytes32) {
         bytes32 inner = keccak256(abi.encode(uint256(key), uint256(0)));
         return keccak256(abi.encode(p, uint256(inner)));
@@ -108,8 +108,11 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
         for (uint24 k = 0; k <= (n >> 5); ++k) {
             vm.store(address(coinflip), keccak256(abi.encode(uint256(k), uint256(1))), bytes32(allWin));
         }
-        uint256 stakeWord = STAKE | (STAKE << 128);
-        for (uint24 k = 0; k <= (n >> 1); ++k) {
+        uint256 stakeWord;
+        for (uint256 i = 0; i < 8; ++i) {
+            stakeWord |= (STAKE / 1 ether) << (i * 32);
+        }
+        for (uint24 k = 0; k <= (n >> 3); ++k) {
             vm.store(address(coinflip), _stakeSlotByKey(k, p), bytes32(stakeWord));
         }
         if (lossDay != 0) _setResultDay(lossDay, LOSS_BYTE);
@@ -171,10 +174,10 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
 
     function test_DeepClaim1460DaysFitsUnderTxGasCap() public {
         uint256 used = _measureDeep(player);
-        // A packed stake word adds at most 2k cold-read + 2.8k fresh-vs-dirty
+        // A packed stake word (8 days) adds at most 2k cold-read + 2.8k fresh-vs-dirty
         // rewrite gas; reserve 5k. Result words add a cold read. 100k covers
         // fixed player/credit state and cold accounts outside the bounded walk.
-        uint256 coldAllowance = (DEEP_CAP / 2 + 1) * 5000 + (DEEP_CAP / 32 + 1) * 2100 + 100_000;
+        uint256 coldAllowance = (DEEP_CAP / 8 + 1) * 5000 + (DEEP_CAP / 32 + 1) * 2100 + 100_000;
         assertLt(used, DEEP_CLAIM_GAS_CEIL + coldAllowance, "cold deep walk exceeds warm budget plus state allowance");
     }
 
@@ -242,7 +245,7 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
 
     function test_RegularClaim365DayWindowFitsUnderTxGasCap() public {
         uint256 used = _measureRegular(regularPlayer);
-        uint256 coldAllowance = (WINDOW / 2 + 1) * 5000 + (WINDOW / 32 + 2) * 2100 + 100_000;
+        uint256 coldAllowance = (WINDOW / 8 + 2) * 5000 + (WINDOW / 32 + 2) * 2100 + 100_000;
         assertLt(
             used, REGULAR_CLAIM_GAS_CEIL + coldAllowance, "cold regular walk exceeds warm budget plus state allowance"
         );

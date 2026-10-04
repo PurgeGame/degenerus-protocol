@@ -200,8 +200,9 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
         // retain the actual bounds. No successful call can overspend this initial amount.
         uint256 used = rewardStart - gasleft() - unpaidAttemptGas;
         uint256 reward;
-        // Every call's first MIN_REWARDED_GAS is unpaid, so splitting work into small calls
-        // only costs the miner.
+        // Every call's first MIN_REWARDED_GAS is unpaid. Splitting work into small calls forfeits
+        // another unpaid million per call; the only thing an extra qualifying call can gain is the
+        // sub-FLIP rounding below, bounded by one FLIP per paid call.
         if (rewardEligible && !gameOver && used > MineFlipGas.MIN_REWARDED_GAS) {
             // Price only compensation, after work and its gas measurement are complete.
             uint256 elapsed = block.timestamp > rewardDueAt ? block.timestamp - rewardDueAt : 0;
@@ -213,6 +214,11 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
             reward = (used - MineFlipGas.MIN_REWARDED_GAS) * rate * PRICE_COIN_UNIT * multiplierBps
                 / (rewardPrice * 10_000);
             if (reward != 0) {
+                // Coinflip stakes are whole FLIP: a positive reward pays at least 1 FLIP, larger
+                // rewards floor to whole FLIP. Applied after the gas measurement, so the
+                // normalization cannot price itself. Both events report this figure; below the
+                // daily stake cap it is exactly what Coinflip credits.
+                reward = reward < 1 ether ? 1 ether : (reward / 1 ether) * 1 ether;
                 coinflip.creditFlip(msg.sender, reward);
                 emit MinerBounty(MINER_BOUNTY_ADVANCE, msg.sender, reward);
             }

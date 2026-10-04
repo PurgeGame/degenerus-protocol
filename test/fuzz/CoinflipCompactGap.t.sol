@@ -212,6 +212,8 @@ contract CoinflipCompactGapTest is CoinflipRngSpineBehavioral {
         uint256 stake = 100 ether + 7;
         vm.prank(GAME);
         coinflip.creditFlip(player, stake);
+        // Stake lanes hold whole FLIP: the 7 wei of dust floors away at the credit.
+        stake = 100 ether;
         assertEq(coinflip.coinflipAmount(player), stake, "actual funded next-day stake");
         uint256 snapshot = vm.snapshotState();
         _gap(2, GAP_START, GAP_START + 1);

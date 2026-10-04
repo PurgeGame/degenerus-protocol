@@ -79,8 +79,9 @@ contract Coinflip {
 
     /// @notice Emitted when a coinflip deposit is credited to the player's pending stake.
     /// @param player The depositor credited.
-    /// @param creditedFlip The deposit principal in FLIP wei (the quest and recycling bonuses that
-    ///        join the stake are not included); 0 on a zero-amount deposit.
+    /// @param creditedFlip The deposit principal actually funded, in FLIP wei: the requested amount
+    ///        floored to whole FLIP (the quest and recycling bonuses that join the stake are not
+    ///        included); 0 on a zero-amount deposit.
     event CoinflipDeposit(address indexed player, uint256 creditedFlip);
     /// @notice Emitted when a player's coinflip auto-rebuy is turned on or off.
     /// @param player The player whose auto-rebuy state changed.
@@ -102,11 +103,15 @@ contract Coinflip {
         uint32 streak,
         uint256 reward
     );
-    /// @notice Emitted when flip stake is credited to a future day.
+    /// @notice Emitted when flip stake is credited to a future day. Authoritative for the stake
+    ///         accepted: stakes are stored in whole FLIP and capped per player and day
+    ///         (STAKE_LANE_MAX), so component events (QuestCompleted, BigRecordUpdated,
+    ///         SeedWindowArmed, CoinflipDeposit) describe nominal awards while this one reports
+    ///         what the lane actually took after rounding and capping.
     /// @param player The player receiving stake credit.
     /// @param day The target flip day being credited.
-    /// @param amount The amount credited (includes any boosts).
-    /// @param newTotal The new total stake for that day.
+    /// @param amount The stake actually added (new total minus previous total), FLIP wei.
+    /// @param newTotal The stored total stake for that day, FLIP wei.
     event CoinflipStakeUpdated(
         address indexed player,
         uint24 indexed day,
@@ -117,7 +122,8 @@ contract Coinflip {
     /// @param century The century index (level / 100) the window belongs to.
     /// @param firstDay First flip day carrying the seed stake.
     /// @param dayCount Number of consecutive days seeded.
-    /// @param amountPerDay Seed stake added per day, per recipient.
+    /// @param amountPerDay Nominal seed stake added per day, per recipient; the per-day
+    ///        CoinflipStakeUpdated reports what each lane accepted.
     event SeedWindowArmed(
         uint24 indexed century,
         uint24 indexed firstDay,
@@ -160,7 +166,9 @@ contract Coinflip {
     ///        basis points, 10,000 = 1x).
     /// @param paid FLIP credited for the claim — the category's accrued share of the
     ///        record pool — 0 on a bare ratchet (kinds 0-3: the candidate did not clear
-    ///        the mark by a fifth) or when the share of the pool computes to zero.
+    ///        the mark by a fifth) or when the share of the pool computes to zero. A
+    ///        nominal figure: the stake it joins is whole FLIP, so CoinflipStakeUpdated
+    ///        reports the accepted amount.
     /// @param sdgnrsPaid sDGNRS paid for the claim from the reward pool (the same
     ///        accrued share at 1/500 scale), 0 on a bare ratchet or an empty pool.
     event BigRecordUpdated(
@@ -192,6 +200,9 @@ contract Coinflip {
 
     /// @notice Thrown when a nonzero deposit amount is below the minimum stake.
     error AmountLTMin();
+    /// @notice Thrown when a manual deposit, with its bonuses, would take the player's stake
+    ///         for the target day past STAKE_LANE_MAX whole FLIP.
+    error StakeAboveDailyCap();
     /// @notice Thrown when the caller is not one of the contracts allowed to credit flip stake.
     error OnlyFlipCreditors();
     /// @notice Thrown when the caller is not the FLIP contract.
@@ -233,6 +244,10 @@ contract Coinflip {
 
     // Constants
     uint256 private constant MIN = 100 ether;
+    /// @dev Stake lanes store whole FLIP: STAKE_UNIT wei per unit, STAKE_LANE_MAX units per
+    ///      player per day. Eight 32-bit lanes pack one storage word.
+    uint256 private constant STAKE_UNIT = 1 ether;
+    uint256 private constant STAKE_LANE_MAX = type(uint32).max;
     uint256 private constant COINFLIP_LOSS_WWXRP_REWARD = 1 ether;
     uint16 private constant COINFLIP_EXTRA_MIN_PERCENT = 78;
     uint16 private constant COINFLIP_EXTRA_RANGE = 38;
@@ -292,10 +307,10 @@ contract Coinflip {
         uint128 autoRebuyCarry;
     }
 
-    // Daily coinflip storage. coinflipStakePacked banks 2 days per slot (key =
-    // day>>1, 128-bit wei lanes, lossless — flip credits can be sub-1-FLIP);
-    // coinflipDayResultPacked banks 32 days per slot (key = day>>5, 8-bit lanes,
-    // 3-state). Access via the helpers.
+    // Daily coinflip storage. coinflipStakePacked banks 8 days per slot (key =
+    // day>>3, 32-bit whole-FLIP lanes; every addition floors to whole FLIP and
+    // saturates at STAKE_LANE_MAX); coinflipDayResultPacked banks 32 days per slot
+    // (key = day>>5, 8-bit lanes, 3-state). Access via the helpers.
     mapping(uint24 => mapping(address => uint256)) internal coinflipStakePacked;
     mapping(uint24 => uint256) internal coinflipDayResultPacked;
     mapping(address => PlayerCoinflipState) internal playerState;
@@ -390,10 +405,8 @@ contract Coinflip {
         recordDayDiceRun = recordStartDay;
 
         for (uint24 d = 1; d <= SEED_FLIP_DAYS; ) {
-            _setFlipStake(d, ContractAddresses.VAULT, SEED_FLIP_DAILY);
-            _setFlipStake(d, ContractAddresses.SDGNRS, SEED_FLIP_DAILY);
-            emit CoinflipStakeUpdated(ContractAddresses.VAULT, d, SEED_FLIP_DAILY, SEED_FLIP_DAILY);
-            emit CoinflipStakeUpdated(ContractAddresses.SDGNRS, d, SEED_FLIP_DAILY, SEED_FLIP_DAILY);
+            _addFlipStake(ContractAddresses.VAULT, d, SEED_FLIP_DAILY);
+            _addFlipStake(ContractAddresses.SDGNRS, d, SEED_FLIP_DAILY);
             unchecked {
                 ++d;
             }
@@ -466,8 +479,12 @@ contract Coinflip {
     ///      wallet FLIP for the remainder; any other caller funds the whole stake from their own
     ///      FLIP — a permissionless gift (the caller pays, the player gets the stake) that never
     ///      touches the player's winnings. The recycling bonus pays on the winnings leg only.
+    ///      The principal is floored to whole FLIP before funding; the remainder stays with the
+    ///      funder. Reverts StakeAboveDailyCap if the stake, with its bonuses, would exceed
+    ///      STAKE_LANE_MAX whole FLIP on the target day.
     /// @param player The stake owner — i.e. the player (address(0) or msg.sender for self-deposit).
-    /// @param amount Amount of FLIP to deposit (min 100 FLIP, or 0 to settle pending claims).
+    /// @param amount Amount of FLIP to deposit (min 100 FLIP, or 0 to settle pending claims);
+    ///        floored to whole FLIP.
     function depositCoinflip(address player, uint256 amount) external {
         if (player == address(0)) player = msg.sender;
         address funder;
@@ -494,6 +511,9 @@ contract Coinflip {
     ) private {
         PlayerCoinflipState storage state = playerState[player];
         if (amount != 0 && amount < MIN) revert AmountLTMin();
+        // Stake lanes hold whole FLIP: fund, burn, score and record the floored principal
+        // only, so the funder keeps the fraction the lane could not take.
+        amount = (amount / STAKE_UNIT) * STAKE_UNIT;
         // Deposits flow through every RNG lock. A deposit on day N stakes day
         // N+1, and the word that resolves day N+1 is not requested until day
         // N+1 — so every stake write (and every BAF draw interval, which keys
@@ -574,8 +594,8 @@ contract Coinflip {
             creditedFlip += _recyclingBonus(fromClaimable);
         }
         // Direct deposits can set the flip record and enter the BAF weighted
-        // draw; indirect deposits cannot.
-        _addDailyFlip(player, creditedFlip, directDeposit ? amount : 0);
+        // draw; indirect deposits cannot. Every manual route reverts past the daily cap.
+        _addDailyFlip(player, creditedFlip, directDeposit ? amount : 0, true);
         emit CoinflipDeposit(player, amount);
     }
 
@@ -668,19 +688,13 @@ contract Coinflip {
     ///      player deposits have). Direct stake write, off the leaderboard/flip record like
     ///      the constructor seed. A win settles through the sDGNRS payout branch into
     ///      the rolling carry; claimableStored stays the genesis seed reserve burns
-    ///      drain first.
+    ///      drain first. FLIP has already removed the whole amount from supply; the lane
+    ///      takes its whole-FLIP floor and saturates at the daily cap, so this never reverts
+    ///      a transfer.
     /// @param amount FLIP (wei) staked onto sDGNRS's next flip.
     function creditSdgnrsBacking(uint256 amount) external onlyFLIP {
         if (amount == 0) return;
-        uint24 targetDay = _targetFlipDay();
-        uint256 newStake = _flipStake(targetDay, ContractAddresses.SDGNRS) + amount;
-        _setFlipStake(targetDay, ContractAddresses.SDGNRS, newStake);
-        emit CoinflipStakeUpdated(
-            ContractAddresses.SDGNRS,
-            targetDay,
-            amount,
-            newStake
-        );
+        _addFlipStake(ContractAddresses.SDGNRS, _targetFlipDay(), amount);
     }
 
     /// @dev Emit the player's committed coinflip claim-state (claimable + carry + cursor) for
@@ -907,11 +921,16 @@ contract Coinflip {
 
     /// @dev Add daily flip stake for player. recordAmount is the raw principal of a
     ///      direct self-funded deposit (zero for every credit path): it alone can arm
-    ///      the flip record and it alone carries BAF draw weight.
+    ///      the flip record and it alone carries BAF draw weight. `manual` marks the
+    ///      deposit routes (self, operator, gift): they revert StakeAboveDailyCap when the
+    ///      stake with its bonuses would pass the lane's whole-FLIP cap, so the caller's
+    ///      funding, quest and record mutations roll back with it. Credit routes saturate
+    ///      instead, so a recipient at the cap can never brick a batch payout or the crank.
     function _addDailyFlip(
         address player,
         uint256 coinflipDeposit,
-        uint256 recordAmount
+        uint256 recordAmount,
+        bool manual
     ) private {
         if (recordAmount != 0) {
             // Manual deposits only: check and consume coinflip boon (5%/10%/25% boost on max 100k FLIP deposit)
@@ -948,11 +967,9 @@ contract Coinflip {
         // Determine which future day this stake applies to (always the next window).
         uint24 targetDay = _targetFlipDay();
 
-        uint256 prevStake = _flipStake(targetDay, player);
-        uint256 newStake = prevStake + coinflipDeposit;
-
-        // Update player's stake for target day
-        _setFlipStake(targetDay, player, newStake);
+        // Principal, bonuses and claims are summed in wei and floored once at the lane
+        // write; the event inside reports the accepted delta and total.
+        _addFlipStake(player, targetDay, coinflipDeposit, manual);
         // BAF weighted draw: on the armed day (an x0 level's last purchase day
         // stakes it), every direct self-funded deposit appends an interval
         // weighted by its raw principal (recordAmount) — never bonuses, boon
@@ -964,10 +981,28 @@ contract Coinflip {
         if (recordAmount != 0 && targetDay == bafDrawDay) {
             _appendBafDrawEntry(targetDay, player, recordAmount);
         }
-        // `coinflipDeposit` is everything credited by this call — principal, quest and
-        // recycling bonuses, the boon boost, and any flip-record claim folded in above.
-        // BigRecordUpdated itemizes the claim's own share.
-        emit CoinflipStakeUpdated(player, targetDay, coinflipDeposit, newStake);
+    }
+
+    /// @dev Add `amount` wei to `day`'s lane for `player`, saturating at the cap, and emit the
+    ///      accepted delta and total. Every stake-writing route funnels through here.
+    function _addFlipStake(address player, uint24 day, uint256 amount) private returns (uint256) {
+        return _addFlipStake(player, day, amount, false);
+    }
+
+    /// @dev `revertAtCap` variant for manual deposits: the whole-FLIP total may not pass
+    ///      STAKE_LANE_MAX. The prior lane is read fresh here, after every external call the
+    ///      caller made.
+    function _addFlipStake(
+        address player,
+        uint24 day,
+        uint256 amount,
+        bool revertAtCap
+    ) private returns (uint256 newStake) {
+        uint256 prevStake = _flipStake(day, player);
+        uint256 requested = prevStake + amount;
+        if (revertAtCap && requested / STAKE_UNIT > STAKE_LANE_MAX) revert StakeAboveDailyCap();
+        newStake = _setFlipStake(day, player, requested);
+        emit CoinflipStakeUpdated(player, day, newStake - prevStake, newStake);
     }
 
     /// @dev Append `player`'s weighted interval to the armed day's draw book.
@@ -1160,7 +1195,7 @@ contract Coinflip {
         uint128 paid = uint128((uint256(pool) * shareBps) / 10_000);
         if (paid != 0) {
             recordPool = pool - paid;
-            _addDailyFlip(player, paid, 0);
+            _addDailyFlip(player, paid, 0, false);
         }
         // The sDGNRS leg rides the same accrued share at 1/500 scale, exactly as the
         // other four kinds' does. A record is a record: the dice run claims from the
@@ -1191,7 +1226,8 @@ contract Coinflip {
     ///
     ///      Stakes ADD to a day's lane rather than replacing it — `_setFlipStake` is a masked
     ///      overwrite and sDGNRS is on perpetual auto-rebuy by level 100, so a replace would
-    ///      destroy a stake the protocol had already rolled forward.
+    ///      destroy a stake the protocol had already rolled forward. A lane at the daily cap
+    ///      saturates; the per-day event reports what it accepted.
     /// @param lvl The level whose jackpot phase just ended.
     function armCenturySeed(uint24 lvl) external {
         if (msg.sender != ContractAddresses.GAME) revert OnlyDegenerusGame();
@@ -1203,12 +1239,8 @@ contract Coinflip {
         uint24 firstDay = _targetFlipDay();
         for (uint24 i = 0; i < SEED_FLIP_DAYS; ) {
             uint24 d = firstDay + i;
-            uint256 vaultTotal = _flipStake(d, ContractAddresses.VAULT) + SEED_FLIP_DAILY;
-            uint256 sdgnrsTotal = _flipStake(d, ContractAddresses.SDGNRS) + SEED_FLIP_DAILY;
-            _setFlipStake(d, ContractAddresses.VAULT, vaultTotal);
-            _setFlipStake(d, ContractAddresses.SDGNRS, sdgnrsTotal);
-            emit CoinflipStakeUpdated(ContractAddresses.VAULT, d, SEED_FLIP_DAILY, vaultTotal);
-            emit CoinflipStakeUpdated(ContractAddresses.SDGNRS, d, SEED_FLIP_DAILY, sdgnrsTotal);
+            _addFlipStake(ContractAddresses.VAULT, d, SEED_FLIP_DAILY);
+            _addFlipStake(ContractAddresses.SDGNRS, d, SEED_FLIP_DAILY);
             unchecked {
                 ++i;
             }
@@ -1557,6 +1589,8 @@ contract Coinflip {
       +======================================================================+*/
 
     /// @notice Credit flip to a player through the authorized protocol/game creditor lane.
+    /// @dev The credit floors to whole FLIP on its own (two sub-FLIP credits add nothing) and
+    ///      saturates at the daily cap; CoinflipStakeUpdated reports the accepted amount.
     /// @param player The player receiving the flip credit.
     /// @param amount Amount of FLIP-denominated flip stake to credit.
     function creditFlip(
@@ -1564,7 +1598,7 @@ contract Coinflip {
         uint256 amount
     ) external onlyFlipCreditors {
         if (player == address(0) || amount == 0) return;
-        _addDailyFlip(player, amount, 0);
+        _addDailyFlip(player, amount, 0, false);
     }
 
     /// @notice Credit flips to multiple players (called by GAME jackpot modules and the
@@ -1580,7 +1614,7 @@ contract Coinflip {
             address player = players[i];
             uint256 amount = amounts[i];
             if (player != address(0) && amount != 0) {
-                _addDailyFlip(player, amount, 0);
+                _addDailyFlip(player, amount, 0, false);
             }
             unchecked {
                 ++i;
@@ -1603,10 +1637,10 @@ contract Coinflip {
         uint256 amount2
     ) external onlyFlipCreditors {
         if (player1 != address(0) && amount1 != 0) {
-            _addDailyFlip(player1, amount1, 0);
+            _addDailyFlip(player1, amount1, 0, false);
         }
         if (player2 != address(0) && amount2 != 0) {
-            _addDailyFlip(player2, amount2, 0);
+            _addDailyFlip(player2, amount2, 0, false);
         }
     }
 
@@ -1885,32 +1919,34 @@ contract Coinflip {
       |                    INTERNAL HELPER FUNCTIONS                         |
       +======================================================================+*/
 
-    /// @dev Player stake for `day` in wei (2 days/slot, 128-bit lanes, lossless).
-    ///      Stored in wei — flip credits (keeper advance rewards, redemption shares)
-    ///      can be sub-1-FLIP, so whole-token granularity would zero them. Fresh
-    ///      SLOAD — never cached across the claim loop's external calls.
+    /// @dev Player stake for `day` in wei: 8 days per slot (key = day >> 3), 32-bit lanes
+    ///      of whole FLIP scaled by STAKE_UNIT on read. Fresh SLOAD — never cached across
+    ///      the claim loop's external calls.
     function _flipStake(uint24 day, address p) internal view returns (uint256) {
-        return uint128(coinflipStakePacked[day >> 1][p] >> ((day & 1) * 128));
+        return uint256(uint32(coinflipStakePacked[day >> 3][p] >> ((day & 7) << 5))) * STAKE_UNIT;
     }
 
-    /// @dev Masked write of `day`'s stake lane, preserving the sibling day. Saturating,
-    ///      on the same grounds as the prize pools' packed halves: the lane is 128 bits
-    ///      wide and the write is masked, so an over-wide value would not truncate — it
-    ///      would spill into the SIBLING DAY's lane and hand that day a stake nobody
-    ///      deposited. Clamping makes that impossible by construction instead of by an
-    ///      invariant every caller has to keep holding.
+    /// @dev Masked write of `day`'s stake lane, preserving the seven sibling days. The wei
+    ///      amount floors to whole FLIP and clamps at STAKE_LANE_MAX before it is shifted in:
+    ///      the write is masked, so an over-wide value would not truncate — it would spill
+    ///      into a SIBLING DAY's lane and hand that day a stake nobody deposited. Clamping
+    ///      makes that impossible by construction instead of by an invariant every caller
+    ///      has to keep holding.
     ///
     ///      A stake is not bounded by supply — the constructor seeds stakes without a mint,
     ///      a deposit burns the FLIP it stakes, and credits add stake nobody minted — so the
     ///      clamp is the bound: if the credit paths ever reach it, the failure is one capped
     ///      stake rather than a neighbouring day's books. Fresh SLOAD/SSTORE.
-    function _setFlipStake(uint24 day, address p, uint256 weiAmount) internal {
-        if (weiAmount > type(uint128).max) weiAmount = type(uint128).max;
-        uint256 shift = (day & 1) * 128;
-        uint24 key = day >> 1;
+    /// @return stored The wei value the lane now holds.
+    function _setFlipStake(uint24 day, address p, uint256 weiAmount) internal returns (uint256 stored) {
+        uint256 units = weiAmount / STAKE_UNIT;
+        if (units > STAKE_LANE_MAX) units = STAKE_LANE_MAX;
+        uint256 shift = (day & 7) << 5;
+        uint24 key = day >> 3;
         uint256 w = coinflipStakePacked[key][p];
-        w = (w & ~(uint256(type(uint128).max) << shift)) | (weiAmount << shift);
+        w = (w & ~(STAKE_LANE_MAX << shift)) | (units << shift);
         coinflipStakePacked[key][p] = w;
+        stored = units * STAKE_UNIT;
     }
 
     /// @dev Day result for `day` (32 days/slot, 8-bit lanes). 3-state byte:

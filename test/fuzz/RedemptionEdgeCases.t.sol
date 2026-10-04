@@ -1740,7 +1740,8 @@ contract RedemptionEdgeCasesB is RedemptionEdgeCasesBase {
 
         uint256 unit = (BOX_BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / game.mintPrice();
         assertGt(unit, 0, "BOUNTY-01: per-box unit must be non-zero");
-        assertEq(bounty, 2 * unit, "BOUNTY-01: keeper paid exactly 2 settled-box units");
+        // Each per-box credit lands in a whole-FLIP stake lane, flooring its own dust.
+        assertEq(bounty, 2 * ((unit / 1 ether) * 1 ether), "BOUNTY-01: keeper paid exactly 2 settled-box units");
 
         // No-work re-sweep: the consumed prefix reverts RedemptionOutOfOrder (ordered settlement
         // queue; was a successful no-op) → zero settled → zero bounty.

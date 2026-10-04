@@ -212,8 +212,8 @@ contract CenturySeedWindow is DeployProtocol {
         }
     }
 
-    /// @dev The other arithmetic site. Stakes ADD into a 128-bit lane, so a long-lived lane
-    ///      could exceed it; `_setFlipStake` clamps instead of reverting. Arming many centuries
+    /// @dev The other arithmetic site. Stakes ADD into a 32-bit whole-FLIP lane, so a long-lived
+    ///      lane could exceed it; `_setFlipStake` clamps instead of reverting. Arming many centuries
     ///      on the SAME wall day drives one lane to the ceiling — the crank must survive it.
     function testFlipLaneSaturatesRatherThanRevertingTheCrank() public {
         // Snapshot first: the DEPLOY window already seeded this day, so the property is
@@ -228,15 +228,15 @@ contract CenturySeedWindow is DeployProtocol {
             "70 arms on one day accumulate, none lost"
         );
 
-        // Now push the same lane past the 128-bit ceiling and confirm it clamps silently.
+        // Now push the same lane past the lane ceiling and confirm it clamps silently.
         vm.prank(address(game));
         coinflip.creditFlip(ContractAddresses.VAULT, type(uint128).max);
         for (uint24 century = 71; century <= 90; ++century) {
             _arm(century * 100); // must not revert even with the lane at its ceiling
         }
-        assertLe(
+        assertEq(
             _stakeAtOffset(ContractAddresses.VAULT, 0),
-            type(uint128).max,
+            uint256(type(uint32).max) * 1 ether,
             "the lane clamps at its width rather than spilling or reverting"
         );
     }

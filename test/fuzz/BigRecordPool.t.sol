@@ -312,8 +312,8 @@ contract BigRecordPoolTest is DeployProtocol {
         assertEq(coinflip.biggestFlipEver(), claimAmount, "claim ratchets the record");
         assertEq(
             coinflip.coinflipAmount(rival),
-            claimAmount + expected,
-            "stake carries the deposit plus the claimed share"
+            ((claimAmount + expected) / 1 ether) * 1 ether,
+            "stake carries the deposit plus the claimed share (whole-FLIP stake lane)"
         );
         assertEq(coinflip.recordPool(), pool - expected, "pool paid the share");
     }

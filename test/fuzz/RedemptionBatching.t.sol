@@ -82,6 +82,8 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
                 uint256 expected = measured <= 1_000_000 ? 0
                     : (measured - 1_000_000) * rate * 1000 ether * (3000 + step * 4500) * (lockedAtStart ? 2 : 1)
                         / (rewardPrice * 10_000);
+                // Whole-FLIP normalization at the payment site: positive sub-FLIP pays 1 FLIP.
+                if (expected != 0) expected = expected < 1 ether ? 1 ether : (expected / 1 ether) * 1 ether;
                 assertEq(paid, expected, "reward prices the measured engine gas");
                 reward = paid;
                 used = measured;
@@ -94,7 +96,7 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         }
         assertEq(works, 1, "one measured miner call");
         assertEq(credits, reward == 0 ? 0 : 1, "exactly one keeper credit");
-        assertEq(coinflip.coinflipAmount(keeper) - prior, reward, "keeper credited exactly the engine reward");
+        assertEq(coinflip.coinflipAmount(keeper) - prior, (reward / 1 ether) * 1 ether, "keeper credited exactly the engine reward");
     }
 
     function _batch(uint256 allowance) private returns (bool done, uint256 charged, uint256 quote) {

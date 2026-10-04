@@ -187,6 +187,8 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
                 uint256 expected = used <= 1_000_000 ? 0
                     : (used - 1_000_000) * rate * 1000 ether * (3000 + step * 4500) * _passFactor * (lockedAtStart ? 2 : 1)
                         / (rewardPrice * 10_000);
+                // Whole-FLIP normalization at the payment site: positive sub-FLIP pays 1 FLIP.
+                if (expected != 0) expected = expected < 1 ether ? 1 ether : (expected / 1 ether) * 1 ether;
                 assertEq(paid, expected, "reward prices qualifying measured gas at capped base fee");
                 assertGt(used, 0);
                 ++workEvents;

@@ -186,7 +186,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         (, uint256 measured, uint256 reward) = _minerWork(vm.getRecordedLogs());
         assertEq(game.degeneretteBetInfo(INDEX, betId), 0, "resolved bet is marked processed (one-reward lock)");
         assertEq(reward, _expectedPay(measured, false, false), "the resolving crank is paid its measured gas only");
-        assertEq(coinflip.coinflipAmount(player), stakeBefore + reward, "the only credit is the measured-gas bounty");
+        assertEq(coinflip.coinflipAmount(player), stakeBefore + _whole(reward), "the only credit is the measured-gas bounty");
 
         uint256 stakeBeforeSecond = coinflip.coinflipAmount(sybil);
         vm.prank(sybil);
@@ -278,7 +278,7 @@ contract KeeperFaucetResistance is DeployProtocol {
             game.mineFlip();
             (, uint256 prepGas, uint256 prepReward) = _minerWork(vm.getRecordedLogs());
             assertEq(prepReward, _expectedPay(prepGas, false, false), "preparation call: reward == measured-gas formula");
-            assertEq(coinflip.coinflipAmount(keeper) - pre, prepReward, "preparation call: the credit is the reported reward");
+            assertEq(coinflip.coinflipAmount(keeper) - pre, _whole(prepReward), "preparation call: the credit is the reported reward");
         }
         assertTrue(game.rngLocked(), "the request took the daily lock");
 
@@ -294,7 +294,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         emit log_named_uint("advance call reward", reward);
         assertGt(measured, MineFlipGas.MIN_REWARDED_GAS, "non-vacuity: the advance measured past the unpaid first million");
         assertEq(reward, _expectedPay(measured, false, true), "advance reward == measured-gas formula (mirror in sync)");
-        assertEq(coinflip.coinflipAmount(keeper) - pre, reward, "the credit is the reported reward");
+        assertEq(coinflip.coinflipAmount(keeper) - pre, _whole(reward), "the credit is the reported reward");
     }
 
     // =========================================================================
@@ -365,8 +365,8 @@ contract KeeperFaucetResistance is DeployProtocol {
 
         assertEq(DQ.lastBetId(vm, address(game), INDEX), n, "n bets queued");
         for (uint64 id = 1; id <= n; ++id) assertEq(game.degeneretteBetInfo(INDEX, id), 0, "sweep resolved every bet");
-        assertEq(bounty, reported, "the credit is the reported bounty");
-        assertEq(bounty, _expectedPay(measured, false, false), "the bounty is the measured-gas formula");
+        assertEq(bounty, _whole(reported), "the credit is the reported bounty");
+        assertEq(reported, _expectedPay(measured, false, false), "the bounty is the measured-gas formula");
         // The fixture's clock is one half-hour step into the day (0.75x, cap 1 gwei), no pass, no lock:
         // below 1x, so the measured-gas bounty can never cover the gas the self-keeper burned.
         uint256 bountyEth = (bounty * PriceLookupLib.priceForLevel(_lvl())) / PRICE_COIN_UNIT;
@@ -537,6 +537,11 @@ contract KeeperFaucetResistance is DeployProtocol {
         if (reset > due) due = reset;
     }
 
+    /// @dev Coinflip stake lanes hold whole FLIP: a credit floors to the whole FLIP it lands as.
+    function _whole(uint256 amount) internal pure returns (uint256) {
+        return (amount / 1 ether) * 1 ether;
+    }
+
     /// @dev Mirror of the miner pay for `measured` gas at the current base fee and clock.
     function _expectedPay(uint256 measured, bool pass, bool locked) internal view returns (uint256) {
         if (measured <= MineFlipGas.MIN_REWARDED_GAS) return 0;
@@ -549,7 +554,10 @@ contract KeeperFaucetResistance is DeployProtocol {
         if (pass) bps <<= 1;
         if (locked) bps <<= 1;
         uint256 rate = block.basefee < cap ? block.basefee : cap;
-        return (measured - MineFlipGas.MIN_REWARDED_GAS) * rate * PRICE_COIN_UNIT * bps / (game.mintPrice() * 10_000);
+        uint256 raw = (measured - MineFlipGas.MIN_REWARDED_GAS) * rate * PRICE_COIN_UNIT * bps / (game.mintPrice() * 10_000);
+        // Whole-FLIP normalization at the payment site: 0 stays 0, positive sub-FLIP pays 1 FLIP.
+        if (raw == 0) return 0;
+        return raw < 1 ether ? 1 ether : _whole(raw);
     }
 
     /// @dev Settle the game to a clean state (advance not due, not rng-locked) — the open leg's `else` arm
