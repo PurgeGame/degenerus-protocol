@@ -28,7 +28,9 @@ import {
  *
  * STRATEGY:
  *   The lock predicate is the security-critical change — it's what stops players from
- *   writing into bafTotals[N] between _requestRng and runBafJackpot. We verify it
+ *   writing into bafTotals[N] between _requestRng and the bracket's resolution (the
+ *   consolidation's beginBaf and the award stage that draws from the frozen bracket
+ *   through bafPairWinners / bafHeadWinner until finalizeBaf). We verify it
  *   directly: drive the game one day cycle organically so alice has a winning claimable
  *   flip + claimableStored, then overwrite the `level` byte in slot 0 of the game's
  *   packed state and assert the lock fires (level=10) or doesn't (level=5).
@@ -544,10 +546,10 @@ describe("BafCreditRouting", function () {
   });
 
   // =========================================================================
-  // BAF-ROUTE-08 — markBafSkipped path routes identically to runBafJackpot
+  // BAF-ROUTE-08 — markBafSkipped path routes identically to the beginBaf path
   // =========================================================================
   describe("BAF-ROUTE-08 markBafSkipped routing equivalence", function () {
-    it("[08] markBafSkipped bumps lastBafResolvedDay; day-D claims seed bracket 20, like the runBafJackpot path", async function () {
+    it("[08] markBafSkipped bumps lastBafResolvedDay; day-D claims seed bracket 20, like the beginBaf path", async function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, coinflip, jackpots, alice } = fixture;
 
@@ -602,6 +604,61 @@ describe("BafCreditRouting", function () {
       // Identical boundary rule to the resolved path: credited to bracket 20.
       expect(aliceEvents.length).to.be.gte(1);
       expect(aliceEvents[0].args.lvl).to.equal(20n);
+    });
+  });
+
+  // =========================================================================
+  // BAF-ROUTE-09 — Claims during the BAF award stage leave the resolving bracket frozen
+  // =========================================================================
+  describe("BAF-ROUTE-09 award-stage claims", function () {
+    it("[09] claim during the award stage (level=10 + jackpotPhase + rngLocked) records to bracket 20; bracket 10's draw is unchanged", async function () {
+      const fixture = await loadFixture(deployFullProtocol);
+      const { game, coinflip, jackpots, alice, bob } = fixture;
+
+      const winningDay = await setupAliceWinningFlip(fixture);
+      const gameAddr = await game.getAddress();
+      const jackpotsAddr = await jackpots.getAddress();
+
+      // Bracket 10 holds a scored bettor (bob) when its award stage opens.
+      const coinflipAddr = await coinflip.getAddress();
+      await hre.ethers.provider.send("hardhat_setBalance", [coinflipAddr, "0x1000000000000000000"]);
+      await hre.ethers.provider.send("hardhat_impersonateAccount", [coinflipAddr]);
+      const coinflipSigner = await hre.ethers.getSigner(coinflipAddr);
+      await jackpots.connect(coinflipSigner).recordBafFlip(bob.address, 10, eth(500));
+      await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [coinflipAddr]);
+
+      // The award stage runs after consolidation, inside the jackpot phase, under the
+      // daily lock: level=10, jackpotPhase=true, lastPurchaseDay=false, rngLocked=true.
+      // The bracket resolved the day before alice's win, so her win still counts.
+      const bafResolvedDay = Number(winningDay) - 1;
+      await setLastBafResolvedDay(jackpotsAddr, bafResolvedDay >= 0 ? bafResolvedDay : 0);
+      await setLevel(gameAddr, 10);
+      await setSlot0Bool(gameAddr, 15, true); // jackpotPhaseFlag
+      await setSlot0Bool(gameAddr, 17, false); // lastPurchaseDay
+      await setSlot0Bool(gameAddr, 19, true); // rngLockedFlag
+
+      const word = 42n;
+      const headBefore = await jackpots.bafHeadWinner(10, word, 0);
+      const roundsBefore = [];
+      for (let p = 0; p < 24; p++) roundsBefore.push(await jackpots.bafPairWinners(10, word, p, 48));
+      expect(headBefore).to.equal(bob.address);
+
+      const tx = await coinflip
+        .connect(alice)
+        .claimCoinflips(alice.address, eth(10000));
+      const events = await getEvents(tx, jackpots, "BafFlipRecorded");
+      const aliceEvents = events.filter(
+        (e) => e.args.player.toLowerCase() === alice.address.toLowerCase()
+      );
+      expect(aliceEvents.length).to.be.gte(1);
+      expect(aliceEvents[0].args.lvl).to.equal(20n);
+
+      // Every bracket-10 slot the remaining award groups draw reads as before the claim.
+      expect(await jackpots.bafHeadWinner(10, word, 0)).to.equal(headBefore);
+      for (let p = 0; p < 24; p++) {
+        const pair = await jackpots.bafPairWinners(10, word, p, 48);
+        for (let i = 0; i < 4; i++) expect(pair[i]).to.equal(roundsBefore[p][i]);
+      }
     });
   });
 });

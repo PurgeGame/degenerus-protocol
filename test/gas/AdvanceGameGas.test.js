@@ -63,6 +63,7 @@ const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
  *   16 = STAGE_JACKPOT_BATTLE
  *   17 = STAGE_PURCHASE_BATTLE
  *   18 = STAGE_DAILY_WORD_APPLIED
+ *   19 = STAGE_JACKPOT_BAF_AWARDS (pays the frozen BAF awards after the level-x0 transition)
  */
 /** Parse Advance events using the advanceModule ABI (not game ABI). */
 async function getAdvanceEvents(tx, advanceModule) {
@@ -335,7 +336,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
   });
 
   // =========================================================================
-  // 5. Enter Jackpot Phase (STAGE_ENTERED_JACKPOT = 13)
+  // 5. Enter Jackpot Phase (STAGE_ENTERED_JACKPOT = 7)
   // =========================================================================
 
   describe("5. Enter Jackpot Phase (STAGE_ENTERED_JACKPOT)", function () {

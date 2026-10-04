@@ -1602,16 +1602,38 @@ contract CoverageGap222 is DeployProtocol {
         assertFalse(ok, "jackpots.recordBafFlip rejected non-coin caller");
     }
 
-    function test_gap_jackpots_runBafJackpot_guard() public {
+    function test_gap_jackpots_bafResolutionHooks_guard() public {
         vm.prank(buyer);
-        (bool ok, ) = address(jackpots).call(
-            abi.encodeWithSignature(
-                "runBafJackpot(uint256,uint24,uint256)",
-                uint256(1 ether),
-                uint24(0),
-                uint256(1)
-            )
-        );
-        assertFalse(ok, "jackpots.runBafJackpot rejected non-game caller");
+        (bool okBegin, bytes memory errBegin) = address(jackpots).call(abi.encodeWithSignature("beginBaf()"));
+        vm.prank(buyer);
+        (bool okFinal, bytes memory errFinal) =
+            address(jackpots).call(abi.encodeWithSignature("finalizeBaf(uint24)", uint24(10)));
+        assertFalse(okBegin, "jackpots.beginBaf rejected non-game caller");
+        assertFalse(okFinal, "jackpots.finalizeBaf rejected non-game caller");
+        assertEq(bytes4(errBegin), bytes4(keccak256("OnlyGame()")), "beginBaf: OnlyGame");
+        assertEq(bytes4(errFinal), bytes4(keccak256("OnlyGame()")), "finalizeBaf: OnlyGame");
+    }
+
+    /// @dev The award stage's module entry runs on its caller's storage. Called on the module
+    ///      contracts directly, their own storage holds no kind-7 record: the call reports done,
+    ///      progresses nothing and writes nothing.
+    function test_gap_runBafAwards_withoutBafWorkIsDone() public {
+        address[2] memory targets = [address(jackpotModule), address(jackpotDrawModule)];
+        for (uint256 t; t < 2; ++t) {
+            vm.record();
+            vm.recordLogs();
+            vm.prank(buyer);
+            (bool ok, bytes memory ret) = targets[t].call(
+                abi.encodeWithSignature("runBafAwards(uint256,uint256)", uint256(1), uint256(9_000_000))
+            );
+            assertTrue(ok, "runBafAwards without BAF work returns");
+            (bool progressed, bool done, uint256 rewardBasis) = abi.decode(ret, (bool, bool, uint256));
+            assertTrue(done, "no kind-7 record reads as done");
+            assertFalse(progressed, "and progresses nothing");
+            assertEq(rewardBasis, 0);
+            (, bytes32[] memory writes) = vm.accesses(targets[t]);
+            assertEq(writes.length, 0, "no storage write");
+            assertEq(vm.getRecordedLogs().length, 0, "no event");
+        }
     }
 }

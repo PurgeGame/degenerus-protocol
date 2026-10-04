@@ -3,6 +3,7 @@ pragma solidity 0.8.34;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {BafViews} from "../helpers/BafViews.sol";
 
 /// @dev Distinct scored candidates expose which band the real BAF allocator used.
 contract BafBandOracle {
@@ -33,6 +34,12 @@ contract BafBandOracle {
     }
 }
 
+/// @notice Each scatter round's band at 48 rounds: rounds 0-11 sample the level's trait buckets,
+///         12-23 the next level's, 24-35 the far-future queues lvl+2..lvl+5 and 36-47
+///         lvl+6..lvl+99, read through `DegenerusJackpots.bafPairWinners` (the pair view the award
+///         stage pays from; `BafViews.round` takes one round's half). The higher score takes the
+///         round's first place and the lower its second; no round reads a past level. The head
+///         slots (`bafHeadWinner`) read the board, not the bands.
 contract BafForwardBandsTest is DeployProtocol {
     function setUp() public { _deployProtocol(); }
 
@@ -43,33 +50,30 @@ contract BafForwardBandsTest is DeployProtocol {
         BafBandOracle oracle = new BafBandOracle(lvl);
         for (uint256 band; band < 4; ++band) {
             vm.startPrank(ContractAddresses.COINFLIP);
-            jackpots.recordBafFlip(oracle.candidate(band, 1), lvl, 100 ether);
+            jackpots.recordBafFlip(oracle.candidate(band, 1), lvl, (100 + band) * 1 ether);
             jackpots.recordBafFlip(oracle.candidate(band, 2), lvl, 50 ether);
             vm.stopPrank();
         }
         vm.etch(address(game), address(oracle).code);
-        vm.prank(address(game));
-        (address[] memory winners, uint256[] memory amounts, uint256 back) = jackpots.runBafJackpot(48_000, lvl, 123);
         uint256[4] memory first;
         uint256[4] memory second;
-        uint256 paid;
-        for (uint256 i; i < winners.length; ++i) {
-            paid += amounts[i];
-            if (amounts[i] != 500 && amounts[i] != 300) continue;
-            uint256 band = (uint160(winners[i]) - 0xBAF000) / 16;
+        for (uint256 round; round < 48; ++round) {
+            (address best, address next) = BafViews.round(address(jackpots), lvl, 123, round, 48);
+            uint256 band = (uint160(best) - 0xBAF000) / 16;
             assertLt(band, 4, "scatter never pays historical candidates");
-            if (amounts[i] == 500) {
-                assertEq(winners[i], oracle.candidate(band, 1), "highest score gets first share");
-                ++first[band];
-            } else {
-                assertEq(winners[i], oracle.candidate(band, 2), "second score gets second share");
-                ++second[band];
-            }
+            assertEq(band, round / 12, "twelve-round bands in forward order");
+            assertEq(best, oracle.candidate(band, 1), "highest score gets first place");
+            assertEq(next, oracle.candidate(band, 2), "second score gets second place");
+            ++first[band];
+            ++second[band];
         }
         for (uint256 band; band < 4; ++band) {
             assertEq(first[band], 12, "twelve first prizes in each forward band");
             assertEq(second[band], 12, "twelve second prizes in each forward band");
         }
-        assertEq(paid + back, 48_000, "payouts plus refund conserve BAF pool");
+        // Head slots: the top bettor and the word-picked third or fourth place of the board.
+        assertEq(jackpots.bafHeadWinner(lvl, 123, 0), oracle.candidate(3, 1), "slot 0 is the top bettor");
+        address pick = jackpots.bafHeadWinner(lvl, 123, 2);
+        assertTrue(pick == oracle.candidate(1, 1) || pick == oracle.candidate(0, 1), "slot 2 is third or fourth place");
     }
 }

@@ -184,8 +184,10 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  Fixed values for prize calculations and BAF configuration.          |
       +======================================================================+*/
 
-    /// @dev Fixed number of scatter rounds to keep BAF gas bounded.
-    uint8 private constant BAF_SCATTER_ROUNDS = 48;
+    /// @dev Entropy key of the far-future pair draws, above every scatter round index.
+    uint256 private constant BAF_FAR_PAIR_KEY = 1 << 16;
+    /// @dev Entropy key of head slot 2's third-or-fourth pick.
+    uint256 private constant BAF_HEAD_PICK_KEY = 1 << 17;
     bytes32 private constant BAF_WINNERS_TAG = keccak256("degenerus.baf.winners");
 
     /// @dev Skipped-bracket consolation rate: 1 WWXRP per 1000 FLIP of frozen
@@ -291,9 +293,10 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  | 10% | Top BAF bettor for this level                               | |
       |  |  5% | Weighted-random final-day coinflip depositor                | |
       |  |  5% | Random pick: 3rd or 4th BAF slot                            | |
-      |  | 50% | Scatter 1st place (48 rounds x 4 multi-level tickets)       | |
-      |  | 30% | Scatter 2nd place (48 rounds x 4 multi-level tickets)       | |
+      |  | 50% | Scatter 1st place (R rounds x 4 sampled candidates)         | |
+      |  | 30% | Scatter 2nd place (R rounds x 4 sampled candidates)         | |
       |  +-------------------------------------------------------------------+ |
+      |  R: 48 below a 500 ETH pool, doubled per fourfold step, max 1,536.     |
       |                                                                        |
       |  ELIGIBILITY:                                                          |
       |  * Top-BAF/pick: any non-zero address (no streak req)                  |
@@ -304,231 +307,105 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |                                                                        |
       |  SECURITY:                                                             |
       |  • VRF-derived randomness for all random selections                    |
-      |  • Draws keccak-chained from the single VRF seed (pseudo-independent)  |
-      |  • Unfilled prizes returned via returnAmountWei                        |
-      |  • Unfilled scatter rounds return to future pool                       |
+      |  • Draws hashed per round pair from the single VRF seed                |
+      |  • Unfilled awards leave their reserve to the game's future pool       |
       +========================================================================+*/
 
-    /// @notice Resolve the BAF jackpot for a level.
-    /// @dev Distributes poolWei across multiple winner categories with eligibility checks.
-    ///      Returns arrays of winners/amounts plus unawarded amount for recycling.
-    ///      Clears leaderboard state after resolution.
-    /// @param poolWei Total ETH prize pool for distribution.
-    /// @param lvl Level number being resolved.
-    /// @param rngWord VRF-derived randomness seed.
-    /// @return winners Array of winner addresses.
-    /// @return amounts Array of prize amounts corresponding to winners.
-    /// @return returnAmountWei Unawarded prize amount to return to caller.
+    /// @notice Opens a bracket's resolution: winning-flip credit claimed from today on belongs
+    ///         to the next bracket.
     /// @custom:access Restricted to game contract via onlyGame modifier.
-    function runBafJackpot(
-        uint256 poolWei,
-        uint24 lvl,
-        uint256 rngWord
-    )
-        external
-        override
-        onlyGame
-        returns (address[] memory winners, uint256[] memory amounts, uint256 returnAmountWei)
-    {
-        uint256 P = poolWei;
-        // Max prize entries (same address may fill several): 1 (top BAF) + 1 (top flip) + 1 (pick) + 96 (scatter) = 99.
-        address[] memory tmpW = new address[](99);
-        uint256[] memory tmpA = new uint256[](99);
-        uint256 n;
-        uint256 toReturn;
-
-        // Winner categories share this BAF stream, never the craps schedule's (word, ordinal) stream.
-        uint256 entropy = EntropyLib.hash2(rngWord, uint256(BAF_WINNERS_TAG));
-        uint256 salt;
-        // The bracket epoch is fixed for the whole resolution: read it once and
-        // thread it through every per-candidate score read.
-        uint64 currentEpoch = bafLevel[lvl].epoch;
-
-        {
-            // Slice A: 10% to the top BAF bettor for the level.
-            uint256 topPrize = P / 10;
-            (address w, ) = _bafTop(lvl, 0);
-            if (_creditOrRefund(w, topPrize, tmpW, tmpA, n)) {
-                unchecked {
-                    ++n;
-                }
-            } else {
-                toReturn += topPrize;
-            }
-        }
-
-        {
-            // Slice A2: 5% to one amount-weighted random direct depositor from the
-            // armed final purchase-day flip window. The roll is domain-separated
-            // inside Coinflip from the same transition word; the entropy/salt
-            // chain below is untouched (this slice consumes none of it).
-            uint256 topPrize = P / 20;
-            address w = coin.bafDrawWinner(rngWord);
-            if (_creditOrRefund(w, topPrize, tmpW, tmpA, n)) {
-                unchecked {
-                    ++n;
-                }
-            } else {
-                toReturn += topPrize;
-            }
-        }
-
-        {
-            unchecked {
-                ++salt;
-            }
-            entropy = EntropyLib.hash2(entropy, salt);
-            uint256 prize = P / 20;
-            uint8 pick = 2 + uint8(entropy & 1);
-            (address w, ) = _bafTop(lvl, pick);
-            // Slice B: 5% to a coin-flip-random pick between the 3rd and 4th BAF leaderboard slots.
-            if (_creditOrRefund(w, prize, tmpW, tmpA, n)) {
-                unchecked {
-                    ++n;
-                }
-            } else {
-                toReturn += prize;
-            }
-        }
-
-        // Scatter slice: 192 total draws (4 tickets * 48 rounds). Per round, take top-2 by BAF score.
-        // Unfilled rounds return their per-round share to future pool.
-        {
-            // Slice E: scatter tickets from trait sampler so casual participants can land smaller cuts.
-            uint256 scatterTop = P / 2;
-            uint256 scatterSecond = (P * 30) / 100;
-            address[BAF_SCATTER_ROUNDS] memory firstWinners;
-            address[BAF_SCATTER_ROUNDS] memory secondWinners;
-            uint256 firstCount;
-            uint256 secondCount;
-            address[] memory futurePair;
-
-            // Fixed rounds of 4-ticket sampling to keep gas bounded per call.
-            for (uint8 round = 0; round < BAF_SCATTER_ROUNDS; ) {
-                unchecked {
-                    ++salt;
-                }
-                entropy = EntropyLib.hash2(entropy, salt);
-
-                // Level targeting, in 12-round bands. lvl and lvl+1 are minted (lvl+1 on this
-                // level's last-purchase word, before this draw) and sample trait buckets; the
-                // unminted ranges sample one queue lane per wallet.
-                // Non-x00: 12 lvl, 12 lvl+1, 12 lvl+2..lvl+5, 12 lvl+6..lvl+99
-                // x00 uses the same four 12-round bands; no historical inventory.
-                address[] memory tickets;
-                uint24 targetLvl;
-                uint8 band = round / 12;
-                if (band == 0) targetLvl = lvl;
-                else if (band == 1) targetLvl = lvl + 1;
-                else if (band < 4) {
-                    // Unminted bands run in round pairs (bands start on even rounds): the even
-                    // round samples four packs, and each round takes one lane from every pack.
-                    if (round & 1 == 0) {
-                        futurePair = band == 2
-                            ? degenerusGame.sampleFarFutureTickets(entropy, lvl + 2, lvl + 5)
-                            : degenerusGame.sampleFarFutureTickets(entropy, lvl + 6, lvl + 99);
-                    }
-                    tickets = new address[](4);
-                    uint256 off = uint256(round & 1) << 2;
-                    for (uint256 i; i < 4; ++i) tickets[i] = futurePair[off + i];
-                }
-                if (targetLvl != 0) (, tickets) = degenerusGame.sampleTraitEntries(band == 1, entropy);
-                // Pick up to 4 tickets from the sampled set.
-                uint256 limit = tickets.length;
-                if (limit > 4) limit = 4;
-
-                address best;
-                uint256 bestScore;
-                address second;
-                uint256 secondScore;
-
-                for (uint256 i; i < limit; ) {
-                    address cand = tickets[i];
-                    uint256 score = _bafScore(cand, lvl, currentEpoch);
-                    if (score > bestScore) {
-                        second = best;
-                        secondScore = bestScore;
-                        best = cand;
-                        bestScore = score;
-                    } else if (score > secondScore && cand != best) {
-                        second = cand;
-                        secondScore = score;
-                    }
-                    unchecked {
-                        ++i;
-                    }
-                }
-
-                // Bucket winners if eligible and capacity not exceeded; otherwise refund their would-be share later.
-                if (best != address(0)) {
-                    firstWinners[firstCount] = best;
-                    unchecked {
-                        ++firstCount;
-                    }
-                }
-                if (second != address(0)) {
-                    secondWinners[secondCount] = second;
-                    unchecked {
-                        ++secondCount;
-                    }
-                }
-
-                unchecked {
-                    ++round;
-                }
-            }
-
-            // Per-round fixed share: empty rounds return to future pool.
-            uint256 perRoundFirst = scatterTop / BAF_SCATTER_ROUNDS;
-            uint256 perRoundSecond = scatterSecond / BAF_SCATTER_ROUNDS;
-
-            // Return unfilled rounds + integer division dust.
-            toReturn += scatterTop - perRoundFirst * firstCount;
-            toReturn += scatterSecond - perRoundSecond * secondCount;
-
-            for (uint256 i; i < firstCount; ) {
-                tmpW[n] = firstWinners[i];
-                tmpA[n] = perRoundFirst;
-                unchecked {
-                    ++n;
-                    ++i;
-                }
-            }
-
-            for (uint256 i; i < secondCount; ) {
-                tmpW[n] = secondWinners[i];
-                tmpA[n] = perRoundSecond;
-                unchecked {
-                    ++n;
-                    ++i;
-                }
-            }
-
-        }
-
-        winners = tmpW;
-        amounts = tmpA;
-        assembly ("memory-safe") {
-            mstore(winners, n)
-            mstore(amounts, n)
-        }
-
-        // Clean up leaderboard state for this level: clear the board entries, then
-        // reset the length and bump the epoch in a single slot write.
-        {
-            uint8 boardLen = bafLevel[lvl].topLen;
-            for (uint8 i; i < boardLen; ) {
-                delete bafTop[lvl][i];
-                unchecked { ++i; }
-            }
-            unchecked {
-                bafLevel[lvl] = BafLevel({epoch: currentEpoch + 1, topLen: 0, skipped: false});
-            }
-        }
-        // Day computed locally: identical to game.currentDayView() (pure GameTimeLib
-        // wall-clock) without the external call.
+    function beginBaf() external onlyGame {
         lastBafResolvedDay = GameTimeLib.currentDayIndex();
-        return (winners, amounts, toReturn);
+    }
+
+    /// @notice Closes a resolved bracket once every award is paid: clears the board and bumps
+    ///         the epoch so every stored score reads zero.
+    /// @param lvl Level whose bracket resolved.
+    /// @custom:access Restricted to game contract via onlyGame modifier.
+    function finalizeBaf(uint24 lvl) external onlyGame {
+        BafLevel memory current = bafLevel[lvl];
+        for (uint8 i; i < current.topLen; ) {
+            delete bafTop[lvl][i];
+            unchecked { ++i; }
+        }
+        unchecked {
+            bafLevel[lvl] = BafLevel({epoch: current.epoch + 1, topLen: 0, skipped: false});
+        }
+    }
+
+    /// @notice One of the bracket's three head awards: slot 0 the top BAF bettor, slot 1 the
+    ///         armed final purchase day's amount-weighted direct depositor (drawn inside
+    ///         Coinflip from the same word), slot 2 a word-picked third or fourth place.
+    /// @dev Pure in the frozen board, the word and the slot; address(0) when the slot is empty.
+    function bafHeadWinner(uint24 lvl, uint256 rngWord, uint8 slot) external view returns (address winner) {
+        if (slot == 0) (winner, ) = _bafTop(lvl, 0);
+        else if (slot == 1) winner = coin.bafDrawWinner(rngWord);
+        else (winner, ) = _bafTop(lvl, 2 + uint8(EntropyLib.hash2(_bafEntropyBase(rngWord), BAF_HEAD_PICK_KEY) & 1));
+    }
+
+    /// @notice Scatter rounds 2 * pair and 2 * pair + 1 of the bracket: each round's best and
+    ///         second-best BAF score among its four sampled candidates, as [best, second] of the
+    ///         even round then of the odd round (address(0) where none qualifies).
+    /// @dev Pure in the bracket, the word, the pair, the round count and the bucket and queue
+    ///      entries it samples. Four bands of `rounds / 4` rounds (`rounds` a multiple of 8, so a
+    ///      pair never straddles two bands): trait buckets at lvl and lvl + 1 (each round four
+    ///      entries of one packed word), then one queue lane per wallet over lvl + 2..lvl + 5 and
+    ///      lvl + 6..lvl + 99, where one sample of eight lanes serves the pair (the even round
+    ///      ranks the first four).
+    function bafPairWinners(uint24 lvl, uint256 rngWord, uint256 pair, uint256 rounds)
+        external view returns (address[4] memory winners)
+    {
+        uint256 base = _bafEntropyBase(rngWord);
+        uint256 band = (pair * 8) / rounds;
+        uint64 currentEpoch = bafLevel[lvl].epoch;
+        address[] memory tickets;
+        if (band < 2) {
+            (, tickets) = degenerusGame.sampleTraitEntries(band == 1, EntropyLib.hash2(base, 2 * pair));
+            (winners[0], winners[1]) = _bafRank(tickets, 0, lvl, currentEpoch);
+            (, tickets) = degenerusGame.sampleTraitEntries(band == 1, EntropyLib.hash2(base, 2 * pair + 1));
+            (winners[2], winners[3]) = _bafRank(tickets, 0, lvl, currentEpoch);
+        } else {
+            uint256 pairEntropy = EntropyLib.hash2(base, BAF_FAR_PAIR_KEY | pair);
+            tickets = band == 2
+                ? degenerusGame.sampleFarFutureTickets(pairEntropy, lvl + 2, lvl + 5)
+                : degenerusGame.sampleFarFutureTickets(pairEntropy, lvl + 6, lvl + 99);
+            (winners[0], winners[1]) = _bafRank(tickets, 0, lvl, currentEpoch);
+            (winners[2], winners[3]) = _bafRank(tickets, 4, lvl, currentEpoch);
+        }
+    }
+
+    /// @dev Best and second-best BAF score among the four candidates from `off` (fewer when the
+    ///      sample is shorter); address(0) where none qualifies.
+    function _bafRank(address[] memory tickets, uint256 off, uint24 lvl, uint64 currentEpoch)
+        private
+        view
+        returns (address best, address second)
+    {
+        uint256 end = off + 4;
+        if (end > tickets.length) end = tickets.length;
+        uint256 bestScore;
+        uint256 secondScore;
+        for (uint256 i = off; i < end; ) {
+            address cand = tickets[i];
+            uint256 score = _bafScore(cand, lvl, currentEpoch);
+            if (score > bestScore) {
+                second = best;
+                secondScore = bestScore;
+                best = cand;
+                bestScore = score;
+            } else if (score > secondScore && cand != best) {
+                second = cand;
+                secondScore = score;
+            }
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    /// @dev The bracket's winner stream, separate from the craps schedule's (word, ordinal) stream.
+    function _bafEntropyBase(uint256 rngWord) private pure returns (uint256) {
+        return EntropyLib.hash2(rngWord, uint256(BAF_WINNERS_TAG));
     }
 
     /// @notice Mark a BAF bracket as skipped because the daily flip lost.
@@ -596,36 +473,6 @@ contract DegenerusJackpots is IDegenerusJackpots {
         BafPlayer memory ps = bafPlayer[lvl][player];
         if (ps.epoch != lv.epoch) return 0;
         return uint256(ps.total) / CONSOLATION_DIVISOR;
-    }
-
-    /*+======================================================================+
-      |                      INTERNAL HELPER FUNCTIONS                       |
-      +======================================================================+
-      |  Utility functions for bucket packing and scoring.                   |
-      +======================================================================+*/
-
-    /// @dev Credit prize to non-zero winner or return false for refund.
-    ///      Writes to preallocated buffers if winner is valid.
-    /// @param candidate Potential winner address.
-    /// @param prize Prize amount in wei.
-    /// @param winnersBuf Pre-allocated winners array.
-    /// @param amountsBuf Pre-allocated amounts array.
-    /// @param idx Current write index.
-    /// @return credited True if winner was credited (eligible and non-zero prize).
-    function _creditOrRefund(
-        address candidate,
-        uint256 prize,
-        address[] memory winnersBuf,
-        uint256[] memory amountsBuf,
-        uint256 idx
-    ) private pure returns (bool credited) {
-        if (prize == 0) return false;
-        if (candidate != address(0)) {
-            winnersBuf[idx] = candidate;
-            amountsBuf[idx] = prize;
-            return true;
-        }
-        return false;
     }
 
     /*+======================================================================+

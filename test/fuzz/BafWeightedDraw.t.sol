@@ -13,8 +13,8 @@ import {IDegenerusGame} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         cumulative interval weighted by its raw FLIP principal; the BAF slice pays
 ///         5% of the pool to ONE winner drawn over those intervals with a
 ///         domain-separated roll of the transition word, located by binary search.
-///         An empty book returns address(0) and the slice refunds, exactly as an
-///         empty board did.
+///         An empty book returns address(0): head slot 1 stays unfilled and its reserved
+///         ETH returns to the pending future pool when the award stage completes.
 ///
 /// @dev The behaviours pinned here are the ones a refactor would quietly break:
 ///      - The normal 100-FLIP minimum is the only entry bar — no whale floor.
@@ -26,7 +26,7 @@ import {IDegenerusGame} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///      - Ordinary (un-armed) days write NO draw state.
 ///      - Entries key the deposit's target day, so the book closes at the day
 ///        boundary — before the deciding word can be requested.
-///      - The draw perturbs no other BAF slice for a fixed word and state.
+///      - The draw perturbs no other BAF slot for a fixed word and state.
 contract BafWeightedDrawTest is DeployProtocol {
     address internal constant GAME = ContractAddresses.GAME;
     bytes32 internal constant TAG = "COINFLIP_BAF_DRAW_WINNER";
@@ -312,46 +312,32 @@ contract BafWeightedDrawTest is DeployProtocol {
     }
 
     // ---------------------------------------------------------------------
-    // Jackpots wiring: empty refund and slice isolation
+    // Jackpots wiring: empty slot and slot isolation
     // ---------------------------------------------------------------------
 
-    /// @notice An armed day nobody entered returns address(0) and the whole Slice A2
-    ///         amount refunds — with no other BAF state, the full pool returns.
-    function testEmptyDrawRefundsSliceA2() public {
+    /// @notice An armed day nobody entered leaves head slot 1 (`bafHeadWinner` slot 1) empty;
+    ///         with no other BAF state every slot is empty, so the award stage credits nothing and
+    ///         the whole reservation returns to the pending future pool at completion.
+    function testEmptyDrawLeavesHeadSlotOneEmpty() public {
         _arm(3);
-        uint256 pool = 100 ether;
-        vm.prank(GAME);
-        (address[] memory w, , uint256 back) = jackpots.runBafJackpot(
-            pool,
-            10,
-            uint256(keccak256("empty_word"))
-        );
-        assertEq(w.length, 0, "nothing to pay anywhere");
-        assertEq(back, pool, "every slice, A2 included, refunds in full");
+        uint256 word = uint256(keccak256("empty_word"));
+        _assertAllSlotsEmpty(word, true);
     }
 
-    /// @notice With one recorded entry, Slice A2 pays exactly 5% to the drawn winner
-    ///         and everything else still refunds.
-    function testSoleEntryTakesExactlyTheFivePercentSlice() public {
+    /// @notice With one recorded entry, head slot 1 (the 5% award) names the drawn winner and
+    ///         every other slot stays empty.
+    function testSoleEntryTakesTheFivePercentSlot() public {
         _arm(3);
         _selfDeposit(alice, 100 ether);
-        uint256 pool = 100 ether;
-        vm.prank(GAME);
-        (address[] memory w, uint256[] memory a, uint256 back) = jackpots.runBafJackpot(
-            pool,
-            10,
-            uint256(keccak256("sole_word"))
-        );
-        assertEq(w.length, 1, "the draw is the only funded slice");
-        assertEq(w[0], alice, "the sole entrant wins the draw");
-        assertEq(a[0], pool / 20, "Slice A2 is exactly 5%");
-        assertEq(back, pool - pool / 20, "the rest refunds");
+        uint256 word = uint256(keccak256("sole_word"));
+        assertEq(jackpots.bafHeadWinner(10, word, 1), alice, "the sole entrant wins the draw slot");
+        _assertAllSlotsEmpty(word, false);
     }
 
-    /// @notice For a fixed word and fixed BAF state, adding draw entries changes
-    ///         ONLY Slice A2: every other winner/amount is identical with and
-    ///         without the draw.
-    function testOtherSlicesUnperturbedByTheDraw() public {
+    /// @notice For a fixed word and fixed BAF state, adding draw entries changes ONLY head
+    ///         slot 1: every scatter pair (`bafPairWinners`) and the other head slots are
+    ///         identical with and without the draw.
+    function testOtherSlotsUnperturbedByTheDraw() public {
         _arm(3);
         // Build board + score state through the real credit path.
         vm.startPrank(ContractAddresses.COINFLIP);
@@ -360,49 +346,34 @@ contract BafWeightedDrawTest is DeployProtocol {
         jackpots.recordBafFlip(carol, 10, 500 ether);
         vm.stopPrank();
 
-        uint256 pool = 100 ether;
         uint256 word = uint256(keccak256("isolation_word"));
-
-        uint256 snap = vm.snapshotState();
-        vm.prank(GAME);
-        (address[] memory w1, uint256[] memory a1, uint256 r1) = jackpots.runBafJackpot(
-            pool,
-            10,
-            word
-        );
-        vm.revertToState(snap);
+        bytes32 before = _otherSlots(word);
+        assertEq(jackpots.bafHeadWinner(10, word, 1), address(0), "no entry, no draw winner");
 
         _selfDeposit(alice, 100 ether);
         _selfDeposit(bob, 300 ether);
-        vm.prank(GAME);
-        (address[] memory w2, uint256[] memory a2, uint256 r2) = jackpots.runBafJackpot(
-            pool,
-            10,
-            word
-        );
+        address drawn = jackpots.bafHeadWinner(10, word, 1);
+        assertTrue(drawn == alice || drawn == bob, "the draw names an entrant");
+        assertEq(_otherSlots(word), before, "every other slot is unchanged by the draw");
+        assertEq(jackpots.bafHeadWinner(10, word, 0), alice, "slot 0 stays the top bettor");
+    }
 
-        // Run 2 must be run 1 plus exactly one extra credited entry: the A2 winner
-        // at 5%, inserted at the A2 position (after Slice A when A credited).
-        assertEq(w2.length, w1.length + 1, "exactly one new credited slice");
-        uint256 a2Idx = type(uint256).max;
-        for (uint256 i; i < w2.length; ++i) {
-            if (a2Idx == type(uint256).max && a2[i] == pool / 20) {
-                // First 5%-sized entry is A2 (slice B pays 5% too, but only ever
-                // after A2 in the buffer; the earliest match is A2).
-                a2Idx = i;
-            }
+    /// @dev Every scatter pair of the 48-round schedule and head slots 0 and 2 for bracket 10.
+    function _otherSlots(uint256 word) internal view returns (bytes32 h) {
+        for (uint256 pair; pair < 24; ++pair) {
+            h = keccak256(abi.encode(h, jackpots.bafPairWinners(10, word, pair, 48)));
         }
-        assertTrue(a2Idx != type(uint256).max, "the A2 credit must appear");
-        assertTrue(a2Idx == 1 || (a2Idx == 0 && w1.length == 0), "A2 sits at its slice position");
+        h = keccak256(abi.encode(h, jackpots.bafHeadWinner(10, word, 0), jackpots.bafHeadWinner(10, word, 2)));
+    }
 
-        uint256 j;
-        for (uint256 i; i < w2.length; ++i) {
-            if (i == a2Idx) continue;
-            assertEq(w2[i], w1[j], "non-A2 winner order unchanged");
-            assertEq(a2[i], a1[j], "non-A2 amount unchanged");
-            ++j;
+    function _assertAllSlotsEmpty(uint256 word, bool includeDraw) internal view {
+        for (uint256 pair; pair < 24; ++pair) {
+            address[4] memory drawn = jackpots.bafPairWinners(10, word, pair, 48);
+            for (uint256 k; k < 4; ++k) assertEq(drawn[k], address(0), "no scored candidate takes a scatter place");
         }
-        assertEq(r1 - r2, pool / 20, "the refund shrinks by exactly the paid A2 share");
+        assertEq(jackpots.bafHeadWinner(10, word, 0), address(0), "no top bettor");
+        assertEq(jackpots.bafHeadWinner(10, word, 2), address(0), "no third or fourth place");
+        if (includeDraw) assertEq(jackpots.bafHeadWinner(10, word, 1), address(0), "an empty book draws nobody");
     }
 
     // ---------------------------------------------------------------------

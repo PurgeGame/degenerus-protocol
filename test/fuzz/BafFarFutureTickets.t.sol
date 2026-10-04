@@ -4,27 +4,22 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
-/// @title BafFarFutureTicketsTest -- Regression test for the RngLocked revert
-///        during BAF reward jackpot processing in mineFlip.
+/// @title BafFarFutureTicketsTest -- BAF ticket legs paid under the daily RNG lock never revert
+///        on a far-future roll, so the level-10 BAF completes and the game moves past it.
 ///
-/// @notice The bug: during the purchase→jackpot transition at level 10 (BAF fires),
-///         _runRewardJackpots → _runBafJackpot → _awardJackpotTickets → _jackpotTicketRoll
-///         has a 5% chance per roll of targeting +5 to +50 levels ahead (far-future).
-///         This calls _queueEntriesScaled which checks:
+/// @notice Path: the level-10 consolidation (`runBafJackpot`) arms the BAF award stage; the
+///         stage (`runBafAwards`, Advance stage 19) pays groups of eight awards under the daily
+///         RNG lock. Each ticket leg rolls through `_awardJackpotTickets` -> `_jackpotTicketRoll`,
+///         which targets five to fifty levels above the floor with 5% probability per roll and
+///         queues through `_queueEntries(winner, target, entries, rngBypass = true)`. The sink's
+///         far-future guard (`isFarFuture && rngLockedFlag && !rngBypass` -> `RngLocked`) applies
+///         to player purchases only, so a far-future roll inside the stage registers its lane
+///         instead of reverting.
 ///
-///           if (isFarFuture && rngLockedFlag && !phaseTransitionActive) revert RngLocked();
-///
-///         At BAF time, rngLockedFlag is true and phaseTransitionActive is false, so
-///         far-future ticket rolls revert — bricking the game permanently.
-///
-///         The fix: set phaseTransitionActive = true before _runRewardJackpots and clear
-///         it after, bypassing the far-future guard for internal reward distributions.
-///
-/// @dev Injects 20 BAF leaderboard entries to maximize the probability of hitting the 5%
-///      far-future branch. With ~20 rolls, P(at least one far-future) ≈ 64%. Multiple
-///      VRF words are tested via the fuzz parameter to push coverage higher.
-///      If any VRF word causes RngLocked revert, mineFlip halts and the game is stuck
-///      at level 10 — caught by assertGt(finalLevel, 10).
+/// @dev Injects 20 scored BAF players at level 10 so the stage pays awards with ticket legs; the
+///      fuzz parameter and the fixed seeds vary the words. Every day is cranked under a realistic
+///      per-call allowance and any stop other than mineFlip's own stop errors fails the run; a
+///      halted stage would leave the game at level 10, caught by assertGt(finalLevel, 10).
 contract BafFarFutureTicketsTest is DeployProtocol {
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
 

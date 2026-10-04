@@ -28,21 +28,18 @@ pragma solidity 0.8.34;
 /// @notice Interface for the jackpot distribution contract.
 /// @dev Handles BAF (Big Ass Flip) jackpot calculations and payouts.
 interface IDegenerusJackpots {
-    /// @notice Run the BAF (Big Ass Flip) jackpot distribution for a level.
-    /// @dev Uses VRF randomness for winner selection. Access restricted to game contract.
-    /// @param poolWei Total ETH pool to distribute.
-    /// @param lvl The level being settled.
-    /// @param rngWord VRF random word for winner selection.
-    /// @return winners Array of winning addresses.
-    /// @return amounts Array of corresponding payout amounts.
-    /// @return returnAmountWei Amount of pool returned (undistributed).
-    function runBafJackpot(
-        uint256 poolWei,
-        uint24 lvl,
-        uint256 rngWord
-    )
-        external
-        returns (address[] memory winners, uint256[] memory amounts, uint256 returnAmountWei);
+    /// @notice Opens a bracket's resolution (today's winning-flip claims route onward).
+    function beginBaf() external;
+
+    /// @notice Closes a resolved bracket: clears the board and bumps the epoch.
+    function finalizeBaf(uint24 lvl) external;
+
+    /// @notice Head award `slot` (0 top bettor, 1 armed-day depositor draw, 2 word-picked 3rd/4th).
+    function bafHeadWinner(uint24 lvl, uint256 rngWord, uint8 slot) external view returns (address winner);
+
+    /// @notice Best and second-best BAF score of scatter rounds 2 * pair and 2 * pair + 1 of `rounds`.
+    function bafPairWinners(uint24 lvl, uint256 rngWord, uint256 pair, uint256 rounds)
+        external view returns (address[4] memory winners);
 
     /// @notice Record a coinflip win for BAF score tracking.
     /// @param player Address of the player.

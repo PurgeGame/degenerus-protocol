@@ -697,7 +697,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     /// @dev Ticket work of another kind is retired together with the field that selects it.
     ///      The groups it awarded are queued entries and stay awarded; without its field that
     ///      draw never restarts, so its unawarded remainder stays as nextPrizePool backing. A
-    ///      retired coin+tickets day is not counted as a completed jackpot day.
+    ///      retired coin+tickets day is not counted as a completed jackpot day. Kind 7 (BAF
+    ///      awards) never reaches here: the advance selector drains it before any ticket leg.
     function _retireTicketWork(uint8 stale) private {
         if (stale == 4) dailyTicketBudgetsPacked &= (uint256(1) << 208) - 1;
         else if (stale == 5) dailyTicketBudgetsPacked &= ~(uint256(type(uint64).max) << 144);
@@ -1496,9 +1497,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
         return uint16(DAILY_CURRENT_BPS_MIN + (seed % range));
     }
 
-    /// @notice The BAF draw and its ordered payouts share the cold draw module.
+    /// @notice The BAF selection and its grouped award stage share the cold draw module.
     function runBafJackpot(uint256, uint24, uint256) external returns (uint256 claimableDelta) {
         if (msg.sender != address(this)) revert OnlySelf();
         return abi.decode(_delegateJackpotDraw(msg.data), (uint256));
+    }
+
+    function runBafAwards(uint256, uint256) external returns (MineFlipGas.Result memory) {
+        return abi.decode(_delegateJackpotDraw(msg.data), (MineFlipGas.Result));
     }
 }

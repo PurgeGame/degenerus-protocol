@@ -245,9 +245,10 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
         revert("did not reach jackpot pending-set");
     }
 
-    /// @notice Drive to the transition day's checkpoint right before the jackpot entry: the
-    ///         last-purchase transition word is applied under the lock and the next chunk is the
-    ///         POOL_CONSOLIDATION stage (a 4.5M allowance cannot admit it).
+    /// @notice Drive to the transition day's last checkpoint before the jackpot entry: the
+    ///         last-purchase transition word is applied under the lock and the next engine step
+    ///         runs the consolidation that enters the jackpot phase. Each step on that day runs
+    ///         from a snapshot; the step that would enter the jackpot phase is rolled back.
     function _driveToTransitionCheckpoint() internal {
         for (uint256 i = 0; i < 4000; i++) {
             require(!game.gameOver(), "gameOver before jackpot phase");
@@ -255,10 +256,14 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
             _fulfillVrf();
             (, , bool lpd, bool locked, ) = game.purchaseInfo();
             if (lpd && locked && game.rngWordForDay(game.currentDayView()) != 0) {
-                (bool ok, bytes memory err) =
-                    address(game).call{gas: 4_500_000}(abi.encodeWithSignature("mineFlip()"));
-                if (!ok && err.length == 4 && bytes4(err) == INSUFFICIENT_GAS) return;
-                if (ok) continue;
+                uint256 snap = vm.snapshotState();
+                bool stepped = _step();
+                if (game.jackpotPhase()) {
+                    vm.revertToState(snap);
+                    return;
+                }
+                vm.deleteStateSnapshot(snap);
+                if (stepped) continue;
             }
             if (!_step()) {
                 vm.warp(block.timestamp + 1 days + 1);

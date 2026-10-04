@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {BafViews} from "../helpers/BafViews.sol";
 
 /// @title BafConsolationClaimTest -- Skipped-BAF WWXRP consolation claims.
 ///
@@ -97,9 +98,22 @@ contract BafConsolationClaimTest is DeployProtocol {
     function testResolvedBracketPaysNothing() public {
         _record(alice, 20, 1000 ether);
 
-        // Real resolution: epoch bumps, scores go stale, skipped stays false.
+        // Real resolution: `beginBaf` at consolidation opens it, the award stage draws from the
+        // frozen scores, and `finalizeBaf` with the last award group bumps the epoch. The
+        // bracket is never skipped, so nothing is claimable at any point.
         vm.prank(address(game));
-        jackpots.runBafJackpot(1 ether, 20, uint256(keccak256("resolved_word")));
+        jackpots.beginBaf();
+        assertEq(jackpots.bafConsolationOf(alice, 20), 0, "a resolving bracket is not claimable");
+        vm.expectRevert(NothingToClaim.selector);
+        jackpots.claimBafConsolation(alice, 20);
+        (address best,) = BafViews.round(address(jackpots), 20, uint256(keccak256("resolved_word")), 0, 48);
+        assertEq(best, address(0), "no sampled entry holds a bracket score");
+        assertEq(jackpots.bafHeadWinner(20, uint256(keccak256("resolved_word")), 0), alice,
+            "the frozen board still names the top bettor mid-stage");
+        vm.prank(address(game));
+        jackpots.finalizeBaf(20);
+        assertEq(jackpots.bafHeadWinner(20, uint256(keccak256("resolved_word")), 0), address(0),
+            "finalizeBaf clears the board");
 
         assertEq(jackpots.bafConsolationOf(alice, 20), 0, "resolved bracket not claimable");
         vm.expectRevert(NothingToClaim.selector);

@@ -50,7 +50,8 @@ PRE-COUNTED	_creditClaimable	_runDecimatorWork	modules/DegenerusGameDecimatorMod
 PAIRED-CREDIT	_creditClaimable	claimDeadVrf	modules/DegenerusGameGameOverModule.sol	READ	deterministic-ending share credited to the holding's owner; paired with its own claimablePool increment
 VALUE-IN	_creditClaimable	creditRedemptionDirect	modules/DegenerusGameLootboxModule.sol	READ	direct redemption half arrives and credits the player (tandem with the aggregate below)
 VALUE-IN	_creditClaimable	distributeYieldSurplus	modules/DegenerusGameJackpotModule.sol	READ	recognized stETH yield surplus: runs only when balance+stETH exceeds the full obligation set; three sink credits
-PRE-COUNTED	_creditClaimable	runBafJackpot	modules/DegenerusGameJackpotDrawModule.sol	READ	BAF winner credits; the summed claimed returns to AdvanceModule and enters claimablePool via claimableDelta
+PRE-COUNTED	_creditClaimable	_payBafAward	modules/DegenerusGameJackpotDrawModule.sol	READ	BAF award-stage credits; the schedule's ETH term was reserved in claimablePool at consolidation (runBafJackpot's claimableDelta) and is tracked down in jackpotWork.paid
+POOL-TO-POOL	claimablePool	_handleGameOverAdvance	modules/DegenerusGameGameOverModule.sol	WRITE	game-over latch releases the uncredited BAF reservation (jackpotWork.paid, kind 7) back into the distributable total before the in-flight work is deleted
 PAIRED-CREDIT	_creditClaimable	sellFarFutureEntries	modules/DegenerusGameMintModule.sol	READ	buyer-funded relabel; claimablePool unchanged
 DRAIN-ZERO	_setCurrentPrizePool	_handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	READ	live pools zeroed at the game-over drain
 POOL-TO-POOL	_setCurrentPrizePool	_runDailyJackpot	modules/DegenerusGameJackpotModule.sol	READ	daily ETH/lootbox budgets carved from the current pool (three call sites, one function)
@@ -101,6 +102,8 @@ POOL-TO-POOL	claimablePool	_handleGameOverDrain	modules/DegenerusGameGameOverMod
 POOL-TO-POOL	claimablePool	_payGoldenTicket	modules/DegenerusGameJackpotModule.sol	WRITE	golden-ticket ETH rung aggregate: future -> claimable; per-player credit paired below
 POOL-TO-POOL	claimablePool	_purchaseForWithCached	modules/DegenerusGameMintModule.sol	WRITE	claimable-funded purchase legs: aggregate falls as the pools rise (relabel)
 POOL-TO-POOL	claimablePool	_releaseToFuture	modules/DegenerusGameDecimatorModule.sol	WRITE	Releases an all-tails round, or at ranking the exact pass money (and the ETH split's dust), from the sealed reservation; paired with the future credit below
+POOL-TO-POOL	claimablePool	_releaseBafReserve	modules/DegenerusGameJackpotDrawModule.sol	WRITE	At BAF stage completion releases the reserved ETH term of awards no candidate took; paired with the pending future credit
+POOL-TO-POOL	_setPendingPools	_releaseBafReserve	modules/DegenerusGameJackpotDrawModule.sol	READ	The release credits pending future (the stage runs under the daily lock, pools frozen), paired with the claimablePool decrement
 PAIRED-CREDIT	claimablePool	_resumeEth	modules/DegenerusGameJackpotModule.sol	WRITE	winners' liabilityDelta aggregate; per-winner credits in _payEthQuadrant; funded by the current-pool debit in payDailyJackpot
 POOL-TO-POOL	claimablePool	_settleShortfall	storage/DegenerusGameStorage.sol	WRITE	canonical spend waterfall (claimable then afking); the matching value destination is at each call site (D-01: pairing kept at call sites)
 POOL-TO-POOL	claimablePool	claimDeadVrf	modules/DegenerusGameGameOverModule.sol	WRITE	moves part of the fixed dead-ending pot (unallocated ETH left after handleGameOverDrain) into claimable; total bounded by deadPot (created share <= traits x perTrait, uncreated weight debited from the tally)

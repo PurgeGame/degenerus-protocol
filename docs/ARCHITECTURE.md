@@ -4,7 +4,7 @@
 
 | Component | Responsibility |
 | --- | --- |
-| `DegenerusGame` + 12 game modules | Purchases, ticket materialization, advance/VRF, jackpots, lootboxes, side-games and terminal distribution. The twelve delegatecall modules are Advance, Afking (`GameAfkingModule`), Bingo, Boon, Decimator, Degenerette, FoilPack, GameOver, Jackpot, Lootbox, Mint and Whale; `DegenerusGameMintStreakUtils` and `DegenerusGamePayoutUtils` are abstract bases inherited by modules, the Game and the Lens, not deployments |
+| `DegenerusGame` + 16 game modules | Purchases, ticket materialization, the miner engine and VRF, jackpots, lootboxes, side-games and terminal distribution. The sixteen delegatecall modules are Advance, Afking (`GameAfkingModule`), Bingo, Boon, Decimator, Degenerette, FoilPack, GameOver, Jackpot, JackpotDraw, Lootbox, Miner, Mint, Rng, Ticket and Whale; `DegenerusGameMintStreakUtils` and `DegenerusGamePayoutUtils` are abstract bases inherited by modules, the Game and the Lens, not deployments |
 | `DegenerusGameStorage` | Shared game/module storage; every delegatecall executes in the Game's storage context. Modules also delegatecall sibling modules from inside a delegatecall (Advance to GameOver, Jackpot and Mint; Jackpot to Whale for early-bird and quadrant pass awards; Mint to FoilPack and Lootbox; FoilPack to Degenerette and Jackpot; Afking and Whale to Lootbox; Degenerette and Lootbox to further modules); `make check-delegatecall` pins each selector/target pair |
 | `FLIP` + `Coinflip` | `FLIP`: token supply, burns, the virtual vault allowance and the separate craps comp lane (`_crapsCompAllowance`). `Coinflip`: daily flip stakes, settled credits and the record pool; it holds no comp state |
 | `Craps`, `LootboxCraps`, `CrapsBattle` + `CrapsEngine` | `CrapsBattle is LootboxCraps is Craps` holds seat/field state and payouts; `CrapsEngine is Craps` is the one deployment after the table and exposes `settleSlip`, `settleRanked` and `settleBattle` as `external pure`, which is what makes the table's pinned call a STATICCALL; the table calls `settleBattle`, which plays a seat's whole run (board, scatter, shooter boost and rotation) under the shared 1,000-roll budget and also returns the battle ranking score (goals: high point, then ending bankroll; busts: shooters completed, then whether anything was kept, then high point, then remainder), so the comparator lives in the engine, not the table |
@@ -259,6 +259,27 @@ none. This changes century candidate exposure, not the scatter pool or its 50/30
 first/second split. Empty rounds still refund their allocation, so realized payouts
 depend on populated candidates and their BAF scores.
 
+BAF payout is staged. The x0 consolidation records the bracket's resolution day, arms the
+award stage and reserves in `claimablePool` (debiting `futurePool`) the ETH term of the whole
+award schedule: R scatter rounds paying (P/2)/R to the round's best BAF score and
+((P*30)/100)/R to its second, then three head awards (P/10 top bettor, P/20 armed-day
+depositor draw, P/20 word-picked third or fourth place). R is 48 below a 500 ETH pool and
+doubles at each fourfold step from 500 ETH up to 1,536 at 128,000 ETH; the bands keep a quarter
+of the rounds each and the head awards are fixed. The schedule depends only on the pool, so the
+Decimator seal, the keep roll and the settled pools are fixed in that transaction. The following
+advance calls (`STAGE_JACKPOT_BAF_AWARDS`, stage 19) draw and pay awards in index order in fixed
+groups of eight. A round pair's four awards are drawn together when the pair starts
+(`DegenerusJackpots.bafPairWinners`): two trait-bucket samples, or one eight-lane far-future
+sample split between the two rounds, ranked by the frozen BAF scores. Ticket awards paid earlier
+in the stage can add far-future lanes a later pair samples; the state each group starts from is
+the same under every call partition, so a resumed stage redraws nothing already paid and gas
+selects only how many groups a call runs. A head award (at least a twentieth of the pool) takes
+half as claimable ETH and half as lootbox tickets or whale-pass halves; a scatter award is all
+ETH or all tickets, alternating by round and rank. The last group returns the ETH term of awards
+no candidate took to the pending future pool (the stage runs under the daily lock, with the
+pools frozen), clears the board and bumps the bracket epoch. A game-over latch during the stage
+releases the uncredited reservation into the distributable total.
+
 The global wallet registry is append-only: each wallet gets one permanent, one-based
 uint32 ID. IDs are never reassigned. Queue words pack eight IDs; trait buckets pack
 eight zero-based global owner indices per completed storage word in two parity buffers. The unfinished zero to seven
@@ -417,8 +438,8 @@ capped at 100 paid passes. The attempt latch advances even if it buys nothing;
 later chunks and days cannot retry the same level. A purchase consumes the stage's
 shared work budget. Its ordinary daily box is separate from this level-start action.
 
-At century transitions the BAF/Decimator draws precede the tagged 5d4 future-pool
-keep roll. The keep range is 50–80%, with mean 65%. Consult the Advance module for
+At century transitions the BAF reservation and the Decimator draw precede the tagged 5d4
+future-pool keep roll; the BAF awards themselves pay from the staged reservation afterwards. The keep range is 50–80%, with mean 65%. Consult the Advance module for
 the exact pool snapshots and ordering; altering a pool size must not reroll winners.
 
 At the final transition close after each x00 level, sDGNRS recycles a random 25–75% of all

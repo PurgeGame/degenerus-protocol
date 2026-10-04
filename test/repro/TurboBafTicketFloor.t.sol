@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {Vm} from "forge-std/Vm.sol";
 import {TicketQueueStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
@@ -19,19 +20,32 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 ///         no further swap ever fires for the level (mid-day requests are locked out), and the
 ///         transition moves every later drain to lvl + 1 and beyond — so a floor-level award
 ///         queued during the collapse would sit at a key no drain ever names again.
-///         `runBafJackpot` therefore routes the floor to lvl + 1 when the flag reads >= 2.
+///         `runBafJackpot` therefore latches the floor at lvl + 1 into the award record when the
+///         flag reads >= 2, and the award stage (Advance stage 19) rolls every lootbox leg from it.
 ///
 ///         Drive: turbo-chain levels from genesis (seed the next pool over target every
 ///         purchase day, so each level collapses in one locked chain), deposit coinflips
 ///         daily so the buyer accrues BAF bracket-10 score (recordBafFlip on claim), and let
-///         level 10's collapsed chain run its BAF. Reachability is asserted (turbo flag,
-///         BAF resolved = epoch bump), then: no entries may remain at level 10's queue keys.
+///         level 10's collapsed chain run its BAF. Reachability is asserted (turbo flag, the award
+///         stage drained = epoch bump by `finalizeBaf`, award calls and BAF rolls observed, every
+///         roll from the turbo floor), then: no entries may remain at level 10's queue keys.
 contract TurboBafTicketFloor is DeployProtocol {
     address private buyer = address(0xB4A1);
     address private crank = address(0xC4A9);
     address private lateBuyer = address(0x1A7E);
 
     uint256 private simTime;
+
+    bytes32 private constant ADVANCE_SIG = keccak256("Advance(uint8,uint24)");
+    bytes32 private constant ETH_WIN_SIG = keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)");
+    bytes32 private constant TICKET_WIN_SIG =
+        keccak256("JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)");
+    uint8 private constant STAGE_JACKPOT_BAF_AWARDS = 19;
+    uint256 private constant BAF_TRAIT_SENTINEL = 420;
+    uint256 private bafAwardCalls;
+    uint256 private bafEthWins;
+    uint256 private bafRolls;
+    uint256 private bafRollsOffFloor;
 
     uint24 private constant TICKET_SLOT_BIT = uint24(1) << 23;
 
@@ -70,6 +84,11 @@ contract TurboBafTicketFloor is DeployProtocol {
             1,
             "harness: the level-10 BAF must have resolved (epoch bump), not skipped"
         );
+        // The award stage drained inside the collapsed chain: its calls ran, it paid awards, and
+        // every lootbox roll started at the turbo floor.
+        assertGt(bafAwardCalls, 0, "harness: the level-10 BAF awards are paid by the award stage");
+        assertGt(bafRolls, 0, "harness: BAF lootbox legs rolled tickets");
+        assertEq(bafRollsOffFloor, 0, "every BAF roll starts at the turbo floor (lvl + 1)");
 
         // Let the next level's purchase days drain the lvl+1 queues normally.
         _runFullDay();
@@ -167,9 +186,29 @@ contract TurboBafTicketFloor is DeployProtocol {
                 _buyTickets();
                 _tryCoinflipDeposit();
             }
+            vm.recordLogs();
             _runFullDay();
+            _scanBafAwards(vm.getRecordedLogs());
         }
         revert("harness: never completed level 10");
+    }
+
+    /// @dev Counts the level-10 award-stage calls and BAF award events (the BAF sentinel trait).
+    function _scanBafAwards(Vm.Log[] memory logs) internal {
+        for (uint256 j; j < logs.length; ++j) {
+            if (logs[j].emitter != address(game) || logs[j].topics.length == 0) continue;
+            bytes32 sig = logs[j].topics[0];
+            if (sig == ADVANCE_SIG) {
+                (uint8 stage, uint24 lvl) = abi.decode(logs[j].data, (uint8, uint24));
+                if (stage == STAGE_JACKPOT_BAF_AWARDS && lvl == 10) ++bafAwardCalls;
+            } else if (sig == ETH_WIN_SIG && uint256(logs[j].topics[3]) == BAF_TRAIT_SENTINEL) {
+                ++bafEthWins;
+            } else if (sig == TICKET_WIN_SIG && uint256(logs[j].topics[3]) == BAF_TRAIT_SENTINEL) {
+                ++bafRolls;
+                (, uint24 source,,) = abi.decode(logs[j].data, (uint32, uint24, uint256, bool));
+                if (source != 11 || uint256(logs[j].topics[2]) < 11) ++bafRollsOffFloor;
+            }
+        }
     }
 
     /// @dev Turbo-chain levels 1-9 (same seeding as above), stopping ON the day the
@@ -211,8 +250,16 @@ contract TurboBafTicketFloor is DeployProtocol {
             _fulfillPending();
             if (!_mine()) break;
             (uint24 lvl, , bool lastPurchaseDay_, bool locked, ) = game.purchaseInfo();
-            if (lastPurchaseDay_ && lvl == 9 && !locked) break;
+            if (lastPurchaseDay_ && lvl == 9 && (!locked || (_jackpotFlags() == 1 && _requestInFlight()))) break;
         }
+    }
+
+    /// @dev True while the VRF coordinator holds an unanswered request.
+    function _requestInFlight() internal view returns (bool) {
+        uint256 id = mockVRF.lastRequestId();
+        if (id == 0) return false;
+        (, , bool fulfilled) = mockVRF.pendingRequests(id);
+        return !fulfilled;
     }
 
     /// @dev Run the advance chain to exhaustion on the current (already-warped) day.
@@ -304,6 +351,7 @@ contract TurboBafTicketFloor is DeployProtocol {
         // as one is eligible (craps windows ride the normal RNG round), possibly while the
         // previous session's reads finish. Otherwise the crank sends it, funded by a lootbox.
         bool before = _ticketWriteSlot();
+        if (_requestInFlight()) return false;
         if (_settleReadsUntilRequest()) return _ticketWriteSlot() != before;
         vm.prank(buyer);
         game.purchase{value: 2 ether}(

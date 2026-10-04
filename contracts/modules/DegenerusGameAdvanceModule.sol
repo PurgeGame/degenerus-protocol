@@ -84,6 +84,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
     uint8 private constant STAGE_JACKPOT_BATTLE = 16;
     uint8 private constant STAGE_PURCHASE_BATTLE = 17;
     uint8 private constant STAGE_DAILY_WORD_APPLIED = 18;
+    uint8 private constant STAGE_JACKPOT_BAF_AWARDS = 19;
     uint16 private constant NEXT_TO_FUTURE_BPS_FAST = 3000;
     uint16 private constant NEXT_TO_FUTURE_BPS_MIN = 1500;
     uint16 private constant NEXT_TO_FUTURE_BPS_DEADLINE = 4500;
@@ -258,6 +259,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
             result.progressed = true;
             result.done = true;
             stage = STAGE_TRANSITION_DONE;
+        } else if (jackpotWork.kind == 7) {
+            // Reserved BAF awards are drawn and paid in groups before the first jackpot-phase daily.
+            result = _runJackpotWork(abi.encodeWithSelector(
+                IDegenerusGameJackpotModule.runBafAwards.selector, word, _phaseAllowance(meter)
+            ));
+            stage = STAGE_JACKPOT_BAF_AWARDS;
         } else if (jackpotWork.kind == 1 || jackpotWork.kind == 2) {
             // Pricing can set ticket-leg flags before the ETH quadrants have finished.
             result = _runJackpotWork(abi.encodeWithSelector(
@@ -293,7 +300,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
                 }
                 stage = STAGE_PURCHASE_DAILY;
             } else {
-                // The consolidated-pool transition is a single atomic accounting action.
+                // The consolidated-pool accounting is one atomic action; the BAF awards it
+                // reserves are drawn and paid afterwards in groups (STAGE_JACKPOT_BAF_AWARDS).
                 if (!MineFlipGas.canRun(meter, GasBounds.POOL_CONSOLIDATION, GasBounds.DAILY_PHASE_TAIL)) return result;
                 uint256 achieved = _getNextPrizePool();
                 levelPrizePool[purchaseLevel] = achieved;
@@ -651,7 +659,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
 
 
         // BAF Jackpot (every 10 levels) — only if the daily flip won (bit 0 of
-        // rngWord = 1). On a losing flip the bracket is marked skipped, the pool
+        // rngWord = 1). Arming returns the ETH term of the award schedule, a function
+        // of the pool alone; that sum leaves futurePool and is reserved in claimablePool
+        // here, so every later step reads the settled values. The award stage then
+        // draws and pays from the reservation and returns what no candidate took to
+        // futurePool. On a losing flip the bracket is marked skipped, the pool
         // stays whole in futurePool (the x00 incinerator pays FLIP, not ETH), and
         // pre-skip winning-flip credit is filtered out of future claims via the
         // lastBafResolvedDay bump.

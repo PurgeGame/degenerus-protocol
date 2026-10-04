@@ -132,11 +132,13 @@ interface IDegenerusGameJackpotDrawModule {
     function awardDailyFlipJackpot(uint24 minLevel, uint24 maxLevel, uint32 traits, uint256 budget, uint256 word) external;
     function runPurchaseJackpotBattle(uint24 lvl, uint256 word, uint256 allowance)
         external returns (MineFlipGas.Result memory);
+    function runBafAwards(uint256 word, uint256 allowance) external returns (MineFlipGas.Result memory);
 }
 
 interface IDegenerusGameJackpotModule {
     function runPurchaseJackpotBattle(uint24 lvl, uint256 word, uint256 allowance)
         external returns (MineFlipGas.Result memory);
+    function runBafAwards(uint256 word, uint256 allowance) external returns (MineFlipGas.Result memory);
     function runDailyJackpot(bool inJackpot, uint24 lvl, uint256 word, uint256 allowance)
         external returns (MineFlipGas.Result memory);
     function runPurchaseDailyTickets(uint256 word, uint256 allowance) external returns (MineFlipGas.Result memory);
@@ -209,7 +211,7 @@ interface IDegenerusGameJackpotModule {
     /// @param poolWei Total ETH pool for BAF.
     /// @param lvl Current level.
     /// @param rngWord VRF entropy.
-    /// @return claimableDelta ETH moved to claimable.
+    /// @return claimableDelta ETH reserved in claimablePool for the staged award schedule.
     function runBafJackpot(
         uint256 poolWei,
         uint24 lvl,

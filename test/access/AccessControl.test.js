@@ -216,11 +216,19 @@ describe("AccessControl", function () {
       ).to.be.revertedWithCustomError(jackpots, "OnlyCoin");
     });
 
-    it("runBafJackpot: reverts when called by alice (onlyGame → OnlyGame)", async function () {
+    it("beginBaf: reverts when called by alice (onlyGame → OnlyGame)", async function () {
       const { jackpots, alice } = await loadFixture(deployFullProtocol);
 
       await expect(
-        jackpots.connect(alice).runBafJackpot(eth("1"), 0, 12345n)
+        jackpots.connect(alice).beginBaf()
+      ).to.be.revertedWithCustomError(jackpots, "OnlyGame");
+    });
+
+    it("finalizeBaf: reverts when called by alice (onlyGame → OnlyGame)", async function () {
+      const { jackpots, alice } = await loadFixture(deployFullProtocol);
+
+      await expect(
+        jackpots.connect(alice).finalizeBaf(10)
       ).to.be.revertedWithCustomError(jackpots, "OnlyGame");
     });
   });

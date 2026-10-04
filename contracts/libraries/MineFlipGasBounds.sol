@@ -20,7 +20,10 @@ library MineFlipGasBounds {
     // Cold: 3.20M measured, empty sDGNRS pools.
     uint256 internal constant TRANSITION_CLOSE = 3_850_000;
     uint256 internal constant LEVEL_ONE_DRAW = 2_500_000;
-    uint256 internal constant POOL_CONSOLIDATION = 8_100_000;
+    // Cold consolidation. Worst: x00 losing flip, skip mark plus the incinerator's 20-probe
+    // book search and fresh FLIP credit, Decimator seal, yield dump, keep roll: 0.48M measured.
+    // The x00 winning flip (BAF reservation) measures 0.42M.
+    uint256 internal constant POOL_CONSOLIDATION = 580_000;
     uint256 internal constant DAILY_PHASE_TAIL = 150_000;
     uint256 internal constant FOIL_PACK = 1_400_000;
 
@@ -119,6 +122,12 @@ library MineFlipGasBounds {
     // One sampler group: eight draws share one packed bucket word. Checkpoints must start a
     // group, so this stays a multiple of eight. 8 x (DRAW + AWARD) + TAIL = 0.57M.
     uint256 internal constant JACKPOT_TICKET_AWARD_CHUNK = 8;
+    // One eight-award BAF group. Worst: a far-future pair group with four cold claimable
+    // credits and eight rolls on eight levels, 0.90M measured; whale-pass legs cost less and the
+    // cost does not grow with the round count.
+    uint256 internal constant BAF_AWARD_GROUP = 1_080_000;
+    // Cursor write and the meter's close after the last admitted group: 60k measured.
+    uint256 internal constant BAF_AWARD_TAIL = 72_000;
 
     // CRAPS
     uint256 internal constant CRAPS_SEAT_GAS_MAX = 1_650_000;

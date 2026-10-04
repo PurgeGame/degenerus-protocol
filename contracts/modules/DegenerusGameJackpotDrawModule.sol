@@ -30,6 +30,10 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
     uint256 private constant SMALL_LOOTBOX_THRESHOLD = 0.5 ether;
     uint16 private constant BAF_TRAIT_SENTINEL = 420;
     uint256 private constant BAF_TICKET_TAG = 0x4261665469636b6574;
+    uint256 private constant BAF_ROUNDS = 48;
+    /// @dev Scatter rounds double at each fourfold step of the BAF pool above this anchor.
+    uint256 private constant BAF_ROUNDS_ANCHOR = 125 ether;
+    uint256 private constant BAF_ROUNDS_MAX_MULTIPLIER = 32;
     event JackpotEthWin(address indexed winner, uint24 indexed level, uint16 indexed traitId,
         uint256 amount, uint256 entryIndex);
     event JackpotTicketWin(address indexed winner, uint24 indexed entryLevel, uint16 indexed traitId,
@@ -278,131 +282,195 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
     // Reward Jackpots (BAF + Decimator Dispatch)
     // -------------------------------------------------------------------------
 
-    /**
-     * @notice Execute BAF (Big-Ass Flip) jackpot distribution.
-     * @dev Large winners (>=5% of pool) receive 50% ETH / 50% lootbox.
-     *      Small winners (<5% of pool) alternate: even-index gets 100% ETH,
-     *      odd-index gets 100% lootbox (gas-efficient batching).
-     *
-     * @param poolWei Total ETH for BAF distribution.
-     * @param lvl Level triggering the BAF.
-     * @param rngWord VRF entropy for winner selection.
-     * @return claimableDelta ETH credited to claimable balances.
-     *         Refund, lootbox, and whale pass ETH stay in futurePool implicitly.
-     *
-     * ## Payout Split
-     *
-     * | Winner Size        | Portion | Reward Type                              |
-     * |--------------------|---------|------------------------------------------|
-     * | Large (>=5% pool)  | 50%     | Claimable ETH (immediate)                |
-     * | Large (>=5% pool)  | 50%     | Lootbox future tickets (claimWhalePass)  |
-     * | Small even-index   | 100%    | Claimable ETH (immediate)                |
-     * | Small odd-index    | 100%    | Lootbox future tickets                   |
-     *
-     * ## Lootbox Flow (Tiered by Amount)
-     *
-     * **All payouts:**
-     * - Large lootbox payouts defer via `claimWhalePass` for gas safety
-     *
-     * All lootbox ETH stays in futurePrizePool (source pool).
-     *
-     */
+    /// @notice Arms the BAF award stage at the x0 consolidation and returns the ETH it reserves.
+    /// @dev Accounting order. The award schedule is a pure function of the pool: 2R scatter awards
+    ///      (`_bafRounds`; a round's best takes (P/2)/R, its second ((P*30)/100)/R) and three
+    ///      head awards (P/10, P/20, P/20). Consolidation debits futurePool and credits
+    ///      claimablePool by the schedule's ETH term (`_bafReservation`) in this transaction, so
+    ///      the Decimator seal, the keep roll and the settled pools do not depend on who wins.
+    ///      `runBafAwards` then draws and pays each award from the reservation in groups; the ETH
+    ///      term of an unfilled award (no candidate) returns to the pending future pool when the
+    ///      stage completes. The bracket's resolution day is recorded here; its board and epoch close
+    ///      at completion so every group reads the same frozen scores. The ticket-roll floor is
+    ///      latched here: turbo routes it one level out because no further swap fires for the
+    ///      level inside the collapsed phase.
+    /// @return claimableDelta ETH reserved in claimablePool for the award schedule.
     function runBafJackpot(
         uint256 poolWei,
         uint24 lvl,
-        uint256 rngWord
+        uint256
     ) external returns (uint256 claimableDelta) {
         if (msg.sender != address(this)) revert OnlySelf();
-        // Get winners and payout info from jackpots contract
-        (address[] memory winnersArr, uint256[] memory amountsArr, ) = jackpots
-            .runBafJackpot(poolWei, lvl, rngWord);
+        jackpots.beginBaf();
+        uint256 rounds = _bafRounds(poolWei);
+        claimableDelta = _bafReservation(poolWei, rounds);
+        JackpotWork storage work = jackpotWork;
+        work.budget = uint128(poolWei);
+        work.paid = uint128(claimableDelta);
+        work.traits = uint32(2 * rounds + 3);
+        work.lvl = lvl;
+        work.winner = 0;
+        work.kind = 7;
+        work.quadrant = (jackpotFlags & JACKPOT_TURBO) != 0 ? 1 : 0;
+        work.finalDay = false;
+        work.directTicketRound = 0;
+        work.directTickets = false;
+    }
 
-        // ---------------------------------------------------------------------
-        // Process each winner with gas-optimized payout structure
-        // Large winners (>=5% of pool): 50% ETH, 50% lootbox (balanced)
-        // Small winners (<5% of pool): alternate 100% ETH or 100% lootbox (gas-efficient)
-        // ---------------------------------------------------------------------
-
-        uint256 largeWinnerThreshold = poolWei / 20; // 5% of total BAF pool
-
-        // Ticket-roll floor. A roll can land on the floor level exactly (its 30% leg), and the
-        // swap that would commit that queue already fired at this level's RNG request. A normal
-        // phase swaps again on jackpot day 2 and drains lvl there, so the floor is lvl. Turbo
-        // collapses the whole phase inside one lock — no further swap fires for the level, so
-        // a floor-lvl award would be committed and materialized only after lvl's draws ended
-        // (the trailing sweep reaches it, but drawless). Route the floor one level out so the
-        // awards land where they still draw.
-        uint24 ticketFloorLvl = (jackpotFlags & JACKPOT_TURBO) != 0 ? lvl + 1 : lvl;
-
-        uint256 winnersLen = winnersArr.length;
-        for (uint256 i; i < winnersLen; ) {
-            address winner = winnersArr[i];
-            uint256 amount = amountsArr[i];
-
-            // Large winners: keep 50/50 split for balanced payout
-            if (amount >= largeWinnerThreshold) {
-                uint256 ethPortion = amount / 2;
-                uint256 lootboxPortion = amount - ethPortion;
-
-                // Credit ETH half to claimable balance
-                _creditClaimable(winner, ethPortion);
-                claimableDelta += ethPortion;
-                emit JackpotEthWin(winner, lvl, BAF_TRAIT_SENTINEL, ethPortion, 0);
-
-                // Lootbox half: small amounts awarded immediately, large deferred
-                if (lootboxPortion <= LOOTBOX_CLAIM_THRESHOLD) {
-                    // Small lootbox: award immediately (2 rolls, probabilistic targeting).
-                    // JackpotTicketWin is emitted per-roll inside _jackpotTicketRoll
-                    // with the real targetLevel and scaled ticketCount.
-                    uint256 cd;
-                    (, cd) = _awardJackpotTickets(
-                        winner,
-                        lootboxPortion,
-                        ticketFloorLvl,
-                        EntropyLib.hash4(rngWord, lvl, BAF_TICKET_TAG, i)
-                    );
-                    claimableDelta += cd;
+    /// @notice Draws and pays the BAF awards in index order in fixed groups of eight.
+    /// @dev Positions 0..2R-1 are the scatter rounds, four per round pair (each round's best then
+    ///      its second); a pair's four awards are drawn together when the pair starts, from the
+    ///      frozen bracket, the locked word, the pair index and the bucket and queue entries at that
+    ///      point (ticket awards paid earlier in the stage can add far-future lanes a later pair
+    ///      samples). Positions 2R..2R+2 are the head awards. Groups hold whole pairs and the state
+    ///      a group starts from is the same under every call partition, so a resumed stage redraws
+    ///      nothing already paid; gas selects only how many groups run.
+    ///      Per award: a large winner (at least a twentieth of the pool) takes half as claimable ETH
+    ///      and half as lootbox tickets or, above the claim threshold, whale-pass halves; a small
+    ///      scatter award is all ETH or all tickets, the leg alternating by round and by rank.
+    ///      `work.paid` tracks the reserved ETH not yet credited; the last group returns what no
+    ///      candidate took to the pending future pool, closes the bracket and deletes the work
+    ///      record. The game-over latch releases the reservation instead.
+    function runBafAwards(uint256 word, uint256 allowance) external returns (MineFlipGas.Result memory result) {
+        MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
+        JackpotWork storage work = jackpotWork;
+        if (work.kind != 7) {
+            result.done = true;
+            return result;
+        }
+        uint256 n = work.traits;
+        uint256 i = work.winner;
+        uint24 lvl = work.lvl;
+        uint256 pool = work.budget;
+        uint256 rounds = (n - 3) / 2;
+        uint24 floorLvl = lvl + work.quadrant;
+        uint256 credited;
+        address[4] memory drawn;
+        while (i < n) {
+            if (!MineFlipGas.canRun(meter, GasBounds.BAF_AWARD_GROUP, GasBounds.BAF_AWARD_TAIL)) break;
+            uint256 end = i + GasBounds.JACKPOT_ETH_AWARD_CHUNK;
+            if (end > n) end = n;
+            for (; i < end; ) {
+                address winner;
+                uint256 amount;
+                if (i < 2 * rounds) {
+                    if (i & 3 == 0) drawn = jackpots.bafPairWinners(lvl, word, i >> 2, rounds);
+                    winner = drawn[i & 3];
+                    amount = i & 1 == 0 ? (pool / 2) / rounds : ((pool * 30) / 100) / rounds;
                 } else {
-                    // Large lootbox: defer to claim (whale pass equivalent). The sub-half-pass
-                    // remainder is folded into claimableDelta so the caller's memFuture debit
-                    // and claimablePool credit both move it out of futurePool exactly once.
-                    claimableDelta += _queueWhalePassClaimCore(winner, lootboxPortion);
-                    emit JackpotWhalePassWin(
-                        winner,
-                        lootboxPortion / HALF_WHALE_PASS_PRICE,
-                        WHALE_PASS_SRC_BAF_DIRECT
-                    );
+                    uint8 slot = uint8(i - 2 * rounds);
+                    winner = jackpots.bafHeadWinner(lvl, word, slot);
+                    amount = slot == 0 ? pool / 10 : pool / 20;
+                }
+                credited += _payBafAward(winner, amount, i, lvl, pool / 20, floorLvl, word);
+                unchecked {
+                    ++i;
                 }
             }
-            // Small winners: alternate between 100% ETH and 100% lootbox for gas efficiency
-            else if (i % 2 == 0) {
-                // Even index: 100% ETH (immediate liquidity)
-                _creditClaimable(winner, amount);
-                claimableDelta += amount;
-                emit JackpotEthWin(winner, lvl, BAF_TRAIT_SENTINEL, amount, 0);
-            } else {
-                // Odd index: 100% lootbox (upside exposure).
-                // JackpotTicketWin is emitted per-roll inside _jackpotTicketRoll;
-                // whale-pass fallback (amount > LOOTBOX_CLAIM_THRESHOLD) emits
-                // JackpotWhalePassWin inside _awardJackpotTickets.
+            ++result.rewardBasis;
+        }
+        if (i != work.winner) {
+            work.paid -= uint128(credited);
+            work.winner = uint16(i);
+            result.progressed = true;
+        }
+        if (i == n) {
+            uint256 residue = work.paid;
+            if (residue != 0) _releaseBafReserve(residue);
+            jackpots.finalizeBaf(lvl);
+            delete jackpotWork;
+            result.done = true;
+            result.progressed = true;
+        }
+        MineFlipGas.finish(meter);
+    }
+
+    /// @dev BAF_ROUNDS below 4 anchors, doubled at each fourfold step of `pool` from there (96 at
+    ///      500 ETH, 192 at 2,000, ... 1,536 at 128,000). Always a multiple of 8.
+    function _bafRounds(uint256 pool) private pure returns (uint256 rounds) {
+        rounds = BAF_ROUNDS;
+        for (
+            uint256 step = 4 * BAF_ROUNDS_ANCHOR;
+            rounds < BAF_ROUNDS * BAF_ROUNDS_MAX_MULTIPLIER && pool >= step;
+            step *= 4
+        ) rounds *= 2;
+    }
+
+    /// @dev A small scatter award pays ETH when its round parity equals its rank parity
+    ///      (best of an even round, second of an odd round) and tickets otherwise.
+    function _bafEthLeg(uint256 i) private pure returns (bool) {
+        return ((i >> 1) ^ i) & 1 == 0;
+    }
+
+    /// @dev The ETH an award credits to claimable: a large winner's half plus the sub-half-pass
+    ///      remainder of a deferred lootbox half, a small ETH-leg award in full, or the
+    ///      sub-half-pass remainder of a small ticket-leg award above the claim threshold.
+    function _bafEthTerm(uint256 amount, uint256 threshold, bool ethLeg) private pure returns (uint256) {
+        if (amount >= threshold) {
+            uint256 lootboxPortion = amount - amount / 2;
+            return amount / 2 + (lootboxPortion > LOOTBOX_CLAIM_THRESHOLD ? lootboxPortion % HALF_WHALE_PASS_PRICE : 0);
+        }
+        if (ethLeg) return amount;
+        return amount > LOOTBOX_CLAIM_THRESHOLD ? amount % HALF_WHALE_PASS_PRICE : 0;
+    }
+
+    /// @dev The ETH term of the whole award schedule for pool `pool` and `rounds` scatter rounds.
+    function _bafReservation(uint256 pool, uint256 rounds) private pure returns (uint256 reserve) {
+        uint256 threshold = pool / 20;
+        uint256 perFirst = (pool / 2) / rounds;
+        uint256 perSecond = ((pool * 30) / 100) / rounds;
+        uint256 evenRounds = (rounds + 1) / 2;
+        uint256 oddRounds = rounds / 2;
+        reserve = evenRounds * (_bafEthTerm(perFirst, threshold, true) + _bafEthTerm(perSecond, threshold, false))
+            + oddRounds * (_bafEthTerm(perFirst, threshold, false) + _bafEthTerm(perSecond, threshold, true))
+            + _bafEthTerm(pool / 10, threshold, true) + 2 * _bafEthTerm(pool / 20, threshold, true);
+    }
+
+    /// @dev Pays one drawn award. Returns the ETH credited to claimable, equal to `_bafEthTerm`
+    ///      for the award; an empty slot or a zero amount pays nothing.
+    function _payBafAward(
+        address winner,
+        uint256 amount,
+        uint256 i,
+        uint24 lvl,
+        uint256 threshold,
+        uint24 floorLvl,
+        uint256 word
+    ) private returns (uint256 credited) {
+        if (winner == address(0) || amount == 0) return 0;
+        if (amount >= threshold) {
+            uint256 ethPortion = amount / 2;
+            uint256 lootboxPortion = amount - ethPortion;
+            _creditClaimable(winner, ethPortion);
+            credited = ethPortion;
+            emit JackpotEthWin(winner, lvl, BAF_TRAIT_SENTINEL, ethPortion, 0);
+            if (lootboxPortion <= LOOTBOX_CLAIM_THRESHOLD) {
                 uint256 cd;
                 (, cd) = _awardJackpotTickets(
-                    winner,
-                    amount,
-                    ticketFloorLvl,
-                    EntropyLib.hash4(rngWord, lvl, BAF_TICKET_TAG, i)
+                    winner, lootboxPortion, floorLvl, EntropyLib.hash4(word, lvl, BAF_TICKET_TAG, i)
                 );
-                claimableDelta += cd;
+                credited += cd;
+            } else {
+                credited += _queueWhalePassClaimCore(winner, lootboxPortion);
+                emit JackpotWhalePassWin(winner, lootboxPortion / HALF_WHALE_PASS_PRICE, WHALE_PASS_SRC_BAF_DIRECT);
             }
-
-            unchecked {
-                ++i;
-            }
+        } else if (_bafEthLeg(i)) {
+            _creditClaimable(winner, amount);
+            credited = amount;
+            emit JackpotEthWin(winner, lvl, BAF_TRAIT_SENTINEL, amount, 0);
+        } else {
+            (, credited) = _awardJackpotTickets(
+                winner, amount, floorLvl, EntropyLib.hash4(word, lvl, BAF_TICKET_TAG, i)
+            );
         }
+    }
 
-        // Ticket-leg lootbox ETH stays in futurePool implicitly. The ETH halves and the
-        // whale-pass remainders are returned in claimableDelta, which the caller deducts
-        // from memFuture and credits to claimablePool in one batch. No storage write here.
+    /// @dev Returns reserved BAF ETH that no candidate took: out of claimablePool and into the
+    ///      pending future pool. The stage runs only under the daily lock, so the pools are frozen.
+    function _releaseBafReserve(uint256 amount) private {
+        claimablePool -= uint128(amount);
+        (uint128 pendingNext, uint128 pendingFuture) = _getPendingPools();
+        _setPendingPools(pendingNext, pendingFuture + uint128(amount));
     }
 
     /**

@@ -1232,14 +1232,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return abi.decode(data, (uint256));
     }
 
-    /// @notice Execute BAF jackpot at a level-multiple-of-10 transition.
+    /// @notice Arm the staged BAF jackpot at a level-multiple-of-10 transition.
     /// @dev Access: Game-only (self-call from AdvanceModule orchestration).
     ///      Signature: runBafJackpot(uint256 poolWei, uint24 lvl, uint256 rngWord) — the ETH
     ///      allocated to this BAF tier, the level being resolved, and the VRF-derived randomness
     ///      seed. The signature matches the module function exactly (identical selector), so the
     ///      calldata forwards as-is — re-encoding here would cost contract-size headroom for no
     ///      behavior change.
-    /// @return claimableDelta ETH added to claimable pool.
+    /// @return claimableDelta ETH reserved in the claimable pool for the award schedule.
     function runBafJackpot(
         uint256,
         uint24,

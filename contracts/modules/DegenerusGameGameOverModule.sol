@@ -230,7 +230,10 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             rngRequestDay = 0;
             // Completed award groups already balanced their source and liabilities.
             // Retire only the unpaid normal-day continuation; its remaining funds
-            // join the terminal pot. No paid award is repeated or clawed back.
+            // join the terminal pot. No paid award is repeated or clawed back. BAF awards
+            // reserved their ETH in claimablePool at consolidation: the uncredited part
+            // leaves the reservation and joins the distributable total.
+            if (jackpotWork.kind == 7) claimablePool -= jackpotWork.paid;
             delete jackpotWork;
             dailyTicketBudgetsPacked = 0;
             dailyJackpotCoinTicketsPending = false;

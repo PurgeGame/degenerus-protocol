@@ -23,7 +23,7 @@ CLASS	kind	subject	function	file	rationale
 # 2026-09-21 seed hygiene and domain separation
 # Reserve stored-word consumer _settleHighRollerReserve (JackpotBattle.sol): Daily request froze paid/day high flags before r.word; canonical paid-seat reservoir sampling uses HIGH_RESERVE_WINNER_TAG, the single field draw uses independent HIGH_RESERVE_DRAW_TAG; cursor/resolved state prevents retries and chunking from changing the draw; awarded seats and SDGNRS excluded
 PURE-DERIVE	PARAM	rngWord	_coinflipReward	Coinflip.sol	exact existing pure reward derivation
-EXEMPT-ADVANCE	PARAM	rngWord	bafDrawWinner	Coinflip.sol	view drawn by DegenerusJackpots.runBafJackpot inside the transition advance; book bafDrawEntry[bafDrawDay] closes at the day boundary, before that word's request
+EXEMPT-ADVANCE	PARAM	rngWord	bafDrawWinner	Coinflip.sol	view drawn by DegenerusJackpots.bafHeadWinner inside the locked BAF award stage; book bafDrawEntry[bafDrawDay] closes at the day boundary, before that word's request
 EXEMPT-ADVANCE	PARAM	rngWord	processCoinflipPayouts	Coinflip.sol	onlyDegenerusGameContract; rngWord is the applied daily/terminal word; gaps use processCoinflipGap separately; win bit + reward% stored once per epoch
 PURE-DERIVE	PARAM	seed	_playerDraw	Craps.sol	private pure four-word keccak used by _survived; no storage, no actor input
 PURE-DERIVE	PARAM	seed	_runSettlement	Craps.sol	private pure hand machine over the committed seed; the board is the frozen, scattered slip
@@ -57,19 +57,14 @@ PURE-DERIVE	PARAM	seed	settleRanked	CrapsEngine.sol	external pure engine door th
 PURE-DERIVE	PARAM	seed	settleSlip	CrapsEngine.sol	external pure compatibility and parity entry point, not called by the table; callers supply the seed and scatter hash; no storage or actor-controlled table settlement
 PURE-DERIVE	PARAM	seed	settleSlipBounded	CrapsEngine.sol	external pure engine door the Decimator module STATICCALLs from _run: goal-free run under the caller's shooter cap and roll budget (clamped to the engine limits); seed and scatter derive from the sealed round word; no storage or actor input
 PURE-DERIVE	ARG	EntropyLib.hash2	sampleFarFutureTickets	DegenerusGame.sol	Mix the committed entropy and filled candidate count for another level when fewer than four slots have been filled.
-EXEMPT-ADVANCE	PARAM	entropy	sampleFarFutureTickets	DegenerusGame.sol	view sampler over the far-future ticketQueue; consumed by runBafJackpot inside the locked advance; far-future pushes revert RngLocked across request->unlock
+EXEMPT-ADVANCE	PARAM	entropy	sampleFarFutureTickets	DegenerusGame.sol	view sampler over the far-future ticketQueue; consumed by bafPairWinners inside the locked BAF award stage (one sample of eight lanes per round pair); far-future pushes revert RngLocked across request->unlock
 PURE-DERIVE	ARG	PackedTicketSampleLib.begin	sampleTraitEntries	DegenerusGame.sol	BAF scatter derives word and lane rotation from its advance-dispatched entropy; pure memory operation over the committed bucket length
-EXEMPT-ADVANCE	PARAM	entropy	sampleTraitEntries	DegenerusGame.sol	view sampler of lvlTraitEntry[targetLvl][entropy>>24]; on-chain consumer is DegenerusJackpots.runBafJackpot (onlyGame) inside the advance; buckets advance-written only
+EXEMPT-ADVANCE	PARAM	entropy	sampleTraitEntries	DegenerusGame.sol	view sampler of lvlTraitEntry[targetLvl][entropy>>24]; on-chain consumer is DegenerusJackpots.bafPairWinners inside the locked BAF award stage; buckets advance-written only
 NOT-RNG	PARAM	subWord	_afkingStreakMirror	DegenerusGameLens.sol	subWord = packed Sub record (covered day, start day, latch); the sealed-word presence test inside is the window gate's _rngWordByDayOf row; lens only
 NOT-RNG	PARAM	subWord	_effectiveQuestStreakMirror	DegenerusGameLens.sol	subWord is the afking Sub struct's packed storage word read via extsload, not a VRF value; read-only lens
 NOT-RNG	PARAM	maxWords	_findPackedIndex	DegenerusGameLens.sol	bounded count (1..2048) of packed storage words to scan; not a VRF value
 NOT-RNG	PARAM	maxWords	findQueueEntry	DegenerusGameLens.sol	read-only queue pagination budget, not an entropy word; forwarded to _findPackedIndex
 NOT-RNG	PARAM	maxWords	findTraitEntry	DegenerusGameLens.sol	read-only packed-entry pagination budget, not an entropy word; forwarded to _findPackedIndex
-PURE-DERIVE	ARG	EntropyLib.hash2	runBafJackpot	DegenerusJackpots.sol	per-slice keccak chain hash2(entropy, ++salt) off the frozen word; no actor input
-EXEMPT-ADVANCE	ARG	coin.bafDrawWinner	runBafJackpot	DegenerusJackpots.sol	forwards the same transition word to Coinflip's domain-separated depositor draw; the armed day's book closed at the day boundary before the request
-EXEMPT-ADVANCE	ARG	degenerusGame.sampleFarFutureTickets	runBafJackpot	DegenerusJackpots.sol	far-future draw inside the advance-dispatched BAF; entropy is the chained frozen word, the queue lock-frozen (RngLocked on far-future pushes)
-EXEMPT-ADVANCE	ARG	degenerusGame.sampleTraitEntries	runBafJackpot	DegenerusJackpots.sol	scatter draw inside the advance-dispatched BAF; targetLvl and entropy pure in the chained frozen word; lvlTraitEntry written only by advance-stack drains
-EXEMPT-ADVANCE	PARAM	rngWord	runBafJackpot	DegenerusJackpots.sol	onlyGame; reached from the transition advance's BAF dispatch with the rngGate word; every slice keccak-chains it; epoch read once, resolving-bracket flips RngLocked
 PURE-DERIVE	PARAM	entropy	_bonusQuestType	DegenerusQuests.sol	private pure weighted select over the entropy; decAllowed only reshapes the pool and is advance-controlled
 PURE-DERIVE	ARG	EntropyLib.hash2	rollDailyQuest	DegenerusQuests.sol	DAILY_QUEST_TAG isolates the global daily quest from other word consumers
 EXEMPT-ADVANCE	PARAM	entropy	rollDailyQuest	DegenerusQuests.sol	onlyGame; called by rngGate with the just-applied daily word; idempotent per day; a global quest type, not per-player
@@ -176,9 +171,17 @@ EXEMPT-ADVANCE	PARAM	entropy	_jackpotTicketRoll	modules/DegenerusGameJackpotDraw
 EXEMPT-ADVANCE	ARG	battle.prepareJackpotBattle	_runPurchaseJackpotBattle	modules/DegenerusGameJackpotDrawModule.sol	Advance-only preparation after the daily request froze paid seats; derives battle word from the applied daily word, level and tag; the delegate keeps its first word and allocation through resumed collection
 EXEMPT-ADVANCE	PARAM	rngWord	_runPurchaseJackpotBattle	modules/DegenerusGameJackpotDrawModule.sol	private advance-stack daily jackpot battle (purchase and jackpot days): keccak(rngWord, lvl, TAG) chain picks levels and walk starts over frozen far-future queues (new far-future registrations revert across the lock)
 EXEMPT-ADVANCE	PARAM	word	awardDailyFlipJackpot	modules/DegenerusGameJackpotDrawModule.sol	Ordered daily/terminal jackpot worker consumes the committed session root under the daily/terminal freeze; saved payout cursor retains fixed plans across checkpoints.
-EXEMPT-ADVANCE	ARG	EntropyLib.hash4	runBafJackpot	modules/DegenerusGameJackpotDrawModule.sol	BAF_TICKET_TAG plus level and fixed winner ordinal; prior variable-length award work excluded
-EXEMPT-ADVANCE	ARG	jackpots.runBafJackpot	runBafJackpot	modules/DegenerusGameJackpotDrawModule.sol	forwards the transition word to DegenerusJackpots.runBafJackpot (onlyGame) for the winner set
-EXEMPT-ADVANCE	PARAM	rngWord	runBafJackpot	modules/DegenerusGameJackpotDrawModule.sol	msg.sender==address(this) (Game self-call from _consolidate, fire bit rngWord&1); winners from DegenerusJackpots, recirc rolls hash2-chained
+EXEMPT-ADVANCE	ARG	EntropyLib.hash4	_payBafAward	modules/DegenerusGameJackpotDrawModule.sol	BAF_TICKET_TAG plus level and the frozen award index; the group partition never enters the roll
+EXEMPT-ADVANCE	PARAM	word	_payBafAward	modules/DegenerusGameJackpotDrawModule.sol	the locked day's recorded word, equal to the selection word: the lock is held from consolidation through the award stage
+EXEMPT-ADVANCE	PARAM	word	runBafAwards	modules/DegenerusGameJackpotDrawModule.sol	advance-dispatched BAF award stage under the daily lock; pays frozen awards, gas selects only the group count
+EXEMPT-ADVANCE	ARG	jackpots.bafHeadWinner	runBafAwards	modules/DegenerusGameJackpotDrawModule.sol	forwards the locked day's word (the selection word) for the head slot draw; slot index fixed by position
+EXEMPT-ADVANCE	ARG	jackpots.bafPairWinners	runBafAwards	modules/DegenerusGameJackpotDrawModule.sol	forwards the locked day's word for the round-pair draw; pair index and round count fixed by position and the armed pool, independent of the call partition
+PURE-DERIVE	ARG	EntropyLib.hash2	_bafEntropyBase	DegenerusJackpots.sol	hash2(rngWord, BAF_WINNERS_TAG): the bracket's winner stream root
+EXEMPT-ADVANCE	PARAM	rngWord	_bafEntropyBase	DegenerusJackpots.sol	the locked transition word forwarded by the game's BAF award stage
+PURE-DERIVE	ARG	EntropyLib.hash2	bafHeadWinner	DegenerusJackpots.sol	hash2(base, BAF_HEAD_PICK_KEY) & 1 picks third or fourth place; no actor input
+EXEMPT-ADVANCE	ARG	coin.bafDrawWinner	bafHeadWinner	DegenerusJackpots.sol	forwards the transition word to Coinflip's domain-separated depositor draw; the armed day's book closed at the day boundary before the request
+EXEMPT-ADVANCE	PARAM	rngWord	bafHeadWinner	DegenerusJackpots.sol	view reached from the game's locked BAF award stage; board frozen for the bracket
+EXEMPT-ADVANCE	PARAM	rngWord	bafPairWinners	DegenerusJackpots.sol	view reached from the game's locked BAF award stage with the selection word; epoch read once per pair
 EXEMPT-ADVANCE	PARAM	word	runPurchaseJackpotBattle	modules/DegenerusGameJackpotDrawModule.sol	Ordered daily/terminal jackpot worker consumes the committed session root under the daily/terminal freeze; saved payout cursor retains fixed plans across checkpoints.
 PURE-DERIVE	ARG	EntropyLib.hash4	_drawBucketEntry	modules/DegenerusGameJackpotDrawUtils.sol	group seed hashes the committed word, fixed trait, source-level or draw salt, and first pull index
 PURE-DERIVE	ARG	DegenerusTraitUtils.traitFromWord	_directQuadrant	modules/DegenerusGameTicketModule.sol	quadrant trait slice of the frozen round seed; the same slice the round drain takes for a common colour
