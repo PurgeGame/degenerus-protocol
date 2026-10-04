@@ -106,24 +106,27 @@ contract Coinflip {
     /// @notice Emitted when flip stake is credited to a future day. Authoritative for the stake
     ///         accepted: stakes are stored in whole FLIP and capped per player and day
     ///         (STAKE_LANE_MAX), so component events (QuestCompleted, BigRecordUpdated,
-    ///         SeedWindowArmed, CoinflipDeposit) describe nominal awards while this one reports
-    ///         what the lane actually took after rounding and capping.
+    ///         CoinflipDeposit) describe nominal awards while this one reports what the lane
+    ///         actually took after rounding and capping. The VAULT and sDGNRS seed stake is not
+    ///         stored and never appears here: SeedWindowArmed carries it.
     /// @param player The player receiving stake credit.
     /// @param day The target flip day being credited.
     /// @param amount The stake actually added (new total minus previous total), FLIP wei.
-    /// @param newTotal The stored total stake for that day, FLIP wei.
+    /// @param newTotal The stored total stake for that day, FLIP wei; for VAULT and sDGNRS on a
+    ///        seed-window day the day's stake is this plus the window's amountPerDay.
     event CoinflipStakeUpdated(
         address indexed player,
         uint24 indexed day,
         uint256 amount,
         uint256 newTotal
     );
-    /// @notice Emitted when an x00 level's seed window is armed for VAULT and sDGNRS.
+    /// @notice Emitted when a seed window opens for VAULT and sDGNRS: the deploy window
+    ///         (century 0) and each x00 level's. A window replaces the previous one.
     /// @param century The century index (level / 100) the window belongs to.
     /// @param firstDay First flip day carrying the seed stake.
     /// @param dayCount Number of consecutive days seeded.
-    /// @param amountPerDay Nominal seed stake added per day, per recipient; the per-day
-    ///        CoinflipStakeUpdated reports what each lane accepted.
+    /// @param amountPerDay Seed stake each recipient holds on every window day, on top of the
+    ///        day's stored stake; no CoinflipStakeUpdated reports it.
     event SeedWindowArmed(
         uint24 indexed century,
         uint24 indexed firstDay,
@@ -356,6 +359,10 @@ contract Coinflip {
     ///      reset it performs is also what prices a second hit on the same day at the
     ///      5% floor of an already-reduced pool.
     uint24 internal recordDayDiceRun;
+    /// @dev First day of the active seed window: VAULT and sDGNRS each hold SEED_FLIP_DAILY of
+    ///      unstored stake on days [seedWindowStart, seedWindowStart + SEED_FLIP_DAYS). One window
+    ///      suffices: both claim cursors pass a window before the next one arms.
+    uint24 internal seedWindowStart;
 
     // BAF weighted draw. Book-kept only for the armed day (the x0 level's last
     // purchase day stakes it): every direct self-funded deposit staking that day
@@ -388,8 +395,9 @@ contract Coinflip {
     mapping(uint256 => uint256) internal bafDrawEntry;
 
     /// @notice Seeds the initial FLIP emission as flip stakes: 200k per day for days 1-20,
-    ///         each to VAULT and sDGNRS. Direct storage writes (not _addDailyFlip) keep the
-    ///         seeds off the BAF weighted draw and the flip record.
+    ///         each to VAULT and sDGNRS, by opening the deploy seed window. The claim walk
+    ///         reads the seed from the window rather than a stake lane, so the seeds stay off
+    ///         the BAF weighted draw and the flip record.
     ///         Nothing mints up front — each day's seed only becomes claimable FLIP if it
     ///         survives that day's flip.
     constructor() {
@@ -404,13 +412,8 @@ contract Coinflip {
         recordDayBuy = recordStartDay;
         recordDayDiceRun = recordStartDay;
 
-        for (uint24 d = 1; d <= SEED_FLIP_DAYS; ) {
-            _addFlipStake(ContractAddresses.VAULT, d, SEED_FLIP_DAILY);
-            _addFlipStake(ContractAddresses.SDGNRS, d, SEED_FLIP_DAILY);
-            unchecked {
-                ++d;
-            }
-        }
+        seedWindowStart = 1;
+        emit SeedWindowArmed(0, 1, SEED_FLIP_DAYS, SEED_FLIP_DAILY);
 
         // Register this contract's ENS reverse name (best-effort; skipped when the
         // registrar is unset — local/test/testnet builds). The setName(string)
@@ -686,7 +689,7 @@ contract Coinflip {
     ///      uncirculated. Day-keyed like every deposit — the credit becomes TOMORROW's
     ///      stake, whose word cannot exist yet (the same structural freeze-safety all
     ///      player deposits have). Direct stake write, off the leaderboard/flip record like
-    ///      the constructor seed. A win settles through the sDGNRS payout branch into
+    ///      the seed program. A win settles through the sDGNRS payout branch into
     ///      the rolling carry; claimableStored stays the genesis seed reserve burns
     ///      drain first. FLIP has already removed the whole amount from supply; the lane
     ///      takes its whole-FLIP floor and saturates at the daily cap, so this never reverts
@@ -803,6 +806,7 @@ contract Coinflip {
         } else {
             remaining = windowDays;
         }
+        (bool seeded, uint24 seedStart) = _seedWindow(player);
 
         // Auto-rebuy-off processes a larger fixed window while keeping tx cost bounded.
         while (remaining != 0 && cursor <= latest) {
@@ -816,12 +820,16 @@ contract Coinflip {
 
             uint256 storedStake = _flipStake(cursor, player);
             uint256 stake = storedStake;
+            if (seeded) {
+                stake += _seedStake(cursor, seedStart);
+            }
             if (rebuyActive && carry != 0) {
                 stake += carry;
             }
 
             if (storedStake != 0) {
-                // Clear stake whether win or loss (loss = forfeit principal)
+                // Clear stake whether win or loss (loss = forfeit principal). A seed is never
+                // stored: the cursor passing its day consumes it.
                 _setFlipStake(cursor, player, 0);
             }
 
@@ -1224,10 +1232,9 @@ contract Coinflip {
     ///      would re-enter a mid-advance game. No RNG-lock gate is needed: the window starts
     ///      at `_targetFlipDay()`, strictly later than the day any pending word resolves.
     ///
-    ///      Stakes ADD to a day's lane rather than replacing it — `_setFlipStake` is a masked
-    ///      overwrite and sDGNRS is on perpetual auto-rebuy by level 100, so a replace would
-    ///      destroy a stake the protocol had already rolled forward. A lane at the daily cap
-    ///      saturates; the per-day event reports what it accepted.
+    ///      Arming stores the window's first day and writes no stake lane: the claim walk adds
+    ///      the seed to whatever a window day's lane holds, so a stake sDGNRS has already rolled
+    ///      forward onto that day is kept.
     /// @param lvl The level whose jackpot phase just ended.
     function armCenturySeed(uint24 lvl) external {
         if (msg.sender != ContractAddresses.GAME) revert OnlyDegenerusGame();
@@ -1237,14 +1244,7 @@ contract Coinflip {
         lastSeededCentury = century;
 
         uint24 firstDay = _targetFlipDay();
-        for (uint24 i = 0; i < SEED_FLIP_DAYS; ) {
-            uint24 d = firstDay + i;
-            _addFlipStake(ContractAddresses.VAULT, d, SEED_FLIP_DAILY);
-            _addFlipStake(ContractAddresses.SDGNRS, d, SEED_FLIP_DAILY);
-            unchecked {
-                ++i;
-            }
-        }
+        seedWindowStart = firstDay;
 
         emit SeedWindowArmed(century, firstDay, SEED_FLIP_DAYS, SEED_FLIP_DAILY);
     }
@@ -1721,10 +1721,14 @@ contract Coinflip {
         return daily + playerState[player].claimableStored + carry;
     }
 
-    /// @notice Get player's current coinflip stake for next day.
-    function coinflipAmount(address player) external view returns (uint256) {
+    /// @notice Get player's current coinflip stake for next day, the VAULT and sDGNRS seed included.
+    function coinflipAmount(address player) external view returns (uint256 amount) {
         uint24 targetDay = _targetFlipDay();
-        return _flipStake(targetDay, player);
+        amount = _flipStake(targetDay, player);
+        (bool seeded, uint24 seedStart) = _seedWindow(player);
+        if (seeded) {
+            amount += _seedStake(targetDay, seedStart);
+        }
     }
 
     /// @notice Get player's auto-rebuy configuration.
@@ -1864,6 +1868,7 @@ contract Coinflip {
         unchecked {
             cursor = startDay + 1;
         }
+        (bool seeded, uint24 seedStart) = _seedWindow(player);
         while (remaining != 0 && cursor <= latestDay) {
             (uint16 rewardPercent, bool win) = _dayResult(cursor);
             // Skip unresolved days (both fields zero) instead of breaking,
@@ -1874,6 +1879,9 @@ contract Coinflip {
             }
 
             uint256 stake = _flipStake(cursor, player);
+            if (seeded) {
+                stake += _seedStake(cursor, seedStart);
+            }
             if (rebuyActive && carry != 0) {
                 stake += carry;
             }
@@ -1926,6 +1934,21 @@ contract Coinflip {
         return uint256(uint32(coinflipStakePacked[day >> 3][p] >> ((day & 7) << 5))) * STAKE_UNIT;
     }
 
+    /// @dev Whether `player` is a seed recipient (VAULT or sDGNRS), and the active seed window's
+    ///      first day when it is. Read once per walk, ahead of its day loop.
+    function _seedWindow(address player) private view returns (bool seeded, uint24 start) {
+        seeded = player == ContractAddresses.VAULT || player == ContractAddresses.SDGNRS;
+        if (seeded) start = seedWindowStart;
+    }
+
+    /// @dev A seed recipient's unstored stake on `day`: SEED_FLIP_DAILY inside the window opening
+    ///      at `start`, else 0. A day before `start` wraps far past the window.
+    function _seedStake(uint24 day, uint24 start) private pure returns (uint256) {
+        unchecked {
+            return uint256(day) - start < SEED_FLIP_DAYS ? SEED_FLIP_DAILY : 0;
+        }
+    }
+
     /// @dev Masked write of `day`'s stake lane, preserving the seven sibling days. The wei
     ///      amount floors to whole FLIP and clamps at STAKE_LANE_MAX before it is shifted in:
     ///      the write is masked, so an over-wide value would not truncate — it would spill
@@ -1933,9 +1956,8 @@ contract Coinflip {
     ///      makes that impossible by construction instead of by an invariant every caller
     ///      has to keep holding.
     ///
-    ///      A stake is not bounded by supply — the constructor seeds stakes without a mint,
-    ///      a deposit burns the FLIP it stakes, and credits add stake nobody minted — so the
-    ///      clamp is the bound: if the credit paths ever reach it, the failure is one capped
+    ///      A stake is not bounded by supply — a deposit burns the FLIP it stakes, and credits
+    ///      add stake nobody minted — so the clamp is the bound: if the credit paths ever reach it, the failure is one capped
     ///      stake rather than a neighbouring day's books. Fresh SLOAD/SSTORE.
     /// @return stored The wei value the lane now holds.
     function _setFlipStake(uint24 day, address p, uint256 weiAmount) internal returns (uint256 stored) {

@@ -241,8 +241,9 @@ interface ICoinflip {
     function fundRecordPool(uint256 amount) external;
 
     /// @notice Arm the x00 seed window if one is due (GAME only, silent when not due).
-    /// @dev Seeds add to each day's whole-FLIP lane and saturate at the per-day cap; the per-day
-    ///      CoinflipStakeUpdated reports what each lane accepted, SeedWindowArmed the nominal seed.
+    /// @dev Stores the window's first day and writes no stake lane: VAULT and sDGNRS each hold the
+    ///      seed on every window day on top of that day's stored stake. SeedWindowArmed is the only
+    ///      event; no per-day CoinflipStakeUpdated is emitted for the seed.
     /// @param lvl The level whose jackpot phase just ended.
     function armCenturySeed(uint24 lvl) external;
 
@@ -276,7 +277,8 @@ interface ICoinflip {
 
     /// @notice Get player's current coinflip stake for the next day's flip.
     /// @dev Returns the stake amount deposited for the upcoming flip day. Stakes are whole FLIP
-    ///      (stored as uint32 units), returned in wei.
+    ///      (stored as uint32 units), returned in wei. For VAULT and sDGNRS it includes the seed
+    ///      when that day lies in the active seed window.
     /// @param player The player to check.
     /// @return The stake amount in FLIP wei for the next flip.
     function coinflipAmount(address player) external view returns (uint256);

@@ -352,57 +352,55 @@ contract CoinflipPackedStake is DeployProtocol {
     //                 4. SEEDS and sDGNRS backing
     // =====================================================================
 
-    function test_ConstructorSeedsLandInLanesOneThroughTwenty() public view {
-        for (uint24 d = 1; d <= 20; ++d) {
-            assertEq(_rawStake(d, VAULT), SEED);
-            assertEq(_rawStake(d, SDGNRS), SEED);
+    function test_ConstructorSeedWritesNoLane() public view {
+        for (uint24 d; d <= 24; ++d) {
+            assertEq(_rawStake(d, VAULT), 0, "the deploy seed is not stored in a vault lane");
+            assertEq(_rawStake(d, SDGNRS), 0, "the deploy seed is not stored in an sDGNRS lane");
         }
-        assertEq(_rawStake(0, VAULT), 0, "lane 0 of word 0 is empty");
-        assertEq(_rawStake(21, VAULT), 0, "word 2 lane 5 is empty");
-        assertEq(_rawStake(24, SDGNRS), 0, "word 3 is empty");
+        assertEq(coinflip.coinflipAmount(VAULT), SEED, "the deploy window seeds day 3");
+        assertEq(coinflip.coinflipAmount(SDGNRS), SEED);
     }
 
-    function test_CenturySeedAddsAndSaturates() public {
+    function test_CenturySeedRidesOnTopOfTheLaneWithoutWritingIt() public {
+        _warpToDay(40);
         uint24 first = _targetDay();
+        // sDGNRS already holds a stake on the window's first day.
+        _credit(SDGNRS, 5_000.5 ether);
         vm.recordLogs();
         vm.prank(GAME);
         coinflip.armCenturySeed(100);
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        uint256 vaultEvents;
         for (uint256 i; i < logs.length; ++i) {
-            if (
-                logs[i].emitter == address(coinflip) && logs[i].topics[0] == STAKE_SIG
-                    && address(uint160(uint256(logs[i].topics[1]))) == VAULT
-            ) {
-                (uint256 amount, uint256 total) = abi.decode(logs[i].data, (uint256, uint256));
-                uint24 day = uint24(uint256(logs[i].topics[2]));
-                assertEq(amount, SEED, "seed delta");
-                assertEq(total, _rawStake(day, VAULT), "event total is the stored lane");
-                ++vaultEvents;
-            }
+            assertTrue(logs[i].topics[0] != STAKE_SIG, "arming emits no stake event");
         }
-        assertEq(vaultEvents, 20);
+        assertEq(_rawStake(first, SDGNRS), 5_000 ether, "the lane keeps its stored stake only");
         for (uint24 i; i < 20; ++i) {
-            uint256 deploySeed = first + i <= 20 ? SEED : 0;
-            assertEq(_rawStake(first + i, VAULT), SEED + deploySeed, "century seed adds to the lane");
+            assertEq(_rawStake(first + i, VAULT), 0, "no vault lane written");
         }
+        assertEq(coinflip.coinflipAmount(SDGNRS), 5_000 ether + SEED, "the seed adds to the lane");
+        assertEq(coinflip.coinflipAmount(VAULT), SEED);
 
-        // A lane at the cap saturates instead of reverting the crank.
+        // A lane at the cap never stalls the arm: arming writes no lane, and the seed rides on top
+        // of the clamped lane.
         _credit(SDGNRS, type(uint128).max);
         assertEq(_rawStake(first, SDGNRS), CAP);
         vm.prank(GAME);
         coinflip.armCenturySeed(200);
-        assertEq(_rawStake(first, SDGNRS), CAP, "seed at the cap is discarded, not spilled");
+        assertEq(_rawStake(first, SDGNRS), CAP, "the stored lane stays at its cap, nothing spilled");
+        assertEq(coinflip.coinflipAmount(SDGNRS), CAP + SEED, "the seed is held outside the lane");
     }
 
     function test_SdgnrsBackingFloorsWhileFlipDecirculatesTheWholeTransfer() public {
+        // Day 3 is a deploy-window day: the view carries the seed, the lane and its event do not.
         uint256 before = coinflip.coinflipAmount(SDGNRS);
+        assertEq(before, SEED);
         vm.recordLogs();
         vm.prank(COIN);
         coinflip.creditSdgnrsBacking(100.5 ether);
         (, uint256 amount, uint256 total) = _stakeEvent(vm.getRecordedLogs(), SDGNRS);
         assertEq(amount, 100 ether);
-        assertEq(total, before + 100 ether);
+        assertEq(total, 100 ether, "the event reports the stored lane");
+        assertEq(coinflip.coinflipAmount(SDGNRS), before + 100 ether);
 
         // A real transfer into sDGNRS: FLIP removes the full amount from supply.
         _mint(player, 50.5 ether);
@@ -417,7 +415,8 @@ contract CoinflipPackedStake is DeployProtocol {
         _credit(SDGNRS, CAP);
         vm.prank(COIN);
         coinflip.creditSdgnrsBacking(1 ether);
-        assertEq(coinflip.coinflipAmount(SDGNRS), CAP);
+        assertEq(_rawStake(_targetDay(), SDGNRS), CAP, "the stored lane saturates");
+        assertEq(coinflip.coinflipAmount(SDGNRS), CAP + SEED, "the seed rides on top of the saturated lane");
     }
 
     // =====================================================================

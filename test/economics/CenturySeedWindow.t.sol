@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {Coinflip} from "../../contracts/Coinflip.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -14,19 +15,22 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///         than on reverts.
 ///
 ///         - SEED-01 below the first century it is a no-op, not a revert.
-///         - SEED-02 it credits exactly SEED_FLIP_DAILY on each of the 20 days, to both
+///         - SEED-02 it seeds exactly SEED_FLIP_DAILY on each of the 20 days, to both
 ///           recipients, starting at the next unresolved day.
 ///         - SEED-03 one century, one arm: a repeat call at the same level changes nothing.
-///         - SEED-04 it ADDS to a day's existing stake rather than replacing it. The one with
-///           real teeth: `_setFlipStake` is a masked overwrite and sDGNRS is on perpetual
-///           auto-rebuy by level 100, so a replace would destroy a stake already rolled forward.
-///         - SEED-05 a later century re-opens it.
+///         - SEED-04 the seed ADDS to a day's existing stake rather than replacing it: sDGNRS is
+///           on perpetual auto-rebuy by level 100, so a stake it already rolled forward onto a
+///           window day must survive the arm.
+///         - SEED-05 a later century re-opens it at that century's target day.
 ///         - SEED-06 catch-up: arriving a century late claims the SKIPPED one first.
 ///         - SEED-07 century arming never mints WWXRP; its owner mint is uncapped.
 ///         - SEED-08 only GAME may call it.
+///         The window is one stored start day (Coinflip slot 4, byte 25) and arming writes no
+///         stake lane; the walks add the seed on window days.
 contract CenturySeedWindow is DeployProtocol {
     uint256 internal constant SEED_FLIP_DAILY = 200_000 ether;
     uint24 internal constant SEED_FLIP_DAYS = 20;
+    bytes32 internal constant ARMED_SIG = keccak256("SeedWindowArmed(uint24,uint24,uint24,uint256)");
 
     function setUp() public {
         _deployProtocol();
@@ -49,6 +53,20 @@ contract CenturySeedWindow is DeployProtocol {
         vm.warp(t0 + uint256(offset) * 1 days);
         amount = coinflip.coinflipAmount(who);
         vm.warp(t0);
+    }
+
+    /// @dev Coinflip slot 4 packs lastSeededCentury at byte 19 and the window start at byte 25.
+    function _lastSeededCentury() internal view returns (uint24) {
+        return uint24(uint256(vm.load(address(coinflip), bytes32(uint256(4)))) >> 152);
+    }
+
+    function _windowStart() internal view returns (uint24) {
+        return uint24(uint256(vm.load(address(coinflip), bytes32(uint256(4)))) >> 200);
+    }
+
+    /// @dev Moves the wall clock past the deploy window (days 1..20).
+    function _leaveDeployWindow() internal {
+        vm.warp(vm.getBlockTimestamp() + 40 days);
     }
 
     // ------------------------------------------------------------------
@@ -77,14 +95,17 @@ contract CenturySeedWindow is DeployProtocol {
     }
 
     function testNextCenturyReopens() public {
-        uint256 before = _stakeAtOffset(ContractAddresses.VAULT, 0);
+        _leaveDeployWindow();
         _arm(100);
+        uint24 first = _windowStart();
+        // Centuries are at least 100 levels, and so at least 100 days, apart.
+        vm.warp(vm.getBlockTimestamp() + 150 days);
         _arm(200);
-        assertEq(
-            _stakeAtOffset(ContractAddresses.VAULT, 0) - before,
-            2 * SEED_FLIP_DAILY,
-            "second century stacks onto the first window's overlapping day"
-        );
+        assertEq(_lastSeededCentury(), 2, "second century armed");
+        assertEq(_windowStart(), first + 150, "the window re-opens at the second century's target day");
+        assertEq(_stakeAtOffset(ContractAddresses.VAULT, 0), SEED_FLIP_DAILY, "first day seeded");
+        assertEq(_stakeAtOffset(ContractAddresses.VAULT, SEED_FLIP_DAYS - 1), SEED_FLIP_DAILY, "last day seeded");
+        assertEq(_stakeAtOffset(ContractAddresses.VAULT, SEED_FLIP_DAYS), 0, "the window stops at SEED_FLIP_DAYS");
     }
 
     function testOnlyGameMayArm() public {
@@ -96,15 +117,23 @@ contract CenturySeedWindow is DeployProtocol {
     // SEED-06 — catch-up across a skipped century
     // ------------------------------------------------------------------
 
-    /// @dev Catch-up grants each missed FLIP window once, starting with century one.
+    /// @dev Catch-up arms each missed century once, starting with century one.
     function testLateArmClaimsTheSkippedCenturyFirst() public {
-        uint256 before = _stakeAtOffset(ContractAddresses.VAULT, 0);
-        _arm(250);
-        assertEq(_stakeAtOffset(ContractAddresses.VAULT, 0), before + SEED_FLIP_DAILY);
-        _arm(250);
-        assertEq(_stakeAtOffset(ContractAddresses.VAULT, 0), before + 2 * SEED_FLIP_DAILY);
-        _arm(250);
-        assertEq(_stakeAtOffset(ContractAddresses.VAULT, 0), before + 2 * SEED_FLIP_DAILY);
+        _leaveDeployWindow();
+        uint24[3] memory announced;
+        for (uint256 i; i < 3; ++i) {
+            vm.recordLogs();
+            _arm(250);
+            Vm.Log[] memory logs = vm.getRecordedLogs();
+            for (uint256 j; j < logs.length; ++j) {
+                if (logs[j].topics[0] == ARMED_SIG) announced[i] = uint24(uint256(logs[j].topics[1]));
+            }
+        }
+        assertEq(announced[0], 1, "century one first");
+        assertEq(announced[1], 2, "then the skipped century two");
+        assertEq(announced[2], 0, "level 250 has nothing further due");
+        assertEq(_lastSeededCentury(), 2);
+        assertEq(_stakeAtOffset(ContractAddresses.VAULT, 0), SEED_FLIP_DAILY, "one window, one seed per day");
     }
 
     // ------------------------------------------------------------------
@@ -112,8 +141,8 @@ contract CenturySeedWindow is DeployProtocol {
     // ------------------------------------------------------------------
 
     function testSeedsEveryDayForBothRecipients() public {
-        // Snapshot first: the DEPLOY window already covers early days, so the property is
-        // "every day grew by exactly one seed", not "every day equals one seed".
+        _leaveDeployWindow();
+        // Snapshot first: the property is "every day grew by exactly one seed".
         uint256[21] memory vaultBefore;
         uint256[21] memory sdgnrsBefore;
         for (uint24 d = 0; d <= SEED_FLIP_DAYS; ++d) {
@@ -148,6 +177,7 @@ contract CenturySeedWindow is DeployProtocol {
     // ------------------------------------------------------------------
 
     function testAddsToAnExistingStakeInsteadOfReplacingIt() public {
+        _leaveDeployWindow();
         // Give sDGNRS a standing stake on the window's first day, the way auto-rebuy would.
         vm.prank(address(game));
         coinflip.creditFlip(ContractAddresses.SDGNRS, 12_345 ether);
@@ -160,7 +190,7 @@ contract CenturySeedWindow is DeployProtocol {
         assertEq(
             _stakeAtOffset(ContractAddresses.SDGNRS, 0),
             before + SEED_FLIP_DAILY,
-            "the seed adds to the standing stake; a masked overwrite would have destroyed it"
+            "the seed adds to the standing stake rather than replacing it"
         );
     }
 
@@ -181,16 +211,16 @@ contract CenturySeedWindow is DeployProtocol {
     // Cost, since it now rides a real transaction
     // ------------------------------------------------------------------
 
-    /// @dev At an x00 level the seeded days sit far past the deploy window, so all twenty
-    ///      slots per recipient are virgin. This is the figure the hosting phase-end tx pays.
+    /// @dev At an x00 level the window sits far past the deploy window. Arming writes the one
+    ///      packed word that holds the window start. This is the figure the hosting phase-end tx pays.
     function testArmGasOnVirginDays() public {
-        vm.warp(vm.getBlockTimestamp() + 40 days);
+        _leaveDeployWindow();
         vm.prank(address(game));
         uint256 g0 = gasleft();
         coinflip.armCenturySeed(100);
         uint256 used = g0 - gasleft();
         emit log_named_uint("armCenturySeed_gas_virgin_days", used);
-        assertLt(used, 800_000, "the century arm stays a sub-800k addition to the phase-end tx");
+        assertLt(used, 15_000, "the century arm is one packed-word write");
     }
 
     // ------------------------------------------------------------------
@@ -204,40 +234,30 @@ contract CenturySeedWindow is DeployProtocol {
     /// @dev Repeated century arming remains bounded and only seeds FLIP.
     function testRepeatedCenturiesNeverRevertOrMintWwxrp() public {
         uint256 supply = wwxrp.totalSupply();
-        uint256 before = _stakeAtOffset(ContractAddresses.VAULT, 0);
         for (uint24 century = 1; century <= 70; ++century) {
             _arm(century * 100);
-            assertEq(_stakeAtOffset(ContractAddresses.VAULT, 0), before + century * SEED_FLIP_DAILY);
+            assertEq(_lastSeededCentury(), century);
+            assertEq(_stakeAtOffset(ContractAddresses.VAULT, 0), SEED_FLIP_DAILY, "one seed per window day");
             assertEq(wwxrp.totalSupply(), supply);
         }
     }
 
-    /// @dev The other arithmetic site. Stakes ADD into a 32-bit whole-FLIP lane, so a long-lived
-    ///      lane could exceed it; `_setFlipStake` clamps instead of reverting. Arming many centuries
-    ///      on the SAME wall day drives one lane to the ceiling — the crank must survive it.
+    /// @dev The other arithmetic site. Stakes ADD into a 32-bit whole-FLIP lane that clamps
+    ///      instead of reverting. Arming writes no lane at all, so a lane already at its ceiling
+    ///      cannot stall the crank; the seed rides on top of the stored lane.
     function testFlipLaneSaturatesRatherThanRevertingTheCrank() public {
-        // Snapshot first: the DEPLOY window already seeded this day, so the property is
-        // "the lane grew by exactly 70 seeds", not "the lane equals 70 seeds".
-        uint256 before = _stakeAtOffset(ContractAddresses.VAULT, 0);
-        for (uint24 century = 1; century <= 70; ++century) {
-            _arm(century * 100);
-        }
-        assertEq(
-            _stakeAtOffset(ContractAddresses.VAULT, 0) - before,
-            70 * SEED_FLIP_DAILY,
-            "70 arms on one day accumulate, none lost"
-        );
-
-        // Now push the same lane past the lane ceiling and confirm it clamps silently.
         vm.prank(address(game));
         coinflip.creditFlip(ContractAddresses.VAULT, type(uint128).max);
-        for (uint24 century = 71; century <= 90; ++century) {
+        uint256 cap = uint256(type(uint32).max) * 1 ether;
+        assertEq(_stakeAtOffset(ContractAddresses.VAULT, 0), cap + SEED_FLIP_DAILY, "deploy seed on a capped lane");
+        for (uint24 century = 1; century <= 90; ++century) {
             _arm(century * 100); // must not revert even with the lane at its ceiling
         }
+        assertEq(_lastSeededCentury(), 90, "every arm landed");
         assertEq(
             _stakeAtOffset(ContractAddresses.VAULT, 0),
-            uint256(type(uint32).max) * 1 ether,
-            "the lane clamps at its width rather than spilling or reverting"
+            cap + SEED_FLIP_DAILY,
+            "the stored lane stays clamped at its width and the seed adds once"
         );
     }
 
@@ -250,8 +270,9 @@ contract CenturySeedWindow is DeployProtocol {
         uint24 maxCentury = maxLevel / 100;
         assertLt(maxCentury, type(uint24).max, "the counter's ceiling is unreachable by construction");
         // Even the maximum level claims exactly one FLIP window per call.
-        uint256 before = _stakeAtOffset(ContractAddresses.VAULT, 0);
+        _leaveDeployWindow();
         _arm(maxLevel);
-        assertEq(_stakeAtOffset(ContractAddresses.VAULT, 0), before + SEED_FLIP_DAILY);
+        assertEq(_lastSeededCentury(), 1);
+        assertEq(_stakeAtOffset(ContractAddresses.VAULT, 0), SEED_FLIP_DAILY);
     }
 }

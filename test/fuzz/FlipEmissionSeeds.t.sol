@@ -6,9 +6,10 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title FlipEmissionSeeds — initial FLIP emission as coinflip seed stakes
 /// @notice Proves the emission scheme end to end:
-///         1. SEEDS    — Coinflip's constructor stakes 200k for days 1-20, each
-///                       to VAULT and sDGNRS; nothing is minted up front (totalSupply
-///                       and vaultMintAllowance both start at 0).
+///         1. SEEDS    — Coinflip's constructor opens the seed window for days 1-20:
+///                       200k of stake per day, each to VAULT and sDGNRS, held as the
+///                       window rather than in stake lanes; nothing is minted up front
+///                       (totalSupply and vaultMintAllowance both start at 0).
 ///         2. SURVIVAL — a seeded day's FLIP only survives if it wins that day's flip;
 ///                       sDGNRS wins fold into its claimable coinflip backing by the
 ///                       daily resolution (uncirculated — no mint, no wallet balance),
@@ -55,13 +56,20 @@ contract FlipEmissionSeeds is DeployProtocol {
     //                       1. SEEDS — placement
     // =====================================================================
 
-    function test_SeedStakesPlacedForDays1Through20_NothingMinted() public view {
-        for (uint24 d = 1; d <= SEED_DAYS; ++d) {
-            assertEq(_stakeOf(d, VAULT), SEED, "vault day seed = 200k");
-            assertEq(_stakeOf(d, SDGNRS), SEED, "sdgnrs day seed = 200k");
+    function test_SeedStakesPlacedForDays1Through20_NothingMinted() public {
+        // The window start (Coinflip slot 4, byte 25) is day 1; no stake lane is written.
+        assertEq(uint24(uint256(vm.load(address(coinflip), bytes32(uint256(4)))) >> 200), 1, "window opens on day 1");
+        for (uint24 d = 1; d <= SEED_DAYS + 1; ++d) {
+            assertEq(_stakeOf(d, VAULT), 0, "no vault lane written");
+            assertEq(_stakeOf(d, SDGNRS), 0, "no sdgnrs lane written");
         }
-        assertEq(_stakeOf(SEED_DAYS + 1, VAULT), 0, "no vault seed past day 20");
-        assertEq(_stakeOf(SEED_DAYS + 1, SDGNRS), 0, "no sdgnrs seed past day 20");
+        // Wall day w stakes day w + 1: days 2..20 read the seed, day 21 does not.
+        for (uint24 w = 1; w <= SEED_DAYS; ++w) {
+            vm.warp((uint256(w - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_620 + 1);
+            uint256 expected = w < SEED_DAYS ? SEED : 0;
+            assertEq(coinflip.coinflipAmount(VAULT), expected, "vault day seed = 200k through day 20");
+            assertEq(coinflip.coinflipAmount(SDGNRS), expected, "sdgnrs day seed = 200k through day 20");
+        }
 
         // Nothing mints up front — the whole emission must survive its day's flip.
         assertEq(coin.totalSupply(), 0, "zero circulating supply at deploy");

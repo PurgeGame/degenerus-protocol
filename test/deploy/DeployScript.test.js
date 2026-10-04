@@ -78,23 +78,25 @@ describe("Deploy Pipeline", function () {
       const seed = hre.ethers.parseEther("200000");
       const vaultAddr = await f.vault.getAddress();
       const sdgnrsAddr = await f.sdgnrs.getAddress();
-      // coinflipBalance is internal; the next-day stake is visible via coinflipAmount
-      // only for the target day, so spot-check via the deploy-time events instead:
-      // day-1 and day-20 stakes were written in the constructor. Assert through the
-      // CoinflipStakeUpdated events emitted at deploy.
-      const events = await f.coinflip.queryFilter(
+      // The deploy seed is one window, not stake lanes: the constructor announces it with a
+      // single SeedWindowArmed (century 0, days 1-20, 200k per day) and emits no
+      // CoinflipStakeUpdated for either recipient.
+      const armed = await f.coinflip.queryFilter(f.coinflip.filters.SeedWindowArmed());
+      expect(armed.length).to.equal(1);
+      expect(armed[0].args.century).to.equal(0n);
+      expect(armed[0].args.firstDay).to.equal(1n);
+      expect(armed[0].args.dayCount).to.equal(20n);
+      expect(armed[0].args.amountPerDay).to.equal(seed);
+      const staked = await f.coinflip.queryFilter(
         f.coinflip.filters.CoinflipStakeUpdated()
       );
-      const byKey = new Map();
-      for (const ev of events) {
-        byKey.set(`${ev.args.player}-${ev.args.day}`, ev.args.newTotal);
+      for (const ev of staked) {
+        expect(ev.args.player).to.not.equal(vaultAddr);
+        expect(ev.args.player).to.not.equal(sdgnrsAddr);
       }
-      for (const day of [1n, 20n]) {
-        expect(byKey.get(`${vaultAddr}-${day}`)).to.equal(seed);
-        expect(byKey.get(`${sdgnrsAddr}-${day}`)).to.equal(seed);
-      }
-      expect(byKey.has(`${vaultAddr}-${21n}`)).to.equal(false);
-      expect(byKey.has(`${sdgnrsAddr}-${21n}`)).to.equal(false);
+      // The next flip day lies in the window, so the view carries the seed for both.
+      expect(await f.coinflip.coinflipAmount(vaultAddr)).to.equal(seed);
+      expect(await f.coinflip.coinflipAmount(sdgnrsAddr)).to.equal(seed);
     });
 
     it("sDGNRS: DGNRS contract holds creator's 20% as sDGNRS", async function () {
