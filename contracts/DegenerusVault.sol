@@ -108,10 +108,11 @@ interface ICoinPlayerActions {
 }
 
 /// @dev The craps table's player surface. The vault is seated automatically at every bonus
-///      window it can pay for, so the only doors it PLAYS through are joining a custom battle and
-///      re-spreading the chips on slips it already owns. Comping somebody else a seat is not one
-///      of them — that goes through the comp door below.
+///      window it can pay for. Its owner can save the shared preferred board, join a custom battle
+///      or re-spread chips on existing slips. Comping somebody else goes through the comp door below.
 interface ICrapsPlayerActions {
+    /// @notice Save the vault's board for automatic seats, comps and jackpot battles.
+    function setPreferredBoard(uint32 chips) external;
     /// @notice Join a custom craps battle, as implemented by CrapsBattle.
     function enterBattle(uint64 slot, uint32 chips, uint16 multiple) external returns (uint256);
     /// @notice Re-spread the chips on a slip the vault already owns, as implemented by CrapsBattle.
@@ -758,6 +759,15 @@ contract DegenerusVault {
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function gameSetOperatorApproval(address operator, bool approved) external onlyVaultOwner {
         gamePlayer.setOperatorApproval(operator, approved);
+    }
+
+    /// @notice Save the vault's shared craps board for future automatic seats, comps and jackpot battles.
+    /// @param chips Up to seven chips in the packed board layout; zero restores a fully random board.
+    /// @dev Uses the table's ordinary preference rules, including the daily RNG lock. Existing
+    ///      seats keep their board; use `crapsAmendSlip` to change an open slip.
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
+    function crapsSetPreferredBoard(uint32 chips) external onlyVaultOwner {
+        ICrapsPlayerActions(ContractAddresses.CRAPS).setPreferredBoard(chips);
     }
 
     /// @notice Join a custom craps battle for the vault, placing zero through seven chips by

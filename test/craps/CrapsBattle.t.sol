@@ -2897,134 +2897,100 @@ contract CrapsBattleTest is CrapsPins {
         craps.amendSlip(betId, over);
     }
 
-    /// @dev THE VAULT NAMES ITS OWN BOARD. It is seated automatically at every bonus day, by a
-    ///      call that takes no arguments, so without a standing board its ticket is blank and the
-    ///      dice place all ten of its chips. The HOUSE keeps the blank either way — it has nobody
-    ///      to choose for it, and naming nothing is the one shape that cannot be read in advance.
-    function test_theVaultPlaysTheBoardItsOwnerNamed() public {
-        // Three each on place 4 and hard 8, plus one on place 10 — seven in packed layout.
+    /// @dev Automatic vault seats use the shared address-wide preference; the house stays random.
+    function test_theVaultPlaysItsPreferredBoard() public {
         uint32 board = uint32((uint256(3) << 3) | (uint256(1) << 18) | (uint256(3) << 24));
-
-        vm.prank(alice);
-        vm.expectRevert(CrapsBattleStorage.NotVaultOwner.selector);
-        craps.setVaultBoard(board);
-
         vm.prank(vaultOwner);
-        craps.setVaultBoard(board);
+        craps.setPreferredBoard(1);
+        vm.prank(ContractAddresses.VAULT);
+        craps.setPreferredBoard(board);
 
         _openDay();
         uint256 daySlot = craps._daySlotOfPub(craps.currentDayIndex());
-        assertEq(craps.betOf((daySlot << 64) | 1).player, ContractAddresses.SDGNRS, "seat one is not the house");
-        assertEq(craps.betOf((daySlot << 64) | 1).chips, 0, "the house stopped leaving its chips to the dice");
-        assertEq(craps.betOf((daySlot << 64) | 2).player, ContractAddresses.VAULT, "seat two is not the vault");
-        assertEq(craps.betOf((daySlot << 64) | 2).chips, board, "the vault did not play the board it named");
+        assertEq(craps.betOf((daySlot << 64) | 1).player, ContractAddresses.SDGNRS);
+        assertEq(craps.betOf((daySlot << 64) | 1).chips, 0, "house must stay random");
+        assertEq(craps.betOf((daySlot << 64) | 2).player, ContractAddresses.VAULT);
+        assertEq(craps.betOf((daySlot << 64) | 2).chips, board, "vault preference was ignored");
+        assertEq(craps.preferredBoardOf(vaultOwner), 1, "owner preference changed");
     }
 
-    /// @dev The board is read AT SEAT TIME and never copied forward, so changing it moves every day
-    ///      the vault has not been seated at yet and no day it already has. A seat already taken
-    ///      moves with `amendSlip` or not at all.
-    function test_theVaultsBoardIsChangeableAndRestorable() public {
+    /// @dev Clearing the shared board keeps automatic participation and only changes future seats.
+    function test_theVaultsPreferredBoardIsChangeableAndRestorable() public {
         uint32 board = uint32((uint256(3) << 3) | (uint256(1) << 18) | (uint256(3) << 24));
-        vm.prank(vaultOwner);
-        craps.setVaultBoard(board);
+        vm.prank(ContractAddresses.VAULT);
+        craps.setPreferredBoard(board);
         _openDay();
         uint256 seat = (craps._daySlotOfPub(craps.currentDayIndex()) << 64) | 2;
-        assertEq(craps.betOf(seat).chips, board, "day one did not take the board");
+        assertEq(craps.betOf(seat).chips, board);
 
-        vm.prank(vaultOwner);
-        craps.setVaultBoard(0);
-        assertEq(craps.betOf(seat).chips, board, "changing the board rewrote a seat already taken");
+        vm.prank(ContractAddresses.VAULT);
+        craps.setPreferredBoard(0);
+        assertEq(craps.betOf(seat).chips, board, "preference change rewrote an existing seat");
 
         _nextWordedDay();
         _openDay();
         uint256 next = (craps._daySlotOfPub(craps.currentDayIndex()) << 64) | 2;
-        assertEq(craps.betOf(next).player, ContractAddresses.VAULT, "seat two of the new day is not the vault");
-        assertEq(craps.betOf(next).chips, 0, "a blank board did not restore the draw");
+        assertEq(craps.betOf(next).player, ContractAddresses.VAULT, "random board disabled vault seats");
+        assertEq(craps.betOf(next).chips, 0, "clearing did not restore the random board");
     }
 
-    /// @dev THE VAULT MAY SIT THE DAY OUT. The sentinel is not a board, it is an instruction not
-    ///      to take a seat — so the vault buys nothing, burns nothing, and the day opens without it.
-    function test_theVaultCanStandDownEntirely() public {
-        // Read the sentinel BEFORE the prank: it is an external call, and a prank covers only the
-        // next one.
-        uint32 off = craps.VAULT_BOARD_OFF();
-        vm.prank(vaultOwner);
-        craps.setVaultBoard(off);
+    /// @dev A prepaid seat keeps its snapshot; the next automatic seat consumes a banked pass
+    ///      and reads the same shared preference used to reserve the prepaid seat.
+    function test_theVaultUsesItsPreferenceForPrepaidAndAutomaticSeats() public {
+        address v = ContractAddresses.VAULT;
+        uint32 board = uint32(SEVEN_PACKED);
+        craps.setPassCredits(v, 0, 0);
+        vm.prank(v);
+        craps.setPreferredBoard(board);
+        vm.prank(ContractAddresses.GAME);
+        uint24 reservedDay = craps.deliverPasses(v, 2, 0);
+        uint256 prepaid = (craps._daySlotOfPub(reservedDay) << 64) | craps.daySeatNumberOf(reservedDay, v);
+        assertEq(craps.betOf(prepaid).chips, board);
 
-        uint256 spent = flip.burned(ContractAddresses.VAULT);
+        vm.prank(v);
+        craps.setPreferredBoard(0);
+        _nextWordedDay();
+        _openDay();
+        assertEq(craps.betOf(prepaid).chips, board, "opening rewrote a prepaid seat");
+        (uint256 banked,) = craps.passCreditsOf(v);
+        assertEq(banked, 1, "prepaid seat spent a second pass");
+
+        _nextWordedDay();
         _openDay();
         uint24 day = craps.currentDayIndex();
-        assertEq(craps.dayTicketsOf(day), 1, "the vault took a seat despite standing down");
-        assertEq(
-            craps.betOf((craps._daySlotOfPub(day) << 64) | 1).player,
-            ContractAddresses.SDGNRS,
-            "the house did not take the day alone"
-        );
-        assertEq(flip.burned(ContractAddresses.VAULT), spent, "a stood-down vault still paid");
-
-        // And it comes back the moment a board is named again.
-        vm.prank(vaultOwner);
-        craps.setVaultBoard(0);
-        _nextWordedDay();
-        _openDay();
-        assertEq(craps.dayTicketsOf(craps.currentDayIndex()), 2, "the vault did not come back");
+        uint256 automatic = (craps._daySlotOfPub(day) << 64) | craps.daySeatNumberOf(day, v);
+        assertEq(craps.betOf(automatic).player, v);
+        assertEq(craps.betOf(automatic).chips, 0);
+        (banked,) = craps.passCreditsOf(v);
+        assertEq(banked, 0, "automatic seat did not spend the banked pass");
     }
 
-    /// @dev STANDING DOWN SPENDS NOTHING — not FLIP, and not a banked pass either. The check sits
-    ///      ahead of the whole funding ladder, so declining a day costs the vault nothing it holds.
-    ///      A day a pass ALREADY bought is untouched: that seat was paid for when the pass was
-    ///      spent, and there is nothing left to decline.
-    function test_standingDownSpendsNoBankedPass() public {
-        address vault = ContractAddresses.VAULT;
-        craps.setPassCredits(vault, 0, 0);
-        vm.prank(ContractAddresses.GAME);
-        craps.deliverPasses(vault, 2, 0); // one takes tomorrow outright, one banks
-        (uint256 banked,) = craps.passCreditsOf(vault);
-        assertEq(banked, 1, "the second pass did not bank");
-
-        uint32 off = craps.VAULT_BOARD_OFF();
-        vm.prank(vaultOwner);
-        craps.setVaultBoard(off);
-
-        // Tomorrow: already seated by the pass, so standing down does not reach it.
-        _nextWordedDay();
-        _openDay();
-        assertEq(craps.dayStateOf(craps.currentDayIndex(), vault), craps.DAY_SEATED(), "the paid day was declined");
-
-        // The day after: nothing standing, so it stands down and the banked pass survives.
-        _nextWordedDay();
-        _openDay();
-        assertEq(craps.dayStateOf(craps.currentDayIndex(), vault), 0, "a stood-down vault sat anyway");
-        (banked,) = craps.passCreditsOf(vault);
-        assertEq(banked, 1, "standing down spent the banked pass");
-    }
-
-    /// @dev ZERO THROUGH SEVEN CHIPS, and never both sides — the same rule both paid doors enforce,
-    ///      so the vault can never hold a shape a player could not.
-    function test_theVaultsBoardAllowsUpToSevenChips() public {
-        vm.startPrank(vaultOwner);
-        for (uint24 placed = 0; placed <= 7; ++placed) {
+    function test_theVaultsPreferredBoardUsesTheSharedValidationAndLock() public {
+        vm.startPrank(ContractAddresses.VAULT);
+        for (uint24 placed; placed <= 7; ++placed) {
             uint256 first = placed > 3 ? 3 : placed;
             uint256 rest = placed - first;
             uint256 second = rest > 3 ? 3 : rest;
-            uint32 packed = uint32(first | (second << 9) | ((rest - second) << 12));
-            craps.setVaultBoard(packed);
+            craps.setPreferredBoard(uint32(first | (second << 9) | ((rest - second) << 12)));
         }
-
-        // Eight is the first board-wide count outside the continuum.
         vm.expectRevert(CrapsBattleStorage.BadRandomCount.selector);
-        craps.setVaultBoard(uint32(3 | (uint256(3) << 9) | (uint256(2) << 12)));
-
-        // And the cap itself, on a board that would otherwise be a legal seven.
+        craps.setPreferredBoard(uint32(3 | (uint256(3) << 9) | (uint256(2) << 12)));
         vm.expectRevert(CrapsBattleStorage.TooManyChipsOnALeg.selector);
-        craps.setVaultBoard(uint32((uint256(4) << 9) | (uint256(3) << 12)));
-
+        craps.setPreferredBoard(uint32((uint256(4) << 9) | (uint256(3) << 12)));
         vm.expectRevert(CrapsBattleStorage.BoardPlaysBothSides.selector);
-        craps.setVaultBoard(uint32(uint256(3) | (uint256(1) << 9) | (uint256(3) << 27)));
-
-        craps.setVaultBoard(uint32(SEVEN_PACKED));
-        craps.setVaultBoard(0);
+        craps.setPreferredBoard(uint32(uint256(3) | (uint256(1) << 9) | (uint256(3) << 27)));
+        vm.expectRevert(CrapsBattleStorage.BadRandomCount.selector);
+        craps.setPreferredBoard(type(uint32).max);
+        craps.setPreferredBoard(uint32(SEVEN_PACKED));
         vm.stopPrank();
+
+        game.setRngLocked(true);
+        vm.startPrank(ContractAddresses.VAULT);
+        craps.setPreferredBoard(uint32(SEVEN_PACKED)); // identical board is a no-op
+        vm.expectRevert(CrapsBattleStorage.BetLocked.selector);
+        craps.setPreferredBoard(0);
+        vm.stopPrank();
+        assertEq(craps.preferredBoardOf(ContractAddresses.VAULT), SEVEN_PACKED);
     }
 
     /// @dev A STARVED HOUSE IS COMPED, BOUNTY AND ALL; THE VAULT IS NOT. A bonus that waits on the

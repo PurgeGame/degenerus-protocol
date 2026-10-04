@@ -52,8 +52,8 @@ interface IFlipCoin {
 }
 
 /// @dev The vault's ownership test — a majority DGVE holder. The only authority this contract
-///      recognises: it opens a custom battle, names the vault's day board (`setVaultBoard`),
-///      and grants or revokes battle creators (`setBattleCreator`).
+///      recognises: it opens a custom battle and grants or revokes battle creators
+///      (`setBattleCreator`). The vault saves its board through the ordinary player surface.
 interface IVaultOwnership {
     /// @notice DegenerusVault's majority-DGVE-holder check for `account`.
     function isVaultOwner(address account) external view returns (bool);
@@ -372,6 +372,7 @@ contract CrapsBattle is CrapsBattleStorage {
     }
 
     /// @notice Save your board for comped tickets and the jackpot battle. Zero restores random.
+    /// @dev The vault's automatic day seats also use its saved preference.
     /// @dev Input is the same canonical thirty-bit board paid entries accept. First save sets
     ///      a permanent sentinel, including for zero; identical initialized boards are no-ops.
     /// @custom:reverts BetLocked If initialization or a change would move a committed daily draw.
@@ -845,40 +846,6 @@ contract CrapsBattle is CrapsBattleStorage {
             if (stored != 0) index = stored - 1;
         }
         return (w.key, index, c);
-    }
-
-    /// @notice Name the board the vault's automatic day seats play from here on.
-    /// @dev The vault is seated at every bonus day by `openBonusDay` — a call nobody makes on its
-    ///      behalf and which takes no arguments — so without this its ticket is always blank and
-    ///      the dice place all ten of its chips. This is the vault's only say in what it plays,
-    ///      short of amending each seat by hand after the fact.
-    ///
-    ///      ZERO THROUGH SEVEN CHIPS, the same rule every paid door enforces, so the vault can
-    ///      never hold a shape a player could not. A zero board restores the full draw.
-    ///
-    ///      Read at seat time, never copied forward: changing it moves every day the vault has not
-    ///      yet been seated at, and no day it already has. A seat already taken is moved with
-    ///      `amendSlip` instead, which is open until its slot stops taking bets.
-    ///      Taken PACKED rather than as a `Craps.Bets`: the ten-field struct costs several hundred
-    ///      bytes to decode at a new entry point, and this contract has none to spare. It is the
-    ///      same thirty-bit layout `CrapsSlipPlaced` already carries, which every client decodes
-    ///      already — three bits a leg, in board order, don't pass last.
-    ///
-    ///      `_VAULT_BOARD_OFF` is the one value that is not a board at all: it takes the vault OUT
-    ///      of the automatic day lane, so it buys no seat, burns no FLIP and spends no banked pass
-    ///      until its owner names a board again. It does NOT reach a seat a pass already bought —
-    ///      that day was paid for when the pass was spent, and there is nothing left to decline.
-    /// @param packed Up to seven chips in the packed layout, zero to go back to the draw, or
-    ///        `VAULT_BOARD_OFF` to stop taking day seats at all.
-    /// @custom:reverts NotVaultOwner If the caller does not hold the vault's DGVE majority.
-    /// @custom:reverts BoardPlaysBothSides If it names both the pass line and don't pass.
-    /// @custom:reverts BadRandomCount If it names more than seven chips.
-    function setVaultBoard(uint32 packed) external {
-        if (!IVaultOwnership(ContractAddresses.VAULT).isVaultOwner(msg.sender)) revert NotVaultOwner();
-        if (packed != _VAULT_BOARD_OFF) _upToSeven(packed);
-        // No echo of its own: the board is read back at each seat, and every seat it steers
-        // still announces the chips it actually plays through `CrapsSlipPlaced`.
-        _vaultBoard = packed;
     }
 
     /// @notice Grant or revoke the right to open a custom battle. The vault's majority holder is
@@ -1939,15 +1906,8 @@ contract CrapsBattle is CrapsBattleStorage {
         // Already sitting: a pass spent on this day wrote the seat the moment it was spent, so
         // there is nothing here to buy.
         if (_loadDaySeat(daySlot, body) != 0) return;
-        // The vault plays a board its owner may name, and may name the sentinel instead and sit
-        // the day out. Read BEFORE anything is spent, so standing down costs it neither FLIP nor a
-        // banked pass. The house has no board and no say: it has nobody to choose for it, and
-        // naming nothing is the one shape that cannot be read off in advance.
-        uint256 chips;
-        if (body == ContractAddresses.VAULT) {
-            chips = _vaultBoard;
-            if (chips == _VAULT_BOARD_OFF) return;
-        }
+        // Automatic seats use the body's saved board; an unset preference is fully random.
+        uint256 chips = preferredBoardOf(body);
         // THE BANK FIRST, FLIP SECOND. A pass is a claim on a day that is already bought and
         // cannot be spent on anything else, so it is what the seat reaches for; FLIP is liquid and
         // is only burned for a day the bank cannot cover. The burn pays the whole day — every

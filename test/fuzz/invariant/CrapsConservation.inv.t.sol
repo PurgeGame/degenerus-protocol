@@ -155,10 +155,10 @@ contract CrapsConservationInv is CrapsPins {
 
     /// @dev Seed the exact bug shape invariant (2) exists for — a progressive balance with no
     ///      funding behind it — and prove the wired check registers it, then goes green again
-    ///      when the inflation is reverted. `_progressive` is slot 17 of `CrapsBattle`
+    ///      when the inflation is reverted. `_progressive` is slot 16 of `CrapsBattle`
     ///      (scripts/layout/golden/CrapsBattle.json), field-isolated: the whole slot is the pool.
     function test_falsifiable_progressiveInflationIsCaught() public {
-        bytes32 slot = bytes32(uint256(17));
+        bytes32 slot = bytes32(uint256(16));
         bytes32 prior = vm.load(address(craps), slot);
         uint256 inflated = uint256(prior) + handler.ghost_subsidies() + 1_000_000 ether;
         vm.store(address(craps), slot, bytes32(inflated));

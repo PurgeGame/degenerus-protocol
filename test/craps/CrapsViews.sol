@@ -93,7 +93,7 @@ contract CrapsViews is CrapsBattle {
     }
 
     /// @dev THE STRUCT-SHAPED DOORS the shipped table stopped taking. Chips now go in packed —
-    ///      three bits a leg, board order, don't pass at bit 27 — the same word `setVaultBoard`
+    ///      three bits a leg, board order, don't pass at bit 27 — the same word `setPreferredBoard`
     ///      has always taken, the same word a bet is STORED as, and the same word
     ///      `CrapsSlipPlaced` has always emitted. Decoding a ten-field struct at four separate
     ///      doors cost 1,931 bytes of EIP-170 to arrive at that word anyway.
@@ -376,10 +376,6 @@ contract CrapsViews is CrapsBattle {
     function windowReservedOf(uint64 slot) external view returns (uint256 count, uint256 high) {
         bytes32 key = bytes32(uint256(slot));
         return (_battles[key] & _MASK32, uint32(_highField[key]));
-    }
-
-    function VAULT_BOARD_OFF() external pure returns (uint32) {
-        return _VAULT_BOARD_OFF;
     }
 
     function DAY_SEATED() external pure returns (uint256) {

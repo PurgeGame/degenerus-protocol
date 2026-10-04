@@ -279,14 +279,15 @@ contract CrapsPreferredBoardTest is CrapsPins {
         assertGt(used[4], used[0]);
     }
 
-    function test_ProtocolSeatingIgnoresPreferenceAndSentinelAsPasses() public {
+    function test_ProtocolSeatingUsesVaultPreferenceWithoutSpendingPreferenceBits() public {
         c.setPassCredits(ContractAddresses.VAULT, 1, 0);
         c.setPassCredits(ContractAddresses.SDGNRS, 0, 0);
         _save(ContractAddresses.VAULT, BOARD);
         _save(ContractAddresses.SDGNRS, 0);
         _openToday();
         assertFalse(c.daySeatIsHigh(c.currentDayIndex(), ContractAddresses.VAULT));
-        assertEq(_dayChips(c.currentDayIndex(), ContractAddresses.VAULT), 0);
+        assertEq(_dayChips(c.currentDayIndex(), ContractAddresses.VAULT), BOARD);
+        assertEq(c.preferredBoardOf(ContractAddresses.VAULT), BOARD);
         assertEq(_word(ContractAddresses.VAULT) & type(uint64).max, 0);
         assertEq(_word(ContractAddresses.SDGNRS), INIT);
     }

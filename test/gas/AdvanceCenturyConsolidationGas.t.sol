@@ -598,7 +598,6 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
             VaultHistorySeeder(address(coinflip)).seedVaultHistory(historyMode == 1);
             vm.etch(address(coinflip), original);
             vm.store(address(crapsBattle), keccak256(abi.encode(ContractAddresses.VAULT, uint256(15))), bytes32(0));
-            vm.store(address(crapsBattle), bytes32(uint256(16)), bytes32(0));
             vm.store(address(coin), bytes32(0), bytes32(uint256(uint128(uint256(vm.load(address(coin), bytes32(0)))))));
         }
         _predictAwards(word, s);

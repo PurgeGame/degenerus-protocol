@@ -49,7 +49,6 @@ CRANK-PINNED	ICrapsEngine.settleBattle	_settlementOf	CrapsBattle.sol	BARE	test/c
 OFF-CRANK	lowlevel:call	constructor	CrapsBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
 OFF-CRANK	ICrapsEngine.customDefinition	createBattle	CrapsBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
 OFF-CRANK	IVaultOwnership.isVaultOwner	setBattleCreator	JackpotBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
-OFF-CRANK	IVaultOwnership.isVaultOwner	setVaultBoard	CrapsBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
 OFF-CRANK	delegatecall:IGameAfkingModule.maybeCurse	_claimWinningsWithCurse	DegenerusGame.sol	BARE		claimWinnings / claimWinnings(amount) player claim path; GNRUS, sDGNRS and VAULT redemptions call it as players
 OFF-CRANK	IStETH.balanceOf	_payoutWithEthFallback	DegenerusGame.sol	BARE		VAULT-only claimWinningsStethFirst payout
 OFF-CRANK	lowlevel:call	_payoutWithEthFallback	DegenerusGame.sol	BARE		VAULT-only claimWinningsStethFirst payout

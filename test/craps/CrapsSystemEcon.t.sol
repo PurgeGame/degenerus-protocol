@@ -82,7 +82,7 @@ contract CrapsSystemEconTest is CrapsPins {
         // B_BLANK names nothing: the dice place all ten.
     }
 
-    /// @dev The same board in the packed form `setVaultBoard` takes — three bits a leg, board
+    /// @dev The same board in the packed form `setPreferredBoard` takes — three bits a leg, board
     ///      order, don't pass at bit 27.
     function _packed(uint8 k) internal pure returns (uint32) {
         Craps.Bets memory b = _board(k);
@@ -99,7 +99,6 @@ contract CrapsSystemEconTest is CrapsPins {
         uint8 board; // what every one of them plays
         uint16 highSeats; // how many of those take the day's high multiple instead
         uint256 standing; // the activity score every player carries
-        bool vaultOff; // stand the vault down
         bool vaultDark; // give the vault the don't-pass board
         bool starveBodies; // refuse the bodies' burn, so they fall through to the comp path
     }
@@ -178,15 +177,9 @@ contract CrapsSystemEconTest is CrapsPins {
 
         address[] memory ps = _players(f.players, salt, f.standing);
 
-        if (f.vaultOff) {
-            // Read the sentinel BEFORE the prank: `vm.prank` binds the next call, and an
-            // external constant read would consume it and leave `setVaultBoard` unpranked.
-            uint32 off = craps.VAULT_BOARD_OFF();
-            vm.prank(vaultOwner);
-            craps.setVaultBoard(off);
-        } else if (f.vaultDark) {
-            vm.prank(vaultOwner);
-            craps.setVaultBoard(_packed(B_DONT));
+        if (f.vaultDark) {
+            vm.prank(ContractAddresses.VAULT);
+            craps.setPreferredBoard(_packed(B_DONT));
         }
         if (f.starveBodies) {
             flip.setBurnRefused(ContractAddresses.SDGNRS, true);
@@ -196,7 +189,7 @@ contract CrapsSystemEconTest is CrapsPins {
         // ONE stack slot for the whole opening balance sheet: seven separate locals put this
         // frame over via-IR's limit, and every figure below is a plain before/after difference.
         uint256[7] memory snap = _snapshot();
-        L.seats = uint256(f.players) + (f.vaultOff ? 1 : 2);
+        L.seats = uint256(f.players) + 2;
 
         Craps.Bets memory board = _board(f.board);
 
@@ -246,7 +239,7 @@ contract CrapsSystemEconTest is CrapsPins {
                 (uint128 bankroll,,,,,) = craps.bonusTermsFor(day, p);
                 dayBankroll += bankroll;
             }
-            L.bodyAction += dayBankroll * (f.vaultOff ? 1 : 2);
+            L.bodyAction += dayBankroll * 2;
             L.action += craps.dayStaked(day);
             L.highAction += craps.highStakedOf(day);
             ++L.daysRun;
@@ -416,15 +409,6 @@ contract CrapsSystemEconTest is CrapsPins {
         _report("A1  cold table: house + vault, cash funded, blank boards", L);
         _actors(L);
         assertEq(L.minted, 0, "craps minted liquid FLIP");
-    }
-
-    /// @notice The vault stands down. One blank house body, alone, winning every pot it plays for.
-    function test_A2_coldTableVaultStoodDown() public {
-        Field memory f;
-        f.vaultOff = true;
-        Ledger memory L = _play(f, 800, 0xA2);
-        _report("A2  cold table: vault OFF, house alone", L);
-        _actors(L);
     }
 
     /// @notice Neither body can fund its seat. The house is comped in anyway; the vault is not.

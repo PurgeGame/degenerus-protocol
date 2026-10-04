@@ -144,12 +144,12 @@ abstract contract VaultSealChunkGas is VaultBafRig {
     uint24 internal latchDay;
     uint24 internal settledAt;
 
-    /// @dev Slow game: the vault settles once on its second day, level 0 idles 240 days and each
-    ///      of levels 1-9 holds 14 purchase days, so the latch walk spans the full window. The
-    ///      vault sits out the craps day lane: a seat it funds past its FLIP allowance settles its
-    ///      flips on the spot, which would shorten the walk.
+    /// @dev Slow game: level 0 idles 240 days and each of levels 1-9 holds 14 purchase days.
+    ///      Automatic craps funding can settle the vault along the way, so seed its worst-case
+    ///      claim backlog immediately before the measured seal to keep the full-window gas
+    ///      measurement deterministic.
     function _slow() internal pure virtual returns (bool);
-    /// @dev Control: the vault is settled through the eve, so the seal walks the latch day only.
+    /// @dev Control: settle the vault's available results before measuring the seal.
     function _presettle() internal pure virtual returns (bool);
     /// @dev The vault rides auto-rebuy with a stop that keeps a carry on every win.
     function _rebuy() internal pure virtual returns (bool) {
@@ -166,10 +166,6 @@ abstract contract VaultSealChunkGas is VaultBafRig {
         vm.pauseGasMetering();
         _settleToday();
         if (_slow()) {
-            vm.mockCall(VAULT, abi.encodeWithSignature("isVaultOwner(address)", address(this)), abi.encode(true));
-            (bool ok, ) = ContractAddresses.CRAPS.call(abi.encodeWithSignature("setVaultBoard(uint32)", type(uint32).max));
-            require(ok, "harness: the vault leaves the day lane");
-            vm.clearMockedCalls();
             _runFullDay();
             vm.prank(POKER);
             coinflip.depositCoinflip(VAULT, 0);
@@ -182,17 +178,14 @@ abstract contract VaultSealChunkGas is VaultBafRig {
         _driveToEve(9);
         latchDay = game.currentDayView() + 1;
         _stageDay();
-        require(_lastClaim(VAULT) == pokedAt, "harness: no intermediate vault settlement");
-        for (uint256 pokes; _presettle() && _lastClaim(VAULT) + 1 < latchDay; ++pokes) {
+        if (!_slow()) {
+            require(_lastClaim(VAULT) == pokedAt, "harness: no intermediate vault settlement");
+        }
+        for (uint256 pokes; !_slow() && _presettle() && _lastClaim(VAULT) + 1 < latchDay; ++pokes) {
             require(pokes < 4, "harness: the control never settled");
             vm.prank(POKER);
             coinflip.depositCoinflip(VAULT, 0);
         }
-        emit log_named_uint("vault_days_unsettled", latchDay - _lastClaim(VAULT));
-        // One claim walks at most 365 days: an auto-rebuy backlog past that settles next time,
-        // older days off auto-rebuy expire (as for any player's single claim).
-        settledAt = _rebuy() && latchDay - _lastClaim(VAULT) > 365 ? _lastClaim(VAULT) + 365 : latchDay;
-
         // The latch day up to its request, then the native daily cycle.
         simTime += 1 days + 1;
         vm.warp(simTime);
@@ -217,6 +210,19 @@ abstract contract VaultSealChunkGas is VaultBafRig {
             }
             vm.deleteStateSnapshot(snap);
         }
+        if (_slow()) {
+            bytes memory original = address(coinflip).code;
+            vm.etch(address(coinflip), type(VaultSettleSeeder).runtimeCode);
+            VaultSettleSeeder(address(coinflip)).seedVaultHistory(latchDay, 365, _rebuy());
+            vm.etch(address(coinflip), original);
+            if (_presettle()) {
+                vm.prank(POKER);
+                coinflip.depositCoinflip(VAULT, 0);
+            }
+        }
+        emit log_named_uint("vault_days_unsettled", latchDay - _lastClaim(VAULT));
+        // One claim walks at most 365 days; compute the endpoint from the actual pre-seal state.
+        settledAt = _rebuy() && latchDay - _lastClaim(VAULT) > 365 ? _lastClaim(VAULT) + 365 : latchDay;
         vm.resumeGasMetering();
     }
 

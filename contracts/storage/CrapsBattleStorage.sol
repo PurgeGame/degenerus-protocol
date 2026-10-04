@@ -351,13 +351,6 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     uint256 internal constant _BET_HIGH_SHIFT = 217;
     uint256 internal constant _BET_DAYHIGH_MASK = 0x3F << 217;
 
-    /// @dev Where the DON'T PASS count sits inside the chip word — the tenth and last leg. The
-    ///      same position in storage and in every event, since the two carry the identical word.
-    /// @notice The one `setVaultBoard` value that is NOT a board: an instruction to sit out. Above
-    ///         every legal packed board — those occupy thirty bits and this sets thirty-two — so it
-    ///         can never collide with a shape anyone could name.
-    uint32 internal constant _VAULT_BOARD_OFF = type(uint32).max;
-
     /// @dev Bit 0 of every one of the ten three-bit legs. Shifting each leg's `4` bit onto this
     ///      mask makes the three-chip ceiling one board-wide test.
     uint256 internal constant _CHIP_LO_MASK = 0x9249249;
@@ -746,13 +739,6 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      per leg); bit 84 is set on its first save and never cleared. Balance updates preserve
     ///      these fields. CrapsPreferenceLib pins this mapping's slot for the Game's jackpot battle batch read.
     mapping(address => uint256) internal _passCredits;
-
-    /// @dev The board the VAULT's automatic day seats play, as packed chip COUNTS. Zero is a blank
-    ///      ticket and leaves all ten chips to the dice, which is where this starts.
-    ///
-    ///      COUNTS, not amounts, which is what lets ONE board serve every window: a chip is worth
-    ///      whatever its own window says it is, and the seat plays all seven of them.
-    uint256 internal _vaultBoard;
 
     /// @dev THE PROGRESSIVE. One balance, shared by every scheduled window of every day.
     ///      Funded once when a protocol day opens — half of what that day's main allocation
