@@ -33,8 +33,9 @@ ENV_KEYS = (
 
 def groups():
     files = sorted(Path("test").rglob("*.sol"))
-    support = {p for p in files if any(str(p).startswith(prefix) for prefix in (
-        "test/fuzz/helpers/", "test/fuzz/handlers/", "test/helpers/"))}
+    # Every non-test source stays compiled: a skipped helper still compiles as an import, but
+    # its artifact is not emitted, so forge cannot identify the contract an invariant targets.
+    support = {p for p in files if not p.name.endswith(".t.sol")}
     fuzz = sorted(Path("test/fuzz").glob("*.t.sol"))
     result = {
         "integration-gas": {p for p in files if p.parts[1] in {
