@@ -418,7 +418,7 @@ contract DegenerusGameFoilPackModule is
             (bool afkLive, uint32 afkStreak) = _liveAfkingStreak(buyer);
             if (afkLive) streakSnapshot = afkStreak;
         }
-        uint256 score = _playerActivityScore(buyer, streakSnapshot);
+        uint256 score = _playerActivityScoreCached(buyer, streakSnapshot);
         uint16 multBps = uint16(ActivityCurveLib.foilBoostBps(score));
 
         // The daily request's foil swap freezes this pack before that request; a mid-day

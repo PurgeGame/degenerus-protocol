@@ -25,7 +25,7 @@ mkdir -p "$GOLD"
 # Deployable contracts that own storage (DegenerusGame = the canonical delegatecall context).
 CONTRACTS=(
   DegenerusGame
-  Coinflip sDGNRS DGNRS DegenerusVaultShare DegenerusAffiliate DegenerusQuests
+  Coinflip sDGNRS DGNRS DegenerusVaultShare DegenerusAffiliate DegenerusQuests DegenerusParimutuel
   FLIP GNRUS WWXRP DegenerusDeityPass DegenerusJackpots DegenerusAdmin
   DegenerusRecordBounty
   # Craps table. CrapsBattle is the only one of the three craps contracts with storage; Craps and

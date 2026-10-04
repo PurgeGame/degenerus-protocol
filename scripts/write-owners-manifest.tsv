@@ -98,7 +98,7 @@ HELPER	lootboxRngPacked	storage/DegenerusGameStorage.sol	_lrWrite/_lrAdd field m
 OWNER	middayRngCredit	DegenerusGame.sol	creditMiddayRng (ADMIN) banks donated LINK credit; the advance module debits
 OWNER	middayRngCredit	modules/DegenerusGameRngModule.sol	_tryChargeMiddayCredit debits the caller's credit for a mid-day request; the facade credits
 OWNER	mintPacked_	modules/DegenerusGameBoonModule.sol	_creditActivity bumps LEVEL_COUNT via setPacked on a fresh read; field-isolated
-OWNER	mintPacked_	modules/DegenerusGameMintStreakUtils.sol	_recordMintData/_recordMintStreakForLevel/_applyCurseStack/_clearCurse: the mint-data field mutators inherited by modules; each is a fresh-read setPacked
+OWNER	mintPacked_	modules/DegenerusGameMintStreakUtils.sol	_recordMintData/_recordMintStreakForLevel/_applyCurseStack/_clearCurse and _playerActivityScoreCachedAt: mint-data field mutators inherited by modules; cached scoring writes only affiliate bits beside durable purchase history after a STATICCALL
 OWNER	mintPacked_	modules/DegenerusGameWhaleModule.sol	purchaseWhalePass/purchaseDeityPass write the pass fields from the entry read; _grantSeatCoin sets SEAT_CLAIMED last in the function so no later whole-word write clobbers it
 OWNER	mintPacked_	modules/GameAfkingModule.sol	subscribe sets / cancel and clearSeatEncumbrance clear the SEAT_ENCUMBERED bit via masked RMW; field-isolated
 HELPER	mintPacked_	storage/DegenerusGameStorage.sol	_activate10LevelPass/_applyWhalePassStats whole-word pass activation from a fresh read

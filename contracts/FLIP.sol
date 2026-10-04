@@ -851,7 +851,7 @@ contract FLIP {
         uint256 baseAmount = amount + (completed ? questReward : 0);
 
         // Activity score bonus (whole points); the curve self-saturates at its cap.
-        uint256 bonusPoints = degenerusGame.playerActivityScore(caller);
+        uint256 bonusPoints = degenerusGame.playerActivityScoreCached(caller);
 
         uint256 decBurnMultBps = ActivityCurveLib.decBattleMultBps(bonusPoints);
 

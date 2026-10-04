@@ -152,6 +152,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         _prepare(21, 4, 3, true);
         harness.applyOpeningWord(21);
         vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScore.selector, player), abi.encode(uint256(500)));
+        vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScoreCached.selector, player), abi.encode(uint256(500)));
         vm.prank(address(game)); coin.mintForGame(player, 4_000_000 ether);
         vm.recordLogs();
         vm.prank(player); coin.decimatorBurn(player, 2_000_000 ether, 0);

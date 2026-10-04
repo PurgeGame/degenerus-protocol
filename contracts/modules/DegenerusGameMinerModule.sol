@@ -38,6 +38,12 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
         return uint8(_nextMinerAction(msg.sender));
     }
 
+    /// @dev Permissionless cache refresh, executed against Game storage only.
+    function playerActivityScoreCached(address player) external returns (uint256) {
+        if (address(this) != ContractAddresses.GAME) revert E();
+        return _playerActivityScoreCached(player, _effectiveQuestStreak(player));
+    }
+
     function mineFlip() external {
         if (address(this) != ContractAddresses.GAME) revert E();
         uint256 rewardStart = gasleft();

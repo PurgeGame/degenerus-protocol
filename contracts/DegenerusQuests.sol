@@ -667,20 +667,18 @@ contract DegenerusQuests is IDegenerusQuests {
      * @dev Called from handleFoilPurchase (GAME-gated) AFTER the buy's own primary + secondary
      *      quest completions, so it applies on top of them. Unconditional on quest state (a foil
      *      purchase boosts the streak even if no daily quest completed); never lowers an already-
-     *      higher streak. Syncs the day-lapse state first (idempotent — the foil leg already
-     *      synced today), so a foil buy restores the streak floor even after a missed-day reset.
+     *      higher streak. The preceding primary/foil leg syncs the day-lapse state, so a foil
+     *      buy restores the streak floor even after a missed-day reset.
      *      For a mid-run afker, whose reward streak is the afking sub base plus funded delivered
      *      days (independent of state.streak), the same floor is applied to that base via the
      *      afking module — before the manual-streak early-return below, so it reaches the afker
      *      even when their manual streak is already at the floor.
      * @param player The player who bought the foil pack.
      */
-    function _foilStreakFloor(address player) private {
-        if (player == address(0)) return;
-        uint24 currentDay = _currentQuestDay(_loadActiveQuests());
-        if (currentDay == 0) return;
-        PlayerQuestState storage state = questPlayerState[player];
-        _questSyncState(state, player, currentDay);
+    function _foilStreakFloor(address player, PlayerQuestState storage state, uint24 currentDay) private {
+        if (player == address(0) || currentDay == 0) return;
+        // The primary/foil leg already synced this day. Neither its credit nor the
+        // afking callbacks can roll quests or reset lastSyncDay.
         if (state.afkingActive) {
             questGame.floorAfkingStreakBase(player, FOIL_STREAK_FLOOR);
         }
@@ -1072,18 +1070,19 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @dev Foil secondary-quest progression (see handleFoilPurchase). Private so the streak
     ///      floor runs unconditionally after it, across all of its early-return paths.
     function _handleFoilPackQuest(
-        address player
+        address player,
+        PlayerQuestState storage state,
+        DailyQuest[QUEST_SLOT_COUNT] memory quests,
+        uint24 currentDay,
+        bool needsSync
     )
         private
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
-        DailyQuest[QUEST_SLOT_COUNT] memory quests = _loadActiveQuests();
-        uint24 currentDay = _currentQuestDay(quests);
-        PlayerQuestState storage state = questPlayerState[player];
         if (player == address(0) || currentDay == 0) {
             return (0, quests[0].questType, state.streak, false);
         }
-        _questSyncState(state, player, currentDay);
+        if (needsSync) _questSyncState(state, player, currentDay);
 
         (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(
             quests,
@@ -1260,9 +1259,9 @@ contract DegenerusQuests is IDegenerusQuests {
         onlyGame
         returns (uint256 reward, uint8 questType, bool completed, uint32 streakSnapshot, bool afking)
     {
-        // Load the active-quests slot once and thread it into both the primary purchase legs
-        // and the streak snapshot: nothing in the foil tree writes activeQuestsPacked
-        // (rollDailyQuest is GAME-gated and unreachable here), so one load serves both.
+        // Load active quests once for the primary legs, streak snapshot and foil secondary.
+        // Nothing in this call tree writes activeQuestsPacked: the afking callbacks only
+        // update their Sub words, and Coinflip credits cannot roll quests.
         DailyQuest[QUEST_SLOT_COUNT] memory quests = _loadActiveQuests();
         (reward, questType, , completed) = _handlePurchase(
             player, ethMintSpendWei, flipMintQty, lootBoxAmount, mintPrice, levelQuestPrice,
@@ -1271,13 +1270,15 @@ contract DegenerusQuests is IDegenerusQuests {
         // Snapshot the reward streak post-primary, pre-floor: the foil-EV boost freezes
         // against this streak, captured before the secondary quest and streak floor below
         // mutate it.
-        streakSnapshot = _effectiveBaseStreak(
-            questPlayerState[player],
-            _currentQuestDay(quests)
+        PlayerQuestState storage state = questPlayerState[player];
+        uint24 currentDay = _currentQuestDay(quests);
+        streakSnapshot = _effectiveBaseStreak(state, currentDay);
+        _handleFoilPackQuest(
+            player, state, quests, currentDay,
+            ethMintSpendWei == 0 && flipMintQty == 0 && lootBoxAmount == 0
         );
-        _handleFoilPackQuest(player);
-        _foilStreakFloor(player);
-        afking = questPlayerState[player].afkingActive;
+        _foilStreakFloor(player, state, currentDay);
+        afking = state.afkingActive;
     }
 
     /// @dev Shared purchase-path quest legs (mint ETH/FLIP + lootbox). Modifier-less core
@@ -2625,8 +2626,11 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @param lvl The current game level (fetched once by the caller).
     /// @return True if the player meets both gates.
     function _isLevelQuestEligible(address player, uint24 lvl) internal view returns (bool) {
-        uint256 packed = questGame.mintPackedFor(player);
+        return _isLevelQuestEligible(player, lvl, questGame.mintPackedFor(player));
+    }
 
+    /// @dev Same gates with a caller-owned mint snapshot; only the deity fallback reads Game.
+    function _isLevelQuestEligible(address player, uint24 lvl, uint256 packed) private view returns (bool) {
         // Activity gate: one whole ticket minted for this level's window. Jackpot-phase
         // buys tag units with `lvl` (tickets target the current level), purchase-phase
         // buys tag `lvl + 1` — either satisfies the quest.
@@ -2784,12 +2788,13 @@ contract DegenerusQuests is IDegenerusQuests {
         override
         returns (bool mayBet, bool earnsReward)
     {
+        uint256 mintData = questGame.mintPackedFor(player);
         earnsReward =
-            _isLevelQuestEligible(player, lvl) ||
+            _isLevelQuestEligible(player, lvl, mintData) ||
             questPlayerState[player].afkingActive;
         mayBet =
             earnsReward ||
-            (questGame.mintPackedFor(player) &
+            (mintData &
                 ~(BitPackingLib.MASK_8 << BitPackingLib.CURSE_COUNT_SHIFT)) !=
             0;
     }

@@ -13,6 +13,7 @@ contract WwxrpRecyclingGameMock {
     uint24 public level;
     function setWord(uint24 day, uint256 word) external { rngWordForDay[day] = word; }
     function setActivity(address player, uint256 score) external { playerActivityScore[player] = score; }
+    function playerActivityScoreCached(address player) external view returns (uint256) { return playerActivityScore[player]; }
     function setLevel(uint24 value) external { level = value; }
     function extsload(bytes32) external pure returns (bytes32) { return bytes32(0); }
 }

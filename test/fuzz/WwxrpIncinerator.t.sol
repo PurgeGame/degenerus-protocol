@@ -180,7 +180,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
         uint256 score = 500;
         vm.mockCall(
             address(game),
-            abi.encodeWithSignature("playerActivityScore(address)", alice),
+            abi.encodeWithSignature("playerActivityScoreCached(address)", alice),
             abi.encode(score)
         );
         uint256 mult = wwxrp.drawMultBps(score);

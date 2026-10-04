@@ -473,14 +473,10 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         bool exemptSub = subscriber == ContractAddresses.VAULT ||
             subscriber == ContractAddresses.SDGNRS;
         // Coin-required: >= 1 AFKing Subscription Token is the sole afking credential.
-        // Checked at subscribe ONLY; the coin enforces the invariant from the
+        // Checked when starting a run; an active update reuses the invariant from the
         // other side (its transfer guard reverts a last-coin transfer while
-        // subInfo.active), so an active sub always holds a coin without any
-        // process-pass re-check.
-        if (
-            !exemptSub &&
-            ISeatToken(ContractAddresses.AFKING_SUB_TOKEN).balanceOf(subscriber) == 0
-        ) revert NoCoin();
+        // subInfo.active, reclaim requires inactive, and there is no burn). An
+        // active sub therefore needs no balance re-check here or in the process pass.
         // Seat-encumbrance latch (fresh subscribe only — an active sub's bit is
         // already set). A still-set bit here means the last run ended by eviction
         // (manual cancel is the only player-side clear), so the seat is forfeit:
@@ -488,6 +484,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // bit token-side. Otherwise set the latch — it holds the coin's transfer
         // guard on the last seat for the whole run and through an eviction.
         if (!exemptSub && !wasActive) {
+            if (ISeatToken(ContractAddresses.AFKING_SUB_TOKEN).balanceOf(subscriber) == 0) revert NoCoin();
             uint256 packedWord = mintPacked_[subscriber];
             if (
                 (packedWord >> BitPackingLib.SEAT_ENCUMBERED_SHIFT) & 1 != 0
@@ -503,7 +500,12 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             _fundingSourceOf[subscriber] = fundingSource;
             s.flags |= FLAG_EXTERNAL_FUNDING;
         } else {
-            delete _fundingSourceOf[subscriber];
+            // A live self-funded run has already cleared this map at its start.
+            // Fresh/restarted runs must still clear it: process removal deletes
+            // the Sub (including its flag) but may leave an old sparse source.
+            if (!wasActive || (s.flags & FLAG_EXTERNAL_FUNDING) != 0) {
+                delete _fundingSourceOf[subscriber];
+            }
             s.flags &= ~FLAG_EXTERNAL_FUNDING;
         }
 
@@ -984,7 +986,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // drainAffiliateBase; the slot-0 reward into pendingFlip). The frozen score
             // (the EV input at open, off the compute-on-read streak — no STATICCALL) is computed
             // once for either box shape.
-            uint256 activityScore = _playerActivityScoreAt(
+            uint256 activityScore = _playerActivityScoreCachedAt(
                 player,
                 preBuyStreak,
                 // Streak basis is the phase-correct active ticket level (== the level the manual mint

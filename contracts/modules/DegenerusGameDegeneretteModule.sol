@@ -561,7 +561,7 @@ contract DegenerusGameDegeneretteModule is
         // lootbox-share EV multiplier). This snapshot precedes the new bet's quest credit.
         uint32 questStreak = _effectiveQuestStreak(player);
         uint16 activityScore = uint16(
-            _playerActivityScoreAt(player, questStreak, lvl + 1, lvl)
+            _playerActivityScoreCachedAt(player, questStreak, lvl + 1, lvl)
         );
 
         // ETH-only per-bet bookkeeping: biggest-spin record and protocol boon entries.

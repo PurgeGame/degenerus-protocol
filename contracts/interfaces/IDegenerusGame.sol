@@ -99,6 +99,8 @@ interface IDegenerusGame {
     /// @return Activity score in whole points.
     function playerActivityScore(address player) external view returns (uint256);
 
+    function playerActivityScoreCached(address player) external returns (uint256);
+
     /// @notice Check if an operator is approved to act on behalf of a player.
     /// @param owner The player who granted approval.
     /// @param operator The operator address to check.

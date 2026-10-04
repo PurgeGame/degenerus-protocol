@@ -93,10 +93,10 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
     ///      One slot, and a placement is a single read-modify-write of it.
     mapping(uint24 => uint256) private growthCounts;
 
-    /// @dev Per-round bets: the low two bits carry the side, bit 2 marks the payout taken.
-    ///      Keyed by round then player so a round left unclaimed is never destroyed by the
-    ///      next round's placement.
-    mapping(uint24 => mapping(address => uint8)) private growthBets;
+    /// @dev Sixty-four permanent round lanes per player word, four bits per lane:
+    ///      low two bits carry the side, bit 2 marks the payout taken. Words are keyed
+    ///      by player then round >> 6; future bets never overwrite an unclaimed round.
+    mapping(address => mapping(uint24 => uint256)) private growthBetWords;
 
     /// @dev Settled sides, two bits per round, 128 rounds to a word — keyed by `round >> 7`.
     ///      Values are the SIDE_OVER/SIDE_UNDER encoding; 0 = unsettled.
@@ -203,14 +203,18 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
         // Round 0 is the sole unscoreable round — growthState reports no ratchet terms
         // for it, so it could never settle and a stake left there would strand.
         if (!open || round == 0) revert MarketClosed();
-        if (growthBets[round][player] != 0) revert AlreadyBet();
+        uint24 betWord = round >> 6;
+        uint256 betShift = (uint256(round) & 63) << 2;
+        uint256 bets = growthBetWords[player][betWord];
+        if (((bets >> betShift) & 7) != 0) revert AlreadyBet();
 
         // A wallet that has never bought anything cannot take a position on how the game
         // grows.
         (bool mayBet, bool earnsReward) = quests.marketBetGates(player, round);
         if (!mayBet) revert NotEligible();
 
-        growthBets[round][player] = over ? SIDE_OVER : SIDE_UNDER;
+        // The gate above is a STATICCALL, so this snapshot remains current until stored.
+        growthBetWords[player][betWord] = bets | (uint256(over ? SIDE_OVER : SIDE_UNDER) << betShift);
         // overCount occupies the low half, underCount the high half, so each side increments
         // by its own unit and the two can never carry into one another.
         growthCounts[round] += over ? 1 : (uint256(1) << 128);
@@ -286,7 +290,7 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
         // Opener first, before the outcome read: a list someone already swept is refused
         // for one cold slot. (A winner who claimed alone can false-positive this; the
         // cost is one rebuilt list.)
-        uint8 opener = growthBets[round][players[0]];
+        uint8 opener = _readBet(players[0], round);
         if (opener == 0 || (opener & CLAIMED_BIT) != 0) revert NothingToSettle();
 
         // One cold SLOAD, no game call: the side was written by the push at the level
@@ -308,11 +312,14 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
         uint256[] memory payouts = new uint256[](len);
         for (uint256 i; i < len; ) {
             address player = players[i];
-            uint8 bet = growthBets[round][player];
+            uint24 betWord = round >> 6;
+            uint256 betShift = (uint256(round) & 63) << 2;
+            uint256 bets = growthBetWords[player][betWord];
+            uint8 bet = uint8((bets >> betShift) & 7);
             // A repeated address fails this on its second pass: the first already set the
             // claimed bit.
             if ((bet & SIDE_MASK) == outcome && (bet & CLAIMED_BIT) == 0) {
-                growthBets[round][player] = bet | CLAIMED_BIT;
+                growthBetWords[player][betWord] = bets | (uint256(CLAIMED_BIT) << betShift);
                 payouts[i] = payout;
                 total += payout;
                 emit BetClaimed(player, round, outcome, payout);
@@ -328,16 +335,24 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
     /// @dev Settle one round for one player. Returns the payout, or 0 when there is
     ///      nothing to pay.
     function _claim(address player, uint24 round) private returns (uint256) {
-        uint8 bet = growthBets[round][player];
+        uint24 betWord = round >> 6;
+        uint256 betShift = (uint256(round) & 63) << 2;
+        uint256 bets = growthBetWords[player][betWord];
+        uint8 bet = uint8((bets >> betShift) & 7);
         if (bet == 0 || (bet & CLAIMED_BIT) != 0) return 0;
 
         uint8 outcome = _readOutcome(round);
         if (outcome == 0 || (bet & SIDE_MASK) != outcome) return 0;
 
         uint256 payout = _payout(round, outcome);
-        growthBets[round][player] = bet | CLAIMED_BIT;
+        growthBetWords[player][betWord] = bets | (uint256(CLAIMED_BIT) << betShift);
         emit BetClaimed(player, round, outcome, payout);
         return payout;
+    }
+
+    /// @dev Read one permanent lane; neighboring rounds retain their side and claim bit.
+    function _readBet(address player, uint24 round) private view returns (uint8) {
+        return uint8((growthBetWords[player][round >> 6] >> ((uint256(round) & 63) << 2)) & 7);
     }
 
     // =========================================================================
@@ -445,7 +460,7 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
         overCount = uint128(packed);
         underCount = uint128(packed >> 128);
 
-        uint8 bet = growthBets[round][player];
+        uint8 bet = _readBet(player, round);
         side = bet & SIDE_MASK;
         claimed = (bet & CLAIMED_BIT) != 0;
         outcome = _readOutcome(round);

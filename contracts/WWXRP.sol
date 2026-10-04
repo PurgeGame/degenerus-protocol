@@ -115,6 +115,8 @@ interface IDrawGame {
         address player
     ) external view returns (uint256);
 
+    function playerActivityScoreCached(address player) external returns (uint256);
+
     /// @notice DegenerusGame's current level.
     function level() external view returns (uint24);
 
@@ -698,7 +700,7 @@ contract WWXRP {
         // 0, so reading the lane first and skipping the dispatch for an empty lane is exact.
         uint16 boonBps;
         if (_holdsWwxrpBoon(msg.sender)) boonBps = game.consumeCoinflipBoon(msg.sender);
-        uint256 multBps = drawMultBps(game.playerActivityScore(msg.sender));
+        uint256 multBps = drawMultBps(game.playerActivityScoreCached(msg.sender));
         uint256 fullWeight = _entryWeight(amount, multBps, boonBps);
         uint256 effective = fullWeight;
 

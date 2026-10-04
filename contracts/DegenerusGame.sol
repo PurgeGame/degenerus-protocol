@@ -1097,6 +1097,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         address player
     ) external returns (uint16 boostBps) {
         if (msg.sender != ContractAddresses.COIN) revert Unauthorized();
+        if (uint8(boonPacked[player].slot0 >> BP_DECIMATOR_TIER_SHIFT) == 0) return 0;
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_BOON_MODULE
             .delegatecall(
@@ -2409,6 +2410,22 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         // lootbox EV or sDGNRS claims.
         uint32 streak = _effectiveQuestStreak(player);
         return _playerActivityScore(player, streak);
+    }
+
+    /// @notice Activity score for transactions; refreshes the current-level affiliate cache.
+    /// @dev The read-only playerActivityScore remains available for STATICCALL consumers.
+    function playerActivityScoreCached(address player) external returns (uint256) {
+        uint256 packed = mintPacked_[player];
+        // Hits and wallets without durable purchase history need no mutating module call.
+        if (uint24(packed >> BitPackingLib.AFFILIATE_BONUS_LEVEL_SHIFT) == level
+            || (packed & ((BitPackingLib.MASK_24 << BitPackingLib.LAST_LEVEL_SHIFT)
+                | (BitPackingLib.MASK_24 << BitPackingLib.LEVEL_COUNT_SHIFT)
+                | (BitPackingLib.MASK_32 << BitPackingLib.DAY_SHIFT))) == 0) {
+            return _playerActivityScore(player, _effectiveQuestStreak(player));
+        }
+        (bool ok, bytes memory data) = ContractAddresses.GAME_MINER_MODULE.delegatecall(msg.data);
+        if (!ok) _revertDelegate(data);
+        return abi.decode(data, (uint256));
     }
 
     /*+======================================================================+

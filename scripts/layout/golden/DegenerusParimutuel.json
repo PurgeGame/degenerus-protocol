@@ -1,0 +1,26 @@
+[
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "growthCounts",
+    "offset": 0,
+    "slot": 0,
+    "typeLabel": "mapping(uint24 => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "growthBetWords",
+    "offset": 0,
+    "slot": 1,
+    "typeLabel": "mapping(address => mapping(uint24 => uint256))"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "growthOutcomeWords",
+    "offset": 0,
+    "slot": 2,
+    "typeLabel": "mapping(uint24 => uint256)"
+  }
+]

@@ -56,6 +56,7 @@ OFF-CRANK	lowlevel:call	_payoutWithEthFallback	DegenerusGame.sol	BARE		VAULT-onl
 OFF-CRANK	IStETH.balanceOf	_payoutWithStethFallback	DegenerusGame.sol	BARE		ETH-first claim payout, claimWinnings player path
 OFF-CRANK	lowlevel:call	_payoutWithStethFallback	DegenerusGame.sol	BARE		ETH-first claim payout, claimWinnings player path (untrusted recipient call runs last)
 OFF-CRANK	delegatecall:IDegenerusGameWhaleModule.purchaseDeityPass	_purchaseDeityPassFor	DegenerusGame.sol	BARE		player deity pass purchase
+OFF-CRANK	lowlevel:delegatecall	playerActivityScoreCached	DegenerusGame.sol	BARE		Score refresh for FLIP decimatorBurn and WWXRP draw entry (player paths); cache misses dispatch to the Miner module; unreachable from required settlement work
 OFF-CRANK	lowlevel:delegatecall	setThanosLevel	DegenerusGame.sol	BARE		vault-owner thanos declaration stub into the advance module; player/configuration path, unreachable from required settlement work
 OFF-CRANK	IVaultOwnerCheck.isVaultOwner	setThanosLevel	modules/DegenerusGameAdvanceModule.sol	BARE		vault-owner access check on the thanos declaration; configuration-only path, unreachable from required settlement work
 OFF-CRANK	delegatecall:IDegenerusGameMintModule.purchase	_purchaseFor	DegenerusGame.sol	BARE		player ticket purchase entry (purchase / purchaseFor)
@@ -249,6 +250,7 @@ OFF-CRANK	IDegenerusQuests.handlePurchase	_purchaseForWithCached	modules/Degener
 OFF-CRANK	ICoinflip.creditFlip	_redeemFlipFor	modules/DegenerusGameMintModule.sol	BARE		Player redeemFlip entry (facade stub); quest reward credit
 OFF-CRANK	ICoinflip.creditFlip	sellFarFutureEntries	modules/DegenerusGameMintModule.sol	BARE		Player sellFarFutureEntries entry (facade stub); salvage credit
 OFF-CRANK	IDegenerusCoin.burnCoinForSalvage	sellFarFutureEntries	modules/DegenerusGameMintModule.sol	BARE		Player sellFarFutureEntries entry (facade stub); salvage burn
+CRANK-PINNED	IDegenerusAffiliate.affiliateBonusPointsBest	_cacheAffiliateBonus	modules/DegenerusGameMintStreakUtils.sol	BARE	test/fuzz/ActivityAffiliateCache.t.sol	Cache miss of the same pinned Affiliate view on the AFKing box open leg (mineFlip -> runAfkingWork); STATICCALL, no revert path.
 CRANK-PINNED	IDegenerusAffiliate.affiliateBonusPointsBest	_playerActivityScoreAt	modules/DegenerusGameMintStreakUtils.sol	BARE	test/fuzz/LensParity.t.sol	Pinned Affiliate view of activity score, no external dependency.
 OFF-CRANK	IDegenerusCoin.balanceOfSpendableForSalvage	_quoteFarFutureFlipSplit	modules/DegenerusGameMintStreakUtils.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
 OFF-CRANK	IDegenerusAffiliate.affiliateBonusPointsBest	_recordMintData	modules/DegenerusGameMintStreakUtils.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
