@@ -101,7 +101,8 @@ contract DegradeDirectTicketFallbackTest is Test {
     ///      the rest of the draw is delivered by the queued path from the same cursor.
     function test_SnapDriftFallsBackAfterDirectGroups() public {
         h.seed(WORD, TICKETS);
-        (MineFlipGas.Result memory first, uint256 direct, uint256 queued) = _step(6_000_000);
+        // Admits one 32-winner direct group (2.8M round bound + 4 x 65k + tail), not a second.
+        (MineFlipGas.Result memory first, uint256 direct, uint256 queued) = _step(4_000_000);
         assertFalse(first.done, "harness: the first call must leave work for the fallback");
         assertEq(queued, 0, "harness: the first call ran the direct lane only");
         (uint8 quadrant, uint16 winner, uint32 round, bool wasDirect,,) = h.state();

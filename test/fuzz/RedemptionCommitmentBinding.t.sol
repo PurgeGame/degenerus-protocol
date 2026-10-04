@@ -265,7 +265,8 @@ contract RedemptionCommitmentBindingTest is DeployProtocol {
         }
         if (word & 1 != 0) {
             uint256 principal = c.escrow * 1 ether;
-            a.flip = principal + principal * _flipPercent(word, day + 1) / 100;
+            // Credited as a coinflip stake, which books whole FLIP.
+            a.flip = (principal + principal * _flipPercent(word, day + 1) / 100) / 1 ether * 1 ether;
         }
     }
 

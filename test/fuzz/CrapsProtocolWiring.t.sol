@@ -504,7 +504,10 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         uint256 cap = 0.5 gwei << steps;
         uint256 rate = 1 gwei < cap ? 1 gwei : cap;
         uint256 bps = (3_000 + 4_500 * steps) * (lockedAtStart ? 2 : 1);
-        return (measured - 1_000_000) * rate * 1000 ether * bps / (game.mintPrice() * 10_000);
+        uint256 pay = (measured - 1_000_000) * rate * 1000 ether * bps / (game.mintPrice() * 10_000);
+        if (pay == 0) return 0;
+        // Coinflip stakes are whole FLIP: at least 1 FLIP, larger pay floored.
+        return pay < 1 ether ? 1 ether : (pay / 1 ether) * 1 ether;
     }
 
     /// @dev Crank `mineFlip` until `slot` is armed, feeding the CURSOR's own pending word each

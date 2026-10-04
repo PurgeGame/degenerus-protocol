@@ -270,7 +270,8 @@ describe("DegenerusAdmin", function () {
 
       expect(event).to.not.be.null;
       expect(event.args.amount).to.equal(eth("399.75"));
-      expect(flipAfter).to.equal(eth("399.75"));
+      // The stake lane holds whole FLIP; the event reports the nominal credit.
+      expect(flipAfter).to.equal(eth("399"));
     });
 
     it("600 LINK in sub, 1 LINK → integrated ~0.5x = 199.75 FLIP flip stake", async function () {
@@ -286,7 +287,8 @@ describe("DegenerusAdmin", function () {
 
       expect(event).to.not.be.null;
       expect(event.args.amount).to.equal(eth("199.75"));
-      expect(flipAfter).to.equal(eth("199.75"));
+      // The stake lane holds whole FLIP; the event reports the nominal credit.
+      expect(flipAfter).to.equal(eth("199"));
     });
 
     it("0x tier (1000+ LINK in sub): no flip credit emitted", async function () {

@@ -97,7 +97,10 @@ contract SerializedMidnightProgressTest is MiddayFrozenPoolLatch {
         uint256 cap = uint256(0.5 gwei) << steps;
         uint256 bps = (3_000 + 4_500 * steps) << (locked ? 1 : 0);
         uint256 rate = block.basefee < cap ? block.basefee : cap;
-        return (used - MineFlipGas.MIN_REWARDED_GAS) * rate * 1000 ether * bps / (price * 10_000);
+        uint256 reward = (used - MineFlipGas.MIN_REWARDED_GAS) * rate * 1000 ether * bps / (price * 10_000);
+        if (reward == 0) return 0;
+        // Coinflip stakes are whole FLIP: at least 1 FLIP, larger rewards floored.
+        return reward < 1 ether ? 1 ether : (reward / 1 ether) * 1 ether;
     }
 
     /// @dev The miner clock: the later of the last accepted callback and the current day reset.

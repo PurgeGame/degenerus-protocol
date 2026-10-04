@@ -181,6 +181,7 @@ abstract contract VaultBafRig is DeployProtocol {
         vm.store(address(coinflip), bytes32(uint256(r) + 1), vm.load(address(coinflip), bytes32(uint256(v) + 1)));
         for (uint24 k; k <= throughDay >> 3; ++k) {
             vm.store(address(coinflip), _stakeSlot(k, REF), vm.load(address(coinflip), _stakeSlot(k, VAULT)));
+            for (uint24 d = k << 3; d < (k << 3) + 8; ++d) _addSeed(d);
         }
         assertEq(_lastClaim(REF), _lastClaim(VAULT), "mirror: claim cursor");
     }
@@ -193,6 +194,24 @@ abstract contract VaultBafRig is DeployProtocol {
         uint256 v = uint256(vm.load(address(coinflip), _stakeSlot(day >> 3, VAULT)));
         uint256 r = uint256(vm.load(address(coinflip), rs));
         vm.store(address(coinflip), rs, bytes32((r & ~mask) | (v & mask)));
+        _addSeed(day);
+    }
+
+    /// @dev The vault's seed stake for `day` in whole FLIP. Coinflip adds it on read for a seed
+    ///      recipient (window start: slot 4, byte 25), so a mirrored claimer stores it in its lane.
+    function _seedUnits(uint24 day) internal view returns (uint256) {
+        uint256 start = (uint256(vm.load(address(coinflip), bytes32(uint256(4)))) >> 200) & 0xFFFFFF;
+        return start != 0 && day >= start && day < start + 20 ? 200_000 : 0;
+    }
+
+    function _addSeed(uint24 day) internal {
+        uint256 seed = _seedUnits(day);
+        if (seed == 0) return;
+        bytes32 rs = _stakeSlot(day >> 3, REF);
+        uint256 shift = uint256(day & 7) << 5;
+        uint256 r = uint256(vm.load(address(coinflip), rs));
+        uint256 lane = ((r >> shift) & type(uint32).max) + seed;
+        vm.store(address(coinflip), rs, bytes32((r & ~(uint256(type(uint32).max) << shift)) | (lane << shift)));
     }
 
     function _mirrorScore(uint24 lvl) internal {
@@ -201,7 +220,9 @@ abstract contract VaultBafRig is DeployProtocol {
 
     function _stake(address p, uint24 day) internal view returns (uint256) {
         uint256 w = uint256(vm.load(address(coinflip), _stakeSlot(day >> 3, p)));
-        return uint256(uint32(w >> ((uint256(day) & 7) << 5))) * 1 ether;
+        uint256 units = uint256(uint32(w >> ((uint256(day) & 7) << 5)));
+        if (p == VAULT) units += _seedUnits(day);
+        return units * 1 ether;
     }
 
     function _lastClaim(address p) internal view returns (uint24) {

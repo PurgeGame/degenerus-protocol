@@ -442,10 +442,8 @@ describe("Phase 264 SURF-05 — per-pull-level resample entry-point gas regressi
         literalDelta <= LITERAL_DELTA_HARD_BOUND,
         `payDailyJackpotCoinAndTickets literal delta ${literalDelta} > ${LITERAL_DELTA_HARD_BOUND} — structural regression`,
       ).to.equal(true);
-      expect(
-        literalDelta > 0,
-        `payDailyJackpotCoinAndTickets literal delta ${literalDelta} non-positive — fixture / measurement regression`,
-      ).to.equal(true);
+      // No lower bound: both figures are whole advance calls whose size the per-chunk gas
+      // admission sets, so stage 9 may cost less than the stage-1 baseline.
 
       if (PAY_DAILY_JACKPOT_COIN_AND_TICKETS_GAS_REF > 0) {
         const drift = Math.abs(measured - PAY_DAILY_JACKPOT_COIN_AND_TICKETS_GAS_REF);
