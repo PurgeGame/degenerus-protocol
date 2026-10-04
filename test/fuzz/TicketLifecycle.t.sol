@@ -552,7 +552,7 @@ contract TicketLifecycleTest is DeployProtocol {
         assertGe(startLevel, 1, "Must reach at least level 1");
 
         // Now drive the game forward day by day until we enter jackpot phase
-        uint256 simTime = block.timestamp;
+        uint256 simTime = vm.getBlockTimestamp();
         bool foundJackpot = false;
         uint256 jackpotLevel;
 
@@ -624,7 +624,7 @@ contract TicketLifecycleTest is DeployProtocol {
         assertGe(currentLevel, 2, "Must reach at least level 2");
 
         // Warp forward to a new day so purchases are allowed
-        vm.warp(block.timestamp + 1 days + 1);
+        vm.warp(vm.getBlockTimestamp() + 1 days + 1);
 
         // Force the game into last-jackpot-day state via vm.store on slot 0:
         // Set jackpotPhaseFlag=true, jackpotCounter=2 (the next draw is day three),
@@ -703,53 +703,48 @@ contract TicketLifecycleTest is DeployProtocol {
     //         key for a near-future level. Processed by _prepareFutureTickets.
     // =========================================================================
 
-    /// @notice Purchase multiple lootboxes with buyer3 (not used by _driveToLevel), finalize RNG,
-    ///         open all. With 80% near-roll probability per open and 45% ticket chance per roll,
-    ///         multiple opens ensure at least some ticket output. After transitions, verify buyer3's
-    ///         ticketsOwed at near-future levels are fully processed to zero.
-    /// @dev SRC-04: Lootbox near roll queues to write key, processed by _prepareFutureTickets
+    /// @notice Purchase multiple lootboxes with buyer3 (not used by _driveToLevel), land the word,
+    ///         open all. The word is chosen so buyer3's first box takes the ticket path at offset
+    ///         0 of the near band (the live mint level), so at least one near-roll ticket output is
+    ///         deterministic. After transitions, verify buyer3's ticketsOwed at near-future levels
+    ///         are fully processed to zero.
+    /// @dev SRC-04: Lootbox near roll queues to write key, processed by the ticket drain.
+    ///      Engine migration: the per-index word map (`lootboxRngWordByIndex`) and the LR_INDEX
+    ///      counter are gone. Boxes bind to one of two physical buffers (tag 0 or 1) and resolve on
+    ///      the word of the session that seals that buffer, opened by the engine as a read
+    ///      consumer. The fixture therefore seals the genesis day, buys into the write buffer and
+    ///      lands the chosen word through the real mid-day request instead of poking storage.
     function testLootboxNearRollTicketsProcessed() public {
         assertEq(game.level(), 0, "Should start at level 0");
+        _settleToday();
+        assertEq(game.level(), 0, "the genesis daily cycle leaves the game at level 0");
 
         // Use buyer3 exclusively for lootbox (buyer1/buyer2 are used by _driveToLevel).
-        // Purchase multiple lootboxes with substantial ETH to maximize ticket output.
-        // Each open has 45% chance of ticket roll * 80% near roll = ~36% near tickets per open.
-        // Multiple purchases on same index/day for same buyer accumulate in lootboxEth.
-        uint48[] memory indices = new uint48[](8);
+        // One buyer at one physical buffer merges every buy into one packed order (the custom
+        // size freezes at 1 ETH), so the eight buys are eight boxes of one order.
+        uint48 buffer;
         for (uint256 i = 0; i < 8; i++) {
-            uint48 idx = _purchaseWithLootbox(buyer3, 0, 1 ether);
-            if (idx > 0) indices[i] = idx;
+            (bool landed, uint48 buf) = _buyBox(buyer3, 1 ether);
+            assertTrue(landed, "lootbox purchase did not land");
+            if (i == 0) buffer = buf;
+            assertEq(buf, buffer, "one buyer's buys between two seals share the write buffer");
         }
-
-        // Finalize the lootbox RNG word for the captured indices DIRECTLY (vm.store) rather
-        // than via a full advance cycle. At c4d48008 a full _driveAdvanceCycle would advance
-        // the lootbox RNG index past these boxes AND resolve buyer3's queued box through the
-        // daily lootbox-processing path before the explicit openLootBox below runs — leaving an
-        // empty box (the permissionless lootbox-resolution-timing behavior). Seeding the word
-        // here keeps the box intact so the explicit open exercises the near/far ticket roll.
-        for (uint256 i = 0; i < 8; i++) {
-            if (indices[i] > 0 && _lootboxRngWord(indices[i]) == 0) {
-                _storeLootboxRngWord(indices[i], 1000 + i);
-            }
-        }
-        // The open sweep walks only finalized indices (idx <= LR_INDEX - 1), so move LR_INDEX
-        // past the seeded indices too -- what a landed VRF word does alongside the word itself.
-        for (uint256 i = 0; i < 8; i++) {
-            if (indices[i] > 0) _finalizeLootboxIndex(indices[i]);
-        }
+        assertEq(_boxesOwed(buffer, buyer3), 8, "eight boxes owed before the open");
 
         // Snapshot write-key queue lengths before opening
         uint256[6] memory writeKeysBefore;
         for (uint24 lvl = 1; lvl <= 5; lvl++) {
             writeKeysBefore[lvl] = _queueLength(_writeKeyForLevel(lvl));
         }
+        uint24 openLevel = uint24(game.level()) + 1; // a box's base level: the live mint level
 
-        // Open all lootboxes
-        for (uint256 i = 0; i < 8; i++) {
-            if (indices[i] > 0) {
-                _openLootbox(buyer3, indices[i]);
-            }
-        }
+        // Land the word and open all eight boxes (mid-day: buyer3's 8 ETH clears the threshold).
+        _openWithMiddayWord(buyer3, _nearRollWord(buyer3));
+        assertEq(_boxesOwed(buffer, buyer3), 0, "the engine opened buyer3's whole order");
+
+        // The selected first box rolled offset 0: its tickets sit on the live write key.
+        assertGt(_ticketsOwed(_writeKeyForLevel(openLevel), buyer3), 0,
+            "the near roll at offset 0 queues buyer3 on the live write key");
 
         // Check if any near-future write key or ticketsOwed grew, OR if buyer3 has
         // ticketsOwed at any near-future level (indicates ticket routing occurred).
@@ -760,14 +755,15 @@ contract TicketLifecycleTest is DeployProtocol {
                 anyTicketQueued = true;
                 break;
             }
-            // Check entriesOwedPacked for buyer3 at both key variants
+            // Check the pending lanes for buyer3 at both key variants
             if (_ticketsOwed(lvl, buyer3) > 0 || _ticketsOwed(lvl | TICKET_SLOT_BIT, buyer3) > 0) {
                 anyTicketQueued = true;
                 break;
             }
         }
-        // Also check far-future range in case a far roll occurred
-        for (uint24 lvl = 6; lvl <= 51 && !anyTicketQueued; lvl++) {
+        // Also check the far-future key: near offsets above the mint ceiling (levels 2-5 at
+        // level 0, ceiling level+1) and far rolls (6-51) both route there.
+        for (uint24 lvl = 2; lvl <= 51 && !anyTicketQueued; lvl++) {
             if (_ticketsOwed(lvl | TICKET_FAR_FUTURE_BIT, buyer3) > 0) {
                 anyTicketQueued = true;
             }
@@ -811,60 +807,57 @@ contract TicketLifecycleTest is DeployProtocol {
     ///         forward and verify all FF queues for processed levels are drained.
     /// @dev SRC-05: Lootbox far roll (offset 5-50) queues to FF key, drained at phase transition.
     ///
-    ///      ONE ROLL PER (index, player). `_rollTargetLevel` seeds off
-    ///      `EntropyLib.hash2(rngWord, player)`, so independent far-roll trials come from distinct
-    ///      BUYERS — not from repeated buys by one buyer. The original fixture bought five
-    ///      DIFFERENT custom sizes per buyer at one index; `_mergeBoxOrder` freezes one custom
-    ///      size per (index, buyer) and reverts `E()` on a size change, and `_purchaseWithLootbox`
-    ///      swallows that revert, so buys 2-5 vanished silently and 20 intended trials became 4.
+    ///      ONE ORDER PER (buffer, player). The entry sweep seeds each box off
+    ///      `EntropyLib.hash4(rngWord, player, BOX_OPEN_TAG, nonce)`, so independent far-roll
+    ///      trials come from distinct BUYERS here (one box each) — not from repeated buys by one
+    ///      buyer. The original fixture bought five DIFFERENT custom sizes per buyer at one index;
+    ///      `_mergeBoxOrder` freezes one custom size per (buffer, buyer) and reverts `E()` on a
+    ///      size change, and `_purchaseWithLootbox` swallows that revert, so buys 2-5 vanished
+    ///      silently and 20 intended trials became 4.
     ///
     ///      Rebuilt to buy from 20 distinct buyers at one shared size, which is 20 real trials
-    ///      under the current model. The word is then CHOSEN so buyer 0's roll lands in the far
-    ///      band, making the assertion deterministic instead of riding the 0.8^20 (~1.2%) tail the
-    ///      old shape depended on. `_farRollWord` only selects; the assertion below still proves
-    ///      the real FF queue grew.
+    ///      under the current model. The word is then CHOSEN so buyer 0's first box takes the
+    ///      ticket path in the far band, making the assertion deterministic instead of riding the
+    ///      tail the old shape depended on. `_farRollWord` only selects; the assertion below still
+    ///      proves the real FF queue grew.
+    ///
+    ///      Engine migration: boxes bind to one of two physical buffers (tag 0 or 1, so 0 is a
+    ///      valid tag) and the per-index word map is gone. The chosen word lands through the real
+    ///      mid-day request (stored verbatim) and the engine opens the sealed cohort as a read
+    ///      consumer, replacing the old advance-cycle-then-poke-the-word fixture.
     function testLootboxFarRollTicketsRouteToFF() public {
         assertEq(game.level(), 0, "Should start at level 0");
+        _settleToday();
+        assertEq(game.level(), 0, "the genesis daily cycle leaves the game at level 0");
 
         // Snapshot FF queue lengths before lootbox opens across a wide range.
-        // Constructor places 2 entries at each FF level 6-100. We check levels 6-55
+        // Constructor places 2 entries at each FF level 2-100. We check levels 6-55
         // (max far target = baseLevel + 50 = 1 + 50 = 51).
         uint256[50] memory ffBefore;
         for (uint24 i = 0; i < 50; i++) {
             ffBefore[i] = _ffQueueLength(i + 6);
         }
 
-        // 20 distinct buyers, ONE buy each at a shared custom size: 20 (index, player) pairs, so
+        // 20 distinct buyers, ONE buy each at a shared custom size: 20 (buffer, player) pairs, so
         // 20 independent rolls. One size per buyer keeps every buy inside the custom-size freeze.
         address[20] memory lboxBuyers;
-        uint48[20] memory boxIndex;
+        uint48 buffer;
         for (uint256 k = 0; k < 20; k++) {
             lboxBuyers[k] = makeAddr(string.concat("lbox_buyer_", vm.toString(k)));
             vm.deal(lboxBuyers[k], 50_000 ether);
-            boxIndex[k] = _purchaseWithLootbox(lboxBuyers[k], 0, 0.1 ether);
+            (bool landed, uint48 buf) = _buyBox(lboxBuyers[k], 0.1 ether);
+            // Every buy must have landed — a silently-swallowed revert is what hollowed out the
+            // original fixture, so failing loudly here is the point.
+            assertTrue(landed, "lootbox purchase did not land");
+            if (k == 0) buffer = buf;
+            assertEq(buf, buffer, "all twenty buys share the write buffer");
         }
 
-        // Every buy must have landed — a silently-swallowed revert is what hollowed out the
-        // original fixture, so failing loudly here is the point.
+        // Land a word chosen so buyer 0 rolls far with tickets; the rest ride the same word at
+        // their own player-salted seeds. 20 x 0.1 ETH pending clears the mid-day threshold.
+        _openWithMiddayWord(lboxBuyers[0], _farRollWord(lboxBuyers[0]));
         for (uint256 k = 0; k < 20; k++) {
-            assertGt(boxIndex[k], 0, "lootbox purchase did not land");
-        }
-
-        // Finalize RNG via advance cycle
-        _driveAdvanceCycle();
-
-        // Seed each index with a word chosen so buyer 0 rolls far; the rest ride the same word
-        // at their own player-salted seeds.
-        uint256 farWord = _farRollWord(lboxBuyers[0]);
-        for (uint256 k = 0; k < 20; k++) {
-            if (_lootboxRngWord(boxIndex[k]) == 0) {
-                _storeLootboxRngWord(boxIndex[k], farWord);
-            }
-        }
-
-        // Open all 20 lootboxes
-        for (uint256 k = 0; k < 20; k++) {
-            _openLootbox(lboxBuyers[k], boxIndex[k]);
+            assertEq(_boxesOwed(buffer, lboxBuyers[k]), 0, "the engine opened every buyer's box");
         }
 
         // Check if any FF queue grew (indicating at least one far roll routed to FF).
@@ -877,6 +870,12 @@ contract TicketLifecycleTest is DeployProtocol {
         }
         // SRC-05 requires proving a lootbox far roll actually reached an FF key.
         assertTrue(anyFFGrowth, "SRC-05: at least one lootbox open must produce a far roll routed to FF key");
+        // And the selected roll itself: buyer 0 now owes entries on a far-future key in the band.
+        bool buyer0Far = false;
+        for (uint24 lvl = 6; lvl <= 51 && !buyer0Far; lvl++) {
+            if (_ticketsOwed(lvl | TICKET_FAR_FUTURE_BIT, lboxBuyers[0]) > 0) buyer0Far = true;
+        }
+        assertTrue(buyer0Far, "SRC-05: the selected far roll queued buyer 0 on a far-future key");
 
         // Drive game forward enough to drain FF queues in the lootbox target range.
         _driveToLevel(8);
@@ -974,8 +973,11 @@ contract TicketLifecycleTest is DeployProtocol {
 
     /// @notice Credit 2 half-passes (= one whale pass's standard award) and claim at
     ///         level 0. Verify the stride-2 whole-ticket shape across near + FF keys,
-    ///         then drive past level 1 and verify the materialized chunk holds exactly
+    ///         then drive into level 1 and verify the materialized chunk holds exactly
     ///         one trait entry in each quadrant (the batch walks i & 3 across a chunk).
+    /// @dev Two parity trait buffers recycle: once level 2 is reached the engine prepares
+    ///      level 3 into level 1's buffer and getEntries(…, 1, …) reads empty, so the spread is
+    ///      read while level 1 still owns its buffer (level 1 reached, its own lifecycle).
     function testClaimWhalePassStridedWholeTicketQuadrants() public {
         address claimant = makeAddr("strided_claimant");
 
@@ -995,9 +997,13 @@ contract TicketLifecycleTest is DeployProtocol {
                 string.concat("FF claim shape at level ", _uint2str(lvl)));
         }
 
-        // Materialize level 1, then check the chunk's quadrant spread.
-        _driveToLevel(2);
-        assertGe(game.level(), 1, "must advance past level 1");
+        // Materialize level 1, then check the chunk's quadrant spread while level 1 still owns
+        // its parity trait buffer.
+        _driveToLevel(1);
+        assertGe(game.level(), 1, "must reach level 1");
+        assertEq(_ticketsOwed(1, claimant) + _ticketsOwed(1 | TICKET_SLOT_BIT, claimant), 0,
+            "level-1 claim fully drained");
+        assertEq(_traitBufferLevel(1), 1, "level 1 still owns its parity trait buffer");
 
         uint24 totalEntries;
         for (uint16 q = 0; q < 4; q++) {
@@ -1026,11 +1032,14 @@ contract TicketLifecycleTest is DeployProtocol {
     // =========================================================================
 
     /// @notice Credit 400 half-passes and claim at level 0: owed = 400 entries
-    ///         (100 whole tickets) at every covered level. A single batch call
-    ///         takes at most ~292 entries, so materializing level 1 must split
-    ///         across calls. Aligned split boundaries keep the quadrant cycle
-    ///         (i & 3, restarting at 0 each call) continuous, so the final
+    ///         (100 whole tickets) at every covered level. One solo chunk takes at
+    ///         most 160 entries (16-aligned, `_solo`), so materializing level 1 must
+    ///         split across chunks. Aligned split boundaries keep the quadrant cycle
+    ///         (i & 3, restarting at 0 each chunk) continuous, so the final
     ///         spread is exactly 100 entries per quadrant.
+    /// @dev Two parity trait buffers recycle: once level 2 is reached the engine prepares
+    ///      level 3 into level 1's buffer and getEntries(…, 1, …) reads empty, so the spread is
+    ///      read while level 1 still owns its buffer (level 1 reached, its own lifecycle).
     function testBudgetSplitMaterializationQuadrantAligned() public {
         address claimant = makeAddr("split_claimant");
 
@@ -1045,9 +1054,13 @@ contract TicketLifecycleTest is DeployProtocol {
         assertEq(_ticketsOwed(_writeKeyForLevel(1), claimant), 400,
             "dense claim shape at level 1");
 
-        // Materialize level 1 across multiple budget-metered batch calls.
-        _driveToLevel(2);
-        assertGe(game.level(), 1, "must advance past level 1");
+        // Materialize level 1 across multiple aligned chunks, then read the spread while
+        // level 1 still owns its parity trait buffer.
+        _driveToLevel(1);
+        assertGe(game.level(), 1, "must reach level 1");
+        assertEq(_ticketsOwed(1, claimant) + _ticketsOwed(1 | TICKET_SLOT_BIT, claimant), 0,
+            "level-1 claim fully drained");
+        assertEq(_traitBufferLevel(1), 1, "level 1 still owns its parity trait buffer");
 
         uint24[4] memory quadCounts;
         uint24 totalEntries;
@@ -1152,7 +1165,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         // Run multiple daily mineFlip cycles WITHOUT triggering a level transition.
         // Keep prize pool LOW so the target isn't reached and _endPhase doesn't fire.
-        uint256 simTime = block.timestamp;
+        uint256 simTime = vm.getBlockTimestamp();
         for (uint256 day = 0; day < 3; day++) {
             simTime += 1 days + 1;
             vm.warp(simTime);
@@ -1214,7 +1227,7 @@ contract TicketLifecycleTest is DeployProtocol {
         assertGe(startLevel, 1, "Must reach at least level 1");
 
         // Drive day by day until entering jackpot phase
-        uint256 simTime = block.timestamp;
+        uint256 simTime = vm.getBlockTimestamp();
         bool foundJackpot = false;
         uint256 jackpotLevel;
 
@@ -1346,33 +1359,35 @@ contract TicketLifecycleTest is DeployProtocol {
     /// @dev ZSA-03: 3+ consecutive transitions with multi-source buying yield zero
     ///      stranding across all key spaces.
     function testMultiSourceZeroStrandingAutoBuy() public {
-        uint48[] memory lboxIndices = new uint48[](25); // up to ~5 per level x 4+ levels
-        uint256 lboxCount = 0;
-
+        // The lootbox source buys from its own wallet: a whale pass records its 10% bonus box as
+        // a custom box in the buyer's order, and the order freezes one custom size per buffer
+        // (a different size reverts E()), so buyer3's 1 ETH custom buys after its pass would be
+        // refused and the lootbox source would never land.
+        address lboxBuyer = makeAddr("multisource_lbox_buyer");
+        vm.deal(lboxBuyer, 50_000 ether);
+        uint256 totalLanded = 0;
         for (uint256 targetLvl = 1; targetLvl <= 4; targetLvl++) {
             // Multi-source ticket buying at current level
             _buyWhalePass(buyer3, 1);
 
-            // Lootbox purchases (5 per level)
+            // Lootbox purchases (5 per level). One buyer between two seals merges into one order
+            // on the physical write buffer (tag 0 or 1), so a landed buy adds a box to it.
+            uint48 buffer = RecyclingState.writeBuffer(address(game));
+            uint256 boxesBefore = _boxesOwed(buffer, lboxBuyer);
+            uint256 landed = 0;
             for (uint256 i = 0; i < 5; i++) {
-                uint48 idx = _purchaseWithLootbox(buyer3, 0, 1 ether);
-                if (idx > 0 && lboxCount < lboxIndices.length) {
-                    lboxIndices[lboxCount] = idx;
-                    lboxCount++;
-                }
+                (bool ok, ) = _buyBox(lboxBuyer, 1 ether);
+                if (ok) landed++;
             }
+            assertEq(_boxesOwed(buffer, lboxBuyer), boxesBefore + landed, "landed buys are boxes of one order");
+            totalLanded += landed;
 
-            // Finalize RNG, store words, open
+            // Seal the buffer and land its word through a real daily cycle: the engine opens the
+            // sealed cohort's orders as a read consumer (the removed per-index word map and the
+            // explicit poke-then-open it fed are gone).
             _driveAdvanceCycle();
-            for (uint256 i = 0; i < lboxCount; i++) {
-                if (lboxIndices[i] > 0 && _lootboxRngWord(lboxIndices[i]) == 0) {
-                    _storeLootboxRngWord(lboxIndices[i], 5000 + i);
-                }
-            }
-            for (uint256 i = 0; i < lboxCount; i++) {
-                if (lboxIndices[i] > 0) {
-                    _openLootbox(buyer3, lboxIndices[i]);
-                }
+            if (landed > 0) {
+                assertEq(_boxesOwed(buffer, lboxBuyer), 0, "the daily cycle's read consumers opened the boxes");
             }
 
             // Drive to next level (this also buys tickets for buyer1/buyer2 daily)
@@ -1382,6 +1397,7 @@ contract TicketLifecycleTest is DeployProtocol {
         _flushAdvance();
         uint256 reached = game.level();
         assertGe(reached, 4, "Must complete at least 4 level transitions");
+        assertGt(totalLanded, 0, "ZSA-03: the lootbox source was exercised");
 
         // ZSA-01 + ZSA-02: autoBuy all processed levels using the reusable helper
         _assertZeroStranding(1, uint24(reached) - 1);
@@ -1394,13 +1410,13 @@ contract TicketLifecycleTest is DeployProtocol {
                 string.concat("ZSA-02: FF not drained at level ", _uint2str(lvl)));
         }
 
-        // ZSA-03: buyer3 verification -- buyer3 used whale passes and lootboxes at
-        // every level. Read-key queues being empty (via _assertZeroStranding) proves
+        // ZSA-03: multi-source verification -- buyer3 bought whale passes and lboxBuyer
+        // lootboxes at every level. Read-key queues being empty (via _assertZeroStranding) proves
         // all sources were processed. Additionally verify no stray FF entries at
         // levels guaranteed to have entered the mint window.
         for (uint24 lvl = 2; lvl <= uint24(reached); lvl++) {
             assertEq(_ffQueueLength(lvl), 0,
-                string.concat("ZSA-03: buyer3 FF not zero at level ", _uint2str(lvl)));
+                string.concat("ZSA-03: multi-source FF not zero at level ", _uint2str(lvl)));
         }
     }
 
@@ -1435,7 +1451,7 @@ contract TicketLifecycleTest is DeployProtocol {
         vm.deal(buyer3, cost + 50 ether);
 
         // Warp to a new day so purchase is allowed on fresh day
-        vm.warp(block.timestamp + 1 days + 1);
+        vm.warp(vm.getBlockTimestamp() + 1 days + 1);
 
         vm.prank(buyer3);
         // Near-future purchase should not revert
@@ -1459,75 +1475,56 @@ contract TicketLifecycleTest is DeployProtocol {
     //         when the resolved target level is far-future.
     // =========================================================================
 
-    /// @notice Purchase a lootbox before locking, finalize RNG, then set rngLocked
-    ///         and attempt to open. With diverse seeds, at least one lootbox open
-    ///         that resolves to a far-future target level will revert RngLocked().
-    ///         This proves the guard fires through the full openLootBox call chain.
+    /// @notice Purchase lootboxes before locking, land their word, then set rngLocked and
+    ///         attempt to open. The sweep's entry gate must no-op every open while locked.
     /// @dev RNG-03: rngLocked blocks FF key writes from lootbox open paths.
-    ///      Integration-level verification that the guard in _queueEntriesScaled is
-    ///      reached through the full openLootBox -> _resolveLootboxCommon chain.
+    ///      Box-order migration: the removed openBox() reverted RngLocked() unconditionally at its
+    ///      OWN entry gate before ever reaching _queueEntriesScaled, so under the OLD door every
+    ///      open always hit the revert regardless of a near- or far-future roll -- the near-future
+    ///      "success" branch was already unreachable through that door. The sweep replacement's
+    ///      entry gate (the read-consumer stage, blocked by rngLockedFlag) is the same flag, but a
+    ///      locked call no-ops (returns 0) instead of reverting, so it can no longer distinguish or
+    ///      even reach the deep near/far-future write-buffer routing this test set out to
+    ///      integration-prove. What IS still provable, and is the honest replacement: the entry
+    ///      gate uniformly blocks every open while locked, with no work done and nothing reverted.
+    ///      Engine migration: boxes bind to one of two physical buffers (tag 0 or 1) and the
+    ///      per-index word map is gone, so all twelve buys form one order on one buffer and one
+    ///      word serves it. The word is fixture-published as the sealed read cohort (what a landed
+    ///      word plus the keeper's publish produce), after sealing the genesis day so the cohort is
+    ///      openable; an unlocked control proves the zero below is the gate, not an empty cohort.
     function testRngLockedBlocksFFLootbox() public {
         assertEq(game.level(), 0, "Should start at level 0");
+        _settleToday();
 
         // Purchase several lootboxes with buyer3 (before locking)
         uint48[] memory indices = new uint48[](12);
         uint256 validCount = 0;
         for (uint256 i = 0; i < 12; i++) {
-            uint48 idx = _purchaseWithLootbox(buyer3, 0, 1 ether);
-            if (idx > 0) {
-                indices[validCount] = idx;
+            (bool landed, uint48 buf) = _buyBox(buyer3, 1 ether);
+            if (landed) {
+                indices[validCount] = buf;
                 validCount++;
             }
         }
         assertTrue(validCount > 0, "Must have at least one valid lootbox index");
+        assertEq(_boxesOwed(indices[0], buyer3), validCount, "every landed buy is a box of buyer3's one order");
 
-        // Finalize RNG via advance cycle
-        _driveAdvanceCycle();
+        // Publish one word for the order's buffer as the sealed read cohort.
+        _storeLootboxRngWord(indices[0], uint256(0xDEADBEEF));
+        assertEq(_lootboxRngWord(indices[0]), uint256(0xDEADBEEF), "the buffer's word is published");
 
-        // Store diverse RNG words that produce different roll outcomes.
-        // Use seeds that maximize the chance of a far roll (offset >= 6).
-        // _rollTargetLevel uses entropy bits to select offset in [0, 50].
-        // Seeds are chosen to produce diverse entropy chains.
-        uint256[6] memory farSeeds = [
-            uint256(0xFFFFFFFF),    // large seed -> different entropy chain
-            uint256(0xDEADBEEF),
-            uint256(7777777),
-            uint256(0xCAFE),
-            uint256(42424242),
-            uint256(0xBAADF00D)
-        ];
-        for (uint256 i = 0; i < validCount && i < 6; i++) {
-            if (_lootboxRngWord(indices[i]) == 0) {
-                _storeLootboxRngWord(indices[i], farSeeds[i]);
-            }
-        }
-        // Remaining indices get sequential seeds
-        for (uint256 i = 6; i < validCount; i++) {
-            if (_lootboxRngWord(indices[i]) == 0) {
-                _storeLootboxRngWord(indices[i], 9000 + i);
-            }
-        }
+        // Control: with the lock clear, the same sweep call opens the order.
+        uint256 snap = vm.snapshotState();
+        vm.prank(buyer3);
+        assertGt(game.openBoxes(type(uint256).max), 0, "control: the unlocked sweep opens the seeded order");
+        assertEq(_boxesOwed(indices[0], buyer3), 0, "control: the unlocked sweep resolved the whole order");
+        vm.revertToState(snap);
 
         // Set rngLockedFlag=true
         _setRngLocked(true);
         (, , , bool rngLocked_,) = game.purchaseInfo();
         assertTrue(rngLocked_, "rngLockedFlag should be true");
 
-        // Try to open all lootboxes. Track outcomes:
-        // - Near-future roll: _queueEntriesScaled succeeds (writes to write key)
-        // - Far-future roll: _queueEntriesScaled reverts RngLocked()
-        // Either outcome is safe. We verify at least one revert occurs (proving
-        // the guard fires on the integration path), or all succeed (all near rolls).
-        // Box-order migration: the removed openBox() reverted RngLocked() unconditionally at its
-        // OWN entry gate before ever reaching _queueEntriesScaled, so under the OLD door every
-        // one of these opens always hit the `reverts` branch below regardless of a near- or
-        // far-future roll -- the near-future "success" branch this loop watches for was already
-        // unreachable through that door (the top-level gate fires first). The sweep replacement's
-        // entry gate (openHumanBoxes' rngLockedFlag check) is the same flag, but a locked call
-        // no-ops (returns 0) instead of reverting, so it can no longer distinguish or even reach
-        // the deep near/far-future write-buffer routing this test set out to integration-prove.
-        // What IS still provable, and is the honest replacement: the entry gate uniformly blocks
-        // every open while locked, for every index, with no work done and nothing reverted.
         uint256 checked = 0;
         for (uint256 i = 0; i < validCount; i++) {
             uint256 rngWord = _lootboxRngWord(indices[i]);
@@ -1540,6 +1537,7 @@ contract TicketLifecycleTest is DeployProtocol {
         }
 
         assertGt(checked, 0, "RNG-03b: at least one lootbox index must be checked");
+        assertEq(_boxesOwed(indices[0], buyer3), validCount, "RNG-03b: the locked sweep left every box unopened");
     }
 
     // =========================================================================
@@ -1563,7 +1561,7 @@ contract TicketLifecycleTest is DeployProtocol {
         _setRngLocked(true);
 
         // Warp to a new day for purchase
-        vm.warp(block.timestamp + 1 days + 1);
+        vm.warp(vm.getBlockTimestamp() + 1 days + 1);
 
         // Determine the actual target level AFTER setting rngLocked.
         // During purchase phase, tickets target level+1. During jackpot phase with
@@ -1645,7 +1643,7 @@ contract TicketLifecycleTest is DeployProtocol {
         uint256 readBefore1 = _queueLength(readKey1);
 
         _setRngLocked(true);
-        vm.warp(block.timestamp + 1 days + 1);
+        vm.warp(vm.getBlockTimestamp() + 1 days + 1);
         // Re-anchor dailyIdx to the warped wall-clock day so the jackpot-phase VRF-death deadman
         // (currentDay - dailyIdx) cannot underflow on the forced-state purchase below.
         _syncDailyIdxToCurrentDay();
@@ -1683,7 +1681,7 @@ contract TicketLifecycleTest is DeployProtocol {
         uint256 readBefore2 = _queueLength(readKey2);
 
         _setRngLocked(true);
-        vm.warp(block.timestamp + 1 days + 1);
+        vm.warp(vm.getBlockTimestamp() + 1 days + 1);
         // Re-anchor dailyIdx to the warped wall-clock day so the jackpot-phase VRF-death deadman
         // (currentDay - dailyIdx) cannot underflow on the forced-state purchase below.
         _syncDailyIdxToCurrentDay();
@@ -1722,7 +1720,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Drive to a state where daily processing has occurred (ticketsFullyProcessed = true)
         // but no new tickets have been purchased since.
         _buyTickets(buyer1, 4000);
-        uint256 simTime = block.timestamp + 1 days + 1;
+        uint256 simTime = vm.getBlockTimestamp() + 1 days + 1;
         vm.warp(simTime);
         _seedNextPrizePool(49.9 ether);
         _buyTickets(buyer1, 4000);
@@ -1770,7 +1768,7 @@ contract TicketLifecycleTest is DeployProtocol {
         assertGe(reached, 1, "Must reach level 1");
 
         // Now buy tickets + lootbox on the same day to trigger mid-day path
-        uint256 simTime = block.timestamp + 1 days + 1;
+        uint256 simTime = vm.getBlockTimestamp() + 1 days + 1;
         vm.warp(simTime);
         _seedNextPrizePool(49.9 ether);
 
@@ -1809,7 +1807,7 @@ contract TicketLifecycleTest is DeployProtocol {
         assertGe(game.level(), 1, "Must reach level 1");
 
         // Advance to next day and complete daily processing
-        uint256 simTime = block.timestamp + 1 days + 1;
+        uint256 simTime = vm.getBlockTimestamp() + 1 days + 1;
         vm.warp(simTime);
         _seedNextPrizePool(49.9 ether);
         _buyTickets(buyer1, 4000);
@@ -1849,7 +1847,7 @@ contract TicketLifecycleTest is DeployProtocol {
         assertGe(reached, 1, "Must reach level 1");
 
         // Day N: buy tickets, complete daily processing
-        uint256 simTime = block.timestamp + 1 days + 1;
+        uint256 simTime = vm.getBlockTimestamp() + 1 days + 1;
         vm.warp(simTime);
         _seedNextPrizePool(49.9 ether);
         _buyTickets(buyer1, 8000);
@@ -1900,7 +1898,7 @@ contract TicketLifecycleTest is DeployProtocol {
         assertGe(reached, 1, "Must reach level 1");
 
         // Day N: complete daily cycle
-        uint256 simTime = block.timestamp + 1 days + 1;
+        uint256 simTime = vm.getBlockTimestamp() + 1 days + 1;
         vm.warp(simTime);
         _seedNextPrizePool(49.9 ether);
         _buyTickets(buyer1, 4000);
@@ -1953,7 +1951,7 @@ contract TicketLifecycleTest is DeployProtocol {
         assertGe(reached, 1, "Must reach level 1");
 
         // Day N: complete daily cycle
-        uint256 simTime = block.timestamp + 1 days + 1;
+        uint256 simTime = vm.getBlockTimestamp() + 1 days + 1;
         vm.warp(simTime);
         _seedNextPrizePool(49.9 ether);
         _buyTickets(buyer1, 4000);
@@ -2000,7 +1998,7 @@ contract TicketLifecycleTest is DeployProtocol {
         assertGe(reached, 1, "Must reach level 1");
 
         // Day N: buy a lot to create a large read queue that takes multiple batches
-        uint256 simTime = block.timestamp + 1 days + 1;
+        uint256 simTime = vm.getBlockTimestamp() + 1 days + 1;
         vm.warp(simTime);
         _seedNextPrizePool(49.9 ether);
         _buyTickets(buyer1, 16000);
@@ -2050,7 +2048,7 @@ contract TicketLifecycleTest is DeployProtocol {
         uint256 reached = game.level();
         assertGe(reached, 1, "Must reach level 1");
 
-        uint256 simTime = block.timestamp + 1 days + 1;
+        uint256 simTime = vm.getBlockTimestamp() + 1 days + 1;
         vm.warp(simTime);
         _seedNextPrizePool(49.9 ether);
 
@@ -2114,7 +2112,7 @@ contract TicketLifecycleTest is DeployProtocol {
         assertGe(reached, 1, "Must reach level 1");
 
         // Next day: buy large batch to create substantial read queue
-        uint256 simTime = block.timestamp + 1 days + 1;
+        uint256 simTime = vm.getBlockTimestamp() + 1 days + 1;
         vm.warp(simTime);
         _seedNextPrizePool(49.9 ether);
         _buyTickets(buyer1, 16000);
@@ -2160,7 +2158,7 @@ contract TicketLifecycleTest is DeployProtocol {
         assertGe(reached, 1, "Must reach level 1");
 
         // Next day: buy large batch to create a read queue that takes multiple batches
-        uint256 simTime = block.timestamp + 1 days + 1;
+        uint256 simTime = vm.getBlockTimestamp() + 1 days + 1;
         vm.warp(simTime);
         _seedNextPrizePool(49.9 ether);
         _buyTickets(buyer1, 16000);
@@ -2212,13 +2210,13 @@ contract TicketLifecycleTest is DeployProtocol {
     ///      Checks the current read key for the queue autoBuy. The write side may have
     ///      nonzero entries from later transitions (vault perpetual writes to past levels).
     ///      The read key being zero proves the level was fully processed during its lifecycle.
-    /// @dev Read lootboxRngIndex directly from storage slot 34 (low 48 bits of lootboxRngPacked)
-    ///      (post V62 lootbox repack: was 35).
+    /// @dev The physical lootbox write buffer (0 or 1) new boxes bind to.
     function _lootboxRngIndex() internal view returns (uint48) {
         return RecyclingState.writeBuffer(address(game));
     }
 
-    /// @dev Read _lootboxWord(index) from storage (mapping at slot 35, post V62 repack: was 36).
+    /// @dev The published word serving physical buffer `index` (0 unless it is the read buffer
+    ///      and its session is published).
     function _lootboxRngWord(uint48 index) internal view returns (uint256) {
         return RecyclingState.word(address(game), index);
     }
@@ -2258,10 +2256,10 @@ contract TicketLifecycleTest is DeployProtocol {
 
     // ==================== Lootbox Helpers ====================
 
-    /// @dev Storage slot for lootboxRngWordByIndex mapping (post V62 lootbox repack: was 36).
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3;
-
-    /// @notice Purchase tickets with a lootbox ETH allocation. Returns the lootbox RNG index.
+    /// @notice Purchase tickets with a lootbox ETH allocation (best effort: a skipped or
+    ///         reverted buy is swallowed). Returns the physical write buffer at purchase time.
+    /// @dev 0 is a valid buffer tag, so the return cannot signal failure: use `_buyBox` when a
+    ///      test needs to know the box landed.
     /// @param who Buyer address
     /// @param ticketQty Ticket quantity (pass 0 for lootbox-only purchase)
     /// @param lootboxEthAmount Lootbox ETH amount (minimum 0.01 ether)
@@ -2273,9 +2271,6 @@ contract TicketLifecycleTest is DeployProtocol {
         if (rngLocked_) return 0;
         if (game.gameOver()) return 0;
 
-        // Record the lootbox RNG index BEFORE purchase (it may increment during purchase
-        // via _maybeRequestLootboxRng -> mineFlip path, but the index for our lootbox
-        // is the current value at purchase time).
         lootboxIndex = _lootboxRngIndex();
 
         // Compute ticket cost: (priceWei * ticketQty) / (4 * 100)
@@ -2292,54 +2287,36 @@ contract TicketLifecycleTest is DeployProtocol {
         }
     }
 
-    /// @notice Open a lootbox after ensuring RNG is available.
-    /// @param who Player address
-    /// @param lootboxIndex Lootbox RNG index from purchase
-    function _openLootbox(address who, uint48 lootboxIndex) internal {
-        // Check if RNG word is available
-        uint256 rngWord = _lootboxRngWord(lootboxIndex);
-        if (rngWord == 0) return; // Skip if RNG not available (caller should have seeded it)
-
-        vm.prank(who);
-        try game.openBoxes(type(uint256).max) {} catch {}
-    }
-
-    /// @notice Pick an rngWord whose resolution for `player` lands in the far band (offset 5-50).
+    /// @notice Pick an rngWord whose FIRST box for `player` takes the ticket path and lands in the
+    ///         far band (offset 5-50).
     /// @dev SELECTION ONLY — it decides which word to inject, never what the test accepts. The
-    ///      assertion still reads the real FF queue. Mirrors the band test the production roll
-    ///      does (`seed = EntropyLib.hash2(rngWord, player)`, far iff `uint16(seed) % 100 < 20`),
-    ///      which is why a drift in that mapping surfaces as "no far-roll word found" rather than
-    ///      as a quietly-vacuous pass.
+    ///      assertion still reads the real FF queue. Mirrors the production roll of the entry
+    ///      sweep (`seed = EntropyLib.hash4(rngWord, player, BOX_OPEN_TAG, nonce)`, far iff
+    ///      `uint16(seed) % 100 < 20`, tickets iff `uint16(seed >> 40) % 20 < 8`), which is why a
+    ///      drift in that mapping surfaces as a failed FF-growth assertion rather than as a
+    ///      quietly-vacuous pass.
     function _farRollWord(address player) internal pure returns (uint256) {
         for (uint256 n = 1; n < 10_000; ++n) {
             uint256 w = uint256(keccak256(abi.encode("SRC-05", n)));
-            uint256 seed = uint256(keccak256(abi.encode(w, uint256(uint160(player)))));
-            if (uint16(seed) % 100 < 20) return w;
+            uint256 seed = _boxSeed(w, player, 1);
+            if (uint16(seed) % 100 < 20 && uint16(seed >> 40) % 20 < 8) return w;
         }
         revert("no far-roll word found");
     }
 
-    /// @notice Store a deterministic lootbox RNG word via vm.store.
-    /// @dev lootboxRngWordByIndex is mapping(uint48 => uint256) at slot 35.
-    ///      mapping slot = keccak256(abi.encode(uint256(index), uint256(34)))
+    /// @notice Fixture-publish `rngWord` for physical buffer `index` as the sealed read cohort
+    ///         (what a landed VRF word plus the keeper's publish produce), via RecyclingState.
     function _storeLootboxRngWord(uint48 index, uint256 rngWord) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT)));
-        RecyclingState.seedWord(address(game), uint48(index), bytes32(rngWord));
-    }
-
-    /// @dev Move LR_INDEX (low 48 bits of lootboxRngPacked, slot 33) past `index` so the open
-    ///      sweep treats it as finalized. Never moves it backwards; the other packed fields stay.
-    function _finalizeLootboxIndex(uint48 index) internal {
-        uint256 packed = uint256(vm.load(address(game), bytes32(uint256(33))));
-        if (uint48(packed) > index) return;
-        vm.store(address(game), bytes32(uint256(33)), bytes32((packed & ~uint256(0xFFFFFFFFFFFF)) | (uint256(index) + 1)));
+        RecyclingState.seedWord(address(game), index, bytes32(rngWord));
     }
 
     /// @notice Drive one mineFlip + VRF cycle to finalize pending lootbox RNG.
     ///         Warps forward 1 day, seeds prize pool, buys tickets, and runs advance loop.
+    /// @dev Reads the clock through vm.getBlockTimestamp(): under via-IR a `block.timestamp`
+    ///      read in a helper called from a loop can be hoisted and go stale after vm.warp,
+    ///      which would warp later cycles backwards into already-sealed days (the engine idles).
     function _driveAdvanceCycle() internal {
-        uint256 t = block.timestamp + 1 days + 1;
-        vm.warp(t);
+        vm.warp(vm.getBlockTimestamp() + 1 days + 1);
         _seedNextPrizePool(49.9 ether);
         _buyTickets(buyer1, 400);
         for (uint256 i = 0; i < 50; i++) {
@@ -2347,6 +2324,114 @@ contract TicketLifecycleTest is DeployProtocol {
             (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) break;
         }
+    }
+
+    // ==================== Box-Order / Mid-Day Word Helpers ====================
+    // Lootbox RNG uses two physical buffers (read = write ^ 1): a box binds to the WRITE buffer
+    // (tag 0 or 1, so 0 is a valid tag) and resolves on the word of the session that seals it.
+
+    /// @dev lootboxOrder: mapping(uint48 => mapping(address => uint256)) at slot 15 (golden layout).
+    uint256 private constant LOOTBOX_ORDER_SLOT = 15;
+    /// @dev Resolved-order marker (Storage BOX_PROCESSED).
+    uint256 private constant BOX_PROCESSED = uint256(1) << 255;
+    /// @dev Seed domain of the entry sweep's per-box roll (LootboxModule BOX_OPEN_TAG, "BoxOpen").
+    uint256 private constant BOX_OPEN_TAG = 0x426f784f70656e;
+    /// @dev vrfSubscriptionId at slot 32 (golden layout).
+    uint256 private constant VRF_SUB_ID_SLOT = 32;
+    /// @dev ticketBufferLevels (uint48) at slot 5 byte 14: even-parity level stamp in its low 24
+    ///      bits, odd-parity stamp in its high 24 bits.
+    uint256 private constant TICKET_BUFFER_LEVELS_SLOT = 5;
+    uint256 private constant TICKET_BUFFER_LEVELS_SHIFT = 112;
+
+    /// @dev The raw packed order word of `who` at physical buffer `buffer`.
+    function _boxOrderWord(uint48 buffer, address who) internal view returns (uint256) {
+        bytes32 inner = keccak256(abi.encode(uint256(buffer), LOOTBOX_ORDER_SLOT));
+        return uint256(vm.load(address(game), keccak256(abi.encode(who, inner))));
+    }
+
+    /// @dev Boxes still owed in `who`'s order at `buffer` (0 once the order resolved).
+    function _boxesOwed(uint48 buffer, address who) internal view returns (uint256) {
+        uint256 word = _boxOrderWord(buffer, who);
+        return word & BOX_PROCESSED != 0 ? 0 : BoxOrderLib.boCount(word);
+    }
+
+    /// @dev Buy one custom box of `eth` for `who` and report whether it landed: the buyer's order
+    ///      at the current write buffer must hold exactly one more box afterwards.
+    function _buyBox(address who, uint256 eth) internal returns (bool landed, uint48 buffer) {
+        buffer = RecyclingState.writeBuffer(address(game));
+        uint256 before = _boxesOwed(buffer, who);
+        _purchaseWithLootbox(who, 0, eth);
+        landed = _boxesOwed(buffer, who) == before + 1;
+    }
+
+    /// @dev Seal today's daily cycle and drain every read consumer of it, so the mid-day path is
+    ///      open: today's daily word is recorded, the daily lock is clear and the read cohort is
+    ///      complete (a fresh request waits for every read consumer to finish). A craps window shut
+    ///      on the write buffer rides a follow-up request; that one is answered and drained too.
+    function _settleToday() internal {
+        for (uint256 i = 0; i < 200; i++) {
+            _fulfillVrfIfPending();
+            if (!game.rngLocked() && game.rngComplete()
+                && game.rngWordForDay(game.currentDayView()) != 0) return;
+            (bool ok, bytes memory err) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            if (!ok) {
+                bytes4 sel = bytes4(err);
+                assertTrue(
+                    sel == bytes4(keccak256("NoWork()")) || sel == bytes4(keccak256("RngNotReady()")),
+                    "harness: mineFlip may only stop for lack of work or a pending word"
+                );
+            }
+        }
+        revert("harness: today's daily cycle never settled");
+    }
+
+    /// @dev Mid-day word for the write buffer's box orders: `requester` (an ETH box buyer whose
+    ///      pending value clears the request threshold) requests, the coordinator answers with
+    ///      `word` (a mid-day word is stored verbatim: no nudge applies), and the engine publishes
+    ///      it and opens the sealed cohort's orders as a read consumer until the session completes.
+    ///      This replaces the removed per-index word map that tests used to poke.
+    function _openWithMiddayWord(address requester, uint256 word) internal {
+        uint256 subId = uint256(vm.load(address(game), bytes32(VRF_SUB_ID_SLOT)));
+        mockVRF.fundSubscription(subId, 100e18); // the mid-day path keeps a LINK floor
+        vm.prank(requester);
+        game.requestLootboxRng();
+        uint256 reqId = mockVRF.lastRequestId();
+        mockVRF.fulfillRandomWords(reqId, word);
+        for (uint256 i = 0; i < 50 && !game.rngComplete(); i++) {
+            (bool ok, bytes memory err) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            if (!ok) {
+                assertEq(bytes4(err), bytes4(keccak256("RngNotReady()")), "harness: mid-day consumers stalled");
+                _fulfillVrfIfPending();
+            }
+        }
+        assertTrue(game.rngComplete(), "harness: the mid-day session's read consumers all completed");
+    }
+
+    /// @dev The entry sweep's per-box seed: hash4(word, player, BOX_OPEN_TAG, nonce), where the
+    ///      nonce is the box's 1-based position in the player's order (LootboxModule._rollTier).
+    function _boxSeed(uint256 word, address player, uint256 nonce) internal pure returns (uint256) {
+        return uint256(keccak256(abi.encode(word, uint256(uint160(player)), BOX_OPEN_TAG, nonce)));
+    }
+
+    /// @notice Pick a word whose FIRST box for `player` takes the ticket path and lands at offset 0
+    ///         of the near band, i.e. on the live mint level (always within the mint ceiling).
+    /// @dev SELECTION ONLY, like `_farRollWord`: the assertions still read the real queues.
+    ///      Mirrors `_rollTargetLevel` (near iff `uint16(seed) % 100 >= 20`, offset
+    ///      `uint8(seed >> 16) % 5`) and `_resolveLootboxRoll` (tickets iff `uint16(seed >> 40) % 20 < 8`).
+    function _nearRollWord(address player) internal pure returns (uint256) {
+        for (uint256 n = 1; n < 10_000; ++n) {
+            uint256 w = uint256(keccak256(abi.encode("SRC-04", n)));
+            uint256 seed = _boxSeed(w, player, 1);
+            if (uint16(seed) % 100 >= 20 && uint8(seed >> 16) % 5 == 0 && uint16(seed >> 40) % 20 < 8) return w;
+        }
+        revert("no near-roll ticket word found");
+    }
+
+    /// @dev Level stamp currently owning `lvl`'s parity trait buffer. Two parity buffers recycle:
+    ///      preparing `lvl + 2` retires `lvl`, after which getEntries(…, lvl, …) reads empty.
+    function _traitBufferLevel(uint24 lvl) internal view returns (uint24) {
+        uint256 raw = uint256(vm.load(address(game), bytes32(TICKET_BUFFER_LEVELS_SLOT)));
+        return uint24(raw >> (TICKET_BUFFER_LEVELS_SHIFT + uint256(lvl & 1) * 24));
     }
 
     // ==================== Whale Pass Helpers ====================
@@ -2478,7 +2563,8 @@ contract TicketLifecycleTest is DeployProtocol {
     /// @notice Drive the game forward to reach at least the target level
     /// @param targetLevel The minimum level to reach
     function _driveToLevel(uint256 targetLevel) internal {
-        uint256 simTime = block.timestamp;
+        // vm.getBlockTimestamp(): a hoisted `block.timestamp` can be stale after vm.warp (via-IR).
+        uint256 simTime = vm.getBlockTimestamp();
 
         // Warm-up: drain pending work on the CURRENT day without warping.
         // This establishes dailyIdx at the current day and prevents multi-day
@@ -2527,6 +2613,8 @@ contract TicketLifecycleTest is DeployProtocol {
             }
         }
     }
+
+
 
     /// @notice Convert uint to string for assertion messages
     function _uint2str(uint256 value) internal pure returns (string memory) {

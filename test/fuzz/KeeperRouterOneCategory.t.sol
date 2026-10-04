@@ -12,7 +12,14 @@ import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
+// CURRENT ENGINE (60d31f775 / 72fc06f6c): the two-category router below is retired. `mineFlip()`
+//      (DegenerusGameMinerModule) selects one action at a time from storage, composes as many as its
+//      allowance admits, and credits the caller ONCE per call, after the loop, on measured gas above
+//      an unpaid first MIN_REWARDED_GAS. The no-stacking proof is unchanged in form: count the
+//      keeper's creditFlip per call (exactly one on a paid call, zero on NoWork). The source attest
+//      now targets the engine module. The history below is kept for the requirement IDs.
 /// @title KeeperRouterOneCategory -- TST-02 (Phase 351, v55.0 game-resident): one-rewarded-category-per-tx
 ///        (no bounty-stacking) on `mineFlip()` + the router->game->creditFlip double-pay disposition + the
 ///        UNREWARDED `openBoxes(count)` escape (the same box drain, credits nothing).
@@ -87,8 +94,8 @@ contract KeeperRouterOneCategory is DeployProtocol {
     // -------------------------------------------------------------------------
 
     uint256 private constant SUBOF_SLOT = 52; // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay (bytes 11..13)
-    uint256 private constant OFF_LASTOPENED = 13; // uint24 lastOpenedDay     (bytes 14..16)
+    uint256 private constant OFF_LASTBOUGHT = 7; // uint24 lastAutoBoughtDay (bytes 7..9; Sub: u8 qty, u8 flags, u16 score, u24 amount)
+    uint256 private constant OFF_LASTOPENED = 10; // uint24 lastOpenedDay     (bytes 10..12)
     uint256 private constant SUBSCRIBERS_SLOT = 54; // _subscribers address[] (length here)
     uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit)
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS_SHIFT in mintPacked_
@@ -117,6 +124,13 @@ contract KeeperRouterOneCategory is DeployProtocol {
     // -------------------------------------------------------------------------
 
     string private constant AFKING_SRC = "contracts/modules/GameAfkingModule.sol";
+    /// @dev The single permissionless engine (60d31f775): one dispatcher, one credit site.
+    string private constant MINER_SRC = "contracts/modules/DegenerusGameMinerModule.sol";
+
+    bytes32 private constant MINER_WORK_SIG = keccak256("MinerWork(address,uint8,uint256,uint256)");
+    /// @dev Distinct human-box owners in the rewarded open test: enough opens that the call
+    ///      measures past the unpaid first MIN_REWARDED_GAS (72fc06f6c).
+    uint256 private constant PAID_BOX_OWNERS = 24;
 
     address private keeper;
     uint256 private constant DRAIN_MAX_ITERATIONS = 50;
@@ -173,9 +187,12 @@ contract KeeperRouterOneCategory is DeployProtocol {
     // Task 1 — D-02 one-category creditFlip COUNT across both branches + skip + NoWork
     // =========================================================================
 
-    /// @notice ADVANCE branch: with `advanceDue()` true, `mineFlip()` takes the advance leg (the
-    ///         structural early-return's `if (advanceDue)` arm); a multiplier > 0 credits EXACTLY ONCE.
-    ///         The buy folded into mineFlip's STAGE rides this single advance bounty.
+    /// @notice ADVANCE branch: a new day's processing is ONE engine call composing many actions
+    ///         (publish, tickets, the day's word, the daily phase, the read consumers), and it credits
+    ///         the keeper EXACTLY ONCE. The one-category router is gone (60d31f775): the engine selects
+    ///         one action at a time from storage and pays once per call, CEI-last, on the call's measured
+    ///         gas above an unpaid first MIN_REWARDED_GAS (72fc06f6c). Composing actions therefore cannot
+    ///         stack bounties.
     function testAdvanceBranchCreditsExactlyOnce() public {
         // Settle the deploy-day advance so we start from a clean, not-due, not-locked state.
         _settleGame(0xADADADAD0001);
@@ -185,24 +202,37 @@ contract KeeperRouterOneCategory is DeployProtocol {
         // Drive `advanceDue()` true: roll the wall clock forward so the simulated day index moves ahead.
         vm.warp(block.timestamp + 1 days);
         assertTrue(game.advanceDue(), "pre: advance is due");
+        // The miner is paid at min(basefee, cap); Foundry's default basefee is 0.
+        vm.fee(1 gwei);
 
-        bool dueBefore = game.advanceDue();
-        bool lockedBefore = game.rngLocked();
+        // The day's request is its own call: a request commits the next cohort and ends the call.
+        vm.recordLogs();
+        vm.prank(keeper);
+        game.mineFlip();
+        Vm.Log[] memory requestLogs = vm.getRecordedLogs();
+        assertTrue(game.rngLocked(), "pre: the day's request took the daily lock");
+        (, , uint256 requestReward) = _minerWork(requestLogs);
+        assertEq(_countFor(requestLogs, keeper), requestReward == 0 ? 0 : 1, "request call: at most one credit");
+        mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0xADADADAD0002);
+        uint24 newDay = game.currentDayView();
+        assertEq(game.rngWordForDay(newDay), 0, "pre: the new day's word is not yet applied");
 
         vm.recordLogs();
         vm.prank(keeper);
         game.mineFlip();
+        Vm.Log[] memory logs = vm.getRecordedLogs();
 
-        // The advance leg credited exactly once (mult > 0 on a normal day-advance).
-        assertEq(_countCoinflipStakeUpdatedFor(keeper), 1, "ADVANCE branch: exactly one mineFlip creditFlip to the keeper");
-
-        // Non-vacuity: the advance leg actually ran — mineFlip's mineFlip() either cleared the
-        // advance-due predicate or engaged rngLock for the day it just advanced (the multi-stage
-        // day-advance locks RNG mid-flight). Either is observable state progress only the advance leg produces.
-        bool progressed = (dueBefore && !game.advanceDue()) || (!lockedBefore && game.rngLocked());
-        assertTrue(progressed, "non-vacuity: the advance leg ran (advance consumed or rngLock engaged)");
+        (, uint256 measured, uint256 reward) = _minerWork(logs);
+        emit log_named_uint("advance call measured gas", measured);
+        emit log_named_uint("advance call bounty", reward);
+        // Non-vacuity: the call really processed the day (publish, tickets, then the day's word
+        // applied under the lock) and measured paid work.
+        assertGt(game.rngWordForDay(newDay), 0, "non-vacuity: the advance call applied the new day's word");
+        assertGt(measured, 1_000_000, "non-vacuity: the advance call measured past the unpaid first million");
+        assertGt(reward, 0, "non-vacuity: the advance call earned a bounty");
+        // The composed actions credited exactly once.
+        assertEq(_countFor(logs, keeper), 1, "ADVANCE branch: exactly one mineFlip creditFlip to the keeper");
     }
-
 
     /// @notice GAMEOVER idle crank reverts: post-gameover the advance predicate stays true (dailyIdx
     ///         freezes) but the only remaining advance work is the one-time 30-day final sweep. With no
@@ -224,7 +254,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         _quietCrapsTable();
         vm.recordLogs();
         vm.prank(keeper);
-        vm.expectRevert(); // GameAfkingModule.NoWork() — no sweep pending, no free idle crank
+        vm.expectRevert(bytes4(keccak256("NoWork()"))); // no sweep pending, no free idle crank
         game.mineFlip();
 
         // ZERO creditFlips — the idle crank reverted before any bounty could pay.
@@ -262,35 +292,41 @@ contract KeeperRouterOneCategory is DeployProtocol {
     // Task 2 — D-01 structural reentrancy attest + D-03 one-category early-return + the human escape
     // =========================================================================
 
-    /// @notice Pin the shared dispatch, single combined keeper-credit site, and absence
-    ///         of ETH-push hooks across both work branches and their payout helper.
+    /// @notice Pin the single engine dispatcher, its single CEI-last keeper-credit site, its trusted
+    ///         worker targets, and the absence of ETH-push hooks. The v55 router functions in
+    ///         GameAfkingModule (`_runWork`/`_runAdvance`/`_runRngConsumers`/`_creditWorkBounty`) are gone:
+    ///         60d31f775 moved dispatch into DegenerusGameMinerModule.mineFlip, which reselects one action
+    ///         from storage per iteration and credits once after the loop.
     function testMintFlipReentrancyStructurallySafeSourceAttest() public view {
+        string memory miner = _stripComments(vm.readFile(MINER_SRC));
         string memory afking = _stripComments(vm.readFile(AFKING_SRC));
-        string memory dispatch = _extractFunctionBody(afking, "function _runWork(bool rewarded) private returns (uint8 mult) {");
-        string memory advance = _extractFunctionBody(afking, "function _runAdvance(bool rewarded) private returns (uint8 mult) {");
-        string memory consumers = _extractFunctionBody(afking, "function _runRngConsumers(bool rewarded) private {");
-        string memory credit = _extractFunctionBody(afking, "function _creditWorkBounty(uint8 kind, uint256 bounty, uint256 redemptionBounty) private {");
+        string memory dispatch = _extractFunctionBody(miner, "function mineFlip() external {");
         assertGt(bytes(dispatch).length, 0, "D-01: shared dispatcher extracted");
-        assertGt(bytes(advance).length, 0, "D-01: advance worker extracted");
-        assertGt(bytes(consumers).length, 0, "D-01: consumer worker extracted");
-        assertGt(bytes(credit).length, 0, "D-01: combined credit helper extracted");
-        assertEq(_countOccurrences(dispatch, "return _runAdvance(rewarded);"), 1, "advance branch returns before consumer work");
-        assertEq(_countOccurrences(dispatch, "_runRngConsumers(rewarded);"), 1, "one consumer pipeline");
-        assertEq(_countOccurrences(dispatch, "_creditWorkBounty("), 0, "dispatcher cannot add a second bounty");
-        assertEq(_countOccurrences(credit, "uint256 total = bounty + redemptionBounty;"), 1, "consumer rewards combine before credit");
-        assertEq(_countOccurrences(credit, "if (total == 0) return;"), 1, "zero credit is skipped");
-        assertEq(_countOccurrences(credit, "creditFlip(msg.sender, total)"), 1, "single helper credit");
-        assertEq(_countOccurrences(afking, "creditFlip(msg.sender,"), 1, "sole keeper-credit site across all legs");
+        assertEq(_countOccurrences(dispatch, "for (uint256 transitions; transitions < 32; ++transitions) {"), 1, "one bounded dispatch loop");
+        assertEq(_countOccurrences(dispatch, "MinerAction action = transitions == 0 ? first : _nextMinerAction();"), 1, "every dispatch reselects from storage");
+        assertEq(_countOccurrences(dispatch, "coinflip.creditFlip(msg.sender, reward);"), 1, "single credit in the dispatcher");
+        assertEq(_countOccurrences(miner, "creditFlip("), 1, "sole keeper-credit site in the engine");
+        assertEq(_countOccurrences(afking, "creditFlip(msg.sender,"), 0, "the retired router credit site stays gone");
+        assertEq(_countOccurrences(dispatch, "if (reward != 0) {"), 1, "zero credit is skipped");
+        // CEI-last: the credit follows the loop's exit check and the gas measurement.
+        uint256 credit = _indexOf(dispatch, "coinflip.creditFlip(msg.sender, reward);");
+        uint256 measured = _indexOf(dispatch, "uint256 used = rewardStart - gasleft() - unpaidAttemptGas;");
+        uint256 loopExit = _indexOf(dispatch, "if (!moved) revert MineFlipGas.InsufficientExecutionGas();");
+        assertGt(measured, loopExit, "gas is measured after every worker returned");
+        assertGt(credit, measured, "the credit is the last external effect");
+        // Every worker target is a pinned protocol address.
+        assertGt(_countOccurrences(dispatch, "target = ContractAddresses."), 0, "worker targets present");
+        assertEq(_countOccurrences(dispatch, "target = ContractAddresses."), _countOccurrences(dispatch, "target = "), "every worker target is a pinned protocol address");
+        assertEq(_countOccurrences(dispatch, "target.call{gas: forwarded}(callData);"), 1, "one external worker call site");
+        assertEq(_countOccurrences(dispatch, "target.delegatecall{gas: forwarded}(callData);"), 1, "one module delegatecall site");
 
-        string memory bodies = string.concat(dispatch, advance, consumers, credit);
-        assertEq(_countOccurrences(bodies, ".call{value:"), 0, "no low-level ETH push in work or credit helpers");
-        assertEq(_countOccurrences(bodies, ".transfer("), 0, "no transfer hook in work or credit helpers");
-        assertEq(_countOccurrences(bodies, ".send("), 0, "no send hook in work or credit helpers");
+        assertEq(_countOccurrences(miner, ".call{value:"), 0, "engine cannot push ETH");
+        assertEq(_countOccurrences(miner, ".transfer("), 0, "engine cannot transfer ETH");
+        assertEq(_countOccurrences(miner, ".send("), 0, "engine cannot send ETH");
         assertEq(_countOccurrences(afking, ".call{value:"), 0, "module cannot push ETH");
         assertEq(_countOccurrences(afking, ".transfer("), 0, "module cannot transfer ETH");
         assertEq(_countOccurrences(afking, ".send("), 0, "module cannot send ETH");
     }
-
 
     /// @notice D-03 UNREWARDED escape: the standalone parametered HUMAN `game.openBoxes(count)` runs the
     ///         human box leg (a queued human box opens) but credits NOTHING (only `mineFlip` credits).
@@ -323,44 +359,54 @@ contract KeeperRouterOneCategory is DeployProtocol {
         assertEq(_countCoinflipStakeUpdatedFor(keeper), 0, "UNREWARDED: openBoxes(count) credits the keeper zero");
     }
 
-    /// @notice REWARDED via mineFlip (the NEW open-leg human drain): with advance NOT due and NO afking
-    ///         box pending, `mineFlip()` falls to the open leg — the afking sweep opens 0, then the human
-    ///         leg drains the queued human box with the leftover budget — and credits the keeper EXACTLY
-    ///         ONCE (the combined-count, knee-pro-rated open bounty). The mirror of the unrewarded escape
-    ///         above: same drain, but mineFlip now PAYS a keeper to clear human boxes (a human box and an
-    ///         afking box are bountied identically).
+    /// @notice REWARDED via mineFlip: once a delivered cohort's human boxes are the engine's next work
+    ///         (the read-consumer HumanBoxes stage, 60d31f775), `mineFlip()` opens them and credits the
+    ///         keeper EXACTLY ONCE, on the call's measured gas above the unpaid first MIN_REWARDED_GAS
+    ///         (72fc06f6c). Enough distinct boxes are queued that the open measures past that million.
+    ///         The mirror of the unrewarded escape above: same drain, but mineFlip PAYS.
     function testMintFlipOpensHumanBoxAndPaysBounty() public {
-        address boxOwner = makeAddr("mf_human_box_owner");
-        vm.deal(boxOwner, 100_000 ether);
+        address[] memory owners = new address[](PAID_BOX_OWNERS);
 
-        // Settle so advance is NOT due (mineFlip takes the `else` open leg) and not locked.
+        // Settle so the engine is idle and not locked.
         _settleGame(0x000F_1111);
         uint48 index = _activeLootboxIndex();
-        _buyBox(boxOwner, LOOTBOX_WEI);
-        // Finalize the box's index + land its word (the same setup as the escape test above).
+        for (uint256 i; i < PAID_BOX_OWNERS; ++i) {
+            owners[i] = makeAddr(string.concat("mf_human_box_owner_", _u(i)));
+            vm.deal(owners[i], 100_000 ether);
+            _buyBox(owners[i], LOOTBOX_WEI);
+        }
+        // Finalize the boxes' index + land its word (the same setup as the escape test above).
         _advanceLootboxRngIndexByOne();
         _parkBoxFrontier(index);
         _injectLootboxRngWord(index, FIXED_WORD);
-        assertGt(_lootboxEthBase(index, boxOwner), 0, "pre: human box queued + un-opened");
+        for (uint256 i; i < PAID_BOX_OWNERS; ++i) {
+            assertGt(_lootboxEthBase(index, owners[i]), 0, "pre: human box queued + un-opened");
+        }
         assertTrue(game.boxesPending(), "pre: a human box is pending");
-        // No afking subscriber exists, so the afking sweep opens 0 and the human leg runs on the full
-        // OPEN_BATCH budget; advance must be not-due so the router reaches the open `else` arm.
-        assertFalse(game.advanceDue(), "pre: advance not due (mineFlip routes to the open leg)");
+        assertEq(
+            game.nextMinerAction(),
+            uint8(DegenerusGameStorage.MinerAction.HumanBoxes),
+            "pre: the delivered cohort's human boxes are the engine's next work"
+        );
         assertFalse(game.rngLocked(), "pre: not locked (the human open leg runs)");
+        vm.fee(1 gwei);
 
         vm.recordLogs();
         vm.prank(keeper);
         game.mineFlip();
+        Vm.Log[] memory logs = vm.getRecordedLogs();
 
-        // The human box opened via mineFlip's open leg (first-deposit signal zeroed).
-        assertEq(_lootboxEthBase(index, boxOwner), 0, "non-vacuity: mineFlip's open leg opened the human box");
-        // ...and the keeper earned EXACTLY ONE open bounty (a box-owner winnings credit cannot inflate the
+        // Every human box opened via mineFlip (first-deposit signal zeroed).
+        for (uint256 i; i < PAID_BOX_OWNERS; ++i) {
+            assertEq(_lootboxEthBase(index, owners[i]), 0, "non-vacuity: mineFlip's open leg opened the human box");
+        }
+        (, uint256 measured, uint256 reward) = _minerWork(logs);
+        emit log_named_uint("human open call measured gas", measured);
+        emit log_named_uint("human open call bounty", reward);
+        assertGt(reward, 0, "the measured open work earned a bounty");
+        // ...and the keeper earned EXACTLY ONE bounty (a box-owner winnings credit cannot inflate the
         // keeper-isolated count — only mineFlip credits the keeper).
-        assertEq(
-            _countCoinflipStakeUpdatedFor(keeper),
-            1,
-            "REWARDED: mineFlip pays the keeper exactly once for opening a human box"
-        );
+        assertEq(_countFor(logs, keeper), 1, "REWARDED: mineFlip pays the keeper exactly once for opening a human box");
     }
 
     // =========================================================================
@@ -390,6 +436,44 @@ contract KeeperRouterOneCategory is DeployProtocol {
                 logs[i].topics[1] == bytes32(uint256(uint160(who)))
             ) count++;
         }
+    }
+
+    /// @dev Recipient-isolated creditFlip count over already-captured logs.
+    function _countFor(Vm.Log[] memory logs, address who) internal view returns (uint256 count) {
+        for (uint256 i; i < logs.length; i++) {
+            if (
+                logs[i].emitter == address(coinflip) &&
+                logs[i].topics.length > 1 &&
+                logs[i].topics[0] == COINFLIP_STAKE_UPDATED_SIG &&
+                logs[i].topics[1] == bytes32(uint256(uint160(who)))
+            ) count++;
+        }
+    }
+
+    /// @dev The MinerWork(caller, firstAction, executionGas, flipReward) of a single mineFlip.
+    function _minerWork(Vm.Log[] memory logs) internal view returns (uint8 first, uint256 measured, uint256 reward) {
+        uint256 seen;
+        for (uint256 i; i < logs.length; i++) {
+            if (logs[i].emitter == address(game) && logs[i].topics.length > 0 && logs[i].topics[0] == MINER_WORK_SIG) {
+                (first, measured, reward) = abi.decode(logs[i].data, (uint8, uint256, uint256));
+                ++seen;
+            }
+        }
+        assertEq(seen, 1, "one MinerWork per mineFlip");
+    }
+
+    /// @dev Byte index of the first occurrence of `needle` (reverts if absent).
+    function _indexOf(string memory haystack, string memory needle) private pure returns (uint256) {
+        bytes memory hb = bytes(haystack);
+        bytes memory n = bytes(needle);
+        for (uint256 i; n.length != 0 && i + n.length <= hb.length; ++i) {
+            bool matched = true;
+            for (uint256 j; j < n.length; ++j) {
+                if (hb[i + j] != n[j]) { matched = false; break; }
+            }
+            if (matched) return i;
+        }
+        revert(string.concat("needle not found: ", needle));
     }
 
     // =========================================================================
@@ -573,13 +657,17 @@ contract KeeperRouterOneCategory is DeployProtocol {
 
     // ---- gameover latch ----
 
-    /// @dev Latch the terminal gameOver public bool (byte 21 of SLOT 0) WITHOUT setting the gameover-time
-    ///      slot, so the advance takes the gameover branch (mult=0) harmlessly.
+    /// @dev Latch the terminal gameOver public bool (byte 21 of SLOT 0) as a finished ending: the final
+    ///      jackpot is paid (gameOverStatePacked slot 19, bit 48) and the gameover-time field stays 0, so
+    ///      no 30-day sweep is due. Until the payout lands the engine still owes Terminal work
+    ///      (60d31f775 selector), so an unpaid latch would not be idle.
     function _latchGameOver() internal {
         bytes32 slot = bytes32(uint256(0));
         uint256 packed = uint256(vm.load(address(game), slot));
         packed |= (uint256(1) << (21 * 8));
         vm.store(address(game), slot, bytes32(packed));
+        uint256 goState = uint256(vm.load(address(game), bytes32(uint256(19))));
+        vm.store(address(game), bytes32(uint256(19)), bytes32(goState | (uint256(1) << 48)));
         require(game.gameOver(), "_latchGameOver: gameOver did not flip (slot 0 byte 21)");
     }
 
@@ -651,12 +739,12 @@ contract KeeperRouterOneCategory is DeployProtocol {
         TicketQueueStorage.seed(address(game), readKey, readKey & ~TICKET_SLOT_BIT, who, uint80(whole) * 4 << 8);
     }
 
-    /// @dev Set the ticketsFullyProcessed bool (SLOT 0 byte 26), preserving the rest of slot 0.
+    /// @dev Set the ticketsFullyProcessed bool (SLOT 0 byte 24, golden layout), preserving the rest of slot 0.
     function _setTicketsFullyProcessed(bool v) internal {
         uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
-        uint256 mask = uint256(0xFF) << (26 * 8);
+        uint256 mask = uint256(0xFF) << (24 * 8);
         slot0 &= ~mask;
-        if (v) slot0 |= (uint256(1) << (26 * 8));
+        if (v) slot0 |= (uint256(1) << (24 * 8));
         vm.store(address(game), bytes32(uint256(0)), bytes32(slot0));
     }
 

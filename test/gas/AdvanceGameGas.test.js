@@ -1,10 +1,25 @@
 import { expect } from "chai";
 import hre from "hardhat";
+import { readFileSync } from "node:fs";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import {
   deployFullProtocol,
   restoreAddresses,
 } from "../helpers/deployFixture.js";
+import { readyDailyFixture } from "../helpers/readyDailyFixture.js";
+import { boSmalls } from "../helpers/boxOrder.js";
+import {
+  CEILING_ALLOWANCE,
+  MINER_IDLE,
+  MINER_WAIT,
+  MINER_TICKETS,
+  mine,
+  settle,
+  measureNextChunk,
+  walkDailyChunks,
+  walkNextDay,
+  heaviestByStage,
+} from "../helpers/mineFlipChunks.js";
 import {
   eth,
   advanceTime,
@@ -15,35 +30,45 @@ import {
 } from "../helpers/testUtils.js";
 
 const ZERO_ADDRESS = hre.ethers.ZeroAddress;
+const GAME_LAYOUT = JSON.parse(
+  readFileSync(new URL("../../scripts/layout/golden/DegenerusGame.json", import.meta.url), "utf8")
+);
 const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
-const NORMAL_GAS_TARGET = 10_000_000n;
-const UNLIKELY_GAS_TARGET = 11_000_000n;
-const AUDIT_GAS_CEILING = 11_500_000n;
-
+// Owner rule (2026-10-03): only the size of one chunk between checkpoints matters, so no
+// test here bounds a whole mineFlip transaction. See test/helpers/mineFlipChunks.js for the
+// two asserted gas properties (per-chunk <= 10M; realistic allowance succeeds + progresses).
 /**
- * AdvanceGame Gas Benchmark Tests
+ * AdvanceGame Gas Benchmarks
  *
- * Measures worst-case gas for every mineFlip code path.
+ * Measures mineFlip code paths under realistic caller allowances.
  * Each test drives the state machine to a specific stage and reports gasUsed.
  *
  * IMPORTANT: The Advance event is declared in DegenerusGameAdvanceModule,
  * emitted via delegatecall from the game proxy. To parse it we must use
- * advanceModule.interface, NOT game.interface.
+ * advanceModule.interface, NOT game.interface. One mineFlip call now composes
+ * several checkpoints, so a receipt can carry several Advance stages.
  *
- * Stage constants (from DegenerusGameAdvanceModule.sol):
- *   0  = STAGE_GAMEOVER
+ * Stage constants (DegenerusGameAdvanceModule.sol / DegenerusGameRngModule.sol):
+ *   0  = STAGE_GAMEOVER (terminal path)
  *   1  = STAGE_RNG_REQUESTED
- *   2  = STAGE_TRANSITION_WORKING
  *   3  = STAGE_TRANSITION_DONE
- *   4  = STAGE_FUTURE_TICKETS_WORKING
- *   5  = STAGE_TICKETS_WORKING
  *   6  = STAGE_PURCHASE_DAILY
  *   7  = STAGE_ENTERED_JACKPOT
- *   8  = STAGE_JACKPOT_ETH_RESUME
- *   9  = STAGE_JACKPOT_COIN_TICKETS
- *   10 = STAGE_JACKPOT_PHASE_ENDED
- *   11 = STAGE_JACKPOT_DAILY_STARTED
+ *   8  = STAGE_JACKPOT_COIN_TICKETS
+ *   9  = STAGE_JACKPOT_PHASE_ENDED
+ *   10 = STAGE_JACKPOT_DAILY_STARTED
+ *   12 = STAGE_GAP_BACKFILLED
+ *   14 = STAGE_JACKPOT_EARLY_BIRD_TICKETS
+ *   15 = STAGE_PURCHASE_DAILY_TICKETS
+ *   16 = STAGE_JACKPOT_BATTLE
+ *   17 = STAGE_PURCHASE_BATTLE
+ *   18 = STAGE_DAILY_WORD_APPLIED
  */
+/** Parse Advance events using the advanceModule ABI (not game ABI). */
+async function getAdvanceEvents(tx, advanceModule) {
+  return getEvents(tx, advanceModule, "Advance");
+}
+
 describe("AdvanceGame Gas Benchmarks", function () {
   this.timeout(600_000);
 
@@ -64,8 +89,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
     );
     for (const { name, gasUsed } of sorted) {
       const gasStr = gasUsed.toLocaleString().padStart(14);
-      const flag = gasUsed > AUDIT_GAS_CEILING ? " !!!" : "";
-      console.log(`  ${name.padEnd(48)} ${gasStr}${flag}`);
+      console.log(`  ${name.padEnd(48)} ${gasStr}`);
     }
 
     console.log("-".repeat(72));
@@ -74,10 +98,6 @@ describe("AdvanceGame Gas Benchmarks", function () {
       console.log(
         `  Peak: ${max.name} = ${max.gasUsed.toLocaleString()} gas`
       );
-      const tier = max.gasUsed <= NORMAL_GAS_TARGET ? "normal (<=10M)"
-        : max.gasUsed <= UNLIKELY_GAS_TARGET ? "unlikely (<=11M)"
-        : max.gasUsed <= AUDIT_GAS_CEILING ? "extreme (<=11.5M)" : "OVER HARD CEILING";
-      console.log(`  Observed maximum tier: ${tier}.`);
     }
     console.log("=".repeat(72));
     console.log("");
@@ -124,45 +144,47 @@ describe("AdvanceGame Gas Benchmarks", function () {
     }
   }
 
+  // Record-only: a composed transaction's total is reported, never bounded (owner rule).
   function recordGas(name, receipt) {
     const gasUsed = receipt.gasUsed;
-    expect(gasUsed, `${name}: transaction exceeds the 11.5M hard ceiling`).to.be.lte(AUDIT_GAS_CEILING);
     gasResults.push({ name, gasUsed });
     console.log(`      Gas: ${gasUsed.toLocaleString()}`);
   }
 
-  /** Parse Advance events using the advanceModule ABI (not game ABI). */
-  async function getAdvanceEvents(tx, advanceModule) {
-    return getEvents(tx, advanceModule, "Advance");
+  // Far-future queue reads through the layout oracle (TicketModule drain state).
+  const TICKET_FAR_FUTURE_BIT = 1n << 22n;
+  const layoutSlot = (label) => BigInt(GAME_LAYOUT.find((e) => e.label === label).slot);
+  const QUEUE_SLOT = layoutSlot("ticketQueue");
+  const QUEUE_LEVELS_SLOT = layoutSlot("ticketQueueLevels");
+  const TICKET_CURSOR_SLOT = layoutSlot("ticketCursor");
+  const mapSlot = (key, base) => hre.ethers.keccak256(
+    hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint256", "uint256"], [key, base]));
+  const readSlot = async (game, slot) => BigInt(await hre.ethers.provider.getStorage(game.target, slot));
+
+  /** Mirror of DegenerusGameStorage._ticketQueueLength for a far-future key. */
+  async function ffQueueLength(game, lvl) {
+    const physical = TICKET_FAR_FUTURE_BIT | ((lvl - 1n) % 100n + 1n);
+    let occupying = await readSlot(game, mapSlot(physical, QUEUE_LEVELS_SLOT));
+    if (occupying === 0n) occupying = physical & 0x7fn;
+    return occupying === lvl ? readSlot(game, mapSlot(physical, QUEUE_SLOT)) : 0n;
   }
 
-  /**
-   * Drive one VRF cycle: next day -> mineFlip -> fulfill -> drain all processing.
-   * Returns the last Advance stage observed.
-   */
-  async function driveOneCycle(game, deployer, mockVRF, advanceModule, word) {
-    await advanceToNextDay();
-    await game.connect(deployer).mineFlip();
-    const requestId = await getLastVRFRequestId(mockVRF);
-    try {
-      await mockVRF.fulfillRandomWords(requestId, word);
-    } catch {
-      // May already be fulfilled
-    }
-    let lastStage = -1n;
-    for (let i = 0; i < 200; i++) {
-      try {
-        const tx = await game.connect(deployer).mineFlip();
-        const events = await getAdvanceEvents(tx, advanceModule);
-        if (events.length > 0) {
-          lastStage = events[0].args.stage;
-        }
-      } catch {
-        break;
-      }
-      if (!(await game.rngLocked())) break;
-    }
-    return lastStage;
+  /** Far-future queue lengths plus the ticket drain cursor (ticketCursor/ticketLevel word). */
+  async function ffSnapshot(game, levels) {
+    const lens = [];
+    for (const l of levels) lens.push(await ffQueueLength(game, l));
+    const word = await readSlot(game, TICKET_CURSOR_SLOT);
+    const cursor = word & 0xffffffffn;
+    const marker = (word >> 32n) & 0xffffffn;
+    const inProgress = (marker & TICKET_FAR_FUTURE_BIT) !== 0n
+      && levels.includes(marker & (TICKET_FAR_FUTURE_BIT - 1n)) && cursor !== 0n;
+    return { lens, cursor, marker, inProgress };
+  }
+
+  /** A chunk touched a far-future queue: it released one, or advanced a far-future cursor. */
+  function ffTouched(before, after) {
+    if (before.lens.some((len, i) => len !== 0n && after.lens[i] === 0n)) return true;
+    return after.inProgress && (before.marker !== after.marker || after.cursor > before.cursor);
   }
 
   /**
@@ -182,35 +204,6 @@ describe("AdvanceGame Gas Benchmarks", function () {
     }
   }
 
-  /**
-   * Drive the game into jackpot phase. Returns true if reached.
-   */
-  async function driveToJackpotPhase(game, deployer, mockVRF, advanceModule) {
-    for (let cycle = 0; cycle < 30; cycle++) {
-      await driveOneCycle(game, deployer, mockVRF, advanceModule, BigInt(cycle * 1000 + 42));
-      if (await game.jackpotPhase()) return true;
-    }
-    return false;
-  }
-
-  /**
-   * Drive through the entire jackpot phase back to purchase phase.
-   * Returns true if phase transition completed.
-   */
-  async function driveJackpotPhaseToEnd(game, deployer, mockVRF, advanceModule) {
-    for (let day = 0; day < 12; day++) {
-      await driveOneCycle(
-        game,
-        deployer,
-        mockVRF,
-        advanceModule,
-        BigInt(day * 2000 + 99)
-      );
-      if (!(await game.jackpotPhase())) return true;
-    }
-    return false;
-  }
-
   // =========================================================================
   // 1. RNG Request (STAGE_RNG_REQUESTED = 1)
   // =========================================================================
@@ -227,11 +220,12 @@ describe("AdvanceGame Gas Benchmarks", function () {
 
       await advanceToNextDay();
 
-      const tx = await game.connect(deployer).mineFlip();
-      const receipt = await tx.wait();
+      // Realistic allowance: the request is an indivisible RNG_REQUEST checkpoint.
+      const { tx, receipt } = await mine(game, deployer);
       const events = await getAdvanceEvents(tx, advanceModule);
       expect(events.length).to.be.gte(1);
       expect(events[0].args.stage).to.equal(1n);
+      expect(await game.rngLocked(), "the daily request engaged").to.equal(true);
       recordGas("Fresh VRF Request (stage=1)", receipt);
     });
   });
@@ -265,6 +259,10 @@ describe("AdvanceGame Gas Benchmarks", function () {
   // =========================================================================
 
   describe("3. Ticket Batch Processing (STAGE_TICKETS_WORKING)", function () {
+    // Converted from a composed-transaction ceiling (one unbounded call measured 14.38M against
+    // an 11.5M cap, i.e. against its own gas limit). The ticket drain is now asserted per chunk
+    // and under realistic allowances: one admitted chunk <= 10M, every 10M call succeeds and
+    // progresses until the drain completes, and a 16.7M call from the same state succeeds.
     it("worst case: max budget (550 writes) ticket processing", async function () {
       const { game, deployer, advanceModule, mockVRF, alice, bob, carol, dan, eve, others } =
         await loadFixture(deployFullProtocol);
@@ -275,16 +273,30 @@ describe("AdvanceGame Gas Benchmarks", function () {
       }
 
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip();
+      await mine(game, deployer);
       const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 999n);
+      // Publication is its own checkpoint; the ticket drain follows it.
+      for (let i = 0; i < 5 && (await game.nextMinerAction()) !== MINER_TICKETS; i++) {
+        await mine(game, deployer, 1_000_000);
+      }
+      expect(await game.nextMinerAction(), "the committed cohort's ticket drain is next").to.equal(MINER_TICKETS);
 
-      const tx = await game.connect(deployer).mineFlip();
-      const receipt = await tx.wait();
-      const events = await getAdvanceEvents(tx, advanceModule);
-      const stage = events.length > 0 ? events[0].args.stage : "?";
-      recordGas(`Ticket Batch 550 writes (stage=${stage})`, receipt);
-      expect(receipt.status).to.equal(1);
+      const start = await hre.ethers.provider.send("evm_snapshot", []);
+      const { receipt: ceiling } = await mine(game, deployer, CEILING_ALLOWANCE);
+      console.log(`      16.7M-allowance call: ${ceiling.gasUsed.toLocaleString()} gas`);
+      await hre.ethers.provider.send("evm_revert", [start]);
+
+      await measureNextChunk(game, deployer, "ticket drain (550 writes)");
+      let calls = 0;
+      let maxGas = 0n;
+      while ((await game.nextMinerAction()) === MINER_TICKETS) {
+        const { receipt } = await mine(game, deployer);
+        if (receipt.gasUsed > maxGas) maxGas = receipt.gasUsed;
+        expect(++calls, "ticket drain finishes in bounded realistic calls").to.be.lte(100);
+      }
+      console.log(`      realistic 10M calls to finish the drain: ${calls}; max call gas ${maxGas.toLocaleString()}`);
+      recordGas("Ticket Batch 550 writes (max 10M-allowance call)", { gasUsed: maxGas });
     });
   });
 
@@ -293,6 +305,8 @@ describe("AdvanceGame Gas Benchmarks", function () {
   // =========================================================================
 
   describe("4. Purchase-Phase Daily Jackpot (STAGE_PURCHASE_DAILY)", function () {
+    // One call now composes several checkpoints, so the purchase daily is located by its
+    // Advance stage among every chunk of the day, and each chunk is measured on its own.
     it("worst case: daily jackpot with many ticket holders", async function () {
       const { game, deployer, advanceModule, mockVRF, alice, bob, carol, dan, eve, others } =
         await loadFixture(deployFullProtocol);
@@ -302,35 +316,21 @@ describe("AdvanceGame Gas Benchmarks", function () {
         await buyFullTickets(game, buyer, 20, 0.2);
       }
 
-      // First VRF cycle: processes tickets
+      // First VRF cycle: processes tickets (realistic allowances throughout).
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip();
-      let requestId = await getLastVRFRequestId(mockVRF);
-      await mockVRF.fulfillRandomWords(requestId, 111n);
+      await settle(game, deployer, mockVRF, advanceModule, 111n);
 
-      // Drain all ticket processing
-      for (let i = 0; i < 50; i++) {
-        if (!(await game.rngLocked())) break;
-        try {
-          await game.connect(deployer).mineFlip();
-        } catch {
-          break;
-        }
-      }
-
-      // Second day for daily jackpot path
+      // Second day: the purchase-phase daily, walked chunk by chunk.
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip();
-      requestId = await getLastVRFRequestId(mockVRF);
+      await mine(game, deployer);
+      expect(await game.rngLocked(), "second-day request engaged").to.equal(true);
+      const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 222n);
-
-      // This should hit the PURCHASE_DAILY path (stage=6)
-      const tx = await game.connect(deployer).mineFlip();
-      const receipt = await tx.wait();
-      const events = await getAdvanceEvents(tx, advanceModule);
-      const stage = events.length > 0 ? events[0].args.stage : "?";
-      recordGas(`Purchase Daily Jackpot (stage=${stage})`, receipt);
-      expect(receipt.status).to.equal(1);
+      const chunks = await walkDailyChunks(game, deployer, advanceModule, "purchase day");
+      const daily = chunks.find((c) => c.stages.includes(6n));
+      expect(daily, "the purchase-phase daily (STAGE_PURCHASE_DAILY) ran as its own chunk").to.not.equal(undefined);
+      expect(await game.rngLocked(), "the purchase day sealed").to.equal(false);
+      recordGas("Purchase Daily Jackpot chunk (stage=6)", daily.receipt);
     });
   });
 
@@ -339,6 +339,10 @@ describe("AdvanceGame Gas Benchmarks", function () {
   // =========================================================================
 
   describe("5. Enter Jackpot Phase (STAGE_ENTERED_JACKPOT)", function () {
+    // Level 0 runs turbo: the purchase->jackpot transition, every jackpot day and the phase
+    // end all complete inside the first daily cycle, so jackpotPhase() is already false again
+    // when the day settles. The transition is therefore proven by its own Advance stage (7,
+    // the POOL_CONSOLIDATION checkpoint), measured as one chunk like every other chunk.
     it("worst case: purchase->jackpot transition with prize pool consolidation", async function () {
       const { game, deployer, advanceModule, mockVRF, alice, bob, carol, dan, eve, others } =
         await loadFixture(deployFullProtocol);
@@ -349,417 +353,41 @@ describe("AdvanceGame Gas Benchmarks", function () {
       const nextPool = await game.nextPrizePoolView();
       console.log(`      nextPrizePool: ${hre.ethers.formatEther(nextPool)} ETH`);
 
-      // Drive VRF cycles, watching every mineFlip call for stage 13
-      let foundGas = false;
-      for (let cycle = 0; cycle < 30; cycle++) {
+      let entered = null;
+      const seen = new Set();
+      for (let cycle = 0; cycle < 5 && entered === null; cycle++) {
         await advanceToNextDay();
-        await game.connect(deployer).mineFlip();
+        await mine(game, deployer);
         const requestId = await getLastVRFRequestId(mockVRF);
-        try {
-          await mockVRF.fulfillRandomWords(
-            requestId,
-            BigInt(cycle * 1000 + 42)
-          );
-        } catch {
-          continue;
+        await mockVRF.fulfillRandomWords(requestId, BigInt(cycle * 1000 + 42));
+        const chunks = await walkDailyChunks(game, deployer, advanceModule, `cycle ${cycle}`);
+        for (const c of chunks) for (const st of c.stages) seen.add(Number(st));
+        const heaviest = heaviestByStage(chunks);
+        for (const st of [10n, 8n, 9n, 3n]) {
+          if (heaviest.has(st)) recordGas(`Jackpot phase heaviest chunk (stage=${st})`, heaviest.get(st).receipt);
         }
-
-        // Drain processing, watching for stage 13
-        for (let i = 0; i < 200; i++) {
-          try {
-            const tx = await game.connect(deployer).mineFlip();
-            const receipt = await tx.wait();
-            const events = await getAdvanceEvents(tx, advanceModule);
-            if (events.length > 0) {
-              if (events[0].args.stage === 7n) {
-                recordGas("Enter Jackpot Phase (stage=7)", receipt);
-                foundGas = true;
-                break;
-              }
-            }
-          } catch {
-            break;
-          }
-          if (!(await game.rngLocked()) && i > 0) break;
-        }
-
-        if (foundGas) break;
-        if (await game.jackpotPhase()) break;
+        entered = chunks.find((c) => c.stages.includes(7n)) ?? null;
       }
-
-      expect(await game.jackpotPhase()).to.equal(true);
-      if (!foundGas) {
-        console.log("      (Stage 13 not directly captured in drain loop)");
-        // Measure a jackpot-phase mineFlip call as fallback
-        await advanceToNextDay();
-        const tx = await game.connect(deployer).mineFlip();
-        const receipt = await tx.wait();
-        const events = await getAdvanceEvents(tx, advanceModule);
-        const stage = events.length > 0 ? events[0].args.stage : "?";
-        recordGas(`Jackpot Phase Entry (stage=${stage})`, receipt);
+      console.log(`      Advance stages observed: ${[...seen].sort((a, b) => a - b).join(", ")}`);
+      expect(entered, "the purchase->jackpot transition (STAGE_ENTERED_JACKPOT) must execute").to.not.equal(null);
+      expect(await game.level(), "the transition advanced the level").to.be.gte(1n);
+      recordGas("Enter Jackpot Phase chunk (stage=7)", entered.receipt);
+      // The same turbo day carries the rest of the jackpot phase, each stage walked as its
+      // own <=10M chunk above: daily ETH (10), coin+tickets (8), phase end (9), transition (3).
+      for (const [stage, name] of [[10, "Jackpot Daily ETH"], [8, "Jackpot Coin+Tickets"],
+        [9, "Final Day Phase End"], [3, "Phase Transition"]]) {
+        expect(seen.has(stage), `${name} (stage=${stage}) ran inside the turbo jackpot day`).to.equal(true);
       }
     });
   });
 
-  // =========================================================================
-  // 6. Jackpot Daily ETH Distribution (STAGE_JACKPOT_DAILY_STARTED = 18)
-  // =========================================================================
-
-  describe("6. Jackpot Daily ETH Distribution (STAGE_JACKPOT_DAILY_STARTED)", function () {
-    it("worst case: fresh daily jackpot ETH with many winners", async function () {
-      const { game, deployer, advanceModule, mockVRF, alice, bob, carol, dan, eve, others } =
-        await loadFixture(deployFullProtocol);
-
-      const buyers = [alice, bob, carol, dan, eve, ...others.slice(0, 15)];
-      await heavyPurchases(game, buyers);
-
-      const reached = await driveToJackpotPhase(game, deployer, mockVRF, advanceModule);
-      if (!reached) {
-        console.log("      (Could not reach jackpot phase - skipping)");
-        this.skip();
-        return;
-      }
-
-      // Advance to next day and get VRF for daily jackpot
-      await advanceToNextDay();
-      await game.connect(deployer).mineFlip();
-      const requestId = await getLastVRFRequestId(mockVRF);
-      await mockVRF.fulfillRandomWords(requestId, 5555n);
-
-      // Drain all ticket processing (stage 5) first, then capture the
-      // first non-ticket stage which should be 18 (fresh daily jackpot).
-      let found = false;
-      for (let i = 0; i < 100; i++) {
-        try {
-          const tx = await game.connect(deployer).mineFlip();
-          const receipt = await tx.wait();
-          const events = await getAdvanceEvents(tx, advanceModule);
-          if (events.length > 0) {
-            const stage = events[0].args.stage;
-            if (stage !== 5n) {
-              recordGas(`Jackpot Daily ETH (stage=${stage})`, receipt);
-              found = true;
-              break;
-            }
-          }
-          if (!(await game.rngLocked())) break;
-        } catch {
-          break;
-        }
-      }
-      if (!found) {
-        console.log("      (Stage 18 not captured after draining tickets)");
-      }
-    });
-  });
-
-  // =========================================================================
-  // 7. Jackpot ETH Resume (STAGE_JACKPOT_ETH_RESUME = 8)
-  // =========================================================================
-
-  describe("7. Jackpot ETH Resume (STAGE_JACKPOT_ETH_RESUME)", function () {
-    it("worst case: resume mid-bucket ETH distribution", async function () {
-      const { game, deployer, advanceModule, mockVRF, alice, bob, carol, dan, eve, others } =
-        await loadFixture(deployFullProtocol);
-
-      const buyers = [alice, bob, carol, dan, eve, ...others.slice(0, 15)];
-      await heavyPurchases(game, buyers);
-
-      const reached = await driveToJackpotPhase(game, deployer, mockVRF, advanceModule);
-      if (!reached) {
-        this.skip();
-        return;
-      }
-
-      // Advance to next day and get VRF
-      await advanceToNextDay();
-      await game.connect(deployer).mineFlip();
-      const requestId = await getLastVRFRequestId(mockVRF);
-      await mockVRF.fulfillRandomWords(requestId, 7777n);
-
-      // Drain all ticket processing (stage 5) first
-      for (let i = 0; i < 100; i++) {
-        try {
-          const tx = await game.connect(deployer).mineFlip();
-          const events = await getAdvanceEvents(tx, advanceModule);
-          if (events.length > 0 && events[0].args.stage !== 5n) {
-            // We hit a non-ticket stage (likely 18 = fresh daily jackpot).
-            // The daily jackpot started but with full budget it may have finished.
-            // We need it to NOT finish so stage 15 (resume) is needed next.
-            break;
-          }
-          if (!(await game.rngLocked())) break;
-        } catch {
-          break;
-        }
-      }
-
-      // Drive through remaining stages to find the fresh daily jackpot call.
-      // After that call, if resumeEthPool was set, next mineFlip hits stage 8.
-      let hitDailyStart = false;
-      for (let i = 0; i < 50; i++) {
-        try {
-          const tx = await game.connect(deployer).mineFlip();
-          const receipt = await tx.wait();
-          const events = await getAdvanceEvents(tx, advanceModule);
-          if (events.length > 0) {
-            const stage = events[0].args.stage;
-            if (stage === 11n) {
-              // STAGE_JACKPOT_DAILY_STARTED — daily jackpot call 1 just ran
-              hitDailyStart = true;
-              break;
-            }
-            if (stage === 8n) {
-              // Already at resume — record and done
-              recordGas("Jackpot ETH Resume (stage=8)", receipt);
-              return;
-            }
-          }
-          if (!(await game.rngLocked())) break;
-        } catch {
-          break;
-        }
-      }
-
-      if (!hitDailyStart) {
-        console.log("      (Could not reach STAGE_JACKPOT_DAILY_STARTED - skipping)");
-        this.skip();
-        return;
-      }
-
-      // Next mineFlip should hit STAGE_JACKPOT_ETH_RESUME if pool was large enough for split
-      try {
-        const tx = await game.connect(deployer).mineFlip();
-        const receipt = await tx.wait();
-        const events = await getAdvanceEvents(tx, advanceModule);
-        if (events.length > 0 && events[0].args.stage === 8n) {
-          recordGas("Jackpot ETH Resume (stage=8)", receipt);
-        } else {
-          const stage = events.length > 0 ? events[0].args.stage : "?";
-          console.log(`      (Pool too small for split — got stage=${stage} instead of 8)`);
-          recordGas(`Jackpot ETH Resume fallback (stage=${stage})`, receipt);
-        }
-      } catch (e) {
-        console.log(`      (Resume call reverted: ${e.message?.slice(0, 80)})`);
-        this.skip();
-      }
-    });
-  });
-
-  // =========================================================================
-  // 8. Jackpot Coin+Tickets (STAGE_JACKPOT_COIN_TICKETS = 17)
-  // =========================================================================
-
-  describe("8. Jackpot Coin+Tickets (STAGE_JACKPOT_COIN_TICKETS)", function () {
-    it("worst case: coin and ticket distribution after daily ETH", async function () {
-      const { game, deployer, advanceModule, mockVRF, alice, bob, carol, dan, eve, others } =
-        await loadFixture(deployFullProtocol);
-
-      const buyers = [alice, bob, carol, dan, eve, ...others.slice(0, 15)];
-      await heavyPurchases(game, buyers);
-
-      const reached = await driveToJackpotPhase(game, deployer, mockVRF, advanceModule);
-      if (!reached) {
-        this.skip();
-        return;
-      }
-
-      // Run a daily jackpot and look for coin+ticket distribution (stage 17)
-      await advanceToNextDay();
-      await game.connect(deployer).mineFlip();
-      const requestId = await getLastVRFRequestId(mockVRF);
-      await mockVRF.fulfillRandomWords(requestId, 8888n);
-
-      let found = false;
-      for (let i = 0; i < 50; i++) {
-        try {
-          const tx = await game.connect(deployer).mineFlip();
-          const receipt = await tx.wait();
-          const events = await getAdvanceEvents(tx, advanceModule);
-          if (events.length > 0) {
-            const stage = events[0].args.stage;
-            if (stage === 9n) {
-              recordGas("Jackpot Coin+Tickets (stage=9)", receipt);
-              found = true;
-              break;
-            }
-            // If we see a different stage, record it and continue looking
-          }
-          if (!(await game.rngLocked())) break;
-        } catch {
-          break;
-        }
-      }
-
-      if (!found) {
-        console.log("      (Stage 17 not directly observed - recording next available)");
-        // Record whatever the next call produces
-        try {
-          await advanceToNextDay();
-          await game.connect(deployer).mineFlip();
-          const rid = await getLastVRFRequestId(mockVRF);
-          try { await mockVRF.fulfillRandomWords(rid, 9999n); } catch {}
-          const tx = await game.connect(deployer).mineFlip();
-          const receipt = await tx.wait();
-          const events = await getAdvanceEvents(tx, advanceModule);
-          const stage = events.length > 0 ? events[0].args.stage : "?";
-          recordGas(`Jackpot Coin+Tickets fallback (stage=${stage})`, receipt);
-        } catch {
-          // Ignore
-        }
-      }
-    });
-  });
-
-  // =========================================================================
-  // 9. Final Day Phase End (STAGE_JACKPOT_PHASE_ENDED = 16)
-  // =========================================================================
-
-  describe("9. Final Day Phase End (STAGE_JACKPOT_PHASE_ENDED)", function () {
-    it("worst case: day 5 endPhase with all end-of-level operations", async function () {
-      const { game, deployer, advanceModule, mockVRF, alice, bob, carol, dan, eve, others } =
-        await loadFixture(deployFullProtocol);
-
-      const buyers = [alice, bob, carol, dan, eve, ...others.slice(0, 15)];
-      await heavyPurchases(game, buyers);
-
-      const reached = await driveToJackpotPhase(game, deployer, mockVRF, advanceModule);
-      if (!reached) {
-        this.skip();
-        return;
-      }
-
-      // Drive through daily jackpots, watching for stage 16 (phase ended)
-      let found = false;
-      for (let day = 0; day < 10; day++) {
-        await advanceToNextDay();
-        await game.connect(deployer).mineFlip();
-        const requestId = await getLastVRFRequestId(mockVRF);
-        try {
-          await mockVRF.fulfillRandomWords(
-            requestId,
-            BigInt(day * 2000 + 99)
-          );
-        } catch {
-          // already fulfilled
-        }
-
-        for (let i = 0; i < 100; i++) {
-          try {
-            const tx = await game.connect(deployer).mineFlip();
-            const receipt = await tx.wait();
-            const events = await getAdvanceEvents(tx, advanceModule);
-            if (events.length > 0) {
-              const stage = events[0].args.stage;
-              if (stage === 10n) {
-                recordGas("Final Day Phase End (stage=10)", receipt);
-                found = true;
-                break;
-              }
-            }
-          } catch {
-            break;
-          }
-          if (!(await game.rngLocked())) break;
-        }
-
-        if (found) break;
-        if (!(await game.jackpotPhase())) {
-          console.log("      (Phase ended during draining but stage 16 not captured)");
-          break;
-        }
-      }
-
-      if (!found) {
-        console.log("      (Stage 16 not captured)");
-      }
-    });
-  });
-
-  // =========================================================================
-  // 10. Phase Transition (STAGE_TRANSITION_DONE = 3)
-  // =========================================================================
-
-  describe("10. Phase Transition (STAGE_TRANSITION_DONE)", function () {
-    it("worst case: vault perpetual tickets + stETH auto-stake", async function () {
-      const { game, deployer, advanceModule, mockVRF, alice, bob, carol, dan, eve, others } =
-        await loadFixture(deployFullProtocol);
-
-      const buyers = [alice, bob, carol, dan, eve, ...others.slice(0, 15)];
-      await heavyPurchases(game, buyers);
-
-      const reached = await driveToJackpotPhase(game, deployer, mockVRF, advanceModule);
-      if (!reached) {
-        this.skip();
-        return;
-      }
-
-      // Manually drive through jackpot phase, watching for stage 16.
-      // When stage 16 (PHASE_ENDED) fires, the NEXT call should be stage 3
-      // (TRANSITION_DONE) since _endPhase sets phaseTransitionActive=true
-      // and keeps RNG locked.
-      let found = false;
-      for (let day = 0; day < 12; day++) {
-        await advanceToNextDay();
-        await game.connect(deployer).mineFlip();
-        const requestId = await getLastVRFRequestId(mockVRF);
-        try {
-          await mockVRF.fulfillRandomWords(requestId, BigInt(day * 2000 + 99));
-        } catch {
-          // already fulfilled
-        }
-
-        for (let i = 0; i < 100; i++) {
-          try {
-            const tx = await game.connect(deployer).mineFlip();
-            const receipt = await tx.wait();
-            const events = await getAdvanceEvents(tx, advanceModule);
-            if (events.length > 0) {
-              const stage = events[0].args.stage;
-              if (stage === 10n) {
-                // Phase ended! Next call processes the phase transition.
-                const tx2 = await game.connect(deployer).mineFlip();
-                const receipt2 = await tx2.wait();
-                const events2 = await getAdvanceEvents(tx2, advanceModule);
-                const stage2 = events2.length > 0 ? events2[0].args.stage : "?";
-                recordGas(`Phase Transition (stage=${stage2})`, receipt2);
-                found = true;
-                break;
-              }
-              if (stage === 3n || stage === 2n) {
-                recordGas(`Phase Transition (stage=${stage})`, receipt);
-                found = true;
-                break;
-              }
-            }
-          } catch {
-            break;
-          }
-          if (!(await game.rngLocked())) break;
-        }
-
-        if (found) break;
-        if (!(await game.jackpotPhase())) {
-          // Phase ended but we didn't capture stage 16; try next call
-          try {
-            const tx = await game.connect(deployer).mineFlip();
-            const receipt = await tx.wait();
-            const events = await getAdvanceEvents(tx, advanceModule);
-            const stage = events.length > 0 ? events[0].args.stage : "?";
-            recordGas(`Phase Transition (stage=${stage})`, receipt);
-            found = true;
-          } catch {
-            // ignore
-          }
-          break;
-        }
-      }
-
-      if (!found) {
-        console.log("      (Stage 3 not captured)");
-      }
-    });
-  });
+  // Sections 6-10 (jackpot daily ETH / ETH resume / coin+tickets / phase end / transition)
+  // were removed: their driver waited for a multi-day jackpot phase that the level-0
+  // fixture never shows (turbo completes the whole phase inside the first daily cycle), so
+  // they only ever reported pending, and their premise was a per-stage transaction cost.
+  // Section 5 now walks that turbo day one checkpoint at a time and requires stages
+  // 10/8/9/3 to run, each as a <=10M chunk; mid-quadrant resume chunking is covered by
+  // test/repro/JackpotCheckpoints.t.sol and test/repro/JackpotTicketAwardChunks.t.sol.
 
   // =========================================================================
   // 11. Game Over Drain (STAGE_GAMEOVER = 0)
@@ -795,9 +423,8 @@ describe("AdvanceGame Gas Benchmarks", function () {
       // Advance 912+ days
       await advanceTime(912 * 86400 + 86400);
 
-      // Step 1: mineFlip -> VRF request
-      const tx1 = await game.connect(deployer).mineFlip();
-      const receipt1 = await tx1.wait();
+      // Step 1: mineFlip -> VRF request (realistic allowance; terminal work is checkpointed)
+      const { tx: tx1, receipt: receipt1 } = await mine(game, deployer);
       const events1 = await getAdvanceEvents(tx1, advanceModule);
       const stage1 = events1.length > 0 ? events1[0].args.stage : "?";
       recordGas(`Game Over VRF Request (stage=${stage1})`, receipt1);
@@ -808,9 +435,8 @@ describe("AdvanceGame Gas Benchmarks", function () {
         await mockVRF.fulfillRandomWords(requestId, 42n);
       }
 
-      // Step 3: mineFlip -> handleGameOverDrain (the expensive one)
-      const tx2 = await game.connect(deployer).mineFlip();
-      const receipt2 = await tx2.wait();
+      // Step 3: mineFlip -> handleGameOverDrain (the expensive one), realistic allowance
+      const { tx: tx2, receipt: receipt2 } = await mine(game, deployer);
       const events2 = await getAdvanceEvents(tx2, advanceModule);
       const stage2 = events2.length > 0 ? events2[0].args.stage : "?";
       recordGas(`Game Over Drain (stage=${stage2})`, receipt2);
@@ -850,8 +476,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       // Wait 30+ days for final sweep
       await advanceTime(31 * 86400);
 
-      const tx = await game.connect(deployer).mineFlip();
-      const receipt = await tx.wait();
+      const { tx, receipt } = await mine(game, deployer);
       const events = await getAdvanceEvents(tx, advanceModule);
       const stage = events.length > 0 ? events[0].args.stage : "?";
       recordGas(`Final Sweep (stage=${stage})`, receipt);
@@ -860,57 +485,97 @@ describe("AdvanceGame Gas Benchmarks", function () {
   });
 
   // =========================================================================
-  // 13. Future Ticket Processing (STAGE_FUTURE_TICKETS_WORKING = 7)
+  // 13. Far-Future Ticket Drain (frozen next-level pool)
   // =========================================================================
+  //
+  // Entries for levels above _mintCeiling() wait unminted in the far-future key space. The
+  // seal that latches lastPurchaseDay freezes the next level's far-future pool, and the
+  // Tickets action of the first cohort committed after it drains that queue
+  // (TicketModule._selectProducer, `_frozenPoolDue()` branch). The drain is located by its
+  // own storage: the ticket cursor marker carries TICKET_FAR_FUTURE_BIT while a far-future
+  // queue is in progress, and the queue is released when it finishes.
 
-  describe("13. Future Ticket Processing (STAGE_FUTURE_TICKETS_WORKING)", function () {
-    it("worst case: future ticket batch for levels lvl+2..lvl+5", async function () {
+  describe("13. Far-Future Ticket Drain (frozen next-level pool)", function () {
+    it("far-future pool drain: one chunk <= 10M, realistic allowance succeeds and progresses", async function () {
       const { game, deployer, advanceModule, mockVRF, alice, bob, carol, dan, eve, others } =
         await loadFixture(deployFullProtocol);
 
+      // Pool past the bootstrap target (latches lastPurchaseDay), plus whale passes whose
+      // entries above the mint ceiling land in the far-future key space.
       const buyers = [alice, bob, carol, dan, eve, ...others.slice(0, 10)];
       await heavyPurchases(game, buyers);
+      for (const buyer of others.slice(10, 160)) {
+        await game.connect(buyer).purchaseWhalePass(buyer.address, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
+      }
+      const lvl0 = await game.level();
+      const preLens = [];
+      for (let l = lvl0 + 1n; l <= lvl0 + 3n; l++) preLens.push(`L${l}=${await ffQueueLength(game, l)}`);
+      console.log(`      far-future queues before the drain: ${preLens.join(" ")}`);
 
-      // Drive VRF cycles, watching every call for stage 7
-      let found = false;
-      for (let cycle = 0; cycle < 30; cycle++) {
+      let ffDrain = null;
+      for (let day = 0; day < 6 && ffDrain === null; day++) {
         await advanceToNextDay();
-        await game.connect(deployer).mineFlip();
-        const requestId = await getLastVRFRequestId(mockVRF);
-        try {
-          await mockVRF.fulfillRandomWords(
-            requestId,
-            BigInt(cycle * 1000 + 42)
-          );
-        } catch {
-          continue;
-        }
-
-        for (let i = 0; i < 200; i++) {
-          try {
-            const tx = await game.connect(deployer).mineFlip();
-            const receipt = await tx.wait();
-            const events = await getAdvanceEvents(tx, advanceModule);
-            if (events.length > 0) {
-              const stage = events[0].args.stage;
-              if (stage === 4n) {
-                recordGas("Future Ticket Processing (stage=4)", receipt);
-                found = true;
-                break;
-              }
-            }
-          } catch {
-            break;
+        for (let i = 0; i < 400 && ffDrain === null; i++) {
+          const action = await game.nextMinerAction();
+          if (action === MINER_IDLE) break;
+          if (action === MINER_WAIT) {
+            await mockVRF.fulfillRandomWords(await getLastVRFRequestId(mockVRF), BigInt(day * 1000 + i + 42));
+            continue;
           }
-          if (!(await game.rngLocked()) && i > 0) break;
+          const lvl = await game.level();
+          const ffLevels = [];
+          for (let l = lvl + 1n; l <= lvl + 2n; l++) if ((await ffQueueLength(game, l)) !== 0n) ffLevels.push(l);
+          if (action !== MINER_TICKETS || ffLevels.length === 0) {
+            await mine(game, deployer);
+            continue;
+          }
+          const before = await ffSnapshot(game, ffLevels);
+
+          // Every realistic 10M call must succeed. While it has not reached a far-future
+          // queue (the committed near read cohort drains first) its state is kept.
+          const snap = await hre.ethers.provider.send("evm_snapshot", []);
+          await mine(game, deployer);
+          const realistic = await ffSnapshot(game, ffLevels);
+          if (!ffTouched(before, realistic)) continue;
+          await hre.ethers.provider.send("evm_revert", [snap]);
+
+          // The 10M call made progress on a far-future queue: isolate the admitted chunk.
+          const chunk = await measureNextChunk(game, deployer, `far-future drain lvl=${lvl}`);
+          const after = await ffSnapshot(game, ffLevels);
+          if (!ffTouched(before, after)) continue;
+          ffDrain = { lvl, ffLevels, before, after, chunk };
         }
-
-        if (found) break;
       }
+      expect(ffDrain, "a Tickets chunk drained a far-future queue").to.not.equal(null);
+      console.log(`      far-future chunk: level=${ffDrain.lvl} queues=${ffDrain.ffLevels.join(",")} ` +
+        `lengths ${ffDrain.before.lens.join(",")} marker ${ffDrain.before.marker.toString(16)}->` +
+        `${ffDrain.after.marker.toString(16)} cursor ${ffDrain.before.cursor}->${ffDrain.after.cursor}`);
+      recordGas("Far-future pool drain entry chunk", ffDrain.chunk.receipt);
+      const released = (snap) => snap.lens.some((len, i) => ffDrain.before.lens[i] !== 0n && len === 0n);
 
-      if (!found) {
-        console.log("      (Stage 7 not observed - whale bundles may not create future ticket queues at this level)");
+      // (a) The rest of the far-future queue drains under realistic 10M calls.
+      const resume = await hre.ethers.provider.send("evm_snapshot", []);
+      let calls = 0;
+      while ((await ffSnapshot(game, ffDrain.ffLevels)).inProgress) {
+        await mine(game, deployer);
+        expect(++calls, "far-future drain finishes in bounded realistic calls").to.be.lte(100);
       }
+      expect(released(await ffSnapshot(game, ffDrain.ffLevels)), "the 10M calls released the far-future queue").to.equal(true);
+      console.log(`      realistic 10M calls to finish the far-future drain: ${calls}`);
+      await hre.ethers.provider.send("evm_revert", [resume]);
+
+      // (b) Every chunk wholly inside the far-future queue, isolated at its minimum
+      // admission allowance, stays <= 10M (asserted by measureNextChunk).
+      let pure = 0;
+      let maxPure = 0n;
+      while ((await ffSnapshot(game, ffDrain.ffLevels)).inProgress) {
+        const { receipt } = await measureNextChunk(game, deployer, "far-future drain (in progress)");
+        if (receipt.gasUsed > maxPure) maxPure = receipt.gasUsed;
+        expect(++pure, "far-future drain finishes in bounded chunks").to.be.lte(200);
+      }
+      expect(released(await ffSnapshot(game, ffDrain.ffLevels)), "the isolated chunks released the far-future queue").to.equal(true);
+      console.log(`      isolated far-future chunks: ${pure}; heaviest ${maxPure.toLocaleString()} gas`);
+      if (pure > 0) recordGas("Far-future pool drain heaviest in-progress chunk", { gasUsed: maxPure });
     });
   });
 
@@ -951,32 +616,33 @@ describe("AdvanceGame Gas Benchmarks", function () {
 
       // Advance to next day and trigger VRF cycle
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip();
+      await mine(game, deployer);
       const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 42n);
-
-      // First processTicketBatch call — cold SSTOREs (worst-case gas)
-      const tx1 = await game.connect(deployer).mineFlip();
-      const receipt1 = await tx1.wait();
-      const events1 = await getAdvanceEvents(tx1, advanceModule);
-      const stage1 = events1.length > 0 ? events1[0].args.stage : "?";
-      recordGas(`Sybil Ticket Batch - first cold batch (stage=${stage1})`, receipt1);
-      expect(receipt1.status).to.equal(1);
-
-      // Second processTicketBatch call — warm SSTOREs (if queue not fully drained)
-      if (await game.rngLocked()) {
-        try {
-          const tx2 = await game.connect(deployer).mineFlip();
-          const receipt2 = await tx2.wait();
-          const events2 = await getAdvanceEvents(tx2, advanceModule);
-          const stage2 = events2.length > 0 ? events2[0].args.stage : "?";
-          recordGas(`Sybil Ticket Batch - second warm batch (stage=${stage2})`, receipt2);
-        } catch {
-          console.log("      (Second batch not needed — queue drained in first call)");
-        }
-      } else {
-        console.log("      (Queue fully drained in first call — no second batch needed)");
+      for (let i = 0; i < 5 && (await game.nextMinerAction()) !== MINER_TICKETS; i++) {
+        await mine(game, deployer, 1_000_000);
       }
+      expect(await game.nextMinerAction(), "the Sybil cohort's ticket drain is next").to.equal(MINER_TICKETS);
+
+      // Converted from a composed-transaction ceiling (the first unbounded call measured
+      // 12.55M against an 11.5M cap). First cold chunk measured on its own, then the drain
+      // must finish under realistic 10M calls; a 16.7M call from the same state succeeds.
+      const start = await hre.ethers.provider.send("evm_snapshot", []);
+      const { receipt: ceiling } = await mine(game, deployer, CEILING_ALLOWANCE);
+      console.log(`      16.7M-allowance call: ${ceiling.gasUsed.toLocaleString()} gas`);
+      await hre.ethers.provider.send("evm_revert", [start]);
+
+      const cold = await measureNextChunk(game, deployer, "Sybil first cold ticket chunk");
+      recordGas("Sybil Ticket Batch - first cold chunk", cold.receipt);
+      let calls = 0;
+      let maxGas = 0n;
+      while ((await game.nextMinerAction()) === MINER_TICKETS) {
+        const { receipt } = await mine(game, deployer);
+        if (receipt.gasUsed > maxGas) maxGas = receipt.gasUsed;
+        expect(++calls, "Sybil drain finishes in bounded realistic calls").to.be.lte(100);
+      }
+      console.log(`      realistic 10M calls to finish the Sybil drain: ${calls}; max call gas ${maxGas.toLocaleString()}`);
+      expect(await game.nextMinerAction(), "ticket drain complete").to.not.equal(MINER_TICKETS);
     });
   });
 
@@ -1011,42 +677,22 @@ describe("AdvanceGame Gas Benchmarks", function () {
     });
 
     it("lootbox RNG path (path 2): VRF callback after requestLootboxRng()", async function () {
-      const { game, deployer, mockVRF, alice } =
-        await loadFixture(deployFullProtocol);
+      // A mid-day request needs today's daily word recorded and the previous read cohort
+      // complete (the read-cohort gate), so start from a settled first daily cycle. The old
+      // body swallowed both refusals and returned early, so it never measured anything.
+      const { game, deployer, mockVRF, alice } = await loadFixture(readyDailyFixture);
 
-      // Purchase lootboxes; the lootbox RNG gate requires non-zero pending lootboxes.
-      // purchase(affiliate, ticketQty, lootBoxQty, affiliateCode, payKind, {value})
-      // Each lootbox costs 0.001 ETH at level 0 (LOOTBOX_PRICE_WEI = 1e15).
-      // We buy 20 lootboxes to ensure the activity threshold is met.
-      try {
-        await game
-          .connect(alice)
-          .purchase(
-            ZERO_ADDRESS,
-            0n,
-            20n,
-            ZERO_BYTES32,
-            MintPaymentKind.DirectEth,false, 
-            { value: hre.ethers.parseEther("0.02") }
-          );
-      } catch (err) {
-        console.log(`      Lootbox purchase failed: ${err.message.slice(0, 80)}`);
-        console.log("      (Skipping lootbox path — not reachable in harness)");
-        return;
-      }
+      // A full 100-box order at the level-0 price (1 ETH): pending box value must clear the
+      // mid-day request threshold, or the request is refused with BelowThreshold().
+      await game
+        .connect(alice)
+        .purchase(alice.address, 0n, boSmalls(100), ZERO_BYTES32, MintPaymentKind.DirectEth, false,
+          { value: eth(1) });
 
-      // requestLootboxRng() can only be called outside the daily advance window.
-      // Try it mid-day (no advanceToNextDay, so we are within the same day).
-      let lbRequestId;
-      try {
-        const lbTx = await game.connect(deployer).requestLootboxRng();
-        await lbTx.wait();
-        lbRequestId = await getLastVRFRequestId(mockVRF);
-      } catch (err) {
-        console.log(`      requestLootboxRng failed: ${err.message.slice(0, 80)}`);
-        console.log("      (Lootbox RNG not requestable in current harness state — skipping path 2)");
-        return;
-      }
+      const before = await getLastVRFRequestId(mockVRF);
+      await (await game.connect(deployer).requestLootboxRng()).wait();
+      const lbRequestId = await getLastVRFRequestId(mockVRF);
+      expect(lbRequestId, "mid-day request issued").to.be.gt(before);
 
       // Fulfill the lootbox VRF request and capture gas.
       const vrfTx = await mockVRF.fulfillRandomWords(lbRequestId, 77n);
@@ -1166,35 +812,32 @@ describe("AdvanceGame Gas Benchmarks", function () {
     }
 
     /**
-     * Drive through a full VRF cycle, capturing receipts for specific stages.
-     * Returns Map<bigint, receipt> for matched stages.
+     * Walk the 305-player turbo jackpot day one checkpoint at a time. Converted from
+     * per-stage composed-transaction ceilings (11.5M on whole mineFlip receipts): every
+     * chunk is measured at its own minimum admission allowance and must stay <= 10M, and
+     * the daily ETH distribution (stage 10) plus the phase end (stage 9) must run.
      */
-    async function driveAndCapture(game, deployer, advanceModule, targetStages) {
-      const stageReceipts = new Map();
-
-      for (let i = 0; i < 200; i++) {
-        try {
-          const tx = await game.connect(deployer).mineFlip();
-          const receipt = await tx.wait();
-          const events = await getAdvanceEvents(tx, advanceModule);
-          if (events.length > 0) {
-            const stage = events[0].args.stage;
-            if (targetStages.includes(stage) && !stageReceipts.has(stage)) {
-              stageReceipts.set(stage, receipt);
-            }
-          }
-        } catch {
-          break;
-        }
-        if (!(await game.rngLocked())) break;
+    async function walkPostSplit(fixture, word, label) {
+      const { game, deployer, advanceModule, mockVRF } = fixture;
+      const byStage = new Map();
+      for (let day = 0; day < 5 && !byStage.has(9n); day++) {
+        await advanceToNextDay();
+        heaviestByStage(await walkNextDay(game, deployer, mockVRF, advanceModule,
+          BigInt(day * 1000) + word, `${label} day ${day}`), byStage);
       }
-
-      return stageReceipts;
+      const order = [...byStage.keys()].sort((x, y) => Number(x - y));
+      for (const st of order) {
+        const c = byStage.get(st);
+        console.log(`      ${label} stage ${st}: heaviest chunk ${c.gasUsed.toLocaleString()} gas (admission ${c.allowance.toLocaleString()})`);
+      }
+      expect(byStage.has(10n), `${label}: daily ETH distribution (stage 10) ran`).to.equal(true);
+      expect(byStage.has(9n), `${label}: jackpot phase ended (stage 9)`).to.equal(true);
+      return byStage;
     }
 
     it("SC-1: daily two-call split — 305 players, autorebuy, max-scale pool", async function () {
-      const { game, deployer, advanceModule, mockVRF, alice, bob, carol, dan, eve, others } =
-        await loadFixture(deployFullProtocol);
+      const fixture = await loadFixture(deployFullProtocol);
+      const { game, alice, bob, carol, dan, eve, others } = fixture;
 
       // Step 1: Set up 305 unique players with tickets + autorebuy
       const players = await setupPlayers(
@@ -1202,280 +845,54 @@ describe("AdvanceGame Gas Benchmarks", function () {
       );
 
       // Step 2: Fund pool — 5 buyers * 20 bundles * 2.4 ETH = 240 ETH total
-      // 30% to nextPool = ~72 ETH; 70% to futurePool = ~168 ETH.
-      // After consolidation (keep roll ~35% of future to current + memNext):
-      // currentPool ~ 72 + 80 = ~152 ETH. At 152 ETH: ~3.9x scale -> ~98/59/31/1 = 189 winners.
       await fundPoolHeavy(game, players.slice(0, 5), 20);
 
-      // Step 3: Drive manually through VRF cycles, capturing stages of interest.
-      // At level 0, turbo mode triggers on day 1-2 (purchaseDays <= 1 && nextPool > 0).
-      // We drive day-by-day, capturing stage 11 (call 1) and stage 8 (call 2) when they fire.
-      const stageReceipts = new Map();
-
-      for (let day = 0; day < 15; day++) {
-        await advanceToNextDay();
-
-        // Drive all mineFlip calls for this day, capturing stages
-        for (let i = 0; i < 200; i++) {
-          try {
-            const tx = await game.connect(deployer).mineFlip();
-            const receipt = await tx.wait();
-            const events = await getAdvanceEvents(tx, advanceModule);
-            if (events.length > 0) {
-              const stage = events[0].args.stage;
-              if ([1n, 7n, 11n, 8n, 9n, 10n].includes(stage) && !stageReceipts.has(stage)) {
-                stageReceipts.set(stage, receipt);
-                console.log(`      Day ${day}, iter ${i}: stage=${stage}, gas=${receipt.gasUsed.toLocaleString()}`);
-              }
-            }
-          } catch {
-            break;
-          }
-          if (!(await game.rngLocked())) break;
-        }
-
-        // Fulfill VRF if a request was made
-        try {
-          const requestId = await getLastVRFRequestId(mockVRF);
-          if (requestId > 0n) {
-            await mockVRF.fulfillRandomWords(requestId, BigInt(day * 1000 + 305305));
-          }
-        } catch {
-          // Already fulfilled or no request pending
-        }
-
-        // Continue draining after fulfillment (same day, mid-day path)
-        for (let i = 0; i < 200; i++) {
-          try {
-            const tx = await game.connect(deployer).mineFlip();
-            const receipt = await tx.wait();
-            const events = await getAdvanceEvents(tx, advanceModule);
-            if (events.length > 0) {
-              const stage = events[0].args.stage;
-              if ([7n, 11n, 8n, 9n, 10n].includes(stage) && !stageReceipts.has(stage)) {
-                stageReceipts.set(stage, receipt);
-                console.log(`      Day ${day}, post-VRF iter ${i}: stage=${stage}, gas=${receipt.gasUsed.toLocaleString()}`);
-              }
-            }
-          } catch {
-            break;
-          }
-          if (!(await game.rngLocked())) break;
-        }
-
-        // Stop if jackpot phase ended (all stages captured)
-        if (stageReceipts.has(10n)) {
-          console.log(`      Jackpot phase ended on day ${day}`);
-          break;
-        }
-      }
-
+      const byStage = await walkPostSplit(fixture, 305305n, "SC-1");
+      recordGas("WC: Daily ETH heaviest chunk (stage=10)", byStage.get(10n).receipt);
       const jpPool = await game.currentPrizePoolView();
       console.log(`      Pool after jackpot: ${hre.ethers.formatEther(jpPool)} ETH`);
-
-      console.log(`      Stages captured: ${[...stageReceipts.keys()].map(s => Number(s)).join(", ")}`);
-
-      // Record gas for call 1 (STAGE_JACKPOT_DAILY_STARTED = 11)
-      if (stageReceipts.has(11n)) {
-        const r = stageReceipts.get(11n);
-        recordGas("WC: Daily Split Call 1 (stage=11)", r);
-        expect(r.gasUsed).to.be.lte(AUDIT_GAS_CEILING);
-        console.log(`      Call 1 gas: ${r.gasUsed.toLocaleString()}`);
-      } else {
-        console.log("      (Stage 11 not captured in this cycle)");
-      }
-
-      // Record gas for call 2 (STAGE_JACKPOT_ETH_RESUME = 8)
-      if (stageReceipts.has(8n)) {
-        const r = stageReceipts.get(8n);
-        recordGas("WC: Daily Split Call 2 (stage=8)", r);
-        expect(r.gasUsed).to.be.lte(AUDIT_GAS_CEILING);
-        console.log(`      Call 2 gas: ${r.gasUsed.toLocaleString()}`);
-      } else if (stageReceipts.has(11n)) {
-        // Stage 11 captured but no stage 8 — pool below split threshold
-        console.log("      (No resume — pool below two-call split threshold)");
-      }
-
-      // Log all captured stages for audit traceability
-      for (const [stage, receipt] of stageReceipts) {
-        if (stage !== 11n && stage !== 8n) {
-          console.log(`      Stage ${stage}: ${receipt.gasUsed.toLocaleString()} gas`);
-        }
-      }
     });
 
     it("SC-2a: purchase phase path — 160 winners, moderate pool", async function () {
-      const { game, deployer, advanceModule, mockVRF, alice, bob, carol, dan, eve, others } =
-        await loadFixture(deployFullProtocol);
+      const fixture = await loadFixture(deployFullProtocol);
+      const { game, alice, bob, carol, dan, eve, others } = fixture;
 
-      // Set up 305 players with tickets (no autorebuy — measures raw ETH distribution)
       const players = await setupPlayers(
         game, [alice, bob, carol, dan, eve], others.slice(0, 300), 305, false
       );
-
-      // Fund same as other tests — 5 buyers * 20 bundles * 2.4 ETH = 240 ETH
-      // 30% to nextPool = ~72 ETH. After consolidation: ~74 ETH current.
-      // At 74 ETH: ~2.3x scale -> 58/35/18/1 = 112 winners (within 160 cap).
       await fundPoolHeavy(game, players.slice(0, 5), 20);
 
-      // Drive manually through VRF cycles, capturing stages of interest
-      const stageReceipts = new Map();
-
-      for (let day = 0; day < 15; day++) {
-        await advanceToNextDay();
-        for (let i = 0; i < 200; i++) {
-          try {
-            const tx = await game.connect(deployer).mineFlip();
-            const receipt = await tx.wait();
-            const events = await getAdvanceEvents(tx, advanceModule);
-            if (events.length > 0) {
-              const stage = events[0].args.stage;
-              if ([11n, 8n, 9n, 10n].includes(stage) && !stageReceipts.has(stage)) {
-                stageReceipts.set(stage, receipt);
-                console.log(`      Day ${day}: stage=${stage}, gas=${receipt.gasUsed.toLocaleString()}`);
-              }
-            }
-          } catch { break; }
-          if (!(await game.rngLocked())) break;
-        }
-        try {
-          const requestId = await getLastVRFRequestId(mockVRF);
-          if (requestId > 0n) await mockVRF.fulfillRandomWords(requestId, BigInt(day * 1000 + 160160));
-        } catch {}
-        for (let i = 0; i < 200; i++) {
-          try {
-            const tx = await game.connect(deployer).mineFlip();
-            const receipt = await tx.wait();
-            const events = await getAdvanceEvents(tx, advanceModule);
-            if (events.length > 0) {
-              const stage = events[0].args.stage;
-              if ([11n, 8n, 9n, 10n].includes(stage) && !stageReceipts.has(stage)) {
-                stageReceipts.set(stage, receipt);
-                console.log(`      Day ${day} post-VRF: stage=${stage}, gas=${receipt.gasUsed.toLocaleString()}`);
-              }
-            }
-          } catch { break; }
-          if (!(await game.rngLocked())) break;
-        }
-        if (stageReceipts.has(10n)) { console.log(`      Phase ended on day ${day}`); break; }
-      }
-
-      console.log(`      Stages captured: ${[...stageReceipts.keys()].map(s => Number(s)).join(", ")}`);
-
-      if (stageReceipts.has(11n)) {
-        const r = stageReceipts.get(11n);
-        recordGas("WC: Early-Burn ETH (stage=11)", r);
-        expect(r.gasUsed).to.be.lte(AUDIT_GAS_CEILING);
-        console.log(`      Early-burn gas: ${r.gasUsed.toLocaleString()}`);
-      } else {
-        console.log("      (Stage 11 not captured)");
-      }
-
-      if (stageReceipts.has(8n)) {
-        const r = stageReceipts.get(8n);
-        recordGas("WC: Early-Burn Resume (stage=8)", r);
-        expect(r.gasUsed).to.be.lte(AUDIT_GAS_CEILING);
-        console.log(`      Early-burn resume gas: ${r.gasUsed.toLocaleString()}`);
-      }
+      const byStage = await walkPostSplit(fixture, 160160n, "SC-2a");
+      recordGas("WC: Early-Burn ETH heaviest chunk (stage=10)", byStage.get(10n).receipt);
     });
 
     it("SC-2b: terminal jackpot path — 305 winners, no autorebuy, max pool", async function () {
-      const { game, deployer, advanceModule, mockVRF, alice, bob, carol, dan, eve, others } =
-        await loadFixture(deployFullProtocol);
+      const fixture = await loadFixture(deployFullProtocol);
+      const { game, alice, bob, carol, dan, eve, others } = fixture;
 
-      // Set up 305 players with tickets (no autorebuy — measures raw distribution gas)
       const players = await setupPlayers(
         game, [alice, bob, carol, dan, eve], others.slice(0, 300), 305, false
       );
-
-      // Fund for good scale — 5 buyers * 20 bundles * 2.4 ETH = 240 ETH total
       await fundPoolHeavy(game, players.slice(0, 5), 20);
 
-      // Drive manually, capturing all jackpot stages.
-      // Turbo's only draw is also its final day.
-      // This means max winners at max scale, 100% pool distribution.
-      const stageReceipts = new Map();
-
-      for (let day = 0; day < 15; day++) {
-        await advanceToNextDay();
-        for (let i = 0; i < 200; i++) {
-          try {
-            const tx = await game.connect(deployer).mineFlip();
-            const receipt = await tx.wait();
-            const events = await getAdvanceEvents(tx, advanceModule);
-            if (events.length > 0) {
-              const stage = events[0].args.stage;
-              if ([11n, 8n, 9n, 10n].includes(stage) && !stageReceipts.has(stage)) {
-                stageReceipts.set(stage, receipt);
-                console.log(`      Day ${day}: stage=${stage}, gas=${receipt.gasUsed.toLocaleString()}`);
-              }
-            }
-          } catch { break; }
-          if (!(await game.rngLocked())) break;
-        }
-        try {
-          const requestId = await getLastVRFRequestId(mockVRF);
-          if (requestId > 0n) await mockVRF.fulfillRandomWords(requestId, BigInt(day * 1000 + 777777));
-        } catch {}
-        for (let i = 0; i < 200; i++) {
-          try {
-            const tx = await game.connect(deployer).mineFlip();
-            const receipt = await tx.wait();
-            const events = await getAdvanceEvents(tx, advanceModule);
-            if (events.length > 0) {
-              const stage = events[0].args.stage;
-              if ([11n, 8n, 9n, 10n].includes(stage) && !stageReceipts.has(stage)) {
-                stageReceipts.set(stage, receipt);
-                console.log(`      Day ${day} post-VRF: stage=${stage}, gas=${receipt.gasUsed.toLocaleString()}`);
-              }
-            }
-          } catch { break; }
-          if (!(await game.rngLocked())) break;
-        }
-        if (stageReceipts.has(10n)) { console.log(`      Phase ended on day ${day}`); break; }
-      }
-
-      console.log(`      Stages captured: ${[...stageReceipts.keys()].map(s => Number(s)).join(", ")}`);
-
-      if (stageReceipts.has(11n)) {
-        const r = stageReceipts.get(11n);
-        recordGas("WC: Terminal Jackpot Call 1 (stage=11)", r);
-        expect(r.gasUsed).to.be.lte(AUDIT_GAS_CEILING);
-        console.log(`      Terminal call 1 gas: ${r.gasUsed.toLocaleString()}`);
-      } else {
-        console.log("      (Terminal call 1 not captured)");
-      }
-
-      if (stageReceipts.has(8n)) {
-        const r = stageReceipts.get(8n);
-        recordGas("WC: Terminal Jackpot Call 2 (stage=8)", r);
-        expect(r.gasUsed).to.be.lte(AUDIT_GAS_CEILING);
-        console.log(`      Terminal call 2 gas: ${r.gasUsed.toLocaleString()}`);
-      } else if (stageReceipts.has(11n)) {
-        console.log("      (No resume — single-call path used)");
-      }
+      // Turbo's only draw is also its final day: 100% pool distribution.
+      const byStage = await walkPostSplit(fixture, 777777n, "SC-2b");
+      recordGas("WC: Terminal Jackpot heaviest chunk (stage=10)", byStage.get(10n).receipt);
+      recordGas("WC: Final day phase end chunk (stage=9)", byStage.get(9n).receipt);
     });
   });
 });
 
 // ===========================================================================
-// Phase 264 SURF-05 D-IMPL-06 — HEAD-only mineFlip ceiling margin record.
+// Phase 264 SURF-05 D-IMPL-06 — HEAD-only mineFlip margin record.
 //
 // The disclosed REQUIREMENTS.md SURF-05 invariant is `MAX_BLOCK_GAS /
-// WORST_CASE_ADVANCE_GAS ≥ 1.99` at the v35.0 HEAD `cf564816`. This describe
-// block re-runs the section-16 worst-case benchmark (SC-1 daily two-call split
-// at 305 players, max-scale pool — the maximally-loaded mineFlip path
-// across the v35.0 source tree) and records the margin explicitly.
-//
-// The section-16 SC-1/2a/2b assertions now enforce the owner's 11.5M hard
-// transaction ceiling. The historical analytic worst-case
-// projection (~15.075M expected; 30M / 15.075M ≈ 1.99×) is the basis for the
-// ≥1.99× margin disclosed in REQUIREMENTS.md SURF-05. The per-pull-level
-// resample helper introduces a per-call delta of ~75-110K (Plan 264-02 Task
-// 2). Historical projections do not replace the current hard-cap assertions.
-//
-// This describe block runs the SC-1 fixture, captures the maximum gasUsed
-// across the captured stages, and asserts the margin is ≥ 1.99 at HEAD.
+// WORST_CASE_ADVANCE_GAS ≥ 1.99`. Under the checkpointed engine the unit of
+// advance work is one admitted chunk, not a whole transaction (a call keeps admitting
+// chunks while its allowance lasts, so a transaction's total only mirrors its gas
+// limit). This block re-runs the section-16 SC-1 fixture (305 players, max-scale
+// pool), walks the turbo jackpot day one chunk at a time, and asserts the margin
+// against the heaviest measured chunk.
 // ===========================================================================
 
 describe("Phase 264 SURF-05 — mineFlip 1.99× margin preserved at v35.0 HEAD", function () {
@@ -1544,10 +961,6 @@ describe("Phase 264 SURF-05 — mineFlip 1.99× margin preserved at v35.0 HEAD",
     console.log(`      [Phase 264 SURF-05] Pool: ${hre.ethers.formatEther(pool)} ETH (current) + ${hre.ethers.formatEther(nextPool)} ETH (next)`);
   }
 
-  async function getAdvanceEvents(tx, advanceModule) {
-    return getEvents(tx, advanceModule, "Advance");
-  }
-
   async function runWorstCaseBenchmarkAtHead() {
     const fixture = await loadFixture(deployFullProtocol);
     const { game, deployer, advanceModule, mockVRF, alice, bob, carol, dan, eve, others } = fixture;
@@ -1559,63 +972,12 @@ describe("Phase 264 SURF-05 — mineFlip 1.99× margin preserved at v35.0 HEAD",
     await fundPoolHeavy(game, players.slice(0, 5), 20);
 
     const stageReceipts = new Map();
-
-    // Drive day-by-day across 15 days (matches section-16 SC-1 cap).
-    for (let day = 0; day < 15; day++) {
+    for (let day = 0; day < 5 && !stageReceipts.has(9n); day++) {
       await advanceToNextDay();
-
-      // Pre-VRF drain.
-      for (let i = 0; i < 200; i++) {
-        try {
-          const tx = await game.connect(deployer).mineFlip();
-          const receipt = await tx.wait();
-          const events = await getAdvanceEvents(tx, advanceModule);
-          if (events.length > 0) {
-            const stage = events[0].args.stage;
-            if ([1n, 7n, 11n, 8n, 9n, 10n].includes(stage) && !stageReceipts.has(stage)) {
-              stageReceipts.set(stage, receipt);
-            }
-          }
-        } catch {
-          break;
-        }
-        if (!(await game.rngLocked())) break;
-      }
-
-      // VRF fulfillment.
-      try {
-        const requestId = await getLastVRFRequestId(mockVRF);
-        if (requestId > 0n) {
-          await mockVRF.fulfillRandomWords(requestId, BigInt(day * 1000 + 305305));
-        }
-      } catch {
-        // Already fulfilled or no request pending.
-      }
-
-      // Post-VRF drain.
-      for (let i = 0; i < 200; i++) {
-        try {
-          const tx = await game.connect(deployer).mineFlip();
-          const receipt = await tx.wait();
-          const events = await getAdvanceEvents(tx, advanceModule);
-          if (events.length > 0) {
-            const stage = events[0].args.stage;
-            if ([7n, 11n, 8n, 9n, 10n].includes(stage) && !stageReceipts.has(stage)) {
-              stageReceipts.set(stage, receipt);
-            }
-          }
-        } catch {
-          break;
-        }
-        if (!(await game.rngLocked())) break;
-      }
-
-      if (stageReceipts.has(10n)) {
-        console.log(`      [Phase 264 SURF-05] Jackpot phase ended on day ${day}`);
-        break;
-      }
+      heaviestByStage(await walkNextDay(game, deployer, mockVRF, advanceModule,
+        BigInt(day * 1000 + 305305), `[Phase 264 SURF-05] day ${day}`), stageReceipts);
+      if (stageReceipts.has(9n)) console.log(`      [Phase 264 SURF-05] Jackpot phase ended on day ${day}`);
     }
-
     return stageReceipts;
   }
 
@@ -1629,16 +991,16 @@ describe("Phase 264 SURF-05 — mineFlip 1.99× margin preserved at v35.0 HEAD",
 
     let maxGas = 0n;
     let maxStage = -1;
-    for (const [stage, receipt] of stageReceipts) {
-      if (receipt.gasUsed > maxGas) {
-        maxGas = receipt.gasUsed;
+    for (const [stage, chunk] of stageReceipts) {
+      if (chunk.gasUsed > maxGas) {
+        maxGas = chunk.gasUsed;
         maxStage = Number(stage);
       }
     }
 
-    expect(maxGas, "measured advance exceeds the 11.5M hard ceiling").to.be.lte(AUDIT_GAS_CEILING);
+    // Every walked chunk already asserted <= 10M inside measureNextChunk.
     const margin = Number(MAX_BLOCK_GAS) / Number(maxGas);
-    console.log(`      [Phase 264 SURF-05] worst-case stage = ${maxStage}, gasUsed = ${maxGas.toLocaleString()}, margin = ${margin.toFixed(3)}× (required ≥ ${REQUIRED_MARGIN})`);
+    console.log(`      [Phase 264 SURF-05] heaviest chunk stage = ${maxStage}, gasUsed = ${maxGas.toLocaleString()}, margin = ${margin.toFixed(3)}× (required ≥ ${REQUIRED_MARGIN})`);
 
     expect(
       margin >= REQUIRED_MARGIN,

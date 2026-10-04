@@ -119,6 +119,10 @@ contract V56SecUnmanipulable is DeployProtocol {
     ///         for a live funded sub), so the run survives it: the finalize WRITE hands the earned streak
     ///         back intact, anchored at the day before the sub ended. Gap days still earn nothing — the
     ///         streak freezes across the gap, never resets.
+    /// @dev    The engine now opens every stamped AFKing box as the next cohort's read consumer, before
+    ///         any later STAGE can run (read-cohort gate, 6d0e64b09 / 60d31f775), so "skip opening the
+    ///         box" is no longer something a caller can do. The guard's skip is reproduced by marking the
+    ///         last delivered box pending again (`_markBoxPending`); the finalize under test is unchanged.
     function testStreakSurvivesProtocolSkipGapIntact() public {
         address p = makeAddr("decay_p");
         _grantSeat(p);
@@ -132,11 +136,12 @@ contract V56SecUnmanipulable is DeployProtocol {
         uint32 earnedBefore = coveredBefore - _afkingStartOf(p);
         assertGt(earnedBefore, 0, "non-vacuity: the run earned a streak over delivered days");
 
-        // Advance several days WITHOUT opening the stamped boxes. The first no-open day still DELIVERS
-        // (the sub was box-clean, so the STAGE stamps a new box — one more earned day); every later cycle
-        // hits the no-orphan guard and skips the funded sub (the protocol-side gap — the sub never misses
-        // a day it could have paid for). The covered high-water then goes stale by >= 2 days.
+        // The first further day still DELIVERS (the sub is box-clean, so the STAGE stamps a new box — one
+        // more earned day). That box is then left pending, so every later cycle hits the no-orphan guard
+        // and skips the funded sub (the protocol-side gap — the sub never misses a day it could have paid
+        // for). The covered high-water then goes stale by >= 2 days.
         _skipDaysNoDelivery(0xDECA03);
+        _markBoxPending(p);
         _skipDaysNoDelivery(0xDECA04);
         _skipDaysNoDelivery(0xDECA05);
 
@@ -520,34 +525,55 @@ contract V56SecUnmanipulable is DeployProtocol {
     // No-orphan arm — a pending-box sub is left ENTIRELY untouched by the STAGE
     // =========================================================================
 
-    /// @notice The NO-ORPHAN guard (GameAfkingModule.sol:892): a sub with a pending unopened box
+    /// @notice The NO-ORPHAN guard (GameAfkingModule `runSubscriberWork`): a sub with a pending unopened box
     ///         (`lastOpenedDay < lastAutoBoughtDay`) is left ENTIRELY untouched by a STAGE cycle — no reclaim,
-    ///         no evict, no funding-kill, no re-stamp — so its paid-for box is never orphaned. Stamp a box
-    ///         (do NOT open it), then run a STAGE: the sub stays in-set with its stamp markers byte-unchanged.
+    ///         no evict, no funding-kill, no re-stamp — so its paid-for box is never orphaned.
+    /// @dev    Under the engine a stamped box is the next cohort's AFKing read consumer and is opened before
+    ///         any later STAGE can run (read-cohort gate, 6d0e64b09 / 60d31f775): that is asserted first.
+    ///         The guard itself is then exercised on a box marked pending again, through the next day's
+    ///         STAGE up to its request (before any cohort could touch the box).
     function testNoOrphanPendingBoxSubUntouchedByStage() public {
         address p = makeAddr("orphan_p");
         _grantSeat(p);
         _fundPool(p, 50 ether);
         _subscribeLootbox(p, 1);
-        // STAGE a buy but DO NOT open — the box is pending (lastOpenedDay < lastAutoBoughtDay).
+        // STAGE a buy: the engine opens the stamped box as the cohort's read consumer.
         _runStageNewDay(0x0F0F);
         _settleClean(0x0F10);
         uint32 boughtBefore = _lastBoughtDayOf(p);
-        uint32 openedBefore = _lastOpenedDayOf(p);
         assertGt(boughtBefore, 0, "non-vacuity: a box was stamped");
+        assertEq(_lastOpenedDayOf(p), boughtBefore, "the engine opened the stamped box before any later STAGE");
+
+        _markBoxPending(p);
+        uint32 openedBefore = _lastOpenedDayOf(p);
         assertTrue(openedBefore < boughtBefore, "the box is pending (lastOpenedDay < lastAutoBoughtDay)");
         uint256 idxBefore = _subscriberIndexOf(p);
 
-        // Run a STAGE cycle WITHOUT opening the box: the no-orphan guard skips the sub entirely.
+        // Run the next day's STAGE (subscriber preparation precedes the day's request) and stop at the
+        // request: the no-orphan guard skips the sub entirely.
         vm.recordLogs();
-        _runStageNewDay(0x0F11);
-        _settleClean(0x0F12);
+        _t += 1 days;
+        vm.warp(_t);
+        for (uint256 i; i < 64 && !game.rngLocked(); ++i) game.mineFlip();
+        assertTrue(game.rngLocked(), "the STAGE ran and the day's request went out");
 
         // UNTOUCHED: the stamp markers are byte-identical, the sub stays in-set, no expiry event fired.
         assertEq(_lastBoughtDayOf(p), boughtBefore, "no-orphan: lastAutoBoughtDay untouched (no re-stamp)");
         assertEq(_lastOpenedDayOf(p), openedBefore, "no-orphan: lastOpenedDay untouched (the box still pending)");
         assertEq(_subscriberIndexOf(p), idxBefore, "no-orphan: the sub stays in-set (no reclaim/evict/funding-kill)");
         assertEq(_countExpiredAnyReason(p), 0, "no-orphan: no SubscriptionExpired fired for the pending-box sub");
+    }
+
+    /// @dev Mark `who`'s last stamped (and already opened) box pending again: lastOpenedDay one day
+    ///      behind lastAutoBoughtDay (Sub bytes 10..12). No cohort owns this marker, so no read consumer
+    ///      opens it; only the STAGE's no-orphan guard sees it.
+    function _markBoxPending(address who) internal {
+        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
+        uint256 packed = uint256(vm.load(address(game), slot));
+        uint256 bought = (packed >> (OFF_LASTBOUGHT * 8)) & 0xFFFFFF;
+        require(bought > 0, "a stamped box exists");
+        packed = (packed & ~(uint256(0xFFFFFF) << (OFF_LASTOPENED * 8))) | ((bought - 1) << (OFF_LASTOPENED * 8));
+        vm.store(address(game), slot, bytes32(packed));
     }
 
     // =========================================================================

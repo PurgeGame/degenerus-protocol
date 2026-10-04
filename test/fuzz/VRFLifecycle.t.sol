@@ -61,8 +61,9 @@ contract VRFLifecycle is DeployProtocol {
         // Warp to next day
         vm.warp(block.timestamp + 1 days);
 
-        // Trigger VRF request
-        game.mineFlip();
+        // Trigger VRF request. The engine runs one action per checkpoint and may first prepare
+        // the day (subscriptions, scheduled Craps maintenance) before the request (60d31f775).
+        for (uint256 i = 0; i < 16 && !game.rngLocked(); i++) game.mineFlip();
         assertTrue(game.rngLocked(), "rngLocked after mineFlip");
 
         // Fulfill VRF

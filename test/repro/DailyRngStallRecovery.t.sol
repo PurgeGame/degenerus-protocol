@@ -7,6 +7,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {DegenerusGameRngModule} from "../../contracts/modules/DegenerusGameRngModule.sol";
+import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
 
 /// @title DailyRngStallRecovery — the council-confirmed stall-path repros.
 ///
@@ -150,6 +151,8 @@ contract DailyRngStallRecovery is DeployProtocol {
         DegenerusGameRngModule(ContractAddresses.GAME_RNG_MODULE).retryRng();
         assertEq(mockVRF.lastRequestId(), oldId, "rejected routes issued no replacement");
 
+        // A nonzero base fee: at Foundry's default of zero any measured-gas reward would price at zero.
+        vm.fee(1 gwei);
         uint256 credit = coinflip.coinflipAmount(owner);
         vm.prank(owner);
         admin.retryGameRng();
@@ -306,6 +309,10 @@ contract DailyRngStallRecovery is DeployProtocol {
         vm.pauseGasMetering();
         _driveToJackpotPhase();
         _drainUntilUnlocked();
+        // The engine requests mid-day words on its own for closed Craps windows (6d0e64b09), and a
+        // mid-day request commits queued tickets: settle that before the cohort under test is
+        // bought, so the day's daily request is the one that commits it.
+        _settleMidday();
         assertTrue(game.jackpotPhase(), "harness: must be inside the jackpot phase");
         uint24 L = _level();
         assertEq(_queueLen(L), 0, "harness: level queue A starts drained");
@@ -379,6 +386,9 @@ contract DailyRngStallRecovery is DeployProtocol {
         uint24 L = _level();
 
         for (uint256 d = 0; d < 12 && game.jackpotPhase(); d++) {
+            // Settle the engine's own mid-day work (closed Craps windows) before the day's buy,
+            // so each day's cohort is committed by its daily request.
+            _settleMidday();
             if (!game.rngLocked()) {
                 _buyTickets();
             }
@@ -456,6 +466,26 @@ contract DailyRngStallRecovery is DeployProtocol {
         }
     }
 
+    /// @dev Answer and drain the mid-day work the state engine requests on its own once a day
+    ///      is sealed (a closed Craps window rides a mid-day request whenever the subscription
+    ///      covers it, 6d0e64b09), until the engine is idle with nothing in flight.
+    function _settleMidday() internal {
+        for (uint256 i; i < 64; i++) {
+            if (game.rngLocked()) return;
+            uint8 action = game.nextMinerAction();
+            if (action == 0 || action == 17) return; // Idle, or the next day's RequestDaily
+            if (action == 2) {
+                uint256 id = mockVRF.lastRequestId();
+                (, , bool done) = mockVRF.pendingRequests(id);
+                if (done) return;
+                _fulfillPending();
+            } else {
+                game.mineFlip();
+            }
+        }
+        revert("harness: mid-day work did not settle");
+    }
+
     /// @dev Cross the day boundary and advance (never fulfilling) until the daily
     ///      request is in flight.
     function _stallNextDailyRequest() internal {
@@ -491,24 +521,21 @@ contract DailyRngStallRecovery is DeployProtocol {
         return _ticketWriteSlot() ? lvl : lvl | TICKET_SLOT_BIT;
     }
 
-    /// @dev Zero _ticketQueueLength(key) (models an award-less previous draw).
+    /// @dev Zero _ticketQueueLength(key) (models an award-less previous draw). Queue slots
+    ///      recycle 1..100 under an absolute-level tag (c729ecfc9): clear the physical root only
+    ///      while it is authenticated to this key's level.
     function _clearQueue(uint24 key) internal {
+        if (TQ.length(address(game), key) == 0) return;
         vm.store(
             address(game),
-            keccak256(abi.encode(uint256(key), uint256(12))),
+            keccak256(abi.encode(uint256(TQ.queueKey(key)), uint256(12))),
             bytes32(0)
         );
     }
 
-    /// @dev _ticketQueueLength(key) — the mapping sits at slot 12.
+    /// @dev _ticketQueueLength(key), through the authenticated physical slot.
     function _queueLen(uint24 key) internal view returns (uint256) {
-        return
-            uint256(
-                vm.load(
-                    address(game),
-                    keccak256(abi.encode(uint256(key), uint256(12)))
-                )
-            );
+        return TQ.length(address(game), key);
     }
 
     /// @dev ticketWriteSlot — slot 0, byte 25.

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
 import {DegenerusParimutuel} from "../../contracts/DegenerusParimutuel.sol";
@@ -1155,6 +1156,18 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         }
     }
 
+    /// @dev One engine checkpoint at a time. A single mineFlip composes every checkpoint its allowance
+    ///      admits (60d31f775), so an unbounded call can open and close a state inside one transaction.
+    ///      Offer the smallest allowance (in 250k steps up to the 16.7M ceiling) that makes progress;
+    ///      the engine then stops at the next checkpoint boundary it cannot admit, and the state between
+    ///      stages is observable. Needs live gas metering (the engine meters with gasleft()).
+    function _mineStep() internal returns (bool ok) {
+        for (uint256 g = 1_000_000; g <= 16_750_000; g += 250_000) {
+            (ok, ) = address(game).call{gas: g}(abi.encodeWithSignature("mineFlip()"));
+            if (ok) return true;
+        }
+    }
+
     /// @dev Raise nextPrizePool over the live target so the next drive latches a
     ///      transition. Slot 2 packs [future:128 | next:128]; replace the next
     ///      half only.
@@ -1281,15 +1294,14 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _seedNextPool(game.prizePoolTargetView() + 10 ether);
 
         uint256 turboObservations;
+        // Stepped one checkpoint per call (`_mineStep`), so metering must run.
+        vm.resumeGasMetering();
         for (uint256 d = 0; d < 8; d++) {
             simTime += 1 days + 1;
             vm.warp(simTime);
-            for (uint256 j = 0; j < 200; j++) {
+            for (uint256 j = 0; j < 400; j++) {
                 _fulfillVrfIfPending();
-                (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("mineFlip()")
-                );
-                if (!ok) break;
+                if (!_mineStep()) break;
                 if (game.jackpotPhase() && game.jackpotDuration() == 1) {
                     (, , , , bool open, ) = game.growthState(0);
                     assertFalse(open, "a turbo phase must never take bets");
@@ -1302,10 +1314,18 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
     }
 
     /// The market closes when the level's DRAWS end, not when jackpotPhaseFlag drops.
-    /// _endPhase seals the level but leaves the flag up through the far-future ticket
-    /// drain — one or more advances — and zeroes the day counter on the way, so a market
-    /// keyed on the flag alone would stay open there AND quote the first day's 150 FLIP
-    /// to the last mover. Driven one advance at a time so the span is observable.
+    /// _endPhase seals the level but leaves the flag up until the transition closes, and zeroes the
+    /// day counter on the way, so a market keyed on the flag alone would stay open there AND quote
+    /// the first day's 150 FLIP to the last mover. Driven one checkpoint per call so the span is
+    /// observable whenever it outlives a call.
+    /// @dev One mineFlip composes every checkpoint its allowance admits (60d31f775). When the last
+    ///      draw chunk leaves the transition's declared bound (TRANSITION_CLOSE) in the call, the draws
+    ///      end and the transition closes in the same call, and no bet can land between them; this
+    ///      fixture's last chunk is admitted only with that much slack, so the ending call is
+    ///      asserted to run the two checkpoints in order (Advance stage 9 then stage 3). A cheaper
+    ///      bound/actual gap leaves the span standing between calls, so the market gate is then
+    ///      checked on the pre-ending snapshot with exactly the two fields `_endPhase` writes
+    ///      (phaseTransitionActive set, jackpotCounter zeroed; flag still up).
     function testBettingClosesWhenDrawsEndNotWhenFlagDrops() public {
         vm.pauseGasMetering();
 
@@ -1314,31 +1334,38 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _bet(alice, true); // in-phase bet still books
 
         bool sawSpan;
+        // Stepped one checkpoint per call (`_mineStep`), so metering must run.
+        vm.resumeGasMetering();
         for (uint256 d = 0; d < 40 && !sawSpan; d++) {
             simTime += 1 days + 1;
             vm.warp(simTime);
-            for (uint256 j = 0; j < 200; j++) {
+            for (uint256 j = 0; j < 400; j++) {
                 _fulfillVrfIfPending();
-                (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("mineFlip()")
-                );
-                if (!ok) break;
+                bool wasLive = game.jackpotPhase();
+                uint256 snap = vm.snapshotState();
+                vm.recordLogs();
+                if (!_mineStep()) break;
                 // The span: draws ended, flag not yet dropped.
                 if (game.jackpotPhase()) {
                     (, , , , bool open, uint8 phaseDay) = game.growthState(0);
                     if (!open) {
                         sawSpan = true;
-                        assertEq(
-                            phaseDay,
-                            0,
-                            "_endPhase zeroed the counter, which is what made the span quote 150"
-                        );
-                        _fund(bob, STAKE);
-                        vm.prank(bob);
-                        vm.expectRevert(DegenerusParimutuel.MarketClosed.selector);
-                        parimutuel.placeBet(address(0), true);
+                        _assertSpanClosed(phaseDay);
                         break;
                     }
+                } else if (wasLive) {
+                    // The ending call: the draws ended, then the transition closed, in one call.
+                    _assertEndsDrawsBeforeTransition(vm.getRecordedLogs());
+                    vm.revertToState(snap);
+                    uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
+                    slot0 = (slot0 & ~(uint256(0xFF) << 128)) | (uint256(1) << 160); // jackpotCounter = 0, phaseTransitionActive
+                    vm.store(address(game), bytes32(0), bytes32(slot0));
+                    assertTrue(game.jackpotPhase(), "the flag is still up in the span");
+                    (, , , , bool open, uint8 phaseDay) = game.growthState(0);
+                    assertFalse(open, "the market is shut once the draws end");
+                    sawSpan = true;
+                    _assertSpanClosed(phaseDay);
+                    break;
                 }
                 if (game.level() > round) break;
             }
@@ -1346,6 +1373,31 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         }
 
         assertTrue(sawSpan, "harness: never observed the post-draw span");
+    }
+
+    function _assertSpanClosed(uint8 phaseDay) internal {
+        assertEq(phaseDay, 0, "_endPhase zeroed the counter, which is what made the span quote 150");
+        _fund(bob, STAKE);
+        vm.prank(bob);
+        vm.expectRevert(DegenerusParimutuel.MarketClosed.selector);
+        parimutuel.placeBet(address(0), true);
+    }
+
+    /// @dev Advance(stage, lvl) from the game: STAGE_JACKPOT_PHASE_ENDED (9) precedes
+    ///      STAGE_TRANSITION_DONE (3) in the ending call.
+    function _assertEndsDrawsBeforeTransition(Vm.Log[] memory logs) internal view {
+        bytes32 sig = keccak256("Advance(uint8,uint24)");
+        uint256 ended = type(uint256).max;
+        uint256 closed = type(uint256).max;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(game) || logs[i].topics.length == 0 || logs[i].topics[0] != sig) continue;
+            (uint8 stage, ) = abi.decode(logs[i].data, (uint8, uint24));
+            if (stage == 9 && ended == type(uint256).max) ended = i;
+            if (stage == 3 && closed == type(uint256).max) closed = i;
+        }
+        assertTrue(ended != type(uint256).max, "the ending call ended the draws");
+        assertTrue(closed != type(uint256).max, "the ending call closed the transition");
+        assertLt(ended, closed, "the draws end before the transition drops the flag");
     }
 
     function testLifecycleBetTransitionClaim() public {

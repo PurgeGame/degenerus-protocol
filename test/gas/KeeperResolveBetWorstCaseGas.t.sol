@@ -6,6 +6,8 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 import {DegeneretteQueue as DQ} from "../helpers/DegeneretteQueue.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 
 /// @title Keeper resolve gas stress cases at the per-currency spin caps.
 /// @notice Searches 2,000 rounds for a high count of paying spins, then injects a
@@ -29,10 +31,6 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     // -------------------------------------------------------------------------
     // Worst-case / measurement constants
     // -------------------------------------------------------------------------
-
-    /// @dev The REAL mainnet block gas limit. foundry.toml inflates block_gas_limit to 30e9 for the
-    ///      test harness; the GAS-01 "fits under the block limit" bar is the mainnet 30M.
-    uint256 internal constant MAINNET_BLOCK_GAS_LIMIT = 30_000_000;
 
     /// @dev v47 per-currency spin caps (DegeneretteModule:226-228). The ETH cap (25) is the
     ///      structural spin-loop ceiling for the DSPIN-02 worst case — 2.5x the old 10-spin bound.
@@ -123,15 +121,11 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
 
         uint64[] memory betIds = new uint64[](1);
         betIds[0] = betId;
+        uint256 bound = _ethStageBound(LEGACY_WORST_SPINS, game.degeneretteBetInfo(INDEX, betId));
 
-        // Measure the worst-case sweep item's gas (gasleft delta around the external call). No
-        // reward is paid either way: openBoxes is unrewarded, exactly like the removed direct
-        // per-id door was.
-        vm.recordLogs();
-        vm.prank(cranker);
-        uint256 gasBefore = gasleft();
-        game.openBoxes(type(uint256).max);
-        uint256 gasUsed = gasBefore - gasleft();
+        // Measure the worst-case bet's resolve as its own engine stage (the mineFlip that resolves
+        // it, minus the same call with the bet queue emptied).
+        (uint256 gasUsed, uint256 stageGas) = _crankResolve();
 
         (uint256 spinResults, uint256 lootboxFlips) = _countResolveEffects(betIds);
 
@@ -153,16 +147,15 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         // Non-vacuity: the bet was actually resolved (queue word zeroed), not silently skipped.
         assertEq(game.degeneretteBetInfo(INDEX, betId), 0, "non-vacuity: worst-case bet resolved (word zeroed)");
 
-        // The headline GAS-01 assertion: the worst case fits the REAL mainnet block gas limit.
-        assertLt(
-            gasUsed,
-            MAINNET_BLOCK_GAS_LIMIT,
-            "GAS-01: 10-spin all-match resolve-bet worst case fits under the 30M mainnet block gas limit"
-        );
+        // The headline GAS-01 assertion, per checkpoint: the worst case resolves inside the
+        // admission the engine charges for it (the declared bound, itself far under 10M).
+        assertLe(stageGas, bound, "GAS-01: 10-spin all-match resolve stays inside its declared admission");
+        assertLe(bound, 10_000_000, "the declared admission is one realistic chunk");
 
-        emit log_named_uint("worst_case_resolve_bet_10spin_allmatch_gas", gasUsed);
+        emit log_named_uint("worst_case_resolve_bet_10spin_allmatch_gas", stageGas);
+        emit log_named_uint("worst_case_resolve_bet_10spin_mineflip_gas", gasUsed);
+        emit log_named_uint("declared_10spin_admission", bound);
         emit log_named_uint("worst_case_resolve_bet_lootbox_materializations", lootboxFlips);
-        emit log_named_uint("mainnet_block_gas_limit", MAINNET_BLOCK_GAS_LIMIT);
     }
 
     // =========================================================================
@@ -191,11 +184,11 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         assertEq(_betTicketCount(betIds[0]), 1, "Test B item is a 1-spin bet (the typical case)");
         _advanceActiveIndexPast(INDEX);
 
-        // Bracket the whole N-item batch; divide by N for the per-1-spin-item marginal.
-        vm.prank(cranker);
-        uint256 gasBefore = gasleft();
-        game.openBoxes(type(uint256).max);
-        uint256 totalGas = gasBefore - gasleft();
+        uint256 declared = GasBounds.DEGENERETTE_TAIL_GAS + GasBounds.ENGINE_BOUNDARY;
+        for (uint256 i; i < nItems; ++i) declared += _betBound(0, 1, game.degeneretteBetInfo(INDEX, betIds[i]));
+
+        // Bracket the whole N-item stage; divide by N for the per-1-spin-item marginal.
+        (, uint256 totalGas) = _crankResolve();
         uint256 perItemMarginal = totalGas / nItems;
 
         // Non-vacuity: every item resolved (queue words zeroed), so the marginal is a real per-item cost.
@@ -214,7 +207,8 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
             worstCaseGas,
             "per-1-spin marginal is materially below the 10-spin worst case (per-spin peg under-reimburses)"
         );
-        assertLt(perItemMarginal, MAINNET_BLOCK_GAS_LIMIT, "per-1-spin marginal trivially fits the block limit");
+        assertLe(totalGas, declared, "the N-item stage stays inside the admissions its bets were charged");
+        emit log_named_uint("declared_n_item_admission", declared);
 
         // The calibration input Plan 05 reads from the test log.
         emit log_named_uint("per_1spin_item_resolve_marginal_gas", perItemMarginal);
@@ -279,12 +273,9 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
 
         uint64[] memory betIds = new uint64[](1);
         betIds[0] = betId;
+        uint256 bound = _ethStageBound(MAX_SPINS_ETH, game.degeneretteBetInfo(idx, betId));
 
-        vm.recordLogs();
-        vm.prank(cranker);
-        uint256 gasBefore = gasleft();
-        game.openBoxes(type(uint256).max);
-        uint256 gasUsed = gasBefore - gasleft();
+        (, uint256 gasUsed) = _crankResolve();
 
         (uint256 spinResults, uint256 lootboxFlips) = _countResolveEffects(betIds);
 
@@ -306,12 +297,10 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         // Non-vacuity: the bet was actually resolved (queue word zeroed), not silently skipped.
         assertEq(game.degeneretteBetInfo(idx, betId), 0, "non-vacuity: 25-spin worst-case bet resolved (word zeroed)");
 
-        // Headline DSPIN-02 assertion: the 25-spin worst case fits the REAL mainnet block gas limit.
-        assertLt(
-            gasUsed,
-            MAINNET_BLOCK_GAS_LIMIT,
-            "DSPIN-02: 25-spin all-match resolve-bet worst case fits under the 30M mainnet block gas limit"
-        );
+        // Headline DSPIN-02 assertion, per checkpoint: the 25-spin worst case resolves inside the
+        // admission the engine charges for it (the declared bound, itself far under 10M).
+        assertLe(gasUsed, bound, "DSPIN-02: 25-spin all-match resolve stays inside its declared admission");
+        assertLe(bound, 10_000_000, "the declared admission is one realistic chunk");
 
         // Absorption: re-measure the legacy 10-spin worst case in this test's own state, and assert
         // the 25-spin cost is BELOW a naive 2.5x of it — demonstrating the single-flush write savings
@@ -325,7 +314,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         emit log_named_uint("worst_case_resolve_bet_25spin_allmatch_gas", gasUsed);
         emit log_named_uint("legacy_10spin_worst_case_gas", legacyGas);
         emit log_named_uint("worst_case_resolve_bet_25spin_lootbox_materializations", lootboxFlips);
-        emit log_named_uint("mainnet_block_gas_limit", MAINNET_BLOCK_GAS_LIMIT);
+        emit log_named_uint("declared_25spin_admission", bound);
     }
 
     // =========================================================================
@@ -345,12 +334,9 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         _advanceActiveIndexPast(INDEX);
 
         assertEq(_betTicketCount(betId), MAX_SPINS_ETH, "DSPIN-02 sweep: ticketCount == MAX_SPINS_ETH (25)");
+        uint256 bound = _ethStageBound(MAX_SPINS_ETH, game.degeneretteBetInfo(INDEX, betId));
 
-        vm.recordLogs();
-        vm.prank(cranker);
-        uint256 gasBefore = gasleft();
-        game.openBoxes(type(uint256).max);
-        uint256 gasUsed = gasBefore - gasleft();
+        (uint256 callGas, uint256 gasUsed) = _crankResolve();
 
         uint64[] memory betIds = new uint64[](1);
         betIds[0] = betId;
@@ -366,14 +352,12 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
 
         assertEq(game.degeneretteBetInfo(INDEX, betId), 0, "non-vacuity: bet resolved via the sweep");
 
-        assertLt(
-            gasUsed,
-            MAINNET_BLOCK_GAS_LIMIT,
-            "DSPIN-02 sweep: 25-spin all-match sweep-resolve worst case fits under the 30M mainnet block gas limit"
-        );
+        assertLe(gasUsed, bound, "DSPIN-02 sweep: 25-spin all-match resolve stays inside its declared admission");
+        assertLe(bound, 10_000_000, "the declared admission is one realistic chunk");
 
         emit log_named_uint("worst_case_resolve_bet_25spin_allmatch_via_sweep_gas", gasUsed);
-        emit log_named_uint("mainnet_block_gas_limit", MAINNET_BLOCK_GAS_LIMIT);
+        emit log_named_uint("worst_case_resolve_bet_25spin_mineflip_gas", callGas);
+        emit log_named_uint("declared_25spin_admission", bound);
     }
 
     /// @notice DSPIN-02 mixed-currency batch via the sweep: the same ETH-25 + FLIP-15 worst case
@@ -392,12 +376,10 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         uint64[] memory betIds = new uint64[](2);
         betIds[0] = ethBet;
         betIds[1] = flipBet;
+        uint256 bound = _ethStageBound(MAX_SPINS_ETH, game.degeneretteBetInfo(INDEX, ethBet))
+            + _betBound(1, MAX_SPINS_FLIP, game.degeneretteBetInfo(INDEX, flipBet));
 
-        vm.recordLogs();
-        vm.prank(cranker);
-        uint256 gasBefore = gasleft();
-        game.openBoxes(type(uint256).max);
-        uint256 gasUsed = gasBefore - gasleft();
+        (uint256 callGas, uint256 gasUsed) = _crankResolve();
 
         (uint256 spinResults, ) = _countResolveEffects(betIds);
         assertEq(spinResults, uint256(MAX_SPINS_ETH) + MAX_SPINS_FLIP,
@@ -405,15 +387,13 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         assertEq(game.degeneretteBetInfo(INDEX, ethBet), 0, "non-vacuity: ETH bet resolved via sweep");
         assertEq(game.degeneretteBetInfo(INDEX, flipBet), 0, "non-vacuity: FLIP bet resolved via sweep");
 
-        assertLt(
-            gasUsed,
-            MAINNET_BLOCK_GAS_LIMIT,
-            "DSPIN-02 sweep: max mixed-currency batch (40 spins, 2 currencies) fits under the 30M block limit"
-        );
+        assertLe(gasUsed, bound, "DSPIN-02 sweep: max mixed-currency batch stays inside its declared admissions");
+        assertLe(bound, 10_000_000, "the declared admissions fit one realistic chunk");
 
         emit log_named_uint("worst_case_mixed_currency_batch_via_sweep_gas", gasUsed);
+        emit log_named_uint("worst_case_mixed_currency_batch_mineflip_gas", callGas);
         emit log_named_uint("mixed_batch_total_spins", spinResults);
-        emit log_named_uint("mainnet_block_gas_limit", MAINNET_BLOCK_GAS_LIMIT);
+        emit log_named_uint("declared_mixed_admission", bound);
     }
 
     // =========================================================================
@@ -421,11 +401,15 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     // =========================================================================
 
     /// @dev One same-symbol cohort makes every owner's high-score spins correlate.
-    ///      Cold calls include sDGNRS awards, win boxes, the human sweep and bounty.
+    ///      Cold calls include sDGNRS awards, win boxes, the human sweep and bounty. Each call gets
+    ///      a realistic 10M allowance and must succeed and progress; the cohort's actual cold work
+    ///      exceeds one such allowance, so it splits across calls.
     function test_ColdMineFlipCorrelatedMaxSpinEthBetsStayUnderOrdinaryTier() public {
         (uint256 word, uint8 symbol) = _findHighAwardWord();
-        uint64[20] memory ids;
-        for (uint256 i; i < 20; ++i) {
+        // 48 owners: resolved cold, the cohort measures past one 10M allowance (20 measured 5.5M),
+        // so the engine's checkpoints must split it across calls.
+        uint64[48] memory ids;
+        for (uint256 i; i < 48; ++i) {
             address owner = address(uint160(0xA77000 + i));
             vm.deal(owner, 100 ether);
             ids[i] = _placeWorstCaseBetN(owner, MAX_SPINS_ETH, symbol);
@@ -433,20 +417,18 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         _setFuturePool(SMALL_POOL_WEI);
         _injectLootboxRngWord(INDEX, word);
         _advanceActiveIndexPast(INDEX);
-        uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
-        slot0 = (slot0 & ~(uint256(type(uint24).max) << 24))
-            | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192);
-        vm.store(address(game), bytes32(uint256(0)), bytes32(slot0));
         uint256 done;
         uint256 calls;
         uint256 awards;
         bytes32 awardTopic = keccak256("PoolTransfer(uint8,address,uint256)");
         while (done < ids.length && calls < 20) {
+            // A realistic allowance: the engine admits bets only while the remaining allowance
+            // covers each one's declared bound, so a saturated cohort splits across calls.
+            _cool();
             vm.recordLogs();
             vm.prank(cranker);
-            game.mineFlip();
+            game.mineFlip{gas: 10_000_000 - 21_000}();
             uint256 used = vm.snapshotGasLastCall("correlated-eth-bet-keeper");
-            assertLt(used + 21_000, 10_000_000, "correlated cold bet cohort respects the ordinary transaction tier");
             emit log_named_uint("correlated keeper gross call gas", used);
             Vm.Log[] memory rows = vm.getRecordedLogs();
             for (uint256 i; i < rows.length; ++i) {
@@ -455,7 +437,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
             uint256 prior = done;
             done = 0;
             for (uint256 i; i < ids.length; ++i) if (game.degeneretteBetInfo(INDEX, ids[i]) == 0) ++done;
-            assertGt(done, prior, "each bounded paid call makes progress");
+            assertGt(done, prior, "each realistic-allowance call makes progress");
             ++calls;
         }
         assertEq(done, ids.length);
@@ -537,10 +519,8 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         _injectLootboxRngWord(idx, word);
         _advanceActiveIndexPast(idx);
 
-        vm.prank(cranker);
-        uint256 gasBefore = gasleft();
-        game.openBoxes(type(uint256).max);
-        gasUsed = gasBefore - gasleft();
+        (, gasUsed) = _crankResolve();
+        assertEq(game.degeneretteBetInfo(idx, betId), 0, "the reference 10-spin bet resolved");
     }
 
     /// @dev The current active lootbox RNG index (low 48 bits of lootboxRngPacked).
@@ -583,8 +563,75 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
 
     /// @dev Inject a lootbox RNG word for an index (lootboxRngWordByIndex mapping at slot 35).
     function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT)));
         RecyclingState.seedWord(address(game), uint48(index), bytes32(rngWord));
+        // What the request's seal also does: the consumer cursors restart and the new write tag's
+        // queues are emptied, so a later cohort's bets sit at positions the Degenerette cursor reads.
+        uint256 s14 = uint256(vm.load(address(game), bytes32(uint256(14))));
+        vm.store(address(game), bytes32(uint256(14)), bytes32(s14 & ~(uint256(type(uint48).max) << 160)));
+        uint256 s56 = uint256(vm.load(address(game), bytes32(uint256(56))));
+        vm.store(address(game), bytes32(uint256(56)), bytes32(s56 & ~(uint256(type(uint48).max) << 56)));
+        vm.store(address(game), keccak256(abi.encode(uint256((index ^ 1) & 1), DQ.QUEUE_SLOT)), bytes32(0));
+        vm.store(address(game), keccak256(abi.encode(uint256((index ^ 1) & 1), uint256(57))), bytes32(0));
+        // The day itself is sealed, as after a mid-day request: the delivered cohort's read
+        // consumers are the engine's only work, so a measured call ends when the cohort completes.
+        uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
+        slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192);
+        vm.store(address(game), bytes32(0), bytes32(slot0));
+    }
+
+    /// @dev Measured calls pay cold access, as a fresh keeper transaction does.
+    function _cool() internal {
+        vm.cool(address(game));
+        vm.cool(address(coin));
+        vm.cool(address(coinflip));
+        vm.cool(address(sdgnrs));
+        vm.cool(address(wwxrp));
+        vm.cool(ContractAddresses.GAME_MINER_MODULE);
+        vm.cool(ContractAddresses.GAME_AFKING_MODULE);
+        vm.cool(ContractAddresses.GAME_TICKET_MODULE);
+        vm.cool(ContractAddresses.GAME_DEGENERETTE_MODULE);
+        vm.cool(ContractAddresses.GAME_LOOTBOX_MODULE);
+        vm.cool(ContractAddresses.GAME_BOON_MODULE);
+    }
+
+    /// @dev Resolve the delivered cohort with one cold mineFlip. Bets resolve only as the engine's
+    ///      Degenerette read consumer; `stageGas` isolates that stage: the same call against the
+    ///      same state with the read bet queue emptied is the baseline every other stage shares.
+    ///      Logs are recorded for the measured call only.
+    function _crankResolve() internal returns (uint256 gasUsed, uint256 stageGas) {
+        uint48 read = RecyclingState.readBuffer(address(game));
+        uint256 snap = vm.snapshotState();
+        vm.store(address(game), keccak256(abi.encode(uint256(read & 1), DQ.QUEUE_SLOT)), bytes32(0));
+        _cool();
+        vm.prank(cranker);
+        uint256 g = gasleft();
+        game.mineFlip();
+        uint256 baseline = g - gasleft();
+        vm.revertToStateAndDelete(snap);
+        _cool();
+        vm.recordLogs();
+        vm.prank(cranker);
+        g = gasleft();
+        game.mineFlip();
+        gasUsed = g - gasleft();
+        stageGas = gasUsed - baseline;
+        emit log_named_uint("cold mineFlip gas", gasUsed);
+        emit log_named_uint("Degenerette stage gas (mineFlip minus empty-queue baseline)", stageGas);
+    }
+
+    /// @dev The engine's admission for one ETH bet of `spins` (MineFlipGasBounds), plus the stage's
+    ///      dispatch boundary and tail that its first admitted bet carries.
+    function _ethStageBound(uint8 spins, uint256 betWord) internal pure returns (uint256) {
+        return _betBound(0, spins, betWord) + GasBounds.DEGENERETTE_TAIL_GAS + GasBounds.ENGINE_BOUNDARY;
+    }
+
+    /// @dev One bet's declared admission: currency base + per-spin, plus the record-claim spin
+    ///      when the bet armed one (record flag, bit 171 of the queued word).
+    function _betBound(uint8 currency, uint8 spins, uint256 betWord) internal pure returns (uint256 b) {
+        b = currency == 0
+            ? GasBounds.DEGENERETTE_ETH_BASE_GAS + uint256(spins) * GasBounds.DEGENERETTE_ETH_SPIN_GAS
+            : GasBounds.DEGENERETTE_FLIP_BASE_GAS + uint256(spins) * GasBounds.DEGENERETTE_FLIP_SPIN_GAS;
+        if ((betWord >> 171) & 1 != 0) b += GasBounds.DEGENERETTE_RECORD_GAS;
     }
 
     /// @dev Set the futurePrizePool (future half, bits 128-255 of slot 2), keeping next intact.

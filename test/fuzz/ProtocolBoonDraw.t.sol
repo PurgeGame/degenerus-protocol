@@ -124,17 +124,20 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 1 days);
         _fixtureCall(abi.encodeCall(ProtocolBoonFixture.word, (day + 1, uint256(987654321))));
     }
+    /// @dev Run the engine until today's daily word is recorded and the lock is released. Any
+    ///      outstanding request (the day's, or a trailing mid-day word a shut craps window rides)
+    ///      is answered with `seed`; mineFlip runs only while it reports work (it reverts NoWork /
+    ///      RngNotReady when idle or waiting).
     function _finishDailyAdvance(uint256 seed) private {
         _finishReadConsumers();
-        uint256 fulfilled = mockVRF.lastRequestId();
         for (uint256 i; i < 150; ++i) {
-            game.mineFlip();
             uint256 request = mockVRF.lastRequestId();
-            if (request > fulfilled) {
-                mockVRF.fulfillRandomWords(request, seed);
-                fulfilled = request;
+            if (request != 0) {
+                (,, bool done) = mockVRF.pendingRequests(request);
+                if (!done) mockVRF.fulfillRandomWords(request, seed);
             }
             if (!game.rngLocked() && game.rngWordForDay(game.currentDayView()) != 0) return;
+            if (game.advanceDue()) game.mineFlip();
         }
         fail("daily advance must finish after the boon stage");
     }
@@ -689,7 +692,9 @@ contract ProtocolBoonDrawTest is DeployProtocol {
     ///      draw finds the older pool's weight in the shared slot, calls the draw, which awards
     ///      nothing and writes nothing, and the daily advance still completes.
     function testRealAdvanceOverAStaleRingSlotAwardsNothing() public {
-        _finishDailyAdvance(1);
+        // A delivered word of 0 or 1 leaves the request waiting (the RNG_WORD_WAITING sentinel), so
+        // the first day's word is 5 rather than 1; the later days keep 2, 3 and 4.
+        _finishDailyAdvance(5);
         vm.prank(bettor); _bet(0, 0.005 ether);
         vm.prank(bettor); _bet(6, 0.005 ether);
         uint24 x = game.currentDayView();

@@ -20,6 +20,15 @@ abstract contract RngIndexDrainOracle is Test {
     uint256 private constant SLOT_OWNERS = 67;
     uint256 private constant SLOT_TICKET_CURSOR = 14;
     bytes32 internal constant TOPIC_TRAITS_GENERATED = keccak256("TraitsGenerated(address,uint256,uint32)");
+    /// @dev Receipt key = stream | startOffset | goldSixTakenFlag (TicketModule._solo): the stream
+    ///      is domain(8) | level(24) | queueIndex(32) | player(160) | 0(32); the low 32 bits carry
+    ///      the run's start offset and bit 255 marks a level whose natural gold six was already
+    ///      taken when the run started (c729ecfc9 / 1a7074212 entry identity).
+    uint256 private constant GOLD_SIX_TAKEN = uint256(1) << 255;
+    uint8 private constant DOMAIN_ORDINARY_ZERO = 0x20;
+    uint8 private constant DOMAIN_FUTURE = 0x22;
+    uint8 private constant GOLD_SIX_TRAIT = 253;
+    uint256 private constant GOLD_SIX_REPLACEMENT_TAG = uint256(keccak256("GOLD_SIX_REPLACEMENT_V1"));
 
     struct DrainSnapshot {
         uint24 firstLevel;
@@ -90,15 +99,18 @@ abstract contract RngIndexDrainOracle is Test {
     }
 
     /// @dev Reimplement the published 64-bit generator and color thresholds without
-    /// calling the production trait helper. Each returned byte includes its quadrant.
-    function _referenceTraits(uint256 key, uint256 word, uint32 start, uint32 take)
+    /// calling the production trait helper. Each returned byte includes its quadrant. The
+    /// stream is the receipt key without its offset/flag bits; groups hash the absolute index.
+    /// The level's unique natural gold six (trait 253) is kept once; later ones are replaced
+    /// by one of the seven other gold dice (GoldSixLib, unique per level since 6d0e64b09).
+    function _referenceTraits(uint256 stream, uint256 word, uint32 start, uint32 take, bool goldSixTaken)
         private pure returns (uint8[] memory traits)
     {
         traits = new uint8[](take);
         uint256 end = uint256(start) + take;
         uint256 i = start;
         while (i < end) {
-            uint64 state = uint64(uint256(keccak256(abi.encode(key, word, uint32(i / 16))))) | 1;
+            uint64 state = uint64(uint256(keccak256(abi.encode(stream, word, i / 16)))) | 1;
             uint64 offset = uint64(i % 16);
             unchecked { state = state * (6364136223846793005 + offset) + offset; }
             for (uint256 j = offset; j < 16 && i < end; ++j) {
@@ -106,7 +118,16 @@ abstract contract RngIndexDrainOracle is Test {
                 uint8 quantile = uint8(state >> 24);
                 uint8 color = quantile < 64 ? 0 : quantile < 128 ? 1 : quantile < 192 ? 2
                     : quantile < 224 ? 3 : quantile < 240 ? 4 : quantile < 248 ? 5 : quantile < 254 ? 6 : 7;
-                traits[i - start] = uint8((i % 4) * 64) | (color << 3) | (uint8(state >> 32) & 7);
+                uint8 trait = uint8((i % 4) * 64) | (color << 3) | (uint8(state >> 32) & 7);
+                if (trait == GOLD_SIX_TRAIT) {
+                    if (goldSixTaken) {
+                        uint8 symbol = uint8(uint256(keccak256(abi.encode(uint256(state), GOLD_SIX_REPLACEMENT_TAG))) % 7);
+                        trait = 248 + symbol + (symbol >= 5 ? 1 : 0);
+                    } else {
+                        goldSixTaken = true;
+                    }
+                }
+                traits[i - start] = trait;
                 ++i;
             }
         }
@@ -116,33 +137,36 @@ abstract contract RngIndexDrainOracle is Test {
         internal view returns (DrainResult memory result)
     {
         uint256[1024] memory added;
-        uint256 previousKey = type(uint256).max;
-        uint32 processed;
+        uint256 previousStream = type(uint256).max;
+        uint256 nextOffset;
         if (_roundOf(subject) != snap.round) ++result.unsupported;
         for (uint256 k; k < logs.length; ++k) {
             Vm.Log memory entry = logs[k];
             if (entry.emitter != address(subject) || entry.topics.length != 2 || entry.topics[0] != TOPIC_TRAITS_GENERATED) continue;
             (uint256 key, uint32 take) = abi.decode(entry.data, (uint256, uint32));
-            uint24 lvl = uint24(key >> 224);
+            bool goldSixTaken = key & GOLD_SIX_TAKEN != 0;
+            uint256 stream = key & ~GOLD_SIX_TAKEN & ~uint256(type(uint32).max);
+            uint32 start = uint32(key);
+            uint8 domain = uint8(stream >> 248);
+            uint24 lvl = uint24(stream >> 224);
             address player = address(uint160(uint256(entry.topics[1])));
-            if (lvl < snap.firstLevel || uint256(lvl - snap.firstLevel) >= 4 || take == 0
-                || (uint32(key) == 0 && take != 1)) {
-                // A zero-owed normal entry may win one fractional entry; a foil's
-                // sixteen-entry TraitsGenerated receipt is not an LCG batch.
+            if (domain < DOMAIN_ORDINARY_ZERO || domain > DOMAIN_FUTURE
+                || lvl < snap.firstLevel || uint256(lvl - snap.firstLevel) >= 4 || take == 0) {
+                // A foil's sixteen-entry TraitsGenerated receipt (FOIL domain) is not an LCG run.
                 ++result.unsupported;
                 continue;
             }
-            if (address(uint160(key >> 32)) != player) ++result.mismatches;
-            uint256 identity = key >> 32;
-            if (identity != previousKey) processed = 0;
-            previousKey = identity;
-            uint8[] memory traits = _referenceTraits(key, committedWord, processed, take);
+            if (address(uint160(stream >> 32)) != player) ++result.mismatches;
+            // Consecutive runs of one entry in one call must resume exactly where the last ended.
+            if (stream == previousStream && start != nextOffset) ++result.mismatches;
+            previousStream = stream;
+            nextOffset = uint256(start) + take;
+            uint8[] memory traits = _referenceTraits(stream, committedWord, start, take, goldSixTaken);
             for (uint256 i; i < traits.length; ++i) {
                 uint256 n = uint256(lvl - snap.firstLevel) * 256 + traits[i];
                 uint256 pos = snap.lengths[n] + added[n]++;
                 if (_ownerAt(subject, lvl, traits[i], pos) != player) ++result.mismatches;
             }
-            processed += take;
             ++result.batches;
             result.entries += take;
             if (player == trackedPlayer) result.trackedEntries += take;
@@ -203,12 +227,24 @@ contract RngIndexDrainHandler is RngIndexDrainOracle {
         ++calls_advance;
         if (game.gameOver()) { ++ghost_gameOverBranchEntered; return; }
         DrainSnapshot memory snap = _snapshotDrain(game);
-        vm.recordLogs();
-        try game.mineFlip() {} catch {
-            // Reverted logs are not committed state and must not be scored.
-            vm.getRecordedLogs();
-            return;
+        // The engine keeps admitting chunks while the allowance covers the next declared bound
+        // (60d31f775): an unbounded call can drain a cohort and then seal the next request in
+        // the same transaction. Offer the smallest of three allowances that admits the next
+        // chunk; 2M covers every ticket chunk of this campaign but never a request (RNG_REQUEST
+        // plus tail), so a ticket-materializing call keeps its committed index.
+        uint256[3] memory allowances = [uint256(2_000_000), 4_500_000, 9_000_000];
+        bool ok;
+        for (uint256 k; k < 3 && !ok; ++k) {
+            vm.recordLogs();
+            try game.mineFlip{gas: allowances[k]}() {
+                ok = true;
+            } catch (bytes memory err) {
+                // Reverted logs are not committed state and must not be scored.
+                vm.getRecordedLogs();
+                if (err.length != 0 && bytes4(err) != bytes4(keccak256("InsufficientExecutionGas()"))) return;
+            }
         }
+        if (!ok) return;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 committedWord = _wordAt(game, snap.index ^ 1);
         DrainResult memory result = _checkDrain(game, snap, logs, committedWord, actor);

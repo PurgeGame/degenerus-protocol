@@ -68,9 +68,11 @@ const MINT_MODULE_SOURCE_PATH = path.resolve(
 );
 
 // ---------------------------------------------------------------------------
-// Slot 13 maps wallets to stable IDs; slot 67 is the global immutable address array.
-// Slot 78 holds three pending lanes per logical level and ID. The helper decodes
-// the selected queue lane; the public accessor independently attests owed totals.
+// `ticketOwnerId` maps wallets to stable IDs; `ticketOwners` is the global immutable address
+// array. Near owed balances share one `ticketPending[id]` word (read/write lanes per level
+// parity, each parity tagged with its level); far-future balances are 32-bit lanes of
+// `farFutureOwed[id]`. The helper decodes the selected queue lane from the layout oracle;
+// the public accessor independently attests owed totals.
 async function readTicketsOwedSlot(gameAddress, wk, buyer) {
   const slot = await entryOwnerRecordSlot(gameAddress, wk, buyer);
   const word = await readEntriesOwed(gameAddress, wk, buyer);
@@ -95,9 +97,16 @@ const JACKPOT_DRAW_SOURCE_PATH = path.resolve(
   process.cwd(),
   "contracts/modules/DegenerusGameJackpotDrawModule.sol"
 );
-// The same two award surfaces now live in separate pinned modules.
+const TICKET_MODULE_SOURCE_PATH = path.resolve(
+  process.cwd(),
+  "contracts/modules/DegenerusGameTicketModule.sol"
+);
+// The same two award surfaces now live in separate pinned modules. 95d88f68b moved the
+// queued main-daily ticket leg (`_resumeQueuedJackpotTickets`) verbatim from the jackpot
+// module into the ticket module, so the scan covers all three, ticket leg first.
 function jackpotAwardSource() {
-  return fs.readFileSync(JACKPOT_SOURCE_PATH, "utf8") + "\n" +
+  return fs.readFileSync(TICKET_MODULE_SOURCE_PATH, "utf8") + "\n" +
+    fs.readFileSync(JACKPOT_SOURCE_PATH, "utf8") + "\n" +
     fs.readFileSync(JACKPOT_DRAW_SOURCE_PATH, "utf8");
 }
 const CONTRACTS_DIR = path.resolve(process.cwd(), "contracts");

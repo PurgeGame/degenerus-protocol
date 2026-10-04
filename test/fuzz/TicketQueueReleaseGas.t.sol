@@ -68,6 +68,9 @@ contract TicketQueueReleaseGasTest is DeployProtocol {
     ///      cost ~15.16M at 3,000 entries (linear in length); the O(1) release
     ///      is a single length-slot write, orders of magnitude below this.
     uint256 private constant GAS_CEILING = 1_000_000;
+    /// @dev Gas supplied to the measured finishing call: the worker spends what it is given, so
+    ///      the O(1) property is measured on a bounded call.
+    uint256 private constant REALISTIC_GAS = 10_000_000;
 
     function setUp() public {
         _deployProtocol();
@@ -127,8 +130,10 @@ contract TicketQueueReleaseGasTest is DeployProtocol {
         uint256 g0 = gasleft();
         // anchor = level + 1; the read window [anchor-1..ceiling] = [49..50] scans only
         // empty read-side queues, so the FF continuation is reached with no near-side work.
-        (bool finished, bool didWork) = mintModule.processTicketBatch(50);
+        // A bounded, realistic call (see the read-window test below).
+        (bool finished, bool didWork) = mintModule.processTicketBatch{gas: REALISTIC_GAS}(50);
         uint256 gasUsed = g0 - gasleft();
+        emit log_named_uint("future_batch_finishing_call_gas", gasUsed);
 
         assertFalse(didWork, "finishing call materializes no new ticket");
         // The call that releases the frozen pool reports the sweep finished itself (no foil
@@ -156,20 +161,25 @@ contract TicketQueueReleaseGasTest is DeployProtocol {
         }
         assertEq(_queueLen(host, rk), QUEUE_LEN, "seed: queue committed");
 
-        // Cursor already at end-of-queue (all entries processed on prior txs);
-        // ticketLevel = LVL so neither entry point resets the cursor. This puts
-        // the very next call on the finishing path — the release site. The deploy-default
-        // level = 0 gives _mintCeiling() = 1 = LVL, so the window [LVL-1..LVL] covers it.
+        // Cursor already at end-of-queue (all entries processed on prior txs). The drain's
+        // checkpoint marker is the full read key (level | slot bit; TicketModule `_drainQueue`
+        // marker = lvl | (rk & (FAR_FUTURE | SLOT))), so ticketLevel = rk keeps the cursor.
+        // This puts the very next call on the finishing path — the release site. The
+        // deploy-default level = 0 gives _mintCeiling() = 1 = LVL, so the window [LVL-1..LVL]
+        // covers it.
         vm.store(
             host,
             bytes32(SLOT_TICKET_CURSOR_LEVEL),
-            bytes32((uint256(LVL) << 32) | QUEUE_LEN)
+            bytes32((uint256(rk) << 32) | QUEUE_LEN)
         );
         _armEntropy(host);
 
+        // A bounded, realistic call: an O(len) release of 3,000 committed slots (~15M) could
+        // not fit in it, and the O(1) release must cost far less than the ceiling.
         uint256 g0 = gasleft();
-        (bool finished, ) = mintModule.processTicketBatch(LVL);
+        (bool finished, ) = mintModule.processTicketBatch{gas: REALISTIC_GAS}(LVL);
         uint256 gasUsed = g0 - gasleft();
+        emit log_named_uint("ticket_batch_finishing_call_gas", gasUsed);
 
         assertTrue(finished, "finishing call reports finished");
         assertEq(_queueLen(host, rk), 0, "queue length released to 0");

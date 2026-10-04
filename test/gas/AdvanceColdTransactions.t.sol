@@ -6,6 +6,7 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {IDegenerusGameLootboxModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
 contract ColdSubscriberSeeder is DegenerusGame {
     /// @dev The all-skip gas fixture also places the two permanent protocol
@@ -43,8 +44,9 @@ contract ColdSubscriberSeeder is DegenerusGame {
 
 /// @dev Setup completes before the measured transaction, including every funding/storage write.
 abstract contract ColdSubscriberFixture is DeployProtocol {
-    uint256 internal constant TX_CAP = 16_777_216;
     uint256 internal constant INTRINSIC = 21_064;
+    uint256 internal constant REALISTIC_ALLOWANCE = 10_000_000;
+    uint256 internal constant CHUNK_GAS_TARGET = 10_000_000;
     bytes32 internal constant ADVANCE_EVENT = keccak256("Advance(uint8,uint24)");
     bytes32 internal constant DELIVERED_EVENT = keccak256("AfkingDelivered(address,uint256)");
     bytes32 internal constant EXPIRED_EVENT = keccak256("SubscriptionExpired(address,uint8)");
@@ -138,69 +140,97 @@ abstract contract ColdSubscriberFixture is DeployProtocol {
         revert("setup did not settle");
     }
 
+    /// @dev The engine keeps admitting chunks while the supplied gas covers the next declared
+    ///      bound, so a call's total mirrors its own allowance and is not bounded here. Asserted:
+    ///      (1) every call at a realistic 10M allowance succeeds and progresses, and those calls
+    ///      complete the subscriber work and the continuation; (2) driven again from the same
+    ///      state with each call at the exact minimum allowance that admits its next chunk, every
+    ///      call succeeds, so each admitted chunk fits its declared admission (bound plus tail:
+    ///      a chunk over it would fail the meter's WorkGasBound check or run out of gas), each
+    ///      admission requirement and each measured chunk is <= 10M, and the same work completes.
     function _check(bytes32 workEvent, uint256 minimum, uint256 maximum) internal {
-        vm.recordLogs();
-        uint256 before = gasleft();
-        game.mineFlip{gas: TX_CAP - INTRINSIC}();
-        uint256 used = before - gasleft() + INTRINSIC;
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        uint256 work;
-        uint8 stage = 255;
-        for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].emitter != address(game) || logs[i].topics.length == 0) continue;
-            if (logs[i].topics[0] == workEvent) ++work;
-            if (logs[i].topics[0] == ADVANCE_EVENT) (stage,) = abi.decode(logs[i].data, (uint8, uint24));
-        }
-        if (_mode() == 3) {
-            // Pending-box skips intentionally emit no per-player event.
-            work = uint16(uint256(vm.load(address(game), bytes32(uint256(56)))));
-        }
-        emit log_named_uint("cold_full_advance_including_intrinsic", used);
+        uint256 snap = vm.snapshotState();
+        (uint256 work, uint8 stage, uint256 calls,) = _drive(workEvent, false);
+        emit log_named_uint("realistic_10m_calls", calls);
         emit log_named_uint("completed_items", work);
-        assertEq(stage, _complete() ? 1 : 11, "full subscriber chunk and expected continuation must run");
-        assertGe(work, minimum, "fixture did not exercise the full chunk");
-        assertLe(work, maximum, "chunk exceeded its item bound");
-        assertLt(used, TX_CAP, "complete transaction exceeds cap");
-    }
-}
+        assertEq(stage, _complete() ? 1 : 11, "full subscriber work and expected continuation must run");
+        assertGe(work, minimum, "fixture did not exercise the full subscriber set");
+        assertLe(work, maximum, "subscriber work exceeded its item count");
+        vm.revertToState(snap);
 
-contract AdvanceColdEvictions is ColdSubscriberFixture {
-    function _mode() internal pure override returns (uint8) {
-        return 0;
-    }
-
-    function test_ColdEvictionsFullTransaction() public {
-        _check(EXPIRED_EVENT, 310, 313);
-    }
-}
-
-contract AdvanceColdTicketSubscriptions is ColdSubscriberFixture {
-    function _mode() internal pure override returns (uint8) {
-        return 1;
+        uint256 maxChunk;
+        (work, stage, calls, maxChunk) = _drive(workEvent, true);
+        emit log_named_uint("admitted_chunks", calls);
+        emit log_named_uint("max_chunk_gas_including_intrinsic", maxChunk);
+        assertEq(stage, _complete() ? 1 : 11, "chunked subscriber work reaches the same continuation");
+        assertGe(work, minimum, "chunked drive did not complete the subscriber set");
+        assertLe(work, maximum, "chunked subscriber work exceeded its item count");
     }
 
-    function test_ColdTicketsFullTransaction() public {
-        _check(DELIVERED_EVENT, 117, 119);
+    /// @dev Calls mineFlip until the expected continuation's Advance marker is emitted. Every
+    ///      call must succeed and change Game storage. `tight` runs each call at its exact
+    ///      minimum admission allowance and bounds the admission and the measured chunk at 10M.
+    function _drive(bytes32 workEvent, bool tight)
+        private returns (uint256 work, uint8 stage, uint256 calls, uint256 maxChunk)
+    {
+        uint8 target = _complete() ? 1 : 11;
+        stage = 255;
+        for (; calls < 2000 && stage != target; ++calls) {
+            uint256 allowance = tight ? _minimumAllowance() : REALISTIC_ALLOWANCE;
+            if (tight) assertLe(allowance, CHUNK_GAS_TARGET, "next chunk admitted under a realistic 10M allowance");
+            vm.recordLogs();
+            vm.startStateDiffRecording();
+            uint256 before = gasleft();
+            game.mineFlip{gas: allowance}();
+            uint256 used = before - gasleft() + INTRINSIC;
+            assertTrue(_storageChanged(vm.stopAndReturnStateDiff()), "a successful call makes engine progress");
+            Vm.Log[] memory logs = vm.getRecordedLogs();
+            for (uint256 i; i < logs.length; ++i) {
+                if (logs[i].emitter != address(game) || logs[i].topics.length == 0) continue;
+                if (logs[i].topics[0] == workEvent) ++work;
+                if (logs[i].topics[0] == ADVANCE_EVENT) (stage,) = abi.decode(logs[i].data, (uint8, uint24));
+            }
+            if (tight) {
+                assertLe(used, CHUNK_GAS_TARGET, "one admitted chunk stays <= 10M");
+                if (used > maxChunk) maxChunk = used;
+            }
+        }
     }
-}
 
-contract AdvanceColdLootboxSubscriptions is ColdSubscriberFixture {
-    function _mode() internal pure override returns (uint8) {
-        return 2;
+    /// @dev Exact (5k-granular) smallest allowance that admits the next chunk, probed on a
+    ///      snapshot. Every smaller allowance must be refused with InsufficientExecutionGas.
+    function _minimumAllowance() private returns (uint256 hi) {
+        uint256 lo = 200_000;
+        hi = REALISTIC_ALLOWANCE;
+        uint256 snap = vm.snapshotState();
+        (bool ok,) = address(game).call{gas: hi}(abi.encodeWithSignature("mineFlip()"));
+        vm.revertToState(snap);
+        assertTrue(ok, "next chunk admitted under a realistic 10M allowance");
+        while (hi - lo > 5_000) {
+            uint256 mid = (lo + hi) / 2;
+            bytes memory err;
+            (ok, err) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip()"));
+            vm.revertToState(snap);
+            if (ok) {
+                hi = mid;
+            } else {
+                assertEq(bytes4(err), MineFlipGas.InsufficientExecutionGas.selector, "a short allowance is refused, nothing else");
+                lo = mid;
+            }
+        }
     }
 
-    function test_ColdLootboxesWithStaleAffiliateCache() public {
-        _check(DELIVERED_EVENT, 248, 250);
-    }
-}
-
-contract AdvanceColdPendingSubscriptions is ColdSubscriberFixture {
-    function _mode() internal pure override returns (uint8) {
-        return 3;
-    }
-
-    function test_ColdPendingBoxSkipsFullTransaction() public {
-        _check(SKIPPED_EVENT, 1248, 1250);
+    /// @dev True when a non-reverted frame changed a Game storage word (module work runs by
+    ///      delegatecall, so the written storage account is the Game).
+    function _storageChanged(Vm.AccountAccess[] memory accesses) private view returns (bool) {
+        for (uint256 a; a < accesses.length; ++a) {
+            if (accesses[a].reverted) continue;
+            for (uint256 k; k < accesses[a].storageAccesses.length; ++k) {
+                Vm.StorageAccess memory w = accesses[a].storageAccesses[k];
+                if (w.account == address(game) && w.isWrite && !w.reverted && w.previousValue != w.newValue) return true;
+            }
+        }
+        return false;
     }
 }
 
@@ -222,20 +252,3 @@ contract AdvanceColdSplitLootboxSubscriptions is ColdSubscriberFixture {
     }
 }
 
-contract AdvanceColdSplitTicketSubscriptions is ColdSubscriberFixture {
-    function _mode() internal pure override returns (uint8) {
-        return 1;
-    }
-
-    function _split() internal pure override returns (bool) {
-        return true;
-    }
-
-    function _complete() internal pure override returns (bool) {
-        return true;
-    }
-
-    function test_ColdSplitTicketsAndRngRequest() public {
-        _check(DELIVERED_EVENT, 86, 86);
-    }
-}

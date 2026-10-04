@@ -250,13 +250,40 @@ contract SdgnrsWhaleBuy is DeployProtocol {
         assertGt(pool0, 0, "fixture: whale pool funded at deploy");
 
         _runLevelStage(4, 240 ether, 0x5D70600);
-        (bool bought, uint256 qty,) = _lastWhalePurchase();
-        assertTrue(bought && qty == 15, "fixture: 15 paid passes");
+        // One read of the run's logs: the purchase and every sDGNRS pool transfer.
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 qty;
+        uint256 whaleTransfers;
+        uint256 whaleAward;
+        uint256 selfAwards;
+        bytes32 poolTransferSig = keccak256("PoolTransfer(uint8,address,uint256)");
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length == 2 && logs[i].topics[0] == WHALE_PURCHASED_SIG
+                && address(uint160(uint256(logs[i].topics[1]))) == ContractAddresses.SDGNRS) {
+                (qty,) = abi.decode(logs[i].data, (uint256, uint256));
+            }
+            if (logs[i].emitter == address(sdgnrs) && logs[i].topics[0] == poolTransferSig) {
+                uint256 amount = abi.decode(logs[i].data, (uint256));
+                bool self = address(uint160(uint256(logs[i].topics[2]))) == ContractAddresses.SDGNRS;
+                if (self) selfAwards += amount;
+                if (uint256(logs[i].topics[1]) == uint256(sDGNRS.Pool.Whale)) {
+                    ++whaleTransfers;
+                    assertTrue(self, "minter reward is a self-award");
+                    whaleAward = amount;
+                }
+            }
+        }
+        assertEq(qty, 15, "fixture: 15 paid passes");
 
         uint256 remaining = pool0;
         for (uint256 i; i < qty; ++i) remaining -= remaining / 100;
         assertEq(sdgnrs.poolBalance(sDGNRS.Pool.Whale), remaining, "pool after == recurrence");
-        assertEq(supply0 - sdgnrs.totalSupply(), pool0 - remaining, "self-award burned exactly the reward");
+        assertEq(whaleTransfers, 1, "ONE transferFromPool for the batched reward");
+        assertEq(whaleAward, pool0 - remaining, "self-award burned exactly the reward");
+        // The same settled day also resolves sDGNRS's own boxes (the engine completes the session's
+        // read consumers in the run), whose sDGNRS self-awards burn too: every supply reduction in
+        // the run is one of these self-award burns.
+        assertEq(supply0 - sdgnrs.totalSupply(), selfAwards, "supply falls by exactly the self-award burns");
     }
 
     /// @notice No second free-tranche seat: the automatic purchase leaves the seat token untouched.

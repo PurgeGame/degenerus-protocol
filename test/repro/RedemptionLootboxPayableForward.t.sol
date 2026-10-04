@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
@@ -114,10 +115,27 @@ contract RedemptionLootboxPayableForward is DeployProtocol {
         vm.store(address(game), bytes32(uint256(GAME_SLOT1)), bytes32(slot1Val));
     }
 
-    /// @dev Resolve a day's pool by pranking the game contract (deterministic roll).
+    /// @dev Session word pinned for the settlement cohort (any word > 1).
+    uint256 internal constant SETTLEMENT_WORD = 0x5E771E;
+
+    /// @dev Resolve a day's pool by pranking the game contract (deterministic roll), mirroring the
+    ///      Game's resolve hook: the resolve and the settlement-cohort word pin happen together.
     function _resolveDay(uint32 dayToResolve, uint16 roll) internal {
-        vm.prank(address(game));
+        vm.startPrank(address(game));
         sdgnrs.resolveRedemptionPeriod(roll, uint24(dayToResolve));
+        sdgnrs.beginRedemptionSettlement(uint24(dayToResolve), SETTLEMENT_WORD);
+        vm.stopPrank();
+        _openSettlementStage(SETTLEMENT_WORD);
+    }
+
+    /// @dev Seed the Game's published, not-yet-complete read session for `word` with its ticket
+    ///      stage done: the redemption consumer stage (stage 1), the only stage in which a live
+    ///      claim is accepted (the Game's resolve hook pins `word` for the cohort in the same step).
+    function _openSettlementStage(uint256 word) internal {
+        RecyclingState.seedWord(address(game), RecyclingState.readBuffer(address(game)), bytes32(word));
+        uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
+        vm.store(address(game), bytes32(0), bytes32(slot0 | (uint256(1) << 192))); // ticketsFullyProcessed
+        assertEq(game.rngConsumerStage(), 1, "fixture: redemption consumer stage open");
     }
 
     /// @dev Give `who` live boon state: an unexpired coinflip boon (slot0). The claim-time
@@ -167,7 +185,7 @@ contract RedemptionLootboxPayableForward is DeployProtocol {
         _setGameClaimableSdgnrs(0);
         _setGameClaimablePool(0);
 
-        // Land the new day's word: the lootbox leg keys to rngWordForDay(dayD + 1).
+        // Land the new day's word (the lootbox leg itself keys to the cohort's pinned session word).
         _primeCurrentDayRng();
     }
 

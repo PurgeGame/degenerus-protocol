@@ -9,6 +9,7 @@ import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {IDegenerusGameLootboxModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
 /// @dev Etched at the game address to read openHumanBoxes' raw return (the router's input).
 contract HumanSweepProbe is DegenerusGameStorage {
@@ -55,6 +56,9 @@ contract DegeneretteSweep is DeployProtocol {
     bytes32 private constant RESOLVED_SIG =
         keccak256("DegeneretteResolved(address,uint32,uint64,uint256,uint32,bytes)");
     bytes32 private constant MINER_BOUNTY_SIG = keccak256("MinerBounty(uint8,address,uint256)");
+    /// @dev Emitted by the unlock right after the freeze lifts.
+    bytes32 private constant SNAPSHOT_SIG =
+        keccak256("PrizePoolDailySnapshot(uint256,uint256,uint256,uint256,uint256,uint256,uint24)");
 
     address private alice;
     address private bob;
@@ -82,8 +86,56 @@ contract DegeneretteSweep is DeployProtocol {
         RecyclingState.seedWriteBuffer(address(game), idx);
     }
 
+    /// @dev Deliver and publish `word` for the sealed cohort at `idx`, as a fulfilled mid-day
+    ///      request leaves it. The day itself is already sealed (dailyIdx = today, tickets drained),
+    ///      so the delivered cohort's read consumers are the engine's only work and mineFlip stops
+    ///      when the cohort completes instead of preparing the next day.
     function _landWord(uint48 idx, uint256 word) private {
         RecyclingState.seedWord(address(game), idx, bytes32(word));
+        uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
+        slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192);
+        vm.store(address(game), bytes32(0), bytes32(slot0));
+    }
+
+    /// @dev Bets resolve as the Degenerette read consumer of the published word, reached only by
+    ///      mineFlip (openBoxes drives the AFK and human stages only). One unbounded call runs the
+    ///      cohort's whole consumer chain.
+    function _resolveCohort() private {
+        vm.prank(makeAddr("sweepCrank"));
+        game.mineFlip();
+    }
+
+    /// @dev Resolved bets in a recorded log window.
+    function _countResolved(Vm.Log[] memory logs) private pure returns (uint256 n) {
+        for (uint256 i; i < logs.length; ++i) if (logs[i].topics[0] == RESOLVED_SIG) ++n;
+    }
+
+    /// @dev One mineFlip given the smallest allowance that still resolves a bet: the engine admits a
+    ///      bet only when the remaining allowance covers its declared bound, so at the minimum the
+    ///      call resolves exactly the next bet. Found by bisection over snapshots of the same state.
+    function _crankOneBet() private returns (uint256 resolved, uint256 supplied) {
+        uint256 lo = 300_000;
+        uint256 hi = 30_000_000;
+        while (hi - lo > 1_000) {
+            uint256 mid = (lo + hi) / 2;
+            uint256 snap = vm.snapshotState();
+            vm.recordLogs();
+            vm.prank(makeAddr("sweepCrank"));
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip()"));
+            uint256 n = ok ? _countResolved(vm.getRecordedLogs()) : 0;
+            vm.revertToStateAndDelete(snap);
+            if (n != 0) hi = mid;
+            else lo = mid;
+        }
+        supplied = hi;
+        resolved = _crankWith(hi);
+    }
+
+    function _crankWith(uint256 supplied) private returns (uint256 resolved) {
+        vm.recordLogs();
+        vm.prank(makeAddr("sweepCrank"));
+        game.mineFlip{gas: supplied}();
+        resolved = _countResolved(vm.getRecordedLogs());
     }
 
     function _setFuturePool(uint256 future) private {
@@ -146,7 +198,7 @@ contract DegeneretteSweep is DeployProtocol {
     ///      resolution entry point. Used as the one-shot reference against which a many-call,
     ///      small-budget sweep is compared for budget-split invariance.
     function _resolveAllInOneSweep() private {
-        game.openBoxes(type(uint256).max);
+        _resolveCohort();
     }
 
     /// @dev Resolved (betId => totalPayout) pairs in log order.
@@ -217,7 +269,7 @@ contract DegeneretteSweep is DeployProtocol {
     // 2. Equivalence
     // =========================================================================
 
-    /// @notice The sweep resolves every bet in a fuzzed-word mixed queue in one openBoxes(max)
+    /// @notice The sweep resolves every bet in a fuzzed-word mixed queue in one unbounded mineFlip
     ///         call, strictly in queue order, zeroing each bet and completing the index's
     ///         frontier. (Sweep resolution is now the only entry point, so there is no second
     ///         independent path left to cross-check payouts against; this asserts the sweep's
@@ -228,7 +280,7 @@ contract DegeneretteSweep is DeployProtocol {
         _landWord(IDX, word);
 
         vm.recordLogs();
-        game.openBoxes(type(uint256).max);
+        _resolveCohort();
         uint256[] memory swept = _resolvedPayouts(vm.getRecordedLogs());
 
         assertEq(swept.length, 12, "six resolved bets, id+payout pairs");
@@ -246,13 +298,18 @@ contract DegeneretteSweep is DeployProtocol {
         Fingerprint memory handPrint = _fingerprint();
         vm.revertToState(snap);
 
-        // Each FLIP 15-spin bet weighs 4 + 15 = 19 units; openBoxes(3) hands the human sweep at
-        // most 45 (less whatever the afking scan and index header take), so no call fits more
-        // than two and the queue drains over several calls.
-        uint256 calls;
-        uint256 resolvedTotal;
+        // The walk-unit budget became a gas allowance (60d31f775: each bet is admitted only while
+        // the remaining allowance covers its declared bound). The first call gets the smallest
+        // allowance that resolves a bet at all, so it resolves exactly one; every later call reuses
+        // that same allowance, which no longer has to cover the earlier stages, so no call fits
+        // more than two and the queue drains over several calls.
+        (uint256 calls, uint256 resolvedTotal) = (1, 0);
+        (uint256 first, uint256 allowance) = _crankOneBet();
+        assertEq(first, 1, "the starved first call resolves exactly one bet");
+        resolvedTotal = first;
+        emit log_named_uint("per-call allowance", allowance);
         while (!game.boxIndexComplete(IDX)) {
-            uint256 n = game.openBoxes(3);
+            uint256 n = _crankWith(allowance);
             assertGt(n, 0, "every call makes progress");
             assertLe(n, 2, "the budget splits the queue");
             resolvedTotal += n;
@@ -274,7 +331,7 @@ contract DegeneretteSweep is DeployProtocol {
         _place(alice, ETH, 0.01 ether, 25);
         _landWord(IDX, word);
         vm.recordLogs();
-        game.openBoxes(type(uint256).max);
+        _resolveCohort();
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         bool found;
@@ -304,19 +361,67 @@ contract DegeneretteSweep is DeployProtocol {
     // 4. Frozen pool holds the queue
     // =========================================================================
 
+    /// @dev Only the reachable freeze is seeded (387dd5d96 dropped the frozen-pool refusal as
+    ///      unreachable): the daily request sets the freeze together with the daily lock, the
+    ///      unlock clears both, and the Degenerette stage needs the lock released. So while the
+    ///      pool is frozen the consumer stage is closed and nothing resolves; the queue resolves
+    ///      only after the real unlock lifts the freeze.
     function testSweepHoldsQueueWhilePoolFrozen() public {
         _placeMixedQueue();
-        _landWord(IDX, uint256(keccak256("frozen_word")));
-        uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
-        vm.store(address(game), bytes32(0), bytes32(slot0 | FROZEN_BIT));
+        uint256 before = mockVRF.lastRequestId();
+        for (uint256 i; i < 64 && mockVRF.lastRequestId() == before; ++i) game.mineFlip();
+        uint256 reqId = mockVRF.lastRequestId();
+        assertTrue(reqId != before, "the daily request went out");
+        assertTrue(_poolFrozen(), "the daily request froze the pool");
+        assertTrue(game.rngLocked(), "the freeze comes with the daily lock");
+        assertEq(RecyclingState.readBuffer(address(game)), IDX, "the queued cohort is sealed for this word");
 
-        assertEq(game.openBoxes(type(uint256).max), 0, "nothing resolves while frozen");
-        assertFalse(game.boxIndexComplete(IDX), "frontier holds at the queue");
+        // Frozen and waiting on the word: the consumer stage is closed and the queue holds.
+        assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.Wait), "waiting on the word");
+        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
+        game.mineFlip();
         assertTrue(game.degeneretteBetInfo(IDX, 1) != 0, "bet still queued");
+        assertFalse(game.boxIndexComplete(IDX), "frontier holds at the queue");
 
-        vm.store(address(game), bytes32(0), bytes32(slot0));
-        assertEq(game.openBoxes(type(uint256).max), 6, "resolves once the freeze lifts");
+        // Deliver the word and crank. Every step that starts frozen starts locked and off the
+        // Degenerette stage, and no bet resolves before the unlock's snapshot lifts the freeze.
+        mockVRF.fulfillRandomWords(reqId, uint256(keccak256("frozen_word")));
+        vm.recordLogs();
+        uint256 frozenSteps;
+        for (uint256 i; i < 64 && !game.boxIndexComplete(IDX); ++i) {
+            if (_poolFrozen()) {
+                ++frozenSteps;
+                assertTrue(game.rngLocked(), "a frozen pool holds the daily lock");
+                assertTrue(
+                    game.nextMinerAction() != uint8(DegenerusGameStorage.MinerAction.Degenerette),
+                    "the queue is not work while frozen"
+                );
+            }
+            vm.prank(makeAddr("sweepCrank"));
+            game.mineFlip();
+        }
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        assertGt(frozenSteps, 0, "fixture: the delivered day cranked while still frozen");
+        assertFalse(_poolFrozen(), "the unlock lifted the freeze");
+        assertFalse(game.rngLocked(), "and released the lock");
         assertTrue(game.boxIndexComplete(IDX), "frontier passes");
+
+        uint256 unfrozenAt = type(uint256).max;
+        uint256 resolved;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(game)) continue;
+            if (logs[i].topics[0] == SNAPSHOT_SIG && unfrozenAt == type(uint256).max) unfrozenAt = i;
+            if (logs[i].topics[0] == RESOLVED_SIG) {
+                assertLt(unfrozenAt, i, "nothing resolves while frozen");
+                ++resolved;
+            }
+        }
+        assertEq(resolved, 6, "resolves once the freeze lifts");
+        for (uint64 id = 1; id <= 6; ++id) assertEq(game.degeneretteBetInfo(IDX, id), 0, "bet zeroed");
+    }
+
+    function _poolFrozen() private view returns (bool) {
+        return uint256(vm.load(address(game), bytes32(0))) & FROZEN_BIT != 0;
     }
 
     // =========================================================================
@@ -341,7 +446,7 @@ contract DegeneretteSweep is DeployProtocol {
         uint256 dgnrsBefore = sdgnrs.balanceOf(alice);
         vm.expectCall(address(sdgnrs), abi.encodeWithSelector(sdgnrs.poolBalance.selector));
         vm.expectCall(address(coinflip), abi.encodeWithSelector(coinflip.creditFlip.selector));
-        game.openBoxes(type(uint256).max);
+        _resolveCohort();
         assertGt(sdgnrs.balanceOf(alice), dgnrsBefore, "S>=7 transferFromPool paid sDGNRS");
         assertEq(game.degeneretteBetInfo(IDX, 1), 0, "resolved by the sweep");
     }
@@ -350,25 +455,27 @@ contract DegeneretteSweep is DeployProtocol {
         _place(bob, FLIP, 1_000 ether, 1);
         _landWord(IDX, _wordScoring(4));
         uint256 before = coin.balanceOf(bob);
-        game.openBoxes(type(uint256).max);
+        _resolveCohort();
         // The survival flip may zero the payout; either way the queue drains once.
         assertEq(game.degeneretteBetInfo(IDX, 1), 0, "resolved");
         assertGe(coin.balanceOf(bob), before, "mintForGame never debits");
     }
 
-    /// @dev Settle today's advance 30+ minutes into the day so mineFlip takes its box-open leg.
+    /// @dev 30+ minutes into the sealed day, with the delivered cohort's read consumers as the only
+    ///      engine work. A nonzero base fee prices the bounty, which mineFlip pays in FLIP on the
+    ///      gas a call measured above its unpaid first MIN_REWARDED_GAS (72fc06f6c).
     function _readyKeeperLeg() private {
         uint256 elapsed = (vm.getBlockTimestamp() - 82620) % 1 days;
         if (elapsed < 30 minutes) vm.warp(vm.getBlockTimestamp() + 30 minutes - elapsed);
-        // dailyIdx (slot 0, bits 24..47) = today and ticketsFullyProcessed (bit 192) set.
-        uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
-        slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192);
-        vm.store(address(game), bytes32(0), bytes32(slot0));
-        assertFalse(game.advanceDue(), "advance settled");
+        vm.fee(1 gwei);
+        assertTrue(game.boxesPending(), "only the delivered cohort's read consumers remain");
+        assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.HumanBoxes), "advance settled");
     }
 
-    /// @dev Run mineFlip as `keeper`; return bets resolved and the box-open bounty paid.
-    function _crank(address keeper) private returns (uint256 resolved, uint256 bounty) {
+    bytes32 private constant MINER_WORK_SIG = keccak256("MinerWork(address,uint8,uint256,uint256)");
+
+    /// @dev Run mineFlip as `keeper`; return bets resolved, the bounty paid and the measured gas.
+    function _crank(address keeper) private returns (uint256 resolved, uint256 bounty, uint256 used) {
         vm.recordLogs();
         vm.prank(keeper);
         game.mineFlip();
@@ -377,34 +484,41 @@ contract DegeneretteSweep is DeployProtocol {
             if (logs[i].topics[0] == RESOLVED_SIG) ++resolved;
             if (logs[i].topics[0] == MINER_BOUNTY_SIG) {
                 (uint8 kind, uint256 amount) = abi.decode(logs[i].data, (uint8, uint256));
-                assertEq(kind, 2, "box-open bounty kind");
+                // One miner bounty kind for every paid mineFlip (60d31f775 retired the per-category
+                // box-open kind 2 with its flat per-bet credit).
+                assertEq(kind, 1, "miner bounty kind");
                 assertEq(address(uint160(uint256(logs[i].topics[1]))), keeper, "paid to the keeper");
                 bounty += amount;
             }
+            if (logs[i].topics[0] == MINER_WORK_SIG) (,used,) = abi.decode(logs[i].data, (uint8, uint256, uint256));
         }
+        emit log_named_uint("measured mineFlip execution gas", used);
+        emit log_named_uint("bounty paid", bounty);
     }
 
-    /// @notice A plain mineFlip resolves the whole queue. Each resolved bet credits only a small
-    ///         flat amount toward the bounty, so a short queue alone earns none: six bets credit
-    ///         6 x 1,500 gas, under one knee step (15 walk units of 4,700 gas).
-    function testMineFlipResolvesQueueWithOnlyTheFlatCredit() public {
+    /// @notice A plain mineFlip resolves the whole queue. Pay is priced on measured gas, and the
+    ///         first MIN_REWARDED_GAS of every call is unpaid (72fc06f6c, replacing the flat
+    ///         1,500-gas per-bet credit and its knee steps), so a short queue alone earns none.
+    function testMineFlipResolvesShortQueueInsideTheUnpaidFirstMillion() public {
         _placeMixedQueue();
         _landWord(IDX, uint256(keccak256("keeper_word")));
         _readyKeeperLeg();
-        (uint256 resolved, uint256 bounty) = _crank(makeAddr("sweepKeeper"));
+        (uint256 resolved, uint256 bounty, uint256 used) = _crank(makeAddr("sweepKeeper"));
         assertEq(resolved, 6, "mineFlip resolved the whole queue");
-        assertEq(bounty, 0, "six bets are under one knee step");
+        assertLe(used, MineFlipGas.MIN_REWARDED_GAS, "six bets fit the unpaid first million");
+        assertEq(bounty, 0, "six bets earn no bounty");
     }
 
-    /// @notice A real backlog still pays the crank: 48 resolved bets credit 72,000 gas, just
-    ///         past one knee step, which earns a fifth of the bounty unit.
-    function testFlatCreditReachesOneKneeStepAtFortyEightBets() public {
-        for (uint256 i; i < 48; ++i) _place(i % 2 == 0 ? alice : bob, FLIP, 100 ether, 1);
+    /// @notice A real backlog still pays the crank: resolving 120 bets measures past the unpaid
+    ///         first MIN_REWARDED_GAS (48 bets measured ~0.68M, inside it), and the excess is paid.
+    function testBacklogPastTheUnpaidFirstMillionEarnsTheBounty() public {
+        for (uint256 i; i < 120; ++i) _place(i % 2 == 0 ? alice : bob, FLIP, 100 ether, 1);
         _landWord(IDX, uint256(keccak256("keeper_word")));
         _readyKeeperLeg();
-        (uint256 resolved, uint256 bounty) = _crank(makeAddr("sweepKeeper"));
-        assertEq(resolved, 48, "one crank resolved the backlog");
-        assertGt(bounty, 0, "a knee step of bet work earns the bounty");
+        (uint256 resolved, uint256 bounty, uint256 used) = _crank(makeAddr("sweepKeeper"));
+        assertEq(resolved, 120, "one crank resolved the backlog");
+        assertGt(used, MineFlipGas.MIN_REWARDED_GAS, "the backlog measures past the unpaid first million");
+        assertGt(bounty, 0, "the measured excess earns the bounty");
     }
 
     /// @notice A sweep that opens nothing reports every unit it consumed (here ten zeroed bet

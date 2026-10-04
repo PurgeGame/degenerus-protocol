@@ -168,10 +168,11 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
             "box enqueued (first-deposit signal set)"
         );
 
-        // Finalize the box's index: advance LR_INDEX so the box at idx becomes LR_INDEX-1 (the
-        // index the sweep opens), and park the open frontier there (lower indices drained).
-        _advanceLootboxRngIndexByOne();
-        assertEq(_activeLootboxIndex(), idx + 1, "LR_INDEX advanced; box index idx is now finalized");
+        // Finalize the box's index: a request seals idx as the read buffer (two physical buffers,
+        // 6d0e64b09: the write side flips to idx ^ 1) before its word lands, and park the open
+        // frontier there.
+        _sealBuffer(idx);
+        assertEq(_activeLootboxIndex(), idx ^ 1, "LR_INDEX advanced; box index idx is now finalized");
         _parkBoxFrontier(idx);
 
         // PRE-WORD: word at idx is 0 -> the sweep orphan-breaks at idx + openLootBox RngNotReady. No open.
@@ -187,33 +188,42 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
             0,
             "pre-word: box NOT opened (sweep orphan-break + openLootBox RngNotReady)"
         );
+        assertEq(_lootboxEthBase(idx, boxOwner) >> 255, 0, "pre-word: box order not marked processed");
 
-        // POST-WORD: land the word at the finalized index -> the SAME crank opens the box.
+        // POST-WORD: land the word at the finalized index -> the SAME crank opens the box. An
+        // open marks the order word BOX_PROCESSED (bit 255) instead of zeroing it (6d0e64b09).
         _injectLootboxRngWord(idx, FIXED_WORD);
         vm.prank(cranker);
         game.openBoxes(100);
         assertEq(
-            _lootboxEthBase(idx, boxOwner),
-            0,
+            _lootboxEthBase(idx, boxOwner) >> 255,
+            1,
             "post-word: same crank now opens the box (relaxation is WHO, not WHEN)"
         );
     }
 
-    /// @notice SAFE-04 (placement guard untouched): a degenerette placement for the active
-    ///         index AFTER that index already has a word reverts RngNotReady
-    ///         (DegeneretteModule:452 `if (_lootboxWord(index) != 0) revert RngNotReady`).
-    ///         The crank relaxed RESOLVE, not PLACEMENT — placement stays frozen as before.
-    function testPlacementGuardUntouchedWhenIndexHasWord() public {
-        // Land a word at the active INDEX, so the placement guard at :452 must trip.
+    /// @notice SAFE-04 (placement frozen): a degenerette placement made AFTER a word has landed
+    ///         never binds to the worded index. With two physical buffers (6d0e64b09) the worded
+    ///         index is always the read buffer and every placement binds to the unworded write
+    ///         buffer, so the old `_lootboxWord(index) != 0 -> RngNotReady` placement guard can no
+    ///         longer fire (it is structurally vacuous); the freeze it protected holds by
+    ///         construction and is asserted directly here. The crank relaxed RESOLVE, not
+    ///         PLACEMENT — placement stays frozen as before.
+    function testPlacementNeverBindsToAWordedIndex() public {
+        // Land a word at INDEX: it becomes the read buffer, the write side flips to INDEX ^ 1.
         _injectLootboxRngWord(INDEX, FIXED_WORD);
         assertGt(_injectedWord(INDEX), 0, "active index has a word");
+        uint64 readBetsBefore = DQ.lastBetId(vm, address(game), INDEX);
+        uint64 writeBetsBefore = DQ.lastBetId(vm, address(game), INDEX ^ 1);
 
         uint32 customTraits = _losingTicketFor(INDEX, FIXED_WORD);
         uint128 betAmount = 0.01 ether;
-        // RngNotReady() is the placement guard revert (DegeneretteModule:49 / :452).
         vm.prank(player);
-        vm.expectRevert(abi.encodeWithSignature("RngNotReady()"));
         game.placeDegeneretteBet{value: betAmount}(address(0), 0, betAmount, 1, uint8(customTraits & 7));
+
+        assertEq(DQ.lastBetId(vm, address(game), INDEX), readBetsBefore, "no bet binds to the worded index");
+        assertEq(DQ.lastBetId(vm, address(game), INDEX ^ 1), writeBetsBefore + 1, "the bet binds to the unworded write buffer");
+        assertEq(_injectedWord(INDEX ^ 1), 0, "the bet's buffer has no word yet");
     }
 
 
@@ -245,12 +255,12 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         // Land the word and resolve it from an unrelated caller (permissionless, post-unlock)
         // through the sweep, which requires the active index to have moved past INDEX.
         _injectLootboxRngWord(INDEX, word);
-        _advanceLootboxRngIndexByOne();
-        vm.prank(cranker);
-        game.openBoxes(type(uint256).max);
+        _sealBuffer(INDEX);
+        _crankBets(INDEX, betId);
 
-        // The bet resolved (queue word zeroed) and the winnings landed wholly in claimable.
+        // The bet resolved (queue word marked processed) and the winnings landed wholly in claimable.
         assertEq(game.degeneretteBetInfo(INDEX, betId), 0, "winning bet resolved");
+        assertTrue(_betProcessed(INDEX, betId), "winning bet resolved");
         uint256 postClaimable = game.claimableWinningsOf(player);
         assertGt(
             postClaimable,
@@ -833,7 +843,8 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
             vm.readFile("contracts/modules/DegenerusGameAdvanceModule.sol")
         );
         assertGt(
-            _countOccurrences(adv, "jackpotPhaseFlag = true;\n\n                lastPurchaseDay = false;"),
+            // The jackpot entry now sits in runDailyPhase's consolidation stage (60d31f775).
+            _countOccurrences(adv, "jackpotPhaseFlag = true;\n                lastPurchaseDay = false;"),
             0,
             "jackpot entry writes jackpotPhaseFlag=true and lastPurchaseDay=false in lockstep"
         );
@@ -887,15 +898,46 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         );
     }
 
+    /// @dev Land `rngWord` as the published session word on `index` (index becomes the read
+    ///      buffer). The delivered read cohort's tickets count as materialized: in the shared
+    ///      consumer order tickets precede boxes and bets (60d31f775), so a forged cohort must
+    ///      carry the ticket certificate (slot 0, ticketsFullyProcessed bit 192) to reach them.
     function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
         RecyclingState.seedWord(address(game), index, bytes32(rngWord));
+        uint256 s0 = uint256(vm.load(address(game), bytes32(0)));
+        vm.store(address(game), bytes32(0), bytes32(s0 | (uint256(1) << 192)));
+        // A fresh session starts its box and bet cursors at zero, as the real seal does
+        // (_swapRngBuffers): boxCursor (slot 56, bits 56..103), degeneretteCursor (slot 14,
+        // bits 160..207).
+        uint256 s56 = uint256(vm.load(address(game), bytes32(uint256(56))));
+        vm.store(address(game), bytes32(uint256(56)), bytes32(s56 & ~(((uint256(1) << 48) - 1) << 56)));
+        uint256 s14 = uint256(vm.load(address(game), bytes32(uint256(14))));
+        vm.store(address(game), bytes32(uint256(14)), bytes32(s14 & ~(((uint256(1) << 48) - 1) << 160)));
     }
 
-    /// @dev Bump the active lootbox RNG index (low 48 bits of lootboxRngPacked, slot 34) by one,
-    ///      mirroring requestLootboxRng's pre-increment, so a box queued at the prior index now sits
-    ///      at LR_INDEX-1 — the just-finalized index the relocated multi-index sweep opens.
-    function _advanceLootboxRngIndexByOne() internal {
-        assertGt(RecyclingState.currentWord(address(game)), 1, "fixture delivered word");
+    /// @dev Seal `index` as the read buffer (the write side flips to index ^ 1), mirroring a
+    ///      request's seal under two physical buffers (6d0e64b09) — the replacement for the old
+    ///      "advance LR_INDEX by one" step. Idempotent once a word was injected at `index`.
+    function _sealBuffer(uint48 index) internal {
+        RecyclingState.seedWriteBuffer(address(game), index ^ 1);
+    }
+
+    /// @dev Raw BET_PROCESSED bit (255) of bet `betId` in degeneretteQueue[index & 1] (slot 21).
+    ///      A later seal only zeroes the queue LENGTH, so the element word stays readable.
+    function _betProcessed(uint48 index, uint64 betId) internal view returns (bool) {
+        bytes32 base = keccak256(abi.encode(keccak256(abi.encode(uint256(index & 1), uint256(21)))));
+        return uint256(vm.load(address(game), bytes32(uint256(base) + betId - 1))) >> 255 == 1;
+    }
+
+    /// @dev Resolve queued bets through the permissionless crank. Degenerette resolution is the
+    ///      engine's Degenerette stage (mineFlip), not the box helper (60d31f775). A 2M allowance
+    ///      can never admit the next daily request (RNG_REQUEST plus tail), so the crank stops at
+    ///      the read cohort instead of committing a new day.
+    function _crankBets(uint48 index, uint64 betId) internal {
+        for (uint256 i; i < 8 && !_betProcessed(index, betId); ++i) {
+            vm.prank(cranker);
+            game.mineFlip{gas: 2_000_000}();
+        }
     }
 
     /// @dev Park the auto-open frontier (boxCursorIndex byte 13 + boxCursor byte 7, both slot 56)
@@ -956,10 +998,10 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
 
         _seedFuturePrizePool(10_000 ether);
         uint256 pre = game.claimableWinningsOf(who);
+        uint64 betId = DQ.lastBetId(vm, address(game), atIndex);
         _injectLootboxRngWord(atIndex, word);
-        _advanceLootboxRngIndexByOne();
-        vm.prank(cranker);
-        game.openBoxes(type(uint256).max);
+        _sealBuffer(atIndex);
+        _crankBets(atIndex, betId);
         creditDelta = game.claimableWinningsOf(who) - pre;
     }
 

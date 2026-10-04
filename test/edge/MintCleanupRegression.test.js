@@ -34,7 +34,6 @@ const DAILY_ENTROPY =
   0x2f02_3456_789a_bcde_f012_3456_789a_bcde_f012_3456_789a_bcde_f012_3456_789a_bcden;
 const TRAITS_GENERATED_V42_TOPIC_HASH =
   "0x279edf1ccbf5db78a99006a6861b4d49de10ed6016d8400ce6a1d5e415d2ebc3";
-const TICKETS_OWED_PACKED_BASE_SLOT = 13n;
 const TICKET_SLOT_BIT = 0x800000n;
 const TICKET_FAR_FUTURE_BIT = 0x400000n;
 
@@ -144,11 +143,6 @@ async function readTicketWriteSlot(addr) {
   return ((BigInt(s0) >> 200n) & 0xFFn) !== 0n;
 }
 
-async function readDailyIdx(addr) {
-  const s0 = await hre.ethers.provider.getStorage(addr, 0);
-  return Number((BigInt(s0) >> 32n) & 0xFFFFFFFFn);
-}
-
 function computeRk(lvl, path, ticketWriteSlot) {
   const v = BigInt(lvl);
   // Path B (current-level) reads/writes `entriesOwedPacked` via `_tqWriteKey(lvl)`
@@ -190,9 +184,20 @@ async function pinDailyEntropy(game, deployer, mockVRF, word) {
   await mockVRF.fulfillRandomWords(request, word);
 }
 
+// MinerAction ordinals (DegenerusGameStorage.MinerAction): mineFlip reverts NoWork() on
+// Idle and RngNotReady() on Wait, so the drain stops on those instead of calling into them.
+const MINER_IDLE = 0n;
+const MINER_WAIT = 2n;
+
 async function drainViaAdvanceGame(game, caller, storage, deployDayBoundary, maxIters = 300) {
   const events = [], reveals = [];
   for (let i = 0; i < maxIters; ++i) {
+    const action = await game.nextMinerAction();
+    if (action === MINER_IDLE || action === MINER_WAIT) {
+      // The pinned daily cycle must be fully sealed before the drain is allowed to stop.
+      expect(await game.rngLocked(), "drain stopped with the daily lock still held").to.equal(false);
+      break;
+    }
     const receipt = await (await game.connect(caller).mineFlip({ gasLimit: 12_000_000 })).wait();
     const newEvents = await parseTraitsGeneratedEvents(receipt, storage, deployDayBoundary);
     events.push(...newEvents);

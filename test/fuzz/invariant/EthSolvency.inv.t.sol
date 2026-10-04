@@ -121,8 +121,11 @@ contract EthSolvencyInvariant is DeployProtocol {
         assertGt(whaleHandler.ghost_lazyPassDeposited(), 0, "fixture: lazy purchase");
         assertGt(whaleHandler.ghost_deityPassDeposited(), 0, "fixture: deity purchase");
         invariant_balanceReconciliation();
+        // vm.getBlockTimestamp(): via-IR reuses one block.timestamp read across the loop's warps.
+        uint256 firstDay = vm.getBlockTimestamp();
         for (uint256 day; day < 3; ++day) {
-            vm.warp(block.timestamp + 1 days);
+            vm.warp(vm.getBlockTimestamp() + 1 days);
+            assertGe(vm.getBlockTimestamp(), firstDay + (day + 1) * 1 days, "nonvacuity: each pass is a new day");
             for (uint256 step; step < 20; ++step) {
                 gameHandler.mineFlip(0);
                 vrfHandler.fulfillVrf(uint256(keccak256(abi.encode(day, step))));

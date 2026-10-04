@@ -34,10 +34,15 @@ contract CrapsRealWiringConservation is DeployProtocol {
         mockVRF.fundSubscription(1, 100e18);
 
         handler = new CrapsRngSealHandler(game, mockVRF, coin, crapsBattle, 5);
+        // The engine settles a delivered cohort's read-bound fields inside its own crank (60d31f775),
+        // where the table's credits mix with the crank's other coinflip effects. This campaign has
+        // the handler settle that stage through the measured keeper door instead.
+        handler.setMeasureTableSettlement(true);
         targetContract(address(handler));
 
-        bytes4[] memory excluded = new bytes4[](1);
+        bytes4[] memory excluded = new bytes4[](2);
         excluded[0] = CrapsRngSealHandler.debugSeedWordedArmAndCheck.selector;
+        excluded[1] = CrapsRngSealHandler.setMeasureTableSettlement.selector;
         excludeSelector(StdInvariant.FuzzSelector({addr: address(handler), selectors: excluded}));
     }
 

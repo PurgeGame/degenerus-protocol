@@ -37,6 +37,10 @@ contract TerminalAffiliateSeeder is DegenerusGame, BucketSeed {
         rngRequestTime = uint48(block.timestamp) & ~uint48(1);
         vrfRequestId = 777;
         rngWordCurrent = word < 2 ? RNG_WORD_WAITING : word;
+        // Only the request-active bit grants a request authority (retained ids and stamps are
+        // historical, 6d0e64b09); a fresh request also clears publication.
+        _setRngRequestActive(true);
+        _setRngSessionPublished(false);
     }
 
     function paidPass(address owner, uint96 paid) external {
@@ -129,13 +133,36 @@ contract TerminalAffiliatePayoutTest is DeployProtocol {
         _applyTerminalWord(_latchAndRequest());
     }
 
+    /// @dev The ending runs as checkpointed terminal actions, one per mineFlip (60d31f775): cohort
+    ///      latch with its own terminal request, word, ticket drains, payout. The terminal word is
+    ///      always the ending's own request (a recorded daily word no longer stands in for it), so the
+    ///      driver answers that request with WORD, the word the seeded buckets were drawn for.
+    function _finishTerminal() private {
+        for (uint256 i; i < 16 && !game.gameOver(); ++i) {
+            uint256 id = mockVRF.lastRequestId();
+            if (id != 0) {
+                (,, bool fulfilled) = mockVRF.pendingRequests(id);
+                if (!fulfilled) mockVRF.fulfillRandomWords(id, WORD);
+            }
+            game.mineFlip();
+        }
+        assertTrue(game.gameOver(), "real terminal advance completes");
+    }
+
+    /// @dev The terminal payout is the checkpointed `runTerminalJackpotWork(pool, level, word, allowance)`
+    ///      (60d31f775); the expected call pins its first three arguments, the allowance is gas-sized.
+    function _expectTerminalDraw(uint256 jackpot, uint24 terminalLevel) private {
+        vm.expectCall(
+            address(game), abi.encodeWithSelector(game.runTerminalJackpotWork.selector, jackpot, terminalLevel, WORD)
+        );
+    }
+
     function _assertSettlement(uint24 terminalLevel, uint256 jackpot, address winner, uint256 share) private {
-        vm.expectCall(address(game), abi.encodeWithSelector(game.runTerminalJackpot.selector, jackpot, terminalLevel, WORD));
+        _expectTerminalDraw(jackpot, terminalLevel);
         uint256 previous = game.claimableWinningsOf(winner);
         uint256 previousLiability = uint256(vm.load(address(game), bytes32(uint256(1)))) >> 128;
         vm.recordLogs();
-        game.mineFlip();
-        assertTrue(game.gameOver(), "real terminal advance completes");
+        _finishTerminal();
         assertEq(game.claimableWinningsOf(winner), previous + share);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 awards;
@@ -202,8 +229,7 @@ contract TerminalAffiliatePayoutTest is DeployProtocol {
     function testNoDistributableFundsPreservesExistingLiability() public {
         _seed(10, 0, 100 ether, 100 ether);
         _rank(TOP, 11, 1000 ether, address(0xB001));
-        game.mineFlip();
-        assertTrue(game.gameOver());
+        _finishTerminal();
         assertEq(game.claimableWinningsOf(TOP), 0);
         assertEq(game.claimableWinningsOf(CREDITOR), 100 ether);
     }
@@ -237,7 +263,10 @@ contract TerminalAffiliatePayoutTest is DeployProtocol {
         affiliate.claim(subs);
         (address top,) = affiliate.affiliateTop(11);
         assertEq(top, LATE, "post-death score really changed the leader");
+        // A retry after the payout finds no terminal work before the 30-day sweep (60d31f775: an idle
+        // engine reverts NoWork), so it can neither re-run the draw nor re-pay the affiliate.
         vm.recordLogs();
+        vm.expectRevert(bytes4(keccak256("NoWork()")));
         game.mineFlip();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) assertTrue(logs[i].topics[0] != PAID);
@@ -256,10 +285,9 @@ contract TerminalAffiliatePayoutTest is DeployProtocol {
         _rank(LATE, 11, 1000 ether, address(0xB002)); // leaderboard 0 -> ranked, after the latch
         _applyTerminalWord(requestId);
         _rank(address(0xAFF3), 11, 10_000 ether, address(0xB003)); // word public, payout pending
-        vm.expectCall(address(game), abi.encodeWithSelector(game.runTerminalJackpot.selector, 100 ether, uint24(11), WORD));
+        _expectTerminalDraw(100 ether, 11);
         vm.recordLogs();
-        game.mineFlip();
-        assertTrue(game.gameOver(), "terminal payout ran");
+        _finishTerminal();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) assertTrue(logs[i].topics[0] != PAID, "no affiliate award");
         assertEq(game.claimableWinningsOf(LATE), 0, "late ranking not paid");

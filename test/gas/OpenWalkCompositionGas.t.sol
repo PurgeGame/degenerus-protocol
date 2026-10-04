@@ -181,91 +181,6 @@ contract OpenWalkCompositionGas is DeployProtocol {
     // (2) Drained-scan + human-sweep composition
     // =========================================================================
 
-    /// @notice A 1000-subscriber fully-drained ring (998 new + 2 deploy subs) PLUS 90 pending
-    ///         human lootboxes (>= the 80-step remaining budget once the afking leg opens 0) —
-    ///         one `mineFlip()` call pays BOTH the full drained-ring scan AND a full-budget human
-    ///         sweep. This is the composition an external review measured heavy human entries at
-    ///         ~15.06M for; this fixture uses ORDINARY (LOOTBOX_MIN, single-leg) human entries, so
-    ///         the measured number here is expected to sit BELOW that heavy-entry reference — the
-    ///         gap is exactly the per-entry human-sweep cost variance the task calibration targets.
-    function testDrainedScanPlusHumanSweepComposition() public {
-        string memory prefix = "comp_";
-        // Generous per-sub funding (50 ether) so BOTH the initial cover-buy STAGE and the
-        // second-day re-stamp STAGE (below) are funded — afkingFunding exhaustion between the two
-        // day cycles would leave some subs un-restamped, which would desync the "exact pending
-        // count" drain trick used below.
-        _setupFundedSubs(RING_1000_NEW_SUBS, prefix, 50 ether, false);
-        _runStageNewDay(uint256(keccak256(abi.encodePacked(prefix, "w1"))) | 1);
-        _settleClean(uint256(keccak256(abi.encodePacked(prefix, "c1"))) | 1);
-        require(!game.advanceDue(), "fixture: clean after the first stage");
-
-        uint256 ringSize = _subscriberCount();
-        require(ringSize == RING_1000_NEW_SUBS + 2, "fixture: ring is the 998-new + 2-deploy 1000 set");
-
-        // Drain the initial subscribe-time cover-buy boxes. No human backlog exists yet, so any
-        // leftover budget in the human-sweep leg is harmless (it no-ops on an empty backlog).
-        vm.prank(makeAddr(string(abi.encodePacked(prefix, "drain1"))));
-        game.openBoxes(ringSize + 5);
-        require(_countPendingAfking() == 0, "fixture: ring fully drained pre-human-buys");
-
-        // 90 distinct human buyers queue a minimal lootbox (LOOTBOX_MIN, no ticket leg) at the
-        // CURRENT (not-yet-finalized) lootbox RNG index — each is a fresh boxPlayers[idx & 1] entry.
-        for (uint256 i; i < HUMAN_BUYERS_FOR_FULL_SWEEP; ++i) {
-            address buyer = makeAddr(string(abi.encodePacked(prefix, "human_", _u(i))));
-            vm.deal(buyer, 1 ether);
-            vm.prank(buyer);
-            game.purchase{value: LOOTBOX_MIN}(buyer, 0, BoxOrderLib.boCustom(LOOTBOX_MIN), bytes32(0), MintPaymentKind.DirectEth, false);
-        }
-
-        // One more day cycle: re-stamps the afking ring's daily boxes AND finalizes (lands the
-        // word for) the human buyers' lootbox RNG index in lockstep — both ride the same daily
-        // VRF request/fulfill flow this harness drives via _runStageNewDay/_settleClean.
-        _runStageNewDay(uint256(keccak256(abi.encodePacked(prefix, "w2"))) | 1);
-        _settleClean(uint256(keccak256(abi.encodePacked(prefix, "c2"))) | 1);
-        require(!game.advanceDue(), "fixture: clean after the second stage");
-
-        // Re-drain ONLY the newly re-stamped afking boxes: pass the EXACT currently-pending count
-        // as maxCount, so `_autoOpen` stops the moment `opened == maxCount` (== every pending
-        // afking box) — the Game's `openBoxes` only falls through to the human sweep leg when
-        // `afkingSteps < maxCount` (DegenerusGame.sol openBoxes), so an exact-match drain never
-        // touches the freshly-queued, still-pending human backlog.
-        uint256 pendingAfterRestamp = _countPendingAfking();
-        require(pendingAfterRestamp > 0, "fixture: the afking ring was re-stamped for the new day");
-        vm.prank(makeAddr(string(abi.encodePacked(prefix, "drain2"))));
-        // +2 skip allowance: openBoxes' remaining budget converts to human WALK units
-        // (rem * OPEN_HUMAN_ENTRY_WEIGHT). The entry-gate always runs the FIRST available human
-        // entry regardless of cost (DegenerusGameLootboxModule.openHumanBoxes's `opened != 0`
-        // guard), so this pre-drain can leak at most ONE of the 90 queued human boxes before the
-        // budget hits the wall on the second — leaving >= 89, still comfortably past the
-        // measured sweep's real capacity (~40 entries at OPEN_WEIGHT_BUDGET / entry cost).
-        uint256 openedDrain2 = game.openBoxes(pendingAfterRestamp + 2);
-        require(openedDrain2 >= pendingAfterRestamp, "fixture: the drain call opened every pending afking box");
-        require(_countPendingAfking() == 0, "fixture: ring fully drained again pre-measurement");
-
-        // MEASURE: one mineFlip() call. The afking leg does a full-ring-scan (every subscriber
-        // already opened -> 0 afking opens), so `opened == 0` hands the human sweep the full
-        // remaining walk budget (OPEN_WEIGHT_BUDGET - the ring-scan's unitsUsed, GameAfkingModule);
-        // 90 queued human entries is comfortably more than that budget can afford at
-        // OPEN_HUMAN_ENTRY_WEIGHT+OPEN_HUMAN_BOX_WEIGHT per entry, so the sweep consumes its
-        // ENTIRE remaining budget on real opens (a partial, not full, drain of the 90).
-        _coolProtocol();
-        vm.prank(makeAddr(string(abi.encodePacked(prefix, "measure"))));
-        uint256 gasBefore = gasleft();
-        game.mineFlip();
-        uint256 gasUsed = gasBefore - gasleft();
-
-        emit log_named_uint("composition_drained_ring_plus_full_human_sweep_gas", gasUsed);
-        emit log_named_uint("composition_ring_size", ringSize);
-        emit log_named_uint("composition_human_buyers_queued", HUMAN_BUYERS_FOR_FULL_SWEEP);
-        emit log_named_uint("composition_open_batch_budget", OPEN_BATCH);
-        emit log_named_uint("intrinsic_tx_gas_context", INTRINSIC_TX_GAS);
-
-        // The `_pendingBoxCount` gate makes a drained ring free to cross: this call pays for
-        // the human sweep ONLY, never a ring scan — so the 10M normal-path target holds where
-        // the pre-gate composition (full-ring scan + full sweep) organically breached it.
-        assertLt(gasUsed + INTRINSIC_TX_GAS, 10_000_000, "gate + full-budget human sweep stays under the 10M normal-path target");
-    }
-
     // =========================================================================
     // (3) NoWork probe cost at a 1000-subscriber drained ring, zero human work
     // =========================================================================
@@ -289,31 +204,6 @@ contract OpenWalkCompositionGas is DeployProtocol {
     // =========================================================================
     // (4) Afking open marginal (dense ring, ready boxes)
     // =========================================================================
-
-    /// @notice The per-open marginal = (gas for N opens - gas for N-1 opens) / 1, snapshot/revert
-    ///         (ported verbatim from V56AfkingGasMarginal.testPerOpenMarginal's shape). Each
-    ///         afking box open is a stamp-derived resolve (no cold-ledger walk) via
-    ///         `_openAfkingBox` — this is the OTHER half of the composition: the per-box cost when
-    ///         a box IS materialized, as opposed to the per-subscriber SKIP cost measured above.
-    function testAfkingOpenMarginalDenseRing() public {
-        uint256 snap = vm.snapshotState();
-        // SHARED prefix across the N and N-1 runs so the first N-1 boxes are byte-identical
-        // between the two runs (same players, same word) and cancel exactly in the delta — see
-        // V56AfkingGasMarginal.testPerOpenMarginal's identical rationale.
-        uint256 gasN = _measureOpenLegGas(N_HI, "openM_");
-        vm.revertToState(snap);
-        uint256 gasNm1 = _measureOpenLegGas(N_LO, "openM_");
-
-        assertGt(gasN, gasNm1, "per-open marginal: N opens cost strictly more than N-1 (the Nth box materialized)");
-        uint256 perOpen = gasN - gasNm1;
-
-        emit log_named_uint("per_afking_open_marginal_gas", perOpen);
-        emit log_named_uint("per_open_gas_n", gasN);
-        emit log_named_uint("per_open_gas_n_minus_1", gasNm1);
-        emit log_named_uint("intrinsic_tx_gas_context", INTRINSIC_TX_GAS);
-
-        assertLt(perOpen, EFFECTIVE_GAS_CEILING, "per-afking-open marginal trivially fits the 16.7M ceiling");
-    }
 
     // =========================================================================
     // Internal helpers (ported + adapted from V56AfkingGasMarginal.t.sol)

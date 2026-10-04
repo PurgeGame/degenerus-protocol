@@ -134,19 +134,48 @@ contract AfKingSubscription is DeployProtocol {
     ///         emits AT MOST ONE creditFlip to the caller (never per-item) — the one-bounty-per-tx
     ///         property. (The advance leg pays `unit·2·mult`; a `mult==0` gameover advance pays none.)
     function testMintFlipEmitsAtMostOneBuyBounty() public {
-        address s1 = makeAddr("buy_s1");
-        address s2 = makeAddr("buy_s2");
-        _setupHealthyBuyingSub(s1);
-        _setupHealthyBuyingSub(s2);
+        // Enough buying subscribers that one call's buy STAGE measures above the unpaid first 1M
+        // (two measured ~0.35M, 32 ~0.39M, 160 ~1.54M: about 9k per stamped subscriber), so a per-item
+        // credit would show.
+        address[] memory subs = new address[](160);
+        for (uint256 i; i < subs.length; i++) {
+            subs[i] = makeAddr(string(abi.encodePacked("buy_s", vm.toString(i))));
+            _setupHealthyBuyingSub(subs[i]);
+        }
 
         address keeper = makeAddr("bounty_keeper");
 
-        // mineFlip routes ONE category (advance, here) and pays ONE bounty CEI-last. The advance leg
-        // runs the buy STAGE in-context. Assert at most one creditFlip emission to the caller.
+        // mineFlip composes every admitted chunk (the buy STAGE for both subscribers among them) and
+        // pays ONE measured-gas reward at the end. The reward prices gas above the unpaid first 1M
+        // at min(basefee, cap); Foundry's default basefee is zero, which would price it at zero.
+        vm.fee(1 gwei);
+        // Subscribing stamps today's cover buy; the next day's buy STAGE is the work under test.
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        uint24 day = game.currentDayView();
+        for (uint256 i; i < subs.length; i++) {
+            assertLt(_subField(subs[i], OFF_LASTBOUGHT, 24), day, "fixture: no subscriber has bought the new day");
+        }
         vm.recordLogs();
         vm.prank(keeper);
-        try game.mineFlip() {} catch {} // may revert NoWork() if nothing is due — that is the no-bounty case
-        assertLe(_countCreditFlipTo(keeper), 1, "at most one bounty creditFlip per mineFlip tx (REW-02)");
+        game.mineFlip();
+        uint256 credits = _countCreditFlipTo(keeper);
+        uint256 reward;
+        uint256 works;
+        for (uint256 i; i < _logsCache.length; i++) {
+            if (_logsCache[i].emitter == address(game) && _logsCache[i].topics.length >= 2
+                && _logsCache[i].topics[0] == keccak256("MinerWork(address,uint8,uint256,uint256)")) {
+                (, uint256 used, uint256 paid) = abi.decode(_logsCache[i].data, (uint8, uint256, uint256));
+                emit log_named_uint("buy-stage mineFlip execution gas", used);
+                reward = paid;
+                ++works;
+            }
+        }
+        assertEq(works, 1, "one measured miner call");
+        for (uint256 i; i < subs.length; i++) {
+            assertGe(_subField(subs[i], OFF_LASTBOUGHT, 24), day, "the call ran the buy STAGE for every subscriber");
+        }
+        assertGt(reward, 0, "nonvacuity: the call measured above the unpaid 1M at a nonzero base fee");
+        assertEq(credits, 1, "exactly one bounty creditFlip per mineFlip tx, never per item (REW-02)");
     }
 
     /// @notice REW-02 tail: a standalone `autoOpen` is UNREWARDED — only mineFlip() credits. An

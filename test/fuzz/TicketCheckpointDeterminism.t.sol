@@ -20,7 +20,11 @@ contract TicketCheckpointHarness is DegenerusGameTicketModule {
         if (future) {
             earlyTicketLevel = level + 2;
             _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, MID_DAY_FUTURE_POOL);
-        } else ticketWriteSlot = !ticketWriteSlot;
+        } else {
+            // The daily request swaps both cohorts; foil keys follow foilWriteSlot (017ac4cdf).
+            ticketWriteSlot = !ticketWriteSlot;
+            foilWriteSlot = !foilWriteSlot;
+        }
     }
     function frozenFuture(uint24 lvl) external { earlyTicketLevel = lvl; lastPurchaseDay = true; }
     function flipSlot() external { ticketWriteSlot = !ticketWriteSlot; }

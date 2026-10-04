@@ -80,6 +80,9 @@ contract KeeperLeversAndPacking is DeployProtocol {
     /// @dev v55: the packed `Sub` struct lives in game storage, NOT the afking module — the layout gate
     ///      greps HERE (D-351-01 RE-DERIVE).
     string private constant STORAGE_SRC = "contracts/storage/DegenerusGameStorage.sol";
+    /// @dev The single permissionless engine (60d31f775): `mineFlip` and its one credit site moved
+    ///      here from GameAfkingModule.
+    string private constant MINER_SRC = "contracts/modules/DegenerusGameMinerModule.sol";
 
     address private player;
     address private cranker;
@@ -135,27 +138,30 @@ contract KeeperLeversAndPacking is DeployProtocol {
             "GAS-02: the retired flat Degenerette resolve reward is gone (bets ride the box bounty)"
         );
 
-        // v55 REFRAME: the afking router mineFlip reads mintPrice ONCE into a local (read-once lever).
-        assertGt(
-            _countOccurrences(afking, "_mintPriceInContext()"),
-            0,
-            "GAS-02 (v55): mineFlip reads _mintPriceInContext() (the hoisted-once mint price)"
-        );
-        // v55 REFRAME: mineFlip pays exactly ONE unified bounty creditFlip per tx, CEI-LAST, after the
-        // one-category early-return (the v49 AfKing autoBuy `creditFlip(msg.sender, bountyEarned)` lever).
+        // The engine's mineFlip (DegenerusGameMinerModule since 60d31f775) reads the ticket price ONCE,
+        // before any work, into the local that prices its single bounty (read-once lever).
+        string memory miner = _stripComments(vm.readFile(MINER_SRC));
+        string memory mineFlipBody = _functionBody(miner, "function mineFlip() external {");
         assertEq(
-            _countOccurrences(afking, "coinflip.creditFlip(msg.sender, bountyEarned);"),
+            _countOccurrences(mineFlipBody, "uint256 rewardPrice = PriceLookupLib.priceForLevel(_activeTicketLevel());"),
+            1,
+            "GAS-02: mineFlip reads the reward price once, before work"
+        );
+        assertEq(_countOccurrences(mineFlipBody, "priceForLevel("), 1, "GAS-02: no second price read in mineFlip");
+        // mineFlip pays exactly ONE bounty creditFlip per tx, CEI-last, after the dispatch loop.
+        assertEq(
+            _countOccurrences(miner, "coinflip.creditFlip(msg.sender, reward);"),
             1,
             "GAS-02 (v55): mineFlip does ONE CEI-last bounty creditFlip per tx (one-category router)"
         );
-        // The one-category structural early-return (no advance+open bounty stacked in one tx): the advance
-        // branch then the `else` open branch — exactly one category routed per call. The predicate is
-        // _advanceDue, the storage-level discovery shared with the Game's external advanceDue view
-        // (same reads in-context, no self-call round-trip).
-        assertGt(
-            _countOccurrences(afking, "if (rewarded ? _advanceDue() : !_advanceNeedsReadDrain()) {"),
-            0,
-            "GAS-02 (v55): mineFlip's one-category early-return (advance branch) byte-present"
+        // The retired router credit no longer exists in the afking module.
+        assertEq(_countOccurrences(afking, "creditFlip(msg.sender,"), 0, "GAS-02: no second keeper-credit site in the afking module");
+        // The one-category early-return is replaced by one action per dispatch iteration, reselected
+        // from storage, with the bounty credited once for the whole call.
+        assertEq(
+            _countOccurrences(mineFlipBody, "MinerAction action = transitions == 0 ? first : _nextMinerAction();"),
+            1,
+            "GAS-02: the engine dispatches one storage-selected action per iteration"
         );
 
         // D-351-02 DROP (removed surface — batchPurchase GONE from contracts): the GAS-02 AfKing
@@ -239,6 +245,7 @@ contract KeeperLeversAndPacking is DeployProtocol {
     ///         GameAfkingModule; the removed-surface batchPurchase keeper-gate (G9 AF_KING) is DROPPED.
     function testG1ThroughG13GuardsBytePresent() public view {
         string memory game_ = _strippedGame();
+        string memory storage_ = _stripComments(vm.readFile(STORAGE_SRC));
         string memory degenerette = _stripComments(vm.readFile(DEGENERETTE_SRC));
         string memory lootbox = _stripComments(vm.readFile(LOOTBOX_SRC));
         string memory afking = _stripComments(vm.readFile(AFKING_SRC));
@@ -246,18 +253,17 @@ contract KeeperLeversAndPacking is DeployProtocol {
         // G1 — RngNotReady freeze guard: placement (reject a bet at an already-worded index) + resolve.
         assertGt(_countOccurrences(degenerette, "revert RngNotReady()"), 0, "G1: RngNotReady guard byte-present");
         assertGt(_countOccurrences(degenerette, "if (_lootboxWord(index) != 0) revert RngNotReady();"), 0, "G1: placement freeze guard (reject bet at an already-worded index)");
-        // Doors removal: resolveDegeneretteBets (which held its own `if (rngWord == 0) revert
-        // RngNotReady();`) is gone. Bets resolve only through sweepDegeneretteBets, which takes
-        // the index's word as an already-validated parameter -- the readiness gate relocated to
-        // its caller, openHumanBoxes' `if (indexWord == 0) break;` (G2, below), which gates both
-        // the box queue and the bet queue off the SAME per-index word before either is touched.
-        assertGt(_countOccurrences(lootbox, "if (indexWord == 0) break;"), 0, "G1: bet-resolve freeze guard now enforced by the caller (openHumanBoxes) before the shared queue is reached");
+        // Bets resolve only as the engine's Degenerette read consumer (60d31f775): the worker runs only
+        // at its consumer stage and only off the read buffer's delivered word.
+        assertGt(_countOccurrences(degenerette, "if (_rngConsumerStage() != 4) return result;"), 0, "G1: bet resolve runs only at the Degenerette consumer stage");
+        assertGt(_countOccurrences(degenerette, "if (rngWord == 0) return result;"), 0, "G1: bet resolve never runs on an un-worded buffer");
 
-        // G2 — RngNotReady open-box guard / orphan-index skip. The relocated multi-index sweep
-        // (DegenerusGameLootboxModule.openHumanBoxes) never advances past an un-worded index: it
-        // BREAKs the walk (resuming once the re-issued word lands), so its boxes are never marooned.
-        assertGt(_countOccurrences(lootbox, "uint256 indexWord = _lootboxWord(idx);"), 0, "G2: sweep per-index word load (threaded into every open at this index)");
-        assertGt(_countOccurrences(lootbox, "if (indexWord == 0) break;"), 0, "G2: sweep orphan-index skip (break, never advance past an un-worded index)");
+        // G2 — RngNotReady open-box guard. The human box worker (GameAfkingModule._runHumanBoxWork,
+        // 60d31f775) reads the read buffer's word once, threads it into every open, and returns
+        // without touching the queue while that word is absent.
+        assertGt(_countOccurrences(afking, "uint256 indexWord = _lootboxWord(idx);"), 0, "G2: sweep per-index word load (threaded into every open at this index)");
+        assertGt(_countOccurrences(afking, "if (indexWord == 0) return result;"), 0, "G2: no open on an un-worded buffer");
+        assertGt(_countOccurrences(afking, "if (_rngConsumerStage() != 3) return result;"), 0, "G2: human boxes open only at their consumer stage");
         assertGt(_countOccurrences(lootbox, "revert RngNotReady()"), 0, "G2: LootboxModule open RngNotReady guard byte-present");
 
         // G3 — one-reward-per-item: the queue word is zeroed before the bet resolves.
@@ -268,21 +274,22 @@ contract KeeperLeversAndPacking is DeployProtocol {
         // skips an entry whose box order AND presale leg are both already zero (already drained).
         assertGt(_countOccurrences(lootbox, "lootboxOrder[index & 1][player] = word | BOX_PROCESSED;"), 0, "G4: box zeroing one-reward guard (single packed word)");
         assertGt(_countOccurrences(lootbox, "uint256 word = _boxOrder(idx, player);"), 0, "G4: sweep per-entry box-word load (the skip-check read doubles as the open's input)");
-        assertGt(_countOccurrences(lootbox, "if (boxes == 0 && stored == 0) {"), 0, "G4: sweep already-opened skip (both legs zero -> continue)");
+        assertGt(_countOccurrences(afking, "if (boxes == 0 && stored == 0) continue;"), 0, "G4: sweep already-opened skip (both legs zero -> continue)");
 
         // G6 — (v49 batchPurchase per-player slice try/catch) DROPPED, D-351-02 (removed surface). The
         // afking per-sub STAGE is revert-free by construction (D-348-04 no valve); asserted ABSENT.
         assertEq(_countOccurrences(game_, "this._batchPurchaseUnit{value: slice}"), 0, "G6 (D-351-02): batchPurchase per-slice try REMOVED (no valve under D-348-04)");
 
-        // G7 — crank per-item isolation. The bet sweep breaks (never skips) on a bet that does
-        // not fit its remaining budget, resuming it next call, and holds its queue while the
-        // pool is frozen; the human-box open per-item isolation lives in the lootbox module's
-        // sweep, where each entry resolves both legs in isolation from its own pre-loaded values
-        // (robust to either leg empty, guaranteed-non-reverting under the entry-gate) — a long
-        // queue can never gas-wall the tx.
-        assertGt(_countOccurrences(degenerette, "if ((resolved != 0 || !mustRunFirst) && unitsSpent + cost > budget) break;"), 0, "G7: bet sweep breaks (never skips) on a bet that does not fit, first bet always runs");
-        assertGt(_countOccurrences(degenerette, "if (prizePoolFrozen) return (0, pos, 0, 0);"), 0, "G7: bet sweep holds its queue while the pool is frozen (no Insolvent revert can stall the frontier)");
-        assertGt(_countOccurrences(lootbox, "if (betPos < blen) break;"), 0, "G7: box sweep resumes mid bet queue next call");
+        // G7 — crank per-item isolation. Every worker admits each item against its declared gas bound
+        // (MineFlipGasBounds) and BREAKS (never skips) when the next item does not fit, resuming from
+        // its persisted cursor on the next call; the Degenerette queue holds while its consumer stage
+        // is closed (stage 0 under the daily lock, which a frozen pool implies). Each human order
+        // resolves in isolation from its own pre-loaded values — a long queue can never gas-wall the tx.
+        assertGt(_countOccurrences(degenerette, "if (!MineFlipGas.canRun(meter, skip ? BET_SKIP_GAS : _betGasMaximum(bet), BET_TAIL_GAS)) break;"), 0, "G7: bet sweep breaks (never skips) on a bet that does not fit");
+        assertGt(_countOccurrences(degenerette, "if (result.progressed) degeneretteCursor = uint48(pos);"), 0, "G7: bet sweep resumes from its cursor");
+        assertGt(_countOccurrences(storage_, "if (gameOver || rngLockedFlag || _rngRequestActive()"), 0, "G7: consumer stages close under the lock (frozen pool holds the bet queue)");
+        assertGt(_countOccurrences(afking, "if (!MineFlipGas.canRun(meter, maximum, HUMAN_TAIL_GAS)) break;"), 0, "G7: box sweep breaks on an order that does not fit");
+        assertGt(_countOccurrences(afking, "boxCursor = uint48(cur);"), 0, "G7: box sweep resumes from its cursor next call");
         assertGt(_countOccurrences(lootbox, "_openLootBoxLegWith(player, idx, word, indexWord, currentLevel);"), 0, "G7: per-entry box-open isolation (the sweep opens one entry at a time)");
         assertGt(_countOccurrences(game_, "if (msg.sender != address(this)) revert OnlySelf();"), 0, "G7: onlySelf (msg.sender == self) guard byte-present");
 
@@ -307,9 +314,10 @@ contract KeeperLeversAndPacking is DeployProtocol {
         // G13 — rngLocked / gameOver freeze guards. The open path no-ops during the freeze (RD-3).
         assertGt(_countOccurrences(game_, "if (rngLockedFlag) revert RngLocked();"), 0, "G13: rngLocked pre-check byte-present");
         assertGt(_countOccurrences(game_, "if (gameOver) revert GameOver();"), 0, "G13: gameOver pre-check byte-present");
-        // The human-box sweep's rngLock/liveness freeze no-op moved into the lootbox module's
-        // openHumanBoxes entry-gate (the sweep is delegatecall'd from openBoxes).
-        assertGt(_countOccurrences(lootbox, "if (rngLockedFlag || _livenessTriggered()) return (0, 0);"), 0, "G13 (RD-3): sweep rngLock/liveness freeze no-op (relocated to openHumanBoxes)");
+        // The human-box sweep's rngLock/liveness freeze no-op: every read consumer (boxes, bets,
+        // Craps) runs only at its consumer stage, which is 0 under the lock or liveness (60d31f775).
+        assertGt(_countOccurrences(storage_, "|| rngFlagsAndNudges & (uint16(1) << 13) != 0 || _livenessTriggered()) return 0;"), 0, "G13 (RD-3): consumer stage closed under rngLock/liveness");
+        assertGt(_countOccurrences(afking, "if (_rngConsumerStage() != 3) return result;"), 0, "G13 (RD-3): the box sweep is a no-op outside its consumer stage");
     }
 
     /// @notice Anti-vacuity backstop for the grep gates: the comment-stripped sources are non-empty and a
@@ -325,7 +333,10 @@ contract KeeperLeversAndPacking is DeployProtocol {
         assertGt(bytes(storage_).length, 1000, "stripped DegenerusGameStorage source is non-empty (repoint live)");
         // Known code identifiers that unquestionably exist post-strip in each repointed source.
         assertGt(_countOccurrences(game_, "function openBoxes(uint256 maxCount)"), 0, "harness live: a known Game code symbol is found");
-        assertGt(_countOccurrences(afking, "function mineFlip()"), 0, "harness live: a known GameAfkingModule code symbol is found");
+        assertGt(_countOccurrences(afking, "function runHumanBoxWork(uint256 gasAllowance)"), 0, "harness live: a known GameAfkingModule code symbol is found");
+        string memory miner = _stripComments(vm.readFile(MINER_SRC));
+        assertGt(bytes(miner).length, 1000, "stripped DegenerusGameMinerModule source is non-empty");
+        assertGt(_countOccurrences(miner, "function mineFlip() external {"), 0, "harness live: the engine's mineFlip is found");
         assertGt(_countOccurrences(storage_, "struct Sub {"), 0, "harness live: a known DegenerusGameStorage code symbol is found");
         // A comment-only sentinel must be STRIPPED (proves comments are actually removed).
         assertEq(
@@ -338,6 +349,30 @@ contract KeeperLeversAndPacking is DeployProtocol {
     // =========================================================================
     // Internal helpers
     // =========================================================================
+
+    /// @dev The brace-matched body of the function whose declaration ends with `sig` ("" if absent).
+    function _functionBody(string memory haystack, string memory sig) internal pure returns (string memory) {
+        bytes memory hb = bytes(haystack);
+        bytes memory sb = bytes(sig);
+        for (uint256 i; sb.length != 0 && i + sb.length <= hb.length; ++i) {
+            bool matched = true;
+            for (uint256 j; j < sb.length; ++j) {
+                if (hb[i + j] != sb[j]) { matched = false; break; }
+            }
+            if (!matched) continue;
+            uint256 open = i + sb.length - 1;
+            uint256 depth;
+            for (uint256 k = open; k < hb.length; ++k) {
+                if (hb[k] == "{") ++depth;
+                else if (hb[k] == "}" && --depth == 0) {
+                    bytes memory out = new bytes(k - open + 1);
+                    for (uint256 m; m < out.length; ++m) out[m] = hb[open + m];
+                    return string(out);
+                }
+            }
+        }
+        return "";
+    }
 
     function _strippedGame() internal view returns (string memory) {
         return _stripComments(vm.readFile(GAME_SRC));

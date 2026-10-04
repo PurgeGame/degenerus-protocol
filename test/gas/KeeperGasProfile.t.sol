@@ -9,7 +9,14 @@ import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 
 /// @dev Actual purchases, callbacks and keeper calls; no queue/completion/storage seeding.
 ///      Also runs against the baseline with RECYCLED_STORAGE=false for payer comparison.
+///      Owner gas rule (2026-10-03): the engine admits checkpoints while the supplied allowance
+///      covers the next declared bound, so a call given unbounded gas measures its own allowance
+///      (a whole-lifecycle call reached ~140M). Every keeper call here therefore gets a realistic
+///      10M allowance and must either progress or stop on NoWork: a required checkpoint that a
+///      10M call cannot admit fails the run. Whole-call figures are logged, never bounded.
 contract KeeperGasProfileTest is DeployProtocol {
+    /// @dev A realistic mineFlip allowance.
+    uint256 internal constant KEEPER_CALL_GAS = 10_000_000;
     DegenerusGameLens lens;
     address[4] buyers;
     uint24[4] boughtFoilAt;
@@ -26,7 +33,6 @@ contract KeeperGasProfileTest is DeployProtocol {
     uint256 keeperGas;
     uint256 maxKeeperGas;
     uint256 keeperCalls;
-    uint256 keeperCallsOver10M;
     uint256 purchaseRefund;
     uint256 callbackRefund;
     uint256 keeperRefund;
@@ -96,13 +102,11 @@ contract KeeperGasProfileTest is DeployProtocol {
             vm.recordLogs();
             bool sample = false; ++callNo;
             if (sample) vm.resumeTracing();
-            try game.mineFlip() {
+            try game.mineFlip{gas: KEEPER_CALL_GAS}() {
                 keeperRefund += _refundLastCall();
                 uint256 used = vm.snapshotGasLastCall("lifecycle-keeper");
                 keeperGas += used;
                 ++keeperCalls;
-                if (used > 10_000_000) ++keeperCallsOver10M;
-                assertLt(used, 16_700_000, "keeper call exceeds hard gas ceiling");
                 if (used > maxKeeperGas) maxKeeperGas = used;
                 _attribute(used);
                 if (sample) { vm.pauseTracing(); emit log_named_uint("traced call gas", used); }
@@ -241,9 +245,7 @@ contract KeeperGasProfileTest is DeployProtocol {
         emit log_named_uint("keeper gas", keeperGas);
         emit log_named_uint("keeper capped call refunds", keeperRefund);
         emit log_named_uint("max individual keeper gas", maxKeeperGas);
-        emit log_named_uint("keeper calls", keeperCalls);
-        emit log_named_uint("keeper calls above 10M", keeperCallsOver10M);
-        assertLe(keeperCallsOver10M * 100, keeperCalls, "more than 1% of keeper calls exceed 10M");
+        emit log_named_uint("keeper calls (each at a 10M allowance)", keeperCalls);
         emit log_named_uint("heavy calls (>1M)", sCalls);
         emit log_named_uint("heavy gas", sGas);
         emit log_named_uint("unique slots touched (cold)", sColdR);
@@ -253,7 +255,7 @@ contract KeeperGasProfileTest is DeployProtocol {
         emit log_named_uint("first write cleared", sClearW);
         emit log_named_uint("warm reads", sWarmR);
         for (uint256 c; c < 64; ++c) if (catCalls[c] != 0) {
-            emit log_named_uint("== category (0 unpaid, 2 box, 4 craps, 5 dec, 32+stage advance)", c);
+            emit log_named_uint("== category (0 unpaid, 1 miner bounty, 32+stage advance)", c);
             emit log_named_uint("calls", catCalls[c]);
             emit log_named_uint("gas", catGas[c]);
             emit log_named_uint("max", catMax[c]);

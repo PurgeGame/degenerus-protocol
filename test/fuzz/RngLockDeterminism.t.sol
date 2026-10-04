@@ -63,6 +63,44 @@ contract RngLockDeterminism is DeployProtocol {
             game.mineFlip();
         }
             _finishReadConsumers();
+        _settleMidday();
+    }
+
+    /// @dev Answer and drain the mid-day work the state engine requests on its own once a day
+    ///      is sealed (a closed Craps window rides a mid-day request whenever the subscription
+    ///      covers it, 6d0e64b09), until the engine is idle with nothing in flight. Never
+    ///      crosses into a daily request.
+    function _settleMidday() internal {
+        for (uint256 i = 0; i < 64; i++) {
+            if (game.rngLocked()) return;
+            uint8 action = game.nextMinerAction();
+            if (action == 0 || action == 17) return; // Idle, or the next day's RequestDaily
+            if (action == 2) {
+                uint256 id = mockVRF.lastRequestId();
+                (,, bool done) = mockVRF.pendingRequests(id);
+                if (done) return;
+                mockVRF.fulfillRandomWords(id, uint256(keccak256(abi.encode("midday", id))));
+                _lastFulfilledReqId = id;
+            } else {
+                game.mineFlip();
+            }
+        }
+        fail("harness: mid-day work did not settle");
+    }
+
+    /// @dev The session word published for `index` (LootboxRngApplied). The drain that releases
+    ///      the daily lock can continue in the same call into a mid-day request for a closed
+    ///      Craps window, which retires the published word from the two physical buffers, so the
+    ///      consumed per-index word is read from the publication event.
+    function _publishedWord(Vm.Log[] memory logs, uint48 index) internal view returns (uint256) {
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].emitter == address(game) && logs[i].topics.length != 0
+                && logs[i].topics[0] == keccak256("LootboxRngApplied(uint48,uint256,uint256)")) {
+                (uint48 at, uint256 word,) = abi.decode(logs[i].data, (uint48, uint256, uint256));
+                if (at == index) return word;
+            }
+        }
+        return 0;
     }
 
     function _readRngWordCurrent() internal view returns (uint256) {
@@ -103,8 +141,13 @@ contract RngLockDeterminism is DeployProtocol {
             mockVRF.fulfillRandomWords(reqId, word);
             _lastFulfilledReqId = reqId;
         }
+        // Drain until the delivered request's day seals. When a perturbation moved the wall day,
+        // the call that seals it goes straight on to the new day's request (the engine selects the
+        // next action in the same flow, 60d31f775), so the lock alone cannot end this loop.
+        uint24 sealedBefore = uint24(uint256(vm.load(address(game), bytes32(uint256(SLOT_PACKED_0)))) >> 24);
         for (uint256 i = 0; i < DRAIN_MAX_ITERATIONS; i++) {
             if (!game.rngLocked()) break;
+            if (uint24(uint256(vm.load(address(game), bytes32(uint256(SLOT_PACKED_0)))) >> 24) > sealedBefore) break;
             game.mineFlip();
         }
     }
@@ -698,8 +741,9 @@ contract RngLockDeterminism is DeployProtocol {
             "TST-01: the keeper perturbation must NOT move _nudgeCount() (frozen request->consume)"
         );
 
+        vm.recordLogs();
         _deliverMockVrf(reqId, vrfWord);
-        uint256 perturbedWord = _lootboxRngWord(purchaseIndex);
+        uint256 perturbedWord = _publishedWord(vm.getRecordedLogs(), purchaseIndex);
         assertTrue(perturbedWord != 0, "TST-01: per-index word must be set post-VRF");
 
         // ---- baseline run: SAME word, SAME reversals, NO perturbation ----
@@ -711,8 +755,9 @@ contract RngLockDeterminism is DeployProtocol {
         );
         game.mineFlip();
         uint256 baselineReqId = mockVRF.lastRequestId();
+        vm.recordLogs();
         _deliverMockVrf(baselineReqId, vrfWord);
-        uint256 baselineWord = _lootboxRngWord(purchaseIndex);
+        uint256 baselineWord = _publishedWord(vm.getRecordedLogs(), purchaseIndex);
 
         _assertVrfOutputByteIdentity(
             bytes32(perturbedWord),
@@ -728,8 +773,9 @@ contract RngLockDeterminism is DeployProtocol {
         assertEq(_readTotalFlipReversals(), 0, "TST-01 control: reversals zeroed");
         game.mineFlip();
         uint256 controlReqId = mockVRF.lastRequestId();
+        vm.recordLogs();
         _deliverMockVrf(controlReqId, vrfWord);
-        uint256 controlWord = _lootboxRngWord(purchaseIndex);
+        uint256 controlWord = _publishedWord(vm.getRecordedLogs(), purchaseIndex);
         assertTrue(
             controlWord != baselineWord,
             "TST-01 non-vacuity: a zero-reversals run MUST differ from the nudged run (the consume reads _nudgeCount(); otherwise the freeze proof is vacuous)"
@@ -879,8 +925,9 @@ contract RngLockDeterminism is DeployProtocol {
             "TST-01 claim: whalePassClaims[claimant] must survive the locked-window claim attempt (WHALE-04 sec4)"
         );
 
+        vm.recordLogs();
         _deliverMockVrf(reqId, vrfWord);
-        uint256 perturbedWord = _lootboxRngWord(purchaseIndex);
+        uint256 perturbedWord = _publishedWord(vm.getRecordedLogs(), purchaseIndex);
         assertTrue(perturbedWord != 0, "TST-01 claim: per-index word must be set post-VRF");
 
         // ---- baseline run: SAME word, SAME reversals, NO perturbation ----
@@ -896,8 +943,9 @@ contract RngLockDeterminism is DeployProtocol {
         );
         game.mineFlip();
         uint256 baselineReqId = mockVRF.lastRequestId();
+        vm.recordLogs();
         _deliverMockVrf(baselineReqId, vrfWord);
-        uint256 baselineWord = _lootboxRngWord(purchaseIndex);
+        uint256 baselineWord = _publishedWord(vm.getRecordedLogs(), purchaseIndex);
 
         _assertVrfOutputByteIdentity(
             bytes32(perturbedWord),
@@ -915,8 +963,9 @@ contract RngLockDeterminism is DeployProtocol {
         assertEq(_readTotalFlipReversals(), 0, "TST-01 claim control: reversals zeroed");
         game.mineFlip();
         uint256 controlReqId = mockVRF.lastRequestId();
+        vm.recordLogs();
         _deliverMockVrf(controlReqId, vrfWord);
-        uint256 controlWord = _lootboxRngWord(purchaseIndex);
+        uint256 controlWord = _publishedWord(vm.getRecordedLogs(), purchaseIndex);
         assertTrue(
             controlWord != baselineWord,
             "TST-01 claim non-vacuity: a zero-reversals run MUST differ from the nudged run (the consume reads _nudgeCount(); otherwise the freeze proof is vacuous)"
@@ -1017,23 +1066,24 @@ contract RngLockDeterminism is DeployProtocol {
         );
 
         // ---- (2) AFTER the lock clears: the box's word landed (not orphaned), the box opens ----
+        vm.recordLogs();
         _deliverMockVrf(reqId, uint256(keccak256("tst01-no-maroon-word")));
         assertFalse(game.rngLocked(), "no-maroon: lock cleared post-VRF");
         assertTrue(
-            _lootboxRngWord(boxIndex) != 0,
+            _publishedWord(vm.getRecordedLogs(), boxIndex) != 0,
             "no-maroon: the box index's per-index word landed (not orphaned/zeroed by the lock)"
         );
         // The box is openable at its index — it materializes post-unlock; none stranded. The
-        // relocated sweep walks the open frontier in order rather than a chosen index, so park it
-        // at boxIndex first (nothing was queued at an earlier index in this test, so this matches
-        // the natural frontier — same idiom as part (2) below, just for a genuinely-landed word).
-        _parkBoxFrontier(boxIndex);
+        // keeper's own human-box stage opens the read cohort before any later request may
+        // retire the buffer, and the manual valve must not revert on the drained cohort. An
+        // open marks the order word BOX_PROCESSED (bit 255) instead of zeroing it (6d0e64b09).
         vm.prank(boxOwner);
         game.openBoxes(type(uint256).max);
-        assertEq(
-            _lootboxEthBase(boxIndex, boxOwner), 0,
+        assertTrue(
+            _lootboxEthBase(boxIndex, boxOwner) >> 255 == 1,
             "no-maroon: the deferred box materializes post-unlock (first-deposit signal zeroed)"
         );
+        _settleMidday();
 
         // ---- autoOpen cursor + boxesPending on a word-ready ACTIVE index (cursor-intact open) ----
         // A fresh box at the now-active index with its word present: boxesPending() flips true
@@ -1050,16 +1100,17 @@ contract RngLockDeterminism is DeployProtocol {
         // words land at LR_INDEX-1. Advance LR_INDEX by one so the box at queuedIndex becomes the
         // just-finalized index the sweep reads, then land its word there. (The old buggy read acted
         // at the ACTIVE index; injecting at the active index is now an unreachable state.)
-        _advanceLootboxRngIndexByOne();
-        assertEq(_readLootboxRngIndex(), queuedIndex + 1, "no-maroon: LR_INDEX advanced past the queued box (now finalized)");
-        _parkBoxFrontier(queuedIndex); // start the sweep at the finalized index (lower indices drained)
+        // Two physical buffers (6d0e64b09): the seeded session makes queuedIndex the read side.
         _injectActiveLootboxWord(queuedIndex, uint256(keccak256("tst01-no-maroon-word2")));
+        _advanceLootboxRngIndexByOne();
+        assertEq(_readLootboxRngIndex(), queuedIndex ^ 1, "no-maroon: LR_INDEX advanced past the queued box (now finalized)");
+        _parkBoxFrontier(queuedIndex); // start the sweep at the finalized index (lower indices drained)
         assertFalse(game.rngLocked(), "no-maroon: unlocked for the cursor-open");
         assertTrue(game.boxesPending(), "no-maroon: boxesPending() true once the finalized-index word lands");
         uint256 openedViaCursor = game.openBoxes(100);
         assertGt(openedViaCursor, 0, "no-maroon: autoOpen walks the cursor and opens the queued box");
-        assertEq(
-            _lootboxEthBase(queuedIndex, boxOwner2), 0,
+        assertTrue(
+            _lootboxEthBase(queuedIndex, boxOwner2) >> 255 == 1,
             "no-maroon: the cursor-opened box materialized (signal zeroed) - none marooned"
         );
     }

@@ -126,7 +126,9 @@ contract FuturepoolSkimTest is DeployProtocol {
         vm.deal(address(game), 300 ether); // no yield surplus to perturb the pools
         uint256 word = 0xA77E1;
         bytes32 skimSig = keccak256("PoolSkimApplied(uint24,uint256,uint256)");
-        for (uint256 step; step < 100; ++step) {
+        // The synthetic 500-day jump leaves one expired Craps maintenance checkpoint per call
+        // ahead of the daily request, so the real pipeline needs hundreds of calls here.
+        for (uint256 step; step < 2000; ++step) {
             uint256 nextBefore = game.nextPrizePoolView();
             uint256 futureBefore = game.futurePrizePoolView();
             vm.recordLogs();

@@ -3,8 +3,9 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 
-/// @title SdgnrsWhaleBuyStageGas -- calibration of `SUB_STAGE_SDGNRS_WHALE_WEIGHT`.
+/// @title SdgnrsWhaleBuyStageGas -- calibration of the sDGNRS whale purchase checkpoint.
 /// @notice Measures the COLD incremental gas of sDGNRS's automatic whale purchase inside the
 ///         afking process STAGE (the first mineFlip call of a new day), for 0 / 5 / 10 / 100
 ///         paid passes, in the state the buy really fires in: the stored level just promoted
@@ -13,12 +14,12 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///         sDGNRS (the ONE fresh owner registration + lane append). `vm.cool` re-colds every
 ///         contract the purchase touches right before the measured call.
 ///
-///         The bound this pins: the purchase's incremental gas must not exceed its charged weight
-///         times the STAGE's ~3.4k-gas weight unit. The STAGE charges the weight against the same
-///         2,500-unit budget the subscriber loop draws from, so a purchase under `weight x unit`
-///         keeps every chunk composition inside the existing <10M proof (V56AfkingGasMarginal,
-///         AdvanceStageWorstCaseGas): the purchase displaces at least as many subscriber units as
-///         it costs. Test-only: ZERO contracts/*.sol mutation.
+///         The bound this pins: the purchase is its own checkpoint, admitted only when the
+///         allowance covers its declared bound `MineFlipGasBounds.SUBSCRIBER_WHALE_GAS` (the
+///         engine's gas bounds replaced the subscriber stage's weight units), so its incremental
+///         gas through the real keeper call must stay inside that bound, itself inside the 10M
+///         realistic chunk limit. Whole keeper calls are budgeted by their allowance and only
+///         reported. Test-only: ZERO contracts/*.sol mutation.
 contract SdgnrsWhaleBuyStageGas is DeployProtocol {
     uint256 private constant GAME_CLAIMABLE_SLOT = 7;
     uint256 private constant CLAIMABLE_POOL_SLOT = 1;
@@ -26,12 +27,11 @@ contract SdgnrsWhaleBuyStageGas is DeployProtocol {
     uint256 private constant SDGNRS_BONUS_OFFBYTES = 25;
     uint256 private constant LEVEL_OFFBYTES = 12;
 
-    /// @dev Mirrors GameAfkingModule.SUB_STAGE_SDGNRS_WHALE_WEIGHT (private there).
-    uint256 private constant WHALE_WEIGHT = 700;
-    /// @dev The STAGE's weight unit (GameAfkingModule.SUB_STAGE_LOOTBOX_WEIGHT = 10 ~= 34k gas).
-    uint256 private constant GAS_PER_WEIGHT_UNIT = 3_400;
-    /// @dev Repository hard ceiling for any single advance transaction.
-    uint256 private constant HARD_CEILING = 16_700_000;
+    uint256 private constant TICKET_QUEUE_SLOT = 12;
+    uint256 private constant TICKET_OWNER_ID_SLOT = 13;
+    uint256 private constant TICKET_PENDING_SLOT = 78;
+    /// @dev A realistic keeper allowance for the measured call.
+    uint256 private constant KEEPER_ALLOWANCE = 10_000_000;
 
     uint256 private _t;
 
@@ -59,11 +59,12 @@ contract SdgnrsWhaleBuyStageGas is DeployProtocol {
         emit log_named_uint("increment, 5 passes", g5 - g0);
         emit log_named_uint("increment, 10 passes", g10 - g0);
         emit log_named_uint("increment, 100 passes", g100 - g0);
-        emit log_named_uint("charged weight x unit", WHALE_WEIGHT * GAS_PER_WEIGHT_UNIT);
+        emit log_named_uint("declared whale checkpoint bound", GasBounds.SUBSCRIBER_WHALE_GAS);
 
         assertGt(g100, g0, "the purchase did real work");
-        assertLe(g100 - g0, WHALE_WEIGHT * GAS_PER_WEIGHT_UNIT, "100-pass increment <= charged weight x 3.4k");
-        assertLt(g100, HARD_CEILING, "the whole stage call stays under the hard ceiling");
+        assertLe(g100 - g0, GasBounds.SUBSCRIBER_WHALE_GAS, "100-pass increment <= declared whale checkpoint bound");
+        assertLe(GasBounds.SUBSCRIBER_WHALE_GAS + GasBounds.SUBSCRIBER_TAIL_GAS, uint256(10_000_000),
+            "whale checkpoint inside the realistic chunk limit");
     }
 
     /// @dev Level 4 (standard price), sDGNRS funded, a new day: cool everything and bracket the
@@ -71,6 +72,7 @@ contract SdgnrsWhaleBuyStageGas is DeployProtocol {
     ///      Non-vacuity: with `expectBuy` the latch must flip inside that call.
     function _measureFirstAdvanceOfDay(uint256 claimable, bool expectBuy) internal returns (uint256 used) {
         _setLevel(4);
+        _retireSkippedLevels();
         _setClaimable(ContractAddresses.SDGNRS, claimable);
         _t += 1 days;
         vm.warp(_t);
@@ -84,8 +86,9 @@ contract SdgnrsWhaleBuyStageGas is DeployProtocol {
         vm.cool(address(coinflip));
         vm.cool(address(crapsBattle));
         vm.cool(address(afkingSubToken));
+        // A realistic allowance succeeds; the engine keeps admitting chunks while it lasts.
         uint256 before = gasleft();
-        game.mineFlip();
+        game.mineFlip{gas: KEEPER_ALLOWANCE}();
         used = before - gasleft();
 
         // The attempt latches the level either way; the claimable debit tells buy from no-buy.
@@ -103,6 +106,25 @@ contract SdgnrsWhaleBuyStageGas is DeployProtocol {
         s0 &= ~(uint256(0xFFFFFF) << (LEVEL_OFFBYTES * 8));
         s0 |= (uint256(lvl) & 0xFFFFFF) << (LEVEL_OFFBYTES * 8);
         vm.store(address(game), bytes32(uint256(0)), bytes32(s0));
+    }
+
+    /// @dev Setting the level directly skips the drains of levels 1..4: release their near queue
+    ///      roots (both slot sides) and bootstrap far-future roots, whose recycled physical roots the
+    ///      purchase binds for levels 5..104, and retire the genesis holders' near cohorts (a parity
+    ///      lane still holding a skipped level refuses a new level's write with E()).
+    function _retireSkippedLevels() internal {
+        for (uint24 lvl = 1; lvl <= 4; ++lvl) {
+            uint24 nearRoot = ((lvl - 1) & 1) + 1;
+            uint24[3] memory roots = [nearRoot, nearRoot | 0x800000, lvl | 0x400000];
+            for (uint256 k; k < 3; ++k) {
+                vm.store(address(game), keccak256(abi.encode(uint256(roots[k]), TICKET_QUEUE_SLOT)), bytes32(0));
+            }
+        }
+        address[2] memory holders = [ContractAddresses.SDGNRS, ContractAddresses.VAULT];
+        for (uint256 i; i < 2; ++i) {
+            uint32 id = uint32(uint256(vm.load(address(game), keccak256(abi.encode(holders[i], TICKET_OWNER_ID_SLOT)))));
+            if (id != 0) vm.store(address(game), keccak256(abi.encode(uint256(id), TICKET_PENDING_SLOT)), bytes32(0));
+        }
     }
 
     function _setClaimable(address who, uint256 amount) internal {

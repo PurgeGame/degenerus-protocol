@@ -10,7 +10,7 @@ import {AdvanceLivenessHandler} from "../handlers/AdvanceLivenessHandler.sol";
 ///
 /// @notice From ANY fuzzed state, with VRF cooperating and without moving time, a bounded
 ///         number of mineFlip cranks must reach a sealed, idle day: terminal revert
-///         NotTimeYet, today's word recorded, rng unlocked, the mid-day latch clear, nothing
+///         NoWork (the engine idle signal), today's word recorded, rng unlocked, the mid-day latch clear, nothing
 ///         staged without a worker (ticketsFullyProcessed), advanceDue() consistent, and a
 ///         mid-day lootbox request not blocked by MidDayActive. A CRAPS-table probe request
 ///         (exempt from the pending-value gates) plus fulfil + cranks must return to the same

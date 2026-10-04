@@ -6,6 +6,9 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
+import {Vm} from "forge-std/Vm.sol";
 
 /// @title VRFStallEdgeCases -- Audit tests for VRF stall edge case requirements
 /// @notice Covers STALL-01 (gap backfill entropy), STALL-02 (manipulation window),
@@ -63,9 +66,29 @@ contract VRFStallEdgeCases is DeployProtocol {
         return _doCoordinatorSwap();
     }
 
+    bytes4 private constant RNG_NOT_READY = bytes4(keccak256("RngNotReady()"));
+    bytes4 private constant NO_WORK = bytes4(keccak256("NoWork()"));
+    uint8 private constant ACTION_DAILY_GAP = 5;
+    uint8 private constant ACTION_DAILY_APPLY = 6;
+
+    /// @dev One engine step. The miner's explicit stop signals (waiting on a word, nothing to
+    ///      do) end a drive loop; any other revert is a real failure and fails the test.
+    function _step() internal returns (bool moved) {
+        try game.mineFlip() {
+            return true;
+        } catch (bytes memory err) {
+            bytes4 sel = bytes4(err);
+            assertTrue(sel == RNG_NOT_READY || sel == NO_WORK, "engine stopped on an unexpected error");
+            return false;
+        }
+    }
+
     /// @dev Resume after coordinator swap. The swap re-issues the in-flight request on the
     ///      new coordinator (preserve+re-issue), so a pending request already exists. Fulfil
-    ///      it first so the re-issued word is delivered, then drain via mineFlip.
+    ///      it first so the re-issued word is delivered, then drain via mineFlip until the
+    ///      stalled day is sealed. The composed mineFlip that seals it goes straight on to the
+    ///      wall day's fresh request when the wall day is later (the engine selects the next
+    ///      action in the same call), so the loop stops on the seal, not on the lock.
     ///      If nothing was in flight (no re-issue), mineFlip fires a fresh request which
     ///      is then fulfilled.
     function _resumeAfterSwap(MockVRFCoordinator newVRF, uint256 vrfWord) internal {
@@ -74,25 +97,27 @@ contract VRFStallEdgeCases is DeployProtocol {
             game.mineFlip();
             reqId = newVRF.lastRequestId();
         }
+        uint48 sealedBefore = _readDailyIdx();
         newVRF.fulfillRandomWords(reqId, vrfWord);
         for (uint256 i = 0; i < 50; i++) {
-            if (!game.rngLocked()) break;
-            game.mineFlip();
+            if (_readDailyIdx() > sealedBefore) return;
+            if (!_step()) break;
         }
+        assertGt(_readDailyIdx(), sealedBefore, "the re-issued word sealed the stalled day");
     }
 
     /// @dev Catch up after the stalled day finished: the wall day's fresh request is answered
-    ///      with `word`, which derives every skipped day in between, and the wall day completes.
+    ///      with `word`, which derives the final skipped day's word, and the wall day completes.
     function _catchUp(MockVRFCoordinator vrf, uint256 word) internal {
         uint24 wallDay = game.currentDayView();
         for (uint256 i = 0; i < 60; i++) {
-            game.mineFlip();
             uint256 id = vrf.lastRequestId();
             if (id != 0) {
                 (,, bool done) = vrf.pendingRequests(id);
                 if (!done) vrf.fulfillRandomWords(id, word);
             }
             if (!game.rngLocked() && game.rngWordForDay(wallDay) != 0) return;
+            _step();
         }
         fail("catch-up did not complete the wall day");
     }
@@ -163,31 +188,33 @@ contract VRFStallEdgeCases is DeployProtocol {
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
 
         // The stalled request's late word finishes day 3, the day it was sent for.
+        // rngWordForDay retains only today and yesterday (c729ecfc9) and the wall day is 8, so
+        // read day 3's exact-tag ring entry before the wall day's request replaces it.
         _resumeAfterSwap(newVRF, 0xDEAD0003);
-        assertEq(game.rngWordForDay(3), 0xDEAD0003, "Stalled day finishes on its own word");
+        assertEq(RecyclingState.dailyWord(address(game), 3), 0xDEAD0003, "Stalled day finishes on its own word");
+        uint256 stalledWord = RecyclingState.dailyWord(address(game), 3);
 
-        // Day 8's fresh request, answered with the fuzzed word, derives gap days 4..7.
+        // Day 8's fresh request, answered with the fuzzed word, derives the final gap day.
         _catchUp(newVRF, vrfWord);
 
-        // _backfillGapDays packs the gap day as uint24 (its loop counter type), so the preimage
-        // day width is 3 bytes — match it exactly with uint24(d).
-        uint256[] memory words = new uint256[](4);
-        for (uint32 d = 4; d <= 7; d++) {
-            uint256 expected = uint256(keccak256(abi.encodePacked(delivered, uint24(d))));
-            if (expected == 0) expected = 1;
-            uint256 actual = game.rngWordForDay(uint24(d));
-            assertEq(actual, expected, "Gap day word must match keccak256(vrfWord, day)");
-            words[d - 4] = actual;
+        // _backfillGapDays retains only the final gap day's derived word in the two-day ring
+        // (6d0e64b09/c729ecfc9); the earlier gap days keep no word and settle through their
+        // coinflip days. The day is packed as uint24 (3-byte preimage width).
+        uint256 expected = uint256(keccak256(abi.encodePacked(delivered, uint24(7))));
+        if (expected == 0) expected = 1;
+        uint256 gapWord = game.rngWordForDay(7);
+        assertEq(gapWord, expected, "Gap day word must match keccak256(vrfWord, day)");
+        for (uint32 d = 4; d <= 6; d++) {
+            assertEq(game.rngWordForDay(uint24(d)), 0, "earlier gap days keep no word in the two-day ring");
+            (uint16 reward,) = coinflip.getCoinflipDayResult(uint24(d));
+            assertTrue(reward != 0, "every gap day still settles its coinflip");
         }
 
         assertTrue(game.rngWordForDay(8) > 1, "wall day word never reads as the request sentinel");
 
-        // Verify all gap day words are distinct from each other
-        for (uint256 i = 0; i < 3; i++) {
-            for (uint256 j = i + 1; j < 4; j++) {
-                assertTrue(words[i] != words[j], "All gap day words must be distinct");
-            }
-        }
+        // The derived gap entropy is distinct from both delivered words around it.
+        assertTrue(gapWord != game.rngWordForDay(8), "gap word distinct from the wall day's word");
+        assertTrue(gapWord != stalledWord, "gap word distinct from the stalled day's word");
     }
 
     /// @notice Unit: verifies zero guard -- all derived gap day words are nonzero.
@@ -206,14 +233,16 @@ contract VRFStallEdgeCases is DeployProtocol {
 
         uint256 resumeWord = 0xBEEF0001;
         _resumeAfterSwap(newVRF, resumeWord);
+        // Exact-tag ring read: the public view keeps only today/yesterday (c729ecfc9).
+        assertTrue(RecyclingState.dailyWord(address(game), 3) != 0, "Stalled day 3 finished on a nonzero word");
         _catchUp(newVRF, 0xBEEF0002);
 
-        // Verify day 3 and all gap day words (4..12) are nonzero (zero guard: derivedWord==0 -> 1)
-        for (uint32 d = 3; d <= 12; d++) {
-            assertTrue(
-                game.rngWordForDay(uint24(d)) != 0,
-                "Zero guard: gap day word must be nonzero"
-            );
+        // Zero guard on the derived word (derivedWord==0 -> 1). Only the final gap day (12) is
+        // retained in the two-day ring (6d0e64b09/c729ecfc9); every gap day settles its coinflip.
+        assertTrue(game.rngWordForDay(12) != 0, "Zero guard: gap day word must be nonzero");
+        for (uint32 d = 4; d <= 12; d++) {
+            (uint16 reward,) = coinflip.getCoinflipDayResult(uint24(d));
+            assertTrue(reward != 0, "every gap day settles its coinflip");
         }
     }
 
@@ -282,13 +311,18 @@ contract VRFStallEdgeCases is DeployProtocol {
         // After callback: rngWordCurrent is nonzero (this is the manipulation window)
         assertEq(_readRngWordCurrent(), resumeWord, "rngWordCurrent set after VRF callback");
 
-        // mineFlip consumes the word (processes gap backfill + current day)
-        for (uint256 i = 0; i < 50; i++) {
-            if (!game.rngLocked()) break;
-            game.mineFlip();
+        // mineFlip consumes the word: it finishes the stalled day 3 it was requested for. The
+        // engine then commits the wall day's fresh request in the same flow.
+        uint48 sealedBefore = _readDailyIdx();
+        for (uint256 i = 0; i < 50 && _readDailyIdx() == sealedBefore; i++) {
+            if (!_step()) break;
         }
+        assertEq(_readDailyIdx(), 3, "the delivered word sealed its own stalled day");
 
-        // After processing: rngWordCurrent cleared to 0
+        // After processing: the session word is replaced by the wall day's fresh request (its
+        // waiting sentinel reads as 0); the stalled word is never carried into day 6.
+        assertTrue(game.rngLocked(), "the wall day's own request is in flight");
+        assertGt(newVRF.lastRequestId(), reqId, "a fresh request, not the stalled one");
         assertEq(_readRngWordCurrent(), 0, "rngWordCurrent cleared after processing");
     }
 
@@ -350,14 +384,29 @@ contract VRFStallEdgeCases is DeployProtocol {
         assertTrue(game.rngLocked(), "Day 32 requested");
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0xAA300001);
 
-        // Measure the transaction that applies the word and derives days 3..31
-        uint256 gasBefore = gasleft();
-        game.mineFlip();
-        uint256 gasUsed = gasBefore - gasleft();
-        assertTrue(game.rngWordForDay(31) != 0, "every skipped day derived in that transaction");
+        // Owner rule: no bound on a whole mineFlip transaction; the per-chunk cost matters.
+        // Bring the engine to the gap chunk (publication and the ticket certificate first). A
+        // 1.5M allowance can never admit DAILY_GAP plus its tail, so these calls stop before it.
+        for (uint256 i; i < 8 && game.nextMinerAction() != ACTION_DAILY_GAP; ++i) game.mineFlip{gas: 1_500_000}();
+        assertEq(game.nextMinerAction(), ACTION_DAILY_GAP, "next chunk is the 29-day gap");
 
-        // 29 days * ~125k/iteration = ~3.6M + overhead, well under 10M
-        assertTrue(gasUsed < 10_000_000, "29-day gap backfill must use < 10M gas");
+        // (a) A realistic allowance succeeds and progresses through the gap.
+        uint256 snap = vm.snapshotState();
+        game.mineFlip{gas: 10_000_000}();
+        assertTrue(game.rngWordForDay(31) != 0, "a 10M call derives the skipped days");
+        vm.revertToState(snap);
+
+        // (b) The gap chunk alone, offered just its declared admission bound plus the engine
+        // boundary/return reserves: it must fit there, and stay under the 10M chunk ceiling.
+        uint256 supplied = GasBounds.DAILY_GAP + GasBounds.ENGINE_BOUNDARY + GasBounds.ENGINE_RETURN + 200_000;
+        uint256 gasBefore = gasleft();
+        game.mineFlip{gas: supplied}();
+        uint256 gasUsed = gasBefore - gasleft();
+        assertEq(game.nextMinerAction(), ACTION_DAILY_APPLY, "exactly the gap chunk ran");
+        assertTrue(game.rngWordForDay(31) != 0, "every skipped day derived in that chunk");
+        emit log_named_uint("29-day gap chunk: mineFlip gas (engine overhead included)", gasUsed);
+        emit log_named_uint("29-day gap chunk: declared DAILY_GAP bound", GasBounds.DAILY_GAP);
+        assertLt(gasUsed, 10_000_000, "29-day gap chunk stays under the 10M per-chunk ceiling");
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -518,30 +567,36 @@ contract VRFStallEdgeCases is DeployProtocol {
         uint256 reissued = newVRF.lastRequestId();
         assertTrue(reissued != 0, "mid-day request re-issued on new coordinator");
 
-        // Fulfil the re-issued mid-day request on the new coordinator -> word lands in [reservedIndex]
+        // Fulfil the re-issued mid-day request on the new coordinator -> word lands in [reservedIndex].
+        // The callback only stores the word; publication is the keeper's first action.
         newVRF.fulfillRandomWords(reissued, 0xDD030001);
+        game.mineFlip();
         assertEq(
             _lootboxRngWord(reservedIndex),
             0xDD030001,
             "Re-issued mid-day word lands in the reserved index (not orphaned)"
         );
 
-        // Mid-day fulfillment clears the in-flight request state (LR_MID_DAY is consumed
-        // later during mineFlip lootbox processing).
-        assertEq(_readVrfRequestId(), 0, "vrfRequestId cleared after mid-day fulfillment");
-        assertEq(_readRngRequestTime(), 0, "rngRequestTime cleared after mid-day fulfillment");
+        // Mid-day publication retires the in-flight request authority (slot-0 request-active
+        // bit). The physical id and stamp are retained as history by design (60d31f775), so the
+        // logical state is what clears; no request is live.
+        assertEq((uint256(vm.load(address(game), bytes32(uint256(SLOT_PACKED_0)))) >> 254) & 1, 0,
+            "vrfRequestId authority cleared after mid-day fulfillment");
+        assertFalse(game.isRngFulfilled(), "no live request remains after mid-day publication");
 
         // Game proceeds without NotTimeYet: advance into the next day
         vm.warp(4 * 86400);
         game.mineFlip();
     }
 
-    /// @notice Unit: a mid-day lootbox RNG request that stalls past MIDDAY_RNG_STALL_TIMEOUT
-    ///         is abandoned at the next daily advance and promoted to the daily request. The
-    ///         fresh daily word resolves the reserved bucket (index preserved, isRetry — no
-    ///         double-advance) and drains the swapped ticket batch — no retryLootboxRng,
-    ///         no NotTimeYet / RngNotReady deadlock.
-    function test_dailyAdvanceTakesOverStalledMidDay() public {
+    /// @notice Unit: a mid-day lootbox RNG request that stalls across midnight is no longer
+    ///         promoted into the next daily request (that RNGREUSE path was removed in
+    ///         60d31f775/6d0e64b09). It BLOCKS the next daily request until it lands: the
+    ///         daily advance waits (RngNotReady), the Admin retry re-sends it for the same
+    ///         reserved bucket (no index advance, the late original is rejected), its word
+    ///         finalizes the reserved bucket and drains the swapped ticket batch, and only then
+    ///         does the day's fresh daily request go out — no deadlock.
+    function test_stalledMidDayBlocksDailyUntilRetryLands() public {
         // Complete day 2 so a daily word exists for the mid-day request gate
         _completeDay(0xDEAD0001);
         vm.warp(3 * 86400);
@@ -576,33 +631,54 @@ contract VRFStallEdgeCases is DeployProtocol {
         );
         assertTrue(((lrPacked >> 224) & 0xFF) != 0, "LR_MID_DAY set after mid-day request");
 
-        // The mid-day VRF stalls. Cross the next-day boundary (~24h >> 4h stale) and advance:
-        // the daily drain-gate abandons the stalled mid-day request and promotes it to the
-        // daily request in a single call.
+        // The mid-day VRF stalls across midnight: the next day's advance waits on it.
         vm.warp(4 * 86400);
+        vm.expectRevert(RNG_NOT_READY);
         game.mineFlip();
+        assertEq(mockVRF.lastRequestId(), stalledReqId, "no daily request while the mid-day word is outstanding");
+        assertFalse(game.rngLocked(), "the daily lock is not taken over the stalled mid-day request");
 
-        uint256 dailyReqId = mockVRF.lastRequestId();
-        assertTrue(dailyReqId != stalledReqId, "Takeover issued a fresh (daily) VRF request");
-        assertTrue(game.rngLocked(), "Takeover promoted the request to the daily lock");
+        // The vault owner's single Admin retry (20h after the stamp) re-sends the same request.
+        vm.prank(ContractAddresses.CREATOR);
+        admin.retryGameRng();
+        uint256 retryReqId = mockVRF.lastRequestId();
+        assertTrue(retryReqId != stalledReqId, "the retry issued a replacement VRF request");
+        assertFalse(game.rngLocked(), "the retry preserves the mid-day mode");
         assertEq(
             _lootboxRngIndex(),
             postRequestIndex,
-            "Takeover preserves lootboxRngIndex (isRetry - no double-advance)"
+            "Retry preserves lootboxRngIndex (no double-advance)"
         );
 
         // The abandoned mid-day request is auto-rejected on late arrival (requestId mismatch).
         mockVRF.fulfillRandomWords(stalledReqId, 0x1111);
-        assertEq(_lootboxRngWord(reservedBucket), 0, "Stalled mid-day word rejected on id mismatch");
+        assertEq(_readRngWordCurrent(), 0, "Stalled mid-day word rejected on id mismatch");
 
-        // The fresh daily word fills the reserved bucket and the swapped batch drains to unlock.
-        mockVRF.fulfillRandomWords(dailyReqId, 0xCAFE0BAD);
-        for (uint256 i = 0; i < 50; i++) {
-            if (!game.rngLocked()) break;
-            game.mineFlip();
+        // The replacement word finalizes the reserved bucket; the swapped batch drains and the
+        // day's fresh daily request follows.
+        mockVRF.fulfillRandomWords(retryReqId, 0xCAFE0BAD);
+        vm.recordLogs();
+        game.mineFlip();
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bool applied;
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].emitter == address(game) && logs[i].topics[0] == keccak256("LootboxRngApplied(uint48,uint256,uint256)")) {
+                (uint48 index, uint256 word, uint256 requestId) = abi.decode(logs[i].data, (uint48, uint256, uint256));
+                if (index == reservedBucket && word == 0xCAFE0BAD && requestId == retryReqId) applied = true;
+            }
         }
-        assertFalse(game.rngLocked(), "Daily flow completes after takeover (no deadlock)");
-        assertTrue(_lootboxRngWord(reservedBucket) != 0, "Daily word finalized the reserved mid-day bucket");
+        assertTrue(applied, "The retried word finalized the reserved mid-day bucket");
+
+        // Daily flow completes after the recovery (no deadlock).
+        for (uint256 i = 0; i < 50; i++) {
+            uint256 id = mockVRF.lastRequestId();
+            (,, bool done) = mockVRF.pendingRequests(id);
+            if (!done) mockVRF.fulfillRandomWords(id, uint256(keccak256(abi.encode("day4", id))));
+            if (!game.rngLocked() && _readDailyIdx() == 4) break;
+            _step();
+        }
+        assertFalse(game.rngLocked(), "Daily flow completes after the mid-day recovery (no deadlock)");
+        assertEq(_readDailyIdx(), 4, "day 4 sealed on its own daily word");
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -616,18 +692,25 @@ contract VRFStallEdgeCases is DeployProtocol {
         _completeDay(0xDEAD0001);
 
         // Verify lootboxRngWord at current index is nonzero after completing the first day
-        uint48 preSwapIndex = (_lootboxRngIndex() ^ 1);
-        uint256 preSwapWord = _lootboxRngWord(preSwapIndex);
-        assertTrue(preSwapWord != 0, "lootboxRngWord at current index nonzero after first day");
+        uint48 firstDayIndex = (_lootboxRngIndex() ^ 1);
+        assertTrue(_lootboxRngWord(firstDayIndex) != 0, "lootboxRngWord at current index nonzero after first day");
 
-        // Warp to the next day (day 3 absolute), trigger VRF request, then swap
+        // Warp to the next day (day 3 absolute), trigger VRF request, then swap. The fresh
+        // request seals the other physical buffer and retires the first day's session (two
+        // physical buffers, 6d0e64b09), so the swap is judged against the post-request state.
         vm.warp(3 * 86400);
         game.mineFlip();
+        uint48 preSwapIndex = (_lootboxRngIndex() ^ 1);
+        assertEq(preSwapIndex, firstDayIndex ^ 1, "the request sealed the other buffer");
+        uint256 preSwapWord = _lootboxRngWord(preSwapIndex);
+        uint256 preSwapCurrent = _readRngWordCurrent();
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
 
-        // Verify lootboxRngWord at pre-swap index is STILL the pre-swap nonzero value
+        // Verify the swap leaves the sealed buffer and its (not yet delivered) word untouched
+        assertEq(_lootboxRngIndex() ^ 1, preSwapIndex, "the swap keeps the sealed buffer");
         uint256 postSwapWord = _lootboxRngWord(preSwapIndex);
         assertEq(postSwapWord, preSwapWord, "lootboxRngWord at current index preserved by swap");
+        assertEq(_readRngWordCurrent(), preSwapCurrent, "the swap installs no word of its own");
 
         // Resume with new VRF
         _resumeAfterSwap(newVRF, 0xCAFE0002);
@@ -738,12 +821,16 @@ contract VRFStallEdgeCases is DeployProtocol {
 
         // Resume: the stalled request finishes day 3 on its late word
         _resumeAfterSwap(newVRF, 0xBACF0001);
-        assertTrue(game.rngWordForDay(3) != 0, "Stalled day 3 finished");
+        // Exact-tag ring read: the public view keeps only today/yesterday (c729ecfc9).
+        assertTrue(RecyclingState.dailyWord(address(game), 3) != 0, "Stalled day 3 finished");
         assertEq(_readDailyIdx(), 3, "sealed through the stalled day");
 
-        // Day 6's fresh request derives gap days 4 and 5 and completes day 6
+        // Day 6's fresh request settles gap days 4 and 5 and completes day 6. Only the final
+        // gap day keeps a derived word in the two-day ring (6d0e64b09/c729ecfc9).
         _catchUp(newVRF, 0xBACF0002);
-        assertTrue(game.rngWordForDay(4) != 0, "Gap day 4 backfilled");
+        (uint16 reward4,) = coinflip.getCoinflipDayResult(4);
+        assertTrue(reward4 != 0, "Gap day 4 backfilled");
+        assertEq(game.rngWordForDay(4), 0, "earlier gap day keeps no word");
         assertTrue(game.rngWordForDay(5) != 0, "Gap day 5 backfilled");
         assertTrue(game.rngWordForDay(6) != 0, "Current day 6 processed");
 

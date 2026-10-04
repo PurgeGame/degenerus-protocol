@@ -24,6 +24,17 @@ contract SdgnrsTransitionSeeder is DegenerusGameStorage {
         }
     }
 
+    /// @dev The seeded transition day is the daily phase of a delivered, published request (the
+    ///      engine selects DailyPhase only for an active, published, not-yet-complete session),
+    ///      and every queue through level 100 drained before its phase ended.
+    function openTransitionDailyPhase() external {
+        rngRequestDay = _simulatedDayIndex();
+        _setRngRequestActive(true);
+        _setRngSessionPublished(true);
+        _setRngComplete(false);
+        TQ.retireCompleted(address(this), 100);
+    }
+
     function prepareCenturyRequest(uint8 compression) external {
         uint24 day = _simulatedDayIndex();
         // The level-99 last-purchase state already materialized the constructor's
@@ -65,6 +76,8 @@ contract SdgnrsCenturyTransitionTest is BoundaryGasFixture {
         bytes memory realCode = address(game).code;
         PhaseEndSeeder seeder = _etchSeedRestore();
         seeder.seedTransitionDone(100, RNG_WORD);
+        vm.etch(address(game), type(SdgnrsTransitionSeeder).runtimeCode);
+        SdgnrsTransitionSeeder(address(game)).openTransitionDailyPhase();
         _restore(realCode);
     }
 
@@ -95,9 +108,17 @@ contract SdgnrsCenturyTransitionTest is BoundaryGasFixture {
         for (uint160 i; i < 150; ++i) {
             assertEq(uint32(TQ.owed(address(game), ffKey, address(0xF0200000 + i)) >> 8), 4);
         }
-        // The close cannot re-run: the same day's next advance has nothing to do.
-        vm.expectRevert(bytes4(keccak256("NotTimeYet()")));
-        game.mineFlip();
+        // The close cannot re-run: cranking the rest of the same day's work (the day-400 fixture's
+        // scheduled Craps maintenance catch-up, one lapsed day per checkpoint) reaches an idle
+        // engine (NoWork; was NotTimeYet) without a second refill.
+        bool idle;
+        for (uint256 i; i < 1000 && !idle; ++i) {
+            try game.mineFlip() {} catch (bytes memory err) {
+                assertEq(bytes4(err), bytes4(keccak256("NoWork()")), "same day ends idle");
+                idle = true;
+            }
+        }
+        assertTrue(idle, "the same day runs out of work");
         assertEq(sdgnrs.lastRecycledCentury(), 1);
         assertEq(sdgnrs.totalSupply(), beforeSupply + REFILL_PERCENT * 1 ether, "exactly one refill");
     }

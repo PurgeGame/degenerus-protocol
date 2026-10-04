@@ -75,18 +75,55 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
             game.mineFlip();
         }
         assertFalse(game.rngLocked(), "bootstrap daily processing finished");
-        game.openBoxes(type(uint256).max);
+        _settleIdle();
         assertEq(game.level(), 0);
         vm.deal(PLAYER, 100 ether);
+    }
+
+    /// @dev Finish every read consumer of the delivered cohorts. A shut craps window the day
+    ///      bound to the write buffer rides the next request, which the engine makes as mid-day
+    ///      work; answer and drain it too, so a fresh request is admissible.
+    function _settleIdle() private {
+        for (uint256 i; i < 20; ++i) {
+            uint256 request = mockVRF.lastRequestId();
+            if (request != 0) {
+                (,, bool done) = mockVRF.pendingRequests(request);
+                if (!done) mockVRF.fulfillRandomWords(request, uint256(keccak256(abi.encode("trailing", i))) | 2);
+            }
+            _finishReadConsumers();
+            if (!game.advanceDue() && game.rngComplete()) return;
+            if (game.advanceDue()) game.mineFlip();
+        }
+        revert("harness: cohorts never settled");
+    }
+
+    /// @dev One mineFlip given the smallest allowance that succeeds (bisection over snapshots).
+    ///      A zero-progress call reverts, so the minimal call runs exactly the next admitted chunk
+    ///      and leaves too little allowance to admit a later, larger one.
+    function _stepMinimal() private {
+        uint256 lo = 200_000;
+        uint256 hi = 30_000_000;
+        while (hi - lo > 1_000) {
+            uint256 mid = (lo + hi) / 2;
+            uint256 snap = vm.snapshotState();
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip()"));
+            vm.revertToStateAndDelete(snap);
+            if (ok) hi = mid;
+            else lo = mid;
+        }
+        game.mineFlip{gas: hi}();
     }
 
     function _index() private view returns (uint48) {
         return RecyclingState.writeBuffer(address(game));
     }
 
+    /// @dev The live order word; an opened order keeps its fields under the BOX_PROCESSED marker
+    ///      (bit 255) rather than being deleted (6d0e64b09 storage recycling), and reads as spent.
     function _order(uint48 index) private view returns (uint256) {
         bytes32 outer = keccak256(abi.encode(uint256(index), uint256(15)));
-        return uint256(vm.load(address(game), keccak256(abi.encode(PLAYER, outer))));
+        uint256 order = uint256(vm.load(address(game), keccak256(abi.encode(PLAYER, outer))));
+        return order & (uint256(1) << 255) != 0 ? 0 : order;
     }
 
     function _buy(uint256 size) private {
@@ -256,7 +293,11 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         (,, bool fulfilled) = mockVRF.pendingRequests(request);
         assertFalse(fulfilled);
         mockVRF.fulfillRandomWords(request, WORD);
-        game.mineFlip(); // publish the delivered midday word
+        // Publish the delivered midday word, in minimal checkpoints, up to the cohort's
+        // human-box stage: the committed order is then the next read consumer for openBoxes.
+        for (uint256 i; i < 100 && game.nextMinerAction() != 10; ++i) _stepMinimal(); // HumanBoxes
+        assertEq(game.nextMinerAction(), 10, "the committed order is the next read consumer");
+        assertEq(_order(index), committed, "publication alone opens nothing");
         assertEq(_index(), (index ^ 1));
         uint256 initialFuture = game.futurePrizePoolView();
         if (laterPurchase) {

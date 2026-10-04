@@ -47,17 +47,6 @@ contract LootboxOpenGoldens is DeployProtocol {
         vm.etch(address(game), real);
     }
 
-    /// @dev Point the permissionless open walk at `index` (cursor 0), as the auto-open repro does.
-    function _parkBoxFrontier(uint48 index) internal {
-        bytes32 slot = bytes32(uint256(56));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        uint256 m = (uint256(1) << 48) - 1;
-        packed &= ~(m << (7 * 8));
-        packed &= ~(m << (13 * 8));
-        require(index < 2, "binary read fixture"); // byte 13 is humanReadComplete, not an index
-        vm.store(address(game), slot, bytes32(packed));
-    }
-
     function _driveDailyCycleOnce() internal {
         (, , , , uint256 priceWei) = game.purchaseInfo();
         if (priceWei != 0 && priceWei <= actor.balance) {
@@ -88,6 +77,33 @@ contract LootboxOpenGoldens is DeployProtocol {
             vm.prank(actor);
             try game.mineFlip() {} catch {}
         }
+        // A fresh request waits for every read consumer of the day's cohort to finish. A shut
+        // craps window the day bound to the write buffer rides the next request, which the engine
+        // makes as mid-day work; answer and drain it too, until the engine is idle.
+        for (uint256 i; i < 20; i++) {
+            uint256 reqId = mockVRF.lastRequestId();
+            if (reqId != 0) {
+                (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
+                if (!fulfilled) mockVRF.fulfillRandomWords(reqId, uint256(keccak256(abi.encode("trailing", i))) | 1);
+            }
+            _finishReadConsumers();
+            if (!game.advanceDue() && game.rngComplete()) break;
+            if (!game.advanceDue()) continue; // a fresh request waits for its word
+            vm.prank(actor);
+            game.mineFlip();
+        }
+        assertTrue(game.rngComplete(), "harness: the day's cohorts all completed");
+    }
+
+    /// @dev Fulfil the pending mid-day request and run the engine once: it publishes the word and
+    ///      resolves the whole read cohort, the human orders included, as read consumers (openBoxes
+    ///      only drives an already-published cohort's AFK and human stages, never publication).
+    function _fulfilAndOpen(uint256 vrfWord) internal returns (Vm.Log[] memory logs) {
+        mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), vrfWord);
+        vm.recordLogs();
+        vm.prank(actor);
+        game.mineFlip();
+        logs = vm.getRecordedLogs();
     }
 
     function test_tiersOpenAtOneFiveAndTwentyFivePrices() public {
@@ -114,14 +130,10 @@ contract LootboxOpenGoldens is DeployProtocol {
         bool found;
         for (uint256 w = 1; w <= 64 && !found; w++) {
             uint256 snap = vm.snapshotState();
-            mockVRF.fulfillRandomWords(reqId, uint256(keccak256(abi.encode("tier_word", w))) | 1);
+            assertEq(mockVRF.lastRequestId(), reqId, "the mid-day request is the pending one");
+            Vm.Log[] memory logs = _fulfilAndOpen(uint256(keccak256(abi.encode("tier_word", w))) | 1);
             assertGt(_word(N), 0, "the word landed at the order's index");
-            _parkBoxFrontier(N);
-            vm.recordLogs();
-            vm.prank(actor);
-            uint256 opened = game.openBoxes(50);
-            assertGt(opened, 0, "the walk opened the order");
-            Vm.Log[] memory logs = vm.getRecordedLogs();
+            assertTrue(game.boxIndexComplete(N), "the walk opened the order");
             uint256 n;
             for (uint256 i; i < logs.length; i++) {
                 if (logs[i].topics[0] != OPENED || logs[i].emitter != address(game)) continue;
@@ -159,6 +171,20 @@ contract LootboxOpenGoldens is DeployProtocol {
 
     struct Opened { uint256 amount; uint24 level; uint32 tickets; bool up; }
 
+    /// @dev The presale roll keys on keccak(word, PRESALE_BOX_TAG, player, index). The pinned
+    ///      presale figures were drawn at the old monotonic lootbox index 2; 6d0e64b09 made the
+    ///      index a physical buffer tag (0/1) and this fixture opens at tag 0, so each word's
+    ///      presale buyer is relabelled to the address whose tag-0 roll lands on the same pinned
+    ///      branch and figures (_presaleBoxDgnrsReward is seed-independent, so 3.75e9 DGNRS recurs
+    ///      exactly; word 3 re-derives six normal passes; word 12 the one WWXRP prize). The
+    ///      presale resolver is byte-identical to origin/main; only the index input changed.
+    function _presaleLabel(uint256 w) internal pure returns (string memory) {
+        if (w == 1) return "goldenPresale2";
+        if (w == 3) return "goldenPresale14";
+        if (w == 12) return "goldenPresale10";
+        revert("no relabelled presale buyer for this word");
+    }
+
     /// @dev Fixed word under BOX_OPEN_TAG: eight plain boxes, three queued levels,
     ///      one DGNRS batch and the presale DGNRS branch. Values are pinned below.
     function test_goldensUnderOneWord() public {
@@ -168,12 +194,13 @@ contract LootboxOpenGoldens is DeployProtocol {
         assertEq(game.level(), 0, "golden fixture level");
         assertEq(priceWei, 0.01 ether, "golden fixture price");
         uint48 N = _idx();
+        assertEq(N, 0, "golden fixture tag");
 
         address whale = makeAddr("goldenBuyer");
         vm.deal(whale, 20 ether);
         vm.prank(whale);
         game.purchase{value: (6 + 15 + 50) * priceWei + 1 ether + 1 ether}(whale, 400, BoxOrderLib.boOrder(6, 3, 2, 1, 1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
-        address pre = makeAddr("goldenPresale");
+        address pre = makeAddr(_presaleLabel(1));
         vm.deal(pre, 5 ether);
         _grantPresaleCredit(pre, 0.5 ether);
         vm.prank(pre);
@@ -181,13 +208,9 @@ contract LootboxOpenGoldens is DeployProtocol {
 
         vm.prank(actor);
         game.requestLootboxRng();
-        mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), uint256(keccak256("golden_word_1")) | 1);
+        Vm.Log[] memory logs = _fulfilAndOpen(uint256(keccak256("golden_word_1")) | 1);
         assertGt(_word(N), 0, "the word landed");
-        _parkBoxFrontier(N);
-        vm.recordLogs();
-        vm.prank(actor);
-        assertGt(game.openBoxes(100), 0, "opened");
-        Vm.Log[] memory logs = vm.getRecordedLogs();
+        assertTrue(game.boxIndexComplete(N), "opened");
 
         Opened[8] memory opened;
         uint256 nOpened;
@@ -202,7 +225,8 @@ contract LootboxOpenGoldens is DeployProtocol {
         uint256 nPresale;
         uint256 nPasses;
         for (uint256 i; i < logs.length; i++) {
-            if (logs[i].emitter != address(game)) continue;
+            // The engine call also carries unindexed engine events (Advance, MinerWork, ...).
+            if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
             bytes32 t = logs[i].topics[0];
             address who = address(uint160(uint256(logs[i].topics[1])));
             if (t == OPENED) {
@@ -264,23 +288,20 @@ contract LootboxOpenGoldens is DeployProtocol {
         (, , , , uint256 priceWei) = game.purchaseInfo();
         assertEq(game.level(), 0, "golden fixture level");
         uint48 N = _idx();
+        assertEq(N, 0, "golden fixture tag");
         address whale = makeAddr("goldenBuyer");
         vm.deal(whale, 20 ether);
         vm.prank(whale);
         game.purchase{value: (6 + 15 + 50) * priceWei + 1 ether + 1 ether}(whale, 400, BoxOrderLib.boOrder(6, 3, 2, 1, 1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
-        address pre = makeAddr("goldenPresale");
+        address pre = makeAddr(_presaleLabel(3));
         vm.deal(pre, 5 ether);
         _grantPresaleCredit(pre, 0.5 ether);
         vm.prank(pre);
         game.buyPresaleBox{value: 0.5 ether}(pre, 0.5 ether);
         vm.prank(actor);
         game.requestLootboxRng();
-        mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), uint256(keccak256(abi.encode("golden_word", uint256(3)))) | 1);
-        _parkBoxFrontier(N);
-        vm.recordLogs();
-        vm.prank(actor);
-        assertGt(game.openBoxes(100), 0, "opened");
-        Vm.Log[] memory logs = vm.getRecordedLogs();
+        Vm.Log[] memory logs = _fulfilAndOpen(uint256(keccak256(abi.encode("golden_word", uint256(3)))) | 1);
+        assertTrue(game.boxIndexComplete(N), "opened");
 
         uint256[8] memory amount = [uint256(9016e12), 9016e12, 9016e12, 9016e12, 45080e12, 45080e12, 225400e12, 901600e12];
         uint24[8] memory level = [uint24(5), 1, 3, 5, 4, 5, 5, 22];
@@ -291,7 +312,8 @@ contract LootboxOpenGoldens is DeployProtocol {
         uint32[3] memory qEntries = [uint32(8), 24, 216];
         uint256 nO; uint256 nQ; uint256 nP; uint256 nPre;
         for (uint256 i; i < logs.length; i++) {
-            if (logs[i].emitter != address(game)) continue;
+            // The engine call also carries unindexed engine events (Advance, MinerWork, ...).
+            if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
             bytes32 t = logs[i].topics[0];
             address who = address(uint160(uint256(logs[i].topics[1])));
             if (t == OPENED) {
@@ -341,23 +363,20 @@ contract LootboxOpenGoldens is DeployProtocol {
         _driveDailyCycleOnce();
         (, , , , uint256 priceWei) = game.purchaseInfo();
         uint48 N = _idx();
+        assertEq(N, 0, "golden fixture tag");
         address whale = makeAddr("goldenBuyer");
         vm.deal(whale, 20 ether);
         vm.prank(whale);
         game.purchase{value: (6 + 15 + 50) * priceWei + 1 ether + 1 ether}(whale, 400, BoxOrderLib.boOrder(6, 3, 2, 1, 1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
-        address pre = makeAddr("goldenPresale");
+        address pre = makeAddr(_presaleLabel(w));
         vm.deal(pre, 5 ether);
         _grantPresaleCredit(pre, 0.5 ether);
         vm.prank(pre);
         game.buyPresaleBox{value: 0.5 ether}(pre, 0.5 ether);
         vm.prank(actor);
         game.requestLootboxRng();
-        mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), uint256(keccak256(abi.encode("golden_word", w))) | 1);
-        _parkBoxFrontier(N);
-        vm.recordLogs();
-        vm.prank(actor);
-        assertGt(game.openBoxes(100), 0, "opened");
-        Vm.Log[] memory logs = vm.getRecordedLogs();
+        Vm.Log[] memory logs = _fulfilAndOpen(uint256(keccak256(abi.encode("golden_word", w))) | 1);
+        assertTrue(game.boxIndexComplete(N), "opened");
         uint256 n;
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game) || logs[i].topics[0] != PRESALE) continue;

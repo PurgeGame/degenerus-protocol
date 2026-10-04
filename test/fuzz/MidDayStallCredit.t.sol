@@ -7,6 +7,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 // MidDayStallCredit — the deadline credit for a VRF stall on a MID-DAY request (audit A-1),
 // compared against the daily path, the coordinator-swap rescue, unattended gaps, the deadman,
@@ -134,6 +135,20 @@ abstract contract StallCreditBase is DeployProtocol {
         _restore();
     }
 
+    /// @dev The first advance past the trigger latches the ending; the terminal word is always
+    ///      the ending's own request, sent after the freeze (60d31f775), so game over follows
+    ///      once that request is answered and the payout runs. Asserts both steps.
+    function _endsOnTheGameOverPath(string memory label) internal {
+        _adv();
+        (bool goLvl,) = _latches();
+        assertTrue(goLvl, label);
+        for (uint256 i; i < 40 && !game.gameOver(); ++i) {
+            _answer();
+            _adv();
+        }
+        assertTrue(game.gameOver(), label);
+    }
+
     function _answer() internal {
         uint256 id = vrf.lastRequestId();
         if (id == 0) return;
@@ -254,18 +269,26 @@ contract MidDayStallCreditTest is StallCreditBase {
         _seed(28);
         uint24 x = game.currentDayView();
         (uint24 psd0,) = _clock();
-        for (uint256 i; i < 60 && !game.rngLocked(); ++i) _adv();
+        // setUp's synthetic 500-day jump leaves expired scheduled Craps days that the engine
+        // maintains, one checkpoint per call, before the first daily request (see _sealDay).
+        for (uint256 i; i < 750 && !game.rngLocked(); ++i) _adv();
         assertTrue(game.rngLocked(), "day X requested; VRF stalls");
 
         _warpDays(5);
         uint24 w = game.currentDayView();
         assertFalse(game.livenessTriggered(), "a request in flight waits");
         _answer();
-        for (uint256 i; i < 300 && game.rngLocked(); ++i) {
+        // The call that seals X goes straight on to the wall day's fresh request (the engine
+        // selects it in the same flow, 60d31f775), so the drive stops on X's seal.
+        for (uint256 i; i < 300; ++i) {
+            (, uint24 sealedIdx) = _clock();
+            if (sealedIdx >= x) break;
             _adv();
             _answer();
         }
-        assertEq(game.rngWordForDay(x) != 0, true, "X finished on its late word");
+        // rngWordForDay retains today and yesterday only (c729ecfc9); X is five days back, so
+        // read its exact-tag ring entry before the wall day's word replaces that parity.
+        assertEq(RecyclingState.dailyWord(address(game), x) != 0, true, "X finished on its late word");
         assertFalse(game.livenessTriggered(), "a recovered daily stall waits for its credit");
 
         _catchUp(w);
@@ -316,7 +339,7 @@ contract MidDayStallCreditTest is StallCreditBase {
         assertFalse(game.livenessTriggered(), "today holds its word");
         _warpToDay(x + 4);
         assertTrue(game.livenessTriggered(), "the next caught-up day past the deadline fires");
-        _adv(); assertTrue(game.gameOver(), "and the advance takes the game-over path");
+        _endsOnTheGameOverPath("and the advance takes the game-over path");
         (bool goLvl,) = _latches();
         assertTrue(goLvl, "the ending latched");
     }
@@ -366,7 +389,7 @@ contract MidDayStallCreditTest is StallCreditBase {
         assertFalse(game.livenessTriggered(), "a gap waits");
         _warpToDay(x + 31);
         assertTrue(game.livenessTriggered(), "deadman");
-        _adv(); assertTrue(game.gameOver(), "the advance takes the game-over path");
+        _endsOnTheGameOverPath("the advance takes the game-over path");
     }
 
     /// @notice Whatever the last request, a game nobody seals for the deadman window ends.
@@ -378,7 +401,7 @@ contract MidDayStallCreditTest is StallCreditBase {
         _answer();
         _warpToDay(x + 31);
         assertTrue(game.livenessTriggered(), "deadman");
-        _adv(); assertTrue(game.gameOver(), "the advance takes the game-over path");
+        _endsOnTheGameOverPath("the advance takes the game-over path");
     }
 
     /// @notice The Admin retry preserves a stalled mid-day request's mode and original timeout.
@@ -456,7 +479,11 @@ contract MidDayStallCreditTest is StallCreditBase {
 
         vm.mockCallRevert(address(vrf), abi.encodeWithSelector(MockVRFCoordinator.requestRandomWords.selector), "");
         for (uint256 i; i < 20; ++i) {
-            _adv(); assertTrue(game.gameOver(), "game-over path");
+            // Each advance is on the game-over path: the first latches the ending (game over
+            // itself waits for the ending's own terminal word, 60d31f775).
+            _adv();
+            (bool goLvl,) = _latches();
+            assertTrue(goLvl, "game-over path");
             (uint48 t, uint256 id) = _stamps();
             if (id == 0 && t != 0 && _dayOf(t) == x + 1) break;
         }

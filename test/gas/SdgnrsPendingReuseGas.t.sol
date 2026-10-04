@@ -30,6 +30,10 @@ contract SdgnrsPendingReuseGasTest is RedemptionGasTest {
             resolutions += r;
             assertEq(sdgnrs.pendingResolveDay(), 0, "resolved pool invalidated");
             assertFalse(sdgnrs.hasPendingRedemptions(day), "retained payload is logically absent");
+            // Unmeasured: the Game pins the session word with the resolve and its keeper drains
+            // the single live cohort before another day's burn can enter (PriorDayUnresolved).
+            _openSettlement(day);
+            _drainSettlementCohort();
             emit log_named_uint("period", period);
             emit log_named_uint("cold burn isolated transaction gas", b);
             emit log_named_uint("cold resolve isolated transaction gas", r);

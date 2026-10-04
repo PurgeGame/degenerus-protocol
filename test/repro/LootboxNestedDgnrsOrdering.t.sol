@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IsDGNRS} from "../../contracts/interfaces/IsDGNRS.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {SigFigLib} from "../../contracts/libraries/SigFigLib.sol";
@@ -32,13 +33,58 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        // The mid-day request that commits the entry needs the subscription's LINK floor.
+        mockVRF.fundSubscription(1, 100e18);
         // Seal and finish the genesis read through the production lifecycle.
         // The golden nested-spin word is bound to physical write buffer 1.
         vm.warp(block.timestamp + 1 days);
         _settleGame(0xB00757);
         _settleClean(0xB00757);
-        _finishReadConsumers();
+        _settleIdle(0xB00757);
+        // A trailing cohort (e.g. a shut craps window riding its own mid-day word) can leave the
+        // other physical tag open for writes; one empty donor-funded cohort restores tag 1.
+        if (RecyclingState.writeBuffer(address(game)) != PARENT_BUFFER) {
+            address donor = makeAddr("nested-donor");
+            mockFeed.setUpdatedAt(block.timestamp);
+            vm.prank(ContractAddresses.ADMIN);
+            game.creditMiddayRng(donor, 1 ether);
+            vm.prank(donor);
+            game.requestLootboxRng();
+            _settleIdle(0xB00758);
+        }
         assertEq(RecyclingState.writeBuffer(address(game)), PARENT_BUFFER);
+    }
+
+    /// @dev Answer every outstanding request and finish every delivered cohort until the engine
+    ///      is idle and the read cohort is complete, so a fresh mid-day request is admissible.
+    function _settleIdle(uint256 vrfWord) private {
+        for (uint256 i; i < 20; ++i) {
+            uint256 reqId = mockVRF.lastRequestId();
+            if (reqId != 0) {
+                (,, bool done) = mockVRF.pendingRequests(reqId);
+                if (!done) mockVRF.fulfillRandomWords(reqId, vrfWord + i);
+            }
+            _finishReadConsumers();
+            if (!game.advanceDue() && game.rngComplete()) return;
+            if (game.advanceDue()) game.mineFlip();
+        }
+        revert("harness: cohorts never settled");
+    }
+
+    /// @dev One mineFlip given the smallest allowance that succeeds (bisection over snapshots):
+    ///      it runs exactly the next admitted chunk and cannot also admit the box entry.
+    function _stepMinimal() private {
+        uint256 lo = 200_000;
+        uint256 hi = 30_000_000;
+        while (hi - lo > 1_000) {
+            uint256 mid = (lo + hi) / 2;
+            uint256 snap = vm.snapshotState();
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip()"));
+            vm.revertToStateAndDelete(snap);
+            if (ok) hi = mid;
+            else lo = mid;
+        }
+        game.mineFlip{gas: hi}();
     }
 
     /// @notice Accepted century behavior: any keeper can settle the known winner before the
@@ -78,73 +124,114 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
         assertEq(sdgnrs.balanceOf(PLAYER), balanceAfter);
     }
 
-    function testParentDgnrsIsSettledAndSnapshotReloadedAcrossNestedEthSpin() public {
-        vm.deal(PLAYER, 31 ether);
-        vm.prank(PLAYER);
-        game.purchase{value: 30 ether}(PLAYER, 0, BOX_ORDER, bytes32(0), MintPaymentKind.DirectEth, false);
-
-        _landWord(RNG_WORD);
-
-        uint256 poolBefore = _lootboxPool();
-        uint256 balanceBefore = sdgnrs.balanceOf(PLAYER);
-
-        vm.recordLogs();
-        uint256 gasBefore = gasleft();
-        game.openBoxes(type(uint256).max);
-        uint256 gasUsed = gasBefore - gasleft();
-        VmSafe.Log[] memory logs = vm.getRecordedLogs();
-
-        uint256[3] memory requested;
-        uint256[3] memory paid;
+    struct NestedOpen {
+        uint256[3] requested;
+        uint256[3] paid;
         uint256 batchCount;
         uint256 parentAmount;
         uint256 parentOpenCount;
+        uint256 poolBefore;
+        uint256 balanceBefore;
+        uint256 gasUsed;
+    }
 
+    /// @dev Open the committed entry (the next read consumer) and decode its DGNRS batches.
+    function _openAndParse() private returns (NestedOpen memory r) {
+        r.poolBefore = _lootboxPool();
+        r.balanceBefore = sdgnrs.balanceOf(PLAYER);
+        vm.recordLogs();
+        uint256 gasBefore = gasleft();
+        game.openBoxes(type(uint256).max);
+        r.gasUsed = gasBefore - gasleft();
+        VmSafe.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             VmSafe.Log memory entry = logs[i];
             if (entry.emitter != address(game) || entry.topics.length < 2) continue;
             if (entry.topics[1] != bytes32(uint256(uint160(PLAYER)))) continue;
 
             if (entry.topics[0] == DGNRS_BATCH_SIG) {
-                assertLt(batchCount, 3, "unexpected extra DGNRS settlement batch");
-                (requested[batchCount], paid[batchCount]) = abi.decode(entry.data, (uint256, uint256));
-                ++batchCount;
+                assertLt(r.batchCount, 3, "unexpected extra DGNRS settlement batch");
+                (r.requested[r.batchCount], r.paid[r.batchCount]) = abi.decode(entry.data, (uint256, uint256));
+                ++r.batchCount;
             } else if (
                 entry.topics[0] == LOOTBOX_OPENED_SIG && entry.topics.length == 3
                     && uint48(uint256(entry.topics[2])) == PARENT_BUFFER
             ) {
                 (uint256 amount,,,,) = abi.decode(entry.data, (uint256, uint24, uint32, uint256, bool));
-                parentAmount = amount;
-                ++parentOpenCount;
+                r.parentAmount = amount;
+                ++r.parentOpenCount;
             }
         }
+    }
+
+    /// @dev Box three's DGNRS award priced from the live pool after the first two batches, and
+    ///      from the entry's stale opening snapshot.
+    function _thirdRoll(NestedOpen memory r) private pure returns (uint256 fresh, uint256 stale) {
+        uint256 seed3 = EntropyLib.hash4(RNG_WORD, uint256(uint160(PLAYER)), 0x426f784f70656e, 3);
+        uint256 boonBudget = r.parentAmount / 10;
+        if (boonBudget > 1 ether) boonBudget = 1 ether;
+        uint256 rollAmount = r.parentAmount - boonBudget;
+        fresh = _dgnrsReward(rollAmount, seed3, r.poolBefore - r.paid[0] - r.paid[1]);
+        stale = _dgnrsReward(rollAmount, seed3, r.poolBefore);
+    }
+
+    /// @dev Awards floor to three significant figures, so a fresh and a stale price for box three
+    ///      differ only when the pool sits near a rounding step. The live Lootbox pool depends on
+    ///      the setup's history, so trim it by the smallest multiple of 1/10,000 of itself that
+    ///      makes the two prices differ (one step period is ~0.6% of the pool and the window
+    ///      ~0.02%, so steps of 0.01% always land in it within the first period).
+    function _distinguishingPoolTrim() private returns (uint256 trim) {
+        uint256 pool = _lootboxPool();
+        for (uint256 k; k < 100; ++k) {
+            trim = pool * k / 10_000;
+            uint256 snap = vm.snapshotState();
+            if (trim != 0) {
+                vm.prank(address(game));
+                IsDGNRS(address(sdgnrs)).transferFromPool(IsDGNRS.Pool.Lootbox, address(0xdead), trim);
+            }
+            NestedOpen memory r = _openAndParse();
+            (uint256 fresh, uint256 stale) = _thirdRoll(r);
+            vm.revertToStateAndDelete(snap);
+            if (fresh != stale) return trim;
+        }
+        revert("harness: no pool trim distinguishes fresh and stale pricing");
+    }
+
+    function testParentDgnrsIsSettledAndSnapshotReloadedAcrossNestedEthSpin() public {
+        vm.deal(PLAYER, 31 ether);
+        vm.prank(PLAYER);
+        game.purchase{value: 30 ether}(PLAYER, 0, BOX_ORDER, bytes32(0), MintPaymentKind.DirectEth, false);
+
+        _landWord(RNG_WORD);
+        uint256 trim = _distinguishingPoolTrim();
+        if (trim != 0) {
+            vm.prank(address(game));
+            IsDGNRS(address(sdgnrs)).transferFromPool(IsDGNRS.Pool.Lootbox, address(0xdead), trim);
+        }
+        emit log_named_uint("lootbox_pool_trim", trim);
+
+        NestedOpen memory r = _openAndParse();
 
         // The middle ETH-spin uses BoxSpin instead of the all-zero LootBoxOpened schema.
-        assertEq(parentOpenCount, 2, "fixture did not open both parent DGNRS boxes");
-        assertEq(batchCount, 3, "parent/child/parent DGNRS must settle as three batches");
-        for (uint256 i; i < batchCount; ++i) {
-            assertGt(requested[i], 0, "fixture batch must request DGNRS");
-            assertEq(paid[i], requested[i], "fixture pool must remain solvent");
+        assertEq(r.parentOpenCount, 2, "fixture did not open both parent DGNRS boxes");
+        assertEq(r.batchCount, 3, "parent/child/parent DGNRS must settle as three batches");
+        for (uint256 i; i < r.batchCount; ++i) {
+            assertGt(r.requested[i], 0, "fixture batch must request DGNRS");
+            assertEq(r.paid[i], r.requested[i], "fixture pool must remain solvent");
         }
 
         // Box three is the later parent DGNRS roll. It must price from the balance after the
         // pre-recursion parent batch and the nested child batch, not the entry's old snapshot.
-        uint256 seed3 = EntropyLib.hash4(RNG_WORD, uint256(uint160(PLAYER)), 0x426f784f70656e, 3);
-        uint256 boonBudget = parentAmount / 10;
-        if (boonBudget > 1 ether) boonBudget = 1 ether;
-        uint256 rollAmount = parentAmount - boonBudget;
-        uint256 liveBeforeThird = poolBefore - paid[0] - paid[1];
-        uint256 expectedFresh = _dgnrsReward(rollAmount, seed3, liveBeforeThird);
-        uint256 expectedStale = _dgnrsReward(rollAmount, seed3, poolBefore);
+        (uint256 expectedFresh, uint256 expectedStale) = _thirdRoll(r);
 
-        assertEq(requested[2], expectedFresh, "later parent roll did not reload live pool");
+        assertEq(r.requested[2], expectedFresh, "later parent roll did not reload live pool");
         assertNotEq(expectedFresh, expectedStale, "fixture must distinguish fresh and stale pool");
 
-        uint256 totalPaid = paid[0] + paid[1] + paid[2];
-        assertEq(poolBefore - _lootboxPool(), totalPaid, "pool debit mismatch");
-        assertEq(sdgnrs.balanceOf(PLAYER) - balanceBefore, totalPaid, "player credit mismatch");
+        uint256 totalPaid = r.paid[0] + r.paid[1] + r.paid[2];
+        assertEq(r.poolBefore - _lootboxPool(), totalPaid, "pool debit mismatch");
+        assertEq(sdgnrs.balanceOf(PLAYER) - r.balanceBefore, totalPaid, "player credit mismatch");
 
-        emit log_named_uint("nested_dgnrs_open_gas", gasUsed);
+        emit log_named_uint("nested_dgnrs_open_gas", r.gasUsed);
         emit log_named_uint("stale_third_dgnrs", expectedStale);
         emit log_named_uint("fresh_third_dgnrs", expectedFresh);
     }
@@ -165,11 +252,18 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
         return IsDGNRS(address(sdgnrs)).poolBalance(IsDGNRS.Pool.Lootbox);
     }
 
+    /// @dev Commit the purchased entry with a mid-day request (its 30 ETH clears the pending-value
+    ///      gate), deliver `vrfWord`, and publish it in minimal checkpoints up to the cohort's
+    ///      human-box stage. The entry is then the next read consumer: openBoxes opens it. (The
+    ///      engine opens a published cohort's entries in the same call that finishes the earlier
+    ///      stages, so publication is stepped rather than run with unbounded gas.)
     function _landWord(uint256 vrfWord) private {
-        _settleGame(vrfWord ^ 0xF00D);
-        vm.warp(block.timestamp + 1 days);
-        _settleGame(vrfWord);
-        _settleClean(vrfWord);
+        vm.prank(PLAYER);
+        game.requestLootboxRng();
+        mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), vrfWord);
+        for (uint256 i; i < 50 && game.nextMinerAction() != 10; ++i) _stepMinimal(); // HumanBoxes
+        assertEq(game.nextMinerAction(), 10, "the entry is the next read consumer");
+        assertEq(RecyclingState.word(address(game), PARENT_BUFFER), vrfWord, "the word reached the entry's tag");
     }
 
     function _settleGame(uint256 vrfWord) private {

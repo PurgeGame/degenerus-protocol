@@ -26,9 +26,9 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 ///           A  advance   — drained by mineFlip: the latch releases the same day and a
 ///                          second mid-day request is accepted.
 ///           B  router    — drained through the mineFlip router only: same outcome.
-///           C  foil      — a real foil purchase stays in the ordinary write cohort while
-///                          the isolated future pool drains. Its next normal commitment
-///                          generates the foil before completing, still the same day.
+///           C  foil      — a real foil purchase stays in the foil write cohort while the
+///                          isolated future pool drains, and a later mid-day word never
+///                          moves it; the next daily commitment generates the foil.
 ///           D  craps     — an ordinary request while a craps window waits on the write buffer
 ///                          (which waives the lootbox pending-value gates, so no lootbox is
 ///                          needed) freezes and latches the same way; the latch releases the
@@ -113,7 +113,19 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
         assertGt(_foilWriteCount(), 0, "isolated future-pool completion preserves the paid foil");
         assertFalse(_foilResolved(), "the isolated pool never borrows the foil's future word");
         _assertReleased(ffKey, day, last);
-        assertTrue(_foilResolved(), "the next ordinary midday drain must finish the paid foil");
+        // Foil packs ride the daily request only (foilWriteSlot): the second mid-day word that
+        // _assertReleased drained never moves the foil cohort, so the paid foil still waits.
+        assertGt(_foilWriteCount(), 0, "a mid-day request never moves the paid foil");
+        assertFalse(_foilResolved(), "a mid-day word never generates the paid foil");
+        // The next daily request freezes the foil cohort and its word generates the pack.
+        simTime = vm.getBlockTimestamp() + 1 days;
+        vm.warp(simTime);
+        for (uint256 i; i < 400 && !_foilResolved(); ++i) {
+            _fulfillPending();
+            (bool ok, bytes memory ret) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            if (!ok) assertTrue(_selector(ret) != SEL_NOT_TIME_YET, "harness: the crank idled before the foil generated");
+        }
+        assertTrue(_foilResolved(), "the next daily commitment must finish the paid foil");
     }
 
     // ---------------------------------------------------------------------
@@ -312,9 +324,12 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
         return (uint256(vm.load(address(game), bytes32(uint256(33)))) >> 224) & 0xFF;
     }
 
+    /// @dev foilQueue (slot 61) keyed by foilWriteSlot (slot 62, byte 10), the foil cohort's
+    ///      own toggle that only the daily request flips.
     function _foilWriteCount() internal view returns (uint256) {
+        bool foilWriteSlot = ((uint256(vm.load(address(game), bytes32(uint256(62)))) >> 80) & 1) != 0;
         return uint256(vm.load(address(game),
-            keccak256(abi.encode(uint256(_ticketWriteSlot() ? 1 : 0), uint256(61)))));
+            keccak256(abi.encode(uint256(foilWriteSlot ? 1 : 0), uint256(61)))));
     }
 
     function _foilResolved() internal view returns (bool) {

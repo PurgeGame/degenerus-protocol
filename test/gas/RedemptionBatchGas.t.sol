@@ -4,6 +4,7 @@ pragma solidity 0.8.34;
 import {AutomaticRedemptionSettlementTest} from "../fuzz/AutomaticRedemptionSettlement.t.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 
 contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
     function _coolSettlementState() internal {
@@ -47,12 +48,16 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         (uint96 base,,) = sdgnrs.pendingRedemptions(alice, day);
         assertEq(base, 160 ether);
         _resolve(day, 175, 99);
-        _coolSettlementState();
-        uint256 beforeGas = gasleft();
-        game.mineFlip();
-        uint256 used = beforeGas - gasleft() + 21_000;
+        uint256 used = _coldRouterGas();
         emit log_named_uint("cold_maximum_redemption_router_gas", used);
-        assertLe(used, 10_000_000, "unchanged target ceiling");
+        // Per-chunk: the maximum beneficiary is one indivisible chunk whose declared admission
+        // bound stays inside the 10M realistic chunk limit (its actual cost is pinned against the
+        // bound by testFuzz_ColdWholeClaimFitsItsReservation).
+        assertLe(
+            GasBounds.REDEMPTION_BASE_GAS + 28 * GasBounds.REDEMPTION_CHUNK_GAS + GasBounds.REDEMPTION_TAIL_GAS,
+            uint256(10_000_000),
+            "maximum beneficiary chunk bound"
+        );
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0, "real maximum claim settled");
     }
     function _queueBurners(uint256 n, uint256 amount) private returns (address[] memory players) {
@@ -65,12 +70,14 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         }
     }
 
+    /// @dev One cold keeper call with a realistic 10M allowance: it must succeed and make progress.
+    ///      The engine keeps admitting chunks while the allowance covers the next declared bound, so
+    ///      the whole call's gas is reported, not bounded; per-chunk bounds are asserted separately.
     function _coldRouterGas() private returns (uint256 used) {
         _coolSettlementState();
         uint256 beforeGas = gasleft();
-        game.mineFlip();
+        game.mineFlip{gas: 10_000_000}();
         used = beforeGas - gasleft() + 21_000;
-        assertLe(used, 10_000_000, "full composed router below target");
     }
 
     function test_ColdMultipleMaximumBeneficiariesAndContinuation() public {

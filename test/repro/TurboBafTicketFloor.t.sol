@@ -5,6 +5,8 @@ import {TicketQueueStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title TurboBafTicketFloor — BAF award tickets rolled onto the floor level under turbo.
@@ -194,19 +196,30 @@ contract TurboBafTicketFloor is DeployProtocol {
                 _buyTickets();
                 _tryCoinflipDeposit();
             }
-            _runFullDay();
+            _runFullDayUntilX0Latch();
         }
         revert("harness: never reached the level-10 latch day");
+    }
+
+    /// @dev `_runFullDay`, stopping at the call that seals the x0 latch: the engine would
+    ///      otherwise go on to send the miner's own mid-day request in the latch window, and the
+    ///      test fires that window's request itself.
+    function _runFullDayUntilX0Latch() internal {
+        simTime += 1 days + 1;
+        vm.warp(simTime);
+        for (uint256 i = 0; i < 300; i++) {
+            _fulfillPending();
+            if (!_mine()) break;
+            (uint24 lvl, , bool lastPurchaseDay_, bool locked, ) = game.purchaseInfo();
+            if (lastPurchaseDay_ && lvl == 9 && !locked) break;
+        }
     }
 
     /// @dev Run the advance chain to exhaustion on the current (already-warped) day.
     function _settleToday() internal {
         for (uint256 i = 0; i < 300; i++) {
             _fulfillPending();
-            (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip()")
-            );
-            if (!ok) break;
+            if (!_mine()) break;
         }
     }
 
@@ -230,6 +243,22 @@ contract TurboBafTicketFloor is DeployProtocol {
     // ---------------------------------------------------------------------
     // Helpers (shared shape with MiddaySwapJackpotCohort)
     // ---------------------------------------------------------------------
+
+    /// @dev One driver step. The engine composes every admitted checkpoint into a call and the
+    ///      miner now sends its own mid-day request whenever one is eligible (a shut Craps window
+    ///      on the write buffer). The driver models the original keeper flow: each call gets the
+    ///      smallest admitting allowance from a realistic ladder, and an optional mid-day request
+    ///      is left to the test (treated as idle). Returns false when no work was done.
+    function _mine() internal returns (bool) {
+        if (game.nextMinerAction() == uint8(DegenerusGameStorage.MinerAction.RequestMidday)) return false;
+        uint256[6] memory ladder = [uint256(1_500_000), 2_500_000, 3_500_000, 5_000_000, 9_000_000, 16_777_216];
+        for (uint256 r; r < ladder.length; ++r) {
+            (bool ok, bytes memory err) = address(game).call{gas: ladder[r]}(abi.encodeWithSignature("mineFlip()"));
+            if (ok) return true;
+            if (bytes4(err) != MineFlipGas.InsufficientExecutionGas.selector) return false;
+        }
+        return false;
+    }
 
     function _fulfillPending() internal {
         uint256 reqId = mockVRF.lastRequestId();
@@ -264,17 +293,18 @@ contract TurboBafTicketFloor is DeployProtocol {
         vm.warp(simTime);
         for (uint256 i = 0; i < 300; i++) {
             _fulfillPending();
-            (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip()")
-            );
-            if (!ok) break;
+            if (!_mine()) break;
         }
     }
 
     /// @dev Buy a lootbox and fire a mid-day lootbox request; report whether the
     ///      ticket buffer flipped (shared shape with MiddaySwapJackpotCohort).
     function _middayRequest() internal returns (bool swapped) {
-        _finishReadConsumers();
+        // The window's mid-day request is whichever comes first: the miner sends its own as soon
+        // as one is eligible (craps windows ride the normal RNG round), possibly while the
+        // previous session's reads finish. Otherwise the crank sends it, funded by a lootbox.
+        bool before = _ticketWriteSlot();
+        if (_settleReadsUntilRequest()) return _ticketWriteSlot() != before;
         vm.prank(buyer);
         game.purchase{value: 2 ether}(
             buyer,
@@ -284,13 +314,35 @@ contract TurboBafTicketFloor is DeployProtocol {
             MintPaymentKind.DirectEth,
             false
         );
-        bool before = _ticketWriteSlot();
+        before = _ticketWriteSlot();
         vm.prank(crank);
         (bool ok, ) = address(game).call(
             abi.encodeWithSignature("requestLootboxRng()")
         );
         require(ok, "harness: requestLootboxRng must be callable");
         swapped = _ticketWriteSlot() != before;
+    }
+
+    /// @dev Finish the session in flight with the smallest admitting allowances. Returns true,
+    ///      leaving the word unanswered, as soon as the miner composes its own mid-day request.
+    function _settleReadsUntilRequest() internal returns (bool minerRequested) {
+        for (uint256 i; i < 300; ++i) {
+            _fulfillPending();
+            uint256 id = mockVRF.lastRequestId();
+            (,, bool fulfilled) = mockVRF.pendingRequests(id);
+            if (game.rngComplete() && (id == 0 || fulfilled)) return false;
+            uint256[6] memory ladder = [uint256(2_700_000), 3_500_000, 4_500_000, 6_000_000, 9_000_000, 16_777_216];
+            bool progressed;
+            for (uint256 r; r < ladder.length && !progressed; ++r) {
+                (bool ok, bytes memory err) = address(game).call{gas: ladder[r]}(abi.encodeWithSignature("mineFlip()"));
+                if (ok) progressed = true;
+                else if (bytes4(err) == bytes4(keccak256("NoWork()"))) return false;
+                else require(bytes4(err) == MineFlipGas.InsufficientExecutionGas.selector, "harness: reads settle");
+            }
+            require(progressed, "harness: reads settle within a realistic allowance");
+            if (mockVRF.lastRequestId() != id) return true;
+        }
+        revert("harness: reads never settled");
     }
 
     /// @dev Cross the day boundary WITHOUT fulfilling the outstanding request, then
@@ -304,9 +356,7 @@ contract TurboBafTicketFloor is DeployProtocol {
         ok; // the promotion entry may or may not revert once its stage breaks
         for (uint256 i = 0; i < 300; i++) {
             _fulfillPending();
-            (ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip()")
-            );
+            ok = _mine();
             if (game.jackpotPhase()) _assertLateTicketsMaterialized();
             if (!ok) break;
         }
@@ -338,15 +388,10 @@ contract TurboBafTicketFloor is DeployProtocol {
 
     // ---- storage probes ----
 
-    /// @dev _ticketQueueLength(key) — the mapping sits at slot 12.
+    /// @dev _ticketQueueLength(key): queue roots recycle physical slots under an absolute-level
+    ///      tag, so read the authenticated length for the logical key.
     function _queueLen(uint24 key) internal view returns (uint256) {
-        return
-            uint256(
-                vm.load(
-                    address(game),
-                    keccak256(abi.encode(uint256(key), uint256(12)))
-                )
-            );
+        return TicketQueueStorage.length(address(game), key);
     }
 
     /// @dev _entriesOwed(key, player) >> 8 — the mapping sits at slot 13.

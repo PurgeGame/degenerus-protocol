@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.33;
 import {RoundDrainChunkGas, ChunkHarness} from "./RoundDrainChunkGas.t.sol";
-import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @notice Fixed-work comparisons for the packed-tail optimization, including event digests.
 /// @dev Cooling resets access warmth between chunks, but does not create separate transactions
 ///      or reset original storage values for SSTORE pricing. These are synthetic comparative
 ///      measurements, excluding transaction intrinsic gas, rather than live fee estimates.
+///      Each chunk is a realistic 10M-gas call: the worker spends whatever gas it is given, so
+///      an unbounded call would be one whole-queue chunk and `peak_gas` would mean nothing.
 contract TicketOptimizationGas is RoundDrainChunkGas {
     function _full(uint256 n, uint32 owed) internal {
         h.seed(LVL, n, owed, 0x70000, false);
@@ -16,11 +17,12 @@ contract TicketOptimizationGas is RoundDrainChunkGas {
         bool done;
         vm.recordLogs();
         while (!done && calls < 1000) {
-            vm.cool(address(h));
-            vm.cool(ContractAddresses.GAME_FOILPACK_MODULE);
+            _cool();
             uint256 beforeGas = gasleft();
-            (done,) = h.processTicketBatch(LVL + 1);
+            bool worked;
+            (done, worked) = h.processTicketBatch{gas: GAS_TARGET}(LVL + 1);
             uint256 used = beforeGas - gasleft();
+            assertTrue(done || worked, "every bounded chunk makes progress");
             totalGas += used;
             if (used > peak) peak = used;
             ++calls;

@@ -7,6 +7,7 @@ import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {Craps} from "../../contracts/Craps.sol";
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 
 /// @dev Setup only: the public game dispatch, seal, run/rank/pay and request gates
 /// are production. All unrelated consumers start complete, isolating Decimator.
@@ -73,6 +74,11 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
         gameCode = address(game).code;
         seedCode = address(new UnpushedDecimatorSessionSeeder()).code;
         _seed(abi.encodeCall(UnpushedDecimatorSessionSeeder.prime, (LVL, WORD, POOL)));
+        // The warp leaves scheduled Craps maintenance owed, which also refuses a mid-day request
+        // (RngModule: _minerMaintenancePending). Run it through the table's own permissionless
+        // keeper while the primed session is complete, so every refusal below answers to the
+        // Decimator read consumer alone.
+        _quietCrapsTable();
         vm.etch(ContractAddresses.CRAPS_ENGINE, address(new UnpushedDecimatorFlatEngine()).code);
         for (uint64 id = 1; id <= COUNT; ++id) {
             vm.prank(ContractAddresses.COIN);
@@ -101,13 +107,21 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
         return (uint256(keccak256(abi.encode(TIE, WORD, LVL, id))) & ~uint256(type(uint64).max)) | id;
     }
 
+    // The compatibility door ignores its count and runs the caller-sized work under the gas it
+    // is given, admitting each step by its declared bound (60d31f775). Allowances replace the
+    // old unit budgets: RUN_ALLOWANCE admits about one heads run, RANK_ALLOWANCE the ranking
+    // step, PAY_ALLOWANCE a small prefix of ETH awards (at least one PAYMENT plus its tail).
+    uint256 private constant RUN_ALLOWANCE = 1_000_000;
+    uint256 private constant RANK_ALLOWANCE = 700_000;
+    uint256 private constant PAY_ALLOWANCE = 230_000;
+
     function test_ActiveWordSurvivesPartialRunsRankingAndEveryPayoutUntilRequest() public {
         _requestBlocked();
         DegenerusGameStorage.DecBattleRound memory r;
         uint64 previous;
         for (uint256 i; previous < COUNT && i < COUNT; ++i) {
-            (, uint256 charged,) = game.settleDecimatorWinners(122);
-            assertLe(charged, 122, "partial call stays inside its allowance");
+            (, uint256 charged,) = game.settleDecimatorWinners{gas: RUN_ALLOWANCE}(0);
+            assertLe(charged, RUN_ALLOWANCE, "partial call stays inside its allowance");
             r = lens.decBattleRoundOf(address(game), LVL);
             assertGt(r.cursor, previous);
             previous = r.cursor;
@@ -115,7 +129,7 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
             _requestBlocked();
         }
         assertEq(r.cursor, COUNT, "every entrant ran before ranking");
-        game.settleDecimatorWinners(72); // Ranking is a separately reserved bounded step.
+        game.settleDecimatorWinners{gas: RANK_ALLOWANCE}(0); // Ranking is a separately reserved bounded step.
         r = lens.decBattleRoundOf(address(game), LVL);
         assertEq(r.phase, 2);
         assertEq(r.winners, 4);
@@ -127,10 +141,20 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
         assertEq(r.champion, champion, "ranking uses the same active word as every run");
         assertEq(lens.decWinnerAt(address(game), LVL, 0).key, _key(champion));
         _requestBlocked();
-        for (uint256 i; i < r.winners; ++i) {
-            game.settleDecimatorWinners(22); // Call reserve plus exactly one ETH award.
-            if (i + 1 < r.winners) _requestBlocked();
+        // Payouts are admitted per award (PAYMENT bound) under the supplied gas, so a bounded call
+        // pays a bounded prefix; the active word must survive every partial payout call.
+        uint256 payCalls;
+        while (lens.decBattleRoundOf(address(game), LVL).phase == 2 && payCalls < 16) {
+            uint256 paidBefore = lens.decBattleRoundOf(address(game), LVL).paid;
+            game.settleDecimatorWinners{gas: PAY_ALLOWANCE}(0);
+            ++payCalls;
+            DegenerusGameStorage.DecBattleRound memory p = lens.decBattleRoundOf(address(game), LVL);
+            if (p.phase == 2) {
+                assertGt(p.paid, paidBefore, "each bounded payout call pays at least one award");
+                _requestBlocked();
+            }
         }
+        assertGt(payCalls, 1, "payouts span bounded calls");
         r = lens.decBattleRoundOf(address(game), LVL);
         assertEq(r.phase, 3);
         uint256 sum;
@@ -144,14 +168,16 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
     }
 
     function test_TerminalReplacementWordCannotResumeOldNormalBattleBeforeGameOver() public {
-        game.settleDecimatorWinners(50);
+        game.settleDecimatorWinners{gas: RUN_ALLOWANCE}(0);
         bytes memory beforeRound = abi.encode(lens.decBattleRoundOf(address(game), LVL));
         _seed(abi.encodeCall(UnpushedDecimatorSessionSeeder.terminalWord, (uint256(0xDEADCAFE))));
         assertFalse(game.gameOver());
         assertEq(RecyclingState.currentWord(address(game)), 0xDEADCAFE);
         (uint256 settled, uint256 used, bool moved) = game.settleDecimatorWinners(2500);
         assertEq(settled, 0);
-        assertEq(used, 0);
+        // The door now reports raw gas, not work units: a refused resume admits no run at all,
+        // so it spends less than the smallest declared step (a tails run).
+        assertLt(used, GasBounds.DECIMATOR_TAILS_GAS_MAX);
         assertFalse(moved);
         assertEq(abi.encode(lens.decBattleRoundOf(address(game), LVL)), beforeRound);
         vm.expectRevert(); lens.decWinnerAt(address(game), LVL, 0);

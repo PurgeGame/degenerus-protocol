@@ -7,6 +7,7 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
 /// @dev Initial conditions only: a funded first jackpot day with already-materialized
 /// ticket owners. No settlement or request is performed under this runtime.
@@ -66,8 +67,9 @@ contract DailyJackpotCommitmentSeeder is DegenerusGame, BucketSeed {
 /// Independent word-2 oracle: raw traits [12,98,134,215], sealed hero -> [12,101,134,215],
 /// hash(2,4)&3 == 3 -> solo q0; daily bps = 765. With 80 ETH current and 100 ETH future,
 /// freeze removes 1 ETH to pending, daily budgets are 4.896 ETH / 1.224 ETH tickets,
-/// early bird is 2.97 ETH. Price(5)=.02, entry unit=.005: ETH pays [2.016,.96,.96,.96];
-/// main gives [0,64,64,96] entries; early bird [0,160,192,160] entries. These constants
+/// early bird is 2.97 ETH. Price(5)=.02, entry unit=.005: ETH pays [2.296,.9,.9,.8] (whole 0.1 ETH
+/// units, non-solo leftovers to the solo);
+/// main gives [0,64,64,96] entries; early bird [0,128,128,128] entries (96-winner cap). These constants
 /// are not obtained from live events, production jackpot helpers or the compared branch.
 ///
 /// Scope: seeded materialized one-owner-per-trait cohorts, no deities, no gold ladder,
@@ -129,19 +131,53 @@ contract DailyJackpotCommitmentFreezeTest is DeployProtocol {
         return uint256(vm.load(address(game), bytes32(uint256(keccak256(abi.encode(forDay, uint256(44)))) + 1)));
     }
 
-    function _advance() private returns (uint8 stage) {
+    /// @dev One public mineFlip. The engine composes every admitted checkpoint into a call, so
+    ///      each call is given the smallest of a fixed ladder of allowances that admits work:
+    ///      1.5M admits single payout checkpoints (never a second payout stage's setup), larger
+    ///      rungs only the indivisible request / word-apply actions. Returns every progress
+    ///      marker of the call, in order.
+    function _advance() private returns (uint8[] memory stages) {
         assertTrue(game.advanceDue(), "a bounded stage must remain publicly reachable");
-        vm.recordLogs();
-        game.mineFlip();
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        uint256 found;
-        for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].emitter == address(game) && logs[i].topics.length != 0 && logs[i].topics[0] == ADVANCE) {
-                (stage,) = abi.decode(logs[i].data, (uint8, uint24));
-                ++found;
+        uint256[10] memory ladder = [uint256(1_500_000), 2_000_000, 2_500_000, 3_000_000, 3_500_000, 4_000_000,
+            4_500_000, 6_000_000, 10_000_000, 16_700_000];
+        Vm.Log[] memory logs;
+        for (uint256 r; r < ladder.length; ++r) {
+            vm.recordLogs();
+            try game.mineFlip{gas: ladder[r]}() {
+                logs = vm.getRecordedLogs();
+                break;
+            } catch (bytes memory err) {
+                vm.getRecordedLogs();
+                assertEq(bytes4(err), MineFlipGas.InsufficientExecutionGas.selector, "only an allowance refusal retries");
+                assertTrue(r + 1 < ladder.length, "a realistic allowance must make progress");
             }
         }
-        assertEq(found, 1, "one progress marker per advance");
+        uint256 found;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter == address(game) && logs[i].topics.length != 0 && logs[i].topics[0] == ADVANCE) ++found;
+        }
+        stages = new uint8[](found);
+        found = 0;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter == address(game) && logs[i].topics.length != 0 && logs[i].topics[0] == ADVANCE) {
+                (stages[found++],) = abi.decode(logs[i].data, (uint8, uint24));
+            }
+        }
+    }
+
+    /// @dev Tickets an owner holds at level 5: still-queued entries plus entries materialized
+    ///      into the level-5 trait buckets (main daily awards materialize directly into the live
+    ///      next-level buffer, 95d88f68b).
+    function _level5Entries(address owner) private view returns (uint256 total) {
+        total = game.entriesOwedView(5, owner);
+        for (uint16 trait; trait < 256; ++trait) {
+            (uint24 count,,) = game.getEntries(uint8(trait), 5, 0, type(uint32).max, owner);
+            total += count;
+        }
+    }
+
+    function _coinTicketsPending() private view returns (bool) {
+        return (_packed() >> 176) & 1 != 0;
     }
 
     function _perturb() private {
@@ -174,33 +210,46 @@ contract DailyJackpotCommitmentFreezeTest is DeployProtocol {
         vm.warp(block.timestamp + 1);
     }
 
-    function _assertRecipients(bool paidEth, bool early, bool main) private view returns (bytes32 digest) {
-        uint256[4] memory eth = [uint256(2.016 ether), 0.96 ether, 0.96 ether, 0.96 ether];
-        uint256[4] memory earlyEntries = [uint256(0), 160, 192, 160];
+    /// @dev Leg states: 0 not started (nothing paid), 1 part-way through its checkpoint calls (at
+    ///      most the committed amount, to the committed owners), 2 complete (exactly committed).
+    function _expectLeg(uint256 actual, uint256 committed, uint8 state, string memory reason) private pure {
+        if (state == 2) assertEq(actual, committed, reason);
+        else if (state == 1) assertLe(actual, committed, reason);
+        else assertEq(actual, 0, reason);
+    }
+
+    function _assertRecipients(uint8 ethState, uint8 earlyState, uint8 mainState) private view returns (bytes32 digest) {
+        // Whole 0.1 ETH units, at most the [32,16,4] targets (5b25fded0): each 0.96 ETH non-solo
+        // share pays 9 x 0.1 / 9 x 0.1 / 4 x 0.2 to its one owner; the .06+.06+.16 leftovers
+        // move to the solo, which settles last (was the exact [2.016,.96,.96,.96]).
+        uint256[4] memory eth = [uint256(2.296 ether), 0.9 ether, 0.9 ether, 0.8 ether];
+        // 96-winner ticket cap (5b25fded0; was 128): 3 non-solo quadrants x 32 winners x 1 ticket.
+        uint256[4] memory earlyEntries = [uint256(0), 128, 128, 128];
         uint256[4] memory mainEntries = [uint256(0), 64, 64, 96];
         for (uint256 q; q < 4; ++q) {
             address currentOwner = _owner(0, q);
             address earlyOwner = _owner(1, q);
             uint256 credited = game.claimableWinningsOf(currentOwner);
-            uint256 mainOwed = game.entriesOwedView(5, currentOwner);
+            uint256 mainOwed = _level5Entries(currentOwner);
+            // Cohort-1 owners hold 128 seeded level-5 entries; early-bird awards stay queued.
             uint256 earlyOwed = game.entriesOwedView(5, earlyOwner);
-            assertEq(credited, paidEth ? eth[q] : 0, "ETH recipient must match committed board and exact share");
-            assertEq(mainOwed, main ? mainEntries[q] : 0, "main tickets must belong to committed current-level owners");
-            assertEq(earlyOwed, early ? earlyEntries[q] : 0, "early tickets must belong to committed next-level owners");
+            _expectLeg(credited, eth[q], ethState, "ETH recipient must match committed board and exact share");
+            _expectLeg(mainOwed, mainEntries[q], mainState, "main tickets must belong to committed current-level owners");
+            _expectLeg(earlyOwed, earlyEntries[q], earlyState, "early tickets must belong to committed next-level owners");
             assertEq(game.claimableWinningsOf(earlyOwner), 0, "early cohort cannot receive current-level ETH");
             assertEq(game.entriesOwedView(4, currentOwner), 0, "daily awards queue at the next level");
             digest = keccak256(abi.encode(digest, currentOwner, credited, mainOwed, earlyOwner, earlyOwed));
             for (uint256 cohort; cohort < 2; ++cohort) {
                 address other = address(uint160(0x2000 + cohort * 16 + q));
                 assertEq(game.claimableWinningsOf(other), 0, "unselected paid owner received ETH");
-                assertEq(game.entriesOwedView(5, other), 0, "unselected paid owner received tickets");
+                assertEq(_level5Entries(other), cohort == 1 ? 128 : 0, "unselected paid owner received tickets");
             }
         }
         for (uint256 lvl = 4; lvl <= 5; ++lvl) {
             for (uint256 base = 0x3000; base <= 0x4000; base += 0x1000) {
                 address other = address(uint160(base + lvl));
                 assertEq(game.claimableWinningsOf(other), 0, "uncommitted hero selected an ETH owner");
-                assertEq(game.entriesOwedView(5, other), 0, "uncommitted hero selected a ticket owner");
+                assertEq(_level5Entries(other), lvl == 5 ? 128 : 0, "uncommitted hero selected a ticket owner");
             }
         }
         assertEq(game.claimableWinningsOf(ATTACKER), 0, "late buyer cannot join committed ETH cohort");
@@ -208,7 +257,16 @@ contract DailyJackpotCommitmentFreezeTest is DeployProtocol {
     }
 
     function _run(bool perturb, uint256 word) private returns (Result memory result) {
-        assertEq(_advance(), 1, "first call must request fresh entropy");
+        // The synthetic day-400 jump leaves expired Craps maintenance (one checkpoint per call)
+        // ahead of the request; the first call that progresses the day must request fresh entropy.
+        uint8[] memory first;
+        for (uint256 i; i < 1000; ++i) {
+            first = _advance();
+            if (first.length != 0) break;
+            assertFalse(game.rngLocked(), "maintenance runs before the request");
+        }
+        assertEq(first.length, 1, "the request call carries one marker");
+        assertEq(first[0], 1, "first call must request fresh entropy");
         assertTrue(game.rngLocked());
         assertEq(uint24(_packed() >> 24), day - 1, "logical day frozen at request");
         uint256 request = mockVRF.lastRequestId();
@@ -227,37 +285,64 @@ contract DailyJackpotCommitmentFreezeTest is DeployProtocol {
         bool paidEth;
         bool early;
         bool main;
-        for (; result.steps < 20 && game.rngLocked(); ++result.steps) {
+        uint256 phase;
+        for (; result.steps < 200 && game.rngLocked(); ++result.steps) {
             if (perturb) {
                 _perturb();
                 ++result.mutations;
             }
             (result.pendingNext, result.pendingFuture) = _pending();
-            uint8 stage = _advance();
-            if (stage == 10) {
-                assertFalse(paidEth, "ETH stage cannot pay twice");
+            uint8[] memory stages = _advance();
+            // Legs may span several checkpoint calls, and the engine composes every admitted
+            // checkpoint into a call: once the battle completes, cheap legs can share its call.
+            // Markers must still follow the committed order, and a leg's completion is read from
+            // the field it consumes.
+            bool sealedNow;
+            bool laterLeg;
+            for (uint256 k; k < stages.length; ++k) {
+                uint8 stage = stages[k];
+                if (stage == 10) {
+                    assertLe(phase, 1, "ETH leg follows the word and battle, precedes ticket legs");
+                    phase = 1;
+                } else if (stage == 14) {
+                    assertLe(phase, 2, "early leg precedes the main leg");
+                    phase = 2;
+                    laterLeg = true;
+                } else if (stage == 8) {
+                    assertLe(phase, 3, "main leg is last");
+                    phase = 3;
+                    laterLeg = true;
+                    sealedNow = true;
+                } else {
+                    assertTrue(stage == 18 || stage == 16 || stage == 5, "unexpected daily path");
+                    assertEq(phase, 0, "other work cannot intervene in priced payout legs");
+                }
+            }
+            if (!paidEth && (_coinTicketsPending() || laterLeg)) {
                 paidEth = true;
                 assertEq(game.currentPrizePoolView(), 73.88 ether, "current debit = ETH plus main-ticket backing");
-                assertEq(game.nextPrizePoolView(), 34.194 ether, "main and early ticket backing moved exactly");
-                assertEq(game.futurePrizePoolView(), 96.03 ether, "early budget debited from frozen future pool");
                 assertEq(game.claimablePoolView(), 4.896 ether, "liability equals all recipient ETH credits");
-                assertEq(uint64(_budgets() >> 8), 244, "main entry budget latched once");
-                assertEq(uint64(_budgets() >> 144), 594, "early entry budget latched once");
-            } else if (stage == 14) {
-                assertTrue(paidEth);
-                assertFalse(early, "early stage cannot pay twice");
-                early = true;
-                assertEq(uint64(_budgets() >> 144), 0, "early field consumed");
-                assertEq(uint64(_budgets() >> 8), 244, "main field survives early stage");
-            } else if (stage == 8) {
-                assertTrue(paidEth && early, "main stage must follow ETH and early stages");
-                main = true;
-                assertEq(_budgets(), 0, "all daily budget fields consumed");
-            } else {
-                assertTrue(stage == 18 || stage == 16 || stage == 5, "unexpected daily path");
-                assertFalse(paidEth, "other work cannot intervene in priced payout legs");
+                if (!sealedNow) {
+                    // The seal (main leg) merges pending revenue; checked at the end instead.
+                    assertEq(game.nextPrizePoolView(), 34.194 ether, "main and early ticket backing moved exactly");
+                    assertEq(game.futurePrizePoolView(), 96.03 ether, "early budget debited from frozen future pool");
+                }
+                if (!laterLeg) {
+                    assertEq(uint64(_budgets() >> 8), 244, "main entry budget latched once");
+                    assertEq(uint64(_budgets() >> 144), 594, "early entry budget latched once");
+                }
             }
-            result.outcomes = _assertRecipients(paidEth, early, main);
+            if (paidEth && !early && uint64(_budgets() >> 144) == 0) {
+                early = true;
+                if (!sealedNow) assertEq(uint64(_budgets() >> 8), 244, "main field survives early stage");
+            }
+            if (early && !main && _budgets() == 0 && !_coinTicketsPending()) {
+                main = true;
+                assertTrue(sealedNow, "the main leg seals the day in its own call");
+            }
+            result.outcomes = _assertRecipients(
+                paidEth ? 2 : phase >= 1 ? 1 : 0, early ? 2 : phase >= 2 ? 1 : 0, main ? 2 : phase >= 3 ? 1 : 0
+            );
             if (!main) {
                 assertTrue(game.rngLocked(), "lock survives between distinct payout stages");
                 assertEq(uint24(_packed() >> 24), day - 1, "day cannot seal between payout stages");

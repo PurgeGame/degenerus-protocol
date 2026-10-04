@@ -5,6 +5,7 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {Vm} from "forge-std/Vm.sol";
 
 /// @dev Read-only view overlay etched onto the live game to inspect internal box-queue state. A
 ///      DegenerusGame subclass: etching type().runtimeCode (no constructor) gives the reads access to
@@ -139,6 +140,27 @@ contract C1BoxAutoOpen is DeployProtocol {
         }
     }
 
+    /// @dev Answer and drain the mid-day work the state engine requests on its own once a day
+    ///      is sealed (a closed Craps window rides a mid-day request whenever the subscription
+    ///      covers it, 6d0e64b09), until the engine is idle with nothing in flight.
+    function _settleMidday() internal {
+        for (uint256 i; i < 64; i++) {
+            if (game.rngLocked()) return;
+            uint8 action = game.nextMinerAction();
+            if (action == 0 || action == 17) return; // Idle, or the next day's RequestDaily
+            if (action == 2) {
+                uint256 id = mockVRF.lastRequestId();
+                (, , bool done) = mockVRF.pendingRequests(id);
+                if (done) return;
+                mockVRF.fulfillRandomWords(id, uint256(keccak256(abi.encode("c1_midday", id))) | 2);
+            } else {
+                vm.prank(actor);
+                game.mineFlip();
+            }
+        }
+        fail("harness: mid-day work did not settle");
+    }
+
     function _enqueueHumanBoxAtCurrentIndex() internal returns (uint48 N, uint256 base) {
         N = _idx();
         uint256 lootboxDeposit = 1.2 ether;
@@ -159,6 +181,7 @@ contract C1BoxAutoOpen is DeployProtocol {
 
     function test_V62_01_autoOpen_opens_finalized_box_midday() public {
         _driveDailyCycleOnce();
+        _settleMidday();
         _finishReadConsumers();
         assertFalse(game.rngLocked(), "stage0: not locked (mid-day path reachable)");
 
@@ -176,7 +199,12 @@ contract C1BoxAutoOpen is DeployProtocol {
         mockVRF.fulfillRandomWords(reqId, uint256(keccak256("c1_midday_word")) | 1);
 
         assertFalse(game.rngLocked(), "post-fulfill: NOT locked (mid-day branch)");
-        game.mineFlip(); // Required keeper publication after the minimal callback.
+        // Required keeper publication after the minimal callback, then the cohort's tickets:
+        // the consumer order puts human boxes after ticket materialization (60d31f775). A 1.1M
+        // allowance can never admit a human-box entry (HUMAN_ENTRY_GAS + tail), so these calls
+        // stop with the box still closed, leaving its open to the permissionless valve.
+        for (uint256 i; i < 20 && game.nextMinerAction() != 10; i++) game.mineFlip{gas: 1_100_000}();
+        assertEq(game.nextMinerAction(), 10, "the human-box stage is next");
         assertGt(_word(N), 0, "the VRF word landed at _lootboxWord(N) (box at N IS ready)");
         assertEq(_idx(), N ^ 1, "LR_INDEX is N+1 while the ready word sits at N");
         assertEq(_base(N, actor), baseAtCreate, "pre-open: box at N still closed");
@@ -202,7 +230,9 @@ contract C1BoxAutoOpen is DeployProtocol {
 
         assertGt(openedAuto, 0, "FIX: openBoxes() opened at least one box");
         assertEq(_base(N, actor), 0, "FIX: openBoxes() drained the finalized human box at N (auto valve works)");
-        assertTrue(game.boxesPending(), "committed tickets still keep the read cohort visible after its box opens");
+        // Consumer order (60d31f775): the cohort's tickets materialized BEFORE its boxes, so after
+        // the open the human read of buffer N is complete rather than held open by tickets.
+        assertTrue(game.boxIndexComplete(N), "the read cohort's human queue completed with its box open");
     }
 
     // =========================================================================
@@ -212,30 +242,58 @@ contract C1BoxAutoOpen is DeployProtocol {
 
     function test_V62_01_autoOpen_opens_finalized_box_dailyFinalize() public {
         _driveDailyCycleOnce();
+        _settleMidday();
         assertFalse(game.rngLocked(), "stage0: not locked");
 
         (uint48 N, uint256 baseAtCreate) = _enqueueHumanBoxAtCurrentIndex();
 
-        // A full daily cycle: the daily request advances LR_INDEX past N; _finalizeLootboxRng
-        // writes the word at LR_INDEX-1 == N.
-        _driveDailyCycleOnce();
-        assertFalse(game.rngLocked(), "post daily cycle: not locked");
-
+        // The daily request seals buffer N (the write side flips to N ^ 1) before its word lands.
+        for (uint256 i; i < 10 && !game.rngLocked(); i++) {
+            vm.warp(block.timestamp + 1 days);
+            vm.prank(actor);
+            game.mineFlip();
+        }
+        assertTrue(game.rngLocked(), "the daily request is in flight");
         uint48 nowIdx = _idx();
         assertEq(nowIdx, N ^ 1, "daily seal switches to the other write buffer");
-        assertGt(_word(N), 0, "the daily-finalized word landed at _lootboxWord(N)");
+        assertEq(_word(N), 0, "no word at N before the daily word lands");
         assertEq(_base(N, actor), baseAtCreate, "pre-open: box at N still closed");
 
-        // Permissionless valve must open the just-finalized box (LR_INDEX-1).
+        // The daily word finalizes buffer N, and the permissionless keeper's human-box stage
+        // opens the box at N (the read buffer) before any later request can retire it. The
+        // V62-01 off-by-one (opening the write side) would leave it closed. An open marks the raw
+        // order word BOX_PROCESSED (bit 255; 6d0e64b09) and the logical view reads it as 0.
+        uint256 reqId = mockVRF.lastRequestId();
+        mockVRF.fulfillRandomWords(reqId, uint256(keccak256("c1_daily_word")) | 2);
+        vm.recordLogs();
+        for (uint256 i; i < 20 && game.rngLocked(); i++) {
+            vm.prank(actor);
+            game.mineFlip();
+        }
+        assertFalse(game.rngLocked(), "post daily cycle: not locked");
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bool landed;
+        for (uint256 i; i < logs.length; i++) {
+            if (logs[i].emitter == address(game) && logs[i].topics.length != 0
+                && logs[i].topics[0] == keccak256("LootboxRngApplied(uint48,uint256,uint256)")) {
+                (uint48 index, uint256 word,) = abi.decode(logs[i].data, (uint48, uint256, uint256));
+                if (index == N && word != 0) landed = true;
+            }
+        }
+        assertTrue(landed, "the daily-finalized word landed at _lootboxWord(N)");
+
+        // Permissionless valve: nothing left to open, and it does not revert.
         vm.prank(actor);
         uint256 openedAuto = game.openBoxes(50);
 
-        emit log_named_uint("[daily] openBoxes() opened count", openedAuto);
+        uint256 raw = uint256(vm.load(address(game),
+            keccak256(abi.encode(actor, keccak256(abi.encode(uint256(N & 1), uint256(15)))))));
+        emit log_named_uint("[daily] openBoxes() opened count after the keeper stage", openedAuto);
         emit log_named_uint("[daily] N", N);
-        emit log_named_uint("[daily] LR_INDEX at open time", nowIdx);
+        emit log_named_uint("[daily] LR_INDEX at request time", nowIdx);
         emit log_named_uint("[daily] base[N] after auto", _base(N, actor));
 
-        assertGt(openedAuto, 0, "FIX(daily): openBoxes() opened at least one box");
+        assertTrue(raw >> 255 == 1, "FIX(daily): the permissionless keeper opened the finalized human box at N");
         assertEq(_base(N, actor), 0, "FIX(daily): openBoxes() drained the finalized human box at N");
     }
 }

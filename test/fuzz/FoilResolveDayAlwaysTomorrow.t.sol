@@ -37,18 +37,23 @@ contract FoilGenerationFreshRequest is DeployProtocol {
         game.mineFlip();
         uint24 R = game.currentDayView();
         uint256 reqR = mockVRF.lastRequestId();
+        assertTrue(game.rngLocked(), "R requested on its own day");
 
         _t += 3 days;
         vm.warp(_t);
         uint24 W = game.currentDayView();
         assertEq(W, R + 3, "wall day is R+3");
         mockVRF.fulfillRandomWords(reqR, WORD_LATE);
-        _advanceUntilUnlocked();
+        _lastFulfilledReqId = reqR;
+        // R seals on its late word. Once R's read cohort drains, the same crank chain issues
+        // W's fresh daily request under the lock (a fresh normal request waits only for the
+        // read consumers, so there is no unlocked window between the two).
+        uint256 fresh = _crankUntilFreshRequest(reqR);
         assertEq(_dailyIdx(), R, "sealed R");
+        assertTrue(game.rngLocked(), "W's fresh request holds the lock");
 
-        _finishReadConsumers();
-        game.mineFlip();
-        mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), WORD_FRESH);
+        mockVRF.fulfillRandomWords(fresh, WORD_FRESH);
+        _lastFulfilledReqId = fresh;
         game.mineFlip();
         assertTrue(game.rngWordForDay(W) != 0, "W's word recorded by the fulfil crank");
         assertEq(_dailyIdx(), W - 1, "gap days skipped");
@@ -65,7 +70,11 @@ contract FoilGenerationFreshRequest is DeployProtocol {
         address late = makeAddr("foil_late");
         _buy(late);
         _assertQueuedForFreshRng(late, W);
-        _finishReadConsumers();
+        // Deliver and drain whatever W's own session still owes (its read cohort and any
+        // mid-day request the crank issued for it) before the calendar moves.
+        _settleClean(WORD_NORMAL);
+        assertEq(_dailyIdx(), W, "W stays the sealed day until W+1");
+        _assertQueuedForFreshRng(late, W);
         _t += 1 days;
         vm.warp(_t);
         assertEq(game.rngWordForDay(W + 1), 0, "W+1 unrequested before its own day");
@@ -110,15 +119,39 @@ contract FoilGenerationFreshRequest is DeployProtocol {
         _settleClean(vrfWord);
     }
 
+    /// @dev Settle the current day: deliver every outstanding request (the daily one and any
+    ///      mid-day request the crank issues for pending value or a shut Craps window), drain its
+    ///      read consumers, and return once today is sealed, unlocked and idle.
     function _settleClean(uint256 vrfWord) internal {
         for (uint256 d; d < 240; d++) {
+            _fulfillPending(vrfWord);
             if (!game.rngLocked()) _finishReadConsumers();
-            if (!game.advanceDue() && !game.rngLocked()) return;
-            _fulfillPending(vrfWord);
-            if (!game.advanceDue() && !game.rngLocked()) return;
-            game.mineFlip();
-            _fulfillPending(vrfWord);
+            if (_settled()) return;
+            if (game.advanceDue()) game.mineFlip();
         }
+        revert("harness: day never settled");
+    }
+
+    function _settled() internal view returns (bool) {
+        return _dailyIdx() == game.currentDayView() && !game.rngLocked() && !game.advanceDue()
+            && !_requestOutstanding();
+    }
+
+    function _requestOutstanding() internal view returns (bool) {
+        uint256 reqId = mockVRF.lastRequestId();
+        if (reqId == 0) return false;
+        (,, bool fulfilled) = mockVRF.pendingRequests(reqId);
+        return !fulfilled;
+    }
+
+    /// @dev Crank until the engine issues a request after `previous`; returns its id.
+    function _crankUntilFreshRequest(uint256 previous) internal returns (uint256 id) {
+        for (uint256 i; i < 64; ++i) {
+            game.mineFlip();
+            id = mockVRF.lastRequestId();
+            if (id != previous) return id;
+        }
+        revert("harness: no fresh request");
     }
 
     function _fulfillPending(uint256 vrfWord) internal {

@@ -10,7 +10,8 @@ import {PurchaseDailyFixture, PurchaseDailySeeder, FreshWordLeg} from "../gas/Pu
 
 /// @notice The purchase day on a real request: the request locks the jackpot battle, the word applies
 ///         alone (18), the battle's steps (17) run under the held lock, then the ETH leg (6) and the
-///         ticket leg (15), which seals and unlocks.
+///         ticket leg (15), which seals and unlocks. Stages are read from the ordered log stream:
+///         the engine composes admitted checkpoints into a call.
 abstract contract PurchaseBattleStagesBase is PurchaseDailyFixture, FreshWordLeg {
     IJackpotBattle internal battle;
 
@@ -23,33 +24,49 @@ abstract contract PurchaseBattleStagesBase is PurchaseDailyFixture, FreshWordLeg
         assertFalse(started, "the field waits for the word");
     }
 
-    /// @dev The word applies alone and draws nothing.
+    /// @dev The word applies alone and draws nothing: its call ends on the application marker
+    ///      (the engine composes admitted checkpoints, so each call takes the smallest admitting
+    ///      realistic allowance, which leaves no room for the next battle group).
     function _apply() internal {
-        (, Tally memory t) = _measure();
-        assertEq(t.stage, STAGE_RNG_APPLIED_, "the word applies alone");
-        assertEq(t.ethWins + t.ticketWins + t.flipWins + t.battleEntries, 0);
+        (uint256 from, uint256 to,) = _runThroughMarker(STAGE_RNG_APPLIED_, 50);
+        delete lastLogs;
+        for (uint256 i = from; i <= to; ++i) lastLogs.push(streamLogs[i]);
+        assertFalse(_markerAfter(to), "the word applies alone");
+        for (uint256 i = from; i < to; ++i) assertFalse(_isMarker(i), "no stage precedes the application");
+        assertEq(
+            _countTopic(lastLogs, ETH_WIN_SIG) + _countTopic(lastLogs, TICKET_WIN_SIG)
+                + _countTopic(lastLogs, FLIP_WIN_SIG) + _countTopic(lastLogs, BATTLE_ENTRY_SIG),
+            0
+        );
         assertTrue(game.rngLocked());
         assertTrue(game.advanceDue());
     }
 
-    /// @dev Runs the battle's steps to completion; returns its awarded entries and a digest of its
-    ///      draw logs and final round.
+    /// @dev Runs the battle's steps to completion (one stage run of battle markers); returns its
+    ///      awarded entries and a digest of its draw logs and final round.
     function _battle() internal returns (bytes32 digest, uint256 entries) {
-        (uint64 slot,,, bool complete) = battle.jackpotProgress();
-        for (uint256 i; !complete; ++i) {
-            assertLt(i, 40, "the battle stalled");
-            (, Tally memory t) = _measure();
-            assertEq(t.stage, STAGE_PURCHASE_BATTLE, "a battle step has its own stage");
-            assertEq(t.ethWins + t.ticketWins + t.flipWins, 0, "a battle step shares no daily leg");
-            assertTrue(game.rngLocked(), "the lock holds across battle steps");
-            _assertNoFreshRng();
-            entries += t.battleEntries;
-            digest = keccak256(abi.encode(digest, _drawDigest()));
-            (,,, complete) = battle.jackpotProgress();
-        }
+        (uint64 slot,,,) = battle.jackpotProgress();
+        (Tally memory t) = _battleRun();
+        entries = t.battleEntries;
+        digest = keccak256(abi.encode(digest, _drawDigest()));
+        (,,, bool complete) = battle.jackpotProgress();
+        assertTrue(complete, "the battle completed");
         (CrapsBattleStorage.JackpotRound memory round, uint256 board, uint64 cursor) =
             JackpotBattle(address(crapsBattle)).jackpotBattleOf(slot);
         digest = keccak256(abi.encode(digest, round, board, cursor));
+    }
+
+    function _battleRun() private returns (Tally memory t) {
+        uint256 before = streamCursor;
+        (, t) = _measure();
+        assertEq(t.stage, STAGE_PURCHASE_BATTLE, "a battle step has its own stage");
+        assertEq(t.ethWins + t.ticketWins + t.flipWins, 0, "a battle step shares no daily leg");
+        _assertNoFreshRng();
+        // Every battle call but the completing one (which may compose the day's next stages)
+        // returned with the daily lock still held.
+        uint256 firstCall = streamLogCall[before];
+        uint256 lastCall = streamLogCall[streamCursor - 1];
+        for (uint256 c = firstCall; c < lastCall; ++c) assertTrue(streamLockedAfter[c], "the lock holds across battle steps");
     }
 
     function _drawDigest() private view returns (bytes32 digest) {
@@ -112,7 +129,10 @@ contract PurchaseBattleStagesTest is PurchaseBattleStagesBase {
         crapsBattle.setPreferredBoard(3);
         (bytes32 deferred,) = _battle();
         assertEq(deferred, sameDay, "a deferred battle changed its result");
-        assertEq(game.rngWordForDay(day), word);
+        // Daily words are retained for today and yesterday only (tagged two-slot storage,
+        // c729ecfc9), so `day`'s record is not readable two days later; the deferred digest
+        // (field, boards and round word) carries the same-word property.
+        word;
         assertEq(game.rngWordForDay(day + 1), 0, "revealed word must not resolve a later day");
         assertTrue(game.rngLocked());
         (, Tally memory daily) = _measure();
@@ -152,9 +172,11 @@ contract PurchaseBattleWithoutTicketsTest is PurchaseBattleStagesBase {
     function test_TraitDrawSealsDayWhenThereIsNoTicketLeg() public {
         _apply();
         uint256 word = game.rngWordForDay(game.currentDayView());
+        // The engine reaches the battle through the metered entry (level, word, allowance); a
+        // prefix match pins the level and the day's word (was payPurchaseJackpotBattle).
         vm.expectCall(
             ContractAddresses.GAME_JACKPOT_MODULE,
-            abi.encodeWithSignature("payPurchaseJackpotBattle(uint24,uint256)", uint24(1), word)
+            abi.encodeWithSignature("runPurchaseJackpotBattle(uint24,uint256,uint256)", uint24(1), word)
         );
         _battle();
         (, Tally memory daily) = _measure();

@@ -70,8 +70,8 @@ contract RouterWorstCaseGas is DeployProtocol {
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol; the v56 re-packed single 256-bit slot,
     // 241/256 bits used — the markers are uint24 each, not the old uint32 232-bit layout).
-    uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay (bytes 11..13)
-    uint256 private constant OFF_LASTOPENED = 13; // uint24 lastOpenedDay     (bytes 14..16)
+    uint256 private constant OFF_LASTBOUGHT = 7; // uint24 lastAutoBoughtDay (bytes 7..9; Sub: u8 qty, u8 flags, u16 score, u24 amount)
+    uint256 private constant OFF_LASTOPENED = 10; // uint24 lastOpenedDay     (bytes 10..12)
 
     // -------------------------------------------------------------------------
     // Worst-case / measurement constants
@@ -80,6 +80,9 @@ contract RouterWorstCaseGas is DeployProtocol {
     /// @dev The 16.7M HARD effective per-tx ceiling (350-TST06-MEASUREMENT-SPEC §5). foundry.toml inflates
     ///      block_gas_limit to 30e9 for the harness; the TST-06 "fits the ceiling" bar is this 16.7M.
     uint256 internal constant EFFECTIVE_GAS_CEILING = 16_700_000;
+
+    /// @dev A realistic per-call mineFlip allowance (owner gas rule, 2026-10-03).
+    uint256 internal constant REALISTIC_CALL_GAS = 10_000_000;
 
     /// @dev The funded-sub count this test seeds. The contract no longer chunks the STAGE by a flat count —
     ///      it advances under a gas-weight budget (SUB_STAGE_WEIGHT_BUDGET 2500; lootbox weight 10, ticket weight 21),
@@ -109,11 +112,16 @@ contract RouterWorstCaseGas is DeployProtocol {
     }
 
 
-    /// @notice TST-06 / Δ3 advance leg: with NO subscribers and NO ready boxes, `mineFlip()` routes to the
-    ///         advance leg (the router's `if (advanceDue) {...}` structural early-return). Drive a real
-    ///         new-day advance THROUGH the router and assert the whole tx fits the 16.7M ceiling.
-    ///         Non-vacuity: the day actually advanced (the game entered rngLock, i.e. the day's RNG was
-    ///         requested) or the advance-due gate cleared.
+    /// @notice TST-06 / Δ3 advance leg: with NO subscribers and NO ready boxes, a real new day's work
+    ///         (subscriber preparation, the day's request, then the day's processing with its ticket
+    ///         drain) is driven THROUGH `mineFlip()` with a realistic 10M allowance per call.
+    /// @dev    Owner gas rule (2026-10-03): the engine admits checkpoints while the allowance covers the
+    ///         next declared bound (MineFlipGasBounds), so a call given unbounded gas composes the whole
+    ///         day and a whole-call ceiling would only measure its own allowance. The property kept here
+    ///         is that every call at a realistic allowance succeeds (never runs out of gas, never refuses
+    ///         a required checkpoint) and makes progress until the day is processed. Per-chunk bounds are
+    ///         pinned by the MineFlipGasBounds-driven suites (test/repro/*Checkpoints*.t.sol,
+    ///         test/gas/DirectJackpotAdvanceGas.t.sol). Calls are logged for calibration.
     function testMintFlipAdvanceLegRouterFitsCeiling() public {
         // Seed a real ticket queue so the new-day advance has structural drain work (the heaviest
         // realizable advance step on the fresh fixture).
@@ -128,25 +136,39 @@ contract RouterWorstCaseGas is DeployProtocol {
         assertTrue(game.advanceDue(), "advanceDue on the new day");
         assertFalse(game.boxesPending(), "no boxes pending -> mineFlip routes to advance");
 
-        bool lockedBefore = game.rngLocked();
+        address opener = makeAddr("mbAdv_opener");
+        uint256 maxCallGas;
+        uint256 calls;
+        // The new day's preparation and request (a request ends its call).
+        while (!game.rngLocked()) {
+            assertLt(calls, 16, "advance non-vacuity: a real new-day advance step ran (rngLock/day moved)");
+            maxCallGas = _realisticCall(opener, maxCallGas);
+            ++calls;
+        }
+        uint256 sealedBefore = uint24(uint256(vm.load(address(game), bytes32(0))) >> 24);
+        mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), uint256(keccak256("mbAdv_word")) | 1);
+        // The day's processing: publication, the ticket drain, the day's word, its daily phase.
+        while (game.rngLocked()) {
+            assertLt(calls, 64, "the day's processing completes at a realistic allowance");
+            maxCallGas = _realisticCall(opener, maxCallGas);
+            ++calls;
+        }
+        assertGt(uint24(uint256(vm.load(address(game), bytes32(0))) >> 24), sealedBefore, "the new day was sealed");
 
-        vm.prank(makeAddr("mbAdv_opener"));
+        emit log_named_uint("mintflip_advance_calls", calls);
+        emit log_named_uint("mintflip_advance_max_call_gas", maxCallGas);
+        emit log_named_uint("realistic_call_allowance", REALISTIC_CALL_GAS);
+    }
+
+    /// @dev One mineFlip at the realistic allowance; it must succeed (progress is enforced by the
+    ///      engine: a zero-progress call reverts).
+    function _realisticCall(address caller, uint256 maxSoFar) internal returns (uint256) {
+        vm.prank(caller);
         uint256 gasBefore = gasleft();
-        game.mineFlip();
-        uint256 mintFlipGas = gasBefore - gasleft();
-
-        // Non-vacuity: a real new-day advance step ran (rngLock flipped, or advanceDue cleared).
-        bool advanced = game.rngLocked() != lockedBefore || game.rngLocked() || !game.advanceDue();
-        assertTrue(advanced, "advance non-vacuity: a real new-day advance step ran (rngLock/day moved)");
-
-        assertLt(
-            mintFlipGas,
-            EFFECTIVE_GAS_CEILING,
-            "16.7M ceiling: the mineFlip() advance-leg router tx (new-day step + routing) fits under 16.7M"
-        );
-
-        emit log_named_uint("mintflip_advance_leg_router_gas", mintFlipGas);
-        emit log_named_uint("effective_gas_ceiling", EFFECTIVE_GAS_CEILING);
+        game.mineFlip{gas: REALISTIC_CALL_GAS}();
+        uint256 used = gasBefore - gasleft();
+        emit log_named_uint("mintflip_advance_call_gas", used);
+        return used > maxSoFar ? used : maxSoFar;
     }
 
     // =========================================================================

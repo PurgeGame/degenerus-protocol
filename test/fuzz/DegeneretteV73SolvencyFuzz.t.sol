@@ -72,11 +72,11 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
         uint256 bet = game.degeneretteBetInfo(1, betId);
         uint256 roiBps = _roiBps(DQ.activity(bet));
         _injectLootboxRngWord(1, word);
-        uint256 lr2 = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
-        vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32((lr2 & ~uint256(0xFFFFFFFFFFFF)) | 2));
+        // Bets resolve only as the engine's Degenerette read consumer (mineFlip); openBoxes drives
+        // the AFK and human stages only.
         vm.recordLogs();
         vm.prank(player);
-        game.openBoxes(type(uint256).max);
+        game.mineFlip();
         (uint8 score, uint8 gold) = _firstSpin();
         assertLe(gold, 4, "at most four gold matches");
         uint256 payout = math.payout(score, gold, CURRENCY_FLIP, DQ.stake(bet), DQ.activity(bet));
@@ -171,8 +171,12 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
     }
 
     function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT)));
         RecyclingState.seedWord(address(game), uint48(index), bytes32(rngWord));
+        // The day itself is sealed (dailyIdx = today, tickets drained), as after a mid-day request:
+        // the delivered cohort's read consumers are the engine's only work.
+        uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
+        slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192);
+        vm.store(address(game), bytes32(0), bytes32(slot0));
     }
 
     function _seedFuturePrizePool(uint256 targetFuture) internal {

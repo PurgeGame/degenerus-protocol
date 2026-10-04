@@ -11,6 +11,7 @@ import {GameAfkingModule} from "../../contracts/modules/GameAfkingModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
+import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 
 /// @title Craps protocol wiring
 /// @notice The craps suite proper runs against mocks — a mock slot reader, a mock FLIP, a mock
@@ -41,6 +42,12 @@ contract CrapsProtocolWiringTest is DeployProtocol {
     address internal constant PLAYER = address(0xBEEF);
     address internal constant STRANGER = address(0xDEAD);
     address internal constant KEEPER = address(0xC0FFEE);
+    /// @dev Extra seats in the walked window (see test_mineFlipShutsAWindowAndWalksItsField).
+    uint256 internal constant WALK_FIELD = 24;
+    /// @dev A realistic mineFlip allowance (owner gas rule: per-call success and progress only).
+    uint256 internal constant REALISTIC_CALL_GAS = 10_000_000;
+    bytes32 internal constant MINER_WORK_SIG = keccak256("MinerWork(address,uint8,uint256,uint256)");
+    bytes32 internal constant MINER_BOUNTY_SIG = keccak256("MinerBounty(uint8,address,uint256)");
 
     /// @dev The afking module reached DIRECTLY, not through the Game — its remaining keeper
     ///      readers are pure, so they need no storage context.
@@ -158,6 +165,14 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         }
         assertGt(paid, 0, "failed to find a paying deterministic fixture");
 
+        // Public settlement takes only the frontier field of a read cohort whose earlier consumers
+        // (tickets, boxes, bets, Decimator) have finished: the read-cohort gate (6d0e64b09). Small
+        // engine calls run those stages and stop before the first whole seat, leaving the field to
+        // the permissionless door.
+        for (uint256 i; i < 32 && game.rngConsumerStage() != 6; ++i) game.mineFlip{gas: 800_000}();
+        assertEq(game.rngConsumerStage(), 6, "the cohort reached its Craps read stage");
+        assertEq(crapsBattle.bonusCursorOf(slot), 0, "the field is still unsettled for the public door");
+
         uint256 stakeBefore = coinflip.coinflipAmount(PLAYER);
         vm.prank(STRANGER);
         crapsBattle.resolveSlot(slot, WIRING_WHOLE_FIELD);
@@ -234,6 +249,15 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         board.place9 = 1;
         vm.prank(PLAYER);
         crapsBattle.enterBonusBattle(1, board, 1);
+        // More seats, so the walk measures past the miner's unpaid first MIN_REWARDED_GAS and the
+        // measured-gas bounty (72fc06f6c) is observable rather than zero.
+        for (uint256 i; i < WALK_FIELD; ++i) {
+            address who = address(uint160(uint256(keccak256(abi.encode("walkfield", i)))));
+            vm.prank(ContractAddresses.GAME);
+            coin.mintForGame(who, uint256(bankroll) * 4);
+            vm.prank(who);
+            crapsBattle.enterBonusBattle(1, board, 1);
+        }
 
         uint64 slot = uint64(uint256(today) * crapsBattle.BONUS_SLOTS_PER_DAY() + 2);
         assertEq(crapsBattle.slotIndexOf(slot), 0, "the window was armed before anything shut it");
@@ -244,27 +268,40 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 5 hours + 10 minutes); // period 1 shuts 6h03m in
 
         // ── The ARM. The cursor works OLDEST-FIRST, so period 0's window is shut and settled
-        // before this one is touched — each crank does one piece and pays one flat FLIP for it.
+        // before this one is touched. A nonzero base fee prices the miner's pay: measured gas above
+        // an unpaid first MIN_REWARDED_GAS at min(basefee, cap) (72fc06f6c; Foundry's basefee is 0).
+        vm.fee(1 gwei);
+        uint256 armStake = coinflip.coinflipAmount(KEEPER);
         vm.recordLogs();
         (uint48 index,) = _crankUntilArmed(slot);
-        // The CATEGORY, not just the amount: the crank has three other legs and the event is how
-        // an indexer tells which one earned. The loop may have paid advance-category bounties on
-        // its way — what matters here is that the LAST crank, the one that armed the window, was
-        // booked as the craps leg.
-        assertEq(_minerBountyKind(vm.getRecordedLogs()), 4, "the credit was not booked as the craps leg");
+        // There is one miner bounty kind now (60d31f775 retired the per-leg kinds 1..4; MinerWork's
+        // firstAction names the stage). Every bounty the arm walk paid is that kind, paid to the
+        // keeper, and lands as coinflip stake, never liquid FLIP.
+        _assertMinerPaysAsStake(vm.getRecordedLogs(), coinflip.coinflipAmount(KEEPER) - armStake);
         assertEq(coin.balanceOf(KEEPER), 0, "the craps bounty minted liquid FLIP");
 
         // The word cannot exist in the block that took the index, which is exactly why the walk
         // is a LATER crank's job. Stand it in the way the flow test above does.
         RecyclingState.seedWord(address(game), index - 1, bytes32(uint256(keccak256("mineflip craps table"))));
 
-        // ── The WALK. The cursor moves, and the same flat FLIP pays for it.
+        // ── The WALK. The cursor moves, and the measured work pays for it.
         uint256 before = coinflip.coinflipAmount(KEEPER);
         assertEq(crapsBattle.bonusCursorOf(slot), 0, "the field had already been walked");
+        uint256 dueAt = _minerRewardDueAt();
+        bool lockedAtStart = game.rngLocked();
+        vm.recordLogs();
         vm.prank(KEEPER);
         game.mineFlip();
         assertGt(crapsBattle.bonusCursorOf(slot), 0, "the crank did not walk the shut field");
-        assertEq(coinflip.coinflipAmount(KEEPER) - before, 1 ether, "the walk did not pay the flat FLIP");
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 paid = _assertMinerPaysAsStake(logs, coinflip.coinflipAmount(KEEPER) - before);
+        (, uint256 measured,) = _minerWork(logs);
+        emit log_named_uint("walk crank measured gas", measured);
+        emit log_named_uint("walk crank bounty      ", paid);
+        assertGt(measured, 1_000_000, "the walk measured past the unpaid first million");
+        assertEq(paid, _expectedMinerPay(measured, lockedAtStart, dueAt), "the walk is paid its measured gas");
+        assertGt(paid, 0, "the walk did not pay");
+        assertEq(coin.balanceOf(KEEPER), 0, "the walk bounty minted liquid FLIP");
     }
 
     /// @dev THE ADVANCE STILL COMES FIRST. The craps leg is deliberately in the ELSE branch: an
@@ -327,23 +364,24 @@ contract CrapsProtocolWiringTest is DeployProtocol {
 
         uint256 g = gasleft();
         vm.prank(KEEPER);
-        game.mineFlip(); // the walk
+        game.mineFlip{gas: REALISTIC_CALL_GAS}(); // the walk, at a realistic allowance
         uint256 used = g - gasleft();
         uint64 walked = crapsBattle.bonusCursorOf(slot);
 
         emit log_named_uint("seats settled in one crank", walked);
         emit log_named_uint("crank gas                 ", used);
         // THE CRANK SPENDS A WORK BUDGET, NOT A SEAT COUNT, so what is asserted here is the
-        // envelope and not a head count: the old flat eighty was wrong in both directions, and
-        // how many seats this particular word buys is the table's business. The distribution
-        // across all nine formats is in `test/fuzz/CrapsKeeperBudgetGas.t.sol`.
+        // envelope and not a head count: how many seats this particular word buys is the table's
+        // business. The distribution across all nine formats is in
+        // `test/fuzz/CrapsKeeperBudgetGas.t.sol`. Owner gas rule (2026-10-03): the engine admits
+        // checkpoints while the supplied allowance covers the next declared bound, so a whole call
+        // is never bounded here; the call is given a realistic 10M allowance and must succeed and
+        // make progress. The per-chunk settle bound (96-seat cap) is pinned in test/craps/CrapsGas.t.sol.
         assertGt(walked, 1, "the crank barely moved the field");
-        assertLt(used, 16_700_000, "the crank passed the protocol's hard per-transaction ceiling");
-        assertLt(used, 9_500_000, "the crank passed the protocol's per-chunk target");
 
         // And the rest follows on later cranks rather than being stranded.
         vm.prank(KEEPER);
-        game.mineFlip();
+        game.mineFlip{gas: REALISTIC_CALL_GAS}();
         assertGt(crapsBattle.bonusCursorOf(slot), walked, "the tail of the field was stranded");
     }
 
@@ -403,27 +441,70 @@ contract CrapsProtocolWiringTest is DeployProtocol {
     /// @dev AND IT PAYS FOR WORK, NOT FOR CALLING. A table with nothing owed hands the crank
     ///      nothing — otherwise the leg is a faucet anyone can crank in a loop.
     function test_mineFlipPaysNothingWhenTheTableIsIdle() public {
-        // No day opened, so no window exists to shut and no field to walk.
+        // No day opened, so no window exists to shut and no field to walk. A nonzero base fee
+        // prices any miner pay (Foundry's default basefee of zero would price every call at zero).
+        vm.fee(1 gwei);
+        assertEq(game.nextMinerAction(), 0, "fixture: the engine is idle (MinerAction.Idle)");
         uint256 before = coinflip.coinflipAmount(KEEPER);
         vm.prank(KEEPER);
-        try game.mineFlip() {} catch {}
+        vm.expectRevert(DegenerusGame.NoWork.selector);
+        game.mineFlip();
         assertEq(coinflip.coinflipAmount(KEEPER), before, "an idle table still paid the crank");
     }
 
-    /// @dev `MinerBounty(kind, miner, flipAmount)`'s category, out of a crank's logs. Zero when
-    ///      the crank paid nothing at all.
-    function _minerBountyKind(Vm.Log[] memory logs) internal pure returns (uint8) {
-        bytes32 sig = keccak256("MinerBounty(uint8,address,uint256)");
-        // The LAST bounty in the stream: a crank loop may pay advance-category bounties on its
-        // way to the craps leg, and the final crank is the one under test.
-        uint8 last;
+    /// @dev Every `MinerBounty` in `logs` is the single miner kind (1), paid to KEEPER, and the
+    ///      bounties sum to the keeper's coinflip stake delta and to the MinerWork-reported pay.
+    function _assertMinerPaysAsStake(Vm.Log[] memory logs, uint256 stakeDelta) internal returns (uint256 paid) {
+        uint256 reported;
         for (uint256 i = 0; i < logs.length; ++i) {
-            if (logs[i].topics.length != 0 && logs[i].topics[0] == sig) {
-                (uint8 kind, ) = abi.decode(logs[i].data, (uint8, uint256));
-                last = kind;
+            if (logs[i].topics.length == 0) continue;
+            if (logs[i].topics[0] == MINER_BOUNTY_SIG) {
+                (uint8 kind, uint256 amount) = abi.decode(logs[i].data, (uint8, uint256));
+                assertEq(kind, 1, "every miner bounty is the single miner kind");
+                assertEq(address(uint160(uint256(logs[i].topics[1]))), KEEPER, "the bounty went to the keeper");
+                paid += amount;
+            } else if (logs[i].topics[0] == MINER_WORK_SIG && logs[i].emitter == address(game)) {
+                (,, uint256 reward) = abi.decode(logs[i].data, (uint8, uint256, uint256));
+                reported += reward;
             }
         }
-        return last;
+        assertEq(paid, reported, "MinerWork reports exactly the bounty paid");
+        assertEq(stakeDelta, paid, "the bounty landed as coinflip stake");
+    }
+
+    /// @dev The last MinerWork(caller, firstAction, executionGas, flipReward) in `logs`.
+    function _minerWork(Vm.Log[] memory logs) internal pure returns (uint8 first, uint256 measured, uint256 reward) {
+        bool seen;
+        for (uint256 i = 0; i < logs.length; ++i) {
+            if (logs[i].topics.length != 0 && logs[i].topics[0] == MINER_WORK_SIG) {
+                (first, measured, reward) = abi.decode(logs[i].data, (uint8, uint256, uint256));
+                seen = true;
+            }
+        }
+        require(seen, "no MinerWork event");
+    }
+
+    /// @dev Mirror of the miner's one clock (DegenerusGameMinerModule._minerRewardDueAt): the later
+    ///      of the last accepted callback (lootboxRngPacked low 48 bits) and the current day reset.
+    function _minerRewardDueAt() internal view returns (uint256 due) {
+        due = uint48(uint256(vm.load(address(game), bytes32(uint256(33)))));
+        uint256 ts = vm.getBlockTimestamp();
+        uint256 reset = ts - (ts - 82_620) % 1 days;
+        if (reset > due) due = reset;
+    }
+
+    /// @dev Mirror of the miner pay: (measured - 1M) * min(basefee, 0.5 gwei << steps) * 1000 FLIP
+    ///      * (0.3x + 0.45x per 30 minutes, x2 under the lock) / ticket price (72fc06f6c). KEEPER holds
+    ///      no pass; the test runs at a 1 gwei base fee.
+    function _expectedMinerPay(uint256 measured, bool lockedAtStart, uint256 dueAt) internal view returns (uint256) {
+        if (measured <= 1_000_000) return 0;
+        uint256 ts = vm.getBlockTimestamp();
+        uint256 steps = (ts > dueAt ? ts - dueAt : 0) / 30 minutes;
+        if (steps > 4) steps = 4;
+        uint256 cap = 0.5 gwei << steps;
+        uint256 rate = 1 gwei < cap ? 1 gwei : cap;
+        uint256 bps = (3_000 + 4_500 * steps) * (lockedAtStart ? 2 : 1);
+        return (measured - 1_000_000) * rate * 1000 ether * bps / (game.mintPrice() * 10_000);
     }
 
     /// @dev Crank `mineFlip` until `slot` is armed, feeding the CURSOR's own pending word each

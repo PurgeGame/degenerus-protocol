@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {RecyclingState} from "../helpers/RecyclingState.sol";
+import {TicketQueueStorage as RingStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
@@ -123,7 +124,7 @@ contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
             | (uint256(100) << _FOIL_SCORE_SHIFT) | (uint256(lvl) << _FOIL_LEVEL_SHIFT);
     }
 
-    function setFoilParity(bool writeSlot) external { ticketWriteSlot = writeSlot; }
+    function setFoilParity(bool writeSlot) external { ticketWriteSlot = writeSlot; foilWriteSlot = writeSlot; }
 
     function seedFoilRead(uint24 lvl, address player, bool processed) external {
         uint80 ownerBits = _registerEntryOwner(player, lvl);
@@ -227,6 +228,9 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
     }
 
     function testJackpotTerminalExcludesPostCommitWriteBuffer() public {
+        // Queue roots recycle under an absolute-level tag: the jump to level 777 models every
+        // earlier level's queue as drained so the level-777 roots can bind.
+        RingStorage.retireCompleted(address(game), LEVEL - 1);
         TerminalCohortSeeder seeder = _installSeeder();
         seeder.seedTerminalState(
             LEVEL,

@@ -28,9 +28,15 @@ contract AfkingStethHost is DegenerusGame {
         _setRngSessionPublished(false);
         _setRngComplete(true);
         _sdgnrsBonusLevel = level;
+        // Jumping to level 4 skips the drains: release the retired levels' far-future roots and
+        // both slot sides of their near queues, whose level-parity physical roots the current
+        // level's queues recycle (a still-occupied root refuses a new level with E()).
         for (uint24 oldLevel = 1; oldLevel <= 4; ++oldLevel) {
-            uint256[] storage q = ticketQueue[_ticketQueueStorageKey(_tqFarFutureKey(oldLevel))];
-            assembly ("memory-safe") { sstore(q.slot, 0) }
+            uint24[3] memory keys = [_tqFarFutureKey(oldLevel), oldLevel, oldLevel | TICKET_SLOT_BIT];
+            for (uint256 k; k < 3; ++k) {
+                uint256[] storage q = ticketQueue[_ticketQueueStorageKey(keys[k])];
+                assembly ("memory-safe") { sstore(q.slot, 0) }
+            }
         }
     }
 

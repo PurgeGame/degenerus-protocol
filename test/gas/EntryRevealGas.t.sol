@@ -5,7 +5,9 @@ import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {LegacyTicketOwnerReference} from "../helpers/LegacyTicketOwnerReference.sol";
 import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
+import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {TicketEntropy} from "../../contracts/libraries/TicketEntropy.sol";
 
 contract EntryRevealHarness is LegacyTicketOwnerReference {
     function seed(uint32[] memory amounts, uint8 rem, uint256 ownerStart) external {
@@ -22,6 +24,54 @@ contract EntryRevealHarness is LegacyTicketOwnerReference {
 
     function owner(uint32 idx) external view returns (address) { return ticketOwners[idx]; }
 
+    /// @dev Owed entries left queued for `n` seeded buyers, and which buyers' fractional
+    ///      remainder has been consumed (its stored remainder byte is zero).
+    function remainingOwed(uint256 n) external view returns (uint256 owedSum, uint256 consumed) {
+        for (uint256 i; i < n; ++i) {
+            uint80 packed = _entryPacked(7, ticketOwnerId[address(uint160(0x123400 + i))]);
+            owedSum += uint32(packed >> 8);
+            if (uint8(packed) == 0) consumed |= uint256(1) << i;
+        }
+    }
+
+    /// @dev Owed entries the pinned legacy runtime left in its owner records (installLegacyOwners layout).
+    function legacyRemainingOwed(uint256 n) external view returns (uint256 owedSum) {
+        uint256 base = uint256(keccak256(abi.encode(keccak256(abi.encode(uint24(7), uint256(67))))));
+        for (uint256 i; i < n; ++i) {
+            uint256 slot = base + ticketOwnerId[address(uint160(0x123400 + i))] - 1;
+            uint256 record;
+            assembly ("memory-safe") { record := sload(slot) }
+            owedSum += uint32(record >> 168);
+        }
+    }
+
+    /// @dev The stored (player, trait) multiset and entry count of the live level buffer.
+    function storedInventory(uint24 lvl) external view returns (uint256 inventory, uint256 entries) {
+        for (uint256 t; t < 256; ++t) {
+            uint256 n = _bucketLength(lvl, t);
+            entries += n;
+            for (uint256 i; i < n; ++i) {
+                unchecked { inventory += uint256(keccak256(abi.encode(_bucketOwnerAtUnchecked(lvl, uint8(t), i), uint8(t)))); }
+            }
+        }
+    }
+
+    /// @dev The pinned pre-reveal runtime reads its queue at the raw level key; queue roots now
+    ///      recycle physical slots under a level tag. Copy the live queue words to the raw-key
+    ///      array the legacy runtime addresses (a root the current layout never uses).
+    function installLegacyQueue(uint24 key) external {
+        uint256[] storage live = ticketQueue[_ticketQueueStorageKey(key)];
+        uint256 rawRoot = uint256(keccak256(abi.encode(uint256(key), uint256(12))));
+        uint256 rawData = uint256(keccak256(abi.encode(rawRoot)));
+        uint256 n = _ticketQueueLength(key);
+        assembly ("memory-safe") { sstore(rawRoot, n) }
+        for (uint256 i; i < (n + 7) / 8; ++i) {
+            uint256 word = live[i];
+            uint256 slot = rawData + i;
+            assembly ("memory-safe") { sstore(slot, word) }
+        }
+    }
+
     function run(uint32 room, uint256 entropy) external returns (uint256 frontier, uint32 used) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_FOILPACK_MODULE.delegatecall(
             abi.encodeWithSelector(DegenerusGameFoilPackModule.drainRounds.selector,
@@ -34,7 +84,8 @@ contract EntryRevealHarness is LegacyTicketOwnerReference {
 
 /// @notice Measures only drain execution, from identical state, against the pinned pre-reveal
 ///         runtime. The large room isolates event cost from deliberately changed chunk limits;
-///         production-budget gas is checked separately by RoundDrainChunkGas.
+///         production-budget gas is checked separately by RoundDrainChunkGas. The current drain
+///         door is caller-sized, so its bounded-allowance runs check progress, not a ceiling.
 contract EntryRevealGas is Test {
     bytes32 private constant OLD_EVENT = keccak256("RoundTraitsGenerated(uint24,uint32,uint256,uint32,uint256)");
     EntryRevealHarness private h;
@@ -48,15 +99,29 @@ contract EntryRevealGas is Test {
         beforeCode = vm.parseBytes(vm.readFile("contracts/mocks/EntryRevealBaseline.hex"));
         assertEq(keccak256(beforeCode), 0xbc93ffbe68b1d942cd336e84ec4c3c1681d763bf33449383cf657189014e9ce5);
         afterCode = address(new DegenerusGameFoilPackModule()).code;
+        // The current foil module's drainRounds door delegates to the ticket module at its pinned address.
+        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
     }
 
     function _observe(bool candidate, uint256 entropy, uint32 room) private returns (Observation memory o) {
-        if (!candidate) h.installLegacyOwners(7, 7);
+        return _observe(candidate, entropy, room, 0);
+    }
+
+    /// @dev `supplied` != 0 bounds the call's gas. The current drain door is caller-sized: it ignores
+    ///      the legacy write room and admits checkpoints while the supplied gas covers the next one.
+    function _observe(bool candidate, uint256 entropy, uint32 room, uint256 supplied)
+        private returns (Observation memory o)
+    {
+        if (!candidate) {
+            h.installLegacyOwners(7, 7);
+            h.installLegacyQueue(7);
+        }
         vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, candidate ? afterCode : beforeCode);
         vm.recordLogs();
         vm.startStateDiffRecording();
         uint256 start = gasleft();
-        h.run(room, entropy);
+        if (supplied == 0) h.run(room, entropy);
+        else h.run{gas: supplied}(room, entropy);
         o.gasUsed = start - gasleft();
         Vm.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -118,11 +183,30 @@ contract EntryRevealGas is Test {
         h.seed(amounts, rem, 1 << 24);
         uint256 snapshot = vm.snapshotState();
         a = _observe(false, entropy, 1_000_000);
+        uint256 legacyLeft = h.legacyRemainingOwed(amounts.length);
         assertTrue(vm.revertToStateAndDelete(snapshot));
         b = _observe(true, entropy, 1_000_000);
-        assertEq(b.buckets, a.buckets, "same stored bucket lengths and ordered owner lanes");
-        assertEq(b.inventory, a.inventory, "same player/trait multiset");
-        assertEq(b.entries, a.entries, "same entry count");
+        // Since 5214f7498 every frozen queue starts at a word-derived rotation
+        // (docs/audit/RNG-DOMAINS.md, DEGENERUS_TICKET_ROTATION_V1), so the current drain seats
+        // owners in a different order than the pinned pre-reveal runtime and the stored lanes and
+        // player/trait pairs legitimately differ from it. What still holds: both drain the same
+        // entries, and every current reveal reports exactly what the drain stored.
+        // Entry conservation, computed exactly. A fractional remainder now resolves under the V2
+        // identity (docs/audit/RNG-DOMAINS.md: one extra entry on a win), and a round needs four
+        // seats, so a short queue's tail stays owed for the solo engine (outside this door).
+        (uint256 owedLeft, uint256 consumed) = h.remainingOwed(amounts.length);
+        uint256 expected;
+        for (uint256 i; i < amounts.length; ++i) {
+            expected += amounts[i];
+            if (rem != 0 && consumed & (uint256(1) << i) != 0 && TicketEntropy.remainder(
+                TicketEntropy.identity(7, 7, i, address(uint160(0x123400 + i))), entropy, rem
+            )) ++expected;
+        }
+        assertEq(b.entries + owedLeft, expected, "revealed plus still-owed entries equal whole entries plus winning fractions");
+        if (rem == 0) assertEq(b.entries + owedLeft, a.entries + legacyLeft, "same entry count");
+        (uint256 storedInv, uint256 storedEntries) = h.storedInventory(7);
+        assertEq(storedEntries, b.entries, "every stored entry is revealed once");
+        assertEq(b.inventory, storedInv, "reveals carry exactly the stored player/trait multiset");
     }
 
     function _distribution(uint32 perBuyer) private {
@@ -155,15 +239,19 @@ contract EntryRevealGas is Test {
                 uint32 room = cold == 0 ? 1000 : 650;
                 Observation memory a = _observe(false, uint256(keccak256("reveal-gas")), room);
                 assertTrue(vm.revertToStateAndDelete(snapshot));
-                Observation memory b = _observe(true, uint256(keccak256("reveal-gas")), room);
+                // The current door spends the gas it is given (no write room): drive it with a
+                // realistic 10M allowance and require progress.
+                Observation memory b = _observe(true, uint256(keccak256("reveal-gas")), room, 10_000_000);
                 emit log_named_uint("chunk_entries_per_buyer", sizes[i]);
                 emit log_named_uint("chunk_budget", room);
                 emit log_named_uint("chunk_entries_before", a.entries);
                 emit log_named_uint("chunk_entries_after", b.entries);
                 emit log_named_uint("chunk_gas_before", a.gasUsed);
                 emit log_named_uint("chunk_gas_after", b.gasUsed);
-                assertGt(b.entries, 0, "uniform pricing must make progress");
-                assertLt(b.gasUsed, 10_000_000);
+                assertGt(b.entries, 0, "a realistic allowance must make progress");
+                (uint256 storedInv, uint256 storedEntries) = h.storedInventory(7);
+                assertEq(storedEntries, b.entries, "a bounded call reveals every entry it stored");
+                assertEq(b.inventory, storedInv, "bounded-call reveals carry the stored multiset");
             }
         }
     }

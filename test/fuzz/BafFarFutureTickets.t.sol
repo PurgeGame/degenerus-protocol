@@ -69,14 +69,7 @@ contract BafFarFutureTicketsTest is DeployProtocol {
             _seedFuturePrizePool(100 ether);
             _buyTickets(buyer, 4000);
 
-            for (uint256 j = 0; j < 80; j++) {
-                _fulfillVrfIfPending(vrfSeed);
-
-                (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("mineFlip()")
-                );
-                if (!ok) break;
-            }
+            _crankDay(vrfSeed);
         }
 
         uint24 finalLevel = game.level();
@@ -112,14 +105,7 @@ contract BafFarFutureTicketsTest is DeployProtocol {
             _seedFuturePrizePool(100 ether);
             _buyTickets(buyer, 4000);
 
-            for (uint256 j = 0; j < 80; j++) {
-                _fulfillVrfIfPending(vrfSeed);
-
-                (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("mineFlip()")
-                );
-                if (!ok) break;
-            }
+            _crankDay(vrfSeed);
         }
 
         uint24 finalLevel = game.level();
@@ -128,6 +114,43 @@ contract BafFarFutureTicketsTest is DeployProtocol {
     }
 
     // ==================== Internal Helpers ====================
+
+    /// @dev Realistic per-call allowance. Given unbounded gas the engine keeps admitting
+    ///      checkpointed chunks while the allowance covers the next declared bound, so an
+    ///      unbounded call spends the whole test gas limit on a large legitimate backlog
+    ///      (fuzz input 4390: a capped box-spin payout boxes ~13.7k ETH of value for sDGNRS
+    ///      and queues ~2.96M far-future entries, which the Tickets stage drains at ~15M gas
+    ///      per call). Bounded calls drain the same backlog through checkpoints.
+    uint256 private constant CRANK_GAS = 16_700_000;
+    /// @dev Calls per day: a bounded backlog drain needs far more calls than an unbounded one
+    ///      did, and 1,500 x 16.7M stays under the test gas limit, so a day that never stops
+    ///      fails below instead of running out of test gas.
+    uint256 private constant MAX_CRANKS_PER_DAY = 1_500;
+
+    /// @dev One day of cranking: answer any pending request, then mineFlip under the realistic
+    ///      allowance until the engine stops. A call may stop only with one of mineFlip's own
+    ///      stop errors; an out-of-gas or any other revert (RngLocked from a far-future BAF
+    ///      roll) fails here instead of silently halting the game.
+    function _crankDay(uint256 vrfSeed) private {
+        for (uint256 j = 0; j < MAX_CRANKS_PER_DAY; j++) {
+            _fulfillVrfIfPending(vrfSeed);
+            (bool ok, bytes memory err) = address(game).call{gas: CRANK_GAS}(
+                abi.encodeWithSignature("mineFlip()")
+            );
+            if (ok) continue;
+            bytes4 sel = err.length >= 4 ? bytes4(err) : bytes4(0);
+            assertTrue(
+                sel == NO_WORK || sel == RNG_NOT_READY || sel == INSUFFICIENT_EXECUTION_GAS,
+                "a realistic-allowance mineFlip stops only on its own stop errors"
+            );
+            return;
+        }
+        fail("day never stopped within the call budget");
+    }
+
+    bytes4 private constant NO_WORK = bytes4(keccak256("NoWork()"));
+    bytes4 private constant RNG_NOT_READY = bytes4(keccak256("RngNotReady()"));
+    bytes4 private constant INSUFFICIENT_EXECUTION_GAS = bytes4(keccak256("InsufficientExecutionGas()"));
 
     /// @notice Inject N players into BAF leaderboard at the given level.
     function _injectBafPlayers(uint24 lvl) internal {

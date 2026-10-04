@@ -5,12 +5,16 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
+import {DegeneretteQueue as DQ} from "../helpers/DegeneretteQueue.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 
-/// @title DegeneretteSweepGas -- measured sweep cost per queued bet.
-/// @notice Places N identical bets, lands the word, and measures one openBoxes sweep over
-///         them. The per-bet marginal (N=11 minus N=1, over 10) calibrates the walk-unit price
-///         each bet is charged (worst case, bounds the call), and pins the keeper bounty's small
-///         flat per-bet credit far below every shape's cost.
+/// @title DegeneretteSweepGas -- measured resolve cost per queued bet against its declared bound.
+/// @notice Places N identical bets, lands the word, and measures the cold mineFlip that resolves
+///         them as the cohort's Degenerette read consumer (bets are admitted one at a time while the
+///         remaining allowance covers MineFlipGasBounds' per-bet bound). The first bet (N=1 minus
+///         N=0) and the per-bet marginal (N=11 minus N=1, over 10) must each stay inside the
+///         declared DEGENERETTE_* bound for their shape, the admission the engine charges.
 contract DegeneretteSweepGas is DeployProtocol {
     uint256 private constant LR_PACKED_SLOT = 33;
     uint256 private constant LR_WORD_SLOT = 3;
@@ -59,16 +63,39 @@ contract DegeneretteSweepGas is DeployProtocol {
             );
         }
         RecyclingState.seedWord(address(game), IDX, bytes32(word));
+        // The day is sealed, as after a mid-day request: the delivered cohort's consumers are the
+        // engine's only work, so the measured call ends when the cohort completes.
+        uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
+        slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192);
+        vm.store(address(game), bytes32(0), bytes32(slot0));
+        _cool();
         vm.recordLogs();
         uint256 g = gasleft();
-        uint256 opened = game.openBoxes(type(uint256).max);
+        game.mineFlip();
         gasUsed = g - gasleft();
-        assertEq(opened, n, "every bet resolved");
         Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 resolved;
         for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] == DQ.RESOLVED_SIG) ++resolved;
             if (logs[i].topics[0] == keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)")) ++boxes;
         }
+        assertEq(resolved, n, "every bet resolved");
         emit log_named_uint("  win boxes opened", boxes);
+    }
+
+    /// @dev Measured calls pay cold access, as a fresh keeper transaction does.
+    function _cool() private {
+        vm.cool(address(game));
+        vm.cool(address(coin));
+        vm.cool(address(coinflip));
+        vm.cool(address(sdgnrs));
+        vm.cool(address(wwxrp));
+        vm.cool(ContractAddresses.GAME_MINER_MODULE);
+        vm.cool(ContractAddresses.GAME_AFKING_MODULE);
+        vm.cool(ContractAddresses.GAME_TICKET_MODULE);
+        vm.cool(ContractAddresses.GAME_DEGENERETTE_MODULE);
+        vm.cool(ContractAddresses.GAME_LOOTBOX_MODULE);
+        vm.cool(ContractAddresses.GAME_BOON_MODULE);
     }
 
     /// @dev A word whose spin-0 score for SYMBOL is below 2 (a losing first spin).
@@ -93,13 +120,29 @@ contract DegeneretteSweepGas is DeployProtocol {
         }
     }
 
+    /// @dev The engine's admission for one bet of this shape (MineFlipGasBounds).
+    function _declared(uint8 currency, uint8 spins) private pure returns (uint256) {
+        return currency == 0
+            ? GasBounds.DEGENERETTE_ETH_BASE_GAS + uint256(spins) * GasBounds.DEGENERETTE_ETH_SPIN_GAS
+            : GasBounds.DEGENERETTE_FLIP_BASE_GAS + uint256(spins) * GasBounds.DEGENERETTE_FLIP_SPIN_GAS;
+    }
+
     function _marginal(string memory label, uint8 currency, uint128 perSpin, uint8 spins, uint256 word) private {
+        uint256 bound = _declared(currency, spins);
         uint256 snap = vm.snapshotState();
+        (uint256 zero,) = _sweep(0, currency, perSpin, spins, word);
+        vm.revertToState(snap);
         (uint256 one,) = _sweep(1, currency, perSpin, spins, word);
         vm.revertToState(snap);
         (uint256 eleven,) = _sweep(11, currency, perSpin, spins, word);
-        emit log_named_uint(string.concat("SWEEP_ONE ", label), one);
+        uint256 first = one - zero;
+        emit log_named_uint(string.concat("DECLARED_PER_BET ", label), bound);
+        emit log_named_uint(string.concat("SWEEP_FIRST_BET cold ", label), first);
         emit log_named_uint(string.concat("SWEEP_PER_BET same-owner ", label), (eleven - one) / 10);
+        // The first bet carries the stage's dispatch, flush and tail, which its admission adds.
+        assertLe(first, bound + GasBounds.DEGENERETTE_TAIL_GAS + GasBounds.ENGINE_BOUNDARY,
+            string.concat("first bet exceeds its declared admission: ", label));
+        assertLe((eleven - one) / 10, bound, string.concat("per-bet marginal exceeds its declared bound: ", label));
         vm.revertToState(snap);
         distinctOwners = true;
         (uint256 oneD,) = _sweep(1, currency, perSpin, spins, word);
@@ -107,41 +150,7 @@ contract DegeneretteSweepGas is DeployProtocol {
         (uint256 elevenD,) = _sweep(11, currency, perSpin, spins, word);
         distinctOwners = false;
         emit log_named_uint(string.concat("SWEEP_PER_BET distinct-owner ", label), (elevenD - oneD) / 10);
-    }
-
-    // Mirror of DegenerusGameDegeneretteModule.BET_WORK_CREDIT_GAS (flat keeper credit per
-    // resolved bet). Re-sync here when it changes; the margin test below then re-proves it.
-    uint256 private constant CREDIT_GAS = 1_500;
-
-    /// @dev Credit vs the cheapest per-bet sweep cost of a shape: the warm, same-owner marginal,
-    ///      measured inside one test (every slot already warm), which understates a real sweep.
-    ///      A keeper's EIP-3529 refund can return at most a fifth of its gas, so its net cost is
-    ///      at least 0.8x that marginal; the credit must be at most half of that, 0.4x.
-    function _assertCreditMargin(string memory label, uint8 currency, uint128 perSpin, uint8 spins, uint256 word)
-        private
-    {
-        uint256 snap = vm.snapshotState();
-        (uint256 one,) = _sweep(1, currency, perSpin, spins, word);
-        vm.revertToState(snap);
-        (uint256 eleven,) = _sweep(11, currency, perSpin, spins, word);
-        vm.revertToState(snap);
-        uint256 cost = eleven - one; // the ten marginal bets
-        uint256 credit = 10 * CREDIT_GAS;
-        emit log_named_uint(string.concat("CREDIT_10 ", label), credit);
-        emit log_named_uint(string.concat("COST_10 ", label), cost);
-        assertLe(credit * 10, cost * 4, string.concat("credit above 0.4x cost: ", label));
-    }
-
-    /// @notice No bet shape is credited more than half its net cost to the sweep.
-    function testFlatCreditAtMostHalfTheNetCostOfEveryShape() public {
-        _assertCreditMargin("eth_1spin_lose", 0, 0.005 ether, 1, _losingWord());
-        _assertCreditMargin("eth_1spin_win_s5", 0, 0.005 ether, 1, _scoringWord(5));
-        _assertCreditMargin("eth_1spin_win_s7_box", 0, 1 ether, 1, _scoringWord(7));
-        _assertCreditMargin("eth_5spin", 0, 0.005 ether, 5, uint256(keccak256("sweep_gas_5")));
-        _assertCreditMargin("eth_25spin", 0, 0.005 ether, 25, uint256(keccak256("sweep_gas_25")));
-        _assertCreditMargin("flip_1spin_lose", 1, 100 ether, 1, _losingWord());
-        _assertCreditMargin("flip_1spin_win_s5", 1, 100 ether, 1, _scoringWord(5));
-        _assertCreditMargin("flip_15spin", 1, 100 ether, 15, uint256(keccak256("sweep_gas_15")));
+        assertLe((elevenD - oneD) / 10, bound, string.concat("distinct-owner marginal exceeds its declared bound: ", label));
     }
 
     function testGasEth1Losing() public {

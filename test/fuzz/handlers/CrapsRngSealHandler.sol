@@ -110,6 +110,15 @@ contract CrapsRngSealHandler is Test {
 
     uint24 internal lastOpenedDay;
     uint24 internal firstOpenedDay;
+    /// @dev The earliest craps day seen open by any engine crank (the keeper bound's range start).
+    ///      Kept apart from first/lastOpenedDay, whose bookkeeping drives the subsidy ghosts.
+    uint24 internal boundFirstDay;
+
+    /// @notice Test-only knob (CrapsRealWiringConservation): settle each delivered cohort's
+    ///         read-bound Craps fields through the measured keeper door instead of inside an engine
+    ///         crank, where the table's credits cannot be isolated from the crank's other coinflip
+    ///         effects. Off by default, so the RNG seal campaign's crank is unchanged.
+    bool public measureTableSettlement;
 
     // -------------------------------------------------------------------------
     // Ghost surface — THE PROPERTIES (must stay 0)
@@ -188,11 +197,19 @@ contract CrapsRngSealHandler is Test {
         craps = craps_;
         coinflip = Coinflip(ContractAddresses.COINFLIP);
         vault = DegenerusVault(payable(ContractAddresses.VAULT));
+        // Custom battles open only for an allowed creator (JackpotBattle.setBattleCreator, vault
+        // owner only); allow the deployer so the custom-battle door is actually exercised.
+        vm.prank(ContractAddresses.CREATOR);
+        JackpotBattle(address(craps_)).setBattleCreator(ContractAddresses.CREATOR, true);
         for (uint256 i; i < actorCount_; i++) {
             address a = address(uint160(uint256(keccak256(abi.encode("craps-seal-actor", i)))));
             actors.push(a);
             vm.deal(a, 2_000 ether);
         }
+    }
+
+    function setMeasureTableSettlement(bool on) external {
+        measureTableSettlement = on;
     }
 
     function actorCount() external view returns (uint256) {
@@ -227,7 +244,7 @@ contract CrapsRngSealHandler is Test {
         // A daily window left open by openDailyWindow is completed first (exempt machinery).
         for (uint256 i; i < 4 && game.rngLocked(); i++) {
             _fulfilPending(seed + 100 + i);
-            try game.mineFlip() {} catch {}
+            _crank(false);
         }
         // Both lanes: the house banks its level cut as HIGH passes and the seat spends those first.
         (uint256 hbn, uint256 hbh) = craps.passCreditsOf(ContractAddresses.SDGNRS);
@@ -238,12 +255,10 @@ contract CrapsRngSealHandler is Test {
         // Early in the new day: period 0 (the twenty-minute opener) is still taking bets.
         vm.warp(_dayStart() + 1 days + 5 minutes);
         _buyTicket();
-        vm.prank(currentActor);
-        try game.mineFlip() {} catch {}
+        _crank(true);
         for (uint256 i; i < 8; i++) {
             _fulfilPending(seed + i);
-            vm.prank(currentActor);
-            try game.mineFlip() {} catch {}
+            _crank(true);
             if (!game.rngLocked() && _crapsDayOpen()) break;
         }
         _finishHumanRead();
@@ -294,7 +309,7 @@ contract CrapsRngSealHandler is Test {
     function fulfil(uint256 wordSeed) external {
         _fulfilPending(wordSeed);
         for (uint256 i; i < 4 && game.rngLocked(); i++) {
-            try game.mineFlip() {} catch {}
+            _crank(false);
         }
         _noteOpenedDay();
         _checkSealedHeaders();
@@ -311,7 +326,7 @@ contract CrapsRngSealHandler is Test {
             return;
         }
         if (!game.rngLocked() && game.isRngFulfilled()) {
-            try game.mineFlip() {} catch {}
+            _crank(false);
         }
         // Property (3): the request that just landed must not have been the one in flight when
         // any armed field bound its index.
@@ -322,6 +337,137 @@ contract CrapsRngSealHandler is Test {
             if (_lootboxRngWord(armedIndexOf[slot]) != 0) ghost_inFlightLandedOnArmedIndex++;
         }
         _countLandedWords();
+    }
+
+    /// @dev One keeper crank through the state engine. The engine settles read-bound Craps fields
+    ///      in its own consumer order right after a word is published (6d0e64b09/60d31f775), so a
+    ///      field can settle inside a crank rather than at the settle door: property (5) is
+    ///      measured here too. A field settled in this crank had a real word if its leaf was worded
+    ///      before the crank or the crank published that leaf's word.
+    mapping(uint64 => bool) internal keeperSettledOnWord;
+
+    function _crank(bool asActor) internal {
+        if (measureTableSettlement) _settleReadCrapsMeasured();
+        uint256 cursorBefore = _cursor();
+        uint256 reqBefore = _unfulfilledRequestId();
+        bool lockedBefore = game.rngLocked();
+        bool midDayBefore = !lockedBefore && _requestActive();
+        // A window armed outside any measured path (e.g. inside an entry) is recorded unmeasured
+        // first, so the post-crank scan below only measures arms made by this crank.
+        for (uint256 i; i < trackedSlots.length; i++) {
+            uint64 shut = trackedSlots[i];
+            uint48 rawShut = craps.slotIndexOf(shut);
+            if (armedSeen[shut] || rawShut == 0) continue;
+            _recordArm(shut, rawShut - 1, 0, 0, false, false, false);
+        }
+        uint256 n = armedSlots.length;
+        uint256[] memory resolvedBefore = new uint256[](n);
+        bool[] memory wordedBefore = new bool[](n);
+        for (uint256 i; i < n; i++) {
+            uint64 slot = armedSlots[i];
+            resolvedBefore[i] = craps.battleOf(craps.keyOfSlot(slot)).resolved;
+            wordedBefore[i] = _lootboxRngWord(armedIndexOf[slot]) != 0;
+        }
+        vm.recordLogs();
+        if (asActor) vm.prank(currentActor);
+        try game.mineFlip() {} catch {}
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < n; i++) {
+            uint64 slot = armedSlots[i];
+            if (craps.battleOf(craps.keyOfSlot(slot)).resolved <= resolvedBefore[i]) continue;
+            bool worded = wordedBefore[i];
+            for (uint256 k; k < logs.length && !worded; k++) {
+                if (logs[k].emitter != address(game) || logs[k].topics.length == 0
+                    || logs[k].topics[0] != keccak256("LootboxRngApplied(uint48,uint256,uint256)")) continue;
+                (uint48 index, uint256 word,) = abi.decode(logs[k].data, (uint48, uint256, uint256));
+                if (index == armedIndexOf[slot] && word != 0) worded = true;
+            }
+            // One field counts once however many keeper chunks its seats take. Only the
+            // non-vacuity count is taken here: a keeper crank also refunds lapsed or terminally
+            // abandoned seats without any word, so property (5) stays measured at the settle door,
+            // and the keeper's own zero-word refusal is LootboxCraps._wordAt / _keepRngCohort's.
+            if (worded && !keeperSettledOnWord[slot]) {
+                keeperSettledOnWord[slot] = true;
+                ghost_settlesWithWord++;
+            }
+        }
+        // The engine's scheduled maintenance arms closed windows inside the crank (it must finish
+        // before the daily request, 6d0e64b09). Like keep()'s pre-scan for the advance chain's own
+        // keeper hop, record those arms for the slip freeze and coverage only: the crank brackets
+        // several actions, so its arm-time cursor is not observed. Properties (1)/(2) stay
+        // measured on the handler's own arm paths.
+        uint256 t = trackedSlots.length;
+        for (uint256 i; i < t; i++) {
+            uint64 slot = trackedSlots[i];
+            if (armedSeen[slot]) continue;
+            uint48 raw = craps.slotIndexOf(slot);
+            if (raw == 0) continue;
+            _recordArm(slot, raw - 1, cursorBefore, reqBefore, lockedBefore, midDayBefore, false);
+        }
+        _noteBoundDay();
+    }
+
+    /// @dev Keeper-door snapshot per armed field: seats resolved so far, and whether its leaf is
+    ///      worded (stored, to keep the keeper path within the stack).
+    uint256[] internal keepResolvedBefore;
+    bool[] internal keepWordedBefore;
+
+    function _armedSettleSnapshot() internal {
+        delete keepResolvedBefore;
+        delete keepWordedBefore;
+        uint256 n = armedSlots.length;
+        for (uint256 i; i < n; i++) {
+            uint64 slot = armedSlots[i];
+            keepResolvedBefore.push(craps.battleOf(craps.keyOfSlot(slot)).resolved);
+            keepWordedBefore.push(_lootboxRngWord(armedIndexOf[slot]) != 0);
+        }
+    }
+
+    /// @dev The table's own `keepScheduled` settles the read cohort's frontier fields at the Craps
+    ///      read stage (the same walk the engine runs). Count a field it settled on a worded leaf
+    ///      once, exactly as `_crank` does for the engine's own settlement (non-vacuity only).
+    function _countWordedKeeperSettles() internal {
+        uint256 n = keepResolvedBefore.length;
+        for (uint256 i; i < n; i++) {
+            uint64 slot = armedSlots[i];
+            if (!keepWordedBefore[i] || keeperSettledOnWord[slot]) continue;
+            if (craps.battleOf(craps.keyOfSlot(slot)).resolved <= keepResolvedBefore[i]) continue;
+            keeperSettledOnWord[slot] = true;
+            ghost_settlesWithWord++;
+        }
+    }
+
+    /// @dev The engine opens a craps day inside the crank that applies its word. Remember the
+    ///      earliest one, so the keeper bound spans every opened day's windows.
+    function _noteBoundDay() internal {
+        (uint24 od,) = craps.bonusDayOf();
+        if (od != 0 && (boundFirstDay == 0 || od < boundFirstDay)) boundFirstDay = od;
+    }
+
+    /// @dev Under `measureTableSettlement`: step the engine through the delivered cohort's earlier
+    ///      checkpoints with the smallest allowance each admits (one mineFlip composes every
+    ///      checkpoint its allowance admits, 60d31f775), and settle its Craps read stage (stage 6)
+    ///      through the measured keeper door, `keepScheduled`, which runs the same read-cohort walk.
+    function _settleReadCrapsMeasured() internal {
+        for (uint256 i; i < 96; i++) {
+            if (game.rngConsumerStage() == 6) {
+                if (!_keep(0)) return;
+                continue;
+            }
+            uint8 next = game.nextMinerAction();
+            // Publish (3) through Decimator (12): the delivered cohort's work before its Craps stage.
+            if (next < 3 || next > 12) return;
+            if (!_minimalEngineStep()) return;
+        }
+    }
+
+    /// @dev One mineFlip at the smallest allowance (250k steps up to the 16.7M ceiling) that makes
+    ///      progress, so the engine stops at the next checkpoint it cannot admit.
+    function _minimalEngineStep() internal returns (bool ok) {
+        for (uint256 g = 1_000_000; g <= 16_750_000; g += 250_000) {
+            (ok, ) = address(game).call{gas: g}(abi.encodeWithSignature("mineFlip()"));
+            if (ok) return true;
+        }
     }
 
     /// @notice Open the DAILY VRF window and leave it open: warp to the next day and fire the
@@ -337,9 +483,10 @@ contract CrapsRngSealHandler is Test {
         _finishHumanRead();
         vm.warp(_dayStart() + 1 days + 5 minutes);
         _buyTicket();
-        for (uint256 i; i < 4 && !game.rngLocked(); i++) {
-            vm.prank(currentActor);
-            try game.mineFlip() {} catch {}
+        // The engine prepares the day (subscriptions, scheduled Craps maintenance) one checkpoint
+        // per call before its daily request (60d31f775).
+        for (uint256 i; i < 64 && !game.rngLocked(); i++) {
+            _crank(true);
         }
         return game.rngLocked();
     }
@@ -357,28 +504,11 @@ contract CrapsRngSealHandler is Test {
         if (game.gameOver()) return;
         if (!game.rngLocked()) {
             if (_armTarget(actorSeed) == 0) {
-                if (!_crapsDayOpen() && !_driveDay(actorSeed)) return;
-                uint24 d = craps.currentDayIndex();
-                uint256 elapsed = block.timestamp - _dayStart();
-                uint256 p = PERIODS;
-                for (uint256 i; i < PERIODS; i++) {
-                    if (elapsed < _closeOf(i) && craps.slotIndexOf(_windowSlot(d, i)) == 0) {
-                        p = i;
-                        break;
-                    }
-                }
-                if (p == PERIODS) return;
-                if (craps.daySeatNumberOf(d, currentActor) != 0) return;
-                _fund(currentActor);
-                uint256 flip0 = coin.balanceOf(currentActor);
-                vm.prank(currentActor);
-                try craps.enterBonusBattle(p, _board(boardSeed), 1) returns (uint256 betId) {
-                    _trackBet(betId);
-                    ghost_entries++;
-                } catch {
-                    return;
-                }
-                ghost_flipBurnedIn += flip0 - coin.balanceOf(currentActor);
+                // The daily request now waits for scheduled Craps maintenance, which arms every
+                // closed scheduled window first (6d0e64b09), so no scheduled window is left to shut
+                // under the lock. A custom battle is outside the schedule: open one whose close
+                // falls before the next day's request, so it is closed and unarmed under the lock.
+                _createCustom(actorSeed, boardSeed);
             }
             if (!_openDailyWindow()) return;
         }
@@ -699,11 +829,18 @@ contract CrapsRngSealHandler is Test {
     /// @notice A custom battle (creator-opened, joinable regardless of the day clock — the one
     ///         door that takes money while the daily lock is held). Actors enter it at once.
     function createCustom(uint256 seed, uint256 boardSeed) external {
+        _createCustom(seed, boardSeed);
+    }
+
+    function _createCustom(uint256 seed, uint256 boardSeed) internal {
         if (game.gameOver()) return;
         uint40 closeTime = uint40(block.timestamp + 10 minutes + (seed % 30 minutes));
+        // Read the goal floor BEFORE the prank: an argument's external call would consume it and
+        // leave the handler itself as the (unauthorized) creator.
+        uint16 goalMult = uint16(craps.MIN_BATTLE_GOAL_MULT());
         vm.prank(ContractAddresses.CREATOR);
         uint64 slot;
-        try craps.createBattle(600, 10, uint16(craps.MIN_BATTLE_GOAL_MULT()), 0, closeTime, true, 0) returns (
+        try craps.createBattle(600, 10, goalMult, 0, closeTime, true, 0) returns (
             uint64 s
         ) {
             slot = s;
@@ -739,7 +876,7 @@ contract CrapsRngSealHandler is Test {
             _fulfilPending(pickSeed);
             // Let an open daily window finish: its word seals whatever window waits on the buffer.
             for (uint256 i; i < 8 && game.rngLocked(); i++) {
-                try game.mineFlip() {} catch {}
+                _crank(false);
                 _fulfilPending(pickSeed + 4 + i);
             }
             slot = _wordedSettleTarget(pickSeed);
@@ -753,7 +890,7 @@ contract CrapsRngSealHandler is Test {
                 // send an ordinary one, and land that.
                 _fulfilPending(pickSeed + 2);
                 for (uint256 i; i < 8 && game.rngLocked(); i++) {
-                    try game.mineFlip() {} catch {}
+                    _crank(false);
                     _fulfilPending(pickSeed + 4 + i);
                 }
                 slot = _wordedSettleTarget(pickSeed);
@@ -826,9 +963,16 @@ contract CrapsRngSealHandler is Test {
     /// @notice One keeper crank at a random budget: the scheduled cursor's own arm path. Any field
     ///         it shuts is measured exactly like a permissionless arm.
     function keep(uint64 budget) external useActor(budget) {
+        _noteOpenedDay();
+        _keep(budget);
+    }
+
+    /// @dev The measured keeper crank. Does not touch the opened-day labels (first/lastOpenedDay),
+    ///      which drive the subsidy ghosts; the bound reads its own range.
+    function _keep(uint64 budget) internal returns (bool progressed) {
         uint256 cursorBefore = _cursor();
         uint256 reqBefore = _unfulfilledRequestId();
-        _noteOpenedDay();
+        _noteBoundDay();
         uint256 stake0 = _stakeLedger();
         uint256 bound = _keeperBound();
         (bool open, bool midDay, bytes32 h0) = _before();
@@ -838,20 +982,9 @@ contract CrapsRngSealHandler is Test {
             if (armedSeen[shut] || rawShut == 0) continue;
             _recordArm(shut, rawShut - 1, 0, 0, false, false, false);
         }
-        vm.prank(currentActor);
-        try craps.keepScheduled(budget % 64) {
-            ghost_keeps++;
-        } catch {
-            ghost_keepReverts++;
-        }
+        progressed = _keepScheduledCounted(budget);
         _after(open, midDay, h0);
-        uint256 credited = _stakeLedger() - stake0;
-        ghost_creditedOut += credited;
-        if (credited > bound) {
-            ghost_creditsOverBound++;
-            (ghost_lastOverCredited, ghost_lastOverBound, ghost_lastOverSlot, ghost_lastOverWasKeep) =
-                (credited, bound, 0, true);
-        }
+        _checkKeeperCredit(stake0, bound);
         // Anything newly armed among the tracked windows was armed by this crank.
         uint256 n = trackedSlots.length;
         for (uint256 i; i < n; i++) {
@@ -862,6 +995,33 @@ contract CrapsRngSealHandler is Test {
             _recordArm(slot, raw - 1, cursorBefore, reqBefore, open, midDay);
         }
         _checkSealedHeaders();
+    }
+
+    /// @dev The table's own keeper door, with the fields it settles on worded leaves counted.
+    function _keepScheduledCounted(uint64 budget) internal returns (bool progressed) {
+        _armedSettleSnapshot();
+        progressed = _callKeepScheduled(budget);
+        _countWordedKeeperSettles();
+    }
+
+    function _callKeepScheduled(uint64 budget) internal returns (bool progressed) {
+        vm.prank(currentActor);
+        try craps.keepScheduled(budget % 64) returns (bool moved, uint64) {
+            ghost_keeps++;
+            progressed = moved;
+        } catch {
+            ghost_keepReverts++;
+        }
+    }
+
+    function _checkKeeperCredit(uint256 stake0, uint256 bound) internal {
+        uint256 credited = _stakeLedger() - stake0;
+        ghost_creditedOut += credited;
+        if (credited > bound) {
+            ghost_creditsOverBound++;
+            (ghost_lastOverCredited, ghost_lastOverBound, ghost_lastOverSlot, ghost_lastOverWasKeep) =
+                (credited, bound, 0, true);
+        }
     }
 
     /// @notice The vault comps banked craps passes through the REAL vault and the REAL FLIP
@@ -965,7 +1125,11 @@ contract CrapsRngSealHandler is Test {
         }
         if (slot < CUSTOM_SLOT_BASE) {
             uint24 day = uint24(slot / SLOTS_PER_DAY);
+            // The day's word may already be retired from the two-day ring (c729ecfc9); the window's
+            // own frozen terms still carry its high multiple.
             uint256 hm = craps.highMultForDay(day);
+            uint256 frozenHm = craps.highMultOfSlot(slot);
+            if (frozenHm > hm) hm = frozenHm;
             if (hm == 0) hm = 1;
             // The pot's boost is the window's advertised base times a rung of 1 / 4 / 40 / 400
             // over four — at most a hundred times the base — and the contested lane's boost is
@@ -993,32 +1157,47 @@ contract CrapsRngSealHandler is Test {
     ///      seven windows plus every tracked custom battle.
     function _keeperBound() internal view returns (uint256 bound) {
         uint24 today = craps.currentDayIndex();
-        for (uint24 d = firstOpenedDay; d != 0 && d <= lastOpenedDay; d++) {
-            uint256 hm = craps.highMultForDay(d);
-            if (hm == 0) hm = 1;
-            for (uint256 p; p < PERIODS; p++) {
-                uint64 slot = _windowSlot(d, p);
-                uint48 raw = craps.slotIndexOf(slot);
-                if (raw == 0) {
-                    // A window of a PAST day that never shut lapses: the keeper's sweep refunds
-                    // every seat's stake (window entrants, day tickets, the two protocol seats).
-                    if (d < today) {
-                        try craps.bonusTermsFor(d, p) returns (uint128 bankroll, uint128, uint256, uint256 bounty, uint256, uint256) {
-                            uint256 seats = craps.battleOf(craps.keyOfSlot(slot)).entrants + craps.dayTicketsOf(d) + 2;
-                            bound += seats * (uint256(bankroll) + bounty) * hm;
-                        } catch {}
-                    }
-                    continue;
-                }
-                if (_lootboxRngWord(raw - 1) == 0) continue;
-                bound += _liabilityBound(slot);
-            }
-        }
+        // Every day from the earliest one seen open (by the handler's own drive or by any engine
+        // crank) through today: the engine opens days inside cranks the handler does not label.
+        uint24 from = firstOpenedDay;
+        if (boundFirstDay != 0 && (from == 0 || boundFirstDay < from)) from = boundFirstDay;
+        uint24 to = lastOpenedDay > today ? lastOpenedDay : today;
+        for (uint24 d = from; d != 0 && d <= to; d++) bound += _dayKeeperBound(d, today);
         for (uint256 i; i < armedSlots.length; i++) {
             uint64 slot = armedSlots[i];
             if (slot < CUSTOM_SLOT_BASE) continue;
             if (_lootboxRngWord(armedIndexOf[slot]) != 0) bound += _liabilityBound(slot);
         }
+    }
+
+    /// @dev One day's seven windows in the keeper bound (see `_keeperBound`).
+    function _dayKeeperBound(uint24 d, uint24 today) internal view returns (uint256 bound) {
+        uint256 hm = craps.highMultForDay(d);
+        if (hm == 0) hm = 1;
+        for (uint256 p; p < PERIODS; p++) {
+            uint64 slot = _windowSlot(d, p);
+            uint48 raw = craps.slotIndexOf(slot);
+            if (raw == 0) {
+                // A window of a PAST day that never shut lapses: the keeper's sweep refunds
+                // every seat's stake (window entrants, day tickets, the two protocol seats).
+                if (d < today) bound += _lapseBound(d, p, slot, hm);
+                continue;
+            }
+            if (_lootboxRngWord(raw - 1) == 0) continue;
+            bound += _liabilityBound(slot);
+        }
+    }
+
+    /// @dev A lapsed window's refund ceiling. Its terms read the day's word, which the two-day ring
+    ///      retires (c729ecfc9): a window whose terms are gone contributes nothing here.
+    function _lapseBound(uint24 d, uint256 p, uint64 slot, uint256 hm) internal view returns (uint256) {
+        try craps.bonusTermsFor(d, p) returns (uint128 bankroll, uint128, uint256, uint256 bounty, uint256, uint256) {
+            try craps.keyOfSlot(slot) returns (bytes32 key) {
+                uint256 seats = craps.battleOf(key).entrants + craps.dayTicketsOf(d) + 2;
+                return seats * (uint256(bankroll) + bounty) * hm;
+            } catch {}
+        } catch {}
+        return 0;
     }
 
     /// @dev Every recipient's coinflip stake — the table's payout lane — in one sum.

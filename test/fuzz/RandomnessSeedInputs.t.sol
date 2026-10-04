@@ -6,13 +6,23 @@ import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IDegenerusGameLootboxModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {TicketQueueStorage as TQ} from "./helpers/TicketQueueStorage.sol";
 
 contract SeedInputSeeder is DegenerusGame {
     function seed(address player, uint256 word, uint256 amount, bool presale) external {
+        // Reaching level 10 means every earlier level's queues materialized. Queue slots recycle
+        // 1..100 under a level tag (c729ecfc9): an unretired genesis queue would refuse the
+        // box's own future-level queue binding.
+        TQ.retireCompleted(address(this), 10);
         level = 10;
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((2) & 1) << 12);
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((uint48(1) + 1) & 1) << 12);
         rngWordCurrent = word; _setRngSessionPublished(true); _setRngComplete(false);
+        // A delivered read cohort reaches its human boxes only after its tickets materialized
+        // (consumer order: tickets, redemption, AFKing, human boxes; 60d31f775).
+        ticketsFullyProcessed = true;
+        humanReadComplete = false;
+        boxCursor = 0;
         if (presale) presaleBoxEth[1][player] = amount;
         else lootboxOrder[1][player] = (uint256(10) << LB_LEVEL_SHIFT) |
             (uint256(1) << LB_CUSTOM_COUNT_SHIFT) |
@@ -84,7 +94,9 @@ contract RandomnessSeedInputsTest is DeployProtocol {
     }
 
     function testFuzz_BoxAmountDoesNotRerollIdentity(uint256 word, uint8 routeSeed) public {
-        word = word == 0 ? 1 : word;
+        // Final words 0 and 1 are never published (they leave a request waiting, 60d31f775):
+        // map them into the deliverable domain instead of rejecting runs.
+        word = word < 2 ? word + 2 : word;
         uint8 route = routeSeed % 4;
         if (route != 3) {
             uint256 seed = route == 0

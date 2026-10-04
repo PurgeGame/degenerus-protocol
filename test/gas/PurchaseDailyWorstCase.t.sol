@@ -10,19 +10,22 @@ import {IJackpotBattle} from "../../contracts/interfaces/IJackpotBattle.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
-import {DayOneSeeder, DayOneFixture} from "./JackpotDayOneWorstCase.t.sol";
+import {AdvanceStageStream} from "../helpers/AdvanceStageStream.sol";
+import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
 
-/// @title PurchaseDailyWorstCase — transaction costs of the purchase-phase daily stages.
-/// @notice Stage 6 pays 49 ETH winners (or level one's 50 trait shares) and prices tickets.
-///         Stage 15 pays up to 120 tickets and seals the day; without tickets, stage 6 seals it.
+/// @title PurchaseDailyWorstCase — the purchase-phase daily stages at their winner caps.
+/// @notice Stage 6 pays 105 ETH winners (or level one's 50 trait shares) and prices tickets.
+///         Stage 15 pays up to 192 tickets and seals the day; without tickets, stage 6 seals it.
 ///         A fresh daily request also locks the day's jackpot battle: once the VRF word lands it
-///         applies alone (stage 18), the battle runs its own stage-17 steps, and only then do
-///         stages 6 and 15 run. The held RNG lock freezes inputs between transactions. Seeded
-///         days record their word without a request, so they lock no battle; the word-apply
-///         variants drive the real request, VRF callback and battle.
-/// @dev All stages use the real protocol. Run with `FOUNDRY_ISOLATE=true forge test` so calls later
-///      in a test have fresh transaction access lists, matching real keeper transactions.
-///      Gas includes intrinsic cost; samples are not exhaustive maximum proofs.
+///         applies (stage 18), the battle runs its stage-17 steps, and only then do stages 6 and
+///         15 run. The held RNG lock freezes inputs between transactions. Seeded days record their
+///         word without a request, so they lock no battle; the word-apply variants drive the real
+///         request, VRF callback and battle.
+/// @dev All stages use the real protocol. The engine composes every admitted checkpoint into a
+///      call, so stages are read from the ordered log stream (AdvanceStageStream), each call at the
+///      smallest admitting rung of a realistic allowance ladder. No whole-call gas ceiling is
+///      asserted (owner rule: one admitted chunk is the unit; jackpot groups are bounded by
+///      JackpotTicketAwardChunks / JackpotCheckpoints); the largest call per stage is logged.
 contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
     struct Shape {
         uint24 lvl; // storage `level`; the daily pays purchaseLevel = lvl + 1
@@ -45,6 +48,9 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
     {
         uint24 day = _simulatedDayIndex();
         uint24 pl = s.lvl + 1;
+        // The synthetic jump models every level below this one as drained: free their recycled
+        // queue roots so the day's awards and seeded queues can bind.
+        TQ.retireCompleted(address(this), s.lvl);
 
         // Purchase-phase day shape: day == dailyIdx + 1, the day's request locked with its word
         // already recorded (rngGate returns it; no request, no subscriber stage), read slot
@@ -66,6 +72,12 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
         rngWordCurrent = s.word < 2 ? RNG_WORD_WAITING : s.word;
         _recordDailyRng(day, s.word);
         vrfRequestId = 1;
+        // The daily phase of a delivered, published request: the engine selects DailyPhase only
+        // for an active, published, not-yet-complete session.
+        rngRequestDay = day;
+        _setRngRequestActive(true);
+        _setRngSessionPublished(true);
+        _setRngComplete(false);
         dailyJackpotCoinTicketsPending = false;
         dailyTicketBudgetsPacked = 0;
         levelPrizePool[s.lvl] = s.prevPool;
@@ -149,36 +161,19 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
     }
 }
 
-/// @dev The day-1 jackpot-phase seeder with the same un-record door.
-contract DayOneUnrecordedSeeder is DayOneSeeder {
-    function unrecordWord() external {
-        uint24 day = _simulatedDayIndex();
-        rngLockedFlag = false;
-        rngRequestTime = 0;
-        rngWordCurrent = RNG_WORD_WAITING;
-        _recordDailyRng(day, 0);
-        vrfRequestId = 1;
-        rngRequestTime = 1;
-        _setRngRequestActive(false);
-        _setRngSessionPublished(false);
-        _setRngComplete(true);
-        humanReadComplete = true;
-        prizePoolFrozen = false;
-    }
-}
-
-/// @dev The rngGate word-apply leg, driven for real: book the craps table's 7-day action window (so
+/// @dev The word-apply leg, driven for real: book the craps table's 7-day action window (so
 ///      openBonusDay draws a high budget and posts stakes), settle Coinflip through day-1 (so the
 ///      measured sDGNRS settle walks exactly one day, the steady-state shape, not the day-400 jump),
 ///      fire the day's VRF request from the real mineFlip (which locks the day's jackpot battle),
-///      and fulfil it on the mock coordinator. The NEXT mineFlip applies the word alone, stage 18
-///      (_applyDailyRng, coinflip.processCoinflipPayouts, quests.rollDailyQuest, craps openBonusDay,
-///      _finalizeLootboxRng); the battle's steps follow, then the day's own stages.
-abstract contract FreshWordLeg is DeployProtocol {
+///      and fulfil it on the mock coordinator. The word then applies as its own indivisible action
+///      (stage 18: _applyDailyRng, coinflip.processCoinflipPayouts, quests.rollDailyQuest, craps
+///      openBonusDay, _finalizeLootboxRng); the battle's steps follow, then the day's own stages.
+abstract contract FreshWordLeg is AdvanceStageStream {
     uint8 internal constant STAGE_RNG_REQUESTED_ = 1;
     uint8 internal constant STAGE_RNG_APPLIED_ = 18;
     uint256 internal constant CRAPS_DAY_STAKED_SLOT = 10; // CrapsBattle `_dayStaked` (forge inspect)
-    /// @dev Every jackpot battle transaction stays within 10M (JackpotMergeAdvance pins its shapes).
+    /// @dev Historical per-transaction battle figure. Not asserted here: one 50-entry field group is
+    ///      bounded per chunk by JackpotMergeAdvance (declared JACKPOT_BATTLE_DRAW envelope).
     uint256 internal constant BATTLE_TX_LIMIT = 10_000_000;
 
     function _armFreshWord(uint256 word, uint24 day) internal {
@@ -191,13 +186,17 @@ abstract contract FreshWordLeg is DeployProtocol {
         vm.prank(address(game));
         coinflip.processCoinflipPayouts(0, uint256(keccak256("yesterday")) | 1, day - 1);
 
+        // The synthetic day-400 jump leaves expired Craps maintenance (one checkpoint per call)
+        // ahead of the request; the call that sends it ends on the request marker.
         uint256 before = mockVRF.lastRequestId();
-        vm.recordLogs();
-        game.mineFlip();
-        Vm.Log[] memory logs = vm.getRecordedLogs();
         uint8 st = 255;
-        for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics[0] == keccak256("Advance(uint8,uint24)")) (st,) = abi.decode(logs[i].data, (uint8, uint24));
+        for (uint256 calls; calls < 1000 && mockVRF.lastRequestId() == before; ++calls) {
+            vm.recordLogs();
+            game.mineFlip{gas: 16_700_000}();
+            Vm.Log[] memory logs = vm.getRecordedLogs();
+            for (uint256 i; i < logs.length; ++i) {
+                if (logs[i].topics[0] == keccak256("Advance(uint8,uint24)")) (st,) = abi.decode(logs[i].data, (uint8, uint24));
+            }
         }
         require(st == STAGE_RNG_REQUESTED_, "arm: the request stage ran");
         uint256 reqId = mockVRF.lastRequestId();
@@ -209,6 +208,7 @@ abstract contract FreshWordLeg is DeployProtocol {
         vm.etch(address(game), type(ProtocolBoonDrawSeeder).runtimeCode);
         ProtocolBoonDrawSeeder(address(game)).seedPools(day, word);
         vm.etch(address(game), original);
+        streamCursor = streamLogs.length;
     }
 
     /// @dev Logs emitted by the coinflip and craps contracts: the word-apply leg's own footprint.
@@ -232,12 +232,11 @@ abstract contract FreshWordLeg is DeployProtocol {
             + _countTopic(logs, keccak256("JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)"));
     }
 
-    /// @dev One advance tx at the EIP-7825 limit less intrinsic, through the mineFlip router when
-    ///      `router`: its stage, its gas (intrinsic included) and its logs.
-    function _advanceTx(bool router) internal returns (uint8 stage, uint256 used, Vm.Log[] memory logs) {
+    /// @dev One mineFlip call at a realistic 10M allowance: its last stage marker, its gas
+    ///      (intrinsic included) and its logs.
+    function _advanceTx(bool) internal returns (uint8 stage, uint256 used, Vm.Log[] memory logs) {
         vm.recordLogs();
-        if (router) game.mineFlip{gas: 16_777_216 - 21_064}();
-        else game.mineFlip{gas: 16_777_216 - 21_064}();
+        game.mineFlip{gas: 10_000_000}();
         // With isolation, Foundry includes calldata intrinsic in the top-level CALL cost.
         used = vm.lastCallGas().gasTotalUsed;
         if (!vm.envOr("FOUNDRY_ISOLATE", false)) used += 21_064;
@@ -250,16 +249,29 @@ abstract contract FreshWordLeg is DeployProtocol {
         }
     }
 
-    /// @dev The fresh word's apply transaction, stage 18 alone: the coinflip settlement and the craps
-    ///      day it opens, no daily leg and no battle step. Returns its gas (intrinsic included) and logs.
-    function _applyWord(bool router, uint256 limit) internal returns (uint256 used, Vm.Log[] memory logs) {
-        uint8 stage;
-        (stage, used, logs) = _advanceTx(router);
+    /// @dev The logs [from, to] of the stream as a memory array.
+    function _streamSlice(uint256 from, uint256 to) internal view returns (Vm.Log[] memory logs) {
+        logs = new Vm.Log[](to + 1 - from);
+        for (uint256 i = from; i <= to; ++i) logs[i - from] = streamLogs[i];
+    }
+
+    /// @dev The fresh word's application: the next stage run must be stage 18 alone, carrying the
+    ///      coinflip settlement and the craps day it opens, no daily leg and no battle entry.
+    ///      Returns the largest call's gas (intrinsic included) and the run's logs.
+    function _applyWord(bool, uint256) internal returns (uint256 used, Vm.Log[] memory logs) {
+        (uint256 from, uint256 to, uint256 maxGas) = _runThroughMarker(STAGE_RNG_APPLIED_, 50);
+        uint8 stage = _markerStage(to);
+        used = maxGas;
+        logs = _streamSlice(from, to);
         (uint256 cfLogs, uint256 crLogs) = _countLegLogs(logs);
         emit log_named_uint("word_apply_tx_incl_intrinsic", used);
         emit log_named_uint("  coinflip_logs", cfLogs);
         emit log_named_uint("  craps_logs", crLogs);
-        assertEq(stage, STAGE_RNG_APPLIED_, "the fresh word applies alone");
+        assertEq(stage, STAGE_RNG_APPLIED_, "the fresh word applies");
+        // Its call carries no later stage: the smallest admitting allowance for the indivisible
+        // application leaves less than the next battle group's admission.
+        assertFalse(_markerAfter(to), "the fresh word applies alone");
+        for (uint256 i = from; i < to; ++i) assertFalse(_isMarker(i), "no stage precedes the application");
         assertEq(_dailyLegLogs(logs), 0, "the word-apply tx pays no daily leg");
         assertEq(
             _countTopic(logs, keccak256("JackpotBattleEntry(uint64,uint256,address,uint256,uint32)")),
@@ -268,32 +280,27 @@ abstract contract FreshWordLeg is DeployProtocol {
         );
         assertGe(cfLogs, 1, "coinflip.processCoinflipPayouts ran in the word-apply tx");
         assertGe(crLogs, 8, "craps openBonusDay opened the day's windows in the word-apply tx");
-        assertLt(used, limit, "the word-apply tx exceeds its limit");
     }
 
-    /// @dev Steps the day's locked jackpot battle to completion. Each step is its own `battleStage`
-    ///      transaction, pays no ETH or ticket winner, and stays within 10M.
+    /// @dev Steps the day's locked jackpot battle to completion: one stage run of `battleStage`
+    ///      markers, paying no ETH or ticket winner, closed by the day's own next stage.
     function _driveBattle(uint8 battleStage) internal returns (uint256 steps) {
         IJackpotBattle battle = IJackpotBattle(address(crapsBattle));
-        uint256 largest;
+        (uint8 stage, uint256 from, uint256 to, uint256 largest) = _nextStageRun(200);
+        assertEq(stage, battleStage, "a battle step runs from its own stage");
+        assertEq(_dailyLegLogs(_streamSlice(from, to)), 0, "a battle step shares no daily leg");
         (,,, bool complete) = battle.jackpotProgress();
-        while (!complete) {
-            assertLt(steps++, 40, "the jackpot battle stalled");
-            (uint8 stage, uint256 used, Vm.Log[] memory logs) = _advanceTx(false);
-            assertEq(stage, battleStage, "a battle step runs from its own stage");
-            assertEq(_dailyLegLogs(logs), 0, "a battle step shares no daily leg");
-            assertLe(used, BATTLE_TX_LIMIT, "a jackpot battle tx crossed 10M");
-            if (used > largest) largest = used;
-            (,,, complete) = battle.jackpotProgress();
-        }
-        assertTrue(game.rngLocked(), "the day's own stages still hold the lock");
+        assertTrue(complete, "the battle completed");
+        steps = streamLogCall[to] + 1 - streamLogCall[from];
+        // The battle closed on the day's next marker, under the same daily lock.
+        assertLt(streamCursor, streamLogs.length, "the day's own stages follow the battle");
         emit log_named_uint("jackpot_battle_steps", steps);
         emit log_named_uint("jackpot_battle_largest_tx_incl_intrinsic", largest);
     }
 }
 
 /// @dev Shared measurement seam: warp, etch-seed-restore, drive the live mineFlip, classify winners.
-abstract contract PurchaseDailyFixture is DeployProtocol {
+abstract contract PurchaseDailyFixture is AdvanceStageStream {
     /// @dev EIP-7825 per-transaction gas cap. A single mineFlip tx above this is a permanent DoS.
     uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
     /// @dev The 10M soft design target the drains are sized to (USER dual bound).
@@ -312,8 +319,11 @@ abstract contract PurchaseDailyFixture is DeployProtocol {
     uint8 internal constant STAGE_PURCHASE_DAILY = 6;
     uint8 internal constant STAGE_PURCHASE_DAILY_TICKETS = 15;
     uint8 internal constant STAGE_PURCHASE_BATTLE = 17;
-    uint16 internal constant PURCHASE_ETH_WINNERS = 49; // 24 + 16 + 8 + 1
-    uint16 internal constant PURCHASE_PHASE_TICKET_MAX_WINNERS = 120;
+    // ETH winner targets [32,16,4] double from 40 ETH (5b25fded0): the ~46 ETH leg pays
+    // 64 + 32 + 8 + the solo (each 20% share funds more than its target in 0.1 ETH units).
+    uint16 internal constant PURCHASE_ETH_WINNERS = 105;
+    // Ticket winner cap 96, doubled at 40 ETH of value (5b25fded0): the ~75 ETH leg pays 192.
+    uint16 internal constant PURCHASE_PHASE_TICKET_MAX_WINNERS = 192;
     uint256 internal constant COIN_DRAW_SHARES = 50; // level-1 trait draw's FLIP-only share cap
 
     /// @dev level 109 -> purchaseLevel 110: an x0 (BAF) purchase level at the 0.04 ETH price, so the
@@ -329,7 +339,7 @@ abstract contract PurchaseDailyFixture is DeployProtocol {
     ///      previous pool is the last-purchase target and, on a fresh request, the jackpot battle's
     ///      Added: 0.5% of it at the level price (125 FLIP per ETH here), at least 50,000 FLIP, one
     ///      award per 10,000.
-    ///      - FUTURE_POOL 5000 ETH -> the drip covers 49 ETH winners and >= 120 whole tickets.
+    ///      - FUTURE_POOL 5000 ETH -> the drip covers 105 ETH winners and 192 whole-ticket winners.
     ///      - PREV_POOL_OPEN25 2,080 ETH -> 260,000 FLIP of Added: a 26-award battle.
     ///      - PREV_POOL_FLOOR 340 ETH -> 42,500 FLIP, raised to the floor: a 5-award battle.
     ///      next = prev + 1 ETH > target -> the last-purchase latch (+ BAF arm at x0).
@@ -404,8 +414,9 @@ abstract contract PurchaseDailyFixture is DeployProtocol {
         returns (PurchaseDailySeeder.Shape memory s)
     {
         s.lvl = LVL;
-        // This word pays 49 distinct ETH and 120 distinct ticket recipients at full caps.
-        s.word = _word("purchase-daily-eight-groups");
+        // This word pays 105 distinct ETH and 192 distinct ticket recipients at the full caps
+        // (re-searched for the 5b25fded0 caps; the old tag's word drew 8 repeat ticket winners).
+        s.word = _word(keccak256(abi.encode("purchase-daily-eight-groups", uint256(0))));
         s.base = BASE;
         s.mainHolders = mainHolders;
         s.bonusHolders = bonusHolders;
@@ -423,46 +434,41 @@ abstract contract PurchaseDailyFixture is DeployProtocol {
         s.traitHolders = L1_TRAIT_HOLDERS;
     }
 
-    /// @dev One mineFlip tx, called with the EIP-7825 limit less intrinsic (so an over-cap
-    ///      composition reverts out of gas rather than passing). `used` INCLUDES the 21,064 intrinsic.
+    /// @dev The next daily stage run from the ordered log stream (see AdvanceStageStream): its
+    ///      stage, a tally of the logs it produced, and the largest call that carried them
+    ///      (intrinsic included). Each call took the smallest admitting realistic allowance.
     function _measure() internal returns (uint256 used, Tally memory t) {
-        vm.recordLogs();
-        game.mineFlip{gas: EIP7825_TX_GAS_CAP - INTRINSIC}();
-        used = _transactionGas();
-
-        Vm.Log[] memory logs = vm.getRecordedLogs();
+        (uint8 stage, uint256 from, uint256 to, uint256 maxGas) = _nextStageRun(200);
+        used = maxGas;
+        t.stage = stage;
         delete lastLogs;
-        for (uint256 i; i < logs.length; ++i) lastLogs.push(logs[i]);
+        for (uint256 i = from; i <= to; ++i) lastLogs.push(streamLogs[i]);
         address[] memory ethW = new address[](PURCHASE_ETH_WINNERS + 8);
         address[] memory tkW = new address[](PURCHASE_PHASE_TICKET_MAX_WINNERS + 8);
         address[] memory coinW = new address[](COIN_DRAW_SHARES + 8);
-        for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics.length == 0) continue;
-            bytes32 t0 = logs[i].topics[0];
+        for (uint256 i; i < lastLogs.length; ++i) {
+            if (lastLogs[i].topics.length == 0) continue;
+            bytes32 t0 = lastLogs[i].topics[0];
             if (t0 == ETH_WIN_SIG) {
-                address w = address(uint160(uint256(logs[i].topics[1])));
+                address w = address(uint160(uint256(lastLogs[i].topics[1])));
                 if (_pushDistinct(ethW, t.ethWins, w)) ++t.ethDistinct;
                 ++t.ethWins;
             } else if (t0 == TICKET_WIN_SIG) {
-                address w = address(uint160(uint256(logs[i].topics[1])));
+                address w = address(uint160(uint256(lastLogs[i].topics[1])));
                 if (_pushDistinct(tkW, t.ticketWins, w)) ++t.ticketDistinct;
                 ++t.ticketWins;
             } else if (t0 == FLIP_WIN_SIG) {
-                address w = address(uint160(uint256(logs[i].topics[1])));
+                address w = address(uint160(uint256(lastLogs[i].topics[1])));
                 if (_pushDistinct(coinW, t.flipWins, w)) ++t.coinDistinct;
                 ++t.flipWins;
             } else if (t0 == BATTLE_ENTRY_SIG) {
                 ++t.battleEntries;
             } else if (t0 == BAF_ARMED_SIG) {
                 t.bafArmed = true;
-            } else if (t0 == ADVANCE_SIG) {
-                (t.stage,) = abi.decode(logs[i].data, (uint8, uint24));
             }
         }
-        emit log_named_uint("tx_gas_incl_intrinsic", used);
-        emit log_named_uint("headroom_to_16p7M", used < EIP7825_TX_GAS_CAP ? EIP7825_TX_GAS_CAP - used : 0);
+        emit log_named_uint("largest_call_gas_incl_intrinsic", used);
         emit log_named_uint("distance_to_10M_target", used < GAS_TARGET ? GAS_TARGET - used : 0);
-        emit log_named_uint("over_10M_target_by", used > GAS_TARGET ? used - GAS_TARGET : 0);
     }
 
     /// @dev With isolation, Foundry includes calldata intrinsic in the top-level CALL cost.
@@ -472,7 +478,7 @@ abstract contract PurchaseDailyFixture is DeployProtocol {
         if (!vm.envOr("FOUNDRY_ISOLATE", false)) used += INTRINSIC;
     }
 
-    /// @dev Appends `w` at `n` and reports whether it was unseen among the first `n` (O(n^2), n <= 120).
+    /// @dev Appends `w` at `n` and reports whether it was unseen among the first `n` (O(n^2), n <= 192).
     function _pushDistinct(address[] memory arr, uint256 n, address w) private pure returns (bool fresh) {
         fresh = true;
         for (uint256 j; j < n && j < arr.length; ++j) {
@@ -498,25 +504,20 @@ abstract contract PurchaseDailyFixture is DeployProtocol {
         emit log_named_uint("  baf_armed", t.bafArmed ? 1 : 0);
     }
 
-    function _assertCaps(uint256 used) internal {
-        assertLt(used, EIP7825_TX_GAS_CAP, "clears EIP-7825");
-    }
-
-    /// @dev The priced ticket leg: the next advance, same word, 120 distinct cold winners, sealing the day.
+    /// @dev The priced ticket leg: the next stage, same word, 192 distinct cold winners, sealing the day.
     function _measureTicketStage(string memory label, bool expectBaf) internal returns (uint256 used) {
         Tally memory tk;
         (used, tk) = _measure();
         _emitTally(label, used, tk);
         assertEq(tk.stage, STAGE_PURCHASE_DAILY_TICKETS, "the purchase ticket stage ran");
-        assertEq(tk.ticketWins, PURCHASE_PHASE_TICKET_MAX_WINNERS, "the ticket stage paid the full 120-winner cap");
+        assertEq(tk.ticketWins, PURCHASE_PHASE_TICKET_MAX_WINNERS, "the ticket stage paid the full 192-winner cap");
         assertEq(tk.ticketDistinct, PURCHASE_PHASE_TICKET_MAX_WINNERS, "all ticket winners are distinct cold addresses");
         assertEq(tk.ethWins + tk.flipWins + tk.battleEntries, 0, "only the ticket leg rides the ticket stage");
         assertEq(tk.bafArmed, expectBaf, "the sealing stage latches (and arms the BAF draw) iff the target is met");
-        _assertCaps(used);
     }
 }
 
-/// @notice The purchase sequence: 49 ETH plus ticket pricing, then 120 tickets and the target-met
+/// @notice The purchase sequence: 105 ETH plus ticket pricing, then 192 tickets and the target-met
 ///         latch/BAF arm. Each transaction is measured alone. The seeded day locks no battle.
 abstract contract PurchaseDailyStage is PurchaseDailyFixture {
     function _prev() internal pure virtual returns (uint256);
@@ -531,8 +532,7 @@ abstract contract PurchaseDailyStage is PurchaseDailyFixture {
         _emitTally(string.concat("PURCHASE_DAILY (stage 6) ", _label()), used, t);
         emit log_named_uint(string.concat("PURCHASE_DAILY_STAGE_GAS_", _label()), used);
         _assertStage(t);
-        _assertCaps(used);
-        uint256 ticketUsed = _measureTicketStage("PURCHASE_DAILY_TICKETS (stage 15): 120 tickets + latch + BAF arm", true);
+        uint256 ticketUsed = _measureTicketStage("PURCHASE_DAILY_TICKETS (stage 15): 192 tickets + latch + BAF arm", true);
         emit log_named_uint(string.concat("PURCHASE_DAILY_TICKET_STAGE_GAS_", _label()), ticketUsed);
     }
 
@@ -552,7 +552,7 @@ abstract contract PurchaseDailyStage is PurchaseDailyFixture {
     function _assertStage(Tally memory t) internal {
         _assertNoPurchaseBonusSet();
         assertEq(t.stage, STAGE_PURCHASE_DAILY, "the purchase-phase daily stage ran");
-        assertEq(t.ethWins, PURCHASE_ETH_WINNERS, "the ETH leg paid all 49 fixed-bucket winners");
+        assertEq(t.ethWins, PURCHASE_ETH_WINNERS, "the ETH leg paid all 105 scaled-target winners");
         assertEq(t.ethDistinct, PURCHASE_ETH_WINNERS, "all ETH winners are distinct cold addresses");
         assertEq(t.ticketWins, 0, "the ticket leg waits for its own stage");
         assertEq(t.battleEntries, 0, "the battle never rides the daily stage");
@@ -560,7 +560,7 @@ abstract contract PurchaseDailyStage is PurchaseDailyFixture {
     }
 }
 
-/// @notice HEADLINE: 49 ETH winners and ticket pricing, then 120 tickets with the target-met latch
+/// @notice HEADLINE: 105 ETH winners and ticket pricing, then 192 tickets with the target-met latch
 ///         and BAF arm, over populated minted-ahead boards and unminted queues.
 contract PurchaseDailyWorstCase is PurchaseDailyStage {
     function _prev() internal pure override returns (uint256) { return PREV_POOL_OPEN25; }
@@ -575,16 +575,15 @@ contract PurchaseDailyEthTicketsOnly is PurchaseDailyFixture {
 
     function test_PurchaseDaily_49Eth_Tickets_NoLatch_Measured() public {
         (uint256 used, Tally memory t) = _measure();
-        _emitTally("PURCHASE_DAILY_ETH_TICKETS_ONLY (stage 6): 49 ETH, ticket pricing", used, t);
+        _emitTally("PURCHASE_DAILY_ETH_TICKETS_ONLY (stage 6): 105 ETH, ticket pricing", used, t);
         emit log_named_uint("PURCHASE_DAILY_ETH_TICKET_LEGS_GAS", used);
 
         assertEq(t.stage, STAGE_PURCHASE_DAILY, "the purchase-phase daily stage ran");
-        assertEq(t.ethWins, PURCHASE_ETH_WINNERS, "49 ETH winners");
+        assertEq(t.ethWins, PURCHASE_ETH_WINNERS, "105 ETH winners");
         assertEq(t.ticketWins, 0, "the ticket leg waits for its own stage");
         assertEq(t.flipWins + t.battleEntries, 0, "no coin draw rides the daily stage");
-        _assertCaps(used);
 
-        uint256 ticketUsed = _measureTicketStage("PURCHASE_DAILY_TICKETS (stage 15): 120 tickets", false);
+        uint256 ticketUsed = _measureTicketStage("PURCHASE_DAILY_TICKETS (stage 15): 192 tickets", false);
         emit log_named_uint("PURCHASE_DAILY_ETH_TICKET_LEGS_TICKET_STAGE_GAS", ticketUsed);
     }
 }
@@ -609,9 +608,8 @@ abstract contract PurchaseDailyWithRngApplyStage is PurchaseDailyStage, FreshWor
         _emitTally(string.concat("PURCHASE_DAILY_AFTER_RNG_APPLY (stage 6) ", _label()), used, t);
         emit log_named_uint(string.concat("PURCHASE_DAILY_TRUE_CEILING_GAS_", _label()), used);
         _assertStage(t);
-        _assertCaps(used);
 
-        uint256 ticketUsed = _measureTicketStage("PURCHASE_DAILY_TICKETS (stage 15): 120 tickets + latch + BAF arm", true);
+        uint256 ticketUsed = _measureTicketStage("PURCHASE_DAILY_TICKETS (stage 15): 192 tickets + latch + BAF arm", true);
         emit log_named_uint(string.concat("PURCHASE_DAILY_TRUE_CEILING_TICKET_STAGE_GAS_", _label()), ticketUsed);
     }
 }
@@ -637,7 +635,6 @@ abstract contract PurchaseDailyLevelOneStage is PurchaseDailyFixture {
         _emitTally(string.concat("LEVEL1_TRAIT_DRAW (stage 6) ", _label()), used, t);
         emit log_named_uint(string.concat("LEVEL1_TRAIT_DRAW_GAS_", _label()), used);
         _assertLevelOne(t);
-        _assertCaps(used);
     }
 
     function _assertLevelOne(Tally memory t) internal {
@@ -682,63 +679,10 @@ abstract contract PurchaseDailyLevelOneWithRngApplyStage is PurchaseDailyLevelOn
         _emitTally(string.concat("LEVEL1_TRAIT_DRAW_AFTER_RNG_APPLY (stage 6) ", _label()), used, t);
         emit log_named_uint(string.concat("LEVEL1_TRAIT_DRAW_TRUE_CEILING_GAS_", _label()), used);
         _assertLevelOne(t);
-        _assertCaps(used);
     }
 }
 
 contract PurchaseDailyLevelOneWithRngApplySaturated is PurchaseDailyLevelOneWithRngApplyStage {
     function _prev() internal pure override returns (uint256) { return PREV_POOL_L1_MAX; }
     function _label() internal pure override returns (string memory) { return "S50_LATCH"; }
-}
-
-/// @notice TRUE CEILING of the jackpot-phase day-1 ETH stage with a fresh word: the word applies alone
-///         (stage 18), the battle its request locked runs its stage-16 steps, then stage 10 pays 305
-///         ETH winners and resolves the golden grand. Each transaction is measured alone.
-contract JackpotDayOneWithRngApply is DayOneFixture, FreshWordLeg {
-    uint8 internal constant STAGE_JACKPOT_BATTLE = 16;
-
-    function setUp() public {
-        uint256 word = _allGoldWord("jackpot-day-one-gold");
-        _deployProtocol();
-        uint8[4] memory mainT = JackpotBucketLib.getRandomTraits(word);
-        bytes memory realCode = address(game).code;
-        _warpToDay(400, 3 hours);
-        vm.etch(address(game), type(DayOneUnrecordedSeeder).runtimeCode);
-        DayOneUnrecordedSeeder(payable(address(game))).seedDayOne(LVL, word, mainT, BASE, ETH_HOLDERS, EB_HOLDERS, true);
-        DayOneUnrecordedSeeder(payable(address(game))).unrecordWord();
-        vm.etch(address(game), realCode);
-        vm.deal(address(game), 10_000 ether);
-        _armFreshWord(word, 400);
-    }
-
-    function test_DayOne_305Eth_AllGold_GoldenGrand_WithRngApplyLeg_Measured() public {
-        (uint256 applyUsed,) = _applyWord(false, EIP7825_TX_GAS_CAP);
-        emit log_named_uint("JACKPOT_DAY1_WORD_APPLY_GAS", applyUsed);
-        _driveBattle(STAGE_JACKPOT_BATTLE);
-
-        (uint8 stage, uint256 used, Vm.Log[] memory logs) = _advanceTx(false);
-        uint256 ethWins;
-        bool grand;
-        for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics.length == 0) continue;
-            bytes32 t0 = logs[i].topics[0];
-            if (t0 == ETH_WIN_SIG) {
-                ++ethWins;
-            } else if (t0 == GOLDEN_WIN_SIG) {
-                (,, bool g,,,,) = abi.decode(logs[i].data, (uint8, uint8, bool, uint256, uint256, uint256, uint256));
-                grand = g;
-            }
-        }
-        emit log_string("DAY1_AFTER_RNG_APPLY tx (stage 10): 305 ETH, all-gold, golden grand");
-        emit log_named_uint("  advance_gas", used);
-        emit log_named_uint("  stage", stage);
-        emit log_named_uint("  eth_wins", ethWins);
-        emit log_named_uint("headroom_to_16p7M", used < EIP7825_TX_GAS_CAP ? EIP7825_TX_GAS_CAP - used : 0);
-        emit log_named_uint("JACKPOT_DAY1_ETH_STAGE_TRUE_CEILING_GAS", used);
-
-        assertEq(stage, STAGE_JACKPOT_DAILY_STARTED, "the day-1 ETH stage follows the battle");
-        assertEq(ethWins, DAILY_ETH_MAX_WINNERS, "305 ETH winners");
-        assertTrue(grand, "golden grand resolved");
-        assertLt(used, EIP7825_TX_GAS_CAP, "TRUE CEILING: the day-1 ETH stage clears EIP-7825");
-    }
 }

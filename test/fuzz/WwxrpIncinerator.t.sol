@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
@@ -72,6 +73,25 @@ contract WwxrpIncineratorTest is DeployProtocol {
         s0 &= ~(uint256(0xFFFFFF) << LEVEL_SHIFT);
         s0 |= uint256(lvl) << LEVEL_SHIFT;
         vm.store(address(game), bytes32(SLOT_0), bytes32(s0));
+    }
+
+    /// @dev The driven test's teleport from a live early level to `lvl` (the same fixture as
+    ///      test/repro/IncineratorStallAwardGuard.t.sol). Besides the level it moves the two retained
+    ///      trait-buffer level stamps (slot 5 bits 112..159) and retires every skipped level's queues:
+    ///      queue slots and pending lanes recycle under a level tag (c729ecfc9 / 1a7074212), so an
+    ///      unretired bootstrap cohort would refuse level 99's binding with E() and freeze every
+    ///      purchase and keeper call after the jump. The century cohorts already queued are kept.
+    function _jumpLevel(uint24 lvl) internal {
+        _setLevel(lvl);
+        uint256 s5 = uint256(vm.load(address(game), bytes32(uint256(5))));
+        uint48 stamps = uint48(uint256(lvl) << ((lvl & 1) * 24) | uint256(lvl + 1) << (((lvl + 1) & 1) * 24));
+        vm.store(address(game), bytes32(uint256(5)), bytes32((s5 & ~(uint256(type(uint48).max) << 112)) | (uint256(stamps) << 112)));
+        uint24 ff = 1 << 22;
+        uint256 kept100 = TicketQueueStorage.length(address(game), (lvl + 2) | ff);
+        uint256 kept101 = TicketQueueStorage.length(address(game), (lvl + 3) | ff);
+        TicketQueueStorage.retireCompleted(address(game), lvl + 1);
+        assertEq(TicketQueueStorage.length(address(game), (lvl + 2) | ff), kept100, "preserve century cohort");
+        assertEq(TicketQueueStorage.length(address(game), (lvl + 3) | ff), kept101, "preserve next-century cohort");
     }
 
     /// @dev Mint WWXRP to `player` and enter the daily draw (which piggybacks
@@ -291,7 +311,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
             abi.encodeWithSignature("pickCharity(uint24)"),
             abi.encode()
         );
-        _setLevel(98);
+        _jumpLevel(98);
 
         for (uint256 day = 0; day < 600; day++) {
             uint24 currentLevel = game.level();

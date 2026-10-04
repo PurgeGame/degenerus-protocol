@@ -100,12 +100,11 @@ contract IncineratorStallAwardGuard is DeployProtocol {
         assertGt(TicketQueueStorage.length(address(game), lvl | ff), 0, "jump skips bootstrap obligations");
         uint256 kept100 = TicketQueueStorage.length(address(game), (lvl + 2) | ff);
         uint256 kept101 = TicketQueueStorage.length(address(game), (lvl + 3) | ff);
-        for (uint24 skipped = 1; skipped <= lvl + 1; ++skipped) {
-            uint24 key = skipped | ff;
-            if (TicketQueueStorage.length(address(game), key) == 0) continue;
-            bytes32 skippedFuture = keccak256(abi.encode(uint256(TicketQueueStorage.queueKey(key)), uint256(12)));
-            vm.store(address(game), skippedFuture, bytes32(0));
-        }
+        // Retire every skipped level's queues — the two-slot near queues and the owners' pending
+        // lanes as well as the far-future roots (queue slots and pending lanes recycle under a
+        // level tag, c729ecfc9 / 1a7074212): an unretired level-2/3 cohort would refuse level
+        // 99's binding with E(), freezing every purchase and keeper call after the jump.
+        TicketQueueStorage.retireCompleted(address(game), lvl + 1);
         assertEq(TicketQueueStorage.length(address(game), (lvl + 2) | ff), kept100, "preserve century cohort");
         assertEq(TicketQueueStorage.length(address(game), (lvl + 3) | ff), kept101, "preserve next-century cohort");
     }

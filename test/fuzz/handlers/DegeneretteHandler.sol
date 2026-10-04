@@ -135,8 +135,10 @@ contract DegeneretteHandler is Test {
 
         uint256 claimableBefore = game.claimableWinningsOf(currentActor);
 
+        // Bets resolve only as the engine's Degenerette read consumer of the published word
+        // (mineFlip); openBoxes drives the AFK and human stages only.
         vm.prank(currentActor);
-        try game.openBoxes(type(uint256).max) {
+        try game.mineFlip() {
             uint256 claimableAfter = game.claimableWinningsOf(currentActor);
             if (claimableAfter > claimableBefore) {
                 ghost_totalEthPayout += (claimableAfter - claimableBefore);
@@ -225,6 +227,21 @@ contract DegeneretteHandler is Test {
         bytes32 wordSlot = keccak256(abi.encode(uint256(index), LOOTBOX_RNG_WORD_SLOT));
         if (uint256(bytes32(RecyclingState.word(address(game), uint48(index)))) == 0) {
             RecyclingState.seedWord(address(game), uint48(index), bytes32(uint256(keccak256(abi.encodePacked("degenerette_resolve_word", index))) | 1));
+            // What the request's seal also does: the Degenerette and box cursors restart and the
+            // new write tag's bet/box queues are emptied (degeneretteCursor slot 14 bits 160..207,
+            // boxCursor slot 56 bits 56..103, degeneretteQueue root 21, boxPlayers root 57).
+            uint256 s14 = uint256(vm.load(address(game), bytes32(uint256(14))));
+            vm.store(address(game), bytes32(uint256(14)), bytes32(s14 & ~(uint256(type(uint48).max) << 160)));
+            uint256 s56 = uint256(vm.load(address(game), bytes32(uint256(56))));
+            vm.store(address(game), bytes32(uint256(56)), bytes32(s56 & ~(uint256(type(uint48).max) << 56)));
+            vm.store(address(game), keccak256(abi.encode(uint256((index ^ 1) & 1), uint256(21))), bytes32(0));
+            vm.store(address(game), keccak256(abi.encode(uint256((index ^ 1) & 1), uint256(57))), bytes32(0));
+            knownQueueLen[index ^ 1] = 0;
+            // The day itself is sealed (dailyIdx = today, tickets drained), as after a mid-day
+            // request: the delivered cohort's read consumers are the engine's only work.
+            uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
+            slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192);
+            vm.store(address(game), bytes32(0), bytes32(slot0));
         }
     }
 

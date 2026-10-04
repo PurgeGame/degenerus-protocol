@@ -67,10 +67,14 @@ contract DeadVrfGasSeeder is DeadVrfSeeder {
 
 /// @dev Setup runs before the measured transaction, so all production storage starts cold.
 ///      Measure the real Game -> Advance -> GameOver path, including call overhead and a
-///      conservative 21,064 intrinsic gas allowance. Assert work as well as the 11.5M ceiling.
+///      conservative 21,064 intrinsic gas allowance. The dead tally is checkpointed per record
+///      under declared gas bounds (MineFlipGasBounds TERMINAL_*; 60d31f775), not a fixed
+///      2,800-unit batch, so the engine spends whatever allowance it is given. Owner rule: no
+///      bound on a whole transaction; a realistic 10M allowance must succeed and progress, and the
+///      ending must complete through such calls with the exact fixed payout.
 abstract contract DeadVrfEndingGasFixture is DeployProtocol {
     uint256 internal constant INTRINSIC = 21_064;
-    uint256 internal constant TX_CAP = 11_500_000;
+    uint256 internal constant REALISTIC = 10_000_000;
     uint24 internal constant LVL = 5000;
     uint24 internal constant FOIL_DAY = 100;
     uint256 internal expectedUncreated;
@@ -93,26 +97,81 @@ abstract contract DeadVrfEndingGasFixture is DeployProtocol {
         vm.etch(address(game), code);
     }
 
+    function _progress() private returns (uint256 pos, uint256 day, uint256 idx, uint256 stage) {
+        bytes memory code = address(game).code;
+        vm.etch(address(game), type(DeadVrfGasSeeder).runtimeCode);
+        (pos, day, idx, stage) = DeadVrfGasSeeder(payable(address(game))).progress();
+        vm.etch(address(game), code);
+    }
+
     function test_ColdDeadVrfBatchFits11_5M() public {
+        uint8 mode = shape();
+        // Only the empty-days shape completes in the first call; the others need several.
+        bool oneCall = mode == 2;
         vm.recordLogs();
         uint256 beforeGas = gasleft();
-        game.mineFlip{gas: TX_CAP - INTRINSIC}();
+        game.mineFlip{gas: REALISTIC - INTRINSIC}();
         uint256 used = beforeGas - gasleft() + INTRINSIC;
         emit log_named_uint("DEAD_VRF_COLD_INCLUDING_INTRINSIC", used);
-        assertLt(used, 11_500_000, "dead-VRF batch exceeds audit target");
-
-        uint8 mode = shape();
-        assertEq(game.gameOver(), mode >= 2, "empty queues and finishing batches may pay out");
+        assertEq(game.gameOver(), oneCall, "empty queues and finishing batches may pay out");
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool advanced;
         bool fixedPayout;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] == keccak256("Advance(uint8,uint24)")) {
                 (uint8 advanceStage,) = abi.decode(logs[i].data, (uint8, uint24));
-                assertEq(advanceStage, mode >= 2 ? 0 : 5);
+                // Tally checkpoints report STAGE_TICKETS_WORKING (5); a call that finishes the
+                // tally moves on to the drain (STAGE_GAMEOVER, 0) within the same allowance.
+                if (oneCall) assertEq(advanceStage, 0);
+                else assertTrue(advanceStage == 5 || advanceStage == 0, "terminal stage");
                 advanced = true;
             }
             if (logs[i].topics[0] == keccak256("DeadVrfPayoutFixed(uint24,uint256,uint256,uint256,uint256)")) {
+                fixedPayout = true;
+            }
+        }
+        assertTrue(advanced, "real advance path executed");
+        assertEq(fixedPayout, oneCall);
+
+        // Inspect after measurement, never warming the measured transaction's state.
+        (uint256 pos, uint256 day, uint256 idx, uint256 stage) = _progress();
+        if (mode == 0) {
+            assertGt(pos, 0, "full registry budget consumed");
+            assertLt(pos, 3001, "the realistic call checkpoints inside the registry");
+            assertEq(stage, 0);
+        } else if (mode == 1) {
+            // Foil records tally cheaply under their per-record bound, so one realistic call may
+            // finish the 3,001-record queue and move on; it must at least have entered it.
+            assertTrue(idx > 0 || day > (FOIL_DAY & 1) + 1, "full foil budget consumed");
+            assertGe(stage, 1);
+        } else if (mode == 2) {
+            assertEq(day, 3, "only two physical foil queues are scanned");
+            assertEq(stage, 3);
+        }
+
+        // Continue at the realistic allowance: every call succeeds and progresses until the
+        // deterministic ending pays out.
+        uint256 maxUsed = used;
+        uint256 calls = 1;
+        vm.recordLogs();
+        while (!game.gameOver() && calls < 64) {
+            (uint256 p0, uint256 d0, uint256 i0, uint256 s0) = _progress();
+            beforeGas = gasleft();
+            game.mineFlip{gas: REALISTIC - INTRINSIC}();
+            used = beforeGas - gasleft() + INTRINSIC;
+            if (used > maxUsed) maxUsed = used;
+            ++calls;
+            (uint256 p1, uint256 d1, uint256 i1, uint256 s1) = _progress();
+            assertTrue(game.gameOver() || p1 != p0 || d1 != d0 || i1 != i0 || s1 != s0,
+                "each realistic call makes progress");
+        }
+        emit log_named_uint("DEAD_VRF_REALISTIC_CALLS", calls);
+        emit log_named_uint("DEAD_VRF_MAX_CALL_INCLUDING_INTRINSIC", maxUsed);
+        assertTrue(game.gameOver(), "the deterministic ending completes at a realistic allowance");
+        if (!oneCall) {
+            logs = vm.getRecordedLogs();
+            for (uint256 i; i < logs.length; ++i) {
+                if (logs[i].topics[0] != keccak256("DeadVrfPayoutFixed(uint24,uint256,uint256,uint256,uint256)")) continue;
                 fixedPayout = true;
                 if (mode != 3) continue;
                 (uint256 pot, uint256 created, uint256 uncreated, uint256 traits) =
@@ -121,26 +180,11 @@ abstract contract DeadVrfEndingGasFixture is DeployProtocol {
                 assertEq(created, 256);
                 assertEq(uncreated, expectedUncreated);
                 assertEq(traits, 256);
-                fixedPayout = true;
             }
+            assertTrue(fixedPayout, "the ending fixed its deterministic payout");
         }
-        assertTrue(advanced, "real advance path executed");
-        assertEq(fixedPayout, mode >= 2);
-
-        // Inspect after measurement, never warming the measured transaction's state.
-        vm.etch(address(game), type(DeadVrfGasSeeder).runtimeCode);
-        (uint256 pos, uint256 day, uint256 idx, uint256 stage) = DeadVrfGasSeeder(payable(address(game))).progress();
-        if (mode == 0) {
-            assertEq(pos, 2800, "full registry budget consumed");
-            assertEq(stage, 0);
-        } else if (mode == 1) {
-            assertEq(idx, 2800, "full foil budget consumed");
-            assertEq(day, (FOIL_DAY & 1) + 1);
-            assertEq(stage, 1);
-        } else if (mode == 2) {
-            assertEq(day, 3, "only two physical foil queues are scanned");
-            assertEq(stage, 3);
-        } else {
+        if (mode == 3) {
+            (pos,,, stage) = _progress();
             assertEq(pos, 0, "completed queue-stage cursor cleared");
             assertEq(stage, 3);
         }

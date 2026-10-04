@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
 import {DegenerusGameMintModule} from "../../contracts/modules/DegenerusGameMintModule.sol";
 import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
+import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -160,7 +161,14 @@ contract AdvanceStageWorstCaseGas is Test {
             ContractAddresses.GAME_FOILPACK_MODULE,
             address(new DegenerusGameFoilPackModule()).code
         );
+        // The mint module's processTicketBatch door delegates to the ticket module at its pinned address.
+        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
     }
+
+    /// @dev processTicketBatch is a caller-sized in-order door: it admits ticket checkpoints while
+    ///      the gas it is given covers the next declared bound, so it is driven with a realistic
+    ///      bounded allowance and checked for progress, never bounded by a ceiling.
+    uint256 internal constant DOOR_GAS = 10_000_000;
 
     function _word() internal pure returns (uint256) {
         return uint256(keccak256("367_gasceil_word")) | 1;
@@ -318,22 +326,13 @@ contract AdvanceStageWorstCaseGas is Test {
         assertEq(tb.queueLen(TARGET_LVL), 1, "fixture: one deep-owed player queued");
 
         uint256 g0 = gasleft();
-        (bool finished, bool worked) = tb.processTicketBatch(TARGET_LVL);
+        (bool finished, bool worked) = tb.processTicketBatch{gas: DOOR_GAS}(TARGET_LVL);
         uint256 gasUsed = g0 - gasleft();
-        assertTrue(worked, "non-vacuity: the batch must mint the seeded queue");
+        assertTrue(worked, "non-vacuity: a realistic allowance must mint the seeded queue");
 
-        emit log_named_uint("STAGE_0_1_5_6_7_ticket_batch_full_chunk_gas", gasUsed);
+        emit log_named_uint("STAGE_0_1_5_6_7_ticket_batch_call_gas_at_10M", gasUsed);
         emit log_named_uint("ticket_batch_finished_first_call", finished ? 1 : 0);
         emit log_named_uint("ticket_batch_cursor_after", tb.cursor());
-        emit log_named_uint("headroom_to_16p7M_gas", EIP7825_TX_GAS_CAP - gasUsed);
-
-        // The single-tx ticket-batch chunk clears the hard EIP cap (MintModule.sol:92: "keeps cold
-        // batch under 15M gas"). Measured, not assumed.
-        assertLt(
-            gasUsed,
-            EIP7825_TX_GAS_CAP,
-            "STAGE 0/1/5/6/7: one full write-budget ticket batch is strictly < 16,777,216 (EIP-7825)"
-        );
     }
 
     /// @notice MEASURED worst-case for a WARM resume ticket batch — the heavier case where the level's
@@ -351,20 +350,12 @@ contract AdvanceStageWorstCaseGas is Test {
         assertEq(tb.cursor(), 1, "fixture: cursor starts at index 1 (warm, no cold-scale)");
 
         uint256 g0 = gasleft();
-        (bool finished, bool worked) = tb.processTicketBatch(TARGET_LVL);
+        (bool finished, bool worked) = tb.processTicketBatch{gas: DOOR_GAS}(TARGET_LVL);
         uint256 gasUsed = g0 - gasleft();
-        assertTrue(worked, "non-vacuity: the batch must mint the seeded queue");
+        assertTrue(worked, "non-vacuity: a realistic allowance must mint the seeded queue");
 
-        emit log_named_uint("STAGE_7_ticket_batch_WARM_full_budget_chunk_gas", gasUsed);
+        emit log_named_uint("STAGE_7_ticket_batch_WARM_call_gas_at_10M", gasUsed);
         emit log_named_uint("ticket_batch_warm_finished", finished ? 1 : 0);
-        emit log_named_uint("headroom_to_16p7M_gas", EIP7825_TX_GAS_CAP - gasUsed);
-
-        // The warm full-budget (1000) batch is the true ticket-stage worst case; still strictly < the cap.
-        assertLt(
-            gasUsed,
-            EIP7825_TX_GAS_CAP,
-            "STAGE 7 (warm resume): the full 1000-write-budget ticket batch is strictly < 16,777,216"
-        );
     }
 
     /// @notice Per-trait marginal for the ticket batch, measured loop-N-divide across two deep-owed
@@ -377,17 +368,21 @@ contract AdvanceStageWorstCaseGas is Test {
         uint32 mHi = 200;
         uint32 mLo = 100;
 
+        // Both drains are driven at the 16.7M ceiling allowance and must complete, so the
+        // difference isolates the per-trait cost of the extra 100 entries.
         uint256 snap = vm.snapshotState();
         tb.seedTicketQueue(TARGET_LVL, 1, mHi, uint160(0x30000));
         uint256 gHi0 = gasleft();
-        tb.processTicketBatch(TARGET_LVL);
+        (bool finishedHi,) = tb.processTicketBatch{gas: 16_700_000}(TARGET_LVL);
         uint256 gasHi = gHi0 - gasleft();
+        assertTrue(finishedHi, "non-vacuity: the 200-owed drain completed in the call");
         vm.revertToState(snap);
 
         tb.seedTicketQueue(TARGET_LVL, 1, mLo, uint160(0x30000));
         uint256 gLo0 = gasleft();
-        tb.processTicketBatch(TARGET_LVL);
+        (bool finishedLo,) = tb.processTicketBatch{gas: 16_700_000}(TARGET_LVL);
         uint256 gasLo = gLo0 - gasleft();
+        assertTrue(finishedLo, "non-vacuity: the 100-owed drain completed in the call");
 
         emit log_named_uint("ticket_batch_gas_at_200_owed", gasHi);
         emit log_named_uint("ticket_batch_gas_at_100_owed", gasLo);
@@ -408,59 +403,5 @@ contract AdvanceStageWorstCaseGas is Test {
             // gas than the 100-owed batch.
             assertGt(gasHi, gasLo, "degenerate ticket-batch measurement: 200-owed gas did not exceed the 100-owed gas");
         }
-    }
-
-    // =========================================================================
-    // Cross-stage rollup — the binding stage + tightest headroom (info log)
-    // =========================================================================
-
-    /// @notice Emits the cross-stage rollup with the MEASURED numbers so the SUMMARY can cite them.
-    ///         The all-evict subscriber STAGE (2) and the gap-backfill (4) are measured by the sibling
-    ///         V56AfkingGasMarginal harness; their numbers are referenced here as constants for the
-    ///         single-file rollup, NOT re-measured (run V56AfkingGasMarginal to refresh them).
-    function test_CrossStageRollup_BindingStageAndHeadroom() public {
-        // Measure the two stages this file owns.
-        (uint8[4] memory traitIds, ) = _deriveTraits(_word());
-        _seedAllBuckets(traitIds);
-        vm.prank(ContractAddresses.GAME);
-        uint256 gJ0 = gasleft();
-        jp.runTerminalJackpot(POOL_WEI, TARGET_LVL, _word());
-        uint256 jackpotGas = gJ0 - gasleft();
-
-        // Use the WARM full-900-budget resume batch (the true ticket-stage worst case, not the lighter
-        // cold-scaled first batch).
-        tb.seedTicketQueueWarmResume(TARGET_LVL, 2, 700, uint160(0x40000), 1);
-        uint256 gT0 = gasleft();
-        (, bool ticketWorked) = tb.processTicketBatch(TARGET_LVL);
-        uint256 ticketGas = gT0 - gasleft();
-        assertTrue(ticketWorked, "non-vacuity: the rollup's ticket batch must mint the seeded queue");
-
-        // Referenced from V56AfkingGasMarginal (measured cold there): after the subscriber-STAGE reweight
-        // (SUB_STAGE_EVICT_WEIGHT 1→7, BUDGET 500→2500) the saturated all-evict chunk dropped 13.6M→~9.7M, so
-        // it is no longer the binding stage — the warm full-budget ticket-batch resume (measured live here) is.
-        uint256 allEvictStageGas = 9_712_869;  // test_AllEvictSaturatedChunk_LIVE_Measured cold all-evict chunk
-        uint256 gapBackfillGas = 7_308_134;    // testGapResume... gap-backfill advance N (separate tx)
-
-        emit log_named_uint("STAGE_2_all_evict_subscriber_chunk_cold_gas_referenced", allEvictStageGas);
-        emit log_named_uint("STAGE_4_gap_backfill_advance_N_gas_referenced", gapBackfillGas);
-        emit log_named_uint("STAGE_8_11_12_jackpot_305_gas_measured", jackpotGas);
-        emit log_named_uint("STAGE_0_1_5_6_7_ticket_batch_chunk_gas_measured", ticketGas);
-
-        // The binding stage is the heaviest single mineFlip tx across all stages.
-        uint256 binding = allEvictStageGas;
-        if (gapBackfillGas > binding) binding = gapBackfillGas;
-        if (jackpotGas > binding) binding = jackpotGas;
-        if (ticketGas > binding) binding = ticketGas;
-        emit log_named_uint("BINDING_STAGE_gas", binding);
-        emit log_named_uint("TIGHTEST_HEADROOM_to_16p7M_gas", EIP7825_TX_GAS_CAP - binding);
-
-        // LOAD-BEARING safety check: no mineFlip stage reaches the EIP-7825 tx cap. This is the real
-        // correctness assertion — it depends on the two stages measured live here (jackpotGas, ticketGas)
-        // plus the referenced subscriber/gap-backfill magnitudes.
-        assertLt(binding, EIP7825_TX_GAS_CAP, "no mineFlip stage reaches the 16,777,216 EIP-7825 cap");
-        // Every mineFlip stage sits on the <10M soft target. The binding (heaviest) stage is the warm
-        // ticket-batch resume (~9.9M); the saturated all-evict subscriber chunk (~9.7M) sits just under it.
-        assertLt(binding, 10_500_000, "every mineFlip stage stays on the <10M soft target");
-        assertLt(jackpotGas, binding, "the 305-winner jackpot (~7.1M) is below the binding ticket-batch stage");
     }
 }

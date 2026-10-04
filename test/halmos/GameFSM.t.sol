@@ -6,6 +6,9 @@ import {DegenerusGameMinerModule} from "../../contracts/modules/DegenerusGameMin
 import {DegenerusGameRngModule} from "../../contracts/modules/DegenerusGameRngModule.sol";
 import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
 import {DegenerusGameGameOverModule} from "../../contracts/modules/DegenerusGameGameOverModule.sol";
+import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
+import {GameAfkingModule} from "../../contracts/modules/GameAfkingModule.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IVRFCoordinator, VRFRandomWordsRequest} from "../../contracts/interfaces/IVRFCoordinator.sol";
@@ -30,6 +33,32 @@ contract FSMEmptyDependencies {
     }
 
     function minerMaintenancePending() external pure returns (bool) { return false; }
+
+    /// @dev sDGNRS read-consumer probe (`_rngConsumerStage`): no live redemption.
+    function redemptionSettlementPending() external pure returns (bool) { return false; }
+
+    // Checkpoint witnesses written by the empty jackpot legs at the moment each runs, so a single
+    // composed mineFlip (60d31f775) still proves what the day looked like at each checkpoint.
+    uint256 public battles;
+    uint256 public dailies;
+    uint24 public battleSealedDay;
+    uint256 public battleDayWord;
+    uint256 public settlementsAtBattle;
+    uint256 public battlesAtDaily;
+    uint24 public dailySealedDay;
+
+    function noteBattle(uint24 sealedDay, uint256 dayWord) external {
+        ++battles;
+        battleSealedDay = sealedDay;
+        battleDayWord = dayWord;
+        settlementsAtBattle = settlements;
+    }
+
+    function noteDaily(uint24 sealedDay) external {
+        ++dailies;
+        battlesAtDaily = battles;
+        dailySealedDay = sealedDay;
+    }
 
     function balanceOf(address) external pure returns (uint256) {
         return 0;
@@ -70,19 +99,39 @@ contract FSMEmptyDependencies {
         lastSettlementDay = day;
     }
 
+    uint24 public gapStart;
+    uint24 public gapEnd;
+
+    /// @dev Stalled days settle in one compact gap call over [start, end) (60d31f775), one
+    ///      settlement per skipped day.
+    function processCoinflipGap(uint256, uint24 start, uint24 end) external {
+        settlements += end - start;
+        gapStart = start;
+        gapEnd = end;
+    }
+
     // Actual interface order is (finished, didWork).
     function processTicketBatch(uint24) external pure returns (bool, bool) {
         return (true, false);
     }
 }
 
-/// @dev Empty battle/daily legs only. This stub changes no field being proved; the actual
-///      Advance module performs the dailyIdx write and request unlock after this leg returns.
+/// @dev Empty battle/daily legs only, at the engine's current checkpointed selectors (60d31f775).
+///      This stub changes no field being proved; the actual Advance module performs the dailyIdx
+///      write and request unlock after this leg returns. Each leg reports the sealed day (and the
+///      battle the day's word) to the dependency witness at the moment it runs.
 contract FSMEmptyJackpotModule is DegenerusGameStorage {
-    function payPurchaseJackpotBattle(uint24, uint256) external {
+    function runPurchaseJackpotBattle(uint24, uint256, uint256) external returns (MineFlipGas.Result memory result) {
+        FSMEmptyDependencies(ContractAddresses.COINFLIP).noteBattle(dailyIdx, _recordedDailyWord(rngRequestDay));
         dailyTicketBudgetsPacked &= ~_JACKPOT_BATTLE_PENDING;
+        result.progressed = true;
+        result.done = true;
     }
-    function payDailyJackpot(bool, uint24, uint256) external pure {}
+    function runDailyJackpot(bool, uint24, uint256, uint256) external returns (MineFlipGas.Result memory result) {
+        FSMEmptyDependencies(ContractAddresses.COINFLIP).noteDaily(dailyIdx);
+        result.progressed = true;
+        result.done = true;
+    }
 }
 
 /// @dev Test setup and read access only; all three claimed state transitions execute production
@@ -164,6 +213,10 @@ contract GameFSMSymbolicTest is Test {
         vm.etch(ContractAddresses.GAME_ADVANCE_MODULE, type(DegenerusGameAdvanceModule).runtimeCode);
         vm.etch(ContractAddresses.GAME_RNG_MODULE, type(DegenerusGameRngModule).runtimeCode);
         vm.etch(ContractAddresses.GAME_JACKPOT_MODULE, type(FSMEmptyJackpotModule).runtimeCode);
+        // The engine drains the (empty) ticket queues and the delivered cohort's (empty) human
+        // boxes on its own path (60d31f775); both run production bytecode.
+        vm.etch(ContractAddresses.GAME_TICKET_MODULE, type(DegenerusGameTicketModule).runtimeCode);
+        vm.etch(ContractAddresses.GAME_AFKING_MODULE, type(GameAfkingModule).runtimeCode);
         bytes memory deps = type(FSMEmptyDependencies).runtimeCode;
         vm.etch(ContractAddresses.VRF_COORDINATOR, deps);
         vm.etch(ContractAddresses.VAULT, deps);
@@ -199,8 +252,11 @@ contract GameFSMSymbolicTest is Test {
         assert(machine.gameOver());
         assert(FSMEmptyDependencies(ContractAddresses.COIN).burns() == 1);
         vm.warp(block.timestamp + uint256(elapsedDays) * 1 days);
-        bytes memory result = _mustCall(abi.encodeCall(DegenerusGameMinerModule.mineFlip, ()));
-        assert(abi.decode(result, (uint8)) == 0);
+        // Before the 30-day sweep a finished ending has no engine work: mineFlip reverts NoWork and
+        // changes nothing (an idle engine refuses the call instead of returning, be793ed7c).
+        (bool ok, bytes memory result) = address(machine).call(abi.encodeCall(DegenerusGameMinerModule.mineFlip, ()));
+        assert(!ok);
+        assert(result.length == 4 && bytes4(result) == DegenerusGameMinerModule.NoWork.selector);
         assert(machine.gameOver());
         assert(machine.sealedDay() == 10);
         assert(machine.level() == initialLevel);
@@ -259,19 +315,29 @@ contract GameFSMSymbolicTest is Test {
         assert(machine.sealedDay() == initialDay);
         assert(FSMEmptyDependencies(ContractAddresses.VRF_COORDINATOR).requests() == 1);
         machine.recordDeliveredWord(42);
+        // One mineFlip composes the delivered day's checkpoints (60d31f775): publish, tickets, the gap
+        // and word application, the battle, the purchase daily and its seal, then the read consumers.
+        // The jackpot legs' witnesses record the state each checkpoint saw.
         _mustCall(abi.encodeCall(DegenerusGameMinerModule.mineFlip, ()));
+        FSMEmptyDependencies deps = FSMEmptyDependencies(ContractAddresses.COINFLIP);
         uint24 afterGap = gap == 0 ? uint24(initialDay) : day - 1;
-        assert(machine.sealedDay() == afterGap);
         assert(afterGap >= initialDay);
         assert(machine.wordAt(day) == 42);
-        assert(FSMEmptyDependencies(ContractAddresses.COINFLIP).settlements() == uint256(gap) + 1);
-        assert(FSMEmptyDependencies(ContractAddresses.COINFLIP).lastSettlementDay() == day);
-        assert(machine.battlePending());
-        // The empty battle's own transaction completes before the purchase daily can seal.
-        _mustCall(abi.encodeCall(DegenerusGameMinerModule.mineFlip, ()));
+        assert(deps.settlements() == uint256(gap) + 1);
+        assert(deps.lastSettlementDay() == day);
+        // The skipped days are exactly the ones between the sealed day and the delivered day.
+        if (gap != 0) assert(deps.gapStart() == uint24(initialDay) + 1 && deps.gapEnd() == day);
+        else assert(deps.gapEnd() == 0);
+        // At the battle checkpoint: the gap was applied, the word recorded, every coinflip day settled.
+        assert(deps.battles() == 1);
+        assert(deps.battleSealedDay() == afterGap);
+        assert(deps.battleDayWord() == 42);
+        assert(deps.settlementsAtBattle() == uint256(gap) + 1);
+        // The empty battle's own checkpoint completes before the purchase daily runs and seals.
         assert(!machine.battlePending());
-        assert(machine.sealedDay() == afterGap);
-        _mustCall(abi.encodeCall(DegenerusGameMinerModule.mineFlip, ()));
+        assert(deps.dailies() == 1);
+        assert(deps.battlesAtDaily() == 1);
+        assert(deps.dailySealedDay() == afterGap);
         assert(machine.sealedDay() == day);
         (bool locked, uint48 requestTime, uint256 requestId) = machine.requestState();
         assert(!locked && !machine.requestActive() && requestTime != 0 && requestId == 1);

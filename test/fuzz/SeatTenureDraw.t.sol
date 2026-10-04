@@ -46,7 +46,11 @@ contract SeatTenureDraw is DeployProtocol {
     function _completeDay(uint256 vrfWord) internal {
         _finishReadConsumers();
         vm.warp(vm.getBlockTimestamp() + 1 days);
-        game.mineFlip();
+        // The day's request follows the day's preparation and Craps maintenance checkpoints
+        // (each a separate keeper step), so crank until the real daily request is issued.
+        uint256 before = mockVRF.lastRequestId();
+        for (uint256 i; i < 50 && mockVRF.lastRequestId() == before; ++i) game.mineFlip();
+        assertGt(mockVRF.lastRequestId(), before, "harness: daily request issued");
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
             mockVRF.fulfillRandomWords(reqId, vrfWord);

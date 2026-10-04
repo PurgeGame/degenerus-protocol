@@ -76,9 +76,10 @@ contract WhaleBulkBuyBonusTest is DeployProtocol {
         return uint32(TicketQueueStorage.owed(address(game), _keyFor(lvl), who) >> 8);
     }
 
+    /// @dev Queue roots recycle physical slots under an absolute-level tag; read the
+    ///      authenticated length for the logical key.
     function _queueLenAt(uint24 lvl) private view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(uint256(_keyFor(lvl)), TICKET_QUEUE_SLOT));
-        return uint256(vm.load(address(game), slot));
+        return TicketQueueStorage.length(address(game), _keyFor(lvl));
     }
 
     // ── expected shapes ──────────────────────────────────────────────────────
@@ -184,6 +185,9 @@ contract WhaleBulkBuyBonusTest is DeployProtocol {
     ///         four dense tickets on 52..151, nothing at 152.
     function testSpanEdgesPastIntroWindow() public {
         _setLevel(51);
+        // The raw level jump models levels 1..51 as completed: retire their recycled queue roots
+        // (slots 1..100 are tagged with an absolute level) so the pass binds levels 52..151.
+        TicketQueueStorage.retireCompleted(address(game), 51);
         address who = makeAddr("edges51");
         uint24 passLevel = _buy(who, 7);
         assertEq(passLevel, 52);

@@ -48,47 +48,31 @@ contract PendingBoxCountInvariant is DeployProtocol {
         _assertInvariant("after grounded subscribes (cover-buys are box-clean)");
 
         // Daily STAGE: every funded lootbox sub gets a Sub-stamp box (pending); ticket subs
-        // stamp box-clean.
-        _runStageNewDay(uint256(keccak256("pb_w1")) | 1);
-        _settleClean(uint256(keccak256("pb_c1")) | 1);
+        // stamp box-clean. The stamps precede the day's request, so they are observable there.
+        _stampToRequest(uint256(keccak256("pb_w1")) | 1);
         _assertInvariant("after the first daily STAGE stamp");
         assertGe(_pendingBoxCount(), N_LOOTBOX, "the lootbox subs' daily boxes are pending");
 
-        // Partial drain through the counter-blind valve, one box at a time.
-        vm.prank(makeAddr("pb_drain_a"));
-        game.openBoxes(1);
-        _assertInvariant("after a 1-box valve drain");
-        vm.prank(makeAddr("pb_drain_b"));
-        game.openBoxes(3);
-        _assertInvariant("after a 3-box valve drain");
-
-        // Rewarded crank (counter-gated path) drains more.
-        if (!game.advanceDue() && !game.rngLocked()) {
-            vm.prank(makeAddr("pb_crank"));
-            game.mineFlip();
-            _assertInvariant("after a rewarded mineFlip drain");
-        }
-
-        // Full drain to zero.
-        vm.prank(makeAddr("pb_drain_c"));
-        game.openBoxes(2000);
+        // The day's cohort opens the stamped boxes as its AFKing read consumer. The engine is
+        // stepped in minimal checkpoints with the invariant checked after every one; when the
+        // AFKing stage is the next work, partial drains run through the in-order valve
+        // (openBoxes with a starved, then a moderate, gas allowance) and the rewarded crank.
+        _drainDay(uint256(keccak256("pb_c1")) | 1, true);
         _assertInvariant("after the full drain");
         assertEq(_pendingBoxCount(), 0, "fully drained ring has zero pending boxes");
 
         // Cancel WHILE PENDING: stamp a fresh day, then cancel one lootbox sub before its box
         // opens. The cancel tombstones in-set and retains the markers (no-orphan rule), so the
         // counter must still include the tombstone's box — and the open walk must still open it.
-        _runStageNewDay(uint256(keccak256("pb_w2")) | 1);
-        _settleClean(uint256(keccak256("pb_c2")) | 1);
+        _stampToRequest(uint256(keccak256("pb_w2")) | 1);
         _assertInvariant("after the second daily STAGE stamp");
         address cancelled = lootboxSubs[0];
         if (!(_lastOpenedDayOf(cancelled) < _lastBoughtDayOf(cancelled))) {
             // Later game phases can deliver a lootbox sub's daily buy as a (box-clean) ticket
             // buy, so re-arm the pending state deterministically: mark the sub pending on its
-            // already-worded stamp day and bump the counter to match — byte-identical to the
-            // state a daily Sub-stamp box leaves behind.
+            // stamp day and bump the counter to match — byte-identical to the state a daily
+            // Sub-stamp box leaves behind (it opens once the stamp day seals).
             uint32 d = _lastBoughtDayOf(cancelled);
-            require(_rngWordByDay(d) != 0, "fixture: the stamp-day word landed");
             _pokeSubOpenedDay(cancelled, d - 1);
             _pokePendingCount(uint16(_pendingBoxCount() + 1));
             _assertInvariant("after re-arming a pending box via poke");
@@ -97,8 +81,7 @@ contract PendingBoxCountInvariant is DeployProtocol {
         game.subscribe(address(0), false, false, 0, address(0)); // qty 0 = cancel (tombstone)
         _assertInvariant("after cancelling a sub with a pending box (tombstone retains markers)");
 
-        vm.prank(makeAddr("pb_drain_d"));
-        game.openBoxes(2000);
+        _drainDay(uint256(keccak256("pb_c2")) | 1, false);
         _assertInvariant("after draining (incl. the pending tombstone's box)");
         assertEq(_pendingBoxCount(), 0, "tombstone's box opened; nothing pending");
         assertEq(
@@ -108,19 +91,96 @@ contract PendingBoxCountInvariant is DeployProtocol {
         );
 
         // Next STAGE reclaims the (now box-clean) tombstone; re-subscribe and stamp again.
-        _runStageNewDay(uint256(keccak256("pb_w3")) | 1);
-        _settleClean(uint256(keccak256("pb_c3")) | 1);
+        _stampToRequest(uint256(keccak256("pb_w3")) | 1);
+        _drainDay(uint256(keccak256("pb_c3")) | 1, false);
         _assertInvariant("after the tombstone-reclaim STAGE");
         vm.prank(cancelled);
         game.subscribe(address(0), false, false, 1, address(0));
         _assertInvariant("after re-subscribing the reclaimed sub");
-        _runStageNewDay(uint256(keccak256("pb_w4")) | 1);
-        _settleClean(uint256(keccak256("pb_c4")) | 1);
+        _stampToRequest(uint256(keccak256("pb_w4")) | 1);
         _assertInvariant("after the post-re-subscribe STAGE stamp");
-        vm.prank(makeAddr("pb_drain_e"));
-        game.openBoxes(2000);
+        _drainDay(uint256(keccak256("pb_c4")) | 1, false);
         _assertInvariant("after the final full drain");
         assertEq(_pendingBoxCount(), 0, "final state: zero pending boxes");
+    }
+
+    // ---- engine driving ----
+
+    /// @dev Settle the current day, move to the next, and step the engine in minimal checkpoints
+    ///      through the day's subscriber preparation until its daily request is the next work.
+    function _stampToRequest(uint256 vrfWord) internal {
+        _drainDay(vrfWord ^ 0xF00D, false);
+        vm.warp(block.timestamp + 1 days);
+        for (uint256 i; i < 400; ++i) {
+            _assertInvariant("preparation checkpoint");
+            if (game.nextMinerAction() == 17) return; // MinerAction.RequestDaily
+            _stepMinimal();
+        }
+        revert("harness: the daily request never became the next work");
+    }
+
+    /// @dev Step the engine in minimal checkpoints, answering requests, until it is idle with the
+    ///      read cohort complete; the invariant is checked after every checkpoint. With `valve`,
+    ///      the first time the AFKing stage is the next work it is partially drained through
+    ///      openBoxes and the rewarded crank before the stepping continues.
+    function _drainDay(uint256 vrfWord, bool valve) internal {
+        bool valveUsed = !valve;
+        for (uint256 i; i < 800; ++i) {
+            _assertInvariant("engine checkpoint");
+            if (!game.advanceDue() && game.rngComplete()) return;
+            _fulfillPending(vrfWord + i);
+            if (!valveUsed && game.nextMinerAction() == 9) { // MinerAction.Afking
+                valveUsed = true;
+                uint256 before = _pendingBoxCount();
+                vm.prank(makeAddr("pb_drain_a"));
+                game.openBoxes{gas: _oneBoxBudget()}(1);
+                _assertInvariant("after a starved valve drain");
+                assertEq(_pendingBoxCount(), before - 1, "the starved valve opened exactly one box");
+                vm.prank(makeAddr("pb_drain_b"));
+                game.openBoxes{gas: 1_500_000}(3);
+                _assertInvariant("after a moderate valve drain");
+                if (game.nextMinerAction() == 9) {
+                    vm.prank(makeAddr("pb_crank"));
+                    game.mineFlip{gas: 2_000_000}();
+                    _assertInvariant("after a rewarded mineFlip drain");
+                }
+                continue;
+            }
+            if (game.advanceDue()) _stepMinimal();
+        }
+        revert("harness: the day never settled");
+    }
+
+    /// @dev The smallest openBoxes allowance that opens an AFKing box (bisection over snapshots).
+    function _oneBoxBudget() internal returns (uint256) {
+        uint256 before = _pendingBoxCount();
+        uint256 lo = 100_000;
+        uint256 hi = 30_000_000;
+        while (hi - lo > 1_000) {
+            uint256 mid = (lo + hi) / 2;
+            uint256 snap = vm.snapshotState();
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("openBoxes(uint256)", uint256(1)));
+            bool opened = ok && _pendingBoxCount() < before;
+            vm.revertToStateAndDelete(snap);
+            if (opened) hi = mid;
+            else lo = mid;
+        }
+        return hi;
+    }
+
+    /// @dev One mineFlip given the smallest allowance that succeeds (bisection over snapshots).
+    function _stepMinimal() internal {
+        uint256 lo = 200_000;
+        uint256 hi = 30_000_000;
+        while (hi - lo > 1_000) {
+            uint256 mid = (lo + hi) / 2;
+            uint256 snap = vm.snapshotState();
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip()"));
+            vm.revertToStateAndDelete(snap);
+            if (ok) hi = mid;
+            else lo = mid;
+        }
+        game.mineFlip{gas: hi}();
     }
 
     // ---- invariant core ----
@@ -167,10 +227,6 @@ contract PendingBoxCountInvariant is DeployProtocol {
         return uint32(_subField(who, OFF_LASTOPENED, 24));
     }
 
-    function _rngWordByDay(uint32 day) internal view returns (uint256) {
-        return RecyclingState.dailyWord(address(game), uint24(day));
-    }
-
     function _pokeSubOpenedDay(address who, uint32 d) internal {
         bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
         uint256 w = uint256(vm.load(address(game), slot));
@@ -203,38 +259,6 @@ contract PendingBoxCountInvariant is DeployProtocol {
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
         game.depositAfkingFunding{value: amount}(who);
-    }
-
-    function _runStageNewDay(uint256 vrfWord) internal {
-        _settleGame(vrfWord ^ 0xF00D);
-        vm.warp(block.timestamp + 1 days);
-        _settleGame(vrfWord);
-    }
-
-    function _settleGame(uint256 vrfWord) internal {
-        for (uint256 d; d < 60; d++) {
-            if (!game.advanceDue() && !game.rngLocked() && _wallDaySealed()) break;
-            _fulfillPending(vrfWord);
-            if (!game.advanceDue() && !game.rngLocked() && _wallDaySealed()) break;
-            game.mineFlip();
-            _fulfillPending(vrfWord);
-        }
-    }
-
-    function _settleClean(uint256 vrfWord) internal {
-        for (uint256 d; d < 240; d++) {
-            if (!game.advanceDue() && !game.rngLocked() && _wallDaySealed()) return;
-            _fulfillPending(vrfWord);
-            if (!game.advanceDue() && !game.rngLocked() && _wallDaySealed()) return;
-            game.mineFlip();
-            _fulfillPending(vrfWord);
-        }
-    }
-
-    // advanceDue can defer a new day while delivered read consumers remain.
-    // Continue through the real advance router until this wall day is sealed.
-    function _wallDaySealed() private view returns (bool) {
-        return uint24(uint256(vm.load(address(game), bytes32(uint256(0)))) >> 24) == game.currentDayView();
     }
 
     function _fulfillPending(uint256 vrfWord) internal {

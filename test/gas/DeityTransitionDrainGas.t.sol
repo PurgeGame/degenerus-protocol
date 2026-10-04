@@ -8,6 +8,7 @@ import {ChunkHarness} from "./RoundDrainChunkGas.t.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
+import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
 
@@ -22,6 +23,15 @@ contract DeityTransitionQueueSeeder is DegenerusGameStorage {
             _tqAppend(key, pos);
             _setEntryOwed(key, pos, packed | (uint80(1_000_000) << 8));
         }
+    }
+
+    /// @dev The seeded close is the daily phase of a delivered, published request: the engine
+    ///      selects DailyPhase only for an active, published, not-yet-complete session.
+    function openDailyPhase() external {
+        rngRequestDay = _simulatedDayIndex();
+        _setRngRequestActive(true);
+        _setRngSessionPublished(true);
+        _setRngComplete(false);
     }
 }
 
@@ -44,6 +54,7 @@ contract DeityTransitionDrainGasTest is BoundaryGasFixture {
         vm.etch(address(game), type(DeityTransitionQueueSeeder).runtimeCode);
         // The nearest unminted level at this close (purchase level LVL + 1 is the mint ceiling).
         DeityTransitionQueueSeeder(address(game)).seedSurvivors(LVL + 2);
+        DeityTransitionQueueSeeder(address(game)).openDailyPhase();
         _restore(original);
     }
 
@@ -51,12 +62,14 @@ contract DeityTransitionDrainGasTest is BoundaryGasFixture {
         uint24 ffKey = (uint24(1) << 22) | (LVL + 2);
         bytes32 ffLenSlot = keccak256(abi.encode(uint256(RingStorage.queueKey(uint24(ffKey))), uint256(12)));
 
+        // A realistic 10M allowance succeeds and closes the transition. The call is reported, not
+        // bounded (the engine admits chunks while the allowance lasts); the close checkpoint itself
+        // (same 32 cold grants) is bounded in isolation by SdgnrsCenturyRecycleGas'
+        // testColdCloseChunk* tests.
         uint256 beforeGas = gasleft();
-        game.mineFlip{gas: 16_777_216 - 21_064}();
+        game.mineFlip{gas: 10_000_000}();
         uint256 used = beforeGas - gasleft() + 21_064;
         emit log_named_uint("cold 32-deity renewal transition close including intrinsic", used);
-        emit log_named_uint("headroom_to_16p7M_gas", 16_777_216 - used);
-        assertLt(used, 16_777_216);
         _checkOwners();
         assertFalse(game.rngLocked(), "transition closes in this advance");
         // Nothing crosses a far-future boundary at the close: the survivors stay unminted.
@@ -64,9 +77,16 @@ contract DeityTransitionDrainGasTest is BoundaryGasFixture {
         for (uint160 i; i < 8; ++i) {
             assertEq(uint32(TQ.owed(address(game), ffKey, address(SURVIVOR_BASE + i)) >> 8), 1_000_000);
         }
-        // The close cannot re-run, so no owner gets a second perpetual ticket.
-        vm.expectRevert(bytes4(keccak256("NotTimeYet()")));
-        game.mineFlip{gas: 16_777_216 - 21_064}();
+        // The close cannot re-run, so no owner gets a second perpetual ticket: the rest of the same
+        // day (the day-400 fixture's Craps maintenance catch-up) ends idle (NoWork; was NotTimeYet).
+        bool idle;
+        for (uint256 i; i < 1000 && !idle; ++i) {
+            try game.mineFlip{gas: 10_000_000}() {} catch (bytes memory err) {
+                assertEq(bytes4(err), bytes4(keccak256("NoWork()")), "same day ends idle");
+                idle = true;
+            }
+        }
+        assertTrue(idle, "the same day runs out of work");
         _checkOwners();
     }
 
@@ -92,6 +112,8 @@ contract DeityFrozenPoolDrainGasTest is Test {
     function setUp() public {
         h = new ChunkHarness();
         vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, address(new DegenerusGameFoilPackModule()).code);
+        // The ticket drain door now delegates to the ticket module at its pinned address.
+        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
         // 1,000,000 entries each = 100,000,000 scaled. Cold start: no marker, cursor 0.
         h.seedFrozenPool(POOL_LVL, 8, 100_000_000, BASE, false);
     }
@@ -104,25 +126,24 @@ contract DeityFrozenPoolDrainGasTest is Test {
         uint256 owed0 = _owedSum();
         assertEq(owed0, 8_000_000, "fixture: eight deep survivors");
 
+        // processTicketBatch is a caller-sized in-order door (it spends the gas it is given), so it
+        // is driven with a realistic bounded allowance and checked for progress, not bounded.
         uint256 g0 = gasleft();
-        (bool finished1, bool worked1) = h.processTicketBatch(POOL_LVL - 1);
+        (bool finished1, bool worked1) = h.processTicketBatch{gas: 10_000_000}(POOL_LVL - 1);
         uint256 cold = g0 - gasleft();
         uint256 owed1 = _owedSum();
-        emit log_named_uint("cold frozen-pool chunk, 8 deep survivors (excl. intrinsic)", cold);
-        emit log_named_uint("headroom_to_16p7M_gas", 16_777_216 - cold);
+        emit log_named_uint("cold frozen-pool call at a 10M allowance (excl. intrinsic)", cold);
         assertTrue(worked1, "cold chunk mints");
         assertFalse(finished1, "a deep pool is not finished in one chunk");
         assertLt(owed1, owed0, "cold chunk consumes owed entries");
-        assertLt(cold + 21_064, 16_777_216);
 
         g0 = gasleft();
-        (bool finished2, bool worked2) = h.processTicketBatch(POOL_LVL - 1);
+        (bool finished2, bool worked2) = h.processTicketBatch{gas: 10_000_000}(POOL_LVL - 1);
         uint256 warm = g0 - gasleft();
         uint256 owed2 = _owedSum();
-        emit log_named_uint("resumed frozen-pool chunk (excl. intrinsic)", warm);
+        emit log_named_uint("resumed frozen-pool call at a 10M allowance (excl. intrinsic)", warm);
         assertTrue(worked2, "resume mints");
         assertFalse(finished2);
         assertLt(owed2, owed1, "resume continues from where the cold chunk stopped");
-        assertLt(warm + 21_064, 16_777_216);
     }
 }

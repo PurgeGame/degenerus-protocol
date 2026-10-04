@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
+import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {DegeneretteQueue as DQ} from "../helpers/DegeneretteQueue.sol";
@@ -74,9 +75,9 @@ contract DegeneretteResolveRepeg is DeployProtocol {
     // =========================================================================
 
     /// @notice The player's total resolution deltas (ETH claimable / claimablePool / FLIP minted)
-    ///         are byte-identical no matter how many `openBoxes` calls it takes to drain the same
-    ///         queued bets: one full-budget sweep that drains all three in a single call, or
-    ///         three minimal-budget sweeps that each drain exactly one. Bets resolve only through
+    ///         are byte-identical no matter how many mineFlip calls it takes to drain the same
+    ///         queued bets: one unbounded call that drains all three, or three minimal-allowance
+    ///         calls that each drain exactly one. Bets resolve only through
     ///         this permissionless FIFO sweep now (the manual per-id door that let a caller
     ///         choose an arbitrary id list, its ordering, or a third-party "automatic sweep vs
     ///         caller-driven call" distinction is gone -- every sweep call is the same entrypoint,
@@ -88,17 +89,19 @@ contract DegeneretteResolveRepeg is DeployProtocol {
     function testResolutionDeltasIndependentOfBatchPartitioning() public {
         _seedFuturePrizePool(1_000_000 ether);
 
-        // Word chosen so the FLIP bet (betId 2) WINS its bet-keyed survival flip
+        // Word chosen so the FLIP bet (betId 1) WINS its bet-keyed survival flip
         // (keccak(word, player, betId, BET_SURVIVAL_TAG) & 1 == 1) -- keeps the FLIP
-        // non-vacuity assert live under every partitioning.
+        // non-vacuity assert live under every partitioning. The FLIP bet queues first: the
+        // queue's declared per-bet admissions are then non-decreasing (FLIP below ETH), so a
+        // minimal-allowance call that admits one bet can never also admit the next.
         uint48 index = 1;
         uint256 word = uint256(keccak256("repeg_partition_independence_v1"));
-        while (uint256(keccak256(abi.encode(word, player, uint256(2), BET_SURVIVAL_TAG))) & 1 == 0) ++word;
+        while (uint256(keccak256(abi.encode(word, player, uint256(1), BET_SURVIVAL_TAG))) & 1 == 0) ++word;
         uint32 ticket = _winningTicketFor(index, word);
 
         _fundFlip(player, 1_000 ether);
-        uint64 b0 = _placeBet(CURRENCY_ETH, 0.01 ether, 2, ticket);
         uint64 b1 = _placeBet(CURRENCY_FLIP, 200 ether, 2, ticket);
+        uint64 b0 = _placeBet(CURRENCY_ETH, 0.01 ether, 2, ticket);
         uint64 b2 = _placeBet(CURRENCY_ETH, 0.01 ether, 2, ticket);
 
         _injectLootboxRngWord(index, word);
@@ -109,9 +112,9 @@ contract DegeneretteResolveRepeg is DeployProtocol {
 
         uint256 snap = vm.snapshotState();
 
-        // --- A: all 3 bets drained by ONE full-budget openBoxes sweep ---
+        // --- A: all 3 bets drained by ONE unbounded mineFlip ---
         _advanceActiveIndexPast(index);
-        game.openBoxes(type(uint256).max);
+        _crank(type(uint256).max);
 
         uint256 claimableDeltaA = game.claimableWinningsOf(player) - preClaimable;
         uint256 claimablePoolDeltaA = _readClaimablePool() - preClaimablePool;
@@ -120,18 +123,14 @@ contract DegeneretteResolveRepeg is DeployProtocol {
         assertEq(game.degeneretteBetInfo(index, b1), 0, "Run A: bet 1 resolved");
         assertEq(game.degeneretteBetInfo(index, b2), 0, "Run A: bet 2 resolved");
 
-        // --- B: revert, resolve the SAME 3 bets in THREE separate minimal-budget sweeps ---
-        // openBoxes(2) always forces the bet at the cursor through regardless of its own cost
-        // (the first bet of a call runs whatever it costs), then the tiny remaining budget
-        // cannot also fit the next one, so each call drains exactly one bet in queue order.
-        // (2, not 1: the fixture's fixed 2-member afking ring -- VAULT + sDGNRS, both
-        // perpetually skip-only here -- always burns exactly 1 unit of maxCount before the
-        // human-box leg sees any.)
+        // --- B: revert, resolve the SAME 3 bets in THREE separate minimal-allowance calls ---
+        // The walk-unit budget is now a gas allowance (60d31f775): each call gets the smallest
+        // allowance that resolves any bet, so each drains exactly one bet in queue order.
         vm.revertToState(snap);
         _advanceActiveIndexPast(index);
-        game.openBoxes(2);
-        game.openBoxes(2);
-        game.openBoxes(2);
+        assertEq(_crankOneBet(), 1, "Run B call 1 resolves exactly one bet");
+        assertEq(_crankOneBet(), 1, "Run B call 2 resolves exactly one bet");
+        assertEq(_crankOneBet(), 1, "Run B call 3 resolves exactly one bet");
 
         uint256 claimableDeltaB = game.claimableWinningsOf(player) - preClaimable;
         uint256 claimablePoolDeltaB = _readClaimablePool() - preClaimablePool;
@@ -187,8 +186,47 @@ contract DegeneretteResolveRepeg is DeployProtocol {
 
     /// @dev Inject a lootbox RNG word for a given index (lootboxRngWordByIndex mapping).
     function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_RNG_WORD_SLOT)));
         RecyclingState.seedWord(address(game), uint48(index), bytes32(rngWord));
+        // The day itself is sealed (dailyIdx = today, tickets drained), as after a mid-day request:
+        // the delivered cohort's read consumers are the engine's only work.
+        uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
+        slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192);
+        vm.store(address(game), bytes32(0), bytes32(slot0));
+    }
+
+    /// @dev Bets resolve only as the engine's Degenerette read consumer (mineFlip); openBoxes
+    ///      drives the AFK and human stages only. Returns the bets this call resolved.
+    function _crank(uint256 allowance) internal returns (uint256 resolved) {
+        vm.recordLogs();
+        vm.prank(makeAddr("degen_resolve_crank"));
+        if (allowance == type(uint256).max) game.mineFlip();
+        else game.mineFlip{gas: allowance}();
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) if (logs[i].topics[0] == DQ.RESOLVED_SIG) ++resolved;
+    }
+
+    /// @dev One mineFlip given the smallest allowance that still resolves a bet (bisection over
+    ///      snapshots): the engine admits a bet only while the remaining allowance covers its
+    ///      declared bound.
+    function _crankOneBet() internal returns (uint256) {
+        uint256 lo = 300_000;
+        uint256 hi = 30_000_000;
+        while (hi - lo > 1_000) {
+            uint256 mid = (lo + hi) / 2;
+            uint256 snap = vm.snapshotState();
+            vm.prank(makeAddr("degen_resolve_crank"));
+            vm.recordLogs();
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip()"));
+            uint256 n;
+            if (ok) {
+                Vm.Log[] memory logs = vm.getRecordedLogs();
+                for (uint256 i; i < logs.length; ++i) if (logs[i].topics[0] == DQ.RESOLVED_SIG) ++n;
+            }
+            vm.revertToStateAndDelete(snap);
+            if (n != 0) hi = mid;
+            else lo = mid;
+        }
+        return _crank(hi);
     }
 
     /// @dev Move the active lootbox RNG index (low 48 bits of lootboxRngPacked) to `idx + 1`, the

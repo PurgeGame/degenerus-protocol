@@ -176,12 +176,65 @@ abstract contract RedemptionEdgeCasesBase is DeployProtocol {
     //                          INTERNAL HELPERS
     // =====================================================================
 
+    /// @dev Session word the fixture pins for each settlement cohort (any word > 1).
+    uint256 internal constant SETTLEMENT_WORD = 0x5E771E;
+
     /// @dev Directly resolve a day's pool by pranking the game contract — bypasses the full
-    ///      advance + VRF cycle for deterministic roll values. Precedent at
-    ///      `test/fuzz/RedemptionGas.t.sol:77-78`.
+    ///      advance + VRF cycle for deterministic roll values. Mirrors the Game's resolve hook
+    ///      (`_resolvePendingRedemption`): the resolve and the settlement-cohort word pin happen
+    ///      together, and the Game is then in that session's published, not-yet-complete read
+    ///      stage with its ticket stage done. Live claims are accepted only in that redemption
+    ///      consumer stage (stage 1), in FIFO order.
     function _resolveDay(uint32 dayToResolve, uint16 roll) internal {
-        vm.prank(address(game));
+        vm.startPrank(address(game));
         sdgnrs.resolveRedemptionPeriod(roll, uint24(dayToResolve));
+        sdgnrs.beginRedemptionSettlement(uint24(dayToResolve), SETTLEMENT_WORD);
+        vm.stopPrank();
+        RecyclingState.seedWord(address(game), RecyclingState.readBuffer(address(game)), bytes32(SETTLEMENT_WORD));
+        uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
+        vm.store(address(game), bytes32(0), bytes32(slot0 | (uint256(1) << 192))); // ticketsFullyProcessed
+        if (sdgnrs.redemptionSettlementPending()) {
+            assertEq(game.rngConsumerStage(), 1, "fixture: redemption consumer stage open");
+        }
+    }
+
+    /// @dev The Game's keeper drain of the live settlement cohort (as `mineFlip` runs it at
+    ///      stage 1). A later day's burn cannot enter while the previous cohort's queue is live
+    ///      (single redemption queue: PriorDayUnresolved).
+    function _settleCohort() internal {
+        vm.prank(address(game));
+        assertTrue(sdgnrs.runRedemptionWork(9_000_000).done, "fixture: keeper drained the cohort");
+        assertFalse(sdgnrs.redemptionSettlementPending(), "fixture: cohort cleared");
+    }
+
+    /// @dev Keeper drain with sDGNRS custody withheld: the live settlement is refused (the Game's
+    ///      stETH pull fails) and the claim parks with its session word (the contained outcome),
+    ///      so the cohort still completes and the claim record survives for `claimParkedRedemption`.
+    ///      Custody is restored afterwards.
+    function _parkCohort(address player, uint24 day) internal {
+        uint256 eth = address(sdgnrs).balance;
+        uint256 st = mockStETH.balanceOf(address(sdgnrs));
+        vm.deal(address(sdgnrs), 0);
+        if (st != 0) {
+            vm.prank(address(sdgnrs));
+            mockStETH.transfer(address(0xDEAD), st);
+        }
+        vm.recordLogs();
+        _settleCohort();
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bool parked;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter == address(sdgnrs)
+                && logs[i].topics[0] == keccak256("RedemptionParked(address,uint24,bytes)")
+                && logs[i].topics[1] == bytes32(uint256(uint160(player)))
+                && logs[i].topics[2] == bytes32(uint256(day))) parked = true;
+        }
+        assertTrue(parked, "fixture: refused settlement parked the claim");
+        vm.deal(address(sdgnrs), eth);
+        if (st != 0) {
+            vm.prank(address(0xDEAD));
+            mockStETH.transfer(address(sdgnrs), st);
+        }
     }
 
     /// @dev Set `_pendingResolveDay` (slot 0, lane [224:247]) via a masked store so the packed
@@ -298,6 +351,9 @@ contract RedemptionEdgeCasesA is RedemptionEdgeCasesBase {
         // v47: per-day flipBase removed (FLIP settled at submit) — no field to assert.
         assertEq(uint256(sPostResolve), 0, "EDGE-01: post-resolve supplySnapshot should be zero");
         assertEq(uint256(bnPostResolve), 0, "EDGE-01: post-resolve burned should be zero");
+        // The resolving session's mandatory keeper settlement clears the prior cohort before any
+        // later day's burn can enter (single redemption queue).
+        _settleCohort();
 
         // Warp to wall day D. No advance for day D has fired yet — this is the "pre-advance gap".
         _advanceWallDay();
@@ -410,15 +466,19 @@ contract RedemptionEdgeCasesA is RedemptionEdgeCasesBase {
     function testFuzz_EDGE_03_SinglePlayerMultiDayClaimsIndependent(uint256 amountSeed) public {
         uint256 amount = bound(amountSeed, FUZZ_MIN_AMOUNT, ACTOR_FUNDING / 100);
 
+        // A live cohort settles before the next day's burn can enter (single redemption queue), so
+        // a player's claims coexist across days only once a refused settlement parks them with
+        // their session word. Days D and D+1 are parked; day D+2 is the live head.
         // Day D burn
         uint32 dayD = game.currentDayView();
         _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(amount);
 
-        // Advance and resolve day D
+        // Advance and resolve day D; its settlement is refused and parks
         _advanceWallDay();
         _resolveDay(dayD, 100);
+        _parkCohort(playerA, uint24(dayD));
 
         // Day D+1 burn
         uint32 dayD1 = game.currentDayView();
@@ -426,9 +486,10 @@ contract RedemptionEdgeCasesA is RedemptionEdgeCasesBase {
         vm.prank(playerA);
         sdgnrs.burn(amount);
 
-        // Advance and resolve day D+1
+        // Advance and resolve day D+1; its settlement is refused and parks
         _advanceWallDay();
         _resolveDay(dayD1, 100);
+        _parkCohort(playerA, uint24(dayD1));
 
         // Day D+2 burn
         uint32 dayD2 = game.currentDayView();
@@ -468,11 +529,11 @@ contract RedemptionEdgeCasesA is RedemptionEdgeCasesBase {
         assertEq(uint256(evD1_Post), uint256(evD1_Pre), "EDGE-03: day-D+1 ethValueOwed mutated by day-D+2 claim");
         assertEq(uint256(asD1_Post), uint256(asD1_Pre), "EDGE-03: day-D+1 activityScore mutated by day-D+2 claim");
 
-        // Subsequent in-order D and D+1 claims succeed (no revert)
+        // Subsequent D and D+1 claims succeed (no revert), each on its own parked session word
         vm.prank(playerA);
-        sdgnrs.claimRedemption(playerA, uint24(dayD));
+        sdgnrs.claimParkedRedemption(playerA, uint24(dayD));
         vm.prank(playerA);
-        sdgnrs.claimRedemption(playerA, uint24(dayD1));
+        sdgnrs.claimParkedRedemption(playerA, uint24(dayD1));
 
         // After all claims, all three slots are cleared
         (uint96 evDFinal, , ) = sdgnrs.pendingRedemptions(playerA, uint24(dayD));
@@ -608,9 +669,12 @@ contract RedemptionEdgeCasesA is RedemptionEdgeCasesBase {
         (uint96 evAtBurn, uint16 asAtBurn, ) = sdgnrs.pendingRedemptions(playerA, uint24(dayD));
 
         // Stall: warp k days forward without firing any advance
+        // vm.getBlockTimestamp(): via-IR reuses one block.timestamp read across the loop's warps.
+        uint256 stallStart = vm.getBlockTimestamp();
         for (uint256 i = 0; i < stallDays; i++) {
-            vm.warp(block.timestamp + 1 days);
+            vm.warp(vm.getBlockTimestamp() + 1 days);
         }
+        assertEq(vm.getBlockTimestamp(), stallStart + stallDays * 1 days, "nonvacuity: the stall spans stallDays");
 
         // Mid-stall: claim slot still byte-identical (no time-degradation).
         // v47: flipOwed field removed — only ethValueOwed + activityScore remain.
@@ -699,10 +763,27 @@ contract RedemptionEdgeCasesA is RedemptionEdgeCasesBase {
         assertEq(uint256(eDPostResolve), 0, "EDGE-07: pendingByDay[D] deleted post-resolve");
 
         // Step 3: V-184 attack — Attacker B re-burns. Wall day is now D+1; sentinel was just
-        // cleared at step 2. The burn lands in pendingByDay[D+1] (fresh slot) and re-stamps
-        // sentinel = D+1. Note: redemptionPeriods[D+1] is a DIFFERENT mapping key than
-        // redemptionPeriods[D], so any subsequent resolve of D+1 writes that distinct slot.
+        // cleared at step 2. While D's settlement cohort is still live the re-burn cannot enter
+        // at all (single redemption queue).
         _primeCurrentDayRng();
+        vm.prank(playerB);
+        vm.expectRevert(sDGNRS.PriorDayUnresolved.selector);
+        sdgnrs.burn(amountB);
+
+        // The mandatory settlement pays A's day-D claim exactly at the first-written roll R_1.
+        (uint96 evA_Pre, , ) = sdgnrs.pendingRedemptions(playerA, uint24(dayD));
+        assertGt(uint256(evA_Pre), 0, "EDGE-07: A's day-D claim slot populated before settlement");
+        uint256 claimableABefore = game.claimableWinningsOf(playerA);
+        _settleCohort();
+        assertEq(
+            game.claimableWinningsOf(playerA) - claimableABefore,
+            (uint256(evA_Pre) * uint256(roll1)) / 100 / 2,
+            "EDGE-07: A's day-D claim settled at the first-written roll"
+        );
+
+        // The re-burn now lands in pendingByDay[D+1] (fresh slot) and re-stamps sentinel = D+1.
+        // Note: redemptionPeriods[D+1] is a DIFFERENT mapping key than redemptionPeriods[D], so
+        // any subsequent resolve of D+1 writes that distinct slot.
         vm.prank(playerB);
         sdgnrs.burn(amountB);
 
@@ -730,12 +811,10 @@ contract RedemptionEdgeCasesA is RedemptionEdgeCasesBase {
             "EDGE-07: V-184 CLOSURE FAILED - redemptionPeriods[D].roll diverged across attack sequence"
         );
 
-        // Player A's claim slot for day D byte-identical across the attack (no cross-day mutation)
+        // Player A's day-D claim was consumed once, by the mandatory settlement at R_1 (asserted
+        // above); the attack sequence cannot resurrect or re-price it (no cross-day mutation).
         (uint96 evA_Post, , ) = sdgnrs.pendingRedemptions(playerA, uint24(dayD));
-        // We didn't snapshot evA_Pre here — but the burn amounts are deterministic for the
-        // first burn of dayD, and the claim slot is preserved across the V-184 vector. The
-        // load-bearing assertion above on redemptionPeriods[dayD] is what matters for V-184.
-        assertGt(uint256(evA_Post), 0, "EDGE-07: A's day-D claim slot must remain populated through attack");
+        assertEq(uint256(evA_Post), 0, "EDGE-07: A's day-D claim consumed once at R_1, never resurrected");
         // No mutation of B's day-D slot (B never burned on day D, only day D+1)
         (uint96 evB_dayD, , ) = sdgnrs.pendingRedemptions(playerB, uint24(dayD));
         assertEq(uint256(evB_dayD), 0, "EDGE-07: B's day-D slot must remain zero (B never burned on day D)");
@@ -803,6 +882,10 @@ contract RedemptionEdgeCasesA is RedemptionEdgeCasesBase {
             abi.encodeWithSelector(game.resolveRedemptionLootbox.selector),
             abi.encode()
         );
+
+        // Back in a live game, the keeper clears the consumed variant-1 cohort before a later
+        // day's burn can enter (single redemption queue).
+        _settleCohort();
 
         // Variant 2: gameOver fires AFTER resolve, BEFORE claim
         uint32 dayD2 = game.currentDayView();
@@ -938,10 +1021,12 @@ contract RedemptionEdgeCasesA is RedemptionEdgeCasesBase {
             "EDGE-10: direct credit != the single expected payout"
         );
 
-        // Storage slot fully cleared; a repeat claim reverts NoClaim (no double-credit).
+        // Storage slot fully cleared; a repeat claim reverts (no double-credit). Live claims take the
+        // exact FIFO head, so the consumed head is RedemptionOutOfOrder (was NoClaim before the
+        // ordered settlement queue).
         (uint96 evPost, , ) = sdgnrs.pendingRedemptions(address(malicious), uint24(dayD));
         assertEq(uint256(evPost), 0, "EDGE-10: claim slot not cleared post-claim");
-        vm.expectRevert(sDGNRS.NoClaim.selector);
+        vm.expectRevert(sDGNRS.RedemptionOutOfOrder.selector);
         malicious.claim(dayD);
     }
 
@@ -1195,8 +1280,8 @@ contract RedemptionEdgeCasesB is RedemptionEdgeCasesBase {
         assertEq(uint256(evSeeded), MAX_DAILY_REDEMPTION_EV, "EDGE-15: seed ethValueOwed mismatch");
         assertEq(uint256(asSeeded), 1, "EDGE-15: seed activityScore mismatch");
 
-        // Pre-set sentinel so burn passes INV-13 guard (pendingResolveDay packed in slot 0, POST RT-PACKING-12).
-        _storePendingResolveDay(uint24(dayD));
+        // No sentinel pre-set: the first burn of the day stamps the single pending aggregate itself
+        // (a pre-set stamp would skip its lazy init and trip the 50% supply cap first).
 
         // Any burn that adds > 0 ethValueOwed must revert ExceedsDailyRedemptionCap.
         // FUZZ_MIN_AMOUNT (100 ether) yields ethValueOwed ~12 gwei > 0 post snap.
@@ -1254,6 +1339,9 @@ contract RedemptionEdgeCasesB is RedemptionEdgeCasesBase {
         _advanceWallDay();
         _resolveDay(dayD, 100);
         assertEq(uint256(sdgnrs.pendingResolveDay()), 0, "EDGE-16: sentinel must clear post day-D resolve");
+        // The live day-D cohort must clear before a day-(D+1) burn can enter; its refused
+        // settlement parks, so the capped day-D claim record stays outstanding.
+        _parkCohort(actor, uint24(dayD));
 
         // Day-(D+1) burn from same actor — must succeed; the day-D claim slot remains
         // byte-identical (composite-key independence).
@@ -1308,6 +1396,8 @@ contract RedemptionEdgeCasesB is RedemptionEdgeCasesBase {
         // Snapshot redemptionPeriods[dayPrior].roll = roll1
         (uint16 rollPriorPostResolve) = sdgnrs.redemptionPeriods(uint24(dayPrior));
         assertEq(uint256(rollPriorPostResolve), uint256(roll1), "EDGE-17: precondition - dayPrior.roll first-write");
+        // The resolving session's mandatory settlement clears the D-1 cohort first.
+        _settleCohort();
 
         // Late-day burn on day D from B (after D-1 was resolved + deleted)
         _primeCurrentDayRng();
@@ -1411,9 +1501,12 @@ contract RedemptionEdgeCasesB is RedemptionEdgeCasesBase {
 
         // Stall: warp k days forward WITHOUT firing any advance. Sentinel must remain D
         // (no contract calls have touched pendingResolveDay).
+        // vm.getBlockTimestamp(): via-IR reuses one block.timestamp read across the loop's warps.
+        uint256 stallStart = vm.getBlockTimestamp();
         for (uint256 i = 0; i < stallDays; i++) {
-            vm.warp(block.timestamp + 1 days);
+            vm.warp(vm.getBlockTimestamp() + 1 days);
         }
+        assertEq(vm.getBlockTimestamp(), stallStart + stallDays * 1 days, "nonvacuity: the stall spans stallDays");
 
         // MID-STALL ASSERTION: sentinel still names dayD (NOT dayD + stallDays)
         assertEq(
@@ -1526,11 +1619,12 @@ contract RedemptionEdgeCasesB is RedemptionEdgeCasesBase {
             "PERM-01: the trigger caller must not be credited"
         );
 
-        // Slot cleared — a repeat trigger reverts NoClaim (no double-credit).
+        // Slot cleared — a repeat trigger reverts (no double-credit): the consumed FIFO head is
+        // RedemptionOutOfOrder under the ordered settlement queue (was NoClaim).
         (uint96 evPost, , ) = sdgnrs.pendingRedemptions(playerA, uint24(dayD));
         assertEq(uint256(evPost), 0, "PERM-01: winner's claim slot must clear");
         vm.prank(playerC);
-        vm.expectRevert(sDGNRS.NoClaim.selector);
+        vm.expectRevert(sDGNRS.RedemptionOutOfOrder.selector);
         sdgnrs.claimRedemption(playerA, uint24(dayD));
     }
 
@@ -1542,6 +1636,9 @@ contract RedemptionEdgeCasesB is RedemptionEdgeCasesBase {
     ///         pending entry for the day and silently skips addresses with nothing pending — one
     ///         stale address cannot poison the sweep. Each settled winner is credited the direct
     ///         half into their game claimable; the no-claim address is untouched.
+    ///         Ordered settlement queue: the batch must be the next exact FIFO prefix, so the
+    ///         empty entry is a queue member whose dust burn rounded to nothing, and a
+    ///         non-member in the prefix reverts the whole batch atomically.
     /// forge-config: default.fuzz.runs = 10000
     function testFuzz_PERM_02_ClaimRedemptionManyBatchSkipsEmpty(
         uint256 amountSeedA,
@@ -1556,12 +1653,24 @@ contract RedemptionEdgeCasesB is RedemptionEdgeCasesBase {
         _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(amountA);
+        // playerC's dust burn rounds to nothing — it is the empty entry in the batch.
+        vm.prank(playerC);
+        sdgnrs.burn(MIN_BURN_AMOUNT);
         vm.prank(playerB);
         sdgnrs.burn(amountB);
-        // playerC deliberately does NOT burn — it is the empty entry in the batch.
+        (uint96 evC, , uint96 escrowC) = sdgnrs.pendingRedemptions(playerC, uint24(dayD));
+        assertEq(uint256(evC) + uint256(escrowC), 0, "PERM-02: fixture - playerC's entry is empty");
 
         _advanceWallDay();
         _resolveDay(dayD, roll);
+
+        // A prefix naming a non-member reverts atomically (nothing settles).
+        address[] memory stale = new address[](2);
+        stale[0] = playerA;
+        stale[1] = playerD;
+        vm.prank(playerD);
+        vm.expectRevert(sDGNRS.RedemptionOutOfOrder.selector);
+        sdgnrs.claimRedemptionMany(stale, uint24(dayD));
 
         (uint96 evA, , ) = sdgnrs.pendingRedemptions(playerA, uint24(dayD));
         (uint96 evB, , ) = sdgnrs.pendingRedemptions(playerB, uint24(dayD));
@@ -1590,9 +1699,11 @@ contract RedemptionEdgeCasesB is RedemptionEdgeCasesBase {
         assertEq(uint256(evAPost), 0, "PERM-02: A slot must clear");
         assertEq(uint256(evBPost), 0, "PERM-02: B slot must clear");
 
-        // Re-sweeping is a no-op (all entries now empty) — no revert, no further credit.
+        // Re-sweeping the consumed prefix reverts RedemptionOutOfOrder (was a no-op before the
+        // ordered settlement queue) — no further credit either way.
         uint256 aAfter = game.claimableWinningsOf(playerA);
         vm.prank(playerD);
+        vm.expectRevert(sDGNRS.RedemptionOutOfOrder.selector);
         sdgnrs.claimRedemptionMany(players, uint24(dayD));
         assertEq(game.claimableWinningsOf(playerA), aAfter, "PERM-02: re-sweep must not double-credit");
     }
@@ -1605,9 +1716,13 @@ contract RedemptionEdgeCasesB is RedemptionEdgeCasesBase {
         _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(ACTOR_FUNDING / 100);
+        // playerC's dust burn rounds to nothing — the empty FIFO entry that must earn no bounty.
+        vm.prank(playerC);
+        sdgnrs.burn(MIN_BURN_AMOUNT);
         vm.prank(playerB);
         sdgnrs.burn(ACTOR_FUNDING / 100);
-        // playerC never burns — the empty entry that must earn no bounty.
+        (uint96 evC, , uint96 escrowC) = sdgnrs.pendingRedemptions(playerC, uint24(dayD));
+        assertEq(uint256(evC) + uint256(escrowC), 0, "BOUNTY-01: fixture - playerC's entry is empty");
 
         _advanceWallDay();
         _resolveDay(dayD, 100);
@@ -1627,9 +1742,11 @@ contract RedemptionEdgeCasesB is RedemptionEdgeCasesBase {
         assertGt(unit, 0, "BOUNTY-01: per-box unit must be non-zero");
         assertEq(bounty, 2 * unit, "BOUNTY-01: keeper paid exactly 2 settled-box units");
 
-        // No-work re-sweep: every slot now empty → zero settled → zero bounty.
+        // No-work re-sweep: the consumed prefix reverts RedemptionOutOfOrder (ordered settlement
+        // queue; was a successful no-op) → zero settled → zero bounty.
         vm.recordLogs();
         vm.prank(playerD);
+        vm.expectRevert(sDGNRS.RedemptionOutOfOrder.selector);
         sdgnrs.claimRedemptionMany(players, uint24(dayD));
         assertEq(
             _sumKeeperBounty(vm.getRecordedLogs(), playerD),

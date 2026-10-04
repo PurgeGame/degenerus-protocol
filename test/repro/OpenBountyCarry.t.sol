@@ -3,29 +3,30 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {VmSafe} from "forge-std/Vm.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
-/// @title OpenBountyCarry — forced-split chunks pay ONE aggregate bounty; real batches pay each
-/// @notice The weighted open walk can split what a single unweighted call used to drain (a skip
-///         run eats budget). The `_openBountyCarry` netting must make the split chunks'
-///         aggregate bounty equal the unsplit call's — WITHOUT under-paying genuinely separate
-///         batches. Two discriminating cases:
-///         (1) 80 pending boxes behind a 22-skip prefix (one old-call batch, forced to split):
-///             chunk 1 pays the full knee bounty, chunk 2 (the spill-over open) pays ZERO.
-///         (2) ~100 organically-stamped boxes (two old-call batches): chunk 2 crosses the
-///             OPEN_BATCH boundary, so its beyond-boundary opens open a FRESH knee — both
-///             chunks pay a full bounty, matching the two old calls.
+/// @title OpenBountyCarry — splitting an AFKing backlog across calls never out-earns one call
+/// @notice The knee bounty and its `_openBountyCarry` netting are gone (60d31f775 / 72fc06f6c):
+///         mineFlip now pays FLIP on the gas each call measured above its unpaid first
+///         MIN_REWARDED_GAS, priced on one clock. The two properties the carry existed for map
+///         onto that rule:
+///         (1) a backlog drained in several calls pays no more in aggregate than one call
+///             draining it (each extra call forfeits another unpaid first million), and
+///         (2) a genuinely separate chunk is still paid: every call measuring past the unpaid
+///             first million earns a bounty — nothing nets a real chunk down to zero.
+///         Organically stamped AFKing boxes from one daily cohort are the backlog.
 contract OpenBountyCarry is DeployProtocol {
     uint256 private constant SUBOF_SLOT = 52;
     uint256 private constant SUBSCRIBERS_SLOT = 54;
     uint256 private constant CURSOR_SLOT = 56;
     uint256 private constant PENDING_SHIFT = 224;
-    uint256 private constant CARRY_SHIFT = 240;
-    uint256 private constant OFF_LASTBOUGHT = 7;  // uint24 lastAutoBoughtDay (bytes 7..9)
-    uint256 private constant OFF_LASTOPENED = 10; // uint24 lastOpenedDay     (bytes 10..12)
     uint256 private _lastFulfilledReqId;
 
     bytes32 private constant STAKE_UPDATED_SIG =
         keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
+    bytes32 private constant MINER_WORK_SIG = keccak256("MinerWork(address,uint8,uint256,uint256)");
+    /// @dev A realistic per-call allowance for the split leg.
+    uint256 private constant SPLIT_ALLOWANCE = 3_000_000;
 
     function setUp() public {
         _deployProtocol();
@@ -33,64 +34,76 @@ contract OpenBountyCarry is DeployProtocol {
         vm.deal(address(game), 10_000_000 ether);
     }
 
-    /// @notice Case 1: one logical batch (80 boxes) forced to split by a skip prefix —
-    ///         aggregate bounty == one full unit (chunk 2 pays zero).
+    /// @notice Case 1: one AFKing backlog, drained by one call or split across realistic-allowance
+    ///         calls: the split's aggregate bounty never exceeds the single call's.
     function testForcedSplitPaysSingleAggregateBounty() public {
-        address[] memory subs = _setupFundedSubs(100, "bc1_", 20 ether);
-        _runStageNewDay(uint256(keccak256("bc1_w")) | 1);
-        _settleClean(uint256(keccak256("bc1_c")) | 1);
-        vm.prank(makeAddr("bc1_drain"));
-        game.openBoxes(2000);
-        require(_pendingCount() == 0, "fixture: drained");
+        _setupFundedSubs(100, "bc1_", 20 ether);
+        _backlogAtAfking(uint256(keccak256("bc1_w")) | 1);
+        uint256 backlog = _pendingCount();
+        require(backlog > 40, "fixture: a real AFKing backlog is the next work");
+        emit log_named_uint("afking_backlog", backlog);
 
-        // Re-arm EXACTLY 80 pending boxes on ring indices [22..101] (0/1 are deploy subs,
-        // 2..21 stay clean = the skip prefix), counter = 80, cursor = 0. One old-style call
-        // (skips free) would open all 80 → ONE bounty.
-        for (uint256 i = 20; i < 100; ++i) {
-            _rearmPending(subs[i]);
+        uint256 snap = vm.snapshotState();
+        (uint256 onePay,) = _mintFlipKeeperCredit(makeAddr("bc1_k1"), 0);
+        _drainRest(makeAddr("bc1_k1"));
+        uint256 oneCallTotal = onePay + _restPay;
+        assertEq(_pendingCount(), 0, "one call drained the backlog");
+        vm.revertToState(snap);
+
+        uint256 splitTotal;
+        uint256 calls;
+        while (_pendingCount() != 0 && calls < 60) {
+            (uint256 paid,) = _mintFlipKeeperCredit(makeAddr("bc1_k2"), SPLIT_ALLOWANCE);
+            splitTotal += paid;
+            ++calls;
         }
-        _pokeCursorPendingCarry(0, 80, 0);
-        require(!game.advanceDue() && !game.rngLocked(), "fixture: open leg live");
+        _drainRest(makeAddr("bc1_k2"));
+        splitTotal += _restPay;
+        emit log_named_uint("one_call_bounty", oneCallTotal);
+        emit log_named_uint("split_calls", calls);
+        emit log_named_uint("split_aggregate_bounty", splitTotal);
 
-        uint256 credit1 = _mintFlipKeeperCredit(makeAddr("bc1_k1"));
-        emit log_named_uint("after_chunk1_pending", _pendingCount());
-        emit log_named_uint("after_chunk1_carry", _carry());
-        emit log_named_uint("chunk1_credit", credit1);
-        uint256 credit2 = _mintFlipKeeperCredit(makeAddr("bc1_k2"));
-        emit log_named_uint("after_chunk2_pending", _pendingCount());
-        emit log_named_uint("chunk2_credit", credit2);
-
-        assertGt(credit1, 0, "chunk 1 pays the full batch bounty");
-        assertEq(credit2, 0, "chunk 2 (forced-split spill-over) pays ZERO - the batch was already paid");
-        assertEq(_pendingCount(), 0, "both chunks together drained the batch");
-        assertEq(_carry(), 0, "carry cleared once the batch drained");
+        assertEq(_pendingCount(), 0, "the split calls drained the backlog");
+        assertGt(calls, 1, "the realistic allowance really split the backlog");
+        assertGt(oneCallTotal, 0, "the single call pays a bounty");
+        assertLe(splitTotal, oneCallTotal, "splitting the backlog never out-earns draining it in one call");
     }
 
-    /// @notice Case 2: two logical batches (~100 organically stamped boxes) — chunk 2's
-    ///         beyond-boundary opens start a fresh knee, so BOTH chunks pay a full unit,
-    ///         matching the two old-style calls.
+    /// @notice Case 2: genuinely separate chunks each pay — every split call that measured past
+    ///         the unpaid first million earned a bounty.
     function testTwoRealBatchesEachPayFullBounty() public {
-        _setupFundedSubs(100, "bc2_", 20 ether);
-        _runStageNewDay(uint256(keccak256("bc2_w")) | 1);
-        _settleClean(uint256(keccak256("bc2_c")) | 1);
+        // 200 subscribers: the backlog left after the lock-releasing call spans several
+        // realistic-allowance chunks, more than one of them past the unpaid first million.
+        _setupFundedSubs(200, "bc2_", 20 ether);
+        _backlogAtAfking(uint256(keccak256("bc2_w")) | 1);
         uint256 pending = _pendingCount();
-        require(pending > 80, "fixture: more than one OPEN_BATCH of organic pending boxes");
-        require(!game.advanceDue() && !game.rngLocked(), "fixture: open leg live");
+        require(pending > 40, "fixture: a real AFKing backlog is the next work");
 
-        uint256 credit1 = _mintFlipKeeperCredit(makeAddr("bc2_k1"));
-        uint256 credit2 = _mintFlipKeeperCredit(makeAddr("bc2_k2"));
-
-        assertGt(credit1, 0, "chunk 1 pays a full unit (first OPEN_BATCH-worth of opens)");
-        assertEq(credit2, credit1, "chunk 2 crosses the batch boundary - its fresh-batch opens pay a full unit too");
-        assertEq(_pendingCount(), 0, "two chunks drained the ~100-box backlog");
+        uint256 paidChunks;
+        uint256 calls;
+        while (_pendingCount() != 0 && calls < 60) {
+            (uint256 paid, uint256 used) = _mintFlipKeeperCredit(makeAddr("bc2_k"), SPLIT_ALLOWANCE);
+            if (used > MineFlipGas.MIN_REWARDED_GAS) {
+                assertGt(paid, 0, "a chunk past the unpaid first million is paid");
+                ++paidChunks;
+            } else {
+                assertEq(paid, 0, "a chunk inside the unpaid first million is not paid");
+            }
+            ++calls;
+        }
+        assertEq(_pendingCount(), 0, "the chunks drained the backlog");
+        assertGe(paidChunks, 2, "at least two separate chunks were each paid");
     }
 
     // ---- helpers ----
 
-    function _mintFlipKeeperCredit(address keeper) internal returns (uint256 total) {
+    /// @dev One keeper mineFlip (`allowance` 0 = unbounded); returns the FLIP credited to the
+    ///      keeper and the execution gas the engine measured.
+    function _mintFlipKeeperCredit(address keeper, uint256 allowance) internal returns (uint256 total, uint256 used) {
         vm.recordLogs();
         vm.prank(keeper);
-        game.mineFlip();
+        if (allowance == 0) game.mineFlip();
+        else game.mineFlip{gas: allowance}();
         VmSafe.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (
@@ -101,34 +114,73 @@ contract OpenBountyCarry is DeployProtocol {
                 (uint256 amount, ) = abi.decode(logs[i].data, (uint256, uint256));
                 total += amount;
             }
+            if (logs[i].topics.length > 0 && logs[i].topics[0] == MINER_WORK_SIG) {
+                (, used,) = abi.decode(logs[i].data, (uint8, uint256, uint256));
+            }
         }
     }
 
-    /// @dev Re-arm a drained sub as pending on its already-worded stamp day.
-    function _rearmPending(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
-        uint256 w = uint256(vm.load(address(game), slot));
-        uint256 bought = (w >> (OFF_LASTBOUGHT * 8)) & 0xFFFFFF;
-        require(bought > 0, "rearm: sub was stamped");
-        uint256 shift = OFF_LASTOPENED * 8;
-        w = (w & ~(uint256(0xFFFFFF) << shift)) | ((bought - 1) << shift);
-        vm.store(address(game), slot, bytes32(w));
+    uint256 private _restPay;
+
+    /// @dev Finish the cohort's remaining read consumers with unbounded keeper calls, so both legs
+    ///      end in the same engine state; the bounty they earn is accumulated in `_restPay`.
+    function _drainRest(address keeper) internal {
+        _restPay = 0;
+        for (uint256 i; i < 20 && game.advanceDue() && !game.rngComplete(); ++i) {
+            (uint256 paid,) = _mintFlipKeeperCredit(keeper, 0);
+            _restPay += paid;
+        }
     }
 
-    function _pokeCursorPendingCarry(uint16 cursor, uint16 pendingCount, uint16 carry) internal {
-        uint256 w = uint256(vm.load(address(game), bytes32(CURSOR_SLOT)));
-        w = (w & ~(uint256(0xFFFF) << 16)) | (uint256(cursor) << 16);
-        w = (w & ~(uint256(0xFFFF) << PENDING_SHIFT)) | (uint256(pendingCount) << PENDING_SHIFT);
-        w = (w & ~(uint256(0xFFFF) << CARRY_SHIFT)) | (uint256(carry) << CARRY_SHIFT);
-        vm.store(address(game), bytes32(CURSOR_SLOT), bytes32(w));
+    /// @dev Stamp every subscriber for a new day and drive that day's cohort, in minimal
+    ///      checkpoints, until its AFKing backlog is the next work. The call that releases the
+    ///      day's lock opens what its leftover admits; the rest is the backlog under test. A
+    ///      nonzero base fee prices the bounty.
+    function _backlogAtAfking(uint256 vrfWord) internal {
+        _settleGame(vrfWord ^ 0xF00D);
+        _settleIdle(vrfWord ^ 0xF00D);
+        vm.warp(block.timestamp + 1 days);
+        for (uint256 i; i < 400; ++i) {
+            if (game.nextMinerAction() == 9) break; // MinerAction.Afking
+            _fulfillPending(vrfWord);
+            _stepMinimal();
+        }
+        assertEq(game.nextMinerAction(), 9, "harness: the AFKing backlog is the next work");
+        vm.fee(1 gwei);
+    }
+
+    /// @dev Answer outstanding requests and finish delivered cohorts until the engine is idle.
+    function _settleIdle(uint256 vrfWord) internal {
+        for (uint256 i; i < 20; ++i) {
+            uint256 reqId = mockVRF.lastRequestId();
+            if (reqId != 0) {
+                (,, bool done) = mockVRF.pendingRequests(reqId);
+                if (!done) mockVRF.fulfillRandomWords(reqId, vrfWord + i);
+            }
+            _finishReadConsumers();
+            if (!game.advanceDue() && game.rngComplete()) return;
+            if (game.advanceDue()) game.mineFlip();
+        }
+        revert("harness: cohorts never settled");
+    }
+
+    /// @dev One mineFlip given the smallest allowance that succeeds (bisection over snapshots).
+    function _stepMinimal() internal {
+        uint256 lo = 200_000;
+        uint256 hi = 30_000_000;
+        while (hi - lo > 1_000) {
+            uint256 mid = (lo + hi) / 2;
+            uint256 snap = vm.snapshotState();
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip()"));
+            vm.revertToStateAndDelete(snap);
+            if (ok) hi = mid;
+            else lo = mid;
+        }
+        game.mineFlip{gas: hi}();
     }
 
     function _pendingCount() internal view returns (uint256) {
         return (uint256(vm.load(address(game), bytes32(CURSOR_SLOT))) >> PENDING_SHIFT) & 0xFFFF;
-    }
-
-    function _carry() internal view returns (uint256) {
-        return (uint256(vm.load(address(game), bytes32(CURSOR_SLOT))) >> CARRY_SHIFT) & 0xFFFF;
     }
 
     function _setupFundedSubs(uint256 n, string memory prefix, uint256 poolEach)

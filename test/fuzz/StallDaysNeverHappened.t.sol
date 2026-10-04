@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 
 /// @notice A multi-day VRF stall resolves the day that requested the word with that word,
 ///         settles the skipped days' coinflips from derived words, and then resumes at the
@@ -42,24 +43,37 @@ contract StallDaysNeverHappened is DeployProtocol {
         assertEq(W, R + 3, "wall day is R+3");
         mockVRF.fulfillRandomWords(reqR, WORD_LATE);
 
-        // R resolves with its own word (buffered clamp), seals, unlocks.
-        _advanceUntilUnlocked();
+        // R resolves with its own word (buffered clamp) and seals. The composed call that
+        // seals it goes straight on to W's fresh request (the engine selects the next action in
+        // the same flow, 60d31f775), so the drive stops on R's seal rather than on the lock.
+        _advanceUntilSealed(R);
         _assertNoWordAheadWhenUnlocked();
         assertEq(_dailyIdx(), R, "sealed R with the word it requested");
         assertEq(game.rngWordForDay(R + 1), 0, "R+1 untouched by R's word");
 
         // W requests fresh; on delivery the gap R+1..W-1 is backfilled and skipped.
-        game.mineFlip();
+        if (!game.rngLocked()) game.mineFlip();
         assertTrue(game.rngLocked(), "W requested fresh");
+        assertTrue(mockVRF.lastRequestId() != reqR, "W's request is a new one");
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), WORD_FRESH);
-        game.mineFlip(); // backfill tx
+        // The gap is its own checkpoint now (DailyGap, then DailyApply): run exactly the gap
+        // chunk (a 1.5M allowance never admits DAILY_GAP, so the lead-in calls stop before it).
+        for (uint256 i; i < 8 && game.nextMinerAction() != 5; ++i) game.mineFlip{gas: 1_500_000}();
+        assertEq(game.nextMinerAction(), 5, "next chunk is the gap backfill");
+        game.mineFlip{gas: GasBounds.DAILY_GAP + GasBounds.ENGINE_BOUNDARY + GasBounds.ENGINE_RETURN + 200_000}(); // backfill tx
         assertTrue(game.rngLocked(), "lock still held after the backfill");
         assertEq(game.rngWordForDay(R + 1), 0, "older gap word is not retained in the two-day ring");
         assertTrue(game.rngWordForDay(R + 2) != 0, "R+2 has a derived word");
-        assertTrue(game.rngWordForDay(W) != 0, "W recorded");
+        assertEq(game.rngWordForDay(W), 0, "W is applied by the next checkpoint, not the gap chunk");
         assertEq(_dailyIdx(), W - 1, "gap days skipped: index parked at W-1");
         assertEq(_foilDraw(R + 1), 0, "no daily draw for R+1");
         assertEq(_foilDraw(R + 2), 0, "no daily draw for R+2");
+        // The word-application checkpoint records W while the lock is still held.
+        assertEq(game.nextMinerAction(), 6, "next chunk applies W's word");
+        game.mineFlip{gas: GasBounds.DAILY_APPLY + GasBounds.ENGINE_BOUNDARY + GasBounds.ENGINE_RETURN + 200_000}();
+        assertTrue(game.rngWordForDay(W) != 0, "W recorded");
+        assertTrue(game.rngLocked(), "W's word is recorded under the lock");
+        assertEq(_dailyIdx(), W - 1, "W not sealed when its word is recorded");
 
         // The next advances pay W's jackpot under the lock and seal W.
         _advanceUntilUnlocked();
@@ -68,6 +82,8 @@ contract StallDaysNeverHappened is DeployProtocol {
         assertEq(_foilDraw(R + 2), 0, "still no draw for R+2");
         assertTrue(_foilDraw(W) != 0, "W got its draw");
         _assertNoWordAheadWhenUnlocked();
+        // Settle any mid-day work the engine requests on W (e.g. a closed Craps window).
+        _settleClean(WORD_FRESH);
 
         // The following day is an ordinary fresh-request day.
         _t += 1 days;
@@ -121,14 +137,17 @@ contract StallDaysNeverHappened is DeployProtocol {
         _settleClean(vrfWord);
     }
 
+    /// @dev Settle until the engine is idle with nothing in flight. A request the engine made
+    ///      (the daily one, or a mid-day request for a closed Craps window) reads as
+    ///      !advanceDue() while it waits, so "settled" is the Idle action, not !advanceDue().
     function _settleClean(uint256 vrfWord) internal {
         for (uint256 d; d < 240; d++) {
+            _fulfillPending(vrfWord);
             // Box opening is disabled under the daily lock. After its seal,
             // finish the delivered consumers before requesting another cohort.
             if (!game.rngLocked()) _finishReadConsumers();
-            if (!game.advanceDue() && !game.rngLocked()) return;
             _fulfillPending(vrfWord);
-            if (!game.advanceDue() && !game.rngLocked()) return;
+            if (!game.rngLocked() && game.nextMinerAction() == 0) return;
             game.mineFlip();
             _fulfillPending(vrfWord);
         }
@@ -155,6 +174,16 @@ contract StallDaysNeverHappened is DeployProtocol {
             game.mineFlip();
         }
         revert("harness: lock never released");
+    }
+
+    /// @dev Advance until `day` is sealed (dailyIdx reaches it). The sealing call may already
+    ///      have committed the wall day's next request.
+    function _advanceUntilSealed(uint24 day) internal {
+        for (uint256 i; i < 64; i++) {
+            if (_dailyIdx() >= day) return;
+            game.mineFlip();
+        }
+        revert("harness: day never sealed");
     }
 
     function _dailyIdx() internal view returns (uint24) {

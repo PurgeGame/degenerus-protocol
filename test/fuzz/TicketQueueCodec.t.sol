@@ -81,7 +81,9 @@ contract TicketQueueCodecTest is Test {
 
     function test_ReferenceModelRootsMatchCompilerLayout() public view {
         (uint256 q, uint256 locator, uint256 owners, uint256 pending) = h.roots();
-        assertEq(q, 12); assertEq(locator, 13); assertEq(owners, 67); assertEq(pending, 79);
+        // Golden layout (scripts/layout/golden/DegenerusGame.json): ticketPending moved 79 -> 78 when
+        // earlyBirdWhalePasses was removed in 5b25fded0 (every slot from 75 shifted down one).
+        assertEq(q, 12); assertEq(locator, 13); assertEq(owners, 67); assertEq(pending, 78);
     }
 
     function testFuzz_OwedRewritePreservesOwnerAndNeighbour(address player, uint80 owed, uint32 position) public {

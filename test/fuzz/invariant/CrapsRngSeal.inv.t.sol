@@ -234,7 +234,8 @@ contract CrapsRngSeal is DeployProtocol {
         assertEq(handler.ghost_sealRequests(), 1, "the ordinary request must seal the shut window");
         handler.fulfil(11);
         assertGt(crapsBattle.wordAt(i0), 0, "the sealing request must land on the window's leaf");
-        handler.settle(0);
+        // The engine's Craps read stage settles the sealed field in the publishing crank itself
+        // (read consumers run in the keeper's order, 6d0e64b09/60d31f775); the handler counts it.
         assertEq(handler.ghost_settlesWithWord(), 1, "the first field settled on its word");
         assertEq(handler.ghost_settlesWithoutWord(), 0);
         game.openBoxes(2000);
@@ -252,7 +253,6 @@ contract CrapsRngSeal is DeployProtocol {
         assertEq(crapsBattle.wordAt(i1), 0, "the second leaf was worded when it bound");
         handler.fulfil(12);
         assertGt(crapsBattle.wordAt(i1), 0, "the second sealing request must land on its leaf");
-        handler.settle(1);
         assertEq(handler.ghost_settlesWithWord(), 2, "the second field settled on its word");
         handler.advanceDay(2);
         assertEq(handler.ghost_settlesWithoutWord(), 0);

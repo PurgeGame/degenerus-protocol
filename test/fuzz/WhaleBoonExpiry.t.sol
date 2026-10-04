@@ -150,6 +150,13 @@ contract WhaleBoonExpiry is DeployProtocol {
         cur &= ~(mask48 << (7 * 8));
         cur &= ~(mask48 << (13 * 8));
         vm.store(address(game), cursorSlot, bytes32(cur));
+
+        // The day itself is sealed (dailyIdx = today, tickets drained), as after a mid-day request:
+        // the delivered cohort's human entry is then an eligible read-consumer stage for openBoxes
+        // (which drives only the published cohort's AFK and human stages).
+        uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
+        slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192);
+        vm.store(address(game), bytes32(0), bytes32(slot0));
     }
 
     /// @dev Trigger checkAndClearExpiredBoon by opening a lootbox: LootboxModule's per-tier
@@ -160,6 +167,7 @@ contract WhaleBoonExpiry is DeployProtocol {
         _setupLootbox(player, index, 10 ether);
         vm.prank(player);
         game.openBoxes(type(uint256).max);
+        assertTrue(game.boxIndexComplete(index), "the sweep opened the forged entry");
     }
 
     // ──────────────────────────────────────────────────────────────────────

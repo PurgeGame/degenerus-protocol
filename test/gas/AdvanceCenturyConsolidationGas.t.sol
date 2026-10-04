@@ -348,21 +348,36 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         vm.etch(address(game), original);
     }
 
+    /// @dev The real miner composes every admitted checkpoint into a call, so a whole call is not
+    ///      bounded (owner rule: one admitted chunk is the unit; IsolatedColdChunks below pins each
+    ///      native chunk against its declared bound). Here the composed miner call is driven at the
+    ///      realistic 10M allowance and at the 16.7M ceiling: each must succeed and make progress
+    ///      at the word application and at the consolidation, and its gas is logged.
     function test_CenturyConsolidationFullColdTransaction() public {
         // No protocol reads before each call: setUp writes are committed, all accessed storage
         // starts cold, and original-vs-current SSTORE pricing is realistic.
         vm.etch(address(game), type(CenturyNativeGasHost).runtimeCode);
         _checkWordApply(true);
         _driveNativeBattle();
-        // The actual Miner can compose further work after consolidation. Pin its
-        // aggregate ceiling independently, then restore the exact cold boundary
-        // for the isolated native cost and unchanged detailed payout assertions.
-        uint256 snapshot = vm.snapshotState();
-        (, uint256 composed,) = _advanceTx(false);
-        emit log_named_uint("century_composed_miner_including_intrinsic", composed);
-        assertLe(composed, CAP, "complete composed miner transaction exceeds 10M");
-        vm.revertToState(snapshot);
+        _checkRealisticMinerCalls("century_composed_miner_including_intrinsic");
         _checkConsolidation();
+    }
+
+    /// @dev From a snapshot, one real mineFlip at 10M and one at 16.7M: each succeeds and
+    ///      progresses (emits a stage marker); state is restored after each.
+    function _checkRealisticMinerCalls(string memory label) private {
+        uint256[2] memory allowances = [uint256(CAP), 16_700_000];
+        for (uint256 a; a < allowances.length; ++a) {
+            uint256 snapshot = vm.snapshotState();
+            vm.recordLogs();
+            (bool ok,) = address(game).call{gas: allowances[a]}(abi.encodeWithSignature("mineFlip()"));
+            uint256 used = vm.lastCallGas().gasTotalUsed;
+            if (!vm.envOr("FOUNDRY_ISOLATE", false)) used += 21_064;
+            assertTrue(ok, "a realistic miner allowance succeeds");
+            assertGt(_countTopic(vm.getRecordedLogs(), keccak256("Advance(uint8,uint24)")), 0, "and makes progress");
+            emit log_named_uint(string.concat(label, a == 0 ? "_at_10M" : "_at_16_7M"), used);
+            vm.revertToState(snapshot);
+        }
     }
 
     /// @dev Measure the native chunks without imposing a 10M cap on a transaction
@@ -392,13 +407,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         while (!host.prepareTicketsOnly{gas: 12_000_000}()) {
             assertLt(++reads, 32, "century ticket prerequisites stalled");
         }
-        if (measureComposition) {
-            uint256 checkpoint = vm.snapshotState();
-            (, uint256 composed,) = _advanceTx(false);
-            emit log_named_uint("century_composed_daily_apply_including_intrinsic", composed);
-            assertLe(composed, CAP, "complete daily-application miner transaction exceeds 10M");
-            vm.revertToState(checkpoint);
-        }
+        if (measureComposition) _checkRealisticMinerCalls("century_composed_daily_apply_including_intrinsic");
         vm.recordLogs();
         host.applyOnly{gas: 12_000_000}();
         uint256 used = _coldCallGas();

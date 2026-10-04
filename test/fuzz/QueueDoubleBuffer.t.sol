@@ -33,6 +33,14 @@ contract QueueHarness is DegenerusGameAdvanceModule {
         return _tqReadKey(lvl);
     }
 
+    function exposed_tqFarFutureKey(uint24 lvl) external pure returns (uint24) {
+        return _tqFarFutureKey(lvl);
+    }
+
+    function exposed_mintCeiling() external view returns (uint24) {
+        return _mintCeiling();
+    }
+
     // --- Direct mapping inspection ---
     function getQueueLength(uint24 key) external view returns (uint256) {
         return _ticketQueueLength(key);
@@ -184,20 +192,39 @@ contract QueueDoubleBufferTest is Test {
     }
 
     // =========================================================================
-    // Test 3: _queueEntryRange routes to write buffer for all levels
+    // Test 3: _queueEntryRange routes every minted level of the range to the
+    //         write buffer and the level past _mintCeiling() to its far-future key
     // =========================================================================
+    /// @dev The near queue recycles two physical slots by level parity and each owner keeps one
+    ///      parity-laned pending word, so at most two consecutive normal levels are live at once:
+    ///      the minted window [level, _mintCeiling() = level + 1]. A three-level range from the
+    ///      current level therefore covers both minted levels plus the first unminted one.
     function testQueueTicketRangeUsesWriteKey() public {
-        uint24 startLvl = 3;
+        uint24 startLvl = LEVEL;
         uint24 numLevels = 3;
+        uint24 ceiling = harness.exposed_mintCeiling();
+        assertEq(ceiling, LEVEL + 1, "minted window ends at level + 1");
         harness.exposed_queueEntryRange(ALICE, startLvl, numLevels, 7);
 
         for (uint24 i = 0; i < numLevels; i++) {
             uint24 lvl = startLvl + i;
             uint24 wk = harness.exposed_tqWriteKey(lvl);
             uint24 rk = harness.exposed_tqReadKey(lvl);
+            uint24 fk = harness.exposed_tqFarFutureKey(lvl);
 
-            assertEq(harness.getQueueLength(wk), 1, "write queue should have entry");
-            assertEq(harness.getTicketsOwed(wk, ALICE), 7, "write buffer should have 7 tickets");
+            if (lvl <= ceiling) {
+                assertEq(harness.getQueueLength(wk), 1, "write queue should have entry");
+                assertEq(harness.getQueueEntry(wk, 0), ALICE, "write queue entry should be ALICE");
+                assertEq(harness.getTicketsOwed(wk, ALICE), 7, "write buffer should have 7 tickets");
+                assertEq(harness.getQueueLength(fk), 0, "minted level has no far-future entry");
+                assertEq(harness.getTicketsOwed(fk, ALICE), 0, "minted level owes nothing far-future");
+            } else {
+                assertEq(harness.getQueueLength(fk), 1, "unminted level queues on its far-future key");
+                assertEq(harness.getQueueEntry(fk, 0), ALICE, "far-future entry should be ALICE");
+                assertEq(harness.getTicketsOwed(fk, ALICE), 7, "far-future key should have 7 tickets");
+                assertEq(harness.getQueueLength(wk), 0, "unminted level has no write-buffer entry");
+                assertEq(harness.getTicketsOwed(wk, ALICE), 0, "unminted level owes nothing on the write key");
+            }
             assertEq(harness.getQueueLength(rk), 0, "read queue should be empty");
             assertEq(harness.getTicketsOwed(rk, ALICE), 0, "read buffer should be empty");
         }

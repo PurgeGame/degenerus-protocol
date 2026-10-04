@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Phase 264 SURF-05 — entry-point gas regression for the per-pull-level resample helper.
 //
+// Engine note (2026-10-03): one mineFlip call now composes several checkpoints and keeps
+// admitting work while its gas lasts, so a call's receipt no longer isolates a stage. Every
+// "gasUsed at stage N" below is the receipt of ONE chunk run at its own minimum admission
+// allowance (test/helpers/mineFlipChunks.js, each asserted <= 10M), and the stage-1 baseline
+// is the request chunk measured the same way. The pinned-REF protocol below is unchanged.
+//
 // Methodology per D-IMPL-04 / D-IMPL-05 / `feedback_gas_worst_case.md`:
 //   1. Derive theoretical worst-case bound from opcode-by-opcode walk FIRST.
 //   2. HEAD-only measurement (no v34.0 binary resurrection — A/B harness deferred per D-IMPL-04).
@@ -121,10 +127,9 @@ import { deployFullProtocol, restoreAddresses } from "../helpers/deployFixture.j
 import {
   eth,
   advanceToNextDay,
-  getEvents,
-  getLastVRFRequestId,
   ZERO_BYTES32,
 } from "../helpers/testUtils.js";
+import { walkNextDay } from "../helpers/mineFlipChunks.js";
 
 const ZERO_ADDRESS = hre.ethers.ZeroAddress;
 const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
@@ -132,10 +137,12 @@ const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
 // Stage constants from contracts/modules/DegenerusGameAdvanceModule.sol L60-73.
 // Only the four stages this test reads are pinned; other stages observed in
 // the drain are reported via the `stagesSeen` diagnostic Set on assertion.
+// Current DegenerusGameAdvanceModule / RngModule stage numbering (coin+tickets is now 8 and
+// the phase end 9; the old 9/10 labels moved when the engine was renumbered).
 const STAGE_RNG_REQUESTED         = 1n;
 const STAGE_PURCHASE_DAILY        = 6n;
-const STAGE_JACKPOT_COIN_TICKETS  = 9n;
-const STAGE_JACKPOT_PHASE_ENDED   = 10n;
+const STAGE_JACKPOT_COIN_TICKETS  = 8n;
+const STAGE_JACKPOT_PHASE_ENDED   = 9n;
 
 // ----------------------------------------------------------------------------
 // Lifecycle drivers — adapted from test/gas/AdvanceGameGas.test.js + Phase261.
@@ -211,48 +218,17 @@ async function setupSplitTriggeringFixture(fixture, count) {
   return players;
 }
 
-/** Drain mineFlip calls in the current day, recording (stage, gasUsed) pairs.
- *  Stops when rngLocked goes false or the call reverts (game-over edge). */
-async function drainAdvances(game, deployer, advanceModule) {
-  const stagesObserved = [];
-  for (let i = 0; i < 200; i++) {
-    let tx;
-    try {
-      tx = await game.connect(deployer).mineFlip();
-    } catch (_) {
-      break;
-    }
-    const receipt = await tx.wait();
-    const events = await getEvents(tx, advanceModule, "Advance");
-    if (events.length > 0) {
-      stagesObserved.push({ stage: events[0].args.stage, gasUsed: receipt.gasUsed });
-    }
-    if (!(await game.rngLocked())) break;
-  }
-  return stagesObserved;
-}
-
-/** One full VRF cycle: nextDay → request → fulfill → drain → return all (stage, gasUsed) pairs.
- *  Captures the FIRST mineFlip() call's receipt (stage 1 / RNG_REQUESTED) plus
- *  every drain-loop advance's receipt afterward. */
+/** One full VRF cycle, walked one checkpoint at a time: nextDay → request chunk(s) →
+ *  fulfill → every daily chunk at its own minimum admission allowance. Returns one
+ *  (stage, gasUsed) pair per Advance stage per chunk. A mineFlip call now composes several
+ *  checkpoints, so per-chunk receipts (each asserted <= 10M) replace per-call receipts,
+ *  and every stage a chunk carries is observed, not just its first Advance event. */
 async function runOneCycle(game, deployer, mockVRF, advanceModule, vrfWord) {
   await advanceToNextDay();
+  const chunks = await walkNextDay(game, deployer, mockVRF, advanceModule, vrfWord,
+    `[Phase264] word ${vrfWord}`, { measureRequest: true });
   const stagesObserved = [];
-  let firstTx;
-  try {
-    firstTx = await game.connect(deployer).mineFlip();
-  } catch (_) {
-    return stagesObserved;
-  }
-  const firstReceipt = await firstTx.wait();
-  const firstEvents = await getEvents(firstTx, advanceModule, "Advance");
-  if (firstEvents.length > 0) {
-    stagesObserved.push({ stage: firstEvents[0].args.stage, gasUsed: firstReceipt.gasUsed });
-  }
-  const requestId = await getLastVRFRequestId(mockVRF);
-  try { await mockVRF.fulfillRandomWords(requestId, vrfWord); } catch (_) { /* already fulfilled */ }
-  const drained = await drainAdvances(game, deployer, advanceModule);
-  for (const obs of drained) stagesObserved.push(obs);
+  for (const c of chunks) for (const stage of c.stages) stagesObserved.push({ stage, gasUsed: c.gasUsed });
   return stagesObserved;
 }
 
@@ -325,7 +301,8 @@ async function measurePayDailyCoinJackpotGas(fixture) {
 }
 
 /**
- * Measure stage 9 (STAGE_JACKPOT_COIN_TICKETS) gasUsed where
+ * Measure the STAGE_JACKPOT_COIN_TICKETS chunk (stage 8 since the renumbering; the
+ * describe name keeps its historical "stage 9" label) where
  * `payDailyJackpotCoinAndTickets` runs the helper in the jackpot phase. Pair
  * with a stage-1 baseline from the same fixture run (captured pre-jackpot or
  * post-jackpot — stage-1 is per-cycle uniform).
@@ -459,7 +436,7 @@ describe("Phase 264 SURF-05 — per-pull-level resample entry-point gas regressi
 
       const literalDelta = measured - baseline;
       console.log(`[REF-CAPTURE] PAY_DAILY_JACKPOT_COIN_AND_TICKETS_GAS_REF  = ${measured}`);
-      console.log(`[SURF-05] payDailyJackpotCoinAndTickets literal delta (stage9 - stage1) = ${literalDelta} gas; helper-growth bound ${PER_CALL_GAS_DELTA_BOUND}; per-site tolerance ${ENTRY_POINT_DELTA_TOLERANCE}`);
+      console.log(`[SURF-05] payDailyJackpotCoinAndTickets literal delta (stage${STAGE_JACKPOT_COIN_TICKETS} - stage1) = ${literalDelta} gas; helper-growth bound ${PER_CALL_GAS_DELTA_BOUND}; per-site tolerance ${ENTRY_POINT_DELTA_TOLERANCE}`);
 
       expect(
         literalDelta <= LITERAL_DELTA_HARD_BOUND,

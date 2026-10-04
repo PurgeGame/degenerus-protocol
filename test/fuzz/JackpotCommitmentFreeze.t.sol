@@ -66,6 +66,7 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
     bytes32 private constant ENTRY = keccak256("JackpotBattleEntry(uint64,uint256,address,uint256,uint32)");
     bytes32 private constant SETTLED = keccak256("CrapsBetSettled(uint256,address,uint256,uint256)");
     bytes32 private constant RESERVE = keccak256("HighRollerReserveDrawn(uint64,uint32,address,uint256,uint256)");
+    bytes32 private constant FINALIZED = keccak256("CrapsBattleFinalized(bytes32,uint8,uint64,uint256,uint256,uint256,uint256)");
     bytes4 private constant RNG_LOCKED = bytes4(keccak256("RngLocked()"));
     IJackpotBattle private api;
     JackpotBattle private reader;
@@ -73,6 +74,8 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
     uint256 private paidBet;
     uint256 private salvagePosition;
     uint24 private paidDay;
+    /// @dev Admits one 50-entry field group (JACKPOT_BATTLE_DRAW 3.3M + tails) but not a second.
+    uint256 private constant ONE_GROUP_GAS = 5_000_000;
 
     struct Result {
         bytes32 transcript;
@@ -153,8 +156,15 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
     }
 
     function _run(uint256 word, bool perturb) private returns (Result memory result) {
+        bool battleFinalized;
         // mineFlip is the scheduled keeper throughout; no direct privileged battle API is used.
-        game.mineFlip();
+        // The synthetic day-400 jump leaves expired Craps maintenance ahead of the daily request
+        // (one checkpoint per call); the first call that sends a request must engage the lock.
+        uint256 before = mockVRF.lastRequestId();
+        for (uint256 i; i < 1000 && mockVRF.lastRequestId() == before; ++i) {
+            assertFalse(game.rngLocked(), "no lock before the daily request");
+            game.mineFlip();
+        }
         assertTrue(game.rngLocked(), "request did not engage the lock");
         (uint64 locked,, bool started,) = api.jackpotProgress();
         assertEq(locked, slot);
@@ -176,7 +186,10 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
             if (perturb) _perturb();
             (CrapsBattleStorage.JackpotRound memory beforeRound,,) = reader.jackpotBattleOf(slot);
             vm.recordLogs();
-            game.mineFlip();
+            // A call keeps drawing 50-entry field groups while another 3.3M group bound fits
+            // (984b8e7d8); this allowance admits at most one group per call so the probe runs
+            // between every pair of actual field chunks.
+            game.mineFlip{gas: ONE_GROUP_GAS}();
             Vm.Log[] memory logs = vm.getRecordedLogs();
             for (uint256 j; j < logs.length; ++j) {
                 // Include every table event (exact field/boards, seat outcomes and bounty
@@ -193,13 +206,24 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
                         ++result.attackerAwards;
                     }
                 }
-                if (topic == SETTLED) ++result.settlements;
+                // The battle settles its own seats under its slot and its day seats under the
+                // day slot, then finalizes. A completing call may run later read consumers in the
+                // same transaction (the engine composes admitted work), whose day-window
+                // settlements are not this battle's.
+                if (topic == FINALIZED && logs[j].topics[1] == bytes32(uint256(slot))) battleFinalized = true;
+                if (topic == SETTLED) {
+                    uint256 betSlot = uint256(logs[j].topics[1]) >> 64;
+                    if (betSlot == slot || (betSlot == uint256(slot) - uint256(slot) % 8 && !battleFinalized)) {
+                        ++result.settlements;
+                    }
+                }
                 if (topic == RESERVE) ++result.reserveEvents;
             }
             (CrapsBattleStorage.JackpotRound memory afterRound,,) = reader.jackpotBattleOf(slot);
             if (afterRound.drawnCount > beforeRound.drawnCount) ++result.draws;
             if (afterRound.drawnCount != 0 && afterRound.word == 0) {
-                assertEq(afterRound.drawnCount % 150, 0, "partial draw must retain its cursor");
+                // Field groups are 50 entries (984b8e7d8; was 150).
+                assertEq(afterRound.drawnCount % 50, 0, "partial draw must retain its cursor");
                 (,, uint64 settledCursor) = reader.jackpotBattleOf(slot);
                 assertEq(settledCursor, 0, "paid seats settled before the field froze");
             }
@@ -209,7 +233,8 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
         (CrapsBattleStorage.JackpotRound memory round, uint256 board, uint64 cursor) = reader.jackpotBattleOf(slot);
         CrapsBattleStorage.HighRollerDraw memory reserve = reader.highRollerDrawOf(slot);
         assertEq(result.entries, 500, "empty/short draws cannot prove the freeze");
-        assertEq(result.draws, 4, "must probe three gaps between actual field chunks");
+        // 500 entries in 50-entry groups (984b8e7d8; was four 150-entry chunks): nine probed gaps.
+        assertEq(result.draws, 10, "must probe nine gaps between actual field chunks");
         assertGt(result.attackerAwards, 0, "preferred-board probe must affect a selected wallet");
         assertEq(result.settlements, uint256(round.paidCount) + 500);
         assertEq(result.reserveEvents, 1);

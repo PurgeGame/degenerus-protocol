@@ -276,12 +276,17 @@ contract V56FreezeSolvency is DeployProtocol {
         address p = makeAddr("stamp_noresolve");
         _grantSeat(p);
 
-        // Record across BOTH the subscribe (min-buy) AND the funded STAGE buy: neither materializes a box.
+        // Record across BOTH the subscribe (min-buy) AND the funded STAGE buy (the new day's
+        // subscriber preparation, through its daily request): neither materializes a box. The open
+        // is the session's AFKing consumer step, after the stamped day's word is delivered, so the
+        // current day's own STAGE box opens when that day settles (between the two recorded windows).
         vm.recordLogs();
         _fundPool(p, 50 ether);
         _subscribeLootbox(p, 1);
-        _runStageNewDay(0x57A11);
-        _settleClean(0x57A12);
+        assertEq(_countLootBoxOpened(p), 0, "STAMP-not-resolve: no LootBoxOpened at subscribe time (the box is stamped, not resolved)");
+        _settleGame(0x57A10);
+        vm.recordLogs();
+        _stampNewDay(0x57A11);
         assertEq(_countLootBoxOpened(p), 0, "STAMP-not-resolve: no LootBoxOpened at subscribe/STAGE time (the box is stamped, not resolved)");
 
         // The box WAS stamped (pending), so the absence of a resolve above is non-vacuous.
@@ -306,20 +311,20 @@ contract V56FreezeSolvency is DeployProtocol {
         _grantSeat(afk);
         _fundPool(afk, 50 ether);
         _subscribeLootbox(afk, 1);
-        _runStageNewDay(0xF00D01);
-        _settleClean(0xF00D02);
+        _stampNewDay(0xF00D01);
 
         uint32 stampDay = _lastBoughtDayOf(afk);
         assertGt(stampDay, 0, "non-vacuity: the afking box was stamped");
         assertTrue(_lastOpenedDayOf(afk) < stampDay, "box pending (lastOpenedDay < lastAutoBoughtDay)");
-        assertTrue(_rngWordByDay(stampDay) != 0, "the stamped day's word has landed (open is reachable)");
 
-        // Snapshot the SHARED pre-open state so both opens replay from an identical stamp.
+        // Snapshot the SHARED pre-open state (stamp taken, its day's request in flight) so both opens
+        // replay from an identical stamp; each open delivers the same word and runs the session.
         uint256 snap = vm.snapshotState();
 
         Box memory box1 = _openAfkingBoxAt(afk, 1_000, 11 minutes, 0xAA11AA11, makeAddr("coinbase_1"));
         assertEq(_lastOpenedDayOf(afk), stampDay, "open#1 materialized the box");
         assertTrue(box1.present, "open#1 emitted a box result (non-vacuous)");
+        assertTrue(_rngWordByDay(stampDay) != 0, "the stamped day's word landed before its open");
 
         vm.revertToState(snap);
         assertEq(_lastBoughtDayOf(afk), stampDay, "revert restored the stamp day");
@@ -344,12 +349,11 @@ contract V56FreezeSolvency is DeployProtocol {
         _grantSeat(afk);
         _fundPool(afk, 50 ether);
         _subscribeLootbox(afk, 1);
-        _runStageNewDay(0xACE5EED);
-        _settleClean(0xACE5EEE);
+        _stampNewDay(0xACE5EED);
 
         uint32 stampDay = _lastBoughtDayOf(afk);
         assertGt(stampDay, 0, "non-vacuity: stamped");
-        assertTrue(_rngWordByDay(stampDay) != 0, "stamped-day word landed");
+        assertTrue(_lastOpenedDayOf(afk) < stampDay, "stamp pending its day's word");
 
         // Keep both opens inside the same level/day window (< ~6h each) so the live level is unchanged; the
         // property under test is the SEED freeze, not the (LIVE-by-design) level.
@@ -361,6 +365,7 @@ contract V56FreezeSolvency is DeployProtocol {
             afk, uint64(r1), w1, uint256(keccak256(abi.encode(r1, "pr"))), address(uint160(uint256(keccak256(abi.encode(r1, "cb")))))
         );
         assertTrue(boxA.present, "fuzz open A materialized (non-vacuous)");
+        assertTrue(_rngWordByDay(stampDay) != 0, "stamped-day word landed");
 
         vm.revertToState(snap);
         Box memory boxB = _openAfkingBoxAt(
@@ -377,8 +382,8 @@ contract V56FreezeSolvency is DeployProtocol {
 
     /// @dev Open `afk`'s stamped afking box at a perturbed block context and return the materialized box
     ///      decoded from the LootBoxOpened event. Perturbs block number / timestamp (sub-day, level held) /
-    ///      prevrandao / coinbase (NONE enter the single-roll afking seed by design), then settles any
-    ///      in-flight advance so mineFlip takes the OPEN leg (!advanceDue) and fires the open. Uses a FIXED
+    ///      prevrandao / coinbase (NONE enter the single-roll afking seed by design), then delivers the
+    ///      stamped day's word and runs the session: the open is its AFKing consumer step. Uses a FIXED
     ///      drain word (NOT derived from the perturbation — the perturbation touches only the block context).
     function _openAfkingBoxAt(
         address afk,
@@ -392,9 +397,9 @@ contract V56FreezeSolvency is DeployProtocol {
         vm.warp(block.timestamp + warpBump);
         vm.prevrandao(bytes32(prevrandao));
         vm.coinbase(coinbase);
-        _settleClean(0xC0FFEEFACE);
 
         vm.recordLogs();
+        _settleClean(0xC0FFEEFACE);
         vm.prank(makeAddr("freeze_opener"));
         try game.mineFlip() {} catch {}
         return _decodeLootBoxOpenedFor(afk);
@@ -483,6 +488,18 @@ contract V56FreezeSolvency is DeployProtocol {
         _t += 1 days;
         vm.warp(_t);
         _settleGame(vrfWord);
+    }
+
+    /// @dev Finish the current day, then open a NEW day up to its daily request: the subscriber
+    ///      preparation stamps each funded sub's box for that day, and the request commits the day's
+    ///      word, which is left undelivered (the box stays pending until its session's AFKing step).
+    function _stampNewDay(uint256 vrfWord) internal {
+        _settleGame(vrfWord ^ 0xF00D);
+        _t += 1 days;
+        vm.warp(_t);
+        uint256 before = mockVRF.lastRequestId();
+        for (uint256 i; i < DRAIN_MAX_ITERATIONS && mockVRF.lastRequestId() == before; ++i) game.mineFlip();
+        assertGt(mockVRF.lastRequestId(), before, "harness: the new day's request is in flight");
     }
 
     function _settleGame(uint256 vrfWord) internal {

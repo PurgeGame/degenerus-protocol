@@ -13,7 +13,18 @@ import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {MineFlipGasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 
+// CURRENT ENGINE (60d31f775 / 72fc06f6c): the router below is retired. `mineFlip()` is the
+//      single engine (DegenerusGameMinerModule); it pays once per call, CEI-last, in FLIP coinflip
+//      credit: (measured gas - unpaid first MIN_REWARDED_GAS) x min(basefee, cap) x (0.3x + 0.45x per
+//      30 minutes, x2 pass, x2 lock) at the ticket price. Bets resolve as the Degenerette read
+//      consumer, never through `openBoxes`. The guards read the measured gas and the pay from each
+//      call's MinerWork event and pin them to that formula; the self-keeper round trip is checked at
+//      the fixture's sub-1x multiplier, where it must stay net negative. The history below is kept for
+//      the requirement IDs.
 /// @title KeeperFaucetResistance -- Proves the v55.0 game-resident permissionless router
 ///        (`game.mineFlip()` advance/open legs, including the queued-bet sweep) is faucet-bounded by three
 ///        caller-independent locks:
@@ -87,26 +98,17 @@ contract KeeperFaucetResistance is DeployProtocol {
     uint256 private constant FIXED_WORD = uint256(keccak256("crank_faucet_fixed_word"));
 
     // -------------------------------------------------------------------------
-    // v55 game-resident router reward mirror (the GAS-05 round-trip guard target)
-    //
-    // The v55 mineFlip() router (GameAfkingModule.sol:985) computes a level-invariant break-even unit
-    // then applies a per-category factor:
-    //   unit       = (BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / mintPrice()        (GameAfkingModule.sol:987)
-    //   advance    = unit * ADVANCE_RATIO_NUM * mult                            (GameAfkingModule.sol:995)
-    //   open leg   = (unit * min(opened, OPEN_KNEE)) / OPEN_KNEE                (GameAfkingModule.sol:1003-1004)
-    // BOUNTY_ETH_TARGET is a HARDCODED internal constant (885_000_000_000_000; no game getter, no longer a
-    // deploy param) — mirrored here. ADVANCE_RATIO_NUM=2 / OPEN_KNEE=5 are `internal constant`s with no
-    // on-chain getter, mirrored here. TEST-MIRROR SYNC: if the contract changes them, re-sync. The guards
-    // CROSS-VALIDATE the live reward (OBSERVED off the mineFlip credit delta) against the mirror, so a
-    // drift trips a test rather than silently passing.
+    // Miner reward mirror (72fc06f6c). The v55 flat unit (BOUNTY_ETH_TARGET, ADVANCE_RATIO_NUM,
+    // OPEN_KNEE) is gone: mineFlip pays the call's measured gas above an unpaid first
+    // MIN_REWARDED_GAS, at min(basefee, cap), times 0.3x + 0.45x per 30 minutes on one clock (the
+    // later of the last accepted callback and the day reset; cap 0.5 gwei doubling per step, four
+    // steps max), x2 for an active pass holder, x2 when the daily lock is held at call start, in FLIP
+    // at the active ticket price. The guards below read the measured gas and the paid amount off the
+    // call's MinerWork event and cross-check them against this mirror, so a drift trips a test.
     // -------------------------------------------------------------------------
 
-    /// @dev GameAfkingModule.sol:173 — the (hardcoded) ETH-target the break-even unit divides.
-    uint256 private constant BOUNTY_ETH_TARGET = 885_000_000_000_000;
-    /// @dev GameAfkingModule.sol:178 — advance-leg multiplier numerator.
-    uint256 private constant ADVANCE_RATIO_NUM = 2;
-    /// @dev GameAfkingModule.sol:184 — open reward pro-rate knee (1x at/above the knee, pro-rated below).
-    uint256 private constant OPEN_KNEE = 5;
+    bytes32 private constant MINER_WORK_SIG = keccak256("MinerWork(address,uint8,uint256,uint256)");
+    uint256 private constant INITIAL_REWARD_BASEFEE_CAP = 0.5 gwei;
 
     // -------------------------------------------------------------------------
     // Game-resident afking storage-slot constants (RE-DERIVED via `forge inspect storage DegenerusGame`).
@@ -114,8 +116,8 @@ contract KeeperFaucetResistance is DeployProtocol {
 
     /// @dev _subOf mapping root (one packed Sub slot per subscriber).
     uint256 private constant SUBOF_SLOT = 52;
-    uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay (bytes 11..13)
-    uint256 private constant OFF_LASTOPENED = 13; // uint24 lastOpenedDay     (bytes 14..16)
+    uint256 private constant OFF_LASTBOUGHT = 7; // uint24 lastAutoBoughtDay (bytes 7..9; Sub: u8 qty, u8 flags, u16 score, u24 amount)
+    uint256 private constant OFF_LASTOPENED = 10; // uint24 lastOpenedDay     (bytes 10..12)
     uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit)
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS_SHIFT in mintPacked_
 
@@ -161,10 +163,11 @@ contract KeeperFaucetResistance is DeployProtocol {
     // Task 1 — Faucet round-trip <= 0, illiquidity, one-reward-per-item, pre-RNG-word block
     // =========================================================================
 
-    /// @notice One-reward-per-item: a bet is zeroed in its queue once the sweep resolves it, so a
-    ///         second sweep over the same drained queue makes no progress and pays nothing; no
-    ///         path pays for it twice. The sweep itself (`openBoxes`) pays no keeper reward at all
-    ///         (only `mineFlip` does).
+    /// @notice One-reward-per-item: a bet is marked processed in its queue once the engine's
+    ///         Degenerette stage resolves it, so a second crank over the same drained queue finds no
+    ///         work (NoWork) and pays nothing; no path pays for it twice. The unrewarded `openBoxes`
+    ///         valve drives only the AFK and human box stages (60d31f775), never bets, and pays no
+    ///         keeper reward at all.
     function testReResolveResolvedBetRevertsNoSecondReward() public {
         uint64 betId = _placeLosingBet(player);
         _injectLootboxRngWord(INDEX, FIXED_WORD);
@@ -173,10 +176,22 @@ contract KeeperFaucetResistance is DeployProtocol {
         uint256 stakeBefore = coinflip.coinflipAmount(player);
         vm.prank(player);
         game.openBoxes(type(uint256).max);
-        assertEq(game.degeneretteBetInfo(INDEX, betId), 0, "resolved bet word is zeroed (one-reward lock)");
-        assertEq(coinflip.coinflipAmount(player), stakeBefore, "sweep resolution pays no keeper reward");
+        assertGt(game.degeneretteBetInfo(INDEX, betId), 0, "the box valve does not resolve bets");
+        assertEq(coinflip.coinflipAmount(player), stakeBefore, "the box valve pays no keeper reward");
+
+        vm.fee(1 gwei);
+        vm.recordLogs();
+        vm.prank(player);
+        game.mineFlip();
+        (, uint256 measured, uint256 reward) = _minerWork(vm.getRecordedLogs());
+        assertEq(game.degeneretteBetInfo(INDEX, betId), 0, "resolved bet is marked processed (one-reward lock)");
+        assertEq(reward, _expectedPay(measured, false, false), "the resolving crank is paid its measured gas only");
+        assertEq(coinflip.coinflipAmount(player), stakeBefore + reward, "the only credit is the measured-gas bounty");
 
         uint256 stakeBeforeSecond = coinflip.coinflipAmount(sybil);
+        vm.prank(sybil);
+        vm.expectRevert(bytes4(keccak256("NoWork()")));
+        game.mineFlip();
         vm.prank(sybil);
         uint256 openedAgain = game.openBoxes(type(uint256).max);
         assertEq(openedAgain, 0, "an already-drained queue offers a second sweep nothing to resolve");
@@ -237,31 +252,49 @@ contract KeeperFaucetResistance is DeployProtocol {
 
 
     /// @notice GUARD-the-guard / test-mirror sync: the advance reward mineFlip() actually credits equals
-    ///         the LIVE break-even unit times ADVANCE_RATIO_NUM times the day-epoch stall mult. This binds
-    ///         the mirrored ADVANCE_RATIO_NUM (and the `unit` formula the open guard reuses) to the deployed
-    ///         contract: if the contract changes BOUNTY_ETH_TARGET or ADVANCE_RATIO_NUM without re-syncing
-    ///         this mirror, this assertion trips RED rather than the round-trip guards silently mis-pricing.
-    ///         The advance is driven at the un-stalled base (mult==1) so the expected value is unit*NUM*1.
-    function testRouterAdvanceRewardMatchesLiveUnitRatio() public {
-        // Drive a fresh new-day advance at the START of the day window (elapsed < 20 min => mult == 1).
+    ///         the measured-gas formula (72fc06f6c) evaluated on the call's own MinerWork-reported gas.
+    ///         This binds the mirror (unpaid first million, capped base fee, 0.3x base, lock doubling,
+    ///         FLIP at the ticket price) to the deployed engine: a contract change without a re-sync
+    ///         trips RED rather than the round-trip guards silently mis-pricing. Replaces the retired
+    ///         flat `unit * ADVANCE_RATIO_NUM * mult` check (testRouterAdvanceRewardMatchesLiveUnitRatio).
+    function testRouterAdvanceRewardMatchesMeasuredGasFormula() public {
+        // A fresh new-day advance at the START of the day window: the clock is the day reset, so the
+        // request call runs at the base 0.3x and the 0.5 gwei cap.
         uint32 dayNow = _today();
         uint256 nextDayStart = (uint256(dayNow + 1) * 1 days) + 82_620;
-        vm.warp(nextDayStart + 1 minutes); // < 20 min into the day => mult == 1 (the un-stalled base)
-        assertTrue(game.advanceDue(), "pre: a fresh day-advance is due at mult==1");
+        vm.warp(nextDayStart + 1 minutes);
+        assertTrue(game.advanceDue(), "pre: a fresh day-advance is due");
+        vm.fee(1 gwei);
 
         address keeper = makeAddr("advMatch_keeper");
         vm.deal(keeper, 1000 ether);
-        uint256 pre = coinflip.coinflipAmount(keeper);
+        // The day's preparation (subscriber stamp, scheduled table upkeep) and its request may take
+        // more than one call; every one is paid exactly its measured-gas formula.
+        uint256 pre;
+        for (uint256 i; i < 16 && !game.rngLocked(); ++i) {
+            pre = coinflip.coinflipAmount(keeper);
+            vm.recordLogs();
+            vm.prank(keeper);
+            game.mineFlip();
+            (, uint256 prepGas, uint256 prepReward) = _minerWork(vm.getRecordedLogs());
+            assertEq(prepReward, _expectedPay(prepGas, false, false), "preparation call: reward == measured-gas formula");
+            assertEq(coinflip.coinflipAmount(keeper) - pre, prepReward, "preparation call: the credit is the reported reward");
+        }
+        assertTrue(game.rngLocked(), "the request took the daily lock");
+
+        // The day's processing after its word lands: the accepted callback restarts the clock (base
+        // rate) and the lock is held at call start (x2).
+        mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), uint256(keccak256("advMatch_word")));
+        pre = coinflip.coinflipAmount(keeper);
+        vm.recordLogs();
         vm.prank(keeper);
         game.mineFlip();
-        uint256 stakeDelta = coinflip.coinflipAmount(keeper) - pre;
-
-        uint256 unit = _liveUnit();
-        assertEq(
-            stakeDelta,
-            unit * ADVANCE_RATIO_NUM * 1,
-            "mineFlip advance reward == live unit * ADVANCE_RATIO_NUM * mult(==1) (mirror in sync)"
-        );
+        (, uint256 measured, uint256 reward) = _minerWork(vm.getRecordedLogs());
+        emit log_named_uint("advance call measured gas", measured);
+        emit log_named_uint("advance call reward", reward);
+        assertGt(measured, MineFlipGas.MIN_REWARDED_GAS, "non-vacuity: the advance measured past the unpaid first million");
+        assertEq(reward, _expectedPay(measured, false, true), "advance reward == measured-gas formula (mirror in sync)");
+        assertEq(coinflip.coinflipAmount(keeper) - pre, reward, "the credit is the reported reward");
     }
 
     // =========================================================================
@@ -318,15 +351,24 @@ contract KeeperFaucetResistance is DeployProtocol {
         _injectLootboxRngWord(INDEX, FIXED_WORD);
         _openSweepFor(INDEX);
 
+        // The keeper pays the base fee as its gas price; the bounty is priced at min(basefee, cap).
+        vm.fee(gasPriceWei);
+        vm.txGasPrice(gasPriceWei);
         uint256 preStake = coinflip.coinflipAmount(player);
+        vm.recordLogs();
         vm.prank(player);
         uint256 g0 = gasleft();
         game.mineFlip();
         uint256 crankGas = g0 - gasleft();
         uint256 bounty = coinflip.coinflipAmount(player) - preStake;
+        (, uint256 measured, uint256 reported) = _minerWork(vm.getRecordedLogs());
 
         assertEq(DQ.lastBetId(vm, address(game), INDEX), n, "n bets queued");
         for (uint64 id = 1; id <= n; ++id) assertEq(game.degeneretteBetInfo(INDEX, id), 0, "sweep resolved every bet");
+        assertEq(bounty, reported, "the credit is the reported bounty");
+        assertEq(bounty, _expectedPay(measured, false, false), "the bounty is the measured-gas formula");
+        // The fixture's clock is one half-hour step into the day (0.75x, cap 1 gwei), no pass, no lock:
+        // below 1x, so the measured-gas bounty can never cover the gas the self-keeper burned.
         uint256 bountyEth = (bounty * PriceLookupLib.priceForLevel(_lvl())) / PRICE_COIN_UNIT;
         assertLt(bountyEth, ((placeGas + crankGas) * 4 / 5) * gasPriceWei, "self-keeping bets is net-negative");
     }
@@ -362,14 +404,22 @@ contract KeeperFaucetResistance is DeployProtocol {
         }
         _injectLootboxRngWord(INDEX, word);
         _openSweepFor(INDEX);
+        vm.fee(1 gwei);
         uint256 preStake = coinflip.coinflipAmount(player);
+        vm.recordLogs();
         vm.prank(player);
         game.mineFlip();
         uint256 bounty = coinflip.coinflipAmount(player) - preStake;
-        // Four ETH 1-spin bets are budgeted at 4 x 38 = 152 units (past the 75-unit knee) but are
-        // credited well under their work, a fraction of one knee step.
-        uint256 fullKnee = (BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / PriceLookupLib.priceForLevel(_lvl());
-        assertLt(bounty, fullKnee / 2, "cheap bets do not buy the full knee");
+        (, uint256 measured,) = _minerWork(vm.getRecordedLogs());
+        for (uint64 id = 1; id <= 4; ++id) assertEq(game.degeneretteBetInfo(INDEX, id), 0, "the crank resolved every bet");
+        // Four ETH 1-spin bets are admitted at their declared worst-case bounds (base + one spin
+        // each), but the bounty is priced on the gas the crank actually measured (72fc06f6c).
+        uint256 budget = 4 * (MineFlipGasBounds.DEGENERETTE_ETH_BASE_GAS + MineFlipGasBounds.DEGENERETTE_ETH_SPIN_GAS);
+        emit log_named_uint("measured crank gas", measured);
+        emit log_named_uint("declared admission budget", budget);
+        assertLt(measured, budget, "the crank measured less than the declared budget it admitted");
+        assertEq(bounty, _expectedPay(measured, false, false), "the credit is priced on measured work");
+        assertLt(bounty, _expectedPay(budget, false, false), "cheap bets do not buy the budget's price");
     }
 
     // =========================================================================
@@ -396,17 +446,25 @@ contract KeeperFaucetResistance is DeployProtocol {
         betId = DQ.lastBetId(vm, address(game), INDEX);
     }
 
-    /// @dev Land the word at `idx`, open the frontier past it and settle today's advance, so a
-    ///      mineFlip() 30+ minutes into the day takes the box-open leg with an eligible keeper.
+    /// @dev Ready the delivered cohort at `idx` on a sealed day, 30+ minutes into it: dailyIdx = today
+    ///      and the cohort's tickets certified (slot 0 bits 24..47 and bit 192, golden layout), the
+    ///      scheduled Craps table quiet. Its read consumers (boxes, then bets) are then the engine's
+    ///      only work (60d31f775 consumer order); `advanceDue()` now reports any engine work, so the
+    ///      settled precondition is the next selected action.
     function _openSweepFor(uint48 idx) internal {
-        uint256 lr = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
-        vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32((lr & ~uint256(0xFFFFFFFFFFFF)) | (idx + 1)));
-        uint256 elapsed = (block.timestamp - 82620) % 1 days;
-        if (elapsed < 30 minutes) vm.warp(block.timestamp + 30 minutes - elapsed);
+        assertEq(RecyclingState.readBuffer(address(game)), idx, "the cohort was delivered at idx");
+        uint256 elapsed = (vm.getBlockTimestamp() - 82620) % 1 days;
+        if (elapsed < 30 minutes) vm.warp(vm.getBlockTimestamp() + 30 minutes - elapsed);
         uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
         slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192);
         vm.store(address(game), bytes32(0), bytes32(slot0));
-        assertFalse(game.advanceDue(), "advance settled");
+        _quietCrapsTable();
+        uint8 next = game.nextMinerAction();
+        assertTrue(
+            next == uint8(DegenerusGameStorage.MinerAction.HumanBoxes)
+                || next == uint8(DegenerusGameStorage.MinerAction.Degenerette),
+            "advance settled"
+        );
     }
 
     /// @dev Inject a lootbox RNG word for an index (lootboxRngWordByIndex mapping at slot 35).
@@ -458,10 +516,40 @@ contract KeeperFaucetResistance is DeployProtocol {
     // v55 router round-trip helpers (the afking open + advance bounty)
     // -------------------------------------------------------------------------
 
-    /// @dev The LIVE break-even unit mineFlip() computes: (BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / mintPrice.
-    ///      BOUNTY_ETH_TARGET is the v55 hardcoded module constant (mirrored here; no game getter exists).
-    function _liveUnit() internal view returns (uint256) {
-        return (BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / game.mintPrice();
+    /// @dev The MinerWork(caller, firstAction, executionGas, flipReward) of a single mineFlip.
+    function _minerWork(Vm.Log[] memory logs) internal view returns (uint8 first, uint256 measured, uint256 reward) {
+        uint256 seen;
+        for (uint256 i; i < logs.length; i++) {
+            if (logs[i].emitter == address(game) && logs[i].topics.length > 0 && logs[i].topics[0] == MINER_WORK_SIG) {
+                (first, measured, reward) = abi.decode(logs[i].data, (uint8, uint256, uint256));
+                ++seen;
+            }
+        }
+        assertEq(seen, 1, "one MinerWork per mineFlip");
+    }
+
+    /// @dev The miner clock: the later of the last accepted callback (lootboxRngPacked low 48 bits)
+    ///      and the current day reset.
+    function _rewardDueAt() internal view returns (uint256 due) {
+        due = uint48(uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)))));
+        uint256 ts = vm.getBlockTimestamp();
+        uint256 reset = ts - (ts - 82_620) % 1 days;
+        if (reset > due) due = reset;
+    }
+
+    /// @dev Mirror of the miner pay for `measured` gas at the current base fee and clock.
+    function _expectedPay(uint256 measured, bool pass, bool locked) internal view returns (uint256) {
+        if (measured <= MineFlipGas.MIN_REWARDED_GAS) return 0;
+        uint256 ts = vm.getBlockTimestamp();
+        uint256 due = _rewardDueAt();
+        uint256 steps = (ts > due ? ts - due : 0) / 30 minutes;
+        if (steps > 4) steps = 4;
+        uint256 cap = INITIAL_REWARD_BASEFEE_CAP << steps;
+        uint256 bps = 3_000 + 4_500 * steps;
+        if (pass) bps <<= 1;
+        if (locked) bps <<= 1;
+        uint256 rate = block.basefee < cap ? block.basefee : cap;
+        return (measured - MineFlipGas.MIN_REWARDED_GAS) * rate * PRICE_COIN_UNIT * bps / (game.mintPrice() * 10_000);
     }
 
     /// @dev Settle the game to a clean state (advance not due, not rng-locked) — the open leg's `else` arm

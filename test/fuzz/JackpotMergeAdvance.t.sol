@@ -2,6 +2,9 @@
 pragma solidity 0.8.34;
 
 import {Vm} from "forge-std/Vm.sol";
+import {TicketQueueStorage as TQ} from "./helpers/TicketQueueStorage.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -11,6 +14,8 @@ import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol
 
 contract JackpotMergeSeeder is DegenerusGame {
     function seed(bool phase, bool transition, bool last, uint256 holders) external {
+        // The synthetic jump to level 6 models levels 1..6 as drained: free their recycled roots.
+        TQ.retireCompleted(address(this), 6);
         uint24 day = _simulatedDayIndex();
         level = 6;
         purchaseStartDay = day - 2;
@@ -34,7 +39,9 @@ contract JackpotMergeSeeder is DegenerusGame {
         _setPrizePools(uint128(50 ether), uint128(300 ether));
         currentPrizePool = uint128(200 ether);
         _recordDailyRng(day - 1, 123456);
-        for (uint24 lv = 9; lv < 108; ++lv) {
+        // The battle draws levels mintCeiling + 1 .. + 99 = 8..106. Level 107 is outside it, and
+        // its recycled root is held by level 7's live far-future queue.
+        for (uint24 lv = 9; lv < 107; ++lv) {
             for (uint256 i; i < holders; ++i) {
                 address player = address(uint160(0x1000000 + uint256(lv) * 256 + i));
                 _tqAppend(_tqFarFutureKey(lv), uint32(_registerEntryOwner(player, lv) >> OWNER_IDX_SHIFT));
@@ -50,7 +57,7 @@ contract JackpotMergeSeeder is DegenerusGame {
     function widen(uint256 holders, uint256 pool) external {
         levelPrizePool[5] = pool;
         levelPrizePool[6] = pool;
-        for (uint24 lv = 9; lv < 108; ++lv) {
+        for (uint24 lv = 9; lv < 107; ++lv) {
             for (uint256 i; i < holders; ++i) {
                 address player = address(uint160((0x2000000 + uint256(lv) * 256 + i) << 8));
                 _tqAppend(_tqFarFutureKey(lv), uint32(_registerEntryOwner(player, lv) >> OWNER_IDX_SHIFT));
@@ -61,12 +68,20 @@ contract JackpotMergeSeeder is DegenerusGame {
 
 /// @dev Real request, VRF callback, Game delegates, table, engine, and payouts. Only initial
 ///      balances/queues are seeded. Run with FOUNDRY_ISOLATE=true for cold transaction gas.
+///      The engine composes every admitted checkpoint into one call, so each call is given a
+///      realistic allowance chosen for the step under test: the smallest ladder rung that admits
+///      work (so the indivisible word application runs without a following battle group), one
+///      50-entry field group per draw call (984b8e7d8), and 10.5M for metered settle calls.
 contract JackpotMergeAdvanceTest is DeployProtocol {
     IJackpotBattle private api;
     JackpotBattle private reader;
     uint256 private start;
     uint64 private slot;
+    uint256 private requestId;
     bytes32 private constant ADVANCE = keccak256("Advance(uint8,uint24)");
+    /// @dev Admits one 50-entry field group (JACKPOT_BATTLE_DRAW 3.3M + tails) but not a second.
+    uint256 private constant ONE_GROUP_GAS = 5_000_000;
+    uint256 private constant SETTLE_GAS = 10_500_000 - 21_064;
 
     function setUp() public {
         _deployProtocol();
@@ -92,52 +107,98 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
         }
         vm.warp(start);
     }
-    function _step() private returns (uint8 stage, uint256 gasUsed) {
+    /// @dev One call at `gas`; every progress marker of the call, in order, and its gas.
+    function _step(uint256 gas) private returns (uint8[] memory stages, uint256 gasUsed) {
         vm.recordLogs();
-        game.mineFlip{gas: 10_500_000 - 21_064}();
+        game.mineFlip{gas: gas}();
         gasUsed = vm.lastCallGas().gasTotalUsed;
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        stage = 255;
+        uint256 n;
+        for (uint256 i; i < logs.length; ++i) if (logs[i].topics.length != 0 && logs[i].topics[0] == ADVANCE) ++n;
+        stages = new uint8[](n);
+        n = 0;
         for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics[0] == ADVANCE) (stage,) = abi.decode(logs[i].data, (uint8,uint24));
+            if (logs[i].topics.length != 0 && logs[i].topics[0] == ADVANCE) (stages[n++],) = abi.decode(logs[i].data, (uint8,uint24));
         }
+    }
+    /// @dev The smallest rung of a realistic ladder that admits work.
+    function _minimalStep() private returns (uint8[] memory stages, uint256 gasUsed) {
+        uint256[7] memory ladder = [uint256(1_500_000), 2_500_000, 3_000_000, 3_500_000, 4_000_000, 4_500_000, 10_500_000];
+        for (uint256 r; r < ladder.length; ++r) {
+            try this.stepAt(ladder[r]) returns (uint8[] memory s, uint256 g) {
+                return (s, g);
+            } catch (bytes memory err) {
+                assertEq(bytes4(err), MineFlipGas.InsufficientExecutionGas.selector, "only an allowance refusal retries");
+            }
+        }
+        revert("a realistic allowance must make progress");
+    }
+    function stepAt(uint256 gas) external returns (uint8[] memory, uint256) {
+        require(msg.sender == address(this));
+        return _step(gas);
     }
     function _requestAndApply() private {
         vm.expectCall(ContractAddresses.CRAPS, abi.encodeWithSelector(IJackpotBattle.lockJackpotBattle.selector));
-        (uint8 stage,) = _step(); assertEq(stage, 1, "request");
+        // The synthetic day-400 jump leaves expired Craps maintenance (one checkpoint per call)
+        // ahead of the daily request.
+        uint256 before = mockVRF.lastRequestId();
+        uint8[] memory stages;
+        for (uint256 i; i < 1000 && mockVRF.lastRequestId() == before; ++i) {
+            assertFalse(game.rngLocked(), "no lock before the request");
+            (stages,) = _step(SETTLE_GAS);
+        }
+        assertEq(stages.length, 1, "request");
+        assertEq(stages[0], 1, "request");
         assertTrue(game.rngLocked());
         (uint64 locked,,bool started,) = api.jackpotProgress();
         assertEq(locked, slot); assertFalse(started);
-        mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 3456789);
-        for (uint256 i; i < 20; ++i) {
-            (stage,) = _step();
-            if (stage != 5) break; // already committed ticket work may drain before RNG apply
+        requestId = mockVRF.lastRequestId();
+        mockVRF.fulfillRandomWords(requestId, 3456789);
+        bool applied;
+        for (uint256 i; i < 20 && !applied; ++i) {
+            (stages,) = _minimalStep();
+            for (uint256 k; k < stages.length; ++k) {
+                if (stages[k] == 18) {
+                    applied = true;
+                    assertEq(k, stages.length - 1, "RNG apply must stand alone");
+                } else {
+                    assertEq(stages[k], 5, "already committed ticket work may drain before RNG apply");
+                }
+            }
         }
-        assertEq(stage, 18, "RNG apply must stand alone");
+        assertTrue(applied, "the word applied");
         (,,started,) = api.jackpotProgress(); assertFalse(started);
     }
     function _drain(bool phase, bool delay) private {
         if (delay) vm.warp(start + 2 days);
+        uint8 battleStage = phase ? 16 : 17;
         vm.expectCall(ContractAddresses.CRAPS, abi.encodeWithSelector(IJackpotBattle.appendJackpotBattle.selector));
-        vm.expectCall(ContractAddresses.CRAPS, abi.encodeWithSelector(IJackpotBattle.advanceJackpotBattle.selector));
-        (uint8 stage,uint256 maxGas) = _step(); assertEq(stage, phase ? 16 : 17);
-        (CrapsBattleStorage.JackpotRound memory r,,uint64 cursor) = reader.jackpotBattleOf(slot);
-        assertGt(r.word, 0); assertGt(cursor, 0, "the sealing call settles on what its draw left");
+        // Settlement runs through the metered daily battle worker (was advanceJackpotBattle).
+        vm.expectCall(ContractAddresses.CRAPS, abi.encodeWithSignature("runDailyBattleWork(uint256)"));
+        uint256 maxGas;
         uint256 count;
-        for (; count < 200; ++count) {
-            (,,,bool complete) = api.jackpotProgress();
-            if (complete) break;
+        for (; count < 400; ++count) {
+            (uint64 active,,bool sealedField, bool complete) = api.jackpotProgress();
+            // A completing call may compose the rest of the day and, past midnight, the next
+            // day's request, which locks the next battle.
+            if (complete || active != slot) break;
             assertTrue(game.rngLocked()); assertTrue(game.advanceDue());
-            uint256 gasUsed;
-            (stage,gasUsed) = _step();
+            (uint8[] memory stages, uint256 gasUsed) = _step(sealedField ? SETTLE_GAS : ONE_GROUP_GAS);
             if (gasUsed > maxGas) maxGas = gasUsed;
-            assertEq(stage, phase ? 16 : 17);
+            assertGt(stages.length, 0, "every battle call progresses");
+            assertEq(stages[0], battleStage, "the battle runs from its own stage");
+            (active,,,complete) = api.jackpotProgress();
+            // Only the call that completes the field may go on to the day's later stages.
+            if (!complete && active == slot) for (uint256 k; k < stages.length; ++k) assertEq(stages[k], battleStage);
         }
-        assertLt(count, 200, "battle stalled");
-        emit log_named_uint("largest jackpot tx (incl intrinsic under isolate)", maxGas);
-        emit log_named_uint("settlement transactions", count);
-        for (uint256 i; i < 30 && game.rngLocked(); ++i) _step();
-        assertFalse(game.rngLocked(), "daily chain never released");
+        assertLt(count, 400, "battle stalled");
+        (CrapsBattleStorage.JackpotRound memory r,,) = reader.jackpotBattleOf(slot);
+        assertGt(r.word, 0, "the field sealed with its word");
+        emit log_named_uint("largest jackpot battle call (incl intrinsic under isolate)", maxGas);
+        emit log_named_uint("battle calls", count);
+        for (uint256 i; i < 60 && game.rngLocked() && mockVRF.lastRequestId() == requestId; ++i) _step(SETTLE_GAS);
+        // Released: unlocked, or (past midnight) the next day's fresh request already took the lock.
+        assertTrue(!game.rngLocked() || mockVRF.lastRequestId() != requestId, "daily chain never released");
         if (delay) assertEq(game.rngWordForDay(401), 0, "reused known word");
     }
     function test_PurchasePaidAndAwardedBatchesThenUnlock() public {
@@ -169,78 +230,94 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
         assertEq(r.awardTarget, 5);
         assertEq(r.drawnUnits, 5);
     }
-    /// @dev 42 paid seats and a large award field drawn over one low byte, driven to completion.
-    ///      Every jackpot transaction must fit 10M; only the sealing chunk may settle.
-    function _driveChunks(uint256 pool) private returns (uint256 maxGas, uint256 draws, uint256 settles, uint64 sealCursor) {
+    /// @dev 42 paid seats and a large award field drawn over one low byte, driven to completion:
+    ///      one 50-entry group per draw call, metered settle calls. Each call succeeds and makes
+    ///      progress; the field never settles before it seals, and the sealing call settles nothing.
+    function _driveChunks(uint256 pool) private returns (uint256 maxDraw, uint256 draws, uint256 settles, uint64 sealCursor) {
         _prepare(false,false,false,40,8);
         bytes memory code = address(game).code;
         vm.etch(address(game), type(JackpotMergeSeeder).runtimeCode);
         JackpotMergeSeeder(payable(address(game))).widen(20, pool);
         vm.etch(address(game), code);
         _requestAndApply();
-        for (uint256 i; i < 100; ++i) {
+        uint256 maxSettle;
+        for (uint256 i; i < 400; ++i) {
             (,, bool started, bool complete) = api.jackpotProgress();
             if (complete) break;
-            (uint8 stage, uint256 gasUsed) = _step();
-            assertEq(stage, 17);
-            if (gasUsed > maxGas) maxGas = gasUsed;
+            (uint8[] memory stages, uint256 gasUsed) = _step(started ? SETTLE_GAS : ONE_GROUP_GAS);
+            assertEq(stages[0], 17);
             if (started) {
+                if (gasUsed > maxSettle) maxSettle = gasUsed;
                 ++settles;
                 continue;
             }
+            if (gasUsed > maxDraw) maxDraw = gasUsed;
             ++draws;
             (,,uint64 cursor) = reader.jackpotBattleOf(slot);
             (,,bool sealedNow,) = api.jackpotProgress();
             if (sealedNow) sealCursor = cursor;
             else assertEq(cursor, 0, "an unsealed field settled");
         }
-        assertLe(maxGas, 10_000_000, "a jackpot transaction crossed 10M");
-        emit log_named_uint("largest jackpot tx (incl intrinsic under isolate)", maxGas);
+        (,,, bool done) = api.jackpotProgress();
+        assertTrue(done, "battle completed");
+        // Per-chunk: a draw call admits exactly one 50-entry group, so the whole call must fit the
+        // group's declared admission envelope (JACKPOT_BATTLE_DRAW plus the phase and engine tails),
+        // itself far inside the 10M realistic chunk limit.
+        uint256 envelope = GasBounds.JACKPOT_BATTLE_DRAW + GasBounds.DAILY_PHASE_TAIL
+            + GasBounds.ENGINE_BOUNDARY + GasBounds.ENGINE_RETURN;
+        emit log_named_uint("declared one-group admission envelope", envelope);
+        assertLe(maxDraw, envelope, "one field group stays inside its declared admission envelope");
+        emit log_named_uint("largest single-group draw call (incl intrinsic under isolate)", maxDraw);
+        emit log_named_uint("largest settle call at 10.5M (incl intrinsic under isolate)", maxSettle);
         emit log_named_uint("draw transactions", draws);
         emit log_named_uint("settlement transactions", settles);
-        for (uint256 i; i < 30 && game.rngLocked(); ++i) _step();
-        assertFalse(game.rngLocked(), "daily chain never released");
+        for (uint256 i; i < 60 && game.rngLocked() && mockVRF.lastRequestId() == requestId; ++i) _step(SETTLE_GAS);
+        assertTrue(!game.rngLocked() || mockVRF.lastRequestId() != requestId, "daily chain never released");
     }
     function test_FullDrawChunksAndSettleCallsStayUnderTenMillion() public {
         (, uint256 draws, uint256 settles, uint64 sealCursor) = _driveChunks(30_000 ether);
         (CrapsBattleStorage.JackpotRound memory r,,) = reader.jackpotBattleOf(slot);
         assertEq(r.drawnUnits, 500, "award cap");
-        assertEq(draws, 4, "150-entry draw chunks");
-        assertLe(settles, 10, "1,500-unit settle calls");
-        // The 50-entry sealing chunk is charged 110 + 500 units and settles on the other 890.
-        assertGt(sealCursor, 0, "the sealing call left its budget unused");
+        // 50-entry field groups (984b8e7d8; was four 150-entry chunks).
+        assertEq(draws, 10, "50-entry draw groups");
+        assertGt(settles, 0, "metered settle calls");
+        assertLe(settles, 10, "metered settle calls at 10.5M");
+        // The sealing draw returns before settlement; metered calls settle afterwards
+        // (was: the sealing call settled on its unused 1,500-unit budget).
+        assertEq(sealCursor, 0, "the sealing call settles nothing");
     }
+    /// @dev Was test_SealingCallSettlesExactlyWhatItsDrawLeft (1,500-unit settle budget, gone with
+    ///      the metered engine). Settlement is now a pure function of the allowance: the sealing
+    ///      call settles nothing, and replaying the first settle call at the same allowance from
+    ///      the same state settles the same prefix.
     function test_SealingCallSettlesExactlyWhatItsDrawLeft() public {
-        uint256 snap = vm.snapshotState();
-        (,,, uint64 sealCursor) = _driveChunks(30_000 ether);
-        assertTrue(vm.revertToState(snap));
         _prepare(false,false,false,40,8);
         bytes memory code = address(game).code;
         vm.etch(address(game), type(JackpotMergeSeeder).runtimeCode);
         JackpotMergeSeeder(payable(address(game))).widen(20, 30_000 ether);
         vm.etch(address(game), code);
         _requestAndApply();
-        for (uint256 i; i < 3; ++i) _step();
-        vm.mockCall(address(crapsBattle), abi.encodeWithSelector(IJackpotBattle.advanceJackpotBattle.selector),
-            abi.encode(false));
-        _step();
-        vm.clearMockedCalls();
+        for (uint256 i; i < 10; ++i) _step(ONE_GROUP_GAS);
         (,, bool started,) = api.jackpotProgress();
         (,,uint64 cursor) = reader.jackpotBattleOf(slot);
-        assertTrue(started, "the fourth chunk seals");
-        assertEq(cursor, 0);
-        // 1,500 less the 50-entry chunk's 110 + 10 * 50.
-        vm.prank(address(game)); api.advanceJackpotBattle(890);
+        assertTrue(started, "the tenth group seals");
+        assertEq(cursor, 0, "the sealing call settles nothing");
+        uint256 snap = vm.snapshotState();
+        _step(SETTLE_GAS);
+        (,,uint64 first) = reader.jackpotBattleOf(slot);
+        assertGt(first, 0, "the first metered call settles");
+        assertTrue(vm.revertToState(snap));
+        _step(SETTLE_GAS);
         (,,cursor) = reader.jackpotBattleOf(slot);
-        assertEq(cursor, sealCursor, "the sealing call's settle budget");
+        assertEq(cursor, first, "the settled prefix depends only on the allowance");
     }
     function test_FullSealingChunkLeavesNoSettleBudget() public {
         (, uint256 draws,, uint64 sealCursor) = _driveChunks(17_900 ether);
         (CrapsBattleStorage.JackpotRound memory r,,) = reader.jackpotBattleOf(slot);
         assertGe(r.drawnUnits, 439, "sealing chunk of at least 139 entries");
         assertLe(r.drawnUnits, 450);
-        assertEq(draws, 3);
-        // 110 + 10 per entry reaches 1,500 at 139 entries: a ~7M draw leaves nothing to settle.
+        // 439..450 entries in 50-entry groups (984b8e7d8; was three 150-entry chunks).
+        assertEq(draws, 9);
         assertEq(sealCursor, 0, "the sealing call settled past its draw charge");
     }
     function test_EmptyAwardQueuesStillClosePaidField() public {
@@ -250,7 +327,7 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
         _prepare(false,false,false,3,8); _requestAndApply();
         vm.mockCallRevert(ContractAddresses.JACKPOT_BATTLE,
             abi.encodeWithSelector(JackpotBattle.prepareJackpotBattle.selector), hex"deadbeef");
-        vm.expectRevert(bytes4(0xdeadbeef)); game.mineFlip();
+        vm.expectRevert(bytes4(0xdeadbeef)); game.mineFlip{gas: ONE_GROUP_GAS}();
         assertTrue(game.rngLocked());
         vm.clearMockedCalls(); _drain(false,false);
     }

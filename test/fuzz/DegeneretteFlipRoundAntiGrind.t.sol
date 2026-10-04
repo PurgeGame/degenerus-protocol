@@ -127,10 +127,9 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
         uint256 nonZeroMints;
         uint256 calls;
         while (!game.boxIndexComplete(index)) {
-            // 2, not 1: the fixture's fixed 2-member afking ring (VAULT + sDGNRS, both
-            // perpetually skip-only here) always burns exactly 1 unit of maxCount before the
-            // human-box leg sees any budget.
-            uint256 minted = _sweepAndMeasure(2);
+            // Each call gets the smallest gas allowance that resolves any bet (the walk-unit
+            // budget became a gas allowance in 60d31f775), so each flush groups exactly one bet.
+            uint256 minted = _sweepAndMeasure(0);
             if (minted != 0) {
                 ++nonZeroMints;
                 // Every surviving payout here clears the threshold, so any per-call flush,
@@ -193,11 +192,39 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
     /// @dev Sweep index 1 with `budget` from the keeper and return the FLIP minted to `player`.
     ///      Resolution is permissionless and only ever credits the bet owner, so the keeper
     ///      needs no approval.
+    ///      Bets resolve only as the engine's Degenerette read consumer (mineFlip). `budget` is
+    ///      max for one unbounded call, or 0 for the smallest allowance that resolves any bet.
     function _sweepAndMeasure(uint256 budget) internal returns (uint256 minted) {
         uint256 before = coin.balanceOf(player);
+        uint256 allowance = budget == type(uint256).max ? 0 : _minimalAllowance();
         vm.prank(keeper);
-        game.openBoxes(budget);
+        if (allowance == 0) game.mineFlip();
+        else game.mineFlip{gas: allowance}();
         minted = coin.balanceOf(player) - before;
+    }
+
+    /// @dev The smallest mineFlip allowance that resolves a bet, by bisection over snapshots: the
+    ///      engine admits a bet only while the remaining allowance covers its declared bound.
+    function _minimalAllowance() internal returns (uint256) {
+        bytes32 resolvedSig = keccak256("DegeneretteResolved(address,uint32,uint64,uint256,uint32,bytes)");
+        uint256 lo = 300_000;
+        uint256 hi = 30_000_000;
+        while (hi - lo > 1_000) {
+            uint256 mid = (lo + hi) / 2;
+            uint256 snap = vm.snapshotState();
+            vm.recordLogs();
+            vm.prank(keeper);
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip()"));
+            bool resolved;
+            if (ok) {
+                Vm.Log[] memory logs = vm.getRecordedLogs();
+                for (uint256 i; i < logs.length; ++i) if (logs[i].topics[0] == resolvedSig) resolved = true;
+            }
+            vm.revertToStateAndDelete(snap);
+            if (resolved) hi = mid;
+            else lo = mid;
+        }
+        return hi;
     }
 
     /// @dev Place a Degenerette bet for `player` and return its id within the index queue.
@@ -255,6 +282,11 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
 
     function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
         RecyclingState.seedWord(address(game), index, bytes32(rngWord));
+        // The day itself is sealed (dailyIdx = today, tickets drained), as after a mid-day request:
+        // the delivered cohort's read consumers are the engine's only work.
+        uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
+        slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192);
+        vm.store(address(game), bytes32(0), bytes32(slot0));
     }
 
     function _seedFuturePrizePool(uint256 targetFuture) internal {

@@ -28,6 +28,74 @@ contract RedemptionBatchGameSeeder is DegenerusGame {
 
 contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
     address private keeper = address(0xC4A123);
+    bytes32 private constant MINER_WORK = keccak256("MinerWork(address,uint8,uint256,uint256)");
+    bytes32 private constant STAKE_UPDATED = keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
+
+    /// @dev The miner's one reward clock: the later of the last accepted callback and the day reset.
+    function _rewardElapsed() private view returns (uint256) {
+        uint256 ts = vm.getBlockTimestamp();
+        uint256 due = uint48(uint256(vm.load(address(game), bytes32(uint256(33)))));
+        uint256 reset = ts - (ts - 82_620) % 1 days;
+        if (reset > due) due = reset;
+        return ts > due ? ts - due : 0;
+    }
+
+    /// @dev The smallest allowance (100k steps, up to `ceiling`) with which the next keeper call
+    ///      succeeds: the measured admission boundary of the next indivisible chunk. Probed on
+    ///      snapshots; the state is left unchanged.
+    function _boundaryAllowance(uint256 ceiling) private returns (uint256 g) {
+        uint256 snap = vm.snapshotState();
+        for (g = 1_000_000; g <= ceiling; g += 100_000) {
+            vm.prank(keeper);
+            try game.mineFlip{gas: g}() {
+                assertTrue(vm.revertToState(snap));
+                return g;
+            } catch {
+                assertTrue(vm.revertToState(snap));
+            }
+        }
+        revert("harness: no allowance up to the ceiling progresses");
+    }
+
+    /// @dev One keeper call through the router: the keeper's only credit is the Game's measured-gas
+    ///      reward (no per-claim or per-box bounty rides along), priced exactly by the engine formula
+    ///      (gas above the unpaid first 1M, capped base fee, delay ladder, no pass, no lock). Returns
+    ///      the credited reward and the call's measured execution gas.
+    function _keeperMine(uint256 gasLimit) private returns (uint256 reward, uint256 used) {
+        uint256 rewardPrice = game.mintPrice();
+        uint256 elapsed = _rewardElapsed();
+        bool lockedAtStart = game.rngLocked();
+        uint256 prior = coinflip.coinflipAmount(keeper);
+        vm.recordLogs();
+        vm.prank(keeper);
+        game.mineFlip{gas: gasLimit}();
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 credits;
+        uint256 works;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter == address(game) && logs[i].topics[0] == MINER_WORK) {
+                (, uint256 measured, uint256 paid) = abi.decode(logs[i].data, (uint8, uint256, uint256));
+                uint256 step = elapsed / 30 minutes;
+                if (step > 4) step = 4;
+                uint256 cap = uint256(0.5 gwei) << step;
+                uint256 rate = block.basefee < cap ? block.basefee : cap;
+                uint256 expected = measured <= 1_000_000 ? 0
+                    : (measured - 1_000_000) * rate * 1000 ether * (3000 + step * 4500) * (lockedAtStart ? 2 : 1)
+                        / (rewardPrice * 10_000);
+                assertEq(paid, expected, "reward prices the measured engine gas");
+                reward = paid;
+                used = measured;
+                ++works;
+            }
+            if (logs[i].emitter == address(coinflip) && logs[i].topics.length > 1
+                && logs[i].topics[0] == STAKE_UPDATED && logs[i].topics[1] == bytes32(uint256(uint160(keeper)))) {
+                ++credits;
+            }
+        }
+        assertEq(works, 1, "one measured miner call");
+        assertEq(credits, reward == 0 ? 0 : 1, "exactly one keeper credit");
+        assertEq(coinflip.coinflipAmount(keeper) - prior, reward, "keeper credited exactly the engine reward");
+    }
 
     function _batch(uint256 allowance) private returns (bool done, uint256 charged, uint256 quote) {
         vm.prank(address(game));
@@ -144,38 +212,72 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
             game.futurePrizePoolView(), address(sdgnrs).balance, sdgnrs.pendingRedemptionEthValue())), manualBalances);
     }
     // Pins coinflip.creditFlip in the router: external keeper gets the exact single credit.
+    // The miner pays measured gas above each call's unpaid first 1M at the capped base fee, so the
+    // fixture settles real lootbox claims (above that threshold) at a nonzero base fee.
     function test_MineFlipPaysExternalKeeperOnceAndNoBoxesStillCommits() public {
+        vm.fee(1 gwei);
         uint24 day = game.currentDayView();
-        _burn(alice, 1 ether); _burn(bob, 1 ether);
-        _resolve(day, 100, 99);
+        _newBurners(2, sdgnrs.totalSupply() * 16 / 1000);
+        _resolve(day, 175, 99);
 
-        uint256 prior = coinflip.coinflipAmount(keeper);
-        vm.prank(keeper); game.mineFlip();
-        assertGt(coinflip.coinflipAmount(keeper) - prior, 0);
+        (uint256 reward, uint256 used) = _keeperMine(10_000_000);
+        emit log_named_uint("redemption_drain_miner_execution_gas", used);
+        assertGt(reward, 0, "external keeper paid for the redemption drain");
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
         assertFalse(sdgnrs.redemptionSettlementPending());
     }
+    // The miner reward prices measured gas above each call's unpaid first 1M at min(basefee, cap),
+    // so at a nonzero base fee the redemptions are cleared by calls held inside that first 1M
+    // (each at the smallest allowance that admits its next chunk) and the keeper is credited nothing.
     function test_LowGasMineClearsRedemptionsWithoutMinerCredit() public {
+        vm.fee(1 gwei);
         uint24 day = game.currentDayView();
         _burn(alice, 1 ether); _burn(bob, 1 ether);
         _resolve(day, 100, 99); _commitWord(99);
         vm.warp(vm.getBlockTimestamp() + 1 days);
+        assertTrue(sdgnrs.redemptionSettlementPending(), "nonvacuity: redemptions await settlement");
         uint256 prior = coinflip.coinflipAmount(keeper);
-        vm.prank(keeper); game.mineFlip{gas: 9_500_000}();
+        uint256 calls;
+        for (; calls < 64 && sdgnrs.redemptionSettlementPending(); ++calls) {
+            (uint256 reward, uint256 used) = _keeperMine(_minimumAllowance());
+            emit log_named_uint("low_gas_call_execution_gas", used);
+            assertLe(used, 1_000_000, "each low-gas call stays inside the unpaid first 1M");
+            assertEq(reward, 0, "a call inside the unpaid first 1M credits nothing");
+        }
+        assertGt(calls, 0, "nonvacuity: low-gas calls ran");
         assertEq(coinflip.coinflipAmount(keeper), prior);
         assertFalse(sdgnrs.redemptionSettlementPending());
+    }
+
+    /// @dev Smallest ladder allowance that admits the keeper's next chunk (probed on a snapshot);
+    ///      every smaller allowance must be refused with InsufficientExecutionGas.
+    function _minimumAllowance() private returns (uint256) {
+        uint256[8] memory ladder =
+            [uint256(1_000_000), 1_250_000, 1_500_000, 2_000_000, 2_500_000, 3_500_000, 5_000_000, 9_500_000];
+        for (uint256 s; s < ladder.length; ++s) {
+            uint256 snap = vm.snapshotState();
+            vm.prank(keeper);
+            (bool ok, bytes memory err) = address(game).call{gas: ladder[s]}(abi.encodeWithSignature("mineFlip()"));
+            vm.revertToState(snap);
+            if (ok) return ladder[s];
+            assertEq(bytes4(err), MineFlipGas.InsufficientExecutionGas.selector, "a short allowance is refused, nothing else");
+        }
+        revert("no allowance up to 9.5M admits the next chunk");
     }
     function test_RedemptionThenAffordableHumanBoxSharesOneCall() public {
         address buyer = address(0xB0C1);
         _buyHuman(buyer, 1);
         uint24 day = game.currentDayView();
-        _burn(alice, 1 ether); _resolve(day, 100, 99); _commitWord(99);
-        uint256 prior = coinflip.coinflipAmount(keeper);
-        vm.prank(keeper); game.mineFlip();
+        _burn(alice, sdgnrs.totalSupply() * 16 / 1000); _resolve(day, 175, 99); _commitWord(99);
+        // The keeper is paid the engine's measured-gas reward for the shared call (the per-box
+        // flat bounty no longer exists); the claim is sized so the call clears the unpaid first 1M.
+        vm.fee(1 gwei);
+        (uint256 reward, uint256 used) = _keeperMine(10_000_000);
+        emit log_named_uint("redemption_plus_human_box_miner_execution_gas", used);
         (uint256 count,, bool complete) = _boxState(buyer);
         assertEq(count, 0); assertTrue(complete);
         assertFalse(sdgnrs.redemptionSettlementPending());
-        assertGt(coinflip.coinflipAmount(keeper) - prior, 24_000_000_000_000 * 1000 ether / game.mintPrice());
+        assertGt(reward, 0, "keeper paid for the shared call");
     }
     function test_OversizedFirstHumanBoxWaitsAndRedemptionsCommit() public {
         address buyer = address(0xB0C2);
@@ -183,13 +285,17 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         uint24 day = game.currentDayView();
         _newBurners(2, sdgnrs.totalSupply() * 16 / 1000);
         _resolve(day, 175, 99); _commitWord(99);
-        vm.prank(keeper); game.mineFlip();
+        // At the measured boundary allowance (<= 10M) the call admits one maximum claim; the engine
+        // keeps admitting chunks while a larger allowance covers the next declared bound.
+        uint256 boundary = _boundaryAllowance(10_000_000);
+        emit log_named_uint("maximum_redemption_admission_boundary_allowance", boundary);
+        vm.prank(keeper); game.mineFlip{gas: boundary}();
         (uint256 count, uint256 cursor, bool complete) = _boxState(buyer);
         assertEq(count, 100); assertEq(cursor, 0); assertFalse(complete);
         assertGt(sdgnrs.pendingRedemptionEthValue(), 0, "next maximum claim retains its reserve");
         assertTrue(sdgnrs.redemptionSettlementPending());
         for (uint256 i; i < 4 && count != 0; ++i) {
-            vm.prank(keeper); game.mineFlip();
+            vm.prank(keeper); game.mineFlip{gas: 10_000_000}();
             (count,, complete) = _boxState(buyer);
         }
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
@@ -206,18 +312,22 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         vm.cool(ContractAddresses.GAME_AFKING_MODULE); vm.cool(ContractAddresses.GAME_LOOTBOX_MODULE);
         vm.cool(ContractAddresses.GAME_MINT_MODULE); vm.cool(ContractAddresses.GAME_FOILPACK_MODULE);
         vm.cool(ContractAddresses.GAME_BOON_MODULE); vm.cool(ContractAddresses.GAME_DEGENERETTE_MODULE);
+        // At the measured boundary (the smallest allowance admitting the maximum claim, declared
+        // 350k + 28 x 250k) the call succeeds and settles the claim, and its remaining allowance
+        // cannot admit the next whole 100-box order. The boundary is a realistic allowance (<= 10M).
+        uint256 boundary = _boundaryAllowance(10_000_000);
+        emit log_named_uint("maximum_redemption_admission_boundary_allowance", boundary);
         vm.prank(keeper);
         uint256 beforeGas = gasleft();
-        game.mineFlip();
+        game.mineFlip{gas: boundary}();
         uint256 used = beforeGas - gasleft() + 21_000;
-        emit log_named_uint("cold_maximum_redemption_composition_gas", used);
-        assertLe(used, 10_000_000, "entire composition below current gas ceiling");
+        emit log_named_uint("cold_maximum_redemption_call_gas_including_intrinsic", used);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
         (uint256 count, uint256 cursor,) = _boxState(first);
         assertEq(count, 100, "next indivisible order remains whole"); assertEq(cursor, 0);
         // Both orders fit individually; continuation follows their committed FIFO.
         for (uint256 i; i < 3 && count != 0; ++i) {
-            vm.prank(keeper); game.mineFlip();
+            vm.prank(keeper); game.mineFlip{gas: 10_000_000}();
             (count,,) = _boxState(second);
         }
         (count,,) = _boxState(first); assertEq(count, 0);

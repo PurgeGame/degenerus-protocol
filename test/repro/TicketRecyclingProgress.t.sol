@@ -5,6 +5,7 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DeadVrfSeeder} from "../fuzz/helpers/DeadVrfSeeder.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IDegenerusGameMintModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
+import {Vm} from "forge-std/Vm.sol";
 
 contract RecyclingProgressSeeder is DeadVrfSeeder {
     function seedDeferredFoil(address foilOwner, address ticketOwner) external {
@@ -32,8 +33,11 @@ contract RecyclingProgressSeeder is DeadVrfSeeder {
         earlyTicketLevel = 203;
         _setTicketBufferLevel(201); _setTicketBufferLevel(202);
         ticketsFullyProcessed = false;
-        rngLockedFlag = true; rngRequestTime = uint48(block.timestamp) & ~uint48(1);
-        vrfRequestId = 777; _setRngRequestActive(true); _setRngSessionPublished(false); rngWordCurrent = 2; _setNudgeCount(3);
+        // A daily request records its day; the chained daily apply reads it.
+        rngLockedFlag = true; rngRequestTime = uint48(block.timestamp) & ~uint48(1); rngRequestDay = day;
+        // A request always clears the completion marker; ticket work is selected only under it.
+        vrfRequestId = 777; _setRngRequestActive(true); _setRngSessionPublished(false); _setRngComplete(false);
+        rngWordCurrent = 2; _setNudgeCount(3);
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((2) & 1) << 12);
         _setRngSessionPublished(false);
         _seedQueued(_tqReadKey(203), 203, owner, uint80(100) << 8);
@@ -78,19 +82,42 @@ contract TicketRecyclingProgressTest is DeployProtocol {
         return RecyclingProgressSeeder(payable(address(game)));
     }
     function test_DeferredPreparationDrainsBlockingFoilBeforeRetryingTickets() public {
+        address foilOwner = makeAddr("old-foil-owner");
         RecyclingProgressSeeder s = _overlay();
-        s.seedDeferredFoil(makeAddr("old-foil-owner"), buyer);
+        s.seedDeferredFoil(foilOwner, buyer);
         emit log_named_uint("retirement deferred by drainable foil", s.foilCount(201));
+        assertEq(s.foilCount(201), 1, "nonvacuity: the old foil is pending");
+        assertEq(s.stamped(201), 201, "nonvacuity: the parity buffer still holds the paid old inventory");
+        // The ticket worker keeps admitting steps while the caller's gas covers them, so one
+        // ample-gas call both drains the blocking foil and then retires the buffer for 203.
+        // The order is read from events.
+        vm.recordLogs();
         (bool done, bool worked) = s.runProductionMint(203);
-        assertFalse(done);
+        (uint256 foilAt, uint256 ticketAt) = _traitsOrder(vm.getRecordedLogs(), foilOwner, buyer);
         assertTrue(worked, "the deferral must still drain the blocking old foil");
-        assertEq(s.foilCount(201), 0);
-        assertEq(s.stamped(201), 201, "first call retains the paid old inventory");
-        (done, worked) = s.runProductionMint(203);
         assertTrue(done);
-        assertTrue(worked);
+        assertEq(s.foilCount(201), 0);
+        assertLt(foilAt, ticketAt, "the old foil generates on the retained 201 inventory before any 203 ticket");
+        assertTrue(s.foilRecordWord(201, foilOwner) >> 255 != 0, "the drained old foil stored its lines");
         assertEq(s.stamped(203), 203);
         assertEq(s.bucketTotal(203), 100, "all pending new tickets materialized");
+    }
+
+    /// @dev Log positions of the first TraitsGenerated for `first` and for `second`.
+    function _traitsOrder(Vm.Log[] memory logs, address first, address second)
+        private view returns (uint256 firstAt, uint256 secondAt)
+    {
+        bytes32 topic = keccak256("TraitsGenerated(address,uint256,uint32)");
+        firstAt = type(uint256).max;
+        secondAt = type(uint256).max;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(game) || logs[i].topics.length < 2 || logs[i].topics[0] != topic) continue;
+            address player = address(uint160(uint256(logs[i].topics[1])));
+            if (player == first && firstAt == type(uint256).max) firstAt = i;
+            if (player == second && secondAt == type(uint256).max) secondAt = i;
+        }
+        assertTrue(firstAt != type(uint256).max, "first owner generated traits");
+        assertTrue(secondAt != type(uint256).max, "second owner generated traits");
     }
     function test_NudgeWrapCannotLeaveCommittedReadWordZero() public {
         RecyclingProgressSeeder s = _overlay();

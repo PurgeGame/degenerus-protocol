@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
@@ -85,6 +86,14 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         );
     }
 
+    /// @dev One keeper call at a 2M allowance. The engine admits work by declared gas bounds
+    ///      (60d31f775): the AFKing scan admits one entry per AFKING_SKIP_GAS/AFKING_OPEN_GAS, so
+    ///      a bounded call walks a bounded prefix, and 2M can never admit a fresh request
+    ///      (RNG_REQUEST plus tail), so the session under test is never sealed behind the test.
+    function _keep() private {
+        game.mineFlip{gas: 2_000_000}();
+    }
+
     function _buyWriteBox() private {
         vm.prank(PLAYER);
         game.purchase{value: 1 ether}(
@@ -96,10 +105,11 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         uint24 day = game.currentDayView();
         _seed(day, day, 1900, false);
 
-        // The clean prefix consumes 1900/1920 units: less than one AFKing open remains,
-        // while the empty human queue can finish using the small handed-off remainder.
-        game.mineFlip();
-        assertTrue(_humanComplete(), "the indexed consumer completed its empty read queue");
+        // A bounded keeper call walks only part of the 1900-entry clean prefix: the final
+        // stamped box stays pending. The shared consumer order (60d31f775) runs human boxes only
+        // after AFKing finishes, so the empty human queue cannot complete the session early.
+        _keep();
+        assertFalse(_humanComplete(), "the indexed consumer completed its empty read queue");
         assertEq(_pending(), 1, "weighted walk preserved the final stamped box");
         assertFalse(game.rngComplete(), "the pending AFKing consumer retains the session");
 
@@ -112,10 +122,11 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
 
         // The new-day router drains the final old-session consumer before requesting again.
         _expectStampedResolve(day);
-        game.mineFlip();
+        for (uint256 i; i < 64 && _pending() != 0; ++i) _keep();
         assertEq(mockVRF.lastRequestId(), requestId, "final-drain call did not request new entropy");
         assertEq(_pending(), 0);
         assertEq(_openedDay(), day);
+        assertTrue(_humanComplete(), "the empty human queue completes after AFKing");
         assertTrue(game.rngComplete(), "final AFKing open notifies completion even with human queue already done");
     }
 
@@ -136,9 +147,11 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         assertEq(_pending(), 1, "request lock also retains the stamp");
 
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), SESSION_WORD);
+        // The new session's read consumers run right after the unlock, in the keeper's own flow
+        // (60d31f775); the stamp must resolve on the NEW word with its own day, whoever opens it.
+        _expectStampedResolve(day);
         for (uint256 i; i < 256 && game.rngLocked(); ++i) game.mineFlip();
         assertFalse(game.rngLocked(), "daily work reaches unlock");
-        _expectStampedResolve(day);
         game.openBoxes(100);
         assertEq(_pending(), 0);
         assertEq(_openedDay(), day);
@@ -170,31 +183,54 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         assertTrue(game.rngLocked());
         assertGt(mockVRF.lastRequestId(), oldRequest);
 
+        uint24 requestDay = game.currentDayView();
+        uint256 delivered = mockVRF.lastRequestId();
         vm.warp(vm.getBlockTimestamp() + 1 days);
-        mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), SESSION_WORD);
-        for (uint256 i; i < 256 && game.rngLocked(); ++i) game.mineFlip();
-        assertFalse(game.rngLocked(), "delayed request applied and unlocked");
-        assertEq(RecyclingState.dailyWord(address(game), stampDay), 0, "gap processing retained only recent daily words");
-        assertEq(_pending(), 1, "request-day stamp survived the gap");
-        assertFalse(game.rngComplete(), "pending stamp retains the applied active session");
-
+        mockVRF.fulfillRandomWords(delivered, SESSION_WORD);
+        // The stamp must survive the gap (the no-orphan rule keeps it through the multi-day
+        // request) and resolve on the active session word with its ORIGINAL stamp day. Its open
+        // now runs in the keeper's own consumer order right after the unlock (60d31f775), so the
+        // resolve is expected across the drain rather than at a separate helper call. The call
+        // that seals the delayed day may continue into the next wall day's request, so the drive
+        // stops on the seal.
         _expectStampedResolve(stampDay);
+        vm.recordLogs();
+        for (uint256 i; i < 256 && _dailyIdx() < requestDay; ++i) game.mineFlip();
+        assertEq(_dailyIdx(), requestDay, "delayed request applied and unlocked");
+        assertEq(RecyclingState.dailyWord(address(game), stampDay), 0, "gap processing retained only recent daily words");
         game.openBoxes(100);
-        assertEq(_pending(), 0);
-        assertEq(_openedDay(), stampDay);
-        assertTrue(game.rngComplete());
+        assertEq(_pending(), 0, "request-day stamp survived the gap");
+        // The same composed call may go on to prepare the next wall day's subscriptions, where
+        // this unfunded fixture subscription expires (its record is deleted); otherwise the
+        // record must show the stamp opened with its original day.
+        if (_openedDay() != stampDay) {
+            Vm.Log[] memory logs = vm.getRecordedLogs();
+            bool expired;
+            for (uint256 i; i < logs.length; ++i) {
+                if (logs[i].topics.length > 1 && logs[i].topics[0] == keccak256("SubscriptionExpired(address,uint8)")
+                    && address(uint160(uint256(logs[i].topics[1]))) == PLAYER) expired = true;
+            }
+            assertTrue(expired, "opened with its stamp day, or expired afterwards");
+        }
+        // Completion was certified: either the session still reads complete, or the next wall
+        // day's request was sealed, which the read-complete gate permits only after it.
+        assertTrue(game.rngComplete() || mockVRF.lastRequestId() > delivered, "the session completed");
+    }
+
+    function _dailyIdx() private view returns (uint24) {
+        return uint24(uint256(game.extsload(bytes32(0))) >> 24);
     }
 
     function test_NewWriteBoxesDoNotKeepCompletedReadSessionOpen() public {
         uint24 day = game.currentDayView();
         _seed(day, day, 1900, false);
-        game.mineFlip();
+        _keep();
         _buyWriteBox();
         uint48 write = RecyclingState.writeBuffer(address(game));
         assertGt(uint256(game.extsload(keccak256(abi.encode(write, uint256(57))))), 0);
 
         _expectStampedResolve(day);
-        game.mineFlip();
+        for (uint256 i; i < 64 && _pending() != 0; ++i) _keep();
         assertEq(_pending(), 0);
         assertTrue(game.rngComplete(), "only the sealed read session must finish");
         assertGt(uint256(game.extsload(keccak256(abi.encode(write, uint256(57))))), 0, "new write orders remain queued");
@@ -202,6 +238,11 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
 
     function test_AfkingDrainAllowsMiddaySessionWithoutReopeningStamp() public {
         uint24 day = game.currentDayView();
+        // setUp's 5-day jump leaves scheduled Craps maintenance owed, which also refuses a
+        // mid-day request (RngModule: _minerMaintenancePending). Run it through the table's own
+        // permissionless keeper first (it runs only between read sessions), so the refusals and
+        // the request below answer to the AFKing read session alone.
+        _quietCrapsTable();
         _seed(day, day, 0, false);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
         game.requestLootboxRng();

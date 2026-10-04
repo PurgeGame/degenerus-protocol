@@ -9,9 +9,26 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 contract QueuePackingGasSeeder is DegenerusGame {
     function claimFor(address player) external { whalePassClaims[player] = 4; }
 
+    /// @dev Level 111 reuses level 1's physical near-queue slot (queue slots recycle under an
+    ///      absolute-level tag) and a wallet's pending word keeps one lane pair per level parity,
+    ///      so the raw jump to level 110 first models level 1 as fully drained: every queued
+    ///      owner's level-1 balance consumed and both level-1 queues released, as the drain
+    ///      leaves them.
     function emptyPurchaseLevel() external {
+        _seedDrainedQueue(_tqWriteKey(1));
+        _seedDrainedQueue(_tqReadKey(1));
         level = 110;
         _registerEntryOwner(address(1), 111);
+    }
+
+    function _seedDrainedQueue(uint24 key) private {
+        uint256 n = _ticketQueueLength(key);
+        uint256[] storage q = ticketQueue[_ticketQueueStorageKey(key)];
+        for (uint256 i; i < n; ++i) {
+            uint32 id = _tqPositionAt(q, i);
+            if (_entryPacked(key, id) != 0) _setEntryOwed(key, id, 0);
+        }
+        _releaseTicketQueue(key);
     }
 
     function queued(uint24 lvl, address player) external view returns (uint80) {

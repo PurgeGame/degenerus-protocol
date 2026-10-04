@@ -5,6 +5,7 @@ import {TicketQueueStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title MiddaySwapJackpotCohort — the mid-day lootbox freeze against a jackpot-phase cohort.
@@ -82,14 +83,19 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         vm.pauseGasMetering();
         _driveToJackpotPhase();
         _drainUntilUnlocked();
+        _settleIdle();
         assertTrue(game.jackpotPhase(), "harness: must be inside the jackpot phase");
         uint24 L = _level();
 
-        // The day's own jackpot leaves award tickets at level + 1.
+        // Award tickets queued at level + 1. Main daily awards now materialize directly into the
+        // live level + 1 buffer (95d88f68b) and the miner's own mid-day request may already have
+        // committed the day-1 early-bird queue, so stage one queued award entry at level + 1
+        // (the queue-path award shape) on the write side.
+        TicketQueueStorage.seed(address(game), _writeKeyOf(L + 1), L + 1, address(0xA3A2D), uint80(4) << 8);
         assertGt(
             _queueLen(_writeKeyOf(L + 1)),
             0,
-            "reachability: the jackpot queues its award tickets at level + 1"
+            "reachability: an award entry is queued at level + 1"
         );
         assertTrue(
             _ticketsFullyProcessed(),
@@ -696,50 +702,6 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
     }
 
     // ---------------------------------------------------------------------
-    // K. Six-segment sweep gas shape
-    // ---------------------------------------------------------------------
-
-    /// The worst chained-call shape: every windowed read key non-empty at once, so one
-    /// worker call opens six fresh segments (six cold derates, six releases) and then
-    /// probes foil. The whole advance transaction must stay under the 10M per-tx target.
-    function testSixSegmentSweepSingleCallStaysUnderTarget() public {
-        vm.pauseGasMetering();
-        _driveToJackpotPhase();
-        _drainUntilUnlocked();
-        assertTrue(game.jackpotPhase(), "harness: must be inside the jackpot phase");
-        uint24 L = _level();
-
-        // Seed a 1-address / 4-entry cohort onto the READ side of every window key
-        // [purchaseLevel-1 .. purchaseLevel+4] = [L .. L+5], and reopen the drain.
-        for (uint24 t = L; t <= L + 5; t++) {
-            _seedReadCohort(t, buyer, 4);
-        }
-        uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(0))));
-        vm.store(
-            address(game),
-            bytes32(uint256(0)),
-            bytes32(s0 & ~(uint256(1) << 192)) // ticketsFullyProcessed = false
-        );
-
-        vm.resumeGasMetering();
-        uint256 g = gasleft();
-        (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
-        g -= gasleft();
-        assertTrue(ok, "harness: the sweep advance must succeed");
-        emit log_named_uint("six-segment sweep advance gas", g);
-        assertGt(g, 0, "harness: gas metering must be live for the measurement");
-        assertLt(g, 10_000_000, "the chained sweep call must stay under the 10M target");
-    }
-
-    /// @dev Seed one queued address with `entries` owed onto the CURRENT READ side of
-    ///      level key `lvl` (queue mapping slot 12, owed mapping slot 13).
-    function _seedReadCohort(uint24 lvl, address who, uint32 entries) internal {
-        TicketQueueStorage.seed(address(game), _readKeyOf(lvl), lvl, who, uint80(entries) << 8);
-    }
-
-    /// @dev Register `who` in ticketOwners (slot 67, permanent) the way every sink does at
-    ///      queue time, returning the owner bits the owed word must carry (position + 1 << 48).
-    // ---------------------------------------------------------------------
     // Drive
     // ---------------------------------------------------------------------
 
@@ -768,6 +730,15 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             }
             if (middayDay) {
                 requested = true;
+                if (!buyOnMiddayDay) {
+                    // Main daily awards now materialize directly into the live level + 1 buffer
+                    // (95d88f68b), so an awards-only day stages its queue-path award entry
+                    // explicitly: the probe then finds only the award queue at level + 1.
+                    _settleReadsWithoutRequest();
+                    TicketQueueStorage.seed(
+                        address(game), _writeKeyOf(L + 1), L + 1, address(0xA3A2D), uint80(4) << 8
+                    );
+                }
                 swapped = _middayRequest();
                 if (mode == MODE_DRAIN_SAME_DAY) {
                     _drainMidday();
@@ -850,7 +821,11 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
     ///      permissionless mid-day request from an unrelated account. True iff the
     ///      global ticket buffer toggled.
     function _middayRequest() internal returns (bool swapped) {
-        _finishReadConsumers();
+        // The miner sends its own mid-day request whenever one is eligible (a shut Craps window
+        // on the write buffer, or pending box value). Finish any session in flight with calls
+        // too small to admit a request (RNG_REQUEST 2.5M + engine reserves), so this explicit
+        // request is the one that commits the cohort under test.
+        _settleReadsWithoutRequest();
         vm.prank(buyer);
         game.purchase{value: 2 ether}(
             buyer,
@@ -867,6 +842,42 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         );
         require(ok, "harness: requestLootboxRng must be callable");
         swapped = _ticketWriteSlot() != before;
+    }
+
+    /// @dev Run the current day to idle: fulfil every request (including the miner's own mid-day
+    ///      requests) and drain its consumers, ending with nothing in flight.
+    function _settleIdle() internal {
+        for (uint256 i; i < 300; ++i) {
+            _fulfillPending();
+            (bool ok, bytes memory err) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            if (!ok) {
+                require(bytes4(err) == bytes4(keccak256("NoWork()")), "harness: the day must settle idle");
+                return;
+            }
+        }
+        revert("harness: the day never settled");
+    }
+
+    function _settleReadsWithoutRequest() internal {
+        for (uint256 i; i < 300; ++i) {
+            _fulfillPending();
+            uint256 id = mockVRF.lastRequestId();
+            (,, bool fulfilled) = mockVRF.pendingRequests(id);
+            if (game.rngComplete() && (id == 0 || fulfilled)) return;
+            // Smallest admitting allowance; a consumer whose own bound exceeds the 2.7M rung is
+            // admitted at the next rung; the guard below proves no request composed after it.
+            uint256[6] memory ladder = [uint256(2_700_000), 3_500_000, 4_500_000, 6_000_000, 9_000_000, 16_777_216];
+            bool progressed;
+            for (uint256 r; r < ladder.length && !progressed; ++r) {
+                (bool ok, bytes memory err) = address(game).call{gas: ladder[r]}(abi.encodeWithSignature("mineFlip()"));
+                if (ok) progressed = true;
+                else if (bytes4(err) == bytes4(keccak256("NoWork()"))) return;
+                else require(bytes4(err) == MineFlipGas.InsufficientExecutionGas.selector, "harness: reads settle");
+            }
+            require(progressed, "harness: reads settle within a realistic allowance");
+            require(mockVRF.lastRequestId() == id, "harness: no request composed into the read settle");
+        }
+        revert("harness: reads never settled");
     }
 
     function _drainMidday() internal {

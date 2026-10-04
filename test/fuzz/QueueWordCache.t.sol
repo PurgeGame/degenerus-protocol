@@ -3,29 +3,55 @@ pragma solidity 0.8.34;
 
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {LegacyTicketOwnerReference} from "../helpers/LegacyTicketOwnerReference.sol";
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
 import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {TicketEntropy} from "../../contracts/libraries/TicketEntropy.sol";
 
-contract QueueWordCacheHarness is LegacyTicketOwnerReference {
+/// @dev The round drain's queue-word cache: adjacent seats share one loaded queue word, so each
+///      queue word is loaded at most once per call. The uncached differential reference
+///      (contracts/mocks/QueueWordCacheReference.hex) was compiled against the pre-ring storage
+///      layout (unrecycled queue keys, level-keyed trait buffers, no queue rotation, unit
+///      budgets) and cannot run against current storage, so these tests check the cache against
+///      an uncached oracle computed here from raw queue lanes and the canonical queue rotation.
+contract QueueWordCacheHarness is DegenerusGameStorage {
+    uint24 private constant FAR_FUTURE_BIT = uint24(1) << 22;
+
+    /// @dev Far-future lanes hold whole entries only (no remainder field), so far-future seeds
+    ///      carry no remainder.
     function seed(uint24 key, uint24 lvl, uint256 n, uint32 ownerStart, uint256 entropy, uint8 shape) external {
         address[] storage owners = ticketOwners;
         assembly ("memory-safe") { sstore(owners.slot, ownerStart) }
+        bool farFuture = key & FAR_FUTURE_BIT != 0;
         for (uint256 i; i < n; ++i) {
             uint80 bits = _registerEntryOwner(address(uint160(0x123400 + i)), lvl);
             uint32 pos = uint32(bits >> OWNER_IDX_SHIFT);
             _tqAppend(key, pos);
             uint256 random = uint256(keccak256(abi.encode(entropy, i)));
             uint32 owed = shape == 1 ? 400 : shape == 2 ? 0 : uint32(random % 65);
-            uint8 rem = shape == 1 ? 0 : uint8((random >> 32) % 100);
+            uint8 rem = shape == 1 || farFuture ? 0 : uint8((random >> 32) % 100);
             uint80 packed = bits | (uint80(owed) << 8) | uint80(rem);
             if (shape == 0 && i % 7 == 0) packed = 0;
             _setEntryOwed(key, pos, packed);
         }
     }
 
-    function resume(uint256 seats) external { ticketSeats = seats; }
+    function resume(uint256 word) external { ticketSeats = word; }
 
+    function seats() external view returns (uint256) { return ticketSeats; }
+
+    function round() external view returns (uint32) { return ticketRound; }
+
+    function physicalKey(uint24 key) external pure returns (uint24) { return _ticketQueueStorageKey(key); }
+
+    /// @dev Uncached oracle: the owner of one physical queue position, read lane by lane.
+    function ownerAtPhysical(uint24 key, uint256 physical) external view returns (address) {
+        return _ticketOwnerAt(_tqPositionAt(ticketQueue[_ticketQueueStorageKey(key)], physical));
+    }
+
+    /// @dev The round phase as the legacy diagnostic selector exposes it; the retired unit
+    ///      budget `room` is ignored, the supplied gas bounds the call.
     function run(uint24 key, uint24 lvl, uint32 room, uint256 idx, uint256 total, uint256 entropy, uint8 shift)
         external returns (uint256 nextIdx, uint32 used)
     {
@@ -37,111 +63,172 @@ contract QueueWordCacheHarness is LegacyTicketOwnerReference {
     }
 }
 
-contract QueueWordCacheTest is Test {
+abstract contract QueueWordCacheBase is Test {
+    uint256 internal constant REALISTIC_GAS = 10_000_000;
+    uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
+
     QueueWordCacheHarness internal h;
-    bytes internal referenceCode;
-    bytes internal candidateCode;
 
     struct Observation {
-        bytes32 writes;
-        bytes32 logical;
-        bytes32 buckets;
-        bytes32 logs;
         uint256 nextIdx;
-        uint32 used;
+        uint256 gasUsed;
         uint256 queueReads;
         uint256 distinctWords;
+        uint256 wordsSeen;
+        Vm.Log[] logs;
     }
 
-    function setUp() public {
+    function _deploy() internal {
         h = new QueueWordCacheHarness();
-        referenceCode = vm.parseBytes(vm.readFile("contracts/mocks/QueueWordCacheReference.hex"));
-        assertEq(keccak256(referenceCode), 0xae005d10018c1f8f35445f87a0e686eb8724c226224ff6ecc0122392526863bd, "pinned uncached reference runtime");
-        candidateCode = address(new DegenerusGameFoilPackModule()).code;
+        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
+        vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, address(new DegenerusGameFoilPackModule()).code);
     }
 
-    function _observe(uint24 key, uint24 lvl, uint32 room, uint256 idx, uint256 n, uint256 entropy, uint8 shift)
-        private returns (Observation memory o)
+    function _observe(uint24 key, uint24 lvl, uint256 idx, uint256 n, uint256 entropy, uint8 shift, uint256 gasLimit)
+        internal returns (Observation memory o)
     {
+        QueueWordCacheHarness hh = h;
+        uint256 base = uint256(keccak256(abi.encode(keccak256(abi.encode(hh.physicalKey(key), uint256(12))))));
         vm.recordLogs();
         vm.startStateDiffRecording();
-        (o.nextIdx, o.used) = h.run(key, lvl, room, idx, n, entropy, shift);
+        uint256 g0 = gasleft();
+        (o.nextIdx,) = hh.run{gas: gasLimit}(key, lvl, 0, idx, n, entropy, shift);
+        o.gasUsed = g0 - gasleft();
         Vm.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        o.logs = keccak256(abi.encode(logs));
-        uint256 base = uint256(keccak256(abi.encode(keccak256(abi.encode(key, uint256(12))))));
-        uint256 seen;
+        o.logs = vm.getRecordedLogs();
         for (uint256 i; i < accesses.length; ++i) {
             for (uint256 j; j < accesses[i].storageAccesses.length; ++j) {
                 Vm.StorageAccess memory a = accesses[i].storageAccesses[j];
-                assertEq(a.account, address(h), "drain writes only the caller's storage");
-                if (a.isWrite) o.writes = keccak256(abi.encode(o.writes, a.slot, a.previousValue, a.newValue, a.reverted));
-                else if (uint256(a.slot) >= base && uint256(a.slot) - base < (n + 7) / 8) {
-                    ++o.queueReads;
-                    uint256 bit = uint256(1) << (uint256(a.slot) - base);
-                    if (seen & bit == 0) { ++o.distinctWords; seen |= bit; }
-                }
+                assertEq(a.account, address(hh), "drain writes only the caller's storage");
+                if (a.isWrite || uint256(a.slot) < base || uint256(a.slot) - base >= (n + 7) / 8) continue;
+                ++o.queueReads;
+                uint256 bit = uint256(1) << (uint256(a.slot) - base);
+                if (o.wordsSeen & bit == 0) { ++o.distinctWords; o.wordsSeen |= bit; }
             }
         }
     }
 
-    function _compare(uint24 key, uint24 lvl, uint32 room, uint256 idx, uint256 n, uint256 entropy, uint8 shift)
-        private returns (Observation memory beforeObs, Observation memory afterObs)
+    /// @dev Uncached replay of the walk's visiting order (reloaded seats in lane order, then the
+    ///      newly walked logical range, each mapped through the canonical rotation): the queue
+    ///      words it touches, and the loads a one-word cache needs, one per change of word.
+    function _expectedWords(uint24 key, uint256 n, uint256 entropy, uint256 seatsBefore, uint256 idx, uint256 nextIdx)
+        internal pure returns (uint256 bitmap, uint256 loads)
     {
-        uint256 snapshot = vm.snapshotState();
-        vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, referenceCode);
-        beforeObs = _observe(key, lvl, room, idx, n, entropy, shift);
-        beforeObs.logical = h.logicalDrainState(key, lvl, false);
-        beforeObs.buckets = h.logicalBuckets(lvl, false);
-        assertTrue(vm.revertToStateAndDelete(snapshot));
-        vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, candidateCode);
-        afterObs = _observe(key, lvl, room, idx, n, entropy, shift);
-        afterObs.logical = h.logicalDrainState(key, lvl, false);
-        afterObs.buckets = h.logicalBuckets(lvl, false);
-        assertEq(afterObs.nextIdx, beforeObs.nextIdx, "same frontier");
-        assertEq(afterObs.used, beforeObs.used, "same deterministic work charge");
-        assertEq(afterObs.logs, beforeObs.logs, "identical event bytes and order");
-        assertEq(afterObs.writes, beforeObs.writes, "identical storage writes and order");
-        assertEq(afterObs.logical, beforeObs.logical, "identical pending quantities, seats and round");
-        assertEq(afterObs.buckets, beforeObs.buckets, "identical ordered trait inventories");
-        assertEq(afterObs.distinctWords, beforeObs.distinctWords, "same queue words visited");
-        assertEq(afterObs.queueReads, afterObs.distinctWords, "each queue word loaded exactly once per call");
+        uint256 start = TicketEntropy.queueStart(key, n, entropy);
+        uint256 last = type(uint256).max;
+        for (uint256 s = seatsBefore; s != 0; s >>= 32) {
+            uint256 w = TicketEntropy.queueIndex((s & 0xffffffff) - 1, start, n) >> 3;
+            bitmap |= uint256(1) << w;
+            if (w != last) { ++loads; last = w; }
+        }
+        for (uint256 q = idx; q < nextIdx; ++q) {
+            uint256 w = TicketEntropy.queueIndex(q, start, n) >> 3;
+            bitmap |= uint256(1) << w;
+            if (w != last) { ++loads; last = w; }
+        }
+    }
+
+    /// @dev Every revealed seat owner is the owner at one of the call's visited positions,
+    ///      looked up lane by lane without the cache.
+    function _assertRevealsMatchOracle(Observation memory o, uint24 key, uint24 lvl, uint256 n, uint256 entropy,
+        uint256 seatsBefore, uint256 idx) internal view returns (uint256 reveals)
+    {
+        uint256 start = TicketEntropy.queueStart(key, n, entropy);
+        uint256 visitedCount;
+        for (uint256 s = seatsBefore; s != 0; s >>= 32) ++visitedCount;
+        visitedCount += o.nextIdx - idx;
+        address[] memory visited = new address[](visitedCount);
+        uint256 k;
+        for (uint256 s = seatsBefore; s != 0; s >>= 32) {
+            visited[k++] = h.ownerAtPhysical(key, TicketEntropy.queueIndex((s & 0xffffffff) - 1, start, n));
+        }
+        for (uint256 q = idx; q < o.nextIdx; ++q) visited[k++] = h.ownerAtPhysical(key, TicketEntropy.queueIndex(q, start, n));
+        for (uint256 i; i < o.logs.length; ++i) {
+            Vm.Log memory l = o.logs[i];
+            // EntryTraitsRevealed is anonymous: four player topics and one data word.
+            if (l.emitter != address(h) || l.topics.length != 4 || l.data.length != 32) continue;
+            ++reveals;
+            for (uint256 t; t < 4; ++t) {
+                uint256 topic = uint256(l.topics[t]);
+                if (topic == 0) continue;
+                assertEq(topic >> 160, lvl, "reveal names the drained level");
+                address player = address(uint160(topic));
+                bool found;
+                for (uint256 v; v < visited.length && !found; ++v) found = visited[v] == player;
+                assertTrue(found, "revealed seat owner matches the uncached queue lane");
+            }
+        }
+    }
+
+    /// @dev The cache invariants of one call. The walk visits physical positions in rotated
+    ///      queue order, so it reads each word once per contiguous run of seats in it: once per
+    ///      call unless the rotation wraps back into a word it already left.
+    function _assertCache(Observation memory o, uint24 key, uint24 lvl, uint256 n, uint256 entropy,
+        uint256 seatsBefore, uint256 idx) internal view returns (uint256 reveals)
+    {
+        (uint256 words, uint256 loads) = _expectedWords(key, n, entropy, seatsBefore, idx, o.nextIdx);
+        assertEq(o.wordsSeen, words, "loaded exactly the words of the reloaded seats and the newly walked entries");
+        assertEq(o.queueReads, loads, "a queue word is loaded only when the walk moves into a different word");
+        reveals = _assertRevealsMatchOracle(o, key, lvl, n, entropy, seatsBefore, idx);
+    }
+}
+
+contract QueueWordCacheTest is QueueWordCacheBase {
+    function setUp() public {
+        _deploy();
     }
 
     function test_AlignedEightOwners_OneQueueRead() public {
         h.seed(3, 3, 8, 1 << 24, 99, 1);
-        (Observation memory beforeObs, Observation memory afterObs) = _compare(3, 3, 165, 0, 8, 99, 0);
-        assertEq(beforeObs.queueReads, 8);
-        assertEq(afterObs.queueReads, 1);
-        emit log_named_uint("UNCACHED_QUEUE_READS", beforeObs.queueReads);
-        emit log_named_uint("CACHED_QUEUE_READS", afterObs.queueReads);
+        Observation memory o = _observe(3, 3, 0, 8, 99, 0, REALISTIC_GAS);
+        uint256 reveals = _assertCache(o, 3, 3, 8, 99, 0, 0);
+        assertEq(o.nextIdx, 8, "all eight owners seated");
+        assertGt(reveals, 0, "the seated owners rolled");
+        // Eight lanes resolved from one load: the uncached walk loaded the word once per seat.
+        assertEq(o.queueReads, 1);
+        assertEq(o.distinctWords, 1);
+        emit log_named_uint("CACHED_QUEUE_READS", o.queueReads);
+        emit log_named_uint("SEATS_FROM_CACHED_WORD", o.nextIdx);
     }
 
     function test_UnalignedEightOwners_TwoQueueReads() public {
         h.seed(3, 3, 16, 0xffffff00, 99, 1);
-        (Observation memory beforeObs, Observation memory afterObs) = _compare(3, 3, 165, 5, 16, 99, 0);
-        assertEq(beforeObs.queueReads, 8);
-        assertEq(afterObs.queueReads, 2);
+        // Rotation start 13 of 16: logical 5..12 sit at physical 2..9, straddling two words.
+        assertEq(TicketEntropy.queueStart(3, 16, 99), 13, "fixture: canonical rotation");
+        Observation memory o = _observe(3, 3, 5, 16, 99, 0, REALISTIC_GAS);
+        _assertCache(o, 3, 3, 16, 99, 0, 5);
+        assertEq(o.nextIdx, 13, "eight seats taken from the frontier");
+        assertEq(o.queueReads, 2);
+        assertEq(o.distinctWords, 2, "each word loaded exactly once");
     }
 
     function test_ScatteredResumedSeats_AndFrontier() public {
         h.seed(3, 3, 40, 0xf0000000, 99, 1);
-        h.resume(uint256(1) | (uint256(8) << 32) | (uint256(18) << 64) | (uint256(24) << 96));
-        _compare(3, 3, 1000, 24, 40, 99, 0);
+        uint256 resumed = uint256(1) | (uint256(8) << 32) | (uint256(18) << 64) | (uint256(24) << 96);
+        h.resume(resumed);
+        Observation memory o = _observe(3, 3, 24, 40, 99, 0, REALISTIC_GAS);
+        _assertCache(o, 3, 3, 40, 99, resumed, 24);
+        // Four resumed seats keep their queue order; four more join from the frontier.
+        assertEq(o.nextIdx, 28, "frontier advances by the four free seats");
+        uint256 expectedSeats = resumed | (uint256(25) << 128) | (uint256(26) << 160) | (uint256(27) << 192)
+            | (uint256(28) << 224);
+        assertEq(h.seats(), expectedSeats, "seats persist in canonical queue order");
+        // Rotation start 6 of 40: physical 6, 13, 23, 29 (reloaded) and 30..33 (new) span 5 words.
+        assertEq(o.queueReads, 5);
+        assertEq(o.distinctWords, 5, "each word loaded exactly once");
     }
 
     function test_ReservedZeroLaneMatchesRevert() public {
         h.seed(3, 3, 8, 1 << 24, 99, 1);
-        bytes32 base = keccak256(abi.encode(keccak256(abi.encode(uint24(3), uint256(12)))));
+        bytes32 base = keccak256(abi.encode(keccak256(abi.encode(h.physicalKey(3), uint256(12)))));
         vm.store(address(h), base, bytes32(0));
-        vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, referenceCode);
         vm.expectRevert(bytes4(keccak256("E()")));
-        h.run(3, 3, 1000, 0, 8, 99, 0);
-        vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, candidateCode);
-        vm.expectRevert(bytes4(keccak256("E()")));
-        h.run(3, 3, 1000, 0, 8, 99, 0);
+        h.run{gas: REALISTIC_GAS}(3, 3, 0, 0, 8, 99, 0);
     }
 
+    /// @dev Three consecutive checkpoints of the round phase at a fuzzed gas limit (the gas now
+    ///      selects the checkpoint the retired unit budget used to): every call keeps the cache
+    ///      invariants against the uncached oracle and the frontier never regresses.
     function testFuzz_EquivalentAcrossChunks(uint256 seed, uint8 shapeSeed, uint16 budgetSeed, uint8 shiftSeed, uint8 cohort)
         public
     {
@@ -150,37 +237,60 @@ contract QueueWordCacheTest is Test {
         uint24 lvl = 3;
         uint24 key = lvl | uint24(uint256(cohort % 3) << 22);
         uint32 ownerStart = uint32((seed >> 32) % 0xffffff00) + 1;
-        uint32 room = uint32(bound(uint256(budgetSeed), 1, 1000));
+        uint256 gasLimit = bound(uint256(budgetSeed), 1_000_000, REALISTIC_GAS);
         uint8 shift = shiftSeed % 5;
         h.seed(key, lvl, n, ownerStart, seed, shapeSeed % 3);
         for (uint256 chunk; chunk < 3; ++chunk) {
-            (, Observation memory o) = _compare(key, lvl, room, idx, n, seed, shift);
+            uint256 seatsBefore = h.seats();
+            Observation memory o = _observe(key, lvl, idx, n, seed, shift, gasLimit);
+            _assertCache(o, key, lvl, n, seed, seatsBefore, idx);
+            assertGe(o.nextIdx, idx, "frontier never regresses");
+            assertLe(o.nextIdx, n, "frontier stays inside the queue");
             idx = o.nextIdx;
         }
     }
 }
 
-abstract contract QueueWordCacheColdFixture is Test {
-    QueueWordCacheHarness internal h;
+/// @dev Cold round-phase calls with the cache. The worker spends what it is given, so each call
+///      is driven with a realistic 10M and, separately, the 16.7M EIP-7825 cap: it must not run
+///      out of gas, must complete at least one round and must stop on the supplied gas with live
+///      seats. One round's admission bound is measured per shape in RoundDrainChunkGas.
+abstract contract QueueWordCacheColdFixture is QueueWordCacheBase {
     function _frontier() internal pure virtual returns (uint256);
     function _seats() internal pure virtual returns (uint256) { return 0; }
     function setUp() public {
-        h = new QueueWordCacheHarness();
-        vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, address(new DegenerusGameFoilPackModule()).code);
+        _deploy();
         h.seed(3, 3, 64, 0xf0000000, 99, 1);
         h.resume(_seats());
     }
-    function test_ColdRoundCache() public {
+
+    function _coldRun(uint256 gasLimit, string memory tag) internal {
         uint256 idx = _frontier();
-        uint256 start = gasleft();
-        (uint256 nextIdx, uint32 used) = h.run(3, 3, 1000, idx, 64, 99, 0);
-        uint256 consumed = start - gasleft();
-        emit log_named_uint("COLD_ROUND_CACHE_GAS", consumed);
-        emit log_named_uint("COLD_ROUND_CACHE_UNITS", used);
-        emit log_named_uint("COLD_ROUND_CACHE_FRONTIER", nextIdx);
-        assertGe(used, 800);
-        assertLe(nextIdx, 64);
-        assertLt(consumed, 11_000_000);
+        vm.cool(address(h));
+        vm.cool(ContractAddresses.GAME_TICKET_MODULE);
+        vm.cool(ContractAddresses.GAME_FOILPACK_MODULE);
+        uint256 seatsBefore = h.seats();
+        uint32 roundBefore = h.round();
+        Observation memory o = _observe(3, 3, idx, 64, 99, 0, gasLimit);
+        uint256 rounds = h.round() - roundBefore;
+        emit log_named_uint(string.concat(tag, "_GAS"), o.gasUsed);
+        emit log_named_uint(string.concat(tag, "_ROUNDS"), rounds);
+        emit log_named_uint(string.concat(tag, "_FRONTIER"), o.nextIdx);
+        emit log_named_uint(string.concat(tag, "_QUEUE_READS"), o.queueReads);
+        _assertCache(o, 3, 3, 64, 99, seatsBefore, idx);
+        // These seats never wrap the rotation back into a word already left.
+        assertEq(o.queueReads, o.distinctWords, "each queue word loaded exactly once per call");
+        assertGe(rounds, 1, "the cold call completes at least one round");
+        assertLe(o.nextIdx, 64);
+        assertTrue(h.seats() != 0, "the supplied gas, not the seats' entries, ends the call");
+    }
+
+    function test_ColdRoundCache() public {
+        uint256 snap = vm.snapshotState();
+        _coldRun(REALISTIC_GAS, "COLD_ROUND_CACHE");
+        assertTrue(vm.revertToState(snap));
+        _coldRun(EIP7825_TX_GAS_CAP, "COLD_ROUND_CACHE_16P7M");
+        assertTrue(vm.revertToStateAndDelete(snap));
     }
 }
 

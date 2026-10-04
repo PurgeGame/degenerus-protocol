@@ -69,6 +69,7 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
     function test_PreferredBoardFrozenAcrossPendingBattleAndMidnight() public {
         vm.prank(buyer); crapsBattle.setPreferredBoard(3);
         uint24 day = _driveToJackpotPendingSet();
+        uint256 wordD = game.rngWordForDay(day);
         _assertPreferenceFrozen();
         vm.warp(block.timestamp + 2 days + 1);
         _assertPreferenceFrozen();
@@ -76,8 +77,10 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
         assertFalse(game.rngLocked());
         vm.prank(buyer); crapsBattle.setPreferredBoard(0);
         assertEq(crapsBattle.preferredBoardOf(buyer), 0);
-        // The unprocessed wall day must not inherit the revealed pending-battle word.
-        assertEq(game.rngWordForDay(day + 1), 0);
+        // The unprocessed wall day must not inherit the revealed pending-battle word. The drain
+        // runs on to the wall day's own request (the engine composes actions, 60d31f775), so
+        // day + 1 is now a skipped gap day whose word derives from that fresh request.
+        assertTrue(game.rngWordForDay(day + 1) != wordD, "the skipped day never inherits the pending day's word");
     }
 
     function _assertPreferenceFrozen() private {
@@ -162,13 +165,19 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
         // immediately after STAGE_ENTERED_JACKPOT, before the pending-set advance.
         // dailyJackpotCoinTicketsPending is FALSE here (sole writer is the later :519),
         // so this proves the fix covers the non-pending break point too.
-        _driveToJackpotPhase();
+        // The engine composes the jackpot entry with the first jackpot stages in one call when the
+        // allowance covers them (60d31f775), so the old post-entry break point is not a separate
+        // step any more. The transition straddle is taken at the same day's last checkpoint
+        // before the entry: the transition word is applied, the lock is held, and the next chunk
+        // is the consolidation that enters the jackpot phase (pending flag false by construction).
+        _driveToTransitionCheckpoint();
         uint24 D = game.currentDayView();
         uint256 wordD = game.rngWordForDay(D);
         emit log_named_uint("[transition] entered jackpot on day", D);
         emit log_named_uint("[transition] rngWordForDay(D)", wordD);
         assertTrue(wordD != 0, "transition: day D word applied at jackpot entry");
         assertTrue(game.rngLocked(), "transition: not unlocked at jackpot entry");
+        assertFalse(_pendingSet(), "transition: the pending flag is false at this break point");
 
         // STRADDLE across the wall-day WITHOUT completing/sealing the day.
         vm.warp(block.timestamp + 1 days + 1);
@@ -177,6 +186,7 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
         // Advance + fulfill: the clamp processes day D's jackpot sequence on wordD, then
         // the wall-day requests its own fresh word.
         uint256 wordD1 = _advanceUntilWordRecorded(D1);
+        assertTrue(game.jackpotPhase(), "transition: day D entered the jackpot phase on its own word");
 
         emit log_named_uint("[transition] rngWordForDay(D+1) after fix", wordD1);
         assertTrue(wordD1 != 0, "transition: no orphan - day D+1 word recorded");
@@ -188,6 +198,32 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
 
     // ==================== Drive helpers ====================
 
+    /// @dev slot 0 byte 22: dailyJackpotCoinTicketsPending (golden layout).
+    uint256 private constant PENDING_BIT = 176;
+    bytes4 private constant INSUFFICIENT_GAS = bytes4(keccak256("InsufficientExecutionGas()"));
+
+    /// @dev One engine step at the smallest of three allowances that admits the next chunk. The
+    ///      engine keeps admitting chunks while the allowance covers the next declared bound
+    ///      (60d31f775), so an unbounded call would run a whole jackpot day; small allowances
+    ///      stop between stages like the old one-stage-per-advance flow. Returns false when the
+    ///      engine has nothing to do now (NoWork / RngNotReady).
+    function _step() internal returns (bool) {
+        uint256[3] memory allowances = [uint256(1_500_000), 4_500_000, 8_700_000];
+        for (uint256 k; k < 3; ++k) {
+            (bool ok, bytes memory err) =
+                address(game).call{gas: allowances[k]}(abi.encodeWithSignature("mineFlip()"));
+            if (ok) return true;
+            if (err.length == 0 || (err.length == 4 && bytes4(err) == INSUFFICIENT_GAS)) continue;
+            return false;
+        }
+        (bool okFull, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+        return okFull;
+    }
+
+    function _pendingSet() internal view returns (bool) {
+        return (uint256(vm.load(address(game), bytes32(0))) >> PENDING_BIT) & 1 != 0;
+    }
+
     /// @notice Drive the game from genesis into the jackpot phase, then advance
     ///         until the daily-jackpot pending is set (STAGE_JACKPOT_DAILY_STARTED)
     ///         — i.e. the deferred coin/ticket settlement is queued but NOT yet
@@ -198,21 +234,39 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
         for (uint256 i = 0; i < 400; i++) {
             require(!game.gameOver(), "gameOver before jackpot pending-set");
             require(game.jackpotPhase(), "left jackpot phase before pending-set");
+            if (_pendingSet() && game.rngLocked()) return game.currentDayView();
 
             _fulfillVrf();
-            vm.recordLogs();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
-            if (ok) {
-                (uint8 stage, bool found) = _lastAdvanceStage(vm.getRecordedLogs());
-                if (found && stage == STAGE_JACKPOT_DAILY_STARTED) {
-                    return game.currentDayView();
-                }
-            } else {
-                // Day fully drained / not-time-yet: move to the next wall-day.
+            if (!_step()) {
+                // Day fully drained / no work yet: move to the next wall-day.
                 vm.warp(block.timestamp + 1 days + 1);
             }
         }
         revert("did not reach jackpot pending-set");
+    }
+
+    /// @notice Drive to the transition day's checkpoint right before the jackpot entry: the
+    ///         last-purchase transition word is applied under the lock and the next chunk is the
+    ///         POOL_CONSOLIDATION stage (a 4.5M allowance cannot admit it).
+    function _driveToTransitionCheckpoint() internal {
+        for (uint256 i = 0; i < 4000; i++) {
+            require(!game.gameOver(), "gameOver before jackpot phase");
+            require(!game.jackpotPhase(), "passed the transition checkpoint");
+            _fulfillVrf();
+            (, , bool lpd, bool locked, ) = game.purchaseInfo();
+            if (lpd && locked && game.rngWordForDay(game.currentDayView()) != 0) {
+                (bool ok, bytes memory err) =
+                    address(game).call{gas: 4_500_000}(abi.encodeWithSignature("mineFlip()"));
+                if (!ok && err.length == 4 && bytes4(err) == INSUFFICIENT_GAS) return;
+                if (ok) continue;
+            }
+            if (!_step()) {
+                vm.warp(block.timestamp + 1 days + 1);
+                _seedNextPrizePool(49.9 ether);
+                _buyTickets(buyer, 4000);
+            }
+        }
+        revert("did not reach the transition checkpoint");
     }
 
     /// @notice Drive purchase phase to target, transition, until jackpotPhase() == true.
@@ -222,8 +276,7 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
             if (game.jackpotPhase()) return;
 
             _fulfillVrf();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
-            if (!ok) {
+            if (!_step()) {
                 // Next wall-day: seed the next pool over target + buy so the level
                 // transition (→ jackpot phase) happens promptly.
                 vm.warp(block.timestamp + 1 days + 1);

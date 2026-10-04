@@ -1,7 +1,11 @@
 // Current level-one purchase-day gas witness through real Game -> JackpotModule ->
 // CrapsBattle/JackpotBattle wiring. A request freezes Added and the field; bounded
-// award/settlement transactions finish before the separate 50-share trait draw.
-// Every advance is a separate cold transaction under the owner's 11.5M hard ceiling.
+// award/settlement checkpoints finish before the separate 50-share trait draw.
+// One mineFlip now composes several checkpoints, so the owner's gas property is per chunk:
+// every call carries a realistic 10M allowance and must succeed (zero-progress calls revert),
+// which bounds every admitted chunk by 10M (test/helpers/mineFlipChunks.js). Ordering between
+// the RNG application, the battle and the trait draw is asserted on log position, not on
+// transaction boundaries.
 // These fixtures cover awarded-only fields and default boards, not paid/high seats
 // or an exhaustive maximum over RNG words. Exact awards, settled seat ownership,
 // actual FLIP credits, zero pass balances, and day completion are mandatory witnesses.
@@ -15,6 +19,7 @@ import {
   restoreAddresses,
 } from "../helpers/deployFixture.js";
 import { advanceToNextDay, getLastVRFRequestId } from "../helpers/testUtils.js";
+import { REALISTIC_ALLOWANCE, mine } from "../helpers/mineFlipChunks.js";
 
 const { ethers } = hre;
 
@@ -25,10 +30,10 @@ const BATTLE_ENTRY_TOPIC = ethers.id("JackpotBattleEntry(uint64,uint256,address,
 const SETTLED_TOPIC = ethers.id("CrapsBetSettled(uint256,address,uint256,uint256)");
 const POT_TOPIC = ethers.id("CrapsBattlePaid(uint256,bytes32,address,uint256)");
 const PASS_TOPIC = ethers.id("CrapsPassesCredited(address,bool,uint256)");
+// 5214f7498 added the hottest-shooter award: 10% of a scheduled main pot, paid as liquid FLIP.
+const HOTTEST_TOPIC = ethers.id("CrapsHottestShooterPaid(uint256,bytes32,address,uint16,uint256)");
 const RNG_APPLIED_TOPIC = ethers.id("DailyRngApplied(uint24,uint256,uint256,uint256)");
 
-const AUDIT_GAS_CEILING = 11_500_000n;
-const SOFT_TARGET = 10_000_000n;
 const SHARES = 50; // COIN_DRAW_SHARES
 const FF_BIT = 1n << 22n;
 const VAULT_DEITY_SYMBOL = 0n;
@@ -151,11 +156,11 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
   await advanceToNextDay();
 
   const receipts = [];
+  // Setup to the real request at a realistic 10M allowance (success implies progress).
   const advance = async () => {
-    const r = await (await game.connect(deployer).mineFlip({ gasLimit: AUDIT_GAS_CEILING })).wait();
-    expect(r.gasUsed < AUDIT_GAS_CEILING, "every real advance must fit the 11.5M hard cap").to.equal(true);
-    receipts.push(r);
-    return r;
+    const { receipt } = await mine(game, deployer);
+    receipts.push(receipt);
+    return receipt;
   };
   const oldRequest = await getLastVRFRequestId(mockVRF);
   for (let step = 0; step < 30 && !(await game.rngLocked()); ++step) await advance();
@@ -171,8 +176,14 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
   await (await mockVRF.fulfillRandomWords(requestId, WORD)).wait();
 
   // Stop on the actual day seal; never hide a fulfillment failure or call a completed day.
+  // Every call carries a realistic 10M allowance. A chunk is admitted only when its declared
+  // bound fits the remaining allowance and must finish inside it, and a chunk that cannot
+  // fit leaves the next call unable to progress (InsufficientExecutionGas), so a day that
+  // seals through successful 10M calls proves every one of its chunks costs <= 10M.
+  const firstDayCall = receipts.length;
   for (let step = 0; step < 100 && await game.rngLocked(); ++step) await advance();
   expect(await game.rngLocked(), "bounded advance chain must seal the day").to.equal(false);
+  const dayReceipts = receipts.slice(firstDayCall);
   expect(await game.rngWordForDay(requestDay)).to.equal(WORD);
   const progress = await battle.jackpotProgress();
   expect(progress.started).to.equal(true);
@@ -192,20 +203,27 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
   const passes = new Map();
   const traitReceipts = [];
   const battleReceipts = [];
+  // Log positions (block, index) order the work across checkpoints and transactions.
+  const position = (l) => BigInt(l.blockNumber) * 1_000_000n + BigInt(l.index);
+  const appliedPositions = [];
+  const battlePositions = [];
+  const traitPositions = [];
   let traitShares = 0;
   let traitTotal = 0n;
   let battlePaid = 0n;
   let pots = 0;
+  let hottest = 0;
   const addCredit = (owner, amount) => credits.set(owner, (credits.get(owner) ?? 0n) + amount);
   const expectedShare = recordedPool * ethers.parseEther("1000") / (ethers.parseEther("0.01") * 400n) / 50n;
   for (const r of receipts) {
     const traitLogs = r.logs.filter((l) => l.address.toLowerCase() === gameAddr.toLowerCase() && l.topics[0] === FLIP_WIN_TOPIC);
     const battleLogs = r.logs.filter((l) => l.address.toLowerCase() === crapsAddr.toLowerCase()
-      && [BATTLE_ENTRY_TOPIC, SETTLED_TOPIC, POT_TOPIC, PASS_TOPIC].includes(l.topics[0]));
+      && [BATTLE_ENTRY_TOPIC, SETTLED_TOPIC, POT_TOPIC, HOTTEST_TOPIC, PASS_TOPIC].includes(l.topics[0]));
     if (traitLogs.length) traitReceipts.push(r);
     if (battleLogs.length) battleReceipts.push(r);
-    expect(traitLogs.length === 0 || battleLogs.length === 0, "battle and trait work must use separate transactions").to.equal(true);
-    if (battleLogs.length) expect(r.logs.some((l) => l.topics[0] === RNG_APPLIED_TOPIC), "battle cannot ride the RNG application").to.equal(false);
+    for (const l of r.logs) if (l.topics[0] === RNG_APPLIED_TOPIC) appliedPositions.push(position(l));
+    for (const l of battleLogs) battlePositions.push(position(l));
+    for (const l of traitLogs) traitPositions.push(position(l));
     for (const l of traitLogs) {
       const owner = addressTopic(l.topics[1]);
       const [amount, index] = coder.decode(["uint256", "uint256"], l.data);
@@ -232,6 +250,12 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
         expect(settled.has(id), "each seat settles once").to.equal(false); settled.add(id);
         const paid = coder.decode(["uint256", "uint256"], l.data)[1];
         addCredit(owner, paid); battlePaid += paid;
+      } else if (l.topics[0] === HOTTEST_TOPIC) {
+        expect(BigInt(l.topics[2])).to.equal(progress.slot);
+        const owner = addressTopic(l.topics[3]);
+        expect(entries.get(l.topics[1]), "hottest-shooter award belongs to an actual awarded seat").to.equal(owner);
+        const paid = coder.decode(["uint16", "uint256"], l.data)[1];
+        addCredit(owner, paid); battlePaid += paid; ++hottest;
       } else if (l.topics[0] === POT_TOPIC) {
         expect(BigInt(l.topics[2])).to.equal(progress.slot);
         const owner = addressTopic(l.topics[3]);
@@ -251,10 +275,17 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
   expect(entries.size, "exact current awarded field must be built").to.equal(expectedAwards);
   expect(settled.size, "every awarded seat must really settle").to.equal(expectedAwards);
   expect(pots, "nonzero pot must pay once").to.equal(1);
+  expect(hottest, "the longest shared hand's shooter is paid once from the nonzero main pot").to.equal(1);
   expect(battlePaid).to.be.gt(0n);
   expect(passes.size, "this fixed jackpot field pays liquid FLIP without pass awards").to.equal(0);
   expect(new Set(entries.values()).size, "fixture must retain a substantial fresh-owner field").to.be.gte(Math.floor(expectedAwards * 0.8));
-  expect(battleReceipts.every((r) => r.blockNumber < traitReceipts[0].blockNumber), "the entire battle must finish before the trait draw").to.equal(true);
+  // A call may now compose the RNG application, battle checkpoints and the trait draw, so
+  // separation is proven by order: the battle runs only after the daily word is applied
+  // and finishes entirely before the separate trait draw begins.
+  expect(appliedPositions.length, "the daily word is applied exactly once").to.equal(1);
+  const firstTrait = traitPositions.reduce((m, x) => (x < m ? x : m), traitPositions[0]);
+  expect(battlePositions.every((x) => x > appliedPositions[0]), "battle cannot run ahead of the RNG application").to.equal(true);
+  expect(battlePositions.every((x) => x < firstTrait), "the entire battle must finish before the trait draw").to.equal(true);
   // These wallet families were freshly seeded only in the Game registry. They had no prior
   // Coinflip/pass balance. Reconcile all published run/pot/share payments to actual ownership.
   for (const [id, owner] of entries) {
@@ -268,6 +299,7 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
     expect((packed >> 32n) & 0xffffffffn, `high passes for ${owner}`).to.equal(0n);
   }
   return {
+    dayCalls: dayReceipts.length,
     gas: receipts.reduce((max, r) => r.gasUsed > max ? r.gasUsed : max, 0n),
     traitGas: traitReceipts[0].gasUsed,
     battleGas: battleReceipts.reduce((max, r) => r.gasUsed > max ? r.gasUsed : max, 0n),
@@ -279,14 +311,14 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
 
 function report(label, t) {
   console.log(`      [COIN-ADV ${label}] ${JSON.stringify(t, (_, value) => typeof value === "bigint" ? value.toString() : value)}`);
-  console.log(`      [COIN-ADV-GAS ${label}] max=${t.gas}; headroom to ${AUDIT_GAS_CEILING}=${AUDIT_GAS_CEILING - t.gas}; soft-target headroom=${SOFT_TARGET - t.gas}`);
+  console.log(`      [COIN-ADV-GAS ${label}] heaviest ${REALISTIC_ALLOWANCE}-allowance call=${t.gas}; day sealed in ${t.dayCalls} calls (battle in ${t.battleTransactions})`);
 }
 
 describe("JackpotCoinAdvanceGas — current staged battle and separate level-one trait draw", function () {
   this.timeout(300_000);
   after(function () { restoreAddresses(); });
   for (const [pool, awards] of [["520", 26], ["5000", 250], ["10000", 500]]) {
-    it(`fully settles ${awards} awarded seats and 50 trait shares below the 11.5M hard cap (${pool} ETH recorded pool)`, async function () {
+    it(`fully settles ${awards} awarded seats and 50 trait shares in <=10M chunks (${pool} ETH recorded pool)`, async function () {
       report(`${pool} ETH / ${awards} awards`, await measureLevelOneAdvance(pool, awards));
     });
   }

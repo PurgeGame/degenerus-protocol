@@ -7,15 +7,20 @@ import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
+import {AdvanceStageStream} from "../helpers/AdvanceStageStream.sol";
+import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
 
-/// @title Lvl100PhaseEndAdvanceGas — the per-tx gas ceiling of the x00 level boundary.
-/// @notice A level boundary is a CHAIN of advance txs, not one tx. Two of them are measured here:
+/// @title Lvl100PhaseEndAdvanceGas — the x00 level boundary's two daily stages.
+/// @notice A level boundary is a CHAIN of checkpoints. Two of them are exercised here:
 ///
-///           STAGE_JACKPOT_PHASE_ENDED (9) — payDailyJackpotCoinAndTickets + _endPhase, at its
-///             ticket-board winner cap (96 main-board tickets) and no battle work of its own, then
-///           STAGE_TRANSITION_DONE (3)     — the tx that reopens the purchase phase and hosts
-///             `coinflip.armCenturySeed`. Reached only once the far-future batch reports no work,
-///             so the century arm can never stack on a chunked stage.
+///           STAGE_JACKPOT_PHASE_ENDED (9) — the coin+tickets leg + _endPhase, at its ticket-board
+///             winner cap (96 doubled to 192 at 40 ETH of value, 5b25fded0) and no battle work of
+///             its own, then
+///           STAGE_TRANSITION_DONE (3)     — the checkpoint that reopens the purchase phase and
+///             hosts `coinflip.armCenturySeed`, a separately admitted stage after the phase end.
+///         The engine composes admitted checkpoints into a call, so the stages are read from the
+///         ordered log stream; every call takes a realistic allowance and must succeed. No
+///         whole-call ceiling is asserted (owner rule): the largest call is logged.
 ///
 ///         The day's jackpot battle runs from its own stage before the phase-ending day's legs;
 ///         JackpotMergeAdvance pins its transactions. Both measured txs drive the REAL production
@@ -117,7 +122,18 @@ contract PhaseEndSeeder is DegenerusGame, BucketSeed {
 
 /// @dev Shared measurement seam: warp to a day whose century-seed lanes are all virgin, etch-seed-
 ///      restore, then drive the live mineFlip and classify the winner events it emitted.
-abstract contract BoundaryGasFixture is DeployProtocol {
+/// @dev The seeded day is the daily phase of a delivered, published request: the engine selects
+///      DailyPhase only for an active, published, not-yet-complete session.
+contract BoundarySessionSeeder is DegenerusGame {
+    function openDailyPhase() external {
+        rngRequestDay = _simulatedDayIndex();
+        _setRngRequestActive(true);
+        _setRngSessionPublished(true);
+        _setRngComplete(false);
+    }
+}
+
+abstract contract BoundaryGasFixture is AdvanceStageStream {
     /// @dev EIP-7825 per-transaction gas cap. A single mineFlip tx above this is a permanent DoS.
     uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
 
@@ -125,6 +141,8 @@ abstract contract BoundaryGasFixture is DeployProtocol {
         keccak256(
             "JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)"
         );
+    bytes32 internal constant TICKET_BATCH_SIG =
+        keccak256("JackpotTicketBatchWin(uint24,uint24,uint16,uint16,uint8,uint32,uint256[4],uint256[4])");
     bytes32 internal constant BATTLE_ENTRY_SIG =
         keccak256("JackpotBattleEntry(uint64,uint256,address,uint256,uint32)");
     bytes32 internal constant SEED_ARMED_SIG =
@@ -132,6 +150,10 @@ abstract contract BoundaryGasFixture is DeployProtocol {
     bytes32 internal constant ADVANCE_SIG = keccak256("Advance(uint8,uint24)");
 
     uint8 internal constant STAGE_JACKPOT_PHASE_ENDED = 9;
+    uint8 internal constant STAGE_JACKPOT_COIN_TICKETS = 8;
+    uint8 internal constant STAGE_TRANSITION_DONE = 3;
+    // 1000 whole tickets worth 40 ETH at 0.04: the 96-winner cap doubles (5b25fded0).
+    uint256 internal constant TICKET_LEG_WINNERS = 192;
     uint8 internal lastStage;
 
     uint24 internal constant LVL = 100;
@@ -160,6 +182,21 @@ abstract contract BoundaryGasFixture is DeployProtocol {
         wwxrpBefore = wwxrp.totalSupply();
     }
 
+    /// @dev Open the seeded day's session; the caller restores the production runtime after.
+    function _openSession() internal {
+        vm.etch(address(game), type(BoundarySessionSeeder).runtimeCode);
+        BoundarySessionSeeder(payable(address(game))).openDailyPhase();
+    }
+
+    /// @dev Registry owner of zero-based index `idx` (ticketOwners, slot 67).
+    function _ownerAt(uint256 idx) internal view returns (address) {
+        return address(uint160(uint256(vm.load(address(game), bytes32(uint256(keccak256(abi.encode(uint256(67)))) + idx)))));
+    }
+
+    /// @dev The next stage from the stream. A coin+tickets leg's partial calls mark stage 8 and its
+    ///      completing call on a final day marks 9: one leg. `ticketWins` counts queued
+    ///      (JackpotTicketWin) and directly materialized (JackpotTicketBatchWin) winners. `used` is
+    ///      the largest call that carried the stage.
     function _measure()
         internal
         returns (
@@ -169,20 +206,26 @@ abstract contract BoundaryGasFixture is DeployProtocol {
             bool seedArmed
         )
     {
-        vm.recordLogs();
-        uint256 g0 = gasleft();
-        game.mineFlip();
-        used = g0 - gasleft();
-
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        for (uint256 i; i < logs.length; ++i) {
-            bytes32 t0 = logs[i].topics[0];
-            if (t0 == TICKET_WIN_SIG) ++ticketWins;
-            else if (t0 == BATTLE_ENTRY_SIG) ++battleEntries;
-            else if (t0 == SEED_ARMED_SIG) seedArmed = true;
-            else if (t0 == ADVANCE_SIG) (lastStage, ) = abi.decode(logs[i].data, (uint8, uint24));
+        (uint8 stage, uint256 from, uint256 to, uint256 maxGas) = _nextStageRun(200);
+        if (stage == STAGE_JACKPOT_COIN_TICKETS && game.rngLocked()) {
+            uint256 g;
+            (stage,, to, g) = _nextStageRun(200);
+            if (g > maxGas) maxGas = g;
         }
-        emit log_named_uint("headroom_to_16p7M", EIP7825_TX_GAS_CAP - used);
+        used = maxGas;
+        lastStage = stage;
+        for (uint256 i = from; i <= to; ++i) {
+            Vm.Log storage l = streamLogs[i];
+            if (l.topics.length == 0) continue;
+            bytes32 t0 = l.topics[0];
+            if (t0 == TICKET_WIN_SIG) ++ticketWins;
+            else if (t0 == TICKET_BATCH_SIG) {
+                (, uint8 count,,,) = abi.decode(l.data, (uint16, uint8, uint32, uint256[4], uint256[4]));
+                ticketWins += count;
+            } else if (t0 == BATTLE_ENTRY_SIG) ++battleEntries;
+            else if (t0 == SEED_ARMED_SIG) seedArmed = true;
+        }
+        emit log_named_uint("largest_call_gas_incl_intrinsic", used);
     }
 }
 
@@ -197,7 +240,11 @@ contract Lvl100PhaseEndAdvanceGas is BoundaryGasFixture {
 
         bytes memory realCode = address(game).code;
         PhaseEndSeeder seeder = _etchSeedRestore();
+        // The level-100 phase end has drained every queue through level 100; the recycled
+        // far-future roots for levels 102..200 are free to bind (seedPhaseEnd fills them).
+        TQ.retireCompleted(address(game), LVL);
         seeder.seedPhaseEnd(LVL, word, mainT, uint160(0x1000000000));
+        _openSession();
         _restore(realCode);
     }
 
@@ -211,16 +258,18 @@ contract Lvl100PhaseEndAdvanceGas is BoundaryGasFixture {
 
         emit log_named_uint("LVL100_PHASE_END_ADVANCE_GAS", used);
 
-        // Non-vacuity: the composition MUST have run at its winner cap, or the ceiling is not one.
+        // Non-vacuity: the leg MUST have run at its winner cap.
         assertEq(lastStage, STAGE_JACKPOT_PHASE_ENDED, "the phase-end stage ran");
-        assertEq(ticketWins, 96, "the main-board ticket leg paid the full 96-winner cap");
+        assertEq(ticketWins, TICKET_LEG_WINNERS, "the main-board ticket leg paid the full 192-winner cap");
         assertEq(battleEntries, 0, "the phase-end coin+tickets stage runs no battle work");
-        // The century arm rides the transition close, not this tx — it must not fuse back onto the
-        // binding stage.
-        assertFalse(seedArmed, "the century arm does NOT ride the binding phase-end tx");
-        assertLt(used, EIP7825_TX_GAS_CAP, "the phase-end advance tx clears EIP-7825");
-        (, bool jackpotPhase_, , , ) = game.purchaseInfo();
-        assertTrue(jackpotPhase_, "the transition is still ahead: the close runs from its own stage");
+        // The century arm rides the transition close, not the phase-end stage.
+        assertFalse(seedArmed, "the century arm does NOT ride the phase-end stage");
+        // The transition close is its own later stage (it may share a call with the phase end
+        // when the allowance admits both checkpoints).
+        (uint256 closeUsed,,, bool closeArmed) = _measure();
+        emit log_named_uint("LVL100_TRANSITION_CLOSE_STAGE_GAS", closeUsed);
+        assertEq(lastStage, STAGE_TRANSITION_DONE, "the close runs from its own stage after the phase end");
+        assertTrue(closeArmed, "the century arm rides the transition close");
     }
 }
 
@@ -235,11 +284,24 @@ contract Lvl100TransitionDoneGas is BoundaryGasFixture {
             LVL,
             uint256(keccak256("lvl100-transition")) | 1
         );
+        _openSession();
         _restore(realCode);
+        // The level-100 close has drained every queue through level 100: the recycled roots for
+        // the level-200 perpetual grants are free to bind.
+        TQ.retireCompleted(address(game), LVL);
     }
 
     function test_TransitionDoneAdvance_WithCenturyArm() public {
-        (uint256 used, , , bool seedArmed) = _measure();
+        // One call at a realistic 10M allowance must close the transition: the close is one
+        // admitted checkpoint (TRANSITION_CLOSE).
+        vm.recordLogs();
+        game.mineFlip{gas: 10_000_000}();
+        uint256 used = vm.lastCallGas().gasTotalUsed + 21_064;
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bool seedArmed;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length != 0 && logs[i].topics[0] == SEED_ARMED_SIG) seedArmed = true;
+        }
 
         emit log_named_uint("LVL100_TRANSITION_DONE_ADVANCE_GAS", used);
         emit log_named_uint(
@@ -252,7 +314,5 @@ contract Lvl100TransitionDoneGas is BoundaryGasFixture {
         assertFalse(jackpotPhase_, "the transition completed and the purchase phase reopened");
         assertTrue(seedArmed, "the century seed window armed on the transition close");
         assertEq(wwxrp.totalSupply(), wwxrpBefore, "century arming no longer mints WWXRP");
-
-        assertLt(used, EIP7825_TX_GAS_CAP, "the transition-close tx clears EIP-7825");
     }
 }

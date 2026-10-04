@@ -59,8 +59,18 @@ contract AutoRebuyArmFrozen is DeployProtocol {
         vm.expectRevert(RngLocked.selector);
         coinflip.setCoinflipAutoRebuy(address(0), true, 0);
 
-        _advanceUntilUnlocked();
+        // R seals on its late word. Once R's read cohort drains, the same crank chain issues
+        // W's fresh daily request under the lock: there is no unlocked window between them.
         uint256 fresh = _requestFreshDaily();
+        assertEq(_dailyIdx(), W - 3, "R sealed before W's fresh request");
+        // R+1..W remain unresolved while W's word is outstanding: arming and the armed position
+        // stay frozen.
+        vm.prank(player);
+        vm.expectRevert(RngLocked.selector);
+        coinflip.setCoinflipAutoRebuy(address(0), true, 0);
+        vm.prank(armed);
+        vm.expectRevert(RngLocked.selector);
+        coinflip.setCoinflipAutoRebuy(address(0), false, 0);
         mockVRF.fulfillRandomWords(fresh, WORD_FRESH);
         game.mineFlip(); // backfill: every day through W resolved, lock still held
         // Nothing unresolved remains, so arming is open even under the lock: a known run can
@@ -81,20 +91,31 @@ contract AutoRebuyArmFrozen is DeployProtocol {
         _settleClean(vrfWord);
     }
 
+    /// @dev Settle the current day: deliver every outstanding request (the daily one and any
+    ///      mid-day request the crank issues for pending value or a shut Craps window) and
+    ///      drain its consumers, returning once today is sealed, unlocked and idle.
     function _settleClean(uint256 vrfWord) internal {
         for (uint256 d; d < 240; d++) {
-            if (_daySealed()) return;
             _fulfillPending(vrfWord);
             if (_daySealed()) return;
-            game.mineFlip();
-            _fulfillPending(vrfWord);
+            if (game.advanceDue()) game.mineFlip();
         }
+        revert("harness: day never settled");
     }
 
-    /// @dev A false advance hint can mean the read cohort must drain first.
+    /// @dev A false advance hint can mean the read cohort must drain first, or that a
+    ///      delivered mid-day request still waits for its word.
     function _daySealed() internal view returns (bool) {
         uint24 sealedDay = uint24(uint256(vm.load(address(game), bytes32(uint256(0)))) >> 24);
-        return game.currentDayView() == sealedDay && !game.advanceDue() && !game.rngLocked();
+        return game.currentDayView() == sealedDay && !game.advanceDue() && !game.rngLocked()
+            && !_requestOutstanding();
+    }
+
+    function _requestOutstanding() internal view returns (bool) {
+        uint256 reqId = mockVRF.lastRequestId();
+        if (reqId == 0) return false;
+        (,, bool fulfilled) = mockVRF.pendingRequests(reqId);
+        return !fulfilled;
     }
 
     function _fulfillPending(uint256 vrfWord) internal {

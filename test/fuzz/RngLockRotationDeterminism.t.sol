@@ -40,6 +40,7 @@ import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol
 // ============================================================================
 
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
+import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
@@ -90,10 +91,10 @@ contract RngLockRotationDeterminism is DeployProtocol {
         return address(_activeVRF) == address(0) ? mockVRF : _activeVRF;
     }
 
-    /// @dev NotTimeYet() selector -- the same-day "no work available yet" signal
-    ///      (AdvanceModule:238). RngNotReady() (the OLD-bug permanent-revert
-    ///      failure mode) is deliberately NOT caught: it must propagate.
-    bytes4 private constant NOT_TIME_YET = bytes4(keccak256("NotTimeYet()"));
+    /// @dev NoWork() selector -- the engine's "no work available yet" signal (MinerModule; the
+    ///      old advance's NotTimeYet() no longer exists after 60d31f775). RngNotReady() (the
+    ///      OLD-bug permanent-revert failure mode) is deliberately NOT caught: it must propagate.
+    bytes4 private constant NOT_TIME_YET = bytes4(keccak256("NoWork()"));
 
     /// @dev Advance one step, tolerating ONLY NotTimeYet(). Any other revert --
     ///      including RngNotReady() -- is re-thrown verbatim so a defect mode
@@ -285,8 +286,10 @@ contract RngLockRotationDeterminism is DeployProtocol {
     ///      LootboxRngLifecycle.t.sol _setupForMidDayRng.
     function _setupForMidDayRng() internal {
         _completeDay(0xDEAD0001);
+        _settleMidday();
         vm.warp(block.timestamp + 1 days);
         _completeDay(0xDEAD0002);
+        _settleMidday();
 
         address buyer = makeAddr("midDayRotationBuyer");
         vm.deal(buyer, 100 ether);
@@ -294,6 +297,44 @@ contract RngLockRotationDeterminism is DeployProtocol {
         game.purchase{value: 1.01 ether}(buyer, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
 
         mockVRF.fundSubscription(1, 100e18);
+    }
+
+    /// @dev Answer and drain the mid-day work the state engine requests on its own once a day
+    ///      is sealed (a closed Craps window rides a mid-day request whenever the subscription
+    ///      covers it, 6d0e64b09), until the engine is idle with nothing in flight.
+    function _settleMidday() internal {
+        for (uint256 i; i < 64; i++) {
+            if (game.rngLocked()) return;
+            uint8 action = game.nextMinerAction();
+            if (action == 0 || action == 17) return; // Idle, or the next day's RequestDaily
+            if (action == 2) {
+                MockVRFCoordinator c = _coord();
+                uint256 id = c.lastRequestId();
+                (,, bool done) = c.pendingRequests(id);
+                if (done) return;
+                c.fulfillRandomWords(id, uint256(keccak256(abi.encode("rotation-midday", id))));
+                _lastFulfilledReqId = id;
+            } else {
+                game.mineFlip();
+            }
+        }
+        revert("harness: mid-day work did not settle");
+    }
+
+    /// @dev Publish the delivered mid-day session (the keeper's first action) and return the word
+    ///      published on `index`. The same call may drain the cohort and seal a later request,
+    ///      so the publication is read from its event rather than from the reusable buffer.
+    function _publishAndRead(uint48 index, string memory label) internal returns (uint256 word) {
+        vm.recordLogs();
+        assertTrue(_advanceTolerant(), label);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; i++) {
+            if (logs[i].emitter == address(game) && logs[i].topics.length != 0
+                && logs[i].topics[0] == keccak256("LootboxRngApplied(uint48,uint256,uint256)")) {
+                (uint48 at, uint256 w,) = abi.decode(logs[i].data, (uint48, uint256, uint256));
+                if (at == index) return w;
+            }
+        }
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -436,13 +477,13 @@ contract RngLockRotationDeterminism is DeployProtocol {
         // The callback stores the word; advance publishes it before consumers run.
         assertEq(_readRngWordCurrent(), vrfWord, "rotation callback preserves the delivered word");
         assertEq(_lootboxRngWord(reservedIndexA), 0, "callback alone does not publish the cohort");
-        assertTrue(_advanceTolerant(), "publish the rotated mid-day session");
+        uint256 landedA = _publishAndRead(reservedIndexA, "publish the rotated mid-day session");
         assertEq(
-            _lootboxRngWord(reservedIndexA),
+            landedA,
             vrfWord,
             "re-issued word must land in the preserved reserved index after rotation"
         );
-        bytes32 digestA = keccak256(abi.encode(reservedIndexA, _lootboxRngWord(reservedIndexA)));
+        bytes32 digestA = keccak256(abi.encode(reservedIndexA, landedA));
 
         // ---- Run B: baseline (no rotation) ----
         _revertToPreLock(preLockSnap);
@@ -463,13 +504,13 @@ contract RngLockRotationDeterminism is DeployProtocol {
         mockVRF.fulfillRandomWords(baselineReqId, vrfWord);
         assertEq(_readRngWordCurrent(), vrfWord, "baseline callback preserves the delivered word");
         assertEq(_lootboxRngWord(reservedIndexB), 0, "callback alone does not publish the baseline cohort");
-        assertTrue(_advanceTolerant(), "publish the baseline mid-day session");
+        uint256 landedB = _publishAndRead(reservedIndexB, "publish the baseline mid-day session");
         assertEq(
-            _lootboxRngWord(reservedIndexB),
+            landedB,
             vrfWord,
             "baseline word must land in the reserved index"
         );
-        bytes32 digestB = keccak256(abi.encode(reservedIndexB, _lootboxRngWord(reservedIndexB)));
+        bytes32 digestB = keccak256(abi.encode(reservedIndexB, landedB));
 
         // The reserved index is identical across runs: rotation froze LR_INDEX.
         assertEq(

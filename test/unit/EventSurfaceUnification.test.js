@@ -53,9 +53,13 @@ const JACKPOT_SOURCE_PATH = path.resolve(
   process.cwd(),
   "contracts/modules/DegenerusGameJackpotModule.sol"
 );
-// Ticket awards span the checkpoint distributor and the extracted draw module.
+// Ticket awards span the checkpoint distributor and the extracted draw module. 95d88f68b
+// moved the queued main-daily ticket leg (`_resumeQueuedJackpotTickets`, the shared
+// distributor emit) from the jackpot module into the ticket module, so the scan covers all
+// three, ticket leg first (as CrossSurfaceTicketMixing's jackpotAwardSource does).
 function jackpotSources() {
-  return fs.readFileSync(JACKPOT_SOURCE_PATH, "utf8") + "\n" +
+  return fs.readFileSync("contracts/modules/DegenerusGameTicketModule.sol", "utf8") + "\n" +
+    fs.readFileSync(JACKPOT_SOURCE_PATH, "utf8") + "\n" +
     fs.readFileSync("contracts/modules/DegenerusGameJackpotDrawModule.sol", "utf8");
 }
 const INTERFACE_SOURCE_PATH = path.resolve(

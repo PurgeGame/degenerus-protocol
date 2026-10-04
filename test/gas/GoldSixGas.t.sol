@@ -35,7 +35,9 @@ contract GoldSixFoilGasHarness is DegenerusGameFoilPackModule {
             foilRecord[1][who] = (uint256(20_000) << _FOIL_MULT_SHIFT) | (uint256(1) << _FOIL_LEVEL_SHIFT);
             foilQueue[_foilWriteKey()].push((owner << 192) | (uint256(1) << 160) | uint160(who));
         }
+        // The daily request swaps both cohorts; foil keys follow foilWriteSlot (017ac4cdf).
         ticketWriteSlot = !ticketWriteSlot;
+        foilWriteSlot = !foilWriteSlot;
         rngWordCurrent = 0xabcdef123456;
         _setRngSessionPublished(true);
     }

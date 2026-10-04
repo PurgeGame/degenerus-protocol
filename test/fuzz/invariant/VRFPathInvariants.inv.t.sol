@@ -80,7 +80,9 @@ contract VRFPathInvariants is DeployProtocol {
     // TEST-03: Gap Backfill
     // ═══════════════════════════════════════════════════════════════════════
 
-    /// @notice All gap days have nonzero rngWordForDay after recovery
+    /// @notice After a recovery the sealed day and the final gap day hold their words in the
+    ///         two-day ring, and every gap day is settled (coinflip). Only the final gap day's
+    ///         derived word is retained since 6d0e64b09/c729ecfc9.
     function invariant_allGapDaysBackfilled() public view {
         assertEq(
             handler.ghost_gapBackfillFailures(),
@@ -90,14 +92,15 @@ contract VRFPathInvariants is DeployProtocol {
     }
 
 
-    /// @notice Runs after each call sequence: at least one fresh index allocation
-    ///         happened (lootboxRngIndex initializes to 1), so the TEST-01 detection
-    ///         sites were exercised — a sequence where the index never moves would
-    ///         make every index invariant above pass vacuously.
+    /// @notice Runs after each call sequence: at least one fresh request committed a
+    ///         buffer (two physical buffers since 6d0e64b09: the selector is 0/1, so the count
+    ///         of committed flips replaces the old "index above its initial 1" test), so the
+    ///         TEST-01 detection sites were exercised — a sequence where the selector never
+    ///         moves would make every index invariant above pass vacuously.
     function afterInvariant() public view {
         assertGt(
-            handler.actualLootboxRngIndex(),
-            1,
+            handler.ghost_freshRequests(),
+            0,
             "VRFPath: no fresh index allocation in sequence - TEST-01 unexercised"
         );
     }

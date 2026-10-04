@@ -128,7 +128,10 @@ contract HumanOrderNativeGasTest is DeployProtocol {
         bytes32 full = _mineAndReadOutcome();
         assertTrue(vm.revertToState(snapshot));
         _cool();
+        // An allowance that cannot admit the indivisible order makes no progress, and the engine
+        // rejects a zero-progress call outright (be793ed7c) instead of returning without work.
         vm.prank(MINER);
+        vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
         game.mineFlip{gas: 2_000_000}();
         vm.etch(address(game), type(HumanOrderGasSeed).runtimeCode);
         assertGt(host.orderLeft(PLAYER), 0, "gas shortage must preserve the unfinished atomic order");

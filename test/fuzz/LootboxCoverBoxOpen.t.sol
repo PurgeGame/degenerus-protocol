@@ -43,17 +43,6 @@ contract LootboxCoverBoxOpen is DeployProtocol {
         vm.etch(address(game), real);
     }
 
-    /// @dev Point the permissionless open walk at `index` (cursor 0), as the auto-open repro does.
-    function _parkBoxFrontier(uint48 index) internal {
-        bytes32 slot = bytes32(uint256(56));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        uint256 m = (uint256(1) << 48) - 1;
-        packed &= ~(m << (7 * 8));
-        packed &= ~(m << (13 * 8));
-        require(index < 2, "binary read fixture"); // byte 13 is humanReadComplete, not an index
-        vm.store(address(game), slot, bytes32(packed));
-    }
-
     function _driveDailyCycleOnce() internal {
         (, , , , uint256 priceWei) = game.purchaseInfo();
         if (priceWei != 0 && priceWei <= actor.balance) {
@@ -84,6 +73,22 @@ contract LootboxCoverBoxOpen is DeployProtocol {
             vm.prank(actor);
             try game.mineFlip() {} catch {}
         }
+        // A fresh request waits for every read consumer of the day's cohort to finish. A shut
+        // craps window the day bound to the write buffer rides the next request, which the engine
+        // makes as mid-day work; answer and drain it too, until the engine is idle.
+        for (uint256 i; i < 20; i++) {
+            uint256 reqId = mockVRF.lastRequestId();
+            if (reqId != 0) {
+                (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
+                if (!fulfilled) mockVRF.fulfillRandomWords(reqId, uint256(keccak256(abi.encode("trailing", i))) | 1);
+            }
+            _finishReadConsumers();
+            if (!game.advanceDue() && game.rngComplete()) break;
+            if (!game.advanceDue()) continue; // a fresh request waits for its word
+            vm.prank(actor);
+            game.mineFlip();
+        }
+        assertTrue(game.rngComplete(), "harness: the day's cohorts all completed");
     }
 
     /// @dev Count the opens for `who` at `index`, with the smallest and largest amount opened.
@@ -131,12 +136,14 @@ contract LootboxCoverBoxOpen is DeployProtocol {
         for (uint256 w = 1; w <= 64 && !found; w++) {
             uint256 snap = vm.snapshotState();
             mockVRF.fulfillRandomWords(reqId, uint256(keccak256(abi.encode("cover_word", w))) | 1);
-            assertGt(_word(N), 0, "the word landed at the entries' index");
-            _parkBoxFrontier(N);
+            // The engine publishes the word and opens the read cohort's entries as read consumers
+            // (openBoxes never publishes a word).
             vm.recordLogs();
             vm.prank(actor);
-            assertGt(game.openBoxes(100), 0, "the walk opened the entries");
+            game.mineFlip();
             Vm.Log[] memory logs = vm.getRecordedLogs();
+            assertGt(_word(N), 0, "the word landed at the entries' index");
+            assertTrue(game.boxIndexComplete(N), "the walk opened the entries");
             (uint256 nCover, uint256 cLo, uint256 cHi) = _openedOf(logs, whale, N);
             (uint256 nPlain, uint256 q,) = _openedOf(logs, plain, N);
             assertLe(nCover, 5, "one box per pass, never more");

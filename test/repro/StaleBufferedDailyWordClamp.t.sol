@@ -76,11 +76,13 @@ contract StaleBufferedDailyWordClamp is DeployProtocol {
         mockVRF.fulfillRandomWords(staleReqId, WORD_D);
         assertTrue(game.isRngFulfilled(), "word buffered (public) before the boundary");
 
-        // Day D+1: the clamp must route the buffered word to day D and stop there.
+        // Day D+1: the clamp must route the buffered word to day D and stop there. The composed
+        // call that seals D may go straight on to D+1's fresh request (the engine selects the
+        // next action in the same flow, 60d31f775), so the drive stops on D's seal.
         vm.warp(vm.getBlockTimestamp() + 1 days);
         for (uint256 i = 0; i < 20; i++) {
             game.mineFlip();
-            if (!game.rngLocked() && _dailyIdx() == dayD) break;
+            if (_dailyIdx() == dayD) break;
         }
         assertEq(_dailyIdx(), dayD, "clamped advance sealed the request day");
         assertEq(game.rngWordForDay(dayD), WORD_D, "request day resolved with its own raw word");
@@ -92,8 +94,10 @@ contract StaleBufferedDailyWordClamp is DeployProtocol {
         assertEq(rpE, 0, "day D+1 coinflip untouched by the stale word");
 
         // Day D+1 gets its OWN request — entropy unknown to any deposit that targeted it.
-        _finishReadConsumers();
-        game.mineFlip();
+        if (!game.rngLocked()) {
+            _finishReadConsumers();
+            game.mineFlip();
+        }
         assertTrue(game.rngLocked(), "fresh daily VRF request in flight for day D+1");
         uint256 freshReqId = mockVRF.lastRequestId();
         assertTrue(freshReqId != staleReqId, "day D+1 word comes from a new request");

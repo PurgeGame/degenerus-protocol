@@ -4,6 +4,8 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
 /// @title BafDrawArming — the game arms exactly one draw day per BAF bracket.
 ///
@@ -107,8 +109,7 @@ contract BafDrawArming is DeployProtocol {
     function _settleToday() internal {
         for (uint256 i = 0; i < 300; i++) {
             _fulfillPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
-            if (!ok) break;
+            if (!_mine()) break;
         }
     }
 
@@ -124,6 +125,22 @@ contract BafDrawArming is DeployProtocol {
     function _tryCoinflipDeposit() internal {
         vm.prank(buyer);
         try coinflip.depositCoinflip(buyer, 500 ether) {} catch {}
+    }
+
+    /// @dev One driver step. The engine composes every admitted checkpoint into a call and the
+    ///      miner now sends its own mid-day request whenever one is eligible (a shut Craps window
+    ///      on the write buffer). The driver models the original keeper flow: each call gets the
+    ///      smallest admitting allowance from a realistic ladder, and an optional mid-day request
+    ///      is left to the test (treated as idle). Returns false when no work was done.
+    function _mine() internal returns (bool) {
+        if (game.nextMinerAction() == uint8(DegenerusGameStorage.MinerAction.RequestMidday)) return false;
+        uint256[6] memory ladder = [uint256(1_500_000), 2_500_000, 3_500_000, 5_000_000, 9_000_000, 16_777_216];
+        for (uint256 r; r < ladder.length; ++r) {
+            (bool ok, bytes memory err) = address(game).call{gas: ladder[r]}(abi.encodeWithSignature("mineFlip()"));
+            if (ok) return true;
+            if (bytes4(err) != MineFlipGas.InsufficientExecutionGas.selector) return false;
+        }
+        return false;
     }
 
     function _fulfillPending() internal {
@@ -155,8 +172,7 @@ contract BafDrawArming is DeployProtocol {
         vm.warp(simTime);
         for (uint256 i = 0; i < 300; i++) {
             _fulfillPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
-            if (!ok) break;
+            if (!_mine()) break;
         }
     }
 

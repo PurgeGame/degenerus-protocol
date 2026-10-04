@@ -46,8 +46,37 @@ contract WardenLbxClosingBoxOrder is DeployProtocol {
         return uint256(vm.load(address(game), keccak256(abi.encode(player, inner))));
     }
 
+    /// @dev Deliver and publish `word` for the sealed cohort at `index`, as a fulfilled mid-day
+    ///      request leaves it, on a sealed day (dailyIdx = today, tickets drained): the cohort's
+    ///      human entries are then the next engine stage, cursor at the queue head.
     function _setRngWord(uint48 index, uint256 word) internal {
         RecyclingState.seedWord(address(game), uint48(index), bytes32(word));
+        uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
+        slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192);
+        vm.store(address(game), bytes32(0), bytes32(slot0));
+    }
+
+    function _openedEntries(uint48 index, address[4] memory who) internal view returns (uint256 n) {
+        for (uint256 i; i < 4; ++i) if (_boxRecord(index, who[i]) == 0) ++n;
+    }
+
+    /// @dev The smallest openBoxes allowance that opens one more entry (bisection over snapshots).
+    ///      Each entry is admitted only while the remaining allowance covers its declared bound,
+    ///      and every presale-only entry carries the same bound, so this budget opens exactly one.
+    function _oneEntryBudget(uint48 index, address[4] memory who) internal returns (uint256) {
+        uint256 before = _openedEntries(index, who);
+        uint256 lo = 100_000;
+        uint256 hi = 30_000_000;
+        while (hi - lo > 1_000) {
+            uint256 mid = (lo + hi) / 2;
+            uint256 snap = vm.snapshotState();
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("openBoxes(uint256)", uint256(2)));
+            bool opened = ok && _openedEntries(index, who) > before;
+            vm.revertToStateAndDelete(snap);
+            if (opened) hi = mid;
+            else lo = mid;
+        }
+        return hi;
     }
 
     function _setPoolBalanceTo(uint256 target) internal {
@@ -67,22 +96,6 @@ contract WardenLbxClosingBoxOrder is DeployProtocol {
         index = _lrIndex();
         vm.prank(buyer);
         game.buyPresaleBox{value: amount}(buyer, amount);
-    }
-
-    /// @dev Advance LR_INDEX past `index` (mirrors a landed VRF word) and park the sweep's open
-    ///      frontier exactly on it, so a bounded openBoxes() call can only ever touch this index's
-    ///      queue.
-    function _finalizeAndParkSweep(uint48 index) internal {
-        uint256 mask48 = (uint256(1) << 48) - 1;
-        uint256 lr = uint256(vm.load(address(game), bytes32(SLOT_LOOTBOX_RNG_PACKED)));
-        vm.store(address(game), bytes32(SLOT_LOOTBOX_RNG_PACKED), bytes32((lr & ~mask48) | (uint256(index) + 1)));
-
-        bytes32 cursorSlot = bytes32(uint256(56)); // packed (boxCursor @ byte 7, boxCursorIndex @ byte 13)
-        uint256 cur = uint256(vm.load(address(game), cursorSlot));
-        cur &= ~(mask48 << (7 * 8));
-        cur &= ~(mask48 << (13 * 8));
-        cur |= (uint256(index) & mask48) << (13 * 8);
-        vm.store(address(game), cursorSlot, bytes32(cur));
     }
 
     /// @dev Sum every PresaleBoxRemainderSwept amount in `logs` (there is at most one per sweep
@@ -122,21 +135,18 @@ contract WardenLbxClosingBoxOrder is DeployProtocol {
             }
             if (all) break;
         }
+        // Seal `index` with its word: boxPlayers[index & 1] queues v[0], v[1], v[2] (bought
+        // first), then closer (bought last, the crossing buy) -- the ONLY order the in-order sweep
+        // can ever produce now.
         _setRngWord(index, word);
+        address[4] memory all4 = [v[0], v[1], v[2], closer];
 
-        // Finalize `index` and park the sweep frontier on it: boxPlayers[index & 1] queues v[0],
-        // v[1], v[2] (bought first), then closer (bought last, the crossing buy) -- the ONLY
-        // order the in-order sweep can ever produce now.
-        _finalizeAndParkSweep(index);
-
-        // openBoxes(2): the afking leg's ring scan (the deploy's standing subscribers, none with a
-        // pending box) rounds up to one step of maxCount, leaving the human sweep one entry-weight
-        // of budget. That sweep always runs the first entry of a call regardless of its cost
-        // (openHumanBoxes), then the `opened != 0` guard stops before a second -- three such calls
-        // open exactly the cohort, one at a time, and never reach the closer.
+        // The walk-unit budget became a gas allowance (60d31f775): each call gets the smallest
+        // allowance that opens an entry, which never fits a second -- three such calls open
+        // exactly the cohort, one at a time, and never reach the closer.
         for (uint256 i; i < 3; ++i) {
             assertEq(sdgnrs.balanceOf(closer), 0, "closer cannot front-run -- still unopened while cohort drains");
-            game.openBoxes(2);
+            game.openBoxes{gas: _oneEntryBudget(index, all4)}(2);
             assertGt(sdgnrs.balanceOf(v[i]), 0, "cohort-first: DGNRS-branch victim is paid");
         }
         uint256 remainder = _poolBal();
@@ -150,8 +160,9 @@ contract WardenLbxClosingBoxOrder is DeployProtocol {
         // PresaleBoxRemainderSwept event still isolates the latch's contribution from the
         // closer's own roll.
         uint256 closerBalBefore = sdgnrs.balanceOf(closer);
+        uint256 closerBudget = _oneEntryBudget(index, all4);
         vm.recordLogs();
-        uint256 opened = game.openBoxes(2);
+        uint256 opened = game.openBoxes{gas: closerBudget}(2);
         assertEq(opened, 1, "exactly the closer's one entry opened");
         uint256 sweptRemainder = _remainderSweptIn(vm.getRecordedLogs());
         uint256 closerOwnRoll = sdgnrs.balanceOf(closer) - closerBalBefore - sweptRemainder;

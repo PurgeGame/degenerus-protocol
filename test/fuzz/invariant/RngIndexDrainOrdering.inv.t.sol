@@ -20,7 +20,10 @@ contract RngIndexDrainOrderingInvariants is DeployProtocol {
         // entries checked by the same oracle as later actions. Acceptance does not depend
         // on randomly discovering a request/fulfillment/drain sequence.
         handler.purchase(2000);
-        handler.advance();
+        // The engine prepares the day one checkpoint per call before its daily request
+        // (60d31f775), and the handler's bounded keeper call may stop at that preparation.
+        for (uint256 i; i < 16 && !game.rngLocked(); ++i) handler.advance();
+        assertTrue(game.rngLocked(), "anchor daily request did not go out");
         handler.fulfillVrf(uint256(keccak256("rng-binding-invariant-anchor")));
         for (uint256 i; i < 100 && game.rngLocked(); ++i) handler.advance();
         assertFalse(game.rngLocked(), "anchor daily cycle did not finish");

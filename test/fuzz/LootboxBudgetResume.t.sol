@@ -6,11 +6,13 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {C1Viewer} from "../repro/C1BoxAutoOpen.t.sol";
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 /// @title LootboxBudgetResume -- a budget-bounded sweep resumes mid-index and maroons nothing
-/// @notice The permissionless open walk charges each entry against a step budget, BREAKS when
-///         the next entry would not fit, and leaves the cursor on it so the next call resumes at
-///         the same index. Mutation v78 rewrote both halves of that — never breaking on the
+/// @notice The permissionless open walk charges each entry against its gas budget (the caller's
+///         allowance; each entry is admitted only while the remaining allowance covers its declared
+///         bound), BREAKS when the next entry would not fit, and leaves the cursor on it so the next
+///         call resumes at the same index. Mutation v78 rewrote both halves of that — never breaking on the
 ///         budget, and never stopping the outer walk mid-index (which would carry the cursor to
 ///         the next index past unopened entries) — and no foundry oracle noticed. Five wallets
 ///         enqueue at one index; a two-step budget opens exactly one entry per call, and every
@@ -38,17 +40,6 @@ contract LootboxBudgetResume is DeployProtocol {
         vm.etch(address(game), type(C1Viewer).runtimeCode);
         v = C1Viewer(payable(address(game))).rngWordFor(index);
         vm.etch(address(game), real);
-    }
-
-    /// @dev Point the permissionless open walk at `index` (cursor 0), as the auto-open repro does.
-    function _parkBoxFrontier(uint48 index) internal {
-        bytes32 slot = bytes32(uint256(56));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        uint256 m = (uint256(1) << 48) - 1;
-        packed &= ~(m << (7 * 8));
-        packed &= ~(m << (13 * 8));
-        require(index < 2, "binary read fixture"); // byte 13 is humanReadComplete, not an index
-        vm.store(address(game), slot, bytes32(packed));
     }
 
     function _driveDailyCycleOnce() internal {
@@ -81,6 +72,61 @@ contract LootboxBudgetResume is DeployProtocol {
             vm.prank(actor);
             try game.mineFlip() {} catch {}
         }
+        // A fresh request waits for every read consumer of the day's cohort to finish. A shut
+        // craps window the day bound to the write buffer rides the next request, which the engine
+        // makes as mid-day work; answer and drain it too, until the engine is idle.
+        for (uint256 i; i < 20; i++) {
+            uint256 reqId = mockVRF.lastRequestId();
+            if (reqId != 0) {
+                (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
+                if (!fulfilled) mockVRF.fulfillRandomWords(reqId, uint256(keccak256(abi.encode("trailing", i))) | 1);
+            }
+            _finishReadConsumers();
+            if (!game.advanceDue() && game.rngComplete()) break;
+            if (!game.advanceDue()) continue; // a fresh request waits for its word
+            vm.prank(actor);
+            game.mineFlip();
+        }
+        assertTrue(game.rngComplete(), "harness: the day's cohorts all completed");
+    }
+
+    /// @dev Deliver and publish a word for the sealed cohort at `index`, as a fulfilled mid-day
+    ///      request leaves it, on a sealed day (dailyIdx = today, tickets drained): the cohort's
+    ///      human orders are then the next engine stage. Mirrors the request's seal: cursors restart
+    ///      and the new write tag's queues are empty.
+    function _deliverCohort(uint48 index) internal {
+        RecyclingState.seedWord(address(game), index, keccak256("budget-resume-word"));
+        uint256 s14 = uint256(vm.load(address(game), bytes32(uint256(14))));
+        vm.store(address(game), bytes32(uint256(14)), bytes32(s14 & ~(uint256(type(uint48).max) << 160)));
+        uint256 s56 = uint256(vm.load(address(game), bytes32(uint256(56))));
+        vm.store(address(game), bytes32(uint256(56)), bytes32(s56 & ~(uint256(type(uint48).max) << 56)));
+        vm.store(address(game), keccak256(abi.encode(uint256((index ^ 1) & 1), uint256(21))), bytes32(0));
+        vm.store(address(game), keccak256(abi.encode(uint256((index ^ 1) & 1), uint256(57))), bytes32(0));
+        uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
+        slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192);
+        vm.store(address(game), bytes32(0), bytes32(slot0));
+    }
+
+    function _drainedCount(uint48 index, address[5] memory who) internal returns (uint256 n) {
+        for (uint256 k; k < 5; k++) if (_base(index, who[k]) == 0) n++;
+    }
+
+    /// @dev The smallest openBoxes allowance that opens any entry (bisection over snapshots).
+    function _minimalOpenAllowance(uint48 index, address[5] memory who) internal returns (uint256) {
+        uint256 before = _drainedCount(index, who);
+        uint256 lo = 100_000;
+        uint256 hi = 20_000_000;
+        while (hi - lo > 1_000) {
+            uint256 mid = (lo + hi) / 2;
+            uint256 snap = vm.snapshotState();
+            vm.prank(actor);
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("openBoxes(uint256)", uint256(2)));
+            bool opened = ok && _drainedCount(index, who) > before;
+            vm.revertToStateAndDelete(snap);
+            if (opened) hi = mid;
+            else lo = mid;
+        }
+        return hi;
     }
 
     function _base(uint48 index, address who) internal returns (uint256 v) {
@@ -103,15 +149,16 @@ contract LootboxBudgetResume is DeployProtocol {
             assertGt(_base(N, who[k]), 0, "fixture: the order persisted");
         }
 
-        _driveDailyCycleOnce();
+        _deliverCohort(N);
         assertGt(_word(N), 0, "the daily word landed at the index");
-        _parkBoxFrontier(N);
         assertTrue(game.boxesPending(), "five entries wait at the index");
 
-        // A two-step budget: one step for the index header, then the first entry of a call always runs and the second never fits.
+        // The smallest allowance that opens anything: the first entry runs, the second never fits.
+        uint256 budget = _minimalOpenAllowance(N, who);
+        emit log_named_uint("one-entry openBoxes allowance", budget);
         vm.prank(actor);
-        uint256 first = game.openBoxes(2);
-        assertGt(first, 0, "a two-step budget opens something");
+        uint256 first = game.openBoxes{gas: budget}(2);
+        assertGt(first, 0, "a one-entry budget opens something");
         uint256 drained;
         for (uint256 k; k < 5; k++) if (_base(N, who[k]) == 0) drained++;
         assertEq(drained, 1, "one order drained, four still owed");
@@ -121,21 +168,20 @@ contract LootboxBudgetResume is DeployProtocol {
         uint256 calls = 1;
         while (game.boxesPending() && calls < 12) {
             vm.prank(actor);
-            game.openBoxes(2);
+            game.openBoxes{gas: budget}(2);
             calls++;
         }
         assertFalse(game.boxesPending(), "the index drains within a bounded number of calls");
         for (uint256 k; k < 5; k++) {
             assertEq(_base(N, who[k]), 0, "no order is marooned behind a budget break");
         }
-        assertEq(calls, 5, "five entries, five two-step calls");
+        assertEq(calls, 5, "five entries, five one-entry calls");
     }
 
-    /// @notice A budget that fits one two-box entry with room to spare but not a second. `openBoxes`
-    ///         hands the human walk `(maxCount - afkingSteps) * OPEN_HUMAN_ENTRY_WEIGHT` steps; with a
-    ///         count of three that is 30 or 45. The index header costs one step and a two-box entry
-    ///         `15 + 2 * 6 = 27`, so the inner loop is still running after the first entry and only
-    ///         the budget BREAK can refuse the second. Five such calls drain the five entries.
+    /// @notice A budget that fits one two-box entry with room to spare but not a second: the
+    ///         smallest one-entry allowance plus 30k gas. The inner loop is still running after the
+    ///         first entry and only the budget BREAK (the next entry's declared bound no longer fits)
+    ///         can refuse the second. Five such calls drain the five entries.
     function test_budgetThatFitsOneEntryRefusesTheSecond() public {
         _driveDailyCycleOnce();
         (, , , , uint256 priceWei) = game.purchaseInfo();
@@ -147,16 +193,16 @@ contract LootboxBudgetResume is DeployProtocol {
             vm.prank(who[k]);
             game.purchase{value: 2 * priceWei + 1 ether}(who[k], 400, BoxOrderLib.boOrder(2, 0, 0, 0, 0), bytes32(0), MintPaymentKind.DirectEth, false);
         }
-        _driveDailyCycleOnce();
+        _deliverCohort(N);
         assertGt(_word(N), 0, "the daily word landed at the index");
-        _parkBoxFrontier(N);
+        uint256 budget = _minimalOpenAllowance(N, who) + 30_000;
 
         uint256 calls;
         while (game.boxesPending() && calls < 12) {
             uint256 before;
             for (uint256 k; k < 5; k++) if (_base(N, who[k]) == 0) before++;
             vm.prank(actor);
-            game.openBoxes(3);
+            game.openBoxes{gas: budget}(3);
             uint256 after_;
             for (uint256 k; k < 5; k++) if (_base(N, who[k]) == 0) after_++;
             assertEq(after_ - before, 1, "one entry per call: the second never fits the budget");

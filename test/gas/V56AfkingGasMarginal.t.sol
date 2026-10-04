@@ -332,30 +332,19 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // Derive the OPEN_BATCH chunk. fixed_open_overhead = the open-leg tx overhead at N opens minus the N
         // per-box marginals (the constant mineFlip entry/exit + advance-check + bounty cost shared by any
         // open chunk size). The chunk at a batch B = fixed + B×perOpen.
+        // The fixed overhead is now the whole stamp-day session's keeper gas outside the boxes.
         uint256 fixedOpenOverhead = gasN > perOpen * N_HI ? gasN - perOpen * N_HI : 0;
-        uint256 openChunkAtBatch = fixedOpenOverhead + OPEN_BATCH * perOpen;
         uint256 derivedMaxSafeOpenBatch = _maxSafeBatch(fixedOpenOverhead, perOpen);
         uint256 chunkAtDerived = fixedOpenOverhead + derivedMaxSafeOpenBatch * perOpen;
-        uint256 openHeadroomCurrent =
-            EFFECTIVE_GAS_CEILING > openChunkAtBatch ? EFFECTIVE_GAS_CEILING - openChunkAtBatch : 0;
-        bool openBatchFits10MTarget = openChunkAtBatch < GAS_TARGET;
 
-        // EMIT-FIRST — the measured numbers + the derived max-safe batch are the load-bearing 355-03 input.
+        // EMIT-FIRST — the measured numbers + the derived max-safe batch.
         emit log_named_uint("per_open_marginal_gas", perOpen);
         emit log_named_uint("per_open_gas_n", gasN);
         emit log_named_uint("per_open_gas_n_minus_1", gasNm1);
         emit log_named_uint("open_fixed_overhead_gas", fixedOpenOverhead);
-        emit log_named_uint("open_chunk_at_OPEN_BATCH_gas", openChunkAtBatch);
-        emit log_named_uint("open_chunk_headroom_to_16p7M_gas", openHeadroomCurrent);
         emit log_named_uint("derived_max_safe_open_batch", derivedMaxSafeOpenBatch);
         emit log_named_uint("open_chunk_at_derived_max_safe_batch_gas", chunkAtDerived);
-        emit log_named_uint("open_batch_fits_10M_target", openBatchFits10MTarget ? 1 : 0);
-        emit log_named_string(
-            "open_batch_dual_bound_finding",
-            openBatchFits10MTarget
-                ? "OPEN_BATCH chunk < 10M target AND <= 16.7M ceiling - no retune needed"
-                : "OPEN_BATCH chunk EXCEEDS the 10M target (still <= 16.7M ceiling) - 355-03 must shrink OPEN_BATCH to derived_max_safe_open_batch"
-        );
+        emit log_named_uint("declared_AFKING_OPEN_GAS", GasBounds.AFKING_OPEN_GAS);
 
         // HARD safety asserts (the never-breach floor; the 10M target at the current constant is a logged
         // 355-03 finding, NOT a hard revert):
@@ -365,10 +354,11 @@ contract V56AfkingGasMarginal is DeployProtocol {
         assertGt(derivedMaxSafeOpenBatch, 0, "a < 10M-safe open batch is achievable (derived max-safe N > 0)");
         // (3) the derivation is sound: the chunk AT the derived max-safe batch is under the 10M target.
         assertLt(chunkAtDerived, GAS_TARGET, "the chunk at the derived max-safe open batch is under the 10M TARGET (derivation sound)");
-        // (4) the never-exceed ceiling holds at the CURRENT OPEN_BATCH (the hard kill bar — must never breach,
-        //     even before the 355-03 retune toward the 10M target).
-        assertLe(openChunkAtBatch, EFFECTIVE_GAS_CEILING, "OPEN_BATCH chunk at the current constant stays <= the 16.7M never-exceed ceiling");
-        emit log_named_uint("current_open_batch", OPEN_BATCH);
+        // (4) per-chunk: the fixed OPEN_BATCH crank is gone; each box is its own AFKing checkpoint admitted
+        //     under the declared AFKING_OPEN_GAS bound, so the measured box must fit that bound, itself
+        //     inside the 10M realistic chunk limit.
+        assertLe(perOpen, GasBounds.AFKING_OPEN_GAS, "per-open marginal fits the declared AFKING checkpoint bound");
+        assertLe(GasBounds.AFKING_OPEN_GAS + GasBounds.AFKING_TAIL_GAS, GAS_TARGET, "AFKING checkpoint bound inside the 10M chunk limit");
     }
 
     // =========================================================================
@@ -509,13 +499,12 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // ---- Advance N (UNLOCKED resume entry): the STAGE chunk + the fresh daily request.
         // The stamp-before-request ordering: the ring walks to completion, then rngGate fires
         // the request (cheap) — no word exists yet, so no backfill/jackpot can share this tx. ----
+        // A realistic 10M allowance succeeds (the engine admits chunks while the allowance lasts, so the
+        // call is reported, not bounded; the checkpoints below are bounded one at a time).
         uint256 gasBeforeN = gasleft();
-        game.mineFlip();
+        game.mineFlip{gas: 10_000_000}();
         uint256 advNGas = gasBeforeN - gasleft();
-
-        // D-06: advance N (the STAGE chunk + request) is strictly under the EIP-7825 per-tx ceiling.
         emit log_named_uint("resume_stage_plus_request_advance_N_gas", advNGas);
-        assertLt(advNGas, EIP7825_TX_GAS_CAP, "D-06: the resume STAGE+request advance N is strictly < 16,777,216 (EIP-7825)");
 
         // Non-vacuity + segregation invariants on advance N:
         //  - the STAGE actually ran and completed before the request fired.
@@ -523,11 +512,16 @@ contract V56AfkingGasMarginal is DeployProtocol {
         //  - the request is in flight (LOCKED) — the entry gate now excludes the ring from every leg below.
         assertTrue(game.rngLocked(), "V62-02: advance N fired the resume request (rngLocked)");
         //  - no word existed in this tx, so nothing backfilled/sealed — structurally no composition.
-        assertTrue(rngWordByDay(idxBeforeStall + 1) == 0, "V62-02: advance N did NOT backfill (no word yet)");
+        (uint16 gapPercentN,) = coinflip.getCoinflipDayResult(uint24(idxBeforeStall + 1));
+        assertEq(gapPercentN, 0, "V62-02: advance N did NOT backfill (no word yet)");
         assertTrue(rngWordByDay(resumeDay) == 0, "V62-02: advance N committed no resumed-day word (request only)");
         assertEq(_dailyIdx(), idxBeforeStall, "V62-02: advance N did NOT advance dailyIdx");
         assertEq(_purchaseStartDay(), psdBeforeResume, "V62-02: advance N did NOT bump purchaseStartDay (no gap accounting yet)");
-        assertTrue(game.advanceDue(), "V62-02: advanceDue() stays true after advance N (liveness preserved)");
+        // Liveness: the only remaining step is waiting on the word, which is not runnable work (the
+        // engine reports RngNotReady); the resume continues on delivery below.
+        assertFalse(game.advanceDue(), "V62-02: after advance N the engine waits on the word (not stuck: RngNotReady)");
+        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
+        game.mineFlip();
 
         // The word arrives — buffered, STILL LOCKED (the organic buffered-clamp state; the lock
         // clears only at _unlockRng, and the entry gate keeps the STAGE out until then).
@@ -536,17 +530,28 @@ contract V56AfkingGasMarginal is DeployProtocol {
 
         // ---- Advance N+1: the gap-backfill leg (STAGE gated out — rngLocked; rngGate backfills the
         // gap ALONE and breaks STAGE_GAP_BACKFILLED, deferring the jackpot downstream) ----
-        uint256 gasBeforeNp1 = gasleft();
-        game.mineFlip();
-        uint256 advNp1Gas = gasBeforeNp1 - gasleft();
-
-        // D-06: advance N+1 (the lone backfill) is strictly under the EIP-7825 per-tx ceiling.
+        // The backfill is its own checkpoint: at the measured boundary allowance (the smallest that
+        // progresses) the call admits the gap backfill alone, and that checkpoint must fit the 10M
+        // realistic chunk limit (30-day worst case).
+        // (Publication and the ticket certificate precede it as their own small checkpoints.)
+        uint256 np1Allowance;
+        uint256 advNp1Gas;
+        for (uint256 i; i < 20 && _dailyIdx() != resumeDay - 1; ++i) {
+            np1Allowance = _boundaryAllowance();
+            uint256 gasBeforeNp1 = gasleft();
+            game.mineFlip{gas: np1Allowance}();
+            advNp1Gas = gasBeforeNp1 - gasleft();
+        }
+        emit log_named_uint("gap_backfill_checkpoint_allowance", np1Allowance);
         emit log_named_uint("gap_backfill_advance_Np1_gas", advNp1Gas);
-        assertLt(advNp1Gas, EIP7825_TX_GAS_CAP, "D-06: the gap-backfill advance N+1 is strictly < 16,777,216 (a SEPARATE tx from the STAGE chunk)");
+        assertLe(advNp1Gas, GAS_TARGET, "D-06: the 30-day gap-backfill checkpoint fits the 10M chunk limit");
 
         // D-07 invariants on advance N+1 (the gap backfill, decoupled from BOTH the STAGE and the jackpot):
         //  - the gap range is now backfilled (so rngGate is idempotent next call: _recordedDailyWord(idx+1) != 0).
-        assertTrue(rngWordByDay(idxBeforeStall + 1) != 0, "D-07: advance N+1 backfilled the gap (idempotent re-entry next call)");
+        // (Gap-day words are not retained — only today's and yesterday's are — so the backfill is observed
+        // through its settled gap coinflip days.)
+        (uint16 gapPercent,) = coinflip.getCoinflipDayResult(uint24(idxBeforeStall + 1));
+        assertGt(gapPercent, 0, "D-07: advance N+1 backfilled the gap (its first gap coinflip day resolved)");
         //  - dailyIdx parked at resumeDay - 1 (the gap is skipped, not walked) -> advanceDue stays true.
         assertEq(_dailyIdx(), resumeDay - 1, "D-07: advance N+1 parked dailyIdx at resumeDay - 1 (gap skipped, no _unlockRng)");
         assertTrue(game.advanceDue(), "D-07: advanceDue() stays true between advance N+1 and advance N+2 (jackpot deferred)");
@@ -557,9 +562,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
         uint256 expectedBump = uint256(resumeDay - idxBeforeStall - 1);
         assertEq(uint256(psdAfterNp1 - psdBeforeResume), expectedBump, "D-07: purchaseStartDay bumped exactly once by the gap count (resumeDay - dailyIdx - 1)");
 
-        // The resumed day's frozen word was landed by advance N+1's normal-daily-rng path (rngGate applied the
-        // resumed day right after the backfill, before the decouple break). advance N+2 reads the SAME word to
-        // pay the deferred jackpot — it is NOT re-rolled (the decouple defers DISTRIBUTION, never the word).
+        // The resumed day's word is applied by the next checkpoint (DailyApply); every later checkpoint
+        // reads the SAME word — it is NOT re-rolled (deferral moves DISTRIBUTION, never the word).
+        game.mineFlip{gas: _boundaryAllowance()}();
         uint256 resumeWordOnNp1 = rngWordByDay(resumeDay);
         require(resumeWordOnNp1 != 0, "fixture: the resumed-day word landed on advance N+1 (committed pre-defer)");
 
@@ -571,18 +576,13 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // via a low-level call so the gas-to-completion (or to the synthetic-fixture jackpot boundary — the
         // cheap STAGE/open marginal fixture builds no full prize-pool/ticket economics) is captured regardless,
         // and assert it stays under the EIP cap.
+        // The deferred distribution: the remaining daily checkpoints, each call with a realistic 10M
+        // allowance, which must succeed (per-chunk bounds for the jackpot legs live in the jackpot suites).
         uint256 gbNp2 = gasleft();
-        (bool okNp2, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+        for (uint256 i; i < 50 && game.rngLocked(); ++i) game.mineFlip{gas: 10_000_000}();
         uint256 advNp2Gas = gbNp2 - gasleft();
-        okNp2; // completion is fixture-state-dependent; the per-tx GAS is the load-bearing D-06 measurement.
-
         emit log_named_uint("deferred_jackpot_advance_Np2_gas", advNp2Gas);
-        emit log_named_uint("deferred_jackpot_advance_Np2_completed", okNp2 ? 1 : 0);
-        // D-06: the deferred-distribution advance N+2 stays strictly under the EIP-7825 per-tx ceiling — and,
-        // critically, it is a SEPARATE tx from the gap backfill N+1: the gap-backfill ~7M and the jackpot
-        // distribution NEVER share one tx (the original Codex composition breach), and neither shares the tx
-        // with the STAGE chunk (the V62-02 upstream breach).
-        assertLt(advNp2Gas, EIP7825_TX_GAS_CAP, "D-06: the deferred-jackpot advance N+2 is strictly < 16,777,216 (a SEPARATE tx from the gap-backfill N+1)");
+        assertFalse(game.rngLocked(), "D-06: the resumed day's distribution completed at realistic allowances");
 
         // D-07: advance N+2 read the SAME frozen resumed-day word committed on advance N+1 (never re-rolled).
         assertEq(rngWordByDay(resumeDay), resumeWordOnNp1, "D-07: the deferred jackpot reads the SAME frozen resumed-day word (committed on N+1, no re-roll on N+2)");
@@ -593,6 +593,21 @@ contract V56AfkingGasMarginal is DeployProtocol {
         emit log_named_uint("subscriber_cap_used", SUBSCRIBER_CAP);
         // Non-vacuity: the funded subs still exist (the resume processed them, did not drop the fixture).
         require(subs.length == N_HI, "fixture: funded set intact");
+    }
+
+    /// @dev The smallest allowance (100k steps) with which the next keeper call succeeds: it admits the
+    ///      next checkpoint alone. Probed on snapshots; the state is left unchanged.
+    function _boundaryAllowance() internal returns (uint256 g) {
+        uint256 snap = vm.snapshotState();
+        for (g = 500_000; g <= GAS_TARGET; g += 100_000) {
+            try game.mineFlip{gas: g}() {
+                require(vm.revertToState(snap), "snapshot");
+                return g;
+            } catch {
+                require(vm.revertToState(snap), "snapshot");
+            }
+        }
+        revert("fixture: no allowance up to 10M progresses");
     }
 
     // =========================================================================
@@ -695,66 +710,55 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///         SLOAD each), the higher per-box marginal. This measures a mixed-day open and asserts both the
     ///         per-box marginal and the full OPEN_BATCH chunk at the mixed-day cost stay < the EIP cap.
     function testResidualR3MixedStampDayOpenBatch() public {
-        // The per-box open is NO LONGER a uniform O(1) constant: a box can roll into a Degenerette
-        // spin (WWXRP / FLIP-spins / ETH-spin), so the old diff-of-two-batches marginal (which
-        // assumed the first N-1 boxes cancel exactly) is unsound — box i's roll value depends on its
-        // stamp DAY, which differs by one between the N and N-1 runs. Measure the WORST CASE directly
-        // instead: FORCE every box in a full OPEN_BATCH to the heaviest path — the ETH-spin (roll 19),
-        // which credits ETH AND recircs a winning payout into a fresh re-hashed box (the deepest
-        // single-box work; the recirc cannot itself cascade an ETH-spin, allowEthSpin=false there).
-        // This is the binding worst-case OPEN_BATCH chunk for the fixed `_autoOpen(OPEN_BATCH)` crank.
-        (uint256 chunkGas, uint256 ethSpins) = _forceEthSpinOpenChunk("r3eth_");
+        // Premise change: a box now always opens in the session of its own stamp day (the next request
+        // waits for every read consumer, and only today's/yesterday's words are retained), so the
+        // multi-day backlog and the fixed OPEN_BATCH crank this measured no longer exist; each box is one
+        // AFKing checkpoint admitted under AFKING_OPEN_GAS. The worst case kept: every box FORCED to the
+        // ETH-spin (roll 19), which credits ETH and may recirc a winning payout into a fresh box (the
+        // deepest single-box work), measured as the N vs N-1 marginal against the declared bound.
+        uint256 snap = vm.snapshotState();
+        (uint256 gasN, uint256 ethSpins) = _forceEthSpinSession(N_HI, "r3eth_");
+        vm.revertToState(snap);
+        (uint256 gasNm1,) = _forceEthSpinSession(N_LO, "r3eth_");
+        uint256 perBox = gasN - gasNm1;
 
-        emit log_named_uint("r3_forced_eth_spin_OPEN_BATCH_chunk_gas", chunkGas);
+        emit log_named_uint("r3_forced_eth_spin_session_gas_n", gasN);
         emit log_named_uint("r3_forced_eth_spin_count", ethSpins);
-        emit log_named_uint("r3_forced_eth_spin_per_box_gas", chunkGas / OPEN_BATCH);
+        emit log_named_uint("r3_forced_eth_spin_per_box_gas", perBox);
 
         // Non-vacuity: every box actually took the ETH-spin path (proves the worst-case forcing worked).
-        assertEq(ethSpins, OPEN_BATCH, "R3: every forced box rolled the ETH-spin (the heaviest outcome)");
-        // The full forced all-ETH-spin OPEN_BATCH chunk stays under the 16,777,216 EIP-7825 per-tx cap,
-        // so the fixed-OPEN_BATCH mineFlip crank can never become un-submittable on a worst-case batch.
-        assertLt(chunkGas, EIP7825_TX_GAS_CAP, "R3: forced all-ETH-spin OPEN_BATCH chunk stays < 16,777,216");
+        assertEq(ethSpins, N_HI, "R3: every forced box rolled the ETH-spin (the heaviest outcome)");
+        // Per-chunk: the heaviest single box fits its declared checkpoint bound, inside the 10M limit.
+        assertLe(perBox, GasBounds.AFKING_OPEN_GAS, "R3: a forced ETH-spin box fits the declared AFKING checkpoint bound");
+        assertLe(GasBounds.AFKING_OPEN_GAS + GasBounds.AFKING_TAIL_GAS, GAS_TARGET, "R3: AFKING checkpoint inside the 10M chunk limit");
     }
 
-    /// @dev Build a full OPEN_BATCH of distinct-stamp-day afking boxes whose injected rngWordByDay is
-    ///      brute-forced so EVERY box rolls the ETH-spin (roll 19 — the heaviest box outcome), then
-    ///      bracket one openBoxes(OPEN_BATCH) call. Returns the measured chunk gas and the count of
-    ///      ETH-type BoxSpin events (must equal OPEN_BATCH — proves the forcing landed). The recirc box
-    ///      each winning ETH-spin opens is in the same chunk (allowEthSpin=false there, so its BoxSpins
-    ///      carry the WWXRP/FLIP type — the ETH-type count is exactly the forced first-level spins).
-    function _forceEthSpinOpenChunk(string memory prefix)
-        internal
-        returns (uint256 chunkGas, uint256 ethSpins)
-    {
-        uint256 m = OPEN_BATCH; // 80 distinct-day boxes — the full fixed crank chunk
-        address[] memory subs = _setupFundedSubs(m, prefix, 5 ether, false);
-        _runStageNewDay(uint256(keccak256(abi.encodePacked(prefix, "w"))) | 1);
-        _settleClean(uint256(keccak256(abi.encodePacked(prefix, "clean"))) | 1);
-        require(!game.advanceDue(), "fixture: clean so the open chunk runs");
-
-        uint32 anchor = _lastBoughtDayOf(subs[0]) + uint32(m) + 1;
-        for (uint256 i; i < m; ++i) {
-            uint32 d = anchor - uint32(i);
-            _pokeLastBoughtDay(subs[i], d);
-            _pokeLastOpenedDay(subs[i], d - 1);
-            // The box seed = keccak256(rngWord, player, AFKING_BOX_TAG, day); brute-force the (injected)
-            // rngWord so its roll value (bits[40..55] % 20) is 19 = the ETH-spin path.
-            uint256 amtWei = _subField(subs[i], OFF_AMOUNT, 24) * MILLI_ETH_SCALE;
-            _injectRngWordByDay(d, _findEthSpinWord(subs[i], d, amtWei, i));
+    /// @dev `m` funded lootbox subs whose next-day box rolls the ETH-spin under the session word: the
+    ///      seed is hash4(sessionWord, player, AFKING_BOX_TAG, stampDay) and the roll uint16(seed >> 40)
+    ///      % 20 == 19, so players are brute-forced against the chosen word (no nudges in this fixture,
+    ///      so the session word is the delivered word) and the known next stamp day. Returns the stamp
+    ///      day's session gas and the count of first-level ETH-type BoxSpin events.
+    function _forceEthSpinSession(uint256 m, string memory prefix) internal returns (uint256 sessionGas, uint256 ethSpins) {
+        uint256 word = uint256(keccak256(abi.encodePacked(prefix, "w"))) | 1;
+        uint32 day = _simulatedDayIndex() + 1;
+        address[] memory subs = new address[](m);
+        uint256 found;
+        for (uint256 k; found < m; ++k) {
+            require(k < 50_000, "fixture: ETH-spin players");
+            address who = makeAddr(string(abi.encodePacked(prefix, _u(k))));
+            uint256 seed = uint256(keccak256(abi.encode(word, uint256(uint160(who)), uint256(0x41666b696e67426f78), uint256(day))));
+            if (uint16(seed >> 40) % 20 == 19) subs[found++] = who;
         }
-
+        for (uint256 i; i < m; ++i) {
+            _grantSeat(subs[i]);
+            _fundPool(subs[i], 5 ether);
+            vm.prank(subs[i]);
+            game.subscribe(address(0), false, false, 1, address(0));
+        }
+        _stampNewDay(word);
+        require(_readStampDay(subs) == day, "fixture: the forced boxes are stamped for the predicted day");
         vm.recordLogs();
-        vm.prank(makeAddr(string(abi.encodePacked(prefix, "op"))));
-        uint256 gasBefore = gasleft();
-        // +2: the walk budget is WEIGHTED (skip = 1 unit, open = OPEN_ITEM_WEIGHT) and the
-        // 2 permanent deploy subs (VAULT/sDGNRS) sit in the ring as skips — the allowance
-        // keeps the full 80 forced opens affordable in this single chunk.
-        game.openBoxes(OPEN_BATCH + 2);
-        chunkGas = gasBefore - gasleft();
-
-        // Count the first-level ETH spins: BoxSpin events whose betId encodes the ETH type
-        // (bits 62-60 == 2). Recirc boxes (allowEthSpin=false) may emit WWXRP/FLIP BoxSpins,
-        // which carry a different type and are excluded here.
+        sessionGas = _sessionGas(word);
         VmSafe.Log[] memory logs = vm.getRecordedLogs();
         bytes32 boxSpinSig = keccak256("BoxSpin(address,uint64,uint256,uint256,uint256)");
         for (uint256 i; i < logs.length; ++i) {
@@ -763,6 +767,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
                 if ((betId >> 60) & 7 == 2) ++ethSpins;
             }
         }
+        for (uint256 i; i < m; ++i) require(_lastOpenedDayOf(subs[i]) == day, "fixture: each forced box opened");
     }
 
     /// @dev Brute-force an injected stamp-day word so the afking box's roll lands on the ETH-spin (19).
@@ -797,30 +802,25 @@ contract V56AfkingGasMarginal is DeployProtocol {
         uint256 evNm1 = _measureEvictStageGas(N_LO, "r4evLo_");
         uint256 perEvict = evN > evNm1 ? evN - evNm1 : 1;
 
+        // A mixed-day backlog no longer exists (each box opens in its own stamp day's session), so the
+        // heaviest open per-iter cost is the same-day open marginal (shared prefix: one real box).
         vm.revertToState(snap);
-        uint256 mxN = _measureMixedDayOpenLegGas(N_HI, "r4mxHi_");
+        uint256 mxN = _measureOpenLegGas(N_HI, "r4op_");
         vm.revertToState(snap);
-        uint256 mxNm1 = _measureMixedDayOpenLegGas(N_LO, "r4mxLo_");
+        uint256 mxNm1 = _measureOpenLegGas(N_LO, "r4op_");
         uint256 perBoxMixed = mxN > mxNm1 ? mxN - mxNm1 : 1;
-
-        // Also capture the REAL measured mixed-day OPEN_BATCH chunk (the binding worst-case chunk at the
-        // heaviest per-iter state — measured directly, NOT a synthetic marginal*N extrapolation, which would
-        // double-count the per-box injection overhead present in the marginal).
-        vm.revertToState(snap);
-        uint256 mixedChunk = _measureMixedDayOpenChunkAtBatch("r4ch_");
 
         uint256 heaviestPerIter = perEvict > perBoxMixed ? perEvict : perBoxMixed;
         emit log_named_uint("r4_per_evict_heavy_gas", perEvict);
         emit log_named_uint("r4_per_box_mixed_heavy_gas", perBoxMixed);
         emit log_named_uint("r4_heaviest_per_iter_gas", heaviestPerIter);
-        emit log_named_uint("r4_measured_mixed_OPEN_BATCH_chunk_gas", mixedChunk);
 
         // R4: the heaviest reachable per-iter cost is a bounded O(1) (does not scale with player magnitude),
         // so the chunk bound holds at the heavy state.
         assertLt(heaviestPerIter, 400_000, "R4: the heaviest reachable per-iter state is a bounded O(1) (no magnitude scaling)");
-        // R4: the REAL measured worst-case mixed-day OPEN_BATCH=80 chunk (every box a cold rngWordByDay SLOAD,
-        // the heaviest reachable open state) stays under the EIP per-tx ceiling — the binding chunk bound.
-        assertLt(mixedChunk, EIP7825_TX_GAS_CAP, "R4: the measured worst-case mixed-day OPEN_BATCH=80 chunk stays < 16,777,216");
+        // R4 per-chunk (the fixed OPEN_BATCH chunk is gone): each box is one AFKing checkpoint, so the
+        // heaviest open per-iter cost fits the declared AFKING_OPEN_GAS bound.
+        assertLe(perBoxMixed, GasBounds.AFKING_OPEN_GAS, "R4: the heaviest open per-iter cost fits the declared AFKING checkpoint bound");
     }
 
     // =========================================================================
@@ -832,21 +832,29 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///         (DegenerusGame:1815). With both backlogs populated and maxCount set so the afking leg does not
     ///         exhaust it, the human cursor advances by EXACTLY the remainder.
     function testLive01AfkingFirstOrdering() public {
+        // The valve serves the session's consumer stages (AFKing, then human boxes), so the fixture
+        // stops at the AFKing stage with the subject still pending (padding subs ahead in the ring).
+        _setupFundedSubs(AFKING_PADS, "v_pad_", 5 ether, false);
         // AFKING backlog: a funded lootbox sub gets a stamped box.
         address afk = makeAddr("v_afk");
         _grantSeat(afk);
         _fundPool(afk, 5 ether); // fund BEFORE subscribe to ground the NEW-run cover-buy (D-12)
         vm.prank(afk);
         game.subscribe(address(0), false, false, 1, address(0));
-        _runStageNewDay(0xA0F1);
+        _settleGame(0xA0F1 ^ 0xF00D);
+        _finishIndexedReadConsumers();
 
-        // HUMAN backlog: a real lootbox buyer queues a box on the human path (boxPlayers).
+        // HUMAN backlog: a real lootbox buyer queues a box on the human path (boxPlayers), committed by
+        // the same daily request as the afking stamp.
         address human = makeAddr("v_human");
         vm.deal(human, 5 ether);
         vm.prank(human);
         game.purchase{value: 1.01 ether}(human, 400, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
 
-        _settleClean(0xA0F2);
+        _stampNewDay(0xA0F1);
+        address[] memory subject = new address[](1);
+        subject[0] = afk;
+        _toAfkingStageWithPending(subject, _lastBoughtDayOf(afk), 0xA0F2);
         require(_lastOpenedDayOf(afk) < _lastBoughtDayOf(afk), "fixture: afking box pending pre-valve");
         uint256 boxCursorBefore = _boxCursor();
         uint256 subOpenCursorBefore = _subOpenCursor();
@@ -873,12 +881,14 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///         budgets so the drain genuinely spans multiple bounded calls.
     function testLive01DrainBothCursorsBoundedNoDoubleOpen() public {
         uint256 n = 8;
+        // Stop at the session's AFKing stage with the subjects pending (padding subs ahead in the ring).
+        _setupFundedSubs(AFKING_PADS, "vd_pad_", 5 ether, false);
         address[] memory subs = _setupFundedSubs(n, "vd_", 5 ether, false);
-        _runStageNewDay(0xB0F1);
-        _settleClean(0xB0F2);
+        _stampNewDay(0xB0F1);
 
         uint32 stampDay = _lastBoughtDayOf(subs[0]);
         require(stampDay > 0, "fixture: subs stamped");
+        _toAfkingStageWithPending(subs, stampDay, 0xB0F2);
         // Pre: every box pending.
         for (uint256 i; i < n; ++i) require(_lastOpenedDayOf(subs[i]) < stampDay, "fixture: each afking box pending");
 
@@ -892,9 +902,11 @@ contract V56AfkingGasMarginal is DeployProtocol {
         uint256 totalOpened;
         uint256 zeroStreak;
         for (uint256 c; c < 80; ++c) {
+            // The valve spends the gas it is given (its count argument no longer bounds it), so the
+            // tiny chunks are tiny allowances.
             vm.prank(makeAddr(string(abi.encodePacked("vd_op_", _u(c)))));
             uint256 gb = gasleft();
-            uint256 op = game.openBoxes(2);
+            uint256 op = game.openBoxes{gas: 1_500_000}(2);
             uint256 g = gb - gasleft();
             // LIVE-01(c): each bounded openBoxes chunk stays under the EIP per-tx ceiling.
             assertLt(g, EIP7825_TX_GAS_CAP, "LIVE-01(c): each bounded openBoxes chunk stays < 16,777,216");
@@ -939,13 +951,17 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///         standalone selector on a live subscriber set.
     function testLive01DrainAfkingBoxesSelectorIsolation() public {
         // Populate a real afking backlog in the GAME's storage.
+        // Stop at the session's AFKing stage with the subject pending (padding subs ahead in the ring).
+        _setupFundedSubs(AFKING_PADS, "vsel_pad_", 5 ether, false);
         address afk = makeAddr("vsel_afk");
         _grantSeat(afk);
         _fundPool(afk, 5 ether); // fund BEFORE subscribe to ground the NEW-run cover-buy (D-12)
         vm.prank(afk);
         game.subscribe(address(0), false, false, 1, address(0));
-        _runStageNewDay(0xE0F1);
-        _settleClean(0xE0F2);
+        _stampNewDay(0xE0F1);
+        address[] memory subject = new address[](1);
+        subject[0] = afk;
+        _toAfkingStageWithPending(subject, _lastBoughtDayOf(afk), 0xE0F2);
         require(_lastOpenedDayOf(afk) < _lastBoughtDayOf(afk), "fixture: afking box pending");
 
         // Call drainAfkingBoxes DIRECTLY on the module address — it hits the MODULE's empty storage, not the
@@ -1253,20 +1269,18 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///      settles clean (so mineFlip routes to OPEN), opens all.
     function _measureOpenLegGas(uint256 n, string memory prefix) internal returns (uint256 openGas) {
         address[] memory subs = _setupFundedSubs(n, prefix, 5 ether, false);
-        _runStageNewDay(uint256(keccak256(abi.encodePacked(prefix, "word"))) | 1);
+        // The boxes open in the session of their stamp day (its AFKing consumer step), so the open leg
+        // is measured as that whole session's keeper gas; N and N-1 differ by exactly one open.
+        uint256 word = uint256(keccak256(abi.encodePacked(prefix, "word"))) | 1;
+        _stampNewDay(word);
         uint32 stampDay = _readStampDay(subs);
-        require(stampDay > 0, "fixture: subs stamped");
-        require(rngWordByDay(stampDay) != 0, "fixture: stamp-day word landed");
+        require(stampDay == _simulatedDayIndex(), "fixture: subs stamped for the new day");
         for (uint256 i; i < n; ++i) {
             require(_lastOpenedDayOf(subs[i]) < stampDay, "marginal pre: each box queued");
         }
 
-        _settleClean(uint256(keccak256(abi.encodePacked(prefix, "clean"))) | 1);
-        require(!game.advanceDue(), "fixture: clean so mineFlip opens");
-        vm.prank(makeAddr(string(abi.encodePacked(prefix, "opener"))));
-        uint256 gasBefore = gasleft();
-        game.mineFlip();
-        openGas = gasBefore - gasleft();
+        openGas = _sessionGas(word);
+        require(rngWordByDay(stampDay) != 0, "fixture: stamp-day word landed");
 
         for (uint256 i; i < n; ++i) {
             require(_lastOpenedDayOf(subs[i]) == stampDay, "marginal non-vacuity: each box opened");
@@ -1324,6 +1338,62 @@ contract V56AfkingGasMarginal is DeployProtocol {
         vm.deal(address(this), amount);
         game.depositAfkingFunding{value: amount}(who);
     }
+
+    /// @dev Finish the current day, then open a NEW day up to its daily request: the subscriber STAGE
+    ///      stamps each funded sub's box for that day and the request commits the day's word, left
+    ///      undelivered (the boxes stay pending until the session's AFKing consumer step opens them).
+    function _stampNewDay(uint256 vrfWord) internal {
+        _settleGame(vrfWord ^ 0xF00D);
+        _finishIndexedReadConsumers();
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        uint256 before = mockVRF.lastRequestId();
+        for (uint256 i; i < DRAIN_MAX_ITERATIONS && mockVRF.lastRequestId() == before; ++i) game.mineFlip();
+        require(mockVRF.lastRequestId() > before, "fixture: the new day's request is in flight");
+    }
+
+    /// @dev Deliver the in-flight request's word and run its whole session (daily work, then the read
+    ///      consumers, the AFKing opens among them) to completion; returns the summed keeper gas. N and
+    ///      N-1 runs share everything but the Nth box, so their difference is one box's open cost.
+    function _sessionGas(uint256 vrfWord) internal returns (uint256 total) {
+        _fulfillPending(vrfWord);
+        for (uint256 i; i < 200 && !game.rngComplete(); ++i) {
+            uint256 g0 = gasleft();
+            game.mineFlip();
+            total += g0 - gasleft();
+        }
+        require(game.rngComplete(), "fixture: the session completed");
+    }
+
+    function _allPending(address[] memory subs, uint32 stampDay) internal view returns (bool) {
+        for (uint256 i; i < subs.length; ++i) if (_lastOpenedDayOf(subs[i]) >= stampDay) return false;
+        return true;
+    }
+
+    /// @dev Deliver the in-flight word and advance with bounded allowances until the session's AFKing
+    ///      stage (rngConsumerStage 2) is open with every subject box still pending. The engine admits
+    ///      chunks while the allowance covers the next declared bound, so the call that finishes the
+    ///      daily work opens queue-head boxes with its spare gas: padding subs ahead of the subjects in
+    ///      the ring absorb that, and a step reaching a subject is replayed with a smaller allowance.
+    function _toAfkingStageWithPending(address[] memory subjects, uint32 stampDay, uint256 vrfWord) internal {
+        _fulfillPending(vrfWord);
+        for (uint256 i; i < 200 && game.rngConsumerStage() != 2; ++i) {
+            uint256 snap = vm.snapshotState();
+            bool stepped;
+            for (uint256 g = 9_000_000; g >= 400_000 && !stepped; g -= 100_000) {
+                try game.mineFlip{gas: g}() {
+                    if (_allPending(subjects, stampDay)) stepped = true;
+                    else require(vm.revertToState(snap), "snapshot");
+                } catch {
+                    require(vm.revertToState(snap), "snapshot");
+                }
+            }
+            require(stepped, "fixture: a bounded allowance stops at the AFKing stage");
+        }
+        require(game.rngConsumerStage() == 2, "fixture: the AFKing stage is open");
+        require(_allPending(subjects, stampDay), "fixture: every subject box pending at the AFKing stage");
+    }
+
+    uint256 internal constant AFKING_PADS = 100;
 
     /// @dev Drive a fresh new-day STAGE then land the day's word (the per-sub stamp becomes a ready box).
     function _runStageNewDay(uint256 vrfWord) internal {

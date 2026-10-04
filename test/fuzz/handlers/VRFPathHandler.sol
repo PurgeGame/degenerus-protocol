@@ -7,7 +7,7 @@ import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {DegenerusAdmin} from "../../../contracts/DegenerusAdmin.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
-import {GameTimeLib} from "../../../contracts/libraries/GameTimeLib.sol";
+import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 
 /// @title VRFPathHandler -- Invariant handler for VRF path lifecycle testing
@@ -23,8 +23,12 @@ contract VRFPathHandler is Test {
     address[] public actors;
     address internal currentActor;
 
-    // --- Ghost variables: TEST-01 (lootbox index lifecycle) ---
+    // --- Ghost variables: TEST-01 (lootbox buffer lifecycle) ---
+    // Two physical buffers (6d0e64b09): the "index" is the write-buffer selector (0/1). It flips
+    // exactly once per committed request and never elsewhere; ghost_expectedIndex mirrors it.
     uint48 public ghost_expectedIndex;
+    uint256 public ghost_freshRequests;
+    uint48 internal recoveryFrom;
     uint256 public ghost_indexSkipViolations;
     uint256 public ghost_doubleIncrementCount;
     uint256 public ghost_orphanedIndices;
@@ -72,28 +76,41 @@ contract VRFPathHandler is Test {
         return RecyclingState.word(address(game), index);
     }
 
-    /// @dev Mirror of the contract's _livenessTriggered() (DegenerusGameStorage), read from
-    ///      one slot-0 load: purchaseStartDay uint24 at byte 0, rngRequestTime uint48 at
-    ///      byte 6, level uint24 at byte 12, jackpotPhaseFlag bool at byte 15,
-    ///      lastPurchaseDay bool at byte 17. Constants mirror _DEPLOY_IDLE_TIMEOUT_DAYS
-    ///      (365) and the 120-day mid-game idle timeout; past either deadline an in-flight
-    ///      pre-deadline request suppresses the trigger for _VRF_GRACE_PERIOD (14 days).
-    ///      Once true at an mineFlip entry, that advance routes into the staged
-    ///      terminal flow, whose entropy path (_gameOverEntropy) by design does NOT
-    ///      backfill gap days.
+    /// @dev The game's own liveness trigger. Once true at an mineFlip entry, that advance routes
+    ///      into the terminal flow, which by design does not backfill gap days.
     function _livenessMirror() internal view returns (bool) {
-        uint256 raw = uint256(vm.load(address(game), bytes32(uint256(0))));
-        if (uint8(raw >> 136) != 0 || uint8(raw >> 120) != 0) return false; // lastPurchaseDay || jackpotPhaseFlag
-        uint24 lvl = uint24(raw >> 96);
-        uint256 psd = uint24(raw);
-        uint256 currentDay = game.currentDayView();
-        uint256 deadlineDay = psd + (lvl == 0 ? 365 : 120);
-        if (currentDay <= deadlineDay) return false;
-        uint48 rngStart = uint48(raw >> 48);
-        return
-            rngStart == 0 ||
-            block.timestamp - rngStart >= 14 days ||
-            GameTimeLib.currentDayIndexAt(rngStart) > deadlineDay;
+        return game.livenessTriggered();
+    }
+
+    /// @dev A request is in flight with no word yet (active bit, rngWordCurrent == WAITING).
+    function _unansweredRequest() internal view returns (bool) {
+        return uint256(vm.load(address(game), bytes32(0))) & (uint256(1) << 254) != 0
+            && RecyclingState.currentWord(address(game)) == 0;
+    }
+
+    function _coinflipSettled(uint24 day) internal view returns (bool) {
+        (bool ok, bytes memory data) = ContractAddresses.COINFLIP.staticcall(
+            abi.encodeWithSignature("getCoinflipDayResult(uint24)", day)
+        );
+        if (!ok) return false;
+        (uint16 rewardPercent, bool win) = abi.decode(data, (uint16, bool));
+        return rewardPercent != 0 || win;
+    }
+
+    /// @dev Account one observed call for the buffer lifecycle: at most one committed request
+    ///      per call, the selector flips iff a request was committed, and a fresh request never
+    ///      seals while the previous request is still unanswered.
+    function _noteRequests(uint48 indexBefore, uint256 reqBefore, bool unansweredBefore) internal {
+        uint256 reqs = vrf.lastRequestId() - reqBefore;
+        uint48 indexAfter = _lootboxRngIndex();
+        if (reqs > 1) ghost_doubleIncrementCount++;
+        bool flipped = indexAfter != indexBefore;
+        if (flipped) {
+            ghost_freshRequests++;
+            ghost_expectedIndex ^= 1;
+            if (reqs == 0) ghost_indexSkipViolations++;
+            if (unansweredBefore) ghost_orphanedIndices++;
+        }
     }
 
     modifier useActor(uint256 seed) {
@@ -160,89 +177,65 @@ contract VRFPathHandler is Test {
         if (game.gameOver()) return;
 
         uint48 indexBefore = _lootboxRngIndex();
-        bool lockedBefore = game.rngLocked();
-        // Capture dailyIdx BEFORE mineFlip updates it — this is the contract's
-        // gap start reference (rngGate backfills from dailyIdx+1 to currentDay).
+        uint256 reqBefore = vrf.lastRequestId();
+        bool unansweredBefore = _unansweredRequest();
+        // Capture dailyIdx BEFORE mineFlip updates it — the gap start reference.
         uint48 dailyIdxBefore = _dailyIdx();
-        // Latch liveness at entry: an advance that runs while the trigger holds routes
-        // into the staged terminal flow (gap backfill not owed from then on). Evaluated
-        // pre-call because the terminal fallback zeroes rngRequestTime, hiding the
-        // VRF-grace trigger from any later read.
+        // Latch liveness at entry: an advance that runs while the trigger holds routes into the
+        // terminal flow (gap backfill not owed from then on).
         if (_livenessMirror()) ghost_livenessLatched = true;
 
         try game.mineFlip() {} catch {
             return;
         }
 
-        uint48 indexAfter = _lootboxRngIndex();
-        bool lockedAfter = game.rngLocked();
+        // TEST-01: one committed request per call at most, flips only on a request.
+        _noteRequests(indexBefore, reqBefore, unansweredBefore);
 
-        // TEST-01: double-increment detection
-        if (indexAfter > indexBefore + 1) {
-            ghost_doubleIncrementCount++;
-        }
-
-        // TEST-01: track expected index
-        if (indexAfter > indexBefore) {
-            ghost_expectedIndex += (indexAfter - indexBefore);
-            // A fresh allocation opens a new pending index; the one pending before it
-            // (indexBefore - 1) must already carry a word — the unworded trailing
-            // suffix never exceeds the single in-flight index. indexBefore >= 2 skips
-            // genesis, where lootboxRngIndex still sits at its initial 1 and no index
-            // has ever been pending.
-            if (indexBefore >= 2 && _lootboxRngWord(indexBefore - 1) == 0) {
-                ghost_orphanedIndices++;
-            }
-        }
-
-        // TEST-02: recovery detection after coordinator swap
-        // Only check gap days after the FULL recovery cycle completes:
-        // mineFlip transitioned the game from locked to unlocked, meaning
-        // the VRF word was consumed and gap days were backfilled in this call.
-        // Skip check once liveness has latched — the staged terminal flow uses
-        // _gameOverEntropy which does NOT call _backfillGapDays, and it unlocks
-        // before the gameOver flag flips at the end of the staged sequence.
+        // TEST-02/03: recovery after a coordinator swap. The recovery consumes the in-flight
+        // word for the day it was requested for and seals THAT day; the same call may then go
+        // on to the wall day's fresh request (the engine composes actions, 60d31f775), so the
+        // trigger is the seal (dailyIdx advancing), not a lock transition. The two-day ring keeps
+        // the sealed day's word and the final gap day's derived word (6d0e64b09/c729ecfc9);
+        // every gap day settles through its coinflip day.
         if (ghost_swapPending && ghost_livenessLatched) {
             ghost_swapPending = false;
+            recoveryFrom = 0;
         }
-        if (ghost_swapPending && lockedBefore && !lockedAfter && !game.gameOver()) {
-            // The recovery consumes the in-flight word for the day it was requested for and
-            // advances dailyIdx to THAT day — it does NOT jump straight to currentDay. The
-            // contract fills [dailyIdx+1, processedDay) as gap days (capped at 120) and the
-            // processed day itself, then sets dailyIdx = processedDay. So the days guaranteed
-            // worded by this transition run from dailyIdxBefore+1 through dailyIdxAfter, NOT to
-            // currentDay (later calendar days are normal one-per-advance catch-up, each its own
-            // lock cycle). Mirror that exact range, not the wall-clock day.
-            uint48 dailyIdxAfter = _dailyIdx();
-            if (dailyIdxAfter > dailyIdxBefore) {
-                // The processed day always carries the freshly-applied word.
-                if (game.rngWordForDay(uint24(dailyIdxAfter)) == 0) {
+        uint48 dailyIdxAfter = _dailyIdx();
+        if (ghost_swapPending && dailyIdxAfter > dailyIdxBefore && !game.gameOver()) {
+            // The gap is its own checkpoint (applyDailyGap parks dailyIdx at day - 1 before the
+            // request day itself is applied and sealed): remember where the recovery started and
+            // evaluate once the request day is sealed.
+            if (recoveryFrom == 0) recoveryFrom = dailyIdxBefore + 1;
+            uint24 requestDay = uint24(uint256(vm.load(address(game), bytes32(uint256(5)))));
+            if (game.rngLocked() && requestDay == uint24(dailyIdxAfter) + 1) return;
+            dailyIdxBefore = recoveryFrom - 1;
+            recoveryFrom = 0;
+            if (RecyclingState.dailyWord(address(game), uint24(dailyIdxAfter)) == 0) {
+                ghost_gapBackfillFailures++;
+            }
+            uint32 gapStart = uint32(dailyIdxBefore + 1);
+            uint32 gapEnd = uint32(dailyIdxAfter);
+            if (gapEnd > gapStart) {
+                if (RecyclingState.dailyWord(address(game), uint24(gapEnd - 1)) == 0) {
                     ghost_gapBackfillFailures++;
                 }
-                // Backfilled gap days [dailyIdxBefore+1, dailyIdxAfter), capped at 120 exactly
-                // as _backfillGapDays does (a >120-day stall leaves the middle days unfilled
-                // by design, so they are out of scope for this assertion).
-                uint32 gapStart = uint32(dailyIdxBefore + 1);
-                uint32 gapEnd = uint32(dailyIdxAfter);
-                if (gapEnd - gapStart > 120) gapEnd = gapStart + 120;
+                // Gap settlement is capped at the deadman window (_backfillGapDays bound).
+                if (gapEnd - gapStart > 31) gapEnd = gapStart + 31;
                 for (uint32 d = gapStart; d < gapEnd; d++) {
-                    if (game.rngWordForDay(uint24(d)) == 0) {
-                        ghost_gapBackfillFailures++;
-                    }
+                    if (!_coinflipSettled(uint24(d))) ghost_gapBackfillFailures++;
                 }
-
-                uint256 gapSize = uint256(uint32(dailyIdxAfter) - gapStart);
-                if (gapSize > ghost_maxGapSize) {
-                    ghost_maxGapSize = gapSize;
-                }
-
-                ghost_swapPending = false;
-                ghost_recoveryCount++;
             }
+            uint256 gapSize = uint256(uint32(dailyIdxAfter) - gapStart);
+            if (gapSize > ghost_maxGapSize) ghost_maxGapSize = gapSize;
+            ghost_swapPending = false;
+            ghost_recoveryCount++;
         }
         // Clear swap flag if game ended (no recovery possible)
         if (ghost_swapPending && game.gameOver()) {
             ghost_swapPending = false;
+            recoveryFrom = 0;
         }
     }
 
@@ -279,26 +272,15 @@ contract VRFPathHandler is Test {
         if (game.gameOver() || game.rngLocked()) return;
 
         uint48 indexBefore = _lootboxRngIndex();
+        uint256 reqBefore = vrf.lastRequestId();
+        bool unansweredBefore = _unansweredRequest();
 
         try game.requestLootboxRng() {} catch {
             return;
         }
 
-        uint48 indexAfter = _lootboxRngIndex();
-
-        // TEST-01: skip/double-increment detection
-        if (indexAfter > indexBefore + 1) {
-            ghost_doubleIncrementCount++;
-        }
-
-        if (indexAfter > indexBefore) {
-            ghost_expectedIndex += (indexAfter - indexBefore);
-            // Same trailing-suffix rule as mineFlip: the previously pending index
-            // must be worded before a new one is opened.
-            if (indexBefore >= 2 && _lootboxRngWord(indexBefore - 1) == 0) {
-                ghost_orphanedIndices++;
-            }
-        }
+        // TEST-01: same accounting as mineFlip.
+        _noteRequests(indexBefore, reqBefore, unansweredBefore);
     }
 
     /// @notice Perform coordinator swap and track stall-to-recovery state

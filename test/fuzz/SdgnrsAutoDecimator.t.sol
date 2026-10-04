@@ -55,7 +55,9 @@ contract AutoDecimatorGameHarness is DegenerusGame {
         rngWordCurrent = RNG_WORD_WAITING;
         rngLockedFlag = false;
         lastPurchaseDay = false;
-        _tryCompleteRng();
+        // The opening day's session is over (its read consumers are done), so the engine's next
+        // action is the real daily request.
+        _setRngComplete(true);
     }
 
     /// @dev The wallet's entry for `lvl` (zero if its latest entry is another event); stack in wei.
@@ -278,9 +280,15 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         // The next real daily request clears the opening flag while the decimator stays open.
         _warp(22);
         harness.prepareNextRequest(22);
-        harness.applyOpeningWord(22);
+        // The real daily request is the keeper engine's RequestDaily action (the advance module
+        // only applies a delivered word); the word is then published and applied by the engine.
+        uint256 requestBefore = mockVRF.lastRequestId();
+        for (uint256 i; i < 20 && mockVRF.lastRequestId() == requestBefore; ++i) game.mineFlip();
+        assertGt(mockVRF.lastRequestId(), requestBefore, "real daily request");
+        assertTrue(game.rngLocked());
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 3);
-        harness.applyOpeningWord(22);
+        for (uint256 i; i < 20 && game.rngWordForDay(22) == 0; ++i) game.mineFlip();
+        assertGt(game.rngWordForDay(22), 0, "day 22 word applied");
         assertTrue(game.decWindow());
         assertGt(coinflip.previewSalvageFlipBacking(HOUSE), CAP);
         (uint256 weight,) = harness.entry(5);

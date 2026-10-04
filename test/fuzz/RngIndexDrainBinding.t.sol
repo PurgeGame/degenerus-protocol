@@ -100,12 +100,34 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         logs = vm.getRecordedLogs();
     }
 
+    /// @dev Answer and drain the mid-day work the state engine requests on its own once a day
+    ///      is sealed (a closed Craps window rides a mid-day request whenever the subscription
+    ///      covers it, 6d0e64b09), until the engine is idle with nothing in flight.
+    function _settleMidday() internal {
+        for (uint256 i; i < 64; i++) {
+            if (game.rngLocked()) return;
+            uint8 action = game.nextMinerAction();
+            if (action == 0 || action == 17) return; // Idle, or the next day's RequestDaily
+            if (action == 2) {
+                uint256 id = mockVRF.lastRequestId();
+                (,, bool done) = mockVRF.pendingRequests(id);
+                if (done) return;
+                mockVRF.fulfillRandomWords(id, uint256(keccak256(abi.encode("binding-midday", id))));
+                lastFulfilledReqId = id;
+            } else {
+                game.mineFlip();
+            }
+        }
+        fail("harness: mid-day work did not settle");
+    }
+
     function _advanceAndCheck(bool checkWrongWord) internal returns (uint256 batches, uint256 entries, uint256 buyerEntries) {
         DrainSnapshot memory snap = _snapshotDrain(game);
         vm.recordLogs();
         game.mineFlip();
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        uint256 word = snap.index == 0 ? 0 : _wordAt(game, snap.index - 1);
+        // Two physical buffers (6d0e64b09): the committed word is the read buffer's (write ^ 1).
+        uint256 word = _wordAt(game, snap.index ^ 1);
         DrainResult memory result = _checkDrain(game, snap, logs, word, buyer);
         assertEq(result.unsupported, 0, "fixture crossed into a different trait consumer");
         assertEq(result.mismatches, 0, "persisted ticket traits differ from committed-word replay");
@@ -172,8 +194,10 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         //    (requestLootboxRng reverts while _recordedDailyWord(today) == 0). Complete a
         //    day, then sit on the new day so today's word is committed.
         _completeDayWithLogs(uint256(keccak256("midday-binding-setup-word")));
+        _settleMidday();
         vm.warp(block.timestamp + 1 days);
         _completeDayWithLogs(uint256(keccak256("midday-binding-setup-word-2")));
+        _settleMidday();
 
         _finishReadBoxes();
 
@@ -189,9 +213,10 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         //    word at index N (= the new LR_INDEX - 1). The word is NOT yet delivered.
         game.requestLootboxRng();
         uint48 idxLive = _lrIndex();
-        assertEq(idxLive, idxN + 1, "mid-day request did not advance LR_INDEX by exactly 1");
+        // Two physical buffers (6d0e64b09): the request seals N and the write side flips to N ^ 1.
+        assertEq(idxLive, idxN ^ 1, "mid-day request did not advance LR_INDEX by exactly 1");
         assertEq(
-            _lootboxWord(idxLive - 1),
+            _lootboxWord(idxLive ^ 1),
             0,
             "in-flight LR_INDEX-1 word delivered before VRF fulfillment"
         );
@@ -216,11 +241,27 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         uint256 reqId = mockVRF.lastRequestId();
         mockVRF.fulfillRandomWords(reqId, midWord);
 
-        // Binding result: index N is now worded; the post-request index N+1 is STILL
-        // un-worded — box B cannot be resolved by the word requested before it was bought.
-        assertTrue(_lootboxWord(idxN) != 0, "in-flight word did not land at index N");
+        // Binding result: the callback stores the word and the next keeper call publishes it on
+        // index N only; the post-request index N+1 is STILL un-worded — box B cannot be resolved
+        // by the word requested before it was bought. The same call may drain the cohort and
+        // seal box B's buffer for a further request, so the publications are read from events.
+        vm.recordLogs();
+        game.mineFlip();
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 landedN;
+        uint256 landedLive;
+        for (uint256 i; i < logs.length; i++) {
+            if (logs[i].emitter == address(game) && logs[i].topics.length != 0
+                && logs[i].topics[0] == keccak256("LootboxRngApplied(uint48,uint256,uint256)")) {
+                (uint48 index, uint256 word, uint256 requestId) = abi.decode(logs[i].data, (uint48, uint256, uint256));
+                if (requestId != reqId) continue;
+                if (index == idxN) landedN = word;
+                if (index == idxLive) landedLive = word;
+            }
+        }
+        assertTrue(landedN != 0, "in-flight word did not land at index N");
         assertEq(
-            _lootboxWord(idxLive),
+            landedLive,
             0,
             "post-request live index N+1 became worded by the in-flight request"
         );

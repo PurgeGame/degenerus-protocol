@@ -5,12 +5,14 @@ import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGameMintModule} from "../../contracts/modules/DegenerusGameMintModule.sol";
 import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
+import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintBucketSeed} from "../helpers/MintBucketSeed.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
-/// @dev Extends the production mint module so the live `processTicketBatch` runs the seated
-///      round drain in THIS contract's storage; adds queue seeders and bucket decoders only.
+/// @dev Extends the production mint module so the live `processTicketBatch` bridge delegates to
+///      the production ticket module (etched at its pinned address) and runs the seated round
+///      drain in THIS contract's storage; adds queue seeders and bucket decoders only.
 contract RoundDrainHarness is MintBucketSeed {
     /// @dev The mint module answers the liveness tail through the Game's view; this harness is
     ///      not deployed at the Game's address, so it evaluates the tail in place.
@@ -98,6 +100,10 @@ contract RoundDrainHarness is MintBucketSeed {
 contract RoundDrain is Test {
     RoundDrainHarness internal h;
     uint24 internal constant LVL = 9;
+    /// @dev `processTicketBatch` is a caller-sized door: it admits checkpoints while the supplied
+    ///      gas covers the next declared bound, so every call is driven with a realistic bounded
+    ///      allowance and must make progress.
+    uint256 internal constant DOOR_GAS = 10_000_000;
     bytes32 internal constant ENTRY_SIG = keccak256("TraitsGenerated(address,uint256,uint32)");
 
     function _isReveal(Vm.Log memory entry) private pure returns (bool) {
@@ -110,12 +116,23 @@ contract RoundDrain is Test {
             ContractAddresses.GAME_FOILPACK_MODULE,
             address(new DegenerusGameFoilPackModule()).code
         );
+        vm.etch(
+            ContractAddresses.GAME_TICKET_MODULE,
+            address(new DegenerusGameTicketModule()).code
+        );
+    }
+
+    /// @dev One bounded door call; an unfinished call must have made progress.
+    function _batch(uint24 anchor) internal returns (bool finished) {
+        bool didWork;
+        (finished, didWork) = h.processTicketBatch{gas: DOOR_GAS}(anchor);
+        assertTrue(finished || didWork, "bounded door call made no progress");
     }
 
     function _drain() internal returns (uint256 calls) {
         bool finished;
         while (!finished) {
-            (finished, ) = h.processTicketBatch(LVL + 1);
+            finished = _batch(LVL + 1);
             ++calls;
             assertLt(calls, 200, "drain did not finish");
         }
@@ -211,7 +228,7 @@ contract RoundDrain is Test {
         bool finished;
         uint256 calls;
         while (!finished) {
-            (finished, ) = h.processTicketBatch(lvl + 1);
+            finished = _batch(lvl + 1);
             assertLt(++calls, 200);
         }
         assertEq(h.ownerCount(lvl), n, "the drain registered nobody");
@@ -254,7 +271,7 @@ contract RoundDrain is Test {
         uint256 lastCursor;
         uint256 lastWhaleOwed = 40000;
         while (!finished) {
-            (finished, ) = h.processTicketBatch(LVL + 1);
+            finished = _batch(LVL + 1);
             ++calls;
             uint256 cursor = h.cursorView();
             uint256 whaleOwed = uint32(h.owedOf(LVL, ps[0]) >> 8);
@@ -266,8 +283,9 @@ contract RoundDrain is Test {
             lastWhaleOwed = whaleOwed;
             assertLt(calls, 480, "drain did not finish in a bounded number of chunks");
         }
-        // 52k entries at >= ~300 per chunk at the worst-case unit prices (the whale drains
-        // ~330 occurrences per call on the per-entry price, the crowd ~700 per round chunk).
+        emit log_named_uint("whale_front_drain_calls_10m", calls);
+        // 52k entries measure ~30 calls under a 10M allowance (real chunk costs sit far below the
+        // declared admission bounds); 400 calls flags a livelock or an admission-rate regression.
         assertLe(calls, 400, "too many chunks for 52k entries");
 
         uint256 total;
@@ -298,6 +316,7 @@ contract RoundDrain is Test {
         }
         h.seedQueue(LVL, ps, owed, rem, uint256(keccak256("round-drain-7")));
         uint256 calls = _drain();
+        emit log_named_uint("survivors_drain_calls_10m", calls);
         assertLt(calls, 110);
         (, uint256 total) = _counts(ps);
         assertEq(total, sum);
@@ -361,6 +380,7 @@ contract RoundDrain is Test {
         }
         h.seedQueue(LVL, ps, owed, rem, uint256(keccak256("round-drain-4")));
         uint256 calls = _drain();
+        emit log_named_uint("multi_chunk_drain_calls_10m", calls);
         assertGt(calls, 2, "must span chunks");
         (uint256[4][] memory c, uint256 total) = _counts(ps);
         assertEq(total, sum);

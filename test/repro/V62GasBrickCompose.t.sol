@@ -64,6 +64,9 @@ contract V62GasBrickCompose is DeployProtocol {
     ///      complete -> permanent mineFlip DoS / forced unrecoverable game-over (the brick).
     uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
 
+    /// @dev The realistic per-leg allowance (a 10M transaction less its intrinsic gas).
+    uint256 internal constant LEG_ALLOWANCE = 10_000_000 - 21_064;
+
     /// @dev SUB_STAGE_WEIGHT_BUDGET (AdvanceModule): the per-chunk gas-weight budget. With
     ///      SUB_STAGE_EVICT_WEIGHT = 8 the budget admits BUDGET/EVICT_WEIGHT = 312 evicts per chunk
     ///      (the saturated all-evict chunk, <10M cold per test_AllEvictSaturatedChunk_LIVE_Measured).
@@ -121,8 +124,9 @@ contract V62GasBrickCompose is DeployProtocol {
         // entry gate keeps the stage out).
         assertFalse(r.composed, "GATE: no advance tx composed evictions with the gap backfill");
 
-        // THE BRICK PREDICATE: every leg of the recovery fits under the per-tx cap.
-        assertLt(r.maxLegGas, EIP7825_TX_GAS_CAP, "every recovery leg stays under the EIP-7825 per-tx cap");
+        // THE BRICK PREDICATE: every leg of the recovery succeeded at a realistic 10M allowance
+        // (a leg that could not fit its next chunk reverts) and the recovery converged.
+        assertLe(r.maxLegGas, LEG_ALLOWANCE, "every recovery leg completed inside its realistic allowance");
     }
 
     /// @notice DIAGNOSTIC: the SAME scenario measured WARM (same-tx slots). The gate is control
@@ -135,10 +139,10 @@ contract V62GasBrickCompose is DeployProtocol {
         assertEq(r.totalEvicted, EVICTING_SUBS, "warm: the evicting set still drains");
     }
 
-    /// @notice CONTROL: the BOUNDARY. With an over-budget evicting set (600 > the 312-evict chunk
-    ///         capacity) the post-unlock stage BREAKS at SUB_STAGE_WEIGHT_BUDGET and drains across
-    ///         multiple chunks — proving the weight budget still chunks the ring walk after the
-    ///         gate, and every chunk leg stays under the cap with no composition anywhere.
+    /// @notice CONTROL: the BOUNDARY. With an over-budget evicting set (600 subscribers, more than
+    ///         one realistic 10M leg's admissions cover) the stage BREAKS when the next item's
+    ///         declared bound no longer fits the leg's allowance (the gas admission that replaced
+    ///         SUB_STAGE_WEIGHT_BUDGET) and drains across multiple chunks, with no composition.
     function testV62_02BoundaryFullBudgetChunksAfterGate() public {
         Result memory r = _seedAndMeasure(600, true);
         _logResult("boundary_600", r);
@@ -146,7 +150,7 @@ contract V62GasBrickCompose is DeployProtocol {
         assertGt(r.maxEvictedLeg, 0, "control: chunked eviction legs ran");
         assertLt(r.maxEvictedLeg, 600, "control: no single leg evicted the whole over-budget set (budget chunking)");
         assertFalse(r.composed, "CONTROL: chunked legs never compose with the backfill either");
-        assertLt(r.maxLegGas, EIP7825_TX_GAS_CAP, "CONTROL: every chunked leg stays under the per-tx cap");
+        assertLe(r.maxLegGas, LEG_ALLOWANCE, "CONTROL: every chunked leg completed inside its realistic allowance");
     }
 
     // =========================================================================
@@ -248,8 +252,10 @@ contract V62GasBrickCompose is DeployProtocol {
         for (uint256 leg; leg < MAX_LEGS; ++leg) {
             if (!game.advanceDue()) break;
             if (cold) vm.cool(address(game)); // realistic stall-recovery first-touch per leg
+            // Each leg gets a realistic allowance: the engine admits work only while the allowance
+            // covers the next chunk's declared bound, so the leg must succeed and progress.
             uint256 gasBefore = gasleft();
-            game.mineFlip();
+            game.mineFlip{gas: LEG_ALLOWANCE}();
             uint256 gasUsed = gasBefore - gasleft();
 
             uint256 subsNow = _subscriberCount();

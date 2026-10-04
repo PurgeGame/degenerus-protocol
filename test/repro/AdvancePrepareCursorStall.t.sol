@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
 
 /// @title AdvancePrepareCursorStall — regression for the jackpot-phase mineFlip ticket-drain
 ///        liveness stall (prepare-future-tickets shared-cursor clobber).
@@ -92,6 +93,7 @@ contract AdvancePrepareCursorStall is DeployProtocol {
         // 1) Reach real jackpot phase, then seal its entry day so RNG unlocks and purchases open.
         _driveToJackpotPhase();
         _drainUntilUnlocked();
+        _settleMidday();
         require(game.jackpotPhase(), "must be in jackpot phase");
         require(!game.rngLocked(), "entry day must be unlocked before buying");
         require(!game.gameOver(), "must be live");
@@ -127,10 +129,12 @@ contract AdvancePrepareCursorStall is DeployProtocol {
         bool drained = false;
         uint32 maxCursor = 0;
         uint256 iters = 0;
+        // Owner rule: the engine spends whatever allowance it is given, so an unbounded call
+        // drains everything at once; each call here gets a realistic 10M allowance.
         for (uint256 i = 0; i < 200; i++) {
             iters++;
             _fulfillVrf();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call{gas: 10_000_000}(abi.encodeWithSignature("mineFlip()"));
             require(ok, "mineFlip must not revert");
             require(!game.gameOver(), "must not escape via game-over");
 
@@ -179,6 +183,26 @@ contract AdvancePrepareCursorStall is DeployProtocol {
             }
         }
         revert("did not reach jackpot phase");
+    }
+
+    /// @dev Answer and drain the mid-day work the state engine requests on its own once a day
+    ///      is sealed (a closed Craps window rides a mid-day request whenever the subscription
+    ///      covers it, 6d0e64b09), until the engine is idle with nothing in flight.
+    function _settleMidday() internal {
+        for (uint256 i; i < 64; i++) {
+            if (game.rngLocked()) return;
+            uint8 action = game.nextMinerAction();
+            if (action == 0 || action == 17) return; // Idle, or the next day's RequestDaily
+            if (action == 2) {
+                uint256 id = mockVRF.lastRequestId();
+                (,, bool done) = mockVRF.pendingRequests(id);
+                if (done) return;
+                _fulfillVrf();
+            } else {
+                game.mineFlip();
+            }
+        }
+        revert("harness: mid-day work did not settle");
     }
 
     function _drainUntilUnlocked() internal {
@@ -245,9 +269,10 @@ contract AdvancePrepareCursorStall is DeployProtocol {
         return _ticketWriteSlot() ? (lvl | TICKET_SLOT_BIT) : lvl;
     }
 
+    /// @dev Queue slots recycle 1..100 under an absolute-level tag (c729ecfc9); read the length
+    ///      through the authenticated physical slot.
     function _queueLen(uint24 key) internal view returns (uint256) {
-        bytes32 root = keccak256(abi.encode(uint256(key), TICKETQUEUE_SLOT));
-        return uint256(vm.load(address(game), root));
+        return TQ.length(address(game), key);
     }
 
     function _cursor() internal view returns (uint32) {

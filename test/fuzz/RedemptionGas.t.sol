@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 /// @title RedemptionGasTest -- Gas benchmarks for all sDGNRS redemption functions
 /// @notice Exercises burn, burnWrapped, resolveRedemptionPeriod, claimRedemption,
@@ -69,6 +70,40 @@ contract RedemptionGasTest is DeployProtocol {
     }
 
     // =====================================================================
+    //                     SETTLEMENT SESSION FIXTURE
+    // =====================================================================
+
+    /// @dev Session word pinned for the settlement cohort (any word > 1).
+    uint256 internal constant SETTLEMENT_WORD = 0x5E771E;
+
+    /// @dev Mirrors the Game's daily resolve hook (`_resolvePendingRedemption`): resolve the
+    ///      pool AND pin the session word for the mandatory settlement cohort in one step, then
+    ///      seed the Game's matching published, not-yet-complete read session with its ticket
+    ///      stage done. Live claims are accepted only in that redemption consumer stage (stage 1).
+    function _resolveAndOpenSettlement(uint24 day, uint16 roll) internal {
+        vm.prank(address(game));
+        sdgnrs.resolveRedemptionPeriod(roll, day);
+        _openSettlement(day);
+    }
+
+    /// @dev The second half of the Game's resolve hook, for fixtures that measure the resolve alone.
+    function _openSettlement(uint24 day) internal {
+        vm.prank(address(game));
+        sdgnrs.beginRedemptionSettlement(day, SETTLEMENT_WORD);
+        RecyclingState.seedWord(address(game), RecyclingState.readBuffer(address(game)), bytes32(SETTLEMENT_WORD));
+        uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
+        vm.store(address(game), bytes32(0), bytes32(slot0 | (uint256(1) << 192))); // ticketsFullyProcessed
+        assertEq(game.rngConsumerStage(), 1, "fixture: redemption consumer stage open");
+    }
+
+    /// @dev The keeper drain that clears the settled cohort, as the Game's miner runs it.
+    function _drainSettlementCohort() internal {
+        vm.prank(address(game));
+        assertTrue(sdgnrs.runRedemptionWork(9_000_000).done, "fixture: settlement cohort drained");
+        assertFalse(sdgnrs.redemptionSettlementPending(), "fixture: cohort cleared");
+    }
+
+    // =====================================================================
     //                     GAMBLING BURN PATH (during game)
     // =====================================================================
 
@@ -122,10 +157,10 @@ contract RedemptionGasTest is DeployProtocol {
         vm.prank(player);
         sdgnrs.burn(PLAYER_SDGNRS / 10);
 
-        // Step 2: Game resolves the same-wall-day pool
+        // Step 2: Game resolves the same-wall-day pool and opens its settlement cohort
+        // (live claims settle only in the redemption consumer stage, in FIFO order).
         uint32 currentDay = game.currentDayView();
-        vm.prank(address(game));
-        sdgnrs.resolveRedemptionPeriod(100, uint24(currentDay));
+        _resolveAndOpenSettlement(uint24(currentDay), 100);
 
         // Step 3: Mock the coinflip day result so claimRedemption doesn't revert
         // getCoinflipDayResult(currentDay) must return (rewardPercent != 0, flipWon)
@@ -241,8 +276,9 @@ contract RedemptionGasTest is DeployProtocol {
         sdgnrs.burn(PLAYER_SDGNRS / 10);
 
         uint32 currentDay = game.currentDayView();
-        vm.prank(address(game));
-        sdgnrs.resolveRedemptionPeriod(100, uint24(currentDay));
+        // Resolve + open the settlement cohort outside the claim bracket (live claims are
+        // accepted only in the redemption consumer stage).
+        _resolveAndOpenSettlement(uint24(currentDay), 100);
 
         vm.mockCall(
             address(coinflip),

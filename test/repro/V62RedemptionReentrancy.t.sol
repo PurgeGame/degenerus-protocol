@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
@@ -134,6 +135,17 @@ contract V62RedemptionReentrancy is DeployProtocol {
         sdgnrs.resolveRedemptionPeriod(roll, uint24(dayToResolve));
         vm.prank(address(game));
         sdgnrs.beginRedemptionSettlement(uint24(dayToResolve), 99);
+        _openSettlementStage(99);
+    }
+
+    /// @dev Seed the Game's published, not-yet-complete read session for `word` with its ticket
+    ///      stage done: the redemption consumer stage (stage 1), the only stage in which a live
+    ///      claim is accepted (the Game's resolve hook pins `word` for the cohort in the same step).
+    function _openSettlementStage(uint256 word) internal {
+        RecyclingState.seedWord(address(game), RecyclingState.readBuffer(address(game)), bytes32(word));
+        uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
+        vm.store(address(game), bytes32(0), bytes32(slot0 | (uint256(1) << 192))); // ticketsFullyProcessed
+        assertEq(game.rngConsumerStage(), 1, "fixture: redemption consumer stage open");
     }
 
     /// @dev The reserve identity under audit (SOLVENCY-01): the contract's own backing (ETH + stETH)

@@ -6,6 +6,8 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {Vm} from "forge-std/Vm.sol";
 
 /// @title VrfRotationLiveness -- VTST-02 liveness-after-rotation (proves VRF-02)
 /// @notice Proves the protocol stays LIVE after an emergency VRF coordinator/subscription
@@ -105,20 +107,21 @@ contract VrfRotationLiveness is DeployProtocol {
         return address(_activeVRF) == address(0) ? mockVRF : _activeVRF;
     }
 
-    /// @dev NotTimeYet() selector -- the same-day "no work available yet" signal (AdvanceModule:238).
-    ///      RngNotReady() (the OLD-bug permanent-revert failure mode) is deliberately NOT caught:
-    ///      it must propagate and fail the test, so liveness is never silently asserted.
-    bytes4 private constant NOT_TIME_YET = bytes4(keccak256("NotTimeYet()"));
+    /// @dev NoWork() selector -- the engine's "no work available yet" signal (MinerModule; the
+    ///      old NotTimeYet() advance error no longer exists after 60d31f775).
+    ///      RngNotReady() is deliberately NOT caught: the drive loops below answer every request
+    ///      before cranking, so a RngNotReady() there is a real stuck state and must fail the test.
+    bytes4 private constant NO_WORK = bytes4(keccak256("NoWork()"));
 
-    /// @dev Advance one step, tolerating ONLY NotTimeYet() (keeper has done all work available
+    /// @dev Advance one step, tolerating ONLY NoWork() (keeper has done all work available
     ///      for this wall-clock instant). Any other revert -- including RngNotReady() -- is
     ///      re-thrown so the defect mode fails the test naturally.
-    /// @return progressed False if NotTimeYet() halted progress for this wall-clock day.
+    /// @return progressed False if NoWork() halted progress for this wall-clock day.
     function _advanceTolerant() internal returns (bool progressed) {
         try game.mineFlip() {
             return true;
         } catch (bytes memory err) {
-            if (err.length >= 4 && bytes4(err) == NOT_TIME_YET) {
+            if (err.length >= 4 && bytes4(err) == NO_WORK) {
                 return false;
             }
             // Re-throw any other revert (RngNotReady, etc.) verbatim.
@@ -128,28 +131,31 @@ contract VrfRotationLiveness is DeployProtocol {
         }
     }
 
-    /// @dev Complete a full day on the ACTIVE coordinator: mineFlip -> fulfil any pending
-    ///      request -> drain until unlocked, fulfilling any request the drain fires. Stops on
-    ///      NotTimeYet() -- the keeper has done all the work available for this wall-clock day.
-    function _completeDay(uint256 vrfWord) internal {
-        _finishReadConsumers();
+    /// @dev Answer the active coordinator's latest request if it is still pending.
+    function _answer(uint256 vrfWord) internal {
         MockVRFCoordinator c = _coord();
-        if (!_advanceTolerant()) return;
-        uint256 reqId = c.lastRequestId();
-        if (reqId != _lastFulfilledReqId && reqId > 0) {
-            c.fulfillRandomWords(reqId, vrfWord);
-            _lastFulfilledReqId = reqId;
+        uint256 r = c.lastRequestId();
+        if (r == 0) return;
+        (,, bool done) = c.pendingRequests(r);
+        if (!done) {
+            c.fulfillRandomWords(r, vrfWord);
+            _lastFulfilledReqId = r;
         }
+    }
+
+    /// @dev Complete a full day on the ACTIVE coordinator: answer every request the engine
+    ///      makes (the daily one, and any mid-day request the state engine issues for a closed
+    ///      Craps window or pending boxes) and crank until today is sealed, unlocked and the
+    ///      engine reports NoWork() -- the keeper has done all the work available for this
+    ///      wall-clock day.
+    function _completeDay(uint256 vrfWord) internal {
+        uint24 today = game.currentDayView();
         for (uint256 i = 0; i < 600; i++) {
-            if (!game.rngLocked()) break;
+            _answer(vrfWord);
             if (!_advanceTolerant()) break;
-            uint256 r = c.lastRequestId();
-            if (r != _lastFulfilledReqId && r > 0) {
-                c.fulfillRandomWords(r, vrfWord);
-                _lastFulfilledReqId = r;
-            }
         }
-            _finishReadConsumers();
+        assertFalse(game.rngLocked(), "the day completes and unlocks");
+        assertTrue(game.rngWordForDay(today) != 0, "today is sealed on its own word");
     }
 
     /// @dev Drive the game into a mid-day RNG state where requestLootboxRng() succeeds AND
@@ -188,15 +194,10 @@ contract VrfRotationLiveness is DeployProtocol {
     ///      fulfil any request the drain fires (e.g. a follow-on daily request for the next
     ///      level). Used after a re-issued daily word has been delivered on the new coordinator.
     function _drainUntilUnlocked(uint256 vrfWord) internal {
-        MockVRFCoordinator c = _coord();
         for (uint256 i = 0; i < 600; i++) {
             if (!game.rngLocked()) break;
+            _answer(vrfWord);
             if (!_advanceTolerant()) break;
-            uint256 r = c.lastRequestId();
-            if (r != _lastFulfilledReqId && r > 0) {
-                c.fulfillRandomWords(r, vrfWord);
-                _lastFulfilledReqId = r;
-            }
         }
     }
 
@@ -245,10 +246,22 @@ contract VrfRotationLiveness is DeployProtocol {
         // `lastRequestId()` at this already-fulfilled mid-day id until the fresh daily request fires.
         _lastFulfilledReqId = newVRF.lastRequestId();
 
-        // POSITIVE: the real VRF word landed in the SAME preserved slot N -- the :269 drain
-        // gate input is now non-zero, so the gate no longer reverts RngNotReady().
+        // POSITIVE: the real VRF word landed in the SAME preserved slot N -- the callback
+        // stores it and the next keeper call publishes it on that buffer first (60d31f775),
+        // before the drained cohort lets the engine move on.
+        uint256 reissued = newVRF.lastRequestId();
+        vm.recordLogs();
+        game.mineFlip();
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 landed;
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].emitter == address(game) && logs[i].topics[0] == keccak256("LootboxRngApplied(uint48,uint256,uint256)")) {
+                (uint48 index, uint256 word, uint256 requestId) = abi.decode(logs[i].data, (uint48, uint256, uint256));
+                if (index == reservedIndex && requestId == reissued) landed = word;
+            }
+        }
         assertEq(
-            _readLootboxWord(reservedIndex),
+            landed,
             vrfWord,
             "re-issued word must land in the preserved reserved index after rotation"
         );
@@ -363,15 +376,17 @@ contract VrfRotationLiveness is DeployProtocol {
     // Task 2: daily-takeover failsafe + requestLootboxRng reachability
     // ══════════════════════════════════════════════════════════════════════
 
-    /// @notice Daily-takeover failsafe (RESEARCH §5 Open Risk 1): if the NEW coordinator also
-    ///         stalls the re-issued mid-day request, the next daily advance abandons it after
-    ///         MIDDAY_RNG_STALL_TIMEOUT and promotes it to the daily request WITHOUT advancing
-    ///         lootboxRngIndex (no double-advance). Fulfilling the daily request lands a real word
-    ///         in the reserved index; the daily flow proceeds -- recoverable, never a freeze.
-    function test_dailyTakeoverRescuesStalledReissueAfterRotation(uint256 vrfWord) public {
-        // Exclude {0,1}: 0 is zero-guarded to 1; rngWord==1 is the rngGate sentinel
-        // (AdvanceModule) -- the final drain would livelock if 1.
-        vm.assume(vrfWord != 0 && vrfWord != 1);
+    /// @notice Stalled re-issue failsafe after rotation: if the NEW coordinator also stalls the
+    ///         re-issued mid-day request, the next day's daily advance waits on it (the old
+    ///         "promote to the daily request" takeover was removed, 60d31f775/6d0e64b09; a
+    ///         mid-day request that bleeds past midnight blocks the daily request until it
+    ///         lands). The Admin retry re-sends it on the new coordinator WITHOUT advancing
+    ///         lootboxRngIndex (no double-advance), the late stalled re-issue is rejected, the
+    ///         retried word lands in the reserved index, and the day's daily flow then proceeds
+    ///         -- recoverable, never a freeze.
+    function test_retryRescuesStalledReissueAfterRotation(uint256 vrfWord) public {
+        // Final words 0 and 1 leave a request waiting for its retry (RngModule); exclude them.
+        vm.assume(vrfWord > 1);
 
         _setupForMidDayRng();
 
@@ -388,30 +403,45 @@ contract VrfRotationLiveness is DeployProtocol {
         assertTrue(reissueReqId != 0, "rotation re-issued the request on the new coordinator");
         assertFalse(game.rngLocked(), "re-issued mid-day request leaves the daily lock clear");
 
-        // The re-issue stalls. Cross the next-day boundary, well past MIDDAY_RNG_STALL_TIMEOUT:
-        // the daily advance abandons the stalled mid-day re-issue and promotes it to the daily
-        // request in a single call.
+        // The re-issue stalls across the next-day boundary: the daily advance waits on it.
         vm.warp(block.timestamp + 1 days + MIDDAY_RNG_STALL_TIMEOUT + 1);
+        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
         game.mineFlip();
+        assertEq(newVRF.lastRequestId(), reissueReqId, "no daily request while the mid-day word is outstanding");
+        assertFalse(game.rngLocked(), "the daily lock is not taken over the stalled re-issue");
 
-        uint256 dailyReqId = newVRF.lastRequestId();
-        assertTrue(dailyReqId != reissueReqId, "takeover issued a fresh (daily) VRF request");
-        assertTrue(game.rngLocked(), "takeover promoted the request to the daily lock");
-        // POSITIVE: takeover preserves lootboxRngIndex (isRetry -- no double-advance).
-        assertEq(_readLootboxRngIndex(), indexAfterRequest, "takeover must NOT advance lootboxRngIndex");
-        assertEq(_readLootboxWord(reservedIndex), 0, "reserved slot empty until the daily word lands");
+        // The vault owner's single Admin retry (20h after the original stamp) re-sends it.
+        vm.prank(ContractAddresses.CREATOR);
+        admin.retryGameRng();
+        uint256 retryReqId = newVRF.lastRequestId();
+        assertTrue(retryReqId != reissueReqId, "the retry issued a replacement request on the new coordinator");
+        assertFalse(game.rngLocked(), "the retry keeps the mid-day mode");
+        // POSITIVE: the retry preserves lootboxRngIndex (no double-advance).
+        assertEq(_readLootboxRngIndex(), indexAfterRequest, "retry must NOT advance lootboxRngIndex");
+        assertEq(_readLootboxWord(reservedIndex), 0, "reserved slot empty until the retried word lands");
 
         // The stalled re-issue is auto-rejected on late arrival
         // (requestId mismatch -> rawFulfillRandomWords early-returns).
         newVRF.fulfillRandomWords(reissueReqId, 0x1111);
-        assertEq(_readLootboxWord(reservedIndex), 0, "late stalled re-issue word rejected on id mismatch");
+        assertEq(_readRngWordCurrent(), 0, "late stalled re-issue word rejected on id mismatch");
 
-        // POSITIVE liveness: fulfil the daily request, drain to rngLocked()==false, bucket filled.
-        newVRF.fulfillRandomWords(dailyReqId, vrfWord);
-        _lastFulfilledReqId = dailyReqId;
-        _drainUntilUnlocked(vrfWord);
-        assertFalse(game.rngLocked(), "drain reaches rngLocked()==false after the daily takeover");
-        assertTrue(_readLootboxWord(reservedIndex) != 0, "daily word finalized the reserved mid-day bucket");
+        // POSITIVE liveness: the retried word lands in the reserved bucket, then the day's
+        // daily flow drains to rngLocked()==false.
+        newVRF.fulfillRandomWords(retryReqId, vrfWord);
+        _lastFulfilledReqId = retryReqId;
+        vm.recordLogs();
+        game.mineFlip();
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bool landed;
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].emitter == address(game) && logs[i].topics[0] == keccak256("LootboxRngApplied(uint48,uint256,uint256)")) {
+                (uint48 index, uint256 word, uint256 requestId) = abi.decode(logs[i].data, (uint48, uint256, uint256));
+                if (index == reservedIndex && word == vrfWord && requestId == retryReqId) landed = true;
+            }
+        }
+        assertTrue(landed, "retried word finalized the reserved mid-day bucket");
+        _completeDay(vrfWord);
+        assertFalse(game.rngLocked(), "drain reaches rngLocked()==false after the retry");
     }
 
     /// @notice requestLootboxRng stays reachable after a completed rotation: after a

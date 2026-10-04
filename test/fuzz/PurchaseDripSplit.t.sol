@@ -195,7 +195,8 @@ contract PurchaseDripSplitTest is Test {
             "insurance skim constant is 200 bps"
         );
         assertEq(
-            _countOccurrences(src, "yieldAccumulator += insuranceCut"),
+            // The engine refactor renamed the local skim to `insurance` (same whole-slice credit).
+            _countOccurrences(src, "yieldAccumulator += insurance;"),
             1,
             "skim credits yieldAccumulator"
         );

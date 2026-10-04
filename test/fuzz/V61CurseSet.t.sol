@@ -230,6 +230,10 @@ contract V61CurseSet is DeployProtocol {
         _seedAffiliateBase(twin, 6);
         _seedCurse(cursed, 2); // -2 points
 
+        // setUp seeds dailyIdx = 100, ahead of the wall clock; the engine stamps a daily box only
+        // once the wall day passes dailyIdx (a new day is due), so bring the wall clock to day 100.
+        _t += (100 - uint256(game.currentDayView())) * 1 days;
+        vm.warp(_t);
         _deliverDay(0x5C0E); // freezes scorePlus1 for both subs at this delivery
 
         uint256 snapCursed = _scorePlus1Of(cursed);
@@ -454,6 +458,9 @@ contract V61CurseSet is DeployProtocol {
 
     function _settleGame(uint256 vrfWord) internal {
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
+            // Answer first: a completed cohort can leave a trailing mid-day request (a shut craps
+            // window rides it) that holds the engine in Wait, where advanceDue reads false.
+            _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) break;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) break;
@@ -464,6 +471,7 @@ contract V61CurseSet is DeployProtocol {
 
     function _settleClean(uint256 vrfWord) internal {
         for (uint256 d; d < 240; d++) {
+            _fulfillPending(vrfWord); // see _settleGame: a trailing request must not stall the drain
             if (!game.advanceDue() && !game.rngLocked()) return;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) return;

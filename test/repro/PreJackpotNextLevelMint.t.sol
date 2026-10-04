@@ -10,6 +10,8 @@ import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
 /// @dev Seed only the starting state; requests, callbacks, advances and claims use production code.
 contract PreJackpotMintSeeder is DegenerusGame {
@@ -84,6 +86,8 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
     uint24 private constant FF_BIT = uint24(1) << 22;
     uint48 private constant INDEX = 0;
     bytes32 private constant PAYOUT_FIXED = keccak256("DeadVrfPayoutFixed(uint24,uint256,uint256,uint256,uint256)");
+    bytes32 private constant ADVANCE = keccak256("Advance(uint8,uint24)");
+    bytes32 private constant TRAITS_GENERATED = keccak256("TraitsGenerated(address,uint256,uint32)");
 
     address private alice = address(0xA11CE);
     address private bob = address(0xB0B);
@@ -313,10 +317,32 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
         assertEq(_minted(NEXT, bob), 0, "FF entries wait for this transition's fresh callback");
 
         mockVRF.fulfillRandomWords(reqId, 0xDA114);
-        for (uint256 i; i < 100 && !game.jackpotPhase(); ++i) {
+        // The engine composes admitted checkpoints, so a turbo collapse can enter and leave its
+        // jackpot phase inside one realistic call. Read the order from the call's logs: every
+        // materialization the transition owes must precede the jackpot-entry marker (stage 7),
+        // which itself precedes the early-bird draw (stage 14).
+        bool entered;
+        uint256 bobBefore;
+        uint256 carolBefore;
+        for (uint256 i; i < 100 && !entered; ++i) {
+            vm.recordLogs();
             game.mineFlip{gas: 16_777_216}();
+            Vm.Log[] memory logs = vm.getRecordedLogs();
+            for (uint256 j; j < logs.length && !entered; ++j) {
+                if (logs[j].emitter != address(game)) continue;
+                if (logs[j].topics.length == 1 && logs[j].topics[0] == ADVANCE) {
+                    (uint8 stage,) = abi.decode(logs[j].data, (uint8, uint24));
+                    assertTrue(stage != 14, "no early-bird draw before jackpot entry");
+                    if (stage == 7) entered = true;
+                    continue;
+                }
+                bobBefore += _materializedIn(logs[j], bob, NEXT);
+                carolBefore += _materializedIn(logs[j], carol, CURRENT);
+            }
         }
-        assertTrue(game.jackpotPhase(), "the funded transition reaches jackpot entry");
+        assertTrue(entered, "the funded transition reaches jackpot entry");
+        assertEq(bobBefore, 8, "all frozen FF entries materialize before jackpot entry and the early-bird draw");
+        assertEq(carolBefore, 4, "the last-purchase current cohort materializes before its jackpot");
         assertEq(_minted(NEXT, bob), 8, "all frozen FF entries materialize before the early-bird draw");
         assertEq(_queueLen(NEXT | FF_BIT), 0, "jackpot entry cannot leave part of the frozen cohort behind");
         assertEq(_minted(CURRENT, carol), 4, "the last-purchase current cohort materializes before its jackpot");
@@ -329,7 +355,11 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
         uint24 currentKey = _writeKey(CURRENT);
         _requestPaidMidday();
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0xABCD);
-        game.mineFlip(); // Mandatory publication precedes the bounded ticket worker.
+        // Publication precedes the bounded ticket worker; with a realistic allowance the same
+        // call admits ticket chunks only while their bounds fit, leaving a partial batch.
+        game.mineFlip{gas: 16_777_216}();
+        assertEq(_midday(), 2, "a partial first batch retains its word binding");
+        assertFalse(_fullyProcessed(), "partial first batch cannot report completion");
         game.mineFlip{gas: 16_777_216}();
         assertEq(_midday(), 2, "a partial batch retains its word binding");
         assertFalse(_fullyProcessed(), "partial FF batch cannot report completion");
@@ -490,15 +520,13 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
             saw = true;
         }
         assertTrue(saw, "ending fixed its deterministic pot");
-        uint256 pos = uint32(
-            uint256(
-                vm.load(
-                    address(game), keccak256(abi.encode(alice, keccak256(abi.encode(uint256(CURRENT), uint256(13)))))
-                )
-            )
-        );
+        // A queued claim names the stable owner ID (ticketOwnerId, slot 13) and carries the queue
+        // key holding the entries in bits 32..55 (GameOverModule.claimDeadVrf).
+        uint256 pos = uint32(uint256(vm.load(address(game), keccak256(abi.encode(alice, uint256(13))))));
+        uint24 aliceKey = _owed(_writeKey(CURRENT), alice) != 0 ? _writeKey(CURRENT) : _readKey(CURRENT);
+        assertEq(_owed(aliceKey, alice), 4, "alice's current entries are still queued at the ending");
         uint256[] memory refs = new uint256[](1);
-        refs[0] = (uint256(1) << 248) | pos;
+        refs[0] = (uint256(1) << 248) | (uint256(aliceKey) << 32) | pos;
         uint256 before = game.claimableWinningsOf(alice);
         game.claimDeadVrf(alice, refs);
         assertGt(game.claimableWinningsOf(alice), before, "current ticket holder can claim the ending pot");
@@ -507,6 +535,16 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
     function _seed(uint32 nextEntries, bool parity, bool turbo, bool withCurrent) private {
         _overlay().seed(withCurrent ? alice : address(0), bob, nextEntries, parity, turbo);
         _restore();
+        // The synthetic 200-day jump leaves expired Craps days for real miner maintenance,
+        // which refuses every RNG request until it completes (RngModule request gates).
+        _finishMaintenance();
+    }
+
+    function _finishMaintenance() private {
+        for (uint256 i; i < 512 && crapsBattle.minerMaintenancePending(); ++i) {
+            game.mineFlip{gas: 16_777_216}();
+        }
+        assertFalse(crapsBattle.minerMaintenancePending(), "fixture scheduled maintenance completed");
     }
 
     function _overlay() private returns (PreJackpotMintSeeder) {
@@ -536,22 +574,45 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
     function _requestNextDaily() private returns (uint256 reqId) {
         uint256 oldId = mockVRF.lastRequestId();
         vm.warp(vm.getBlockTimestamp() + 1 days);
-        for (uint256 i; i < 20 && mockVRF.lastRequestId() == oldId; ++i) {
+        // A new day may first retire its own expired Craps maintenance checkpoints.
+        for (uint256 i; i < 64 && mockVRF.lastRequestId() == oldId; ++i) {
             game.mineFlip{gas: 16_777_216}();
         }
         reqId = mockVRF.lastRequestId();
         assertGt(reqId, oldId, "the new day requests a fresh word");
     }
 
+    /// @dev Each call gets the smallest rung of a realistic allowance ladder that admits work, so
+    ///      the sealing call cannot also compose the miner's own mid-day request (2.5M bound):
+    ///      the seal is observed before any later request.
     function _finishOrdinaryPurchaseDaily() private {
-        for (uint256 i; i < 100 && game.rngLocked(); ++i) {
-            game.mineFlip{gas: 16_777_216}();
+        uint256[9] memory ladder = [uint256(1_500_000), 2_000_000, 2_500_000, 3_000_000, 3_500_000, 4_000_000,
+            6_000_000, 10_000_000, 16_777_216];
+        // Drive the day seal, then the committed session's read consumers (they follow the seal),
+        // stopping before any new request.
+        uint256 requestId = mockVRF.lastRequestId();
+        for (uint256 i; i < 400 && (game.rngLocked() || !game.rngComplete()); ++i) {
+            assertEq(mockVRF.lastRequestId(), requestId, "no request composes into the daily chain");
+            for (uint256 r; r < ladder.length; ++r) {
+                try game.mineFlip{gas: ladder[r]}() {
+                    break;
+                } catch (bytes memory err) {
+                    assertEq(bytes4(err), MineFlipGas.InsufficientExecutionGas.selector, "only an allowance refusal retries");
+                    assertTrue(r + 1 < ladder.length, "a realistic allowance must make progress");
+                }
+            }
         }
         (, bool jackpot, bool lastPurchase, bool locked,) = game.purchaseInfo();
         assertFalse(locked, "the whole daily jackpot and ticket leg reached their day seal");
         assertTrue(lastPurchase, "the target-met ordinary day opened its last-purchase window");
         assertFalse(jackpot, "the last-purchase window precedes the jackpot phase");
-        assertFalse(game.advanceDue(), "no daily work remains before the next request");
+        // No daily work remains. A shut Craps window bound to the write buffer is mid-day request
+        // work for any caller (craps windows ride the normal RNG round), not daily work.
+        uint8 next = game.nextMinerAction();
+        assertTrue(
+            next == uint8(DegenerusGameStorage.MinerAction.Idle) || next == uint8(DegenerusGameStorage.MinerAction.RequestMidday),
+            "no daily work remains before the next request"
+        );
     }
 
     function _buyCurrent(address player) private {
@@ -618,6 +679,25 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
         for (uint16 trait; trait < 256; ++trait) {
             (uint24 count,,) = game.getEntries(uint8(trait), lvl, 0, type(uint32).max, player);
             total += count;
+        }
+    }
+
+    /// @dev Entries for (player, lvl) materialized by one log: a solo TraitsGenerated run (level in
+    ///      the stream identity, bits 224..247) or an anonymous EntryTraitsRevealed round (topic j is
+    ///      (level << 160) | player; presence bit 128 + 4j + q per quadrant).
+    function _materializedIn(Vm.Log memory l, address player, uint24 lvl) private pure returns (uint256 n) {
+        if (l.topics.length == 2 && l.topics[0] == TRAITS_GENERATED) {
+            if (address(uint160(uint256(l.topics[1]))) != player) return 0;
+            (uint256 baseKey, uint32 take) = abi.decode(l.data, (uint256, uint32));
+            if (uint24(baseKey >> 224) == lvl) n = take;
+            return n;
+        }
+        if (l.topics.length != 4 || l.data.length != 32) return 0;
+        uint256 entries = abi.decode(l.data, (uint256));
+        uint256 tag = (uint256(lvl) << 160) | uint160(player);
+        for (uint256 j; j < 4; ++j) {
+            if (uint256(l.topics[j]) != tag) continue;
+            for (uint256 q; q < 4; ++q) if ((entries >> (128 + 4 * j + q)) & 1 != 0) ++n;
         }
     }
 

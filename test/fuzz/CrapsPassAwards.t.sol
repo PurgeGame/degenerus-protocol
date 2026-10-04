@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
 import {FlipRoundLib} from "../../contracts/libraries/FlipRoundLib.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 
@@ -35,8 +36,12 @@ contract CrapsPassAwards is DeployProtocol {
         vm.deal(buyer, 5_000 ether);
     }
 
-    /// @dev game.level = lvl: uint24 at slot 0, byte offset 12 (bit 96).
+    /// @dev game.level = lvl: uint24 at slot 0, byte offset 12 (bit 96). Reaching `lvl` means every
+    ///      level through it has materialized its queues. Queue slots recycle 1..100 under a level tag
+    ///      (c729ecfc9), so an unretired genesis queue would refuse the pass's own far-future binding
+    ///      (lvl + 100 shares lvl's slot) with E().
     function _setLevel(uint24 lvl) private {
+        TicketQueueStorage.retireCompleted(address(game), lvl);
         uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
         uint256 mask = uint256(0xFFFFFF) << 96;
         vm.store(
@@ -212,9 +217,14 @@ contract CrapsPassAwards is DeployProtocol {
         RecyclingState.seedWord(address(game), uint48(index), bytes32(word));
     }
 
-    /// @dev Publish the purchased physical buffer; seedWord has already installed its word.
+    /// @dev Publish the purchased physical buffer; seedWord has already installed its word. The
+    ///      delivered cohort's human boxes are a read consumer that runs only once its tickets have
+    ///      materialized (60d31f775 consumer order), so the fixture also certifies the ticket drain
+    ///      (ticketsFullyProcessed: slot 0 byte 24, golden layout).
     function _finalizeIndex(uint48 index) private {
         RecyclingState.seedWriteBuffer(address(game), index ^ 1);
+        uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
+        vm.store(address(game), bytes32(uint256(0)), bytes32(slot0 | (uint256(1) << 192)));
     }
 
     function _seedOf(uint256 word, address who) private view returns (uint256) {

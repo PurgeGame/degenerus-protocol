@@ -60,8 +60,8 @@ FLIP. The comp allowance is neither circulating FLIP nor vault mint backing.
 
 ## Purchase timing and pool acceleration
 
-Level 0 retains its 365-day purchase deadline. Later levels have a 30-day purchase
-deadline: elapsed day 30 activates distress purchases, and game-over becomes eligible
+Level 0 has a 250-day purchase deadline (`_DEPLOY_IDLE_TIMEOUT_DAYS`). Later levels have
+a 30-day purchase deadline: elapsed day 30 activates distress purchases, and game-over becomes eligible
 on day 31 if the target is still unmet. A funded last-purchase/jackpot phase can finish
 beyond that boundary. The deadline is read at the start of a caught-up day, so days a
 VRF stall or an unattended stretch skipped are credited to it on catch-up; a stall has
@@ -122,13 +122,14 @@ operator and charge; the table's `CrapsBonusDonated` records the vault as donor.
 
 ## Ticket materialization
 
-`advanceGame` and `mineFlip` enter the same work dispatcher in `GameAfkingModule`.
-The dispatcher calls the advance worker or drains existing read consumers before the
-next daily request can reuse their randomness storage. Neither public entry calls the
-other. Workers run by delegatecall, preserving the original caller. Only `mineFlip`
-enables the keeper bounty; standalone advancement and its prerequisite drains are
-unrewarded. The bounty prices measured gas above each call's first 1M at a capped basefee
-times a multiplier that starts at 0.3x and rises 0.45x per 30 minutes the work waits: 1.2x
+`mineFlip` is the single engine entry: `DegenerusGame` delegates it to
+`DegenerusGameMinerModule`, which selects the next action from storage
+(`_nextMinerAction`) and runs the advance worker or drains existing read consumers
+before the next daily request can reuse their randomness storage. Workers run by
+delegatecall, preserving the original caller, and each chunk is admitted only while the
+caller's gas covers its declared bound. Standalone advancement is a miner action like any
+other and is paid by measured gas; terminal actions are unpaid. The bounty prices measured
+gas above each call's first 1M at a capped basefee times a multiplier that starts at 0.3x and rises 0.45x per 30 minutes the work waits: 1.2x
 after one hour, 2.1x after two. A caller with a deity pass, or a lazy/whale pass covering
 the current level, earns double. A call that starts while the daily RNG lock is held earns
 double again.

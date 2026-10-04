@@ -1784,8 +1784,10 @@ contract CrapsBattleTest is CrapsPins {
         // fifty. A donation run through that rounding would hand the winner five granules nobody
         // burned, so the figure has to arrive exactly as it was given.
         uint24 donation = 45;
+        // The index is read first: an argument call would consume carol's prank.
+        uint256 customIndex = slot - craps.customSlotBase();
         vm.prank(carol);
-        craps.donate(true, slot - craps.customSlotBase(), donation);
+        craps.donate(true, customIndex, donation);
         assertEq(craps.roundBoostFor(donation), 50, "the fixture no longer straddles the rounding step");
 
         _closeOn(craps, slot, 0, uint256(keccak256("customboost")));

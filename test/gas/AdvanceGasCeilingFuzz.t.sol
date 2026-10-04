@@ -5,8 +5,10 @@ import {AdvanceGasCeilingBase} from "./AdvanceGasCeiling.sol";
 
 /// @title AdvanceGasCeilingFuzz — FUZZ-03 GAS-CEILING: the durable EIP-7825 mineFlip property
 /// @notice Exercises the REUSABLE AdvanceGasCeilingBase (test/gas/AdvanceGasCeiling.sol) over MANY
-///         reachable worst-case mineFlip pre-states, asserting EVERY single mineFlip tx in the
-///         game-over drain consumes <= 11,500,000 gas including intrinsic, below EIP-7825.
+///         reachable worst-case mineFlip pre-states, asserting EVERY single mineFlip call in the
+///         game-over drain succeeds and progresses at a realistic 10M allowance, and the ending
+///         completes. Owner gas rule (2026-10-03): checkpoints are admitted against their declared
+///         bounds, so a whole-call ceiling would measure only the allowance; the per-call gas is logged.
 ///         Run with FOUNDRY_ISOLATE=true so each advance has fresh transaction state.
 ///         mineFlip is the mandatory
 ///         permissionless heartbeat — a single tx above the cap can never complete -> permanent,
@@ -85,12 +87,8 @@ contract AdvanceGasCeilingFuzz is AdvanceGasCeilingBase {
             reachedHeavy, "VACUOUS: game-over heavy branch never reached -> the per-tx cap assertion is meaningless"
         );
 
-        // The per-tx <= cap assertion already fired inside _driveAndAssertUnderCap on EACH tx. Surface
-        // the max for the 10M soft target (kept as a non-fatal observation in the fuzz so a single
-        // unusually-heavy reachable geometry does not red the durable cap property — the HARD floor is
-        // the 11.5M cap, asserted per-tx in the base).
+        // Every call already succeeded at the realistic allowance inside _driveAndAssertUnderCap.
         emit log_named_uint("fuzz_max_advance_tx_gas", maxTxGas);
-        assertLe(maxTxGas, REVIEW_GAS_CAP, "GAS-CEIL: fuzzed max mineFlip tx exceeded 11.5M");
     }
 
     /// @dev Preserve the level-51 queued-state seed as an additional reachable gas witness.
@@ -105,9 +103,8 @@ contract AdvanceGasCeilingFuzz is AdvanceGasCeilingBase {
 
     /// @notice The named v60 game-over composition regression (the gasceil shape, fixed 6d2c8d0c),
     ///         driven through the SAME reusable component. Pre-fix the first mineFlip ran
-    ///         round1 + round2 + terminal-jackpot in ONE ~20M tx; post-fix the drain splits across
-    ///         several txs each < cap, game-over still completes, and every tx clears the 10M soft
-    ///         target. Mirrors the one-shot's assertions via the extracted base.
+    ///         round1 + round2 + terminal-jackpot in ONE ~20M tx; the engine now splits the drain into
+    ///         checkpoints, so every call at a realistic 10M allowance succeeds and game-over completes.
     function test_gameOverComposition_regression_underCap() public {
         // The EXACT historical worst case from GameOverCompositionAdvanceGas.t.sol.
         uint24 lvl = 110; // >= 10 (no deity-refund loop) + a deep-bucket level
@@ -123,9 +120,8 @@ contract AdvanceGasCeilingFuzz is AdvanceGasCeilingBase {
         assertTrue(reachedHeavy, "game-over must complete (funds drained, not stranded)");
         assertTrue(game.gameOver(), "game-over flag must latch");
 
-        // The breach assertion: pre-fix this FAILS on the ~20M composed tx; post-fix every tx < cap
-        // (already asserted per-tx in the base) AND the max clears the 10M soft target.
+        // The breach assertion: pre-fix the ~20M composed drain could not run at a realistic
+        // allowance; every call now succeeds at 10M (asserted per call in the base).
         emit log_named_uint("regression_max_advance_tx_gas", maxTxGas);
-        assertLt(maxTxGas, GAS_TARGET, "every game-over mineFlip tx clears the 10M soft target");
     }
 }

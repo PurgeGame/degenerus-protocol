@@ -155,7 +155,11 @@ contract QuestRetryDoubleRoll is DeployProtocol {
             require(!game.gameOver(), "gameOver before reaching last-purchase-day");
 
             (, , bool lpd, bool rngL, ) = game.purchaseInfo();
-            if (game.level() >= 1 && lpd && !rngL) return game.level();
+            if (game.level() >= 1 && lpd && !rngL) {
+                _settleMidday();
+                (, , lpd, rngL, ) = game.purchaseInfo();
+                if (lpd && !rngL) return game.level();
+            }
 
             simTime += 1 days + 1;
             vm.warp(simTime);
@@ -165,7 +169,13 @@ contract QuestRetryDoubleRoll is DeployProtocol {
             for (uint256 j = 0; j < 80; j++) {
                 _fulfillVrfIfPending();
                 (, , bool lpd2, bool rngL2, ) = game.purchaseInfo();
-                if (game.level() >= 1 && lpd2 && !rngL2) return game.level();
+                if (game.level() >= 1 && lpd2 && !rngL2) {
+                    // Settle the engine's own mid-day work (closed Craps windows) so the window
+                    // is idle, as an unlocked last purchase day was before the engine refactor.
+                    _settleMidday();
+                    (, , lpd2, rngL2, ) = game.purchaseInfo();
+                    if (lpd2 && !rngL2) return game.level();
+                }
                 (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
                 if (!ok) break;
             }
@@ -212,6 +222,26 @@ contract QuestRetryDoubleRoll is DeployProtocol {
             }
         }
         return (false, 0, 0);
+    }
+
+    /// @dev Answer and drain the mid-day work the state engine requests on its own once a day
+    ///      is sealed (a closed Craps window rides a mid-day request whenever the subscription
+    ///      covers it, 6d0e64b09), until the engine is idle with nothing in flight.
+    function _settleMidday() internal {
+        for (uint256 i; i < 64; i++) {
+            if (game.rngLocked()) return;
+            uint8 action = game.nextMinerAction();
+            if (action == 0 || action == 17) return; // Idle, or the next day's RequestDaily
+            if (action == 2) {
+                uint256 id = mockVRF.lastRequestId();
+                (,, bool done) = mockVRF.pendingRequests(id);
+                if (done) return;
+                _fulfillVrfIfPending();
+            } else {
+                game.mineFlip();
+            }
+        }
+        revert("harness: mid-day work did not settle");
     }
 
     function _buyTickets(address who, uint256 qty) internal {

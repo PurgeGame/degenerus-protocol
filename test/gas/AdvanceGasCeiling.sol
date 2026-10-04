@@ -6,6 +6,7 @@ import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
+import {TicketQueueStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 import {Vm} from "forge-std/Vm.sol";
 
 /// @title AdvanceGasCeiling — the REUSABLE EIP-7825 gas-ceiling property component
@@ -75,6 +76,11 @@ contract GameSeeder is DegenerusGame, BucketSeed {
     ) private {
         uint24 day = _simulatedDayIndex();
 
+        // Reaching `lvl` means every level through it has materialized its queues. Queue slots recycle
+        // 1..100 under a level tag (c729ecfc9), so an unretired genesis queue would refuse the seeded
+        // level-(lvl + 1) binding with E().
+        TicketQueueStorage.retireCompleted(address(this), lvl);
+
         // --- Liveness game-over pre-state ---
         // lvl != 0 + target never met; the 200-day warp after seeding also fires the no-seal
         // deadman, so the ending's terminal word derives the capped 31 skipped days as well.
@@ -141,10 +147,9 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
 
     /// @dev EIP-7825 per-transaction gas cap. A single mineFlip tx above this = permanent DoS.
     uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
-    uint256 internal constant REVIEW_GAS_CAP = 11_500_000;
     uint256 internal constant TX_INTRINSIC = 21_064;
-    /// @dev USER soft comfort target.
-    uint256 internal constant GAS_TARGET = 10_000_000;
+    /// @dev A realistic per-call mineFlip allowance (owner gas rule, 2026-10-03).
+    uint256 internal constant REALISTIC_CALL_GAS = 10_000_000;
 
     // Production caps mirrored from DegenerusGameJackpotModule (the 305-winner geometry).
     uint16 internal constant DAILY_ETH_MAX_WINNERS = 305;
@@ -206,11 +211,14 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
         vm.warp(block.timestamp + 200 days);
     }
 
-    /// @notice (b) Drive the REAL game.mineFlip() in a bounded loop, asserting EVERY single tx
-    ///         consumes <= REVIEW_GAS_CAP including intrinsic gas. Stops when game-over latches or the iteration budget is
-    ///         spent.
-    /// @param maxTxIters cap on mineFlip txs to drive (bound so a long run never lands mid-tx).
-    /// @return maxTxGas     the largest single-tx gas observed (surface for the < GAS_TARGET soft check)
+    /// @notice (b) Drive the REAL game.mineFlip() in a bounded loop at a realistic 10M allowance per call.
+    ///         Owner gas rule (2026-10-03): the engine admits checkpoints while the supplied allowance
+    ///         covers the next declared bound (MineFlipGasBounds), so a whole-call figure only measures
+    ///         the allowance it was given; what is asserted is that EVERY call at a realistic allowance
+    ///         succeeds (no out-of-gas, no refused required checkpoint: a zero-progress call reverts) and
+    ///         that the ending completes within the call budget. Each call's gas is logged.
+    /// @param maxTxIters cap on mineFlip calls to drive.
+    /// @return maxTxGas     the largest single-call gas observed, including intrinsic (logged)
     /// @return reachedHeavy whether the heavy branch was exercised — true once game-over latches after
     ///                      the committed ticket batch and isolated terminal jackpot. If false, the
     ///                      measurement is vacuous and the caller MUST fail acceptance.
@@ -219,7 +227,11 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
         for (uint256 i = 0; i < maxTxIters; ++i) {
             vm.recordLogs();
             uint256 g0 = gasleft();
-            game.mineFlip{gas: REVIEW_GAS_CAP - TX_INTRINSIC}();
+            try game.mineFlip{gas: REALISTIC_CALL_GAS}() {}
+            catch (bytes memory reason) {
+                emit log_named_bytes("mineFlip refused at a realistic allowance", reason);
+                fail("a terminal mineFlip at a realistic 10M allowance did not progress");
+            }
             uint256 used = g0 - gasleft() + TX_INTRINSIC;
             Vm.Log[] memory logs = vm.getRecordedLogs();
             for (uint256 j; j < logs.length; ++j) {
@@ -227,8 +239,6 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
             }
             emit log_named_uint("advance_tx_gas[i]", used);
             if (used > maxTxGas) maxTxGas = used;
-            // The stricter 11.5M review assertion fires on EACH advance transaction.
-            assertLe(used, REVIEW_GAS_CAP, "GAS-CEIL: a terminal advance transaction exceeded the 11.5M review cap");
             if (game.gameOver()) {
                 reachedHeavy = true; // terminal jackpot ran -> the heavy branch was exercised
                 break;
@@ -242,7 +252,7 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
             }
         }
         emit log_named_uint("max_advance_tx_gas", maxTxGas);
-        emit log_named_uint("eip7825_tx_gas_cap", EIP7825_TX_GAS_CAP);
+        emit log_named_uint("realistic_call_allowance", REALISTIC_CALL_GAS);
         assertTrue(reachedHeavy, "terminal driver exhausted before gameOver and payout");
         assertEq(winners, DAILY_ETH_MAX_WINNERS, "all 305 terminal award slots must execute");
     }

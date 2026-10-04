@@ -58,10 +58,13 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         _deployProtocol();
         mockVRF.fundSubscription(1, 100e18);
         vm.warp(block.timestamp + 1 days);
+        // Subscribed before the bootstrap request, so their subscribe-time cover boxes resolve in
+        // the bootstrap cohort and never share a cohort with the owners' orders.
+        _spawnAfkingSubscribers(40);
         _requestDaily();
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0xB007);
         _finishDaily();
-        game.openBoxes(type(uint256).max);
+        _settleIdle();
         assertEq(game.level(), 0, "fixture's live denomination");
         vm.deal(ALICE, 100 ether);
         vm.deal(BOB, 100 ether);
@@ -103,6 +106,94 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
             game.mineFlip();
         }
         assertFalse(game.rngLocked(), "bounded daily processing must finish");
+    }
+
+    /// @dev Finish every read consumer of the delivered cohorts. A shut craps window the day
+    ///      bound to the write buffer rides the next request, which the engine makes as mid-day
+    ///      work; answer and drain it too, so a fresh request is admissible.
+    function _settleIdle() private {
+        for (uint256 i; i < 20; ++i) {
+            uint256 request = mockVRF.lastRequestId();
+            if (request != 0) {
+                (,, bool done) = mockVRF.pendingRequests(request);
+                if (!done) mockVRF.fulfillRandomWords(request, uint256(keccak256(abi.encode("trailing", i))) | 2);
+            }
+            _finishReadConsumers();
+            if (!game.advanceDue() && game.rngComplete()) return;
+            if (game.advanceDue()) game.mineFlip();
+        }
+        revert("harness: cohorts never settled");
+    }
+
+    /// @dev Lootbox-mode AFKing subscribers, stamped a box each at every day's preparation. A
+    ///      daily cohort's read consumers run in the same call that releases the day's lock, and
+    ///      the final day chunk's declared bound leaves room for both owners' entries; the AFKing
+    ///      stage precedes human boxes, so a backlog of stamped boxes holds the human stage to its
+    ///      own later call, where openBoxes reaches the owners' entries. Mid-day cohorts carry no
+    ///      stamps and are unaffected.
+    function _spawnAfkingSubscribers(uint256 n) private {
+        for (uint256 i; i < n; ++i) {
+            address sub = address(uint160(0x5AB000 + i));
+            _grantSeat(sub);
+            vm.deal(address(this), 10 ether);
+            game.depositAfkingFunding{value: 10 ether}(sub);
+            vm.prank(sub);
+            game.subscribe(address(0), false, false, 1, address(0));
+        }
+    }
+
+    /// @dev One mineFlip given the smallest allowance that succeeds (bisection over snapshots).
+    ///      A zero-progress call reverts, so the minimal call runs exactly the next admitted chunk
+    ///      and leaves too little allowance to admit a later, larger one.
+    function _stepMinimal() private {
+        uint256 lo = 200_000;
+        uint256 hi = 30_000_000;
+        while (hi - lo > 1_000) {
+            uint256 mid = (lo + hi) / 2;
+            uint256 snap = vm.snapshotState();
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip()"));
+            vm.revertToStateAndDelete(snap);
+            if (ok) hi = mid;
+            else lo = mid;
+        }
+        game.mineFlip{gas: hi}();
+    }
+
+    /// @dev Drive the delivered cohort (publication, tickets, and on a daily request the whole
+    ///      day's processing) in minimal checkpoints up to its human-box stage, where the box
+    ///      orders are the next read consumer: openBoxes is the door that opens them from here.
+    function _advanceToHumanBoxes(uint48 index, uint256[2] memory orders) private {
+        for (uint256 i; i < 400; ++i) {
+            if (game.nextMinerAction() == 10) return; // MinerAction.HumanBoxes
+            _stepMinimal();
+            _assertOrders(index, orders, false);
+        }
+        revert("harness: the human-box stage was never reached");
+    }
+
+    function _drained(uint48 index) private view returns (uint256 n) {
+        if (_order(index, ALICE) == 0) ++n;
+        if (_order(index, BOB) == 0) ++n;
+    }
+
+    /// @dev The smallest openBoxes allowance that drains the next owner's entry (bisection over
+    ///      snapshots): each entry is admitted only while the remaining allowance covers its
+    ///      declared bound, and both owners' entries carry the same bound, so this budget opens
+    ///      exactly one.
+    function _oneEntryBudget(uint48 index) private returns (uint256) {
+        uint256 before = _drained(index);
+        uint256 lo = 100_000;
+        uint256 hi = 30_000_000;
+        while (hi - lo > 1_000) {
+            uint256 mid = (lo + hi) / 2;
+            uint256 snap = vm.snapshotState();
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("openBoxes(uint256)", uint256(2)));
+            bool opened = ok && _drained(index) > before;
+            vm.revertToStateAndDelete(snap);
+            if (opened) hi = mid;
+            else lo = mid;
+        }
+        return hi;
     }
 
     function _buy(address owner, uint256 count, uint256 size) private {
@@ -291,8 +382,12 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         uint256 future = game.futurePrizePoolView();
         uint256 current = game.currentPrizePoolView();
         uint256 liability = game.claimablePoolView();
+        // The walk-unit count became a gas allowance (60d31f775): a budget of 2 is the smallest
+        // allowance that opens one owner's entry; a large budget is an unbounded call.
+        uint256 allowance = budget == 2 ? _oneEntryBudget(index) : 0;
         vm.prank(caller);
-        assertEq(game.openBoxes(budget), expectedCount, "exact number of consumed boxes");
+        if (allowance == 0) assertEq(game.openBoxes(budget), expectedCount, "exact number of consumed boxes");
+        else assertEq(game.openBoxes{gas: allowance}(budget), expectedCount, "exact number of consumed boxes");
         assertEq(_order((index ^ 1), ALICE), nextAlice, "unrevealed Alice order survives old-index opening");
         assertEq(_order((index ^ 1), BOB), nextBob, "unrevealed Bob order survives old-index opening");
         assertEq(game.nextPrizePoolView(), next, "ordinary reward does not spend ticket backing");
@@ -328,8 +423,9 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         (,, fulfilled) = mockVRF.pendingRequests(request);
         assertTrue(fulfilled, "callback really fulfilled");
         if (perturb) _perturb(index, orders, false);
-        if (daily) _finishDaily();
-        else game.mineFlip(); // publish delivered midday word before opening
+        // Publish the delivered word (and on a daily request, finish the day) before opening.
+        _advanceToHumanBoxes(index, orders);
+        assertFalse(game.rngLocked(), "the day's processing finished before opening");
         assertEq(game.level(), 0, "opening denomination intentionally held fixed");
         assertEq(_word(index), word, "exact delivered word reaches its committed index");
         assertEq(_word((index ^ 1)), 0, "later purchases remain unrevealed");

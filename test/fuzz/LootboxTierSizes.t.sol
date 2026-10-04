@@ -53,22 +53,18 @@ contract LootboxTierSizes is DeployProtocol {
         vm.etch(address(game), real);
     }
 
+    function _base(uint48 index, address who) internal returns (uint256 v) {
+        bytes memory real = address(game).code;
+        vm.etch(address(game), type(C1Viewer).runtimeCode);
+        v = C1Viewer(payable(address(game))).lootboxBaseFor(index, who);
+        vm.etch(address(game), real);
+    }
+
     function _word(uint48 index) internal returns (uint256 v) {
         bytes memory real = address(game).code;
         vm.etch(address(game), type(C1Viewer).runtimeCode);
         v = C1Viewer(payable(address(game))).rngWordFor(index);
         vm.etch(address(game), real);
-    }
-
-    /// @dev Point the permissionless open walk at `index` (cursor 0), as the auto-open repro does.
-    function _parkBoxFrontier(uint48 index) internal {
-        bytes32 slot = bytes32(uint256(56));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        uint256 m = (uint256(1) << 48) - 1;
-        packed &= ~(m << (7 * 8));
-        packed &= ~(m << (13 * 8));
-        require(index < 2, "binary read fixture"); // byte 13 is humanReadComplete, not an index
-        vm.store(address(game), slot, bytes32(packed));
     }
 
     function _driveDailyCycleOnce() internal {
@@ -101,6 +97,22 @@ contract LootboxTierSizes is DeployProtocol {
             vm.prank(actor);
             try game.mineFlip() {} catch {}
         }
+        // A fresh request waits for every read consumer of the day's cohort to finish. A shut
+        // craps window the day bound to the write buffer rides the next request, which the engine
+        // makes as mid-day work; answer and drain it too, until the engine is idle.
+        for (uint256 i; i < 20; i++) {
+            uint256 reqId = mockVRF.lastRequestId();
+            if (reqId != 0) {
+                (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
+                if (!fulfilled) mockVRF.fulfillRandomWords(reqId, uint256(keccak256(abi.encode("trailing", i))) | 1);
+            }
+            _finishReadConsumers();
+            if (!game.advanceDue() && game.rngComplete()) break;
+            if (!game.advanceDue()) continue; // a fresh request waits for its word
+            vm.prank(actor);
+            game.mineFlip();
+        }
+        assertTrue(game.rngComplete(), "harness: the day's cohorts all completed");
     }
 
     function test_tiersOpenAtOneFiveAndTwentyFivePrices() public {
@@ -128,13 +140,14 @@ contract LootboxTierSizes is DeployProtocol {
         for (uint256 w = 1; w <= 64 && !found; w++) {
             uint256 snap = vm.snapshotState();
             mockVRF.fulfillRandomWords(reqId, uint256(keccak256(abi.encode("tier_word", w))) | 1);
-            assertGt(_word(N), 0, "the word landed at the order's index");
-            _parkBoxFrontier(N);
+            // The engine publishes the word and resolves the read cohort, the order included, as
+            // read consumers (openBoxes never publishes a word).
             vm.recordLogs();
             vm.prank(actor);
-            uint256 opened = game.openBoxes(50);
-            assertGt(opened, 0, "the walk opened the order");
+            game.mineFlip();
             Vm.Log[] memory logs = vm.getRecordedLogs();
+            assertGt(_word(N), 0, "the word landed at the order's index");
+            assertTrue(game.boxIndexComplete(N), "the walk opened the order");
             uint256 n;
             for (uint256 i; i < logs.length; i++) {
                 if (logs[i].topics[0] != OPENED || logs[i].emitter != address(game)) continue;
@@ -219,15 +232,14 @@ contract LootboxTierSizes is DeployProtocol {
             expected[t] = _expected(mults[t] * PriceLookupLib.priceForLevel(uint24(lvl)), ev, boost, adj);
         }
 
-        // The daily word finalizes the index and lands the boxes' word without a mid-day request.
-        _driveDailyCycleOnce();
-        assertGt(_word(N), 0, "the daily word landed at the orders' index");
-        _parkBoxFrontier(N);
+        // The daily word finalizes the index and lands the boxes' word without a mid-day request;
+        // the same engine calls open the orders as read consumers of that word.
         vm.recordLogs();
-        vm.prank(actor);
-        uint256 opened = game.openBoxes(100);
-        assertGt(opened, 0, "the walk opened the orders");
+        _driveDailyCycleOnce();
         Vm.Log[] memory logs = vm.getRecordedLogs();
+        // The drive also settles any trailing craps cohort, which reuses the physical tags, so
+        // the orders' own markers (processed once opened) are the evidence, not the tag's word.
+        for (uint256 t; t < 3; t++) assertEq(_base(N, who[t]), 0, "the walk opened the orders");
 
         uint256[3] memory fig;
         for (uint256 t; t < 3; t++) {

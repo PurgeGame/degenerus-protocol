@@ -200,10 +200,22 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
         probe.seedBetScore(INDEX, id - 1, score);
     }
 
-    function _sweepAmounts() private returns (uint256[] memory amounts) {
+    /// @dev Deliver the winning word for the sealed cohort at INDEX on a sealed day (dailyIdx =
+    ///      today, tickets drained), as a fulfilled mid-day request leaves it: the cohort's read
+    ///      consumers are then the engine's only work.
+    function _land() private {
         RecyclingState.seedWord(address(game), INDEX, bytes32(_winningWord()));
+        uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
+        slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192);
+        vm.store(address(game), bytes32(0), bytes32(slot0));
+    }
+
+    /// @dev Bets resolve only as the engine's Degenerette read consumer (mineFlip); openBoxes
+    ///      drives the AFK and human stages only.
+    function _sweepAmounts() private returns (uint256[] memory amounts) {
+        _land();
         vm.recordLogs();
-        game.openBoxes(type(uint256).max);
+        game.mineFlip();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 count;
         for (uint256 i; i < logs.length; ++i) if (logs[i].topics[0] == OPENED) ++count;
@@ -282,13 +294,15 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
         game.placeDegeneretteBet{value: uint256(spins) * stake}(address(0), 0, stake, spins, SYMBOL);
         probe.seedBetScore(INDEX, 0, score);
         probe.seedAllowance(player, 1, used);
-        RecyclingState.seedWord(address(game), INDEX, bytes32(_winningWord()));
+        _land();
         vm.cool(address(game));
         vm.cool(address(lootboxModule));
         vm.cool(address(degeneretteModule));
+        vm.recordLogs();
         uint256 beforeGas = gasleft();
-        game.openBoxes(type(uint256).max);
+        game.mineFlip();
         emit log_named_uint(name, beforeGas - gasleft());
+        assertEq(_resolvedCount(vm.getRecordedLogs()), 1, "the measured call resolved the bet");
     }
 
     function testGas_Win1Spin() public { _gasSweep("cap_win_1spin", 1, MAX_SCORE, 0); }
@@ -300,13 +314,16 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
 
     function testGas_WarmBatch() public {
         for (uint256 i; i < 11; ++i) _place(1, MAX_SCORE);
-        RecyclingState.seedWord(address(game), INDEX, bytes32(_winningWord()));
+        _land();
         vm.cool(address(game));
         vm.cool(address(lootboxModule));
         vm.cool(address(degeneretteModule));
+        vm.recordLogs();
         uint256 beforeGas = gasleft();
-        assertEq(game.openBoxes(type(uint256).max), 11);
-        emit log_named_uint("cap_batch_11", beforeGas - gasleft());
+        game.mineFlip();
+        uint256 used = beforeGas - gasleft();
+        assertEq(_resolvedCount(vm.getRecordedLogs()), 11);
+        emit log_named_uint("cap_batch_11", used);
     }
 
     function testGas_Placement() public {
@@ -322,5 +339,10 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
         uint256 beforeGas = gasleft();
         probe.dispatch(address(lootboxModule), abi.encodeWithSelector(NORMAL, player, 60 ether, uint256(12345), MAX_SCORE));
         emit log_named_uint("cap_normal_recirc", beforeGas - gasleft());
+    }
+
+    function _resolvedCount(Vm.Log[] memory logs) private pure returns (uint256 n) {
+        bytes32 resolved = keccak256("DegeneretteResolved(address,uint32,uint64,uint256,uint32,bytes)");
+        for (uint256 i; i < logs.length; ++i) if (logs[i].topics[0] == resolved) ++n;
     }
 }

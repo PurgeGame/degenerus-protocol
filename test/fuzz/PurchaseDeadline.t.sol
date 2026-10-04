@@ -7,6 +7,7 @@ import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {TicketQueueStorage as TQ} from "./helpers/TicketQueueStorage.sol";
 
 contract PurchaseDeadlineHarness is DegenerusGameStorage {
     function seed(uint24 lvl, uint24 age, uint48 requestTime, uint24 sealedAge, uint8 phase) external {
@@ -43,14 +44,16 @@ contract PurchaseDeadlineTest is Test {
         assertTrue(h.liveness(), "purchase deadline expires on day 31");
     }
 
-    function test_genesis364_365_366() public {
-        h.seed(0, 364, 0, 1, 0);
+    /// @dev The level-0 deadline is 250 days (c729ecfc9 _DEPLOY_IDLE_TIMEOUT_DAYS = 250;
+    ///      docs/audit/RNG-DOMAINS.md "The initial level-0 idle deadline is 250 days").
+    function test_genesis249_250_251() public {
+        h.seed(0, 249, 0, 1, 0);
         assertFalse(h.distress());
         assertFalse(h.liveness());
-        h.seed(0, 365, 0, 1, 0);
+        h.seed(0, 250, 0, 1, 0);
         assertTrue(h.distress());
         assertFalse(h.liveness());
-        h.seed(0, 366, 0, 1, 0);
+        h.seed(0, 251, 0, 1, 0);
         assertTrue(h.liveness());
     }
 
@@ -83,6 +86,11 @@ contract PurchaseDeadlineTest is Test {
 
 contract PurchaseDeadlineSeeder is DegenerusGame {
     function seed(uint24 age) external {
+        // Entering this purchase phase means the prior level's queues, including its frozen
+        // level-2 pool, have already materialized (same premise as DeadVrfEnding's
+        // DeadlineSeeder). Queue slots now recycle 1..100 under a level tag (c729ecfc9), so an
+        // unretired genesis queue would collide with level 102's perpetual queue later.
+        TQ.retireCompleted(address(this), 2);
         uint24 day = _simulatedDayIndex();
         level = 1;
         purchaseStartDay = day - age;
@@ -131,11 +139,14 @@ contract PurchaseDeadlineIntegrationTest is DeployProtocol {
 
         // Finish the funded level beyond its purchase deadline, across all three jackpot days.
         uint256 nextTimestamp = block.timestamp;
+        // setUp's synthetic 500-day jump leaves expired scheduled Craps days that the engine
+        // maintains one checkpoint per call before the day's request, so a day is driven until
+        // the engine has nothing left to do (not merely until a call leaves the lock clear).
         for (uint256 day; day < 6; ++day) {
-            for (uint256 step; step < 200; ++step) {
+            for (uint256 step; step < 1000; ++step) {
                 if (game.level() == 2 && !game.jackpotPhase() && !game.rngLocked()) return;
+                if (!game.rngLocked() && !game.advanceDue()) break;
                 _advanceWithVrf();
-                if (!game.rngLocked()) break;
             }
             assertFalse(game.gameOver(), "funded level must not die at day 31");
             nextTimestamp += 1 days;

@@ -38,8 +38,17 @@ contract CustomRngCohortGasTest is DeployProtocol {
             crapsBattle.enterBattle(slot, BOARD, 256);
         }
         vm.warp(vm.getBlockTimestamp() + 60);
+        // Craps windows ride the normal RNG round (6d0e64b09): the close binds the field to the
+        // write buffer and makes no request of its own; the ordinary mid-day request, for which a
+        // closed window on the write buffer is work that waives the pending-value gates, seals it.
+        uint256 requestBefore = mockVRF.lastRequestId();
         uint48 buffer = crapsBattle.closeBattle(slot);
+        assertEq(mockVRF.lastRequestId(), requestBefore, "the close makes no request of its own");
+        assertEq(buffer, RecyclingState.writeBuffer(address(game)), "the shut field binds the write buffer");
+        game.mineFlip();
         uint256 request = mockVRF.lastRequestId();
+        assertGt(request, requestBefore, "the ordinary mid-day request seals the shut field");
+        assertEq(RecyclingState.readBuffer(address(game)), buffer, "the request sealed the field's buffer");
         (,, bool fulfilled) = mockVRF.pendingRequests(request);
         assertFalse(fulfilled, "custom close requests its fresh session");
         mockVRF.fulfillRandomWords(request, uint256(keccak256("cold deep high custom")) | 2);

@@ -9,6 +9,7 @@ import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol"
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 import {MockLinkEthFeed} from "../../../contracts/mocks/MockLinkEthFeed.sol";
+import {TicketQueueStorage as TQ} from "../helpers/TicketQueueStorage.sol";
 
 /// @title AdvanceLivenessHandler — drives the advance chain and checks a LIVENESS post-condition.
 ///
@@ -69,7 +70,9 @@ contract AdvanceLivenessHandler is Test {
     bytes4 private constant E_BELOW_THRESHOLD = bytes4(keccak256("BelowThreshold()"));
     bytes4 private constant E_RNG_IN_FLIGHT = bytes4(keccak256("RngInFlight()"));
     bytes4 private constant E_GAS_TOO_HIGH = bytes4(keccak256("GasTooHigh()"));
-    bytes4 private constant E_NOT_TIME_YET = bytes4(keccak256("NotTimeYet()"));
+    // The engine's idle signal is NoWork() (MinerModule, 60d31f775); the old advance's
+    // NotTimeYet() no longer exists. The constant keeps its role: the expected quiescence error.
+    bytes4 private constant E_NOT_TIME_YET = bytes4(keccak256("NoWork()"));
     bytes4 private constant E_RNG_NOT_READY = bytes4(keccak256("RngNotReady()"));
     bytes4 private constant E_RNG_LOCKED = bytes4(keccak256("RngLocked()"));
 
@@ -212,12 +215,21 @@ contract AdvanceLivenessHandler is Test {
     }
 
     /// Mid-day lootbox request from a random player (after optionally topping up the pending
-    /// lootbox value) or as the CRAPS table.
+    /// lootbox value) or from a funded LINK donor. Craps has no request path of its own any more
+    /// (6d0e64b09); the donor's credit waives the empty-queue gates the way the craps exemption did.
     function actMiddayRequest(uint256 actorSeed, uint256 mode) external action("middayRequest") {
         mode = mode % 3;
         address a = _actor(actorSeed);
         if (mode == 1) _buyLootbox(a, 2 ether);
-        _request(mode == 2 ? ContractAddresses.CRAPS : a);
+        _request(mode == 2 ? _donor() : a);
+    }
+
+    /// A funded LINK donor whose credit waives the pending-value gates.
+    function _donor() internal returns (address donor) {
+        donor = address(uint160(0xD0D0D0));
+        MockLinkEthFeed(ContractAddresses.LINK_ETH_FEED).setUpdatedAt(block.timestamp);
+        vm.prank(ContractAddresses.ADMIN);
+        game.creditMiddayRng(donor, 1 ether);
     }
 
     function actFulfill() external action("fulfill") {
@@ -339,7 +351,7 @@ contract AdvanceLivenessHandler is Test {
         _buyTickets(a, bound(seed >> 8, 1, 20));
         _buyLootbox(a, 2 ether);
         if ((seed >> 40) & 1 == 1) _buyFoil(_actor(seed >> 16));
-        _request((seed >> 32) & 1 == 1 ? ContractAddresses.CRAPS : _actor(seed >> 24));
+        _request((seed >> 32) & 1 == 1 ? _donor() : _actor(seed >> 24));
         _fulfillPending();
         uint256 n = bound(seed >> 48, 1, 30);
         for (uint256 i = 0; i < n; i++) {
@@ -431,16 +443,8 @@ contract AdvanceLivenessHandler is Test {
             _fulfillPending();
             (bool ok, bytes memory ret) = address(game).call(abi.encodeWithSignature("mineFlip()"));
             if (!ok) {
-                bytes4 stopped = _sel(ret);
-                // Advance can be idle while this session still has required consumers.
-                // Stop after they finish: unrelated stamped boxes/scheduled upkeep and
-                // optional fresh requests are outside this word's completion predicate.
-                if (stopped == E_NOT_TIME_YET && !_sessionComplete()) {
-                    (bool worked, bytes memory routerRet) = address(game).call(abi.encodeWithSignature("mineFlip()"));
-                    if (worked) continue;
-                    if (_sel(routerRet) != bytes4(keccak256("NoWork()"))) return (true, _sel(routerRet), cranks);
-                }
-                return (true, stopped, cranks);
+                // One engine selects every action (60d31f775): its idle stop is NoWork().
+                return (true, _sel(ret), cranks);
             }
         }
         return (false, bytes4(0), cranks);
@@ -537,7 +541,7 @@ contract AdvanceLivenessHandler is Test {
         (bool ok,) = address(game).call(abi.encodeWithSignature("requestLootboxRng()"));
         if (!ok) return;
         ghost_middayRequests++;
-        if (who == ContractAddresses.CRAPS) ghost_middayAsCraps++;
+        if (who == address(uint160(0xD0D0D0))) ghost_middayAsCraps++;
         if (!latchBefore && _midDayLatch() != 0) {
             ghost_middayLatchSet++;
             if (lpd && !inJp) {
@@ -669,8 +673,10 @@ contract AdvanceLivenessHandler is Test {
         return RecyclingState.dailyWord(address(game), uint24(day));
     }
 
+    /// Queue slots recycle 1..100 under an absolute-level tag (c729ecfc9): read through the
+    /// authenticated physical slot.
     function _queueLen(uint24 key) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(key), TICKET_QUEUE_SLOT))));
+        return TQ.length(address(game), key);
     }
 
     function _readKey(uint24 lvl) internal view returns (uint24) {

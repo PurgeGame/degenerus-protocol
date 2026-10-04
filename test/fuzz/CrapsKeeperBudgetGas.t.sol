@@ -257,7 +257,10 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 31 minutes);
         mockVRF.fulfillRandomWordsRaw(request, address(game), 0xAABBCC);
         assertEq(_readyAt(), ready, "duplicate callback cannot reset age");
+        // A call that cannot fit one whole seat makes no progress, and a zero-progress mineFlip
+        // reverts instead of committing a no-op (be793ed7c).
         vm.prank(MINER);
+        vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
         game.mineFlip{gas: 800_000}();
         assertEq(crapsBattle.bonusCursorOf(slot), 0);
         assertEq(_readyAt(), ready, "no-op checkpoint cannot reset age");
@@ -332,7 +335,10 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
 
     function test_SubSeatGasMakesNoProgressAndEarnsNoReward() public {
         uint256 prior = coinflip.coinflipAmount(MINER);
-        vm.prank(MINER); game.mineFlip{gas: 800_000}();
+        // Sub-seat gas cannot admit the atomic seat; the zero-progress call reverts (be793ed7c).
+        vm.prank(MINER);
+        vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
+        game.mineFlip{gas: 800_000}();
         assertEq(crapsBattle.bonusCursorOf(slot), 0);
         assertEq(coinflip.coinflipAmount(MINER), prior);
         _finish(14_000_000, true);

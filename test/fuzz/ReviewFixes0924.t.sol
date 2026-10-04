@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {Test} from "forge-std/Test.sol";
+import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
@@ -140,7 +142,9 @@ contract RecoveredStallIntegrationTest is DeployProtocol {
         vm.etch(address(game), realCode);
 
         uint24 d = game.currentDayView();
-        for (uint256 i; i < 40 && !game.rngLocked(); ++i) game.mineFlip();
+        // setUp's synthetic 500-day jump leaves expired scheduled Craps days as maintenance
+        // checkpoints ahead of the first daily request (see MidDayStallCredit._sealDay).
+        for (uint256 i; i < 800 && !game.rngLocked(); ++i) game.mineFlip();
         assertTrue(game.rngLocked(), "day D requested; VRF stalls");
         (uint24 psd0,) = _clock();
 
@@ -302,39 +306,89 @@ contract DecimatorLegEndingIdleTest is DeployProtocol {
         vm.etch(address(game), realCode);
     }
 
+    /// @dev The knee credit per resolved run is gone (60d31f775 / 72fc06f6c): mineFlip pays FLIP on
+    ///      the gas a call measured above its unpaid first MIN_REWARDED_GAS, whatever the outcome.
+    ///      A tails-only run is still engine work and is paid by the same rule as any other.
     function test_LosingRunStillPaysOneKeeperBounty() public {
         vm.etch(address(game), type(ReviewClaimSeeder).runtimeCode);
         ReviewClaimSeeder(payable(address(game))).seedLosingKeeperRun(DLVL);
         vm.etch(address(game), realCode);
-        assertFalse(game.advanceDue());
+        assertEq(game.nextMinerAction(), 12, "the losing runs are the next engine work (MinerAction.Decimator)");
+        vm.fee(1 gwei);
         address keeper = makeAddr("battle-keeper");
         uint256 before = coinflip.coinflipAmount(keeper);
+        vm.recordLogs();
         vm.prank(keeper); game.mineFlip();
-        assertGt(coinflip.coinflipAmount(keeper), before, "tails run still earns work bounty");
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 used;
+        uint256 reward;
+        uint8 first;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] == keccak256("MinerWork(address,uint8,uint256,uint256)")) {
+                (first, used, reward) = abi.decode(logs[i].data, (uint8, uint256, uint256));
+            }
+        }
+        assertEq(first, 12, "non-vacuity: the call ran the losing runs' Decimator stage");
+        emit log_named_uint("losing run mineFlip gas", used);
+        emit log_named_uint("losing run bounty", reward);
+        assertEq(coinflip.coinflipAmount(keeper) - before, reward, "the bounty is credited to the keeper's stake");
+        if (used > MineFlipGas.MIN_REWARDED_GAS) assertGt(reward, 0, "tails work past the unpaid first million is paid");
+        else assertEq(reward, 0, "work inside the unpaid first million is unpaid, whatever its outcome");
         assertEq(game.claimableWinningsOf(winner), 0, "tails has no ETH credit");
     }
 
-    function test_legCreditsDuringLiveness() public {
+    /// @dev Once liveness triggers the read-consumer stage is closed and the ending owns the chain:
+    ///      a sealed battle does not settle, and its reservation stays in claimablePool until the
+    ///      final sweep releases it (test_SweepDoesNotWaitForPendingBattle). The Decimator never
+    ///      holds up the end.
+    function test_legIdlesDuringLiveness() public {
+        assertTrue(game.livenessTriggered(), "fixture: liveness triggered");
         uint256 before = game.claimableWinningsOf(winner);
+        uint256 poolBefore = game.claimablePoolView();
         (uint256 settled, , bool moved) = game.settleDecimatorWinners(1000);
-        assertEq(settled, 1); assertTrue(moved);
-        assertEq(game.claimableWinningsOf(winner), before + 1 ether);
+        assertEq(settled, 0); assertFalse(moved);
+        assertEq(game.claimableWinningsOf(winner), before, "no credit once liveness triggers");
+        assertEq(game.claimablePoolView(), poolBefore, "the reservation stays reserved for the sweep");
     }
 
     function test_legIdlesAfterGameOver() public {
         _over();
         uint256 before = game.claimableWinningsOf(winner);
-        (uint256 settled, uint256 units, bool moved) = game.settleDecimatorWinners(1500);
-        assertEq(settled, 0); assertEq(units, 0); assertFalse(moved);
+        // The compatibility door's second value is now the gas its worker call used (60d31f775),
+        // not work units; an idle leg settles nothing and moves nothing.
+        (uint256 settled, uint256 gasUsed, bool moved) = game.settleDecimatorWinners(1500);
+        assertEq(settled, 0); assertFalse(moved);
+        emit log_named_uint("idle decimator leg gas", gasUsed);
         assertEq(game.claimableWinningsOf(winner), before, "no credit after game over");
     }
 
     function test_SweepDoesNotWaitForPendingBattle() public {
         _over();
-        game.mineFlip(); // Terminal deadline passed; the queued battle does not hold the sweep.
-        vm.etch(address(game), type(ReviewClaimSeeder).runtimeCode);
-        assertTrue(ReviewClaimSeeder(payable(address(game))).swept(), "sweep ran with a battle queued");
-        vm.etch(address(game), realCode);
+        // The queued battle does not hold the sweep. Terminal work runs in checkpointed stages (the
+        // unpaid terminal jackpot, then the final sweep 30 days after that payout), so drive the
+        // engine through both.
+        bool swept;
+        bool warped;
+        for (uint256 i; i < 40 && !swept; ++i) {
+            uint256 id = mockVRF.lastRequestId(); // the terminal path may request its own word
+            if (id != 0) {
+                (,, bool done) = mockVRF.pendingRequests(id);
+                if (!done) mockVRF.fulfillRandomWords(id, uint256(keccak256(abi.encode("terminal", i))) | 2);
+            }
+            if (game.nextMinerAction() == 0) { // MinerAction.Idle
+                // The 30-day final-sweep clock starts when the terminal payout finishes
+                // (GameOverModule._finishTerminalPayout); let it elapse once.
+                if (warped) break;
+                vm.warp(vm.getBlockTimestamp() + 31 days);
+                warped = true;
+                continue;
+            }
+            game.mineFlip();
+            vm.etch(address(game), type(ReviewClaimSeeder).runtimeCode);
+            swept = ReviewClaimSeeder(payable(address(game))).swept();
+            vm.etch(address(game), realCode);
+        }
+        assertTrue(swept, "sweep ran with a battle queued");
         assertEq(game.claimableWinningsOf(winner), 0, "the unsettled battle credits nothing");
     }
 
@@ -479,6 +533,9 @@ contract FoilDrainTerminalFlagTest is Test {
         vm.revertToState(snap);
         h.setCase(liveTrigger, latch);
         live = h.liveness();
+        // The liveness probe reads deeper in the triggered case and would pre-warm a slot the
+        // drain later reads (2,000 gas); measure every drain from cold storage instead.
+        vm.cool(ContractAddresses.GAME);
         g = h.drainGas();
     }
 

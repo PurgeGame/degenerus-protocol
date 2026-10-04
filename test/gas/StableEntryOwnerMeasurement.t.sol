@@ -139,7 +139,10 @@ contract StableEntryOwnerMeasurementTest is Test {
         }
         emit log_named_uint("old 100 future credits", oldTotal);
         emit log_named_uint("candidate 100 future credits", newTotal);
-        assertLt(newTotal, oldTotal);
+        // Production now stores far-future owed entries in one fixed uint256[13] per owner, one
+        // 32-bit lane per circular level slot (1a7074212), so 100 distinct future levels touch
+        // 13 words instead of the prototype's 100 pending words: the shipped sink is cheaper.
+        assertLt(oldTotal, newTotal, "shipped far-future lanes undercut the per-level prototype");
         assertEq(candidate.idOf(PLAYER), 1);
     }
 }

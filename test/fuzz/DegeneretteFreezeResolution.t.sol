@@ -5,6 +5,7 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 import {DegeneretteQueue as DQ} from "../helpers/DegeneretteQueue.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {FlipRoundLib} from "../../contracts/libraries/FlipRoundLib.sol";
@@ -189,10 +190,10 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         assertEq(_readPendingFuture(), prePendingFuture,
             "Unfrozen: pending future should be untouched");
 
-        // Inject RNG word, finalize the index, and sweep it through openBoxes.
+        // Inject RNG word, finalize the index, and resolve it through the engine.
         _injectLootboxRngWord(index, winningRngWord);
 
-        game.openBoxes(type(uint256).max);
+        _resolveCohort();
 
         // Live future should have decreased (debited by ETH payout)
         uint256 postResolveLiveFuture = _readFuturePrizePool();
@@ -260,7 +261,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
 
         vm.recordLogs();
-        game.openBoxes(type(uint256).max);
+        _resolveCohort();
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         (, uint32 firstResultTraits, bytes memory firstSpins) = _decodeResolved(logs, 1, first);
@@ -322,7 +323,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // Resolve both in ONE call (the cross-bet flush under test).
 
         vm.recordLogs();
-        game.openBoxes(type(uint256).max);
+        _resolveCohort();
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         // Replay the per-spin baseline from each bet's own DegeneretteResolved `spins` payload,
@@ -429,7 +430,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
 
         vm.recordLogs();
-        game.openBoxes(type(uint256).max);
+        _resolveCohort();
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         // Raw spins paid: Sum of the per-spin payouts recomputed off the resolved event's
@@ -486,7 +487,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
 
         vm.recordLogs();
-        game.openBoxes(type(uint256).max);
+        _resolveCohort();
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         // Recompute the per-spin RAW payouts off the resolved event's packed spins, and read
@@ -544,13 +545,6 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     // DGAS-05 Test 6: lootbox summed PER betId, never across bets
     // =========================================================================
 
-    /// @dev Mirrors DegenerusGameStorage.OPEN_HUMAN_ENTRY_WEIGHT (15) and the DegeneretteModule
-    ///      private per-bet walk-unit weights (BET_ENTRY_WEIGHT_ETH = 36, BET_SPIN_WEIGHT_ETH = 2)
-    ///      so Run B below can budget-starve `openBoxes` to resolve exactly ONE queued 1-spin ETH
-    ///      bet per call (see the derivation comment at its call site).
-    uint256 private constant MIRROR_OPEN_HUMAN_ENTRY_WEIGHT = 15;
-    uint256 private constant MIRROR_ONE_SPIN_ETH_BET_WEIGHT = 36 + 1 * 2;
-
     /// @notice Prove the lootbox-share is summed PER betId (one box per bet), never
     ///         across bets (the resolution-batch-invariant). Two bets SHARE the same
     ///         lootbox index (two bet-txs, same index). Both flip into the lootbox
@@ -561,16 +555,18 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     ///         separate calls. A summed-across implementation (one box on share1+share2)
     ///         would diverge (the box ticket-roll is non-linear in `amount`).
     /// @dev Doors removal: there is no caller-composed betId list to split into two calls
-    ///      anymore — `openBoxes` always walks the queue in order. Run B instead
-    ///      budget-starves the FIRST call so only bet1 fits (a 1-spin ETH bet always costs
-    ///      MIRROR_ONE_SPIN_ETH_BET_WEIGHT walk units and the sweep's first entry always runs
-    ///      regardless of cost, but never a second one that would exceed the budget), then
-    ///      drains the rest — reproducing "resolve bet1, then bet2, in two separate txs" exactly.
+    ///      anymore — the engine always walks the queue in order. Run B instead gas-starves the
+    ///      FIRST mineFlip so only bet1 fits (each bet is admitted only while the remaining
+    ///      allowance covers its declared bound), then drains the rest — reproducing "resolve
+    ///      bet1, then bet2, in two separate txs" exactly.
     function testLootboxSummedPerBetIdNotAcrossBets() public {
         uint48 index = 1;
         uint256 word = uint256(keccak256("perbetid_word"));
         uint32 ticket = _winningTicketFor(index, word);
-        uint128 perTicket = 1 ether;         // score 2 pays 0.45 ETH at minimum activity, above the cap
+        // score 2 pays 0.225 ETH at minimum activity, above the cap. Both bets stay under the 1 ETH
+        // biggest-spin floor so neither arms a record claim: equal declared admissions, so a
+        // gas-starved call that admits bet1 cannot also admit bet2.
+        uint128 perTicket = 0.5 ether;
         uint256 smallPool = 0.5 ether;
 
         // Place TWO same-index single-spin ETH bets (two bet-txs, SAME lootbox index).
@@ -586,7 +582,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // --- Run A: resolve BOTH in ONE call (the cross-bet batch under test) ---
         uint256 preA = game.claimableWinningsOf(player);
         vm.recordLogs();
-        game.openBoxes(type(uint256).max);
+        _resolveCohort();
 
         uint256 ethCreditedOneCall = game.claimableWinningsOf(player) - preA;
         // Two bets resolved -> two DegeneretteResolved, two PayoutCapped (one spin each).
@@ -596,24 +592,17 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
             "per-betId: each bet's single spin capped independently -> two PayoutCapped");
 
         // --- Run B: revert to the snapshot, resolve the SAME two bets in TWO calls ---
-        // (the per-betId baseline: one box per bet, resolved one at a time). maxCount=3 ->
-        // openHumanBoxes budget = 3 * MIRROR_OPEN_HUMAN_ENTRY_WEIGHT = 45, minus 1 walk unit
-        // for the index header = 44 walk units handed to sweepDegeneretteBets: enough for
-        // bet1 (MIRROR_ONE_SPIN_ETH_BET_WEIGHT = 38 walk units, forced to run first regardless
-        // of cost) but not bet1+bet2 (76), so the sweep resolves exactly bet1 and leaves bet2
-        // queued for the next call.
+        // (the per-betId baseline: one box per bet, resolved one at a time).
         vm.revertToState(snap);
         uint256 preB = game.claimableWinningsOf(player);
 
-        // maxCount such that maxCount * MIRROR_OPEN_HUMAN_ENTRY_WEIGHT - 1 (the index-header
-        // step) lands in [weight, 2*weight - 1) = [38, 75]: exactly one bet's worth of budget.
-        uint256 runBFirstCallMaxCount =
-            (MIRROR_ONE_SPIN_ETH_BET_WEIGHT + 1) / MIRROR_OPEN_HUMAN_ENTRY_WEIGHT + 1;
-        game.openBoxes(runBFirstCallMaxCount);
+        // The walk-unit budget is now a gas allowance (60d31f775): the starved first call gets the
+        // smallest allowance that resolves any bet, which admits bet1 and refuses bet2.
+        assertEq(_crankOneBet(), 1, "Run B call 1: exactly one bet fits the starved allowance");
         assertEq(_betPacked(bet1), 0, "Run B call 1: bet1 alone resolved");
         assertGt(_betPacked(bet2), 0, "Run B call 1: bet2 left queued (budget-starved)");
 
-        game.openBoxes(type(uint256).max);
+        _resolveCohort();
         assertEq(_betPacked(bet2), 0, "Run B call 2: bet2 resolved");
 
         uint256 ethCreditedTwoCalls = game.claimableWinningsOf(player) - preB;
@@ -655,7 +644,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         uint256 playerBefore = sdgnrs.balanceOf(player);
         uint256 treasuryBefore = sdgnrs.balanceOf(address(sdgnrs));
         vm.recordLogs();
-        game.openBoxes(type(uint256).max);
+        _resolveCohort();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(_betPacked(betId), 0, "the real sweep consumed the placed bet");
 
@@ -771,7 +760,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         uint256 snap = vm.snapshotState();
 
         uint256 preClaimable = game.claimableWinningsOf(player);
-        game.openBoxes(type(uint256).max);
+        _resolveCohort();
         uint256 ethCreditedPreGo = game.claimableWinningsOf(player) - preClaimable;
         assertGt(
             ethCreditedPreGo,
@@ -815,6 +804,15 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
             0,
             "post-game-over: the bet remains queued, unresolved (pending bets are not settled by the game-over no-op)"
         );
+
+        // Bets now resolve only as an engine read consumer. Once liveness triggers, no read stage
+        // is eligible: the engine's only work is the terminal path, which resolves no pending bet.
+        assertEq(game.rngConsumerStage(), 0, "no read consumer runs once liveness triggers");
+        assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.Terminal), "only the terminal path remains");
+        vm.recordLogs();
+        game.mineFlip();
+        assertEq(_countTopic(vm.getRecordedLogs(), DQ.RESOLVED_SIG), 0, "the terminal step resolves no pending bet");
+        assertEq(game.claimableWinningsOf(player), 0, "the terminal step credits the bettor nothing");
     }
 
     // =========================================================================
@@ -1080,6 +1078,47 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     /// @dev Seals the cohort and marks the reusable word ready.
     function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
         RecyclingState.seedWord(address(game), uint48(index), bytes32(rngWord));
+        // The day itself is sealed (dailyIdx = today, tickets drained), as after a mid-day request:
+        // the delivered cohort's read consumers are the engine's only work, so mineFlip stops when
+        // the cohort completes instead of preparing the next day.
+        uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
+        slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192);
+        vm.store(address(game), bytes32(0), bytes32(slot0));
+    }
+
+    /// @dev Bets resolve as the Degenerette read consumer of the published word, reached only by
+    ///      mineFlip (openBoxes drives the AFK and human stages only). One unbounded call runs the
+    ///      cohort's whole consumer chain.
+    function _resolveCohort() internal {
+        vm.prank(makeAddr("degen_freeze_crank"));
+        game.mineFlip();
+    }
+
+    /// @dev One mineFlip given the smallest allowance that still resolves a bet: the engine admits a
+    ///      bet only while the remaining allowance covers its declared bound, so at the minimum the
+    ///      call resolves exactly the next bet. Found by bisection over snapshots of the same state.
+    function _crankOneBet() internal returns (uint256 resolved) {
+        uint256 lo = 300_000;
+        uint256 hi = 30_000_000;
+        while (hi - lo > 1_000) {
+            uint256 mid = (lo + hi) / 2;
+            uint256 snap = vm.snapshotState();
+            vm.recordLogs();
+            vm.prank(makeAddr("degen_freeze_crank"));
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip()"));
+            uint256 n = ok ? _countTopic(vm.getRecordedLogs(), DQ.RESOLVED_SIG) : 0;
+            vm.revertToStateAndDelete(snap);
+            if (n != 0) hi = mid;
+            else lo = mid;
+        }
+        vm.recordLogs();
+        vm.prank(makeAddr("degen_freeze_crank"));
+        game.mineFlip{gas: hi}();
+        resolved = _countTopic(vm.getRecordedLogs(), DQ.RESOLVED_SIG);
+    }
+
+    function _countTopic(Vm.Log[] memory logs, bytes32 topic) internal pure returns (uint256 n) {
+        for (uint256 i; i < logs.length; ++i) if (logs[i].topics.length != 0 && logs[i].topics[0] == topic) ++n;
     }
 
     /// @notice Find a (customTraits, rngWord) pair that guarantees >= 2 matches.

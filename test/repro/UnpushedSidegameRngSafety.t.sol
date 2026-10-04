@@ -23,8 +23,8 @@ contract UnpushedSidegameOutcomeEngine {
     }
 }
 
-/// @notice Residual payout-timing witness: public normal-cohort settlement and
-/// the Game's jackpot stage can consume the same live progressive in either order.
+/// @notice Residual payout-timing witness: public normal-cohort settlement and the Game's
+/// jackpot stage consume the same live progressive; the read-cohort gate now fixes the order.
 /// The Game/VRF stages use the existing pinned fixture; fields, admission, arming,
 /// and settlement use their production entrypoints. No award helper is called.
 contract UnpushedSidegameRngSafety is CrapsPins {
@@ -82,14 +82,21 @@ contract UnpushedSidegameRngSafety is CrapsPins {
         assertTrue(table.advanceJackpotBattle(WHOLE_FIELD));
     }
 
-    function test_PublicSettlementOrderChangesProgressiveAwardWithFrozenOutcomes() public {
-        uint256 snapshot = vm.snapshotState();
-        uint256 aliceFirst = _settleScheduled();
+    /// @notice The witness no longer has two orders. Read-bound Craps cohorts are a gated read
+    ///         consumer (stage 6), reachable only once the daily lock lifts, while the jackpot
+    ///         battle advances inside the locked daily phase (6d0e64b09 / 60d31f775). So the
+    ///         public settlement of the scheduled field can never run ahead of the jackpot stage of
+    ///         the request that sealed it: the progressive is consumed jackpot-first, always.
+    function test_PublicSettlementWaitsForTheJackpotStageWithFrozenOutcomes() public {
+        (bool moved, bool settled) = api.keepRngCohort(buffer, WHOLE_FIELD);
+        assertFalse(moved || settled, "the scheduled cohort waits while the daily jackpot stage holds the lock");
+        uint256 before = table.progressivePool();
         _settleJackpot();
-        assertTrue(vm.revertToState(snapshot));
-        _settleJackpot();
+        assertEq(before - table.progressivePool(), 100_000 ether, "the jackpot stage consumes the progressive first");
+        // The daily phase ends with the jackpot stage; the lock lifts and the gated read
+        // consumers, the scheduled Craps cohort among them, run on the same frozen outcomes.
+        game.setRngLocked(false);
         uint256 aliceLast = _settleScheduled();
-        assertEq(aliceFirst, 100_000 ether);
         assertEq(aliceLast, 90_000 ether);
     }
 }
