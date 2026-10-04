@@ -192,12 +192,6 @@ contract DegenerusGameFoilPackModule is
     ///      that do not reach it pay nothing toward it.
     uint32 private constant GRAND_DRAIN_UNITS = 14;
 
-    /// @dev Per-settled-claim keeper bounty target (ETH-equivalent wei) for the
-    ///      permissionless batch claimer, converted to FLIP at the reference price.
-    ///      Mirrors the decimator box-claim bounty so a sweeper is reimbursed roughly
-    ///      its per-claim settle gas.
-    uint256 private constant FOIL_CLAIM_BOUNTY_ETH_TARGET = 15_000_000_000_000;
-
     // -------------------------------------------------------------------------
     // Events
     // -------------------------------------------------------------------------
@@ -545,8 +539,8 @@ contract DegenerusGameFoilPackModule is
     ///      with StaleBatch(), because an already-swept list fails there first and the
     ///      cheap revert is what a wallet's pre-flight simulation shows a second sender.
     ///      Put a tuple expected to settle first. Each settled win credits its own
-    ///      `player`. The arrays are parallel: claim i is (players[i], drawDays[i],
-    ///      ticketIndexes[i]).
+    ///      `player`; the caller is paid nothing. The arrays are parallel: claim i is
+    ///      (players[i], drawDays[i], ticketIndexes[i]).
     /// @param players Pack owners the wins credit to.
     /// @param drawDays Draw days to claim against.
     /// @param ticketIndexes Which pack ticket (0-3) per claim.
@@ -559,7 +553,6 @@ contract DegenerusGameFoilPackModule is
         uint256 n = players.length;
         if (drawDays.length != n || ticketIndexes.length != n) revert LengthMismatch();
 
-        uint256 settled;
         for (uint256 i; i < n; ) {
             // External self-call: address(this) is GAME under delegatecall, so this
             // dispatches through the facade stub back into this module in the Game's
@@ -572,11 +565,7 @@ contract DegenerusGameFoilPackModule is
                     drawDays[i],
                     ticketIndexes[i]
                 )
-            {
-                unchecked {
-                    ++settled;
-                }
-            } catch {
+            {} catch {
                 // The opening tuple doubles as the spent-list probe. One tuple list is
                 // handed to many senders and the first to land settles every tuple in
                 // it, so a dead opener means the list is already swept. Reverting lets a
@@ -589,22 +578,6 @@ contract DegenerusGameFoilPackModule is
             unchecked {
                 ++i;
             }
-        }
-
-        // Keeper bounty: a small FLIP credit per claim actually settled, paid to the
-        // caller during a live game (the flip credit is worthless post-gameover).
-        // Skipped and non-winning tuples settle nothing and earn nothing, so a padded
-        // batch cannot farm the bounty. The ETH-value tracks the per-claim settle gas
-        // at the reference price (FLIP per ETH = PRICE_COIN_UNIT / mintPrice), so the
-        // credit holds its gas-reimbursement value across the price curve.
-        if (!gameOver && settled != 0) {
-            coinflip.creditFlip(
-                msg.sender,
-                (settled * FOIL_CLAIM_BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) /
-                    PriceLookupLib.priceForLevel(
-                        jackpotPhaseFlag ? level : level + 1
-                    )
-            );
         }
     }
 

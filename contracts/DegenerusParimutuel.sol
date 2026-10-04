@@ -30,7 +30,6 @@ import {IDegenerusCoin} from "./interfaces/IDegenerusCoin.sol";
 import {ICoinflip} from "./interfaces/ICoinflip.sol";
 import {IDegenerusQuests} from "./interfaces/IDegenerusQuests.sol";
 import {IDegenerusParimutuel} from "./interfaces/IDegenerusParimutuel.sol";
-import {PriceLookupLib} from "./libraries/PriceLookupLib.sol";
 
 /**
  * @title DegenerusParimutuel
@@ -49,10 +48,9 @@ import {PriceLookupLib} from "./libraries/PriceLookupLib.sol";
  *      outcome, 128 rounds per word; claims read the bit and never re-derive.
  *
  *      Stakes burn at placement; winners re-mint through the coinflip rail; dust and an
- *      empty winning side stay burned. Beyond the stakes the rail pays the gas-pegged
- *      settlement bounty (capped at one per winning bet ever). Betting requires having
- *      ever bought anything. FLIP is tombstoned at game over, so an unresolved book needs
- *      no unwind rule.
+ *      empty winning side stay burned. Settlement pays no bounty: winners claim, or anyone
+ *      cranks for them unpaid. Betting requires having ever bought anything. FLIP is
+ *      tombstoned at game over, so an unresolved book needs no unwind rule.
  */
 contract DegenerusParimutuel is IDegenerusParimutuel {
     // =========================================================================
@@ -81,16 +79,6 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
     ///      the book before committing; a decaying reward prices that advantage back out
     ///      without a hard cutoff.
     uint256 public constant QUEST_BASE = 150 ether;
-
-    /// @dev FLIP-per-ETH conversion base, matching the Game's PRICE_COIN_UNIT:
-    ///      FLIP per ETH = PRICE_COIN_UNIT / mintPrice. Equal to STAKE by construction —
-    ///      the stake is one whole ticket — but priced here, not staked.
-    uint256 private constant PRICE_COIN_UNIT = 1000 ether;
-
-    /// @dev Settlement-crank bounty target (ETH wei) per winner actually paid: the ~30k-gas
-    ///      marginal cost of one settled winner at the 0.5-gwei reference — the same peg
-    ///      and number the foil-claim bounty carries.
-    uint256 private constant CRANK_BOUNTY_ETH_TARGET = 15_000_000_000_000;
 
     uint8 private constant SIDE_OVER = 1;
     uint8 private constant SIDE_UNDER = 2;
@@ -271,24 +259,23 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
     /// @dev The settlement crank. A round's outcome and its per-winner payout are
     ///      properties of the ROUND, not of the claimant, so both are derived once for the
     ///      whole list and the credits land as one creditFlipBatch call: settling a
-    ///      hundred bettors costs one growthState call, one growthCounts read and one
-    ///      credit call, where a hundred single claims would repeat all three.
+    ///      hundred bettors costs one growthCounts read and one credit call, where a
+    ///      hundred single claims would repeat both.
     ///
     ///      Permissionless for the same reason as claim — a payout can only ever reach the
-    ///      bettor who placed the bet — and paid for its work: the caller earns a gas-pegged
-    ///      FLIP credit per winner it actually settles.
+    ///      bettor who placed the bet. The caller is paid nothing for the work.
     ///
     ///      Past the opening address, entries that did not bet, lost, or already claimed are
     ///      skipped rather than reverted, so a duplicate or junk entry cannot brick the
     ///      batch. The opening address is the exception, and is the probe: a call that would
-    ///      settle nothing reverts instead of succeeding silently, so a keeper racing a
+    ///      settle nothing reverts instead of succeeding silently, so a caller racing a
     ///      list someone else already swept fails its simulation rather than paying for the
     ///      whole walk. A crank therefore leads with a winner it believes unpaid.
     /// @param round The round to settle.
     /// @param players The bettors to pay, a genuine unpaid winner first.
     /// @custom:reverts NothingToSettle If the round is unsettled, its winning side is empty,
     ///         the list is empty, or the opening address is not an unpaid winner.
-    /// @return total FLIP credited to winners across the batch, excluding the caller's bounty.
+    /// @return total FLIP credited to winners across the batch.
     function claimRound(
         uint24 round,
         address[] calldata players
@@ -296,10 +283,9 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
         uint256 len = players.length;
         if (len == 0) revert NothingToSettle();
 
-        // Opener first, before the outcome read and the bounty's game call: most cranks
-        // are duplicates racing one broadcast list, and a spent opener proves the sweep
+        // Opener first, before the outcome read: a list someone already swept is refused
         // for one cold slot. (A winner who claimed alone can false-positive this; the
-        // cost is one rebuilt broadcast.)
+        // cost is one rebuilt list.)
         uint8 opener = growthBets[round][players[0]];
         if (opener == 0 || (opener & CLAIMED_BIT) != 0) revert NothingToSettle();
 
@@ -317,12 +303,9 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
         uint256 payout = _payoutFrom(packed, outcome);
 
         // Credits land through one creditFlipBatch call rather than one credit per
-        // winner. The arrays stay list-shaped: a skipped entry leaves its slot zeroed,
-        // and the batch ignores zero entries by contract. One slot past the list carries
-        // the caller's bounty, so the whole settlement is a single credit call.
-        address[] memory winners = new address[](len + 1);
-        uint256[] memory payouts = new uint256[](len + 1);
-        uint256 settled;
+        // winner, over the caller's own list: a skipped entry leaves its payout zero,
+        // and the batch ignores zero entries by contract.
+        uint256[] memory payouts = new uint256[](len);
         for (uint256 i; i < len; ) {
             address player = players[i];
             uint8 bet = growthBets[round][player];
@@ -330,12 +313,8 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
             // claimed bit.
             if ((bet & SIDE_MASK) == outcome && (bet & CLAIMED_BIT) == 0) {
                 growthBets[round][player] = bet | CLAIMED_BIT;
-                winners[i] = player;
                 payouts[i] = payout;
                 total += payout;
-                unchecked {
-                    ++settled;
-                }
                 emit BetClaimed(player, round, outcome, payout);
             }
             unchecked {
@@ -343,22 +322,7 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
             }
         }
 
-        // Keeper bounty in the batch's tail slot: per winner ACTUALLY settled (padding
-        // earns nothing; the claimed bit caps it at one per winning bet ever), priced at
-        // the ROUTED level the crank runs at so the FLIP tracks settle gas. A caller who
-        // also won takes two slots — payout plus bounty, as two calls would pay.
-        // growthState(0) rather than growthState(round): round 0 skips the three ratchet
-        // reads, which settlement does not need — the outcome is the stored bit. The call
-        // carries only the routing half the bounty is priced at.
-        (, , , uint24 currentLevel, bool bettingOpen, ) = game.growthState(0);
-        winners[len] = msg.sender;
-        payouts[len] =
-            (settled * CRANK_BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) /
-            PriceLookupLib.priceForLevel(
-                bettingOpen ? currentLevel : currentLevel + 1
-            );
-
-        coinflip.creditFlipBatch(winners, payouts);
+        coinflip.creditFlipBatch(players, payouts);
     }
 
     /// @dev Settle one round for one player. Returns the payout, or 0 when there is

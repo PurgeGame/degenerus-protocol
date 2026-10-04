@@ -64,8 +64,6 @@ interface IDegenerusGamePlayer {
     function livenessTriggered() external view returns (bool);
     /// @notice Get RNG word for a specific day.
     function rngWordForDay(uint24 day) external view returns (uint256);
-    /// @notice Current mint price in wei (the active ticket level's price).
-    function mintPrice() external view returns (uint256);
     /// @notice Get player's activity score.
     function playerActivityScore(address player) external view returns (uint256);
     /// @notice Resolve a redemption lootbox (sDGNRS forwards ETH as msg.value; GAME pulls any stETH remainder).
@@ -536,18 +534,6 @@ contract sDGNRS {
     ///      Game as free backing, raising backing for remaining holders. Live-game only; terminal
     ///      claims are already 100% direct.
     uint256 private constant MIN_REDEMPTION_LOOTBOX_ETH = 0.01 ether;
-
-    /// @dev 1,000 FLIP in base units — the FLIP one whole ticket mints, and the ETH→FLIP conversion
-    ///      numerator for the miner box-bounty, matching the Game's PRICE_COIN_UNIT.
-    ///      FLIP per ETH = PRICE_COIN_UNIT / mintPrice.
-    uint256 private constant PRICE_COIN_UNIT = 1000 ether;
-
-    /// @dev Miner box-bounty target (ETH wei) per settled redemption claim. Sized so the FLIP
-    ///      bounty's ETH-value reimburses the ~48k-gas per-box settle at the ~0.5-gwei reference.
-    ///      The reward is an illiquid coinflip credit, and every pending claim costs a real sDGNRS
-    ///      gambling burn (>=1 whole token, one box per wallet per day) to create, so permissionlessly
-    ///      cranking others' claims is liveness work rather than a clean farm.
-    uint256 private constant BOX_BOUNTY_ETH_TARGET = 24_000_000_000_000;
 
     /// @dev Game contract reference for player actions and claimable queries
     IDegenerusGamePlayer private constant game = IDegenerusGamePlayer(ContractAddresses.GAME);
@@ -1046,7 +1032,8 @@ contract sDGNRS {
 
     /// @notice Claim resolved gambling-burn redemptions for a batch of players on day `day`.
     /// @dev `players` must be the next exact FIFO prefix in the redemption consumer stage.
-    ///      Empty claims in that prefix are skipped. LIVE-GAME ONLY: in terminal mode a batch could
+    ///      Empty claims in that prefix are skipped. The caller is paid nothing: mineFlip drains
+    ///      the same cohort and its engine reward is the paid path. LIVE-GAME ONLY: in terminal mode a batch could
     ///      settle only entries the caller is the player or approved operator for (all others revert),
     ///      which the single claimRedemption already does — so the batch reverts once game is over.
     /// @param players Claimants whose redemptions to settle.
@@ -1063,26 +1050,9 @@ contract sDGNRS {
 
         // The forced cohort's session word is identical for every player in this batch.
         uint256 rngWordNext = _redemptionQueueDay == day ? _redemptionWord : 0;
-        uint256 settled;
         for (uint256 i; i < players.length; ++i) {
             _takeRedemptionHead(players[i], day);
-            if (_claimRedemptionFor(players[i], day, roll, false, rngWordNext)) {
-                unchecked {
-                    ++settled;
-                }
-            }
-        }
-
-        // Miner bounty: a small FLIP flip-credit per successful claim this call, paid to the
-        // caller. Counts only successful claims — empty (player, day) slots are skipped and earn nothing.
-        // The ETH-value tracks the per-claim settle gas at the 0.5-gwei reference (FLIP per ETH =
-        // PRICE_COIN_UNIT / mintPrice), so the credit holds its gas-reimbursement value across the
-        // price curve. sDGNRS is an authorized flip creditor, so this credits AS sDGNRS.
-        if (settled != 0) {
-            coinflip.creditFlip(
-                msg.sender,
-                _redemptionBounty(settled)
-            );
+            _claimRedemptionFor(players[i], day, roll, false, rngWordNext);
         }
     }
 
@@ -1098,10 +1068,6 @@ contract sDGNRS {
             forfeited = lootbox;
             lootbox = 0;
         }
-    }
-
-    function _redemptionBounty(uint256 settled) private view returns (uint256) {
-        return (settled * BOX_BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / game.mintPrice();
     }
 
     /// @dev Shared settle core for the single and batch claim entry points. Callers must have

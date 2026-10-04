@@ -172,8 +172,8 @@ contract AutomaticRedemptionSettlementTest is DeployProtocol {
     function _claimTranscript() internal returns (bytes32 digest) {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
-            // Batch callers receive a separate Coinflip bounty; player awards and
-            // every Game/sDGNRS event must remain identical across all three routes.
+            // Player awards and every Game/sDGNRS event must remain identical across
+            // all three routes.
             if (logs[i].emitter == address(game) || logs[i].emitter == address(sdgnrs)) {
                 digest = keccak256(abi.encode(digest, logs[i].emitter, logs[i].topics, logs[i].data));
             }

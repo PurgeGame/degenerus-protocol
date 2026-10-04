@@ -319,7 +319,7 @@ contract RedemptionCommitmentBindingTest is DeployProtocol {
         Ledger memory l = _ledger();
         if (batch) {
             // The batch must be the exact FIFO prefix: a stale or duplicate entry reverts the whole
-            // batch atomically (it no longer skips), so nothing pays and no bounty accrues.
+            // batch atomically (it no longer skips), so nothing pays.
             address[] memory owners = new address[](4);
             owners[0] = ALICE;
             owners[1] = address(0xBAD);
@@ -363,11 +363,7 @@ contract RedemptionCommitmentBindingTest is DeployProtocol {
         assertEq(
             sdgnrs.poolBalance(sDGNRS.Pool.Lootbox), l.inventory - a.dgnrs - b.dgnrs, "actual token inventory debit"
         );
-        assertEq(
-            coinflip.coinflipAmount(KEEPER),
-            l.keeperFlip + (batch ? 4.8 ether : 0),
-            "bounty only counts two distinct settled claims"
-        );
+        assertEq(coinflip.coinflipAmount(KEEPER), l.keeperFlip, "the claim batch pays its caller nothing");
         assertEq(game.claimableWinningsOf(KEEPER), 0);
         assertEq(sdgnrs.balanceOf(KEEPER), 0);
         // Consumed heads cannot be re-taken (exact FIFO head; was NoClaim / a no-op batch).

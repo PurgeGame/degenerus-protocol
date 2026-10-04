@@ -99,10 +99,6 @@ abstract contract RedemptionEdgeCasesBase is DeployProtocol {
     ///      self-contained). POST RT-PACKING-12: scalars packed into slot 0, mappings shifted down 10->7.
     uint256 internal constant SLOT_PENDING_BY_DAY = 7;
 
-    // Keeper box-bounty mirror (sDGNRS private constants). TEST-MIRROR SYNC: if the
-    // contract changes these, re-sync — the bounty assertion cross-validates the observed creditFlip.
-    uint256 internal constant BOX_BOUNTY_ETH_TARGET = 24_000_000_000_000;
-    uint256 internal constant PRICE_COIN_UNIT = 1000 ether;
     /// @dev keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)") — creditFlip emits this.
     bytes32 internal constant COINFLIP_STAKE_UPDATED_SIG =
         keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
@@ -1708,15 +1704,15 @@ contract RedemptionEdgeCasesB is RedemptionEdgeCasesBase {
         assertEq(game.claimableWinningsOf(playerA), aAfter, "PERM-02: re-sweep must not double-credit");
     }
 
-    /// @notice BOUNTY-01: claimRedemptionMany pays the keeper a FLIP flip-credit per box it settles,
-    ///         pegged to the per-box settle gas (settled × BOX_BOUNTY_ETH_TARGET × PRICE_COIN_UNIT /
-    ///         mintPrice). Skipped (empty) entries earn nothing, and a no-work re-sweep pays zero.
-    function test_BOUNTY01_RedemptionKeeperBountyPerSettledBox() public {
+    /// @notice BOUNTY-01: claimRedemptionMany pays its caller nothing — mineFlip's engine reward is
+    ///         the paid path for the same cohort — whether boxes settle, entries are skipped, or the
+    ///         re-sweep reverts.
+    function test_BOUNTY01_RedemptionBatchPaysTheCallerNothing() public {
         uint32 dayD = game.currentDayView();
         _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(ACTOR_FUNDING / 100);
-        // playerC's dust burn rounds to nothing — the empty FIFO entry that must earn no bounty.
+        // playerC's dust burn rounds to nothing — the empty FIFO entry the batch skips.
         vm.prank(playerC);
         sdgnrs.burn(MIN_BURN_AMOUNT);
         vm.prank(playerB);
@@ -1729,22 +1725,20 @@ contract RedemptionEdgeCasesB is RedemptionEdgeCasesBase {
 
         address[] memory players = new address[](3);
         players[0] = playerA;
-        players[1] = playerC; // empty — skipped, no bounty
+        players[1] = playerC; // empty — skipped
         players[2] = playerB;
 
-        // Keeper (playerD, not a redeemer) sweeps: 2 boxes settle, 1 skipped → bounty for exactly 2.
+        // Keeper (playerD, not a redeemer) sweeps: 2 boxes settle, 1 skipped, the keeper earns nothing.
         vm.recordLogs();
         vm.prank(playerD);
         sdgnrs.claimRedemptionMany(players, uint24(dayD));
-        uint256 bounty = _sumKeeperBounty(vm.getRecordedLogs(), playerD);
-
-        uint256 unit = (BOX_BOUNTY_ETH_TARGET * PRICE_COIN_UNIT) / game.mintPrice();
-        assertGt(unit, 0, "BOUNTY-01: per-box unit must be non-zero");
-        // Each per-box credit lands in a whole-FLIP stake lane, flooring its own dust.
-        assertEq(bounty, 2 * ((unit / 1 ether) * 1 ether), "BOUNTY-01: keeper paid exactly 2 settled-box units");
+        assertEq(_sumKeeperBounty(vm.getRecordedLogs(), playerD), 0, "BOUNTY-01: settling sweep pays no bounty");
+        (uint96 evA, , ) = sdgnrs.pendingRedemptions(playerA, uint24(dayD));
+        (uint96 evB, , ) = sdgnrs.pendingRedemptions(playerB, uint24(dayD));
+        assertEq(uint256(evA) + uint256(evB), 0, "BOUNTY-01: both real boxes settled");
 
         // No-work re-sweep: the consumed prefix reverts RedemptionOutOfOrder (ordered settlement
-        // queue; was a successful no-op) → zero settled → zero bounty.
+        // queue; was a successful no-op).
         vm.recordLogs();
         vm.prank(playerD);
         vm.expectRevert(sDGNRS.RedemptionOutOfOrder.selector);
