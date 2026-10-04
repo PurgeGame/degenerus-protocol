@@ -72,13 +72,13 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
 
     /// @dev The single growth-bet stake: one whole ticket at PRICE_COIN_UNIT. Fixed rather
     ///      than chosen, so the two pools are counts and every winner is paid the same.
-    uint256 public constant STAKE = 1_000 ether;
+    uint256 public constant STAKE = 1_000;
 
     /// @dev Participation-quest reward on the first day betting is open, before the
     ///      per-day decay. Parimutuel pays the last mover best, since the final bettor sees
     ///      the book before committing; a decaying reward prices that advantage back out
     ///      without a hard cutoff.
-    uint256 public constant QUEST_BASE = 150 ether;
+    uint256 public constant QUEST_BASE = 150;
 
     uint8 private constant SIDE_OVER = 1;
     uint8 private constant SIDE_UNDER = 2;
@@ -397,7 +397,7 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
     ///      reward amounts while counting actual draws. The final draw closes betting.
     function _questReward(uint8 phaseDay) private pure returns (uint256) {
         uint256 step = phaseDay <= 1 ? 0 : 2;
-        return ((QUEST_BASE / 1 ether) >> step) * 1 ether;
+        return QUEST_BASE >> step;
     }
 
     // =========================================================================

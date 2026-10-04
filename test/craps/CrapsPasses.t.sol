@@ -493,8 +493,8 @@ contract CrapsPassesTest is CrapsPins {
         vm.prank(alice);
         craps.buyFutureCrapsDays(start, 1, true);
         assertEq(flip.burned(alice) - before_, craps.HIGH_FUTURE_DAY_PRICE(), "the high day burned the wrong price");
-        assertEq(craps.HIGH_FUTURE_DAY_PRICE(), 500_000 ether, "the high price moved");
-        assertEq(craps.NORMAL_FUTURE_DAY_PRICE(), 25_000 ether, "the normal price moved");
+        assertEq(craps.HIGH_FUTURE_DAY_PRICE(), 500_000, "the high price moved");
+        assertEq(craps.NORMAL_FUTURE_DAY_PRICE(), 25_000, "the normal price moved");
     }
 
     /// @dev A REJECTED RANGE COSTS NOTHING. The burn and the earlier days of the run unwind with
@@ -1002,13 +1002,13 @@ contract CrapsAwardSplitTest is CrapsPins {
     /// @dev The handoff's worked example: a 1,200,000 FLIP award has a 600,000 target, above
     ///      545,600 — one high pass worth 520,800 and 679,200 liquid.
     function test_theWorkedHighPassExample() public {
-        uint256 gross = 1_200_000 ether;
+        uint256 gross = 1_200_000;
         uint256 banked = craps.splitAward(KEY, alice, 2, gross);
         (uint256 n, uint256 h) = craps.passCreditsOf(alice);
         assertEq(n, 0, "the high award issued normals");
         assertEq(h, 1, "the award did not bank exactly one high pass");
-        assertEq(banked, 520_800 ether, "the pass value is not one high pass");
-        assertEq(gross - banked, 679_200 ether, "the liquid change is not the remainder");
+        assertEq(banked, 520_800, "the pass value is not one high pass");
+        assertEq(gross - banked, 679_200, "the liquid change is not the remainder");
     }
 
     /// @dev Fractional remainders return as FLIP exactly, in both denominations.

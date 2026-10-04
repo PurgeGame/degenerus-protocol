@@ -253,11 +253,11 @@ contract GoldenTicketFoilPack is Test {
     /// @dev The searched pack holds exactly four golds, all inside ticket 0 — so it
     ///      pays the ladder's 4-gold rung plus the single-all-gold-ticket kicker.
     uint8 internal constant PACK_GOLDS = 4;
-    uint256 internal constant LADDER_4 = 80_000e18;
-    uint256 internal constant KICKER = 25_000e18;
+    uint256 internal constant LADDER_4 = 80_000;
+    uint256 internal constant KICKER = 25_000;
     uint256 internal constant EXPECTED_FLIP = LADDER_4 + KICKER;
     uint256 internal constant HALF_PASS_PRICE = 2.25 ether;
-    uint256 internal constant COIN_UNIT = 1000 ether;
+    uint256 internal constant COIN_UNIT = 1000;
 
     function setUp() public {
         vm.warp(82_620 + (uint256(RESOLVE_DAY) - 1) * 1 days);
@@ -391,13 +391,13 @@ contract GoldenTicketFoilPack is Test {
 
     /// @dev The ladder's rungs, and that it caps at eight.
     function testGoldLadderRungs() public view {
-        assertEq(h.goldLadderFlip(3), 20_000e18, "3 golds");
-        assertEq(h.goldLadderFlip(4), 80_000e18, "4 golds");
-        assertEq(h.goldLadderFlip(5), 250_000e18, "5 golds");
-        assertEq(h.goldLadderFlip(6), 750_000e18, "6 golds");
-        assertEq(h.goldLadderFlip(7), 2_500_000e18, "7 golds");
-        assertEq(h.goldLadderFlip(8), 7_500_000e18, "8 golds");
-        assertEq(h.goldLadderFlip(16), 7_500_000e18, "capped at the 8 rung");
+        assertEq(h.goldLadderFlip(3), 20_000, "3 golds");
+        assertEq(h.goldLadderFlip(4), 80_000, "4 golds");
+        assertEq(h.goldLadderFlip(5), 250_000, "5 golds");
+        assertEq(h.goldLadderFlip(6), 750_000, "6 golds");
+        assertEq(h.goldLadderFlip(7), 2_500_000, "7 golds");
+        assertEq(h.goldLadderFlip(8), 7_500_000, "8 golds");
+        assertEq(h.goldLadderFlip(16), 7_500_000, "capped at the 8 rung");
     }
 
     // -- one all-gold ticket: 25,000 FLIP -------------------------------------
@@ -465,14 +465,14 @@ contract GoldenTicketFoilPack is Test {
         );
         assertEq(golds, 3, "three golds");
         assertEq(allGold, 0, "scattered, no all-gold ticket");
-        assertEq(flipCredit, 20_000e18, "the 3-gold rung, no kicker");
-        assertEq(flipRec.lastAmount(), 20_000e18, "credited the rung");
+        assertEq(flipCredit, 20_000, "the 3-gold rung, no kicker");
+        assertEq(flipRec.lastAmount(), 20_000, "credited the rung");
     }
 
     function testFiveScatteredGoldsPayTheFiveRung() public {
         seedAndDrain(FIVE_GOLD_WORD);
         h.claimGoldenTicket(BUYER, LVL);
-        assertEq(flipRec.lastAmount(), 250_000e18, "the 5-gold rung");
+        assertEq(flipRec.lastAmount(), 250_000, "the 5-gold rung");
     }
 
     function testClaimRevertsAtTwoGolds() public {
@@ -690,7 +690,7 @@ contract GoldenTicketFoilPack is Test {
         assertEq(golds, 8, "which is eight golds");
         assertEq(
             h.goldLadderFlip(golds),
-            7_500_000e18,
+            7_500_000,
             "and eight golds is the ladder's top rung"
         );
     }

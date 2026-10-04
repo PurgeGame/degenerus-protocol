@@ -544,7 +544,7 @@ contract DegenerusAdmin {
     address public linkEthPriceFeed;
 
     /// @dev FLIP conversion constant: 1000 FLIP = 1e21 base units.
-    uint256 private constant PRICE_COIN_UNIT = 1000 ether;
+    uint256 private constant PRICE_COIN_UNIT = 1000;
 
     /// @dev Expected LINK/ETH feed decimals.
     uint8 private constant LINK_ETH_FEED_DECIMALS = 18;

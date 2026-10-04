@@ -8,28 +8,28 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title FlipTombstone — BTOMB-03: gameover FLIP tombstone signals ONLY in uncirculated supply
 /// @notice Deterministic scenario tests against the APPLIED Phase-326 diff that drive every property
-///         of `FLIP.tombstoneAtGameOver()` (the one-shot 1e36-wei VAULT-allowance flood) plus
+///         of `FLIP.tombstoneAtGameOver()` (the one-shot 1e18-wei VAULT-allowance flood) plus
 ///         the downstream DGVF pro-rata FLIP claim (`DegenerusVault.burnCoin`) against a flooded
 ///         allowance.
 ///
 ///         Four properties (BTOMB-01/02 mechanic → BTOMB-03 non-distortion proof):
 ///         1. NON-CIRCULATING       — the flood does NOT change `totalSupply()` (circulating leg).
-///         2. SIGNAL LOCALIZATION   — `vaultMintAllowance()` += EXACTLY 1e36 and
-///                                    `supplyIncUncirculated()` += EXACTLY 1e36, while
+///         2. SIGNAL LOCALIZATION   — `vaultMintAllowance()` += EXACTLY 1e18 and
+///                                    `supplyIncUncirculated()` += EXACTLY 1e18, while
 ///                                    `totalSupply()` is unchanged (whole delta in the uncirculated leg).
 ///         3. ONE-SHOT + GAME-GATE  — a second `tombstoneAtGameOver()` is a no-op (early-return,
-///                                    NOT revert, total += 1e36 not 2e36); a non-GAME caller reverts
+///                                    NOT revert, total += 1e18 not 2e18); a non-GAME caller reverts
 ///                                    `OnlyGame`; the CHECKED `_toUint128` add holds at the seeded
 ///                                    +escrowed value AND is a LIVE negative control at the cap.
 ///         4. DGVF CLAIM-SAFE       — the DGVF pro-rata `burnCoin` share math
 ///                                    (`flipOut = coinBal * amount / supply`) does NOT overflow /
-///                                    revert on a 1e36-inflated `coinBal` and returns a correct-magnitude
+///                                    revert on a 1e18-inflated `coinBal` and returns a correct-magnitude
 ///                                    payout (the false-confidence guard: a test that only checks
-///                                    `totalSupply()` unchanged but never claims against the 1e36
+///                                    `totalSupply()` unchanged but never claims against the 1e18
 ///                                    allowance would miss a downstream overflow).
 ///
 ///         False-confidence guard (threat T-327-03-FC1/FC2/FC3): the one-shot test calls TWICE and
-///         asserts +EXACTLY 1e36 (not 2e36) with no revert; the checked-add test drives the existing
+///         asserts +EXACTLY 1e18 (not 2e18) with no revert; the checked-add test drives the existing
 ///         allowance to the uint128 boundary and proves both the flood-holds case AND the
 ///         past-the-cap SupplyOverflow revert (the cap is a live control, not a vacuous pass); the
 ///         DGVF test drives an ACTUAL `burnCoin` against the flooded reserve and asserts a
@@ -43,8 +43,8 @@ contract FlipTombstone is DeployProtocol {
     //                          CONSTANTS
     // =====================================================================
 
-    /// @dev The one-shot flood constant (FLIP.FLIP_TOMBSTONE_WEI = 1e36).
-    uint256 internal constant TOMBSTONE_WEI = 1e36;
+    /// @dev The one-shot flood constant (FLIP.FLIP_TOMBSTONE_AMOUNT = 1e18).
+    uint256 internal constant TOMBSTONE_AMOUNT = 1e18;
 
     /// @dev Initial VAULT mint allowance (zero — the initial emission arrives as
     ///      Coinflip seed stakes, not a constructor allowance).
@@ -73,7 +73,7 @@ contract FlipTombstone is DeployProtocol {
     //          (a) NON-CIRCULATING — totalSupply() untouched by the flood
     // =====================================================================
 
-    /// @notice The 1e36 flood does NOT change circulating totalSupply().
+    /// @notice The 1e18 flood does NOT change circulating totalSupply().
     function test_BTOMB03_TotalSupplyUntouched() public {
         uint256 tsBefore = coin.totalSupply();
         assertEq(tsBefore, SEED_CIRCULATING, "precondition: circulating seed = 0");
@@ -92,7 +92,7 @@ contract FlipTombstone is DeployProtocol {
     //   (b) SIGNAL LOCALIZATION — delta lands ONLY in the uncirculated leg
     // =====================================================================
 
-    /// @notice vaultMintAllowance() and supplyIncUncirculated() each += EXACTLY 1e36 while
+    /// @notice vaultMintAllowance() and supplyIncUncirculated() each += EXACTLY 1e18 while
     ///         totalSupply() is unchanged (the entire delta is in the uncirculated leg).
     function test_BTOMB03_SignalLandsOnlyInUncirculated() public {
         uint256 allowanceBefore = coin.vaultMintAllowance();
@@ -109,16 +109,16 @@ contract FlipTombstone is DeployProtocol {
         vm.prank(GAME);
         coin.tombstoneAtGameOver();
 
-        // The signal lands ONLY in the uncirculated leg, by EXACTLY 1e36.
+        // The signal lands ONLY in the uncirculated leg, by EXACTLY 1e18.
         assertEq(
             coin.vaultMintAllowance(),
-            allowanceBefore + TOMBSTONE_WEI,
-            "vaultMintAllowance must += EXACTLY 1e36"
+            allowanceBefore + TOMBSTONE_AMOUNT,
+            "vaultMintAllowance must += EXACTLY 1e18"
         );
         assertEq(
             coin.supplyIncUncirculated(),
-            uncircBefore + TOMBSTONE_WEI,
-            "supplyIncUncirculated must += EXACTLY 1e36"
+            uncircBefore + TOMBSTONE_AMOUNT,
+            "supplyIncUncirculated must += EXACTLY 1e18"
         );
         assertEq(
             coin.totalSupply(),
@@ -138,7 +138,7 @@ contract FlipTombstone is DeployProtocol {
     //         (c) ONE-SHOT — a second flood is a no-op (early-return)
     // =====================================================================
 
-    /// @notice A second tombstoneAtGameOver() is a no-op: allowance += EXACTLY 1e36 total (not 2e36)
+    /// @notice A second tombstoneAtGameOver() is a no-op: allowance += EXACTLY 1e18 total (not 2e18)
     ///         and the second call does NOT revert (early-return, not revert, so it cannot brick
     ///         the critical gameover path).
     function test_BTOMB03_OneShot() public {
@@ -149,8 +149,8 @@ contract FlipTombstone is DeployProtocol {
         uint256 allowanceAfterFirst = coin.vaultMintAllowance();
         assertEq(
             allowanceAfterFirst,
-            allowanceBefore + TOMBSTONE_WEI,
-            "first flood += 1e36"
+            allowanceBefore + TOMBSTONE_AMOUNT,
+            "first flood += 1e18"
         );
 
         // Second call: must NOT revert and must NOT re-flood.
@@ -159,8 +159,8 @@ contract FlipTombstone is DeployProtocol {
 
         assertEq(
             coin.vaultMintAllowance(),
-            allowanceBefore + TOMBSTONE_WEI,
-            "second flood is a no-op - total += EXACTLY 1e36, NOT 2e36"
+            allowanceBefore + TOMBSTONE_AMOUNT,
+            "second flood is a no-op - total += EXACTLY 1e18, NOT 2e18"
         );
         // totalSupply still untouched across both calls.
         assertEq(coin.totalSupply(), SEED_CIRCULATING, "totalSupply untouched across both calls");
@@ -195,38 +195,38 @@ contract FlipTombstone is DeployProtocol {
     // =====================================================================
 
     /// @notice The checked _toUint128 add holds at a realistic high allowance (a large
-    ///         escrow) — no SupplyOverflow, result == existing + 1e36.
+    ///         escrow) — no SupplyOverflow, result == existing + 1e18.
     function test_BTOMB03_CheckedAddNoOverflow() public {
         // Escrow a large additional allowance as GAME (vaultEscrow is GAME-or-VAULT gated). Push the
         // existing allowance to a plausible high value.
-        uint256 escrow = 1_000_000_000_000 ether; // 1e30 wei
+        uint256 escrow = 1_000_000_000_000; // whole FLIP
         vm.prank(GAME);
         coin.vaultEscrow(escrow);
 
         uint256 existing = coin.vaultMintAllowance();
         assertEq(existing, SEED_VAULT_ALLOWANCE + escrow, "escrow applied");
 
-        // Flood: the checked add holds (existing + 1e36 << uint128 max ~3.4e38).
+        // Flood: the checked add holds (existing + 1e18 << uint128 max ~3.4e38).
         vm.prank(GAME);
         coin.tombstoneAtGameOver();
 
         assertEq(
             coin.vaultMintAllowance(),
-            existing + TOMBSTONE_WEI,
-            "checked add holds at seeded+escrowed value: result == existing + 1e36"
+            existing + TOMBSTONE_AMOUNT,
+            "checked add holds at seeded+escrowed value: result == existing + 1e18"
         );
     }
 
     /// @notice The checked add holds EXACTLY at the boundary: drive the existing allowance to
-    ///         (uint128 max - 1e36) so existing + 1e36 == uint128 max — the flood still succeeds.
+    ///         (uint128 max - 1e18) so existing + 1e18 == uint128 max — the flood still succeeds.
     function test_BTOMB03_CheckedAddAtBoundary() public {
-        // Target existing = U128_MAX - 1e36 so existing + 1e36 == U128_MAX exactly.
-        uint256 target = U128_MAX - TOMBSTONE_WEI;
+        // Target existing = U128_MAX - 1e18 so existing + 1e18 == U128_MAX exactly.
+        uint256 target = U128_MAX - TOMBSTONE_AMOUNT;
         uint256 escrow = target - SEED_VAULT_ALLOWANCE;
         vm.prank(GAME);
         coin.vaultEscrow(escrow);
 
-        assertEq(coin.vaultMintAllowance(), target, "existing pushed to U128_MAX - 1e36");
+        assertEq(coin.vaultMintAllowance(), target, "existing pushed to U128_MAX - 1e18");
 
         vm.prank(GAME);
         coin.tombstoneAtGameOver();
@@ -239,11 +239,11 @@ contract FlipTombstone is DeployProtocol {
     }
 
     /// @notice Negative control — the cap is LIVE: pushing the existing allowance past
-    ///         (uint128 max - 1e36) makes the flood's _toUint128(existing + 1e36) revert
+    ///         (uint128 max - 1e18) makes the flood's _toUint128(existing + 1e18) revert
     ///         SupplyOverflow. Proves the checked add is not vacuous.
     function test_BTOMB03_CheckedAddCapIsLive() public {
-        // Drive existing to (U128_MAX - 1e36 + 1) so existing + 1e36 == U128_MAX + 1 → overflow.
-        uint256 target = U128_MAX - TOMBSTONE_WEI + 1;
+        // Drive existing to (U128_MAX - 1e18 + 1) so existing + 1e18 == U128_MAX + 1 → overflow.
+        uint256 target = U128_MAX - TOMBSTONE_AMOUNT + 1;
         uint256 escrow = target - SEED_VAULT_ALLOWANCE;
         vm.prank(GAME);
         coin.vaultEscrow(escrow);
@@ -259,32 +259,32 @@ contract FlipTombstone is DeployProtocol {
     }
 
     // =====================================================================
-    //  TASK 2 — (f) DGVF claim-safe on a 1e36-inflated allowance share
+    //  TASK 2 — (f) DGVF claim-safe on a 1e18-inflated allowance share
     // =====================================================================
 
     /// @notice The DGVF pro-rata FLIP claim (DegenerusVault.burnCoin) does NOT overflow / revert
-    ///         when the VAULT allowance it draws against has been flooded by 1e36, and returns a
+    ///         when the VAULT allowance it draws against has been flooded by 1e18, and returns a
     ///         correct-magnitude pro-rata payout.
     ///
     ///         burnCoin computes: flipOut = (coinBal * amount) / supplyBefore where coinBal includes
-    ///         vaultMintAllowance() (post-flood ≈ 1e36). The intermediate product
+    ///         vaultMintAllowance() (post-flood ≈ 1e18). The intermediate product
     ///         coinBal * amount must not overflow uint256, and the remainder mint via vaultMintTo
     ///         (which casts the share to uint128 and debits the allowance) must not revert.
-    function test_BTOMB03_DgvbClaimNoOverflowOn1e36Share() public {
-        // Flood the VAULT allowance by 1e36 (gameover tombstone).
+    function test_BTOMB03_DgvbClaimNoOverflowOn1e18Share() public {
+        // Flood the VAULT allowance by 1e18 (gameover tombstone).
         vm.prank(GAME);
         coin.tombstoneAtGameOver();
 
         uint256 reserve = coin.vaultMintAllowance();
         assertEq(
             reserve,
-            SEED_VAULT_ALLOWANCE + TOMBSTONE_WEI,
-            "DGVF reserve = seeded allowance + 1e36 flood"
+            SEED_VAULT_ALLOWANCE + TOMBSTONE_AMOUNT,
+            "DGVF reserve = seeded allowance + 1e18 flood"
         );
 
         // CREATOR holds the entire DGVF share supply (DGVB_INITIAL_SUPPLY = 1e30, minted in the
         // DegenerusVaultShare constructor, untouched at fresh deploy). The vault's FLIP balance and
-        // coinflip claimable are both 0 here, so coinBal == vaultMintAllowance() ≈ 1e36.
+        // coinflip claimable are both 0 here, so coinBal == vaultMintAllowance() ≈ 1e18.
         uint256 dgvbSupply = DGVB_INITIAL_SUPPLY;
 
         // Burn 1% of the DGVF supply (1e28 shares) — a clean fractional pro-rata claim that does NOT

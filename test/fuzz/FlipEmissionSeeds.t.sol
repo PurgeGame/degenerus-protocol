@@ -27,7 +27,7 @@ contract FlipEmissionSeeds is DeployProtocol {
     address internal constant VAULT = ContractAddresses.VAULT;
     address internal constant SDGNRS = ContractAddresses.SDGNRS;
 
-    uint256 internal constant SEED = 200_000 ether;
+    uint256 internal constant SEED = 200_000;
     uint24 internal constant SEED_DAYS = 20;
 
     function setUp() public {
@@ -41,7 +41,7 @@ contract FlipEmissionSeeds is DeployProtocol {
         bytes32 inner = keccak256(abi.encode(uint256(day >> 3), uint256(0)));
         bytes32 slot = keccak256(abi.encode(player, uint256(inner)));
         uint256 word = uint256(vm.load(address(coinflip), slot));
-        return uint256(uint32(word >> ((uint256(day) & 7) * 32))) * 1 ether;
+        return uint256(uint32(word >> ((uint256(day) & 7) * 32))) * 1;
     }
 
     /// @dev Resolve day `epoch` as the GAME with a win (bit 0 = 1) or loss (bit 0 = 0) word.
@@ -151,7 +151,7 @@ contract FlipEmissionSeeds is DeployProtocol {
                 82_620 +
                 1
         );
-        uint256 credit = 100_000 ether;
+        uint256 credit = 100_000;
         vm.prank(GAME);
         coinflip.creditFlip(SDGNRS, credit);
 

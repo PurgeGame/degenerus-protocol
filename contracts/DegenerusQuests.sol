@@ -203,7 +203,7 @@ contract DegenerusQuests is IDegenerusQuests {
     // -------------------------------------------------------------------------
 
     /// @dev Price unit for reward calculations (1000 FLIP).
-    uint256 private constant PRICE_COIN_UNIT = 1000 ether;
+    uint256 private constant PRICE_COIN_UNIT = 1000;
     bytes32 private constant DAILY_QUEST_TAG = keccak256("degenerus.quest.daily");
     bytes32 private constant LEVEL_QUEST_TAG = keccak256("degenerus.quest.level");
 
@@ -215,10 +215,10 @@ contract DegenerusQuests is IDegenerusQuests {
     uint8 private constant QUEST_SLOT_COUNT = 2;
 
     /// @dev Fixed reward for the slot 0 quest.
-    uint256 private constant QUEST_SLOT0_REWARD = 100 ether;
+    uint256 private constant QUEST_SLOT0_REWARD = 100;
 
     /// @dev Fixed reward for the random (slot 1) quest.
-    uint256 private constant QUEST_RANDOM_REWARD = 100 ether;
+    uint256 private constant QUEST_RANDOM_REWARD = 100;
 
     /// @dev Milestone streak-shield grant: +1 shield each time the quest streak reaches a
     ///      new multiple of this interval (100, 200, …). shieldCenturyHighWater is a uint8
@@ -395,22 +395,21 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /// @notice Active quests for the current day, packed into a single slot.
     ///         Each quest record is 64 bits: day (24b) | questType (8b), upper record bits unused,
-    ///         with slot 0 in bits 0-63 and slot 1 in bits 64-127 (upper 128 bits unused).
+    ///         with slot 0 in bits 0-63 and slot 1 in bits 64-127. Level quest type and
+    ///         version occupy bits 128-135 and 136-143, sharing the daily handlers' warm word.
     ///         Read/written via `_loadActiveQuests` / `_storeActiveQuests` (one SLOAD/SSTORE per pair).
     uint256 private activeQuestsPacked;
 
     /// @notice Per-player quest state including progress, streak, and streak shields.
     mapping(address => PlayerQuestState) private questPlayerState;
 
-    /// @notice Active level quest type: 1-3, 5-8 from the weighted roll, or 11
-    ///         (CRAPS_DAY_PASS) from the level roll's tail. Seeded to MINT_ETH at deploy and
-    ///         overwritten by each rollLevelQuest; never zeroed between levels.
-    ///         Packs with levelQuestVersion in one slot.
-    uint8 private levelQuestType;
+    /// @dev Former level quest word. Keep the mapping roots that follow fixed; the active
+    ///      type/version now live in activeQuestsPacked and this reserved slot is never used.
+    uint16 private _reservedLevelQuest;
 
-    /// @notice Version counter for level quest invalidation. Bumps on each rollLevelQuest.
-    ///         Player state stores this value; mismatch resets progress + completed.
-    uint8 private levelQuestVersion;
+    uint256 private constant LEVEL_QUEST_TYPE_SHIFT = 128;
+    uint256 private constant LEVEL_QUEST_VERSION_SHIFT = 136;
+    uint256 private constant LEVEL_QUEST_MASK = uint256(type(uint16).max) << LEVEL_QUEST_TYPE_SHIFT;
 
     /// @notice Per-player level quest state.
     ///         Packed: version (8b) | progress (128b) | completed (1b at bit 136).
@@ -444,8 +443,7 @@ contract DegenerusQuests is IDegenerusQuests {
         // Version starts at 1, not 0, so a player carrying the zero-initialized
         // `levelQuestPlayerState` takes the normal stale-progress reset path rather than
         // matching version 0 by accident. The first real roll bumps it to 2 for level 2.
-        levelQuestType = QUEST_TYPE_MINT_ETH;
-        levelQuestVersion = 1;
+        _storeLevelQuest(QUEST_TYPE_MINT_ETH, 1);
         emit LevelQuestRolled(
             GENESIS_QUEST_LEVEL,
             1,
@@ -499,11 +497,19 @@ contract DegenerusQuests is IDegenerusQuests {
         quests[1] = _unpackQuestRecord(uint64(packed >> 64));
     }
 
-    /// @dev Persists both active quests into the packed slot with a single SSTORE.
+    /// @dev Replace the daily pair while preserving the independent level quest epoch.
     function _storeActiveQuests(DailyQuest[QUEST_SLOT_COUNT] memory quests) private {
         activeQuestsPacked =
+            (activeQuestsPacked & ~uint256(type(uint128).max)) |
             uint256(_packQuestRecord(quests[0])) |
             (uint256(_packQuestRecord(quests[1])) << 64);
+    }
+
+    /// @dev Replace only the level type/version; daily quest rolls and level rolls commute.
+    function _storeLevelQuest(uint8 questType, uint8 version) private {
+        activeQuestsPacked = (activeQuestsPacked & ~LEVEL_QUEST_MASK) |
+            (uint256(questType) << LEVEL_QUEST_TYPE_SHIFT) |
+            (uint256(version) << LEVEL_QUEST_VERSION_SHIFT);
     }
 
     /// @dev Decodes one 64-bit quest record: day (24b) | questType (8b).
@@ -1195,6 +1201,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @return questType The type of quest that was processed.
      * @return streak Player's current streak after this action.
      * @return completed True if a quest was completed by this action.
+     * @return afking True while the buyer has an afking run; its live streak is held by Game.
      * @custom:reverts OnlyCoin When caller is not COIN, COINFLIP, GAME, or AFFILIATE.
      */
     function handlePurchase(
@@ -1207,12 +1214,15 @@ contract DegenerusQuests is IDegenerusQuests {
     )
         external
         onlyCoin
-        returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
+        returns (uint256 reward, uint8 questType, uint32 streak, bool completed, bool afking)
     {
-        return _handlePurchase(
+        (reward, questType, streak, completed) = _handlePurchase(
             player, ethMintSpendWei, flipMintQty, lootBoxAmount, mintPrice, levelQuestPrice,
             _loadActiveQuests()
         );
+        // This player word was already loaded by the handler. Forward its run flag so
+        // score consumers need the Game-side Sub word only for an afking player.
+        afking = questPlayerState[player].afkingActive;
     }
 
     /**
@@ -1235,6 +1245,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @return questType The primary quest type processed.
      * @return completed True if the primary quest completed by this action.
      * @return streakSnapshot Pre-floor reward streak for the foil-EV activity score.
+     * @return afking True while the buyer has an afking run; its live streak is held by Game.
      * @custom:reverts OnlyGame When caller is not GAME contract.
      */
     function handleFoilPurchase(
@@ -1247,7 +1258,7 @@ contract DegenerusQuests is IDegenerusQuests {
     )
         external
         onlyGame
-        returns (uint256 reward, uint8 questType, bool completed, uint32 streakSnapshot)
+        returns (uint256 reward, uint8 questType, bool completed, uint32 streakSnapshot, bool afking)
     {
         // Load the active-quests slot once and thread it into both the primary purchase legs
         // and the streak snapshot: nothing in the foil tree writes activeQuestsPacked
@@ -1266,6 +1277,7 @@ contract DegenerusQuests is IDegenerusQuests {
         );
         _handleFoilPackQuest(player);
         _foilStreakFloor(player);
+        afking = questPlayerState[player].afkingActive;
     }
 
     /// @dev Shared purchase-path quest legs (mint ETH/FLIP + lootbox). Modifier-less core
@@ -1847,7 +1859,7 @@ contract DegenerusQuests is IDegenerusQuests {
     // -------------------------------------------------------------------------
     // Daily progress is stored in a compact per-family unit so it fits uint16:
     //   ETH-value quests    -> milli-ETH   (wei / 1e15; target <= 500)
-    //   FLIP-value quests -> whole FLIP (wei / 1e18; target <= 2000)
+    //   FLIP-value quests -> whole FLIP (one raw unit per token; target <= 2000)
     //   MINT_FLIP         -> ticket count (already a count; target = 1)
     // Accumulation converts the native delta to stored units before adding, and the
     // stored target compares against it like-for-like. View/event surfaces convert
@@ -1869,7 +1881,7 @@ contract DegenerusQuests is IDegenerusQuests {
         ) {
             return 1; // ticket / foil-pack / craps-action count
         }
-        return 1e18; // whole FLIP: FLIP / DECIMATOR / AFFILIATE / DEGENERETTE_FLIP
+        return 1; // whole FLIP: FLIP / DECIMATOR / AFFILIATE / DEGENERETTE_FLIP
     }
 
     /// @dev Native delta (wei / count) -> stored progress units. Truncates toward zero.
@@ -2585,17 +2597,18 @@ contract DegenerusQuests is IDegenerusQuests {
             EntropyLib.hash2(entropy, uint256(LEVEL_QUEST_TAG)),
             type(uint8).max, decAllowed, QUEST_TYPE_CRAPS_DAY_PASS
         );
-        levelQuestType = rolled;
+        uint8 version;
         uint24 questLevel;
         unchecked {
-            ++levelQuestVersion;
+            version = uint8(activeQuestsPacked >> LEVEL_QUEST_VERSION_SHIFT) + 1;
             // advanceGame must never gain a revert; level is a uint24 the game
             // increments once per level, so the +1 cannot reach the boundary.
             questLevel = questGame.level() + 1;
         }
+        _storeLevelQuest(rolled, version);
         emit LevelQuestRolled(
             questLevel,
-            levelQuestVersion,
+            version,
             rolled,
             _levelQuestTargetValue(
                 rolled,
@@ -2659,13 +2672,13 @@ contract DegenerusQuests is IDegenerusQuests {
             questType == QUEST_TYPE_DECIMATOR ||
             questType == QUEST_TYPE_DEGENERETTE_FLIP
         ) {
-            return 20_000 ether;
+            return 20_000;
         }
         return 0;
     }
 
     /// @dev Shared level quest progress handler called by each of the 6 handlers.
-    ///      Reads levelQuestType and levelQuestVersion (packed in one slot)
+    ///      Reads level type/version from the already-warm activeQuestsPacked word.
     ///      to get both the active type and the current version. Short-circuits on type mismatch before any
     ///      player state read. Eligibility is deferred to the completion boundary —
     ///      an ineligible player keeps accumulating progress and completes once they later qualify.
@@ -2679,12 +2692,13 @@ contract DegenerusQuests is IDegenerusQuests {
         uint256 delta,
         uint256 mintPrice
     ) internal {
-        uint8 lqType = levelQuestType;
+        uint256 active = activeQuestsPacked;
+        uint8 lqType = uint8(active >> LEVEL_QUEST_TYPE_SHIFT);
 
         // Type mismatch or no quest active — exit before any player SLOAD
         if (lqType != handlerQuestType) return;
 
-        uint8 currentVersion = levelQuestVersion;
+        uint8 currentVersion = uint8(active >> LEVEL_QUEST_VERSION_SHIFT);
         uint256 packed = levelQuestPlayerState[player];
         uint8 playerVersion = uint8(packed);
 
@@ -2733,8 +2747,8 @@ contract DegenerusQuests is IDegenerusQuests {
                 _grantCenturyShield(player, qs);
             }
 
-            coinflip.creditFlip(player, 800 ether);
-            emit LevelQuestCompleted(player, lvl + 1, lqType, 800 ether);
+            coinflip.creditFlip(player, 800);
+            emit LevelQuestCompleted(player, lvl + 1, lqType, 800);
         } else {
             packed = uint256(currentVersion) | (uint256(progress) << 8);
             levelQuestPlayerState[player] = packed;
@@ -2804,7 +2818,7 @@ contract DegenerusQuests is IDegenerusQuests {
         if (msg.sender != ContractAddresses.PARIMUTUEL) revert OnlyGame();
         if (player == address(0) || reward == 0) return 0;
 
-        uint8 currentVersion = levelQuestVersion;
+        uint8 currentVersion = uint8(activeQuestsPacked >> LEVEL_QUEST_VERSION_SHIFT);
         uint256 packed = levelQuestPlayerState[player];
 
         // Version mismatch: this is the first touch of the word this level, so drop the
@@ -2843,7 +2857,7 @@ contract DegenerusQuests is IDegenerusQuests {
     }
 
     /// @notice Returns a player's level quest state for frontend display.
-    /// @dev Reads levelQuestType, levelQuestVersion, and levelQuestPlayerState for the player's current level.
+    /// @dev Reads the packed active level quest and the player's level progress word.
     /// @param player The player address to query.
     /// @return questType The active level quest type (1-8, or 11 for the craps day-pass quest).
     /// @return progress The player's accumulated progress.
@@ -2856,12 +2870,13 @@ contract DegenerusQuests is IDegenerusQuests {
         override
         returns (uint8 questType, uint128 progress, uint256 target, bool completed, bool eligible)
     {
-        questType = levelQuestType;
+        uint256 active = activeQuestsPacked;
+        questType = uint8(active >> LEVEL_QUEST_TYPE_SHIFT);
 
         uint256 packed = levelQuestPlayerState[player];
         uint8 playerVersion = uint8(packed);
 
-        if (playerVersion == levelQuestVersion && questType != 0) {
+        if (playerVersion == uint8(active >> LEVEL_QUEST_VERSION_SHIFT) && questType != 0) {
             progress = uint128(packed >> 8);
             completed = (packed >> 136) & 1 == 1;
         }

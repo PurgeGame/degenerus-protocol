@@ -107,7 +107,7 @@ contract DegenerusRecordBounty {
     uint256 private constant KINDS = 5;
     /// @dev Current holder per record kind (tokenId 0-4).
     address[5] private _holders;
-    /// @dev The standing mark per kind, in that record's unit (flip: FLIP wei;
+    /// @dev The standing mark per kind, in that record's unit (flip: whole FLIP;
     ///      spin and luckbox: ETH wei; buy: whole tickets; dice run: score basis
     ///      points, 10,000 = 1x). Display-only mirror of Coinflip's biggest*Ever
     ///      marks.
@@ -320,7 +320,7 @@ contract DegenerusRecordBounty {
     ///      the dice run as the multiple its score basis points name.
     function _formatMark(uint256 tokenId, uint128 mark) private pure returns (string memory) {
         if (tokenId == 0) {
-            return string(abi.encodePacked(Strings.toString(uint256(mark) / 1 ether), " FLIP"));
+            return string(abi.encodePacked(Strings.toString(uint256(mark)), " FLIP"));
         }
         if (tokenId == 3) {
             return string(abi.encodePacked(Strings.toString(uint256(mark)), " tickets"));

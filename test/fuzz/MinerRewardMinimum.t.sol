@@ -17,6 +17,7 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 contract MinerRewardMinimum is DeployProtocol {
     bytes32 private constant MINER_WORK_SIG = keccak256("MinerWork(address,uint8,uint256,uint256)");
     bytes32 private constant MINER_BOUNTY_SIG = keccak256("MinerBounty(uint8,address,uint256)");
+    // Independent legacy-denomination reference: normalize only at the expected output.
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
     uint256 private constant BASEFEE_CAP = 0.5 gwei;
 
@@ -109,8 +110,8 @@ contract MinerRewardMinimum is DeployProtocol {
 
     function _normalized(uint256 raw) internal pure returns (uint256) {
         if (raw == 0) return 0;
-        if (raw < 1 ether) return 1 ether;
-        return (raw / 1 ether) * 1 ether;
+        if (raw < 1 ether) return 1;
+        return raw / 1 ether;
     }
 
     function test_UnderTheUnpaidMillionPaysZeroAtNonzeroBaseFee() public view {
@@ -127,7 +128,7 @@ contract MinerRewardMinimum is DeployProtocol {
     function test_OneWeiRawRewardPaysOneFlip() public {
         (uint256 measured, uint256 reward,,) = _advance(1);
         assertEq(measured, measuredAtOne, "the fee does not change the measured gas");
-        assertEq(reward, 1 ether, "a positive sub-FLIP raw reward pays 1 FLIP");
+        assertEq(reward, 1, "a positive sub-FLIP raw reward pays 1 FLIP");
     }
 
     function test_JustBelowOneFlipPaysOneFlip() public {
@@ -136,7 +137,7 @@ contract MinerRewardMinimum is DeployProtocol {
         assertLt(raw, 1 ether, "fixture: raw is just below 1 FLIP");
         assertGe(raw + rawPerWei, 1 ether, "fixture: one more fee-unit would reach 1 FLIP");
         (, uint256 reward,,) = _advance(fee);
-        assertEq(reward, 1 ether);
+        assertEq(reward, 1);
     }
 
     function test_OneFlipAndDustPaysOneFlip() public {
@@ -145,12 +146,12 @@ contract MinerRewardMinimum is DeployProtocol {
         assertGe(raw, 1 ether, "fixture: raw reached 1 FLIP");
         assertLt(raw, 2 ether, "fixture: raw holds sub-FLIP dust");
         (, uint256 reward,,) = _advance(fee);
-        assertEq(reward, 1 ether, "dust above 1 FLIP floors away");
+        assertEq(reward, 1, "dust above 1 FLIP floors away");
         assertEq(reward, _normalized(raw));
         // Exactly 1 FLIP raw is reachable only when the per-wei pay divides 1 FLIP.
         if (1 ether % rawPerWei == 0) {
             (, uint256 exact,,) = _advance(1 ether / rawPerWei);
-            assertEq(exact, 1 ether, "exactly 1 FLIP raw pays 1 FLIP");
+            assertEq(exact, 1, "exactly 1 FLIP raw pays 1 FLIP");
         }
     }
 
@@ -161,7 +162,7 @@ contract MinerRewardMinimum is DeployProtocol {
         assertLt(raw, 3 ether);
         assertLe(fee, BASEFEE_CAP, "fixture: the fee stays under the reward cap");
         (, uint256 reward,,) = _advance(fee);
-        assertEq(reward, 2 ether, "whole FLIP floors, no minimum involved");
+        assertEq(reward, 2, "whole FLIP floors, no minimum involved");
     }
 
     function testFuzz_RewardIsTheNormalizedRawPay(uint64 fee) public {
@@ -171,6 +172,6 @@ contract MinerRewardMinimum is DeployProtocol {
         assertEq(measured, measuredAtOne);
         assertEq(reward, _normalized(raw), "reward == normalize(raw)");
         // The rounding subsidy per paid call is bounded by one FLIP.
-        assertLe(reward, raw + 1 ether);
+        assertLe(reward, raw / 1 ether + 1);
     }
 }

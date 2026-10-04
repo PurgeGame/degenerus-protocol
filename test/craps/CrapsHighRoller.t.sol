@@ -46,7 +46,7 @@ contract HighHarness is CrapsViews {
     ///      the arithmetic rather than restate it needs it on its own.
     function baseRunOf(uint256 betId) external view returns (uint256 won, uint256 paid) {
         Settlement memory s =
-            _settlementOf(betId, _bets[betId], _slotWindow(betId >> 64), _wordAt(_indexOf(betId >> 64)));
+            _settlementOf(betId, _loadBet(betId), _slotWindow(betId >> 64), _wordAt(_indexOf(betId >> 64)));
         return (s.won, s.paid);
     }
 }
@@ -55,8 +55,8 @@ contract CrapsHighRollerTest is CrapsPins {
     HighHarness internal craps;
 
     uint24 internal constant L = 600;
-    uint128 internal constant LW = 600e18;
-    uint256 internal constant GRANULE = 100e18;
+    uint128 internal constant LW = 600;
+    uint256 internal constant GRANULE = 100;
     uint24 internal constant SU = 3;
     uint256 internal constant SUW = uint256(SU) * GRANULE;
     uint256 internal constant PLAIN_WORD = 40 << 8;
@@ -267,7 +267,7 @@ contract CrapsHighRollerTest is CrapsPins {
         // Fixed-5x windows put less of this tier's daily allocation into period one than the old
         // mixed-goal schedule did. Keep the fixture comfortably above `_roundBoost`'s threshold
         // so it continues to test rounding rather than merely granule widening.
-        for (uint256 i = 1; i <= days_; ++i) craps.bookHighDay(today - uint24(i), 30_000_000 ether);
+        for (uint256 i = 1; i <= days_; ++i) craps.bookHighDay(today - uint24(i), 30_000_000);
         _setDailyWord(today, _wordFor(10));
         vm.prank(ContractAddresses.GAME);
         craps.openBonusDay();
@@ -525,7 +525,7 @@ contract CrapsHighRollerTest is CrapsPins {
         uint24 today = craps.currentDayIndex();
 
         // A week of purely HIGH action, chosen so every floor below is exact.
-        uint256 perDay = 3_600_000 ether;
+        uint256 perDay = 3_600_000;
         uint256 days_ = craps.BOOST_ACTION_WINDOW_DAYS();
         for (uint256 i = 1; i <= days_; ++i) craps.bookHighDay(today - uint24(i), perDay);
 
@@ -564,7 +564,7 @@ contract CrapsHighRollerTest is CrapsPins {
         vm.warp(block.timestamp + 10 days);
         uint24 today = craps.currentDayIndex();
         uint256 days_ = craps.BOOST_ACTION_WINDOW_DAYS();
-        for (uint256 i = 1; i <= days_; ++i) craps.bookDay(today - uint24(i), 3_600_000 ether);
+        for (uint256 i = 1; i <= days_; ++i) craps.bookDay(today - uint24(i), 3_600_000);
         (, uint256 highBudget) = craps.drawBudgetsFor(today);
         assertEq(highBudget, 0, "ordinary action funded the high lane");
         assertEq(craps.highStakedOf(today - 1), 0, "ordinary action booked as high action");
@@ -639,7 +639,7 @@ contract CrapsHighRollerTest is CrapsPins {
         // the SHORTEST the schedule allows: a far goal is never reached, so every run under it
         // busts and a sweep for one that came home with money would never find one.
         uint32 played = uint32(L) + uint32(index) * 10;
-        bankroll = uint256(played) * 2 * 1 ether;
+        bankroll = uint256(played) * 2 * 1;
         slot = _openHigh(craps, played, 2, 5, SU, 10);
         vm.prank(alice);
         hi = craps.enterBattle(slot, _boardA(), 10);
@@ -671,7 +671,7 @@ contract CrapsHighRollerGasTest is CrapsPins {
     HighHarness internal craps;
 
     uint24 internal constant L = 600;
-    uint128 internal constant LW = 600e18;
+    uint128 internal constant LW = 600;
     uint24 internal constant SU = 3;
     uint256 internal constant PLAIN_WORD = 40 << 8;
 

@@ -10,6 +10,7 @@ execute by delegatecall, while craps uses a separate stateless dice engine.
 | Document | Purpose |
 | --- | --- |
 | [Audit handoff](docs/AUDIT.md) | Exact source snapshot, scope and reading order |
+| [Token units](docs/TOKEN-UNITS.md) | Whole-token FLIP/WWXRP APIs and rounding rules |
 | [Architecture](docs/ARCHITECTURE.md) | Contract boundaries, value flow and invariants |
 | [Security and roles](SECURITY.md) | Authorities, external dependencies and reporting |
 | [Known issues](KNOWN-ISSUES.md) | Accepted assumptions and disclosed limitations |

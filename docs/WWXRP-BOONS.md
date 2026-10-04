@@ -4,7 +4,21 @@ WWXRP boons keep award IDs **38 / 39 / 40**, bonuses **4% / 8% / 12%**, and
 their existing packed lane in Game storage. Each tier retains weight 200 in
 the boon table. They are separate from ETH and FLIP Degenerette stake boons.
 
+## Whole-token awards
+
+Positive WWXRP prizes below one token award **1 WWXRP**. This applies to skipped-BAF
+consolation (`score / 1000`) and the shared reward-spin resolver used by lootboxes
+and foil rewards. Zero scores and losing spins still pay zero. Larger awards keep
+their existing whole-token floor: 1.9 pays 1, and 2.9 pays 2.
+
+The minimum applies before the vault owner's `gameMintScale`. That whole-number
+multiplier still applies at mint time, including scale 0 disabling game minting.
+Coinflip loss prizes, presale-box duds and golden-ticket consolation are already
+whole-token awards; the lootbox cold-bust award already has a one-token minimum.
+
 ## Daily burn and century incinerator
+
+WWXRP has zero decimals: `amount` and both weights are whole tokens.
 
 `WWXRP.enter(amount)` consumes the player's live WWXRP boon once. It applies
 the bonus to the entry's activity-weighted burn amount. It first reads the
@@ -13,9 +27,9 @@ consume only when the lane holds a tier; an empty lane would consume nothing
 anyway, so the skip saves the dispatch without changing any outcome:
 
 ```text
-weightedWei = floor(amount * activityMultiplierBps * (10_000 + boonBps) / 100_000_000)
-dailyWeight = floor(weightedWei / 1 ether)
-centuryWeight = weightedWei
+weightedTokens = floor(amount * activityMultiplierBps * (10_000 + boonBps) / 100_000_000)
+dailyWeight = weightedTokens
+centuryWeight = weightedTokens
 ```
 
 The century entry is recorded only during level x99, as before. The same

@@ -34,7 +34,7 @@ contract WwxrpGameMintScaleTest is DeployProtocol {
     function testDefaultIsOneX() public {
         assertEq(wwxrp.name(), "Worthless Wrapped XRP");
         assertEq(wwxrp.gameMintScale(), 1, "deploy default 1x");
-        assertEq(_mintFrom(ContractAddresses.GAME, 7 ether), 7 ether, "game mint unchanged at 1x");
+        assertEq(_mintFrom(ContractAddresses.GAME, 7), 7, "game mint unchanged at 1x");
     }
 
     function testFuzz_ScaleAppliesToEveryPinnedGameMinter(uint64 scale, uint128 amount) public {
@@ -53,8 +53,8 @@ contract WwxrpGameMintScaleTest is DeployProtocol {
         wwxrp.setGameMintScale(0);
         wwxrp.setTrustedMinter(app, true);
         vm.stopPrank();
-        assertEq(_mintFrom(ContractAddresses.GAME, 5 ether), 0, "game prints nothing at 0");
-        assertEq(_mintFrom(app, 5 ether), 5 ether, "trusted app mints the exact amount");
+        assertEq(_mintFrom(ContractAddresses.GAME, 5), 0, "game prints nothing at 0");
+        assertEq(_mintFrom(app, 5), 5, "trusted app mints the exact amount");
     }
 
     function testHugeRequestNeverReverts() public {

@@ -26,11 +26,11 @@ contract CrapsEngine is Craps, CrapsCustomTerms {
     /// @param scatterHash  The owner-keyed draw that throws the unnamed chips.
     /// @param scatterCount How many of the ten chips the dice place.
     /// @param seed         The window's shooter seed.
-    /// @param bankroll     The bankroll the run starts on, in wei.
-    /// @param goal         The bankroll that latches a Goal, in wei.
+    /// @param bankroll     Starting bankroll in internal sub-units (10^18 per whole FLIP).
+    /// @param goal         Goal in the same internal sub-units.
     /// @param player       The slip's owner, who seasons the survival coin.
     /// @param boost        The shooter-boost terms, zero for a custom battle.
-    /// @return r The run: bankroll in and out, its peak, hands, units, rolls and the stop.
+    /// @return r The run; money fields retain internal sub-units for exact replay and scoring.
     function settleSlip(
         uint256 packedChips,
         uint256 chipFlip,
@@ -90,7 +90,9 @@ contract CrapsEngine is Craps, CrapsCustomTerms {
     }
 
     /// @notice Full normal battle settlement, shared by paid and awarded entries.
-    /// @dev bankrollIn becomes the rounded payment; unitsPlayed becomes the unscaled merit rank.
+    /// @dev Inputs and returned money fields are whole FLIP. The simulation retains 10^18
+    ///      sub-units through every hand; bankrollIn becomes the rounded payment and unitsPlayed
+    ///      becomes the unscaled merit rank. Ranking precedes conversion of the receipt.
     ///      Every seat of a field throws the same dice. An awarded entry keys its board scatter,
     ///      survival coin to its own bet id rather than its wallet, so repeat
     ///      awards to one wallet stay separate runs. Every field uses the shared 600-roll
@@ -117,8 +119,12 @@ contract CrapsEngine is Craps, CrapsCustomTerms {
             }
         }
         r = _play(chips, chipFlip, _hash3(word, 0x437261707353636174746572, key),
-            10 - placed, seed, bankroll, goal, address(uint160(key)), boost);
+            10 - placed, seed, bankroll * FLIP, goal * FLIP, address(uint160(key)), boost);
         r.unitsPlayed = _rankOf(r);
+        // The existing final-award policy discards sub-FLIP dust before its hundreds roll.
+        // Retaining fractions above preserves affordability, goals and escalated payouts.
+        r.bankrollOut /= FLIP;
+        r.peakBankroll /= FLIP;
         uint256 paid = r.stop == SlipStop.Bust ? 0 : r.bankrollOut;
         r.bankrollIn = paid > FlipRoundLib.FLIP_ROUND_THRESHOLD
             ? FlipRoundLib.roundFlipToHundreds(paid, _hash3(word, 0x4372617073526f756e64, betId))

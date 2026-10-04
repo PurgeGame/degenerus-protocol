@@ -2,6 +2,14 @@
 
 Each wallet has one preference across all levels. New comp tickets and the daily jackpot battle use it. A comp ticket snapshots the preference when created; later edits do not change that ticket.
 
+## Reservations and settlement deadline
+
+Future day tickets and window reservations can cover tomorrow through 30 days ahead. Every day in a paid or pass-funded batch must fit; an invalid day reverts the whole purchase. Automatic awards bank unused pass credits when they cannot reserve a day. Unspent pass credits do not expire.
+
+Scheduled day D can settle, or receive its unopened-day pass refund, through D+30. Starting D+31, remaining work is skipped without payment or refund, including unfinished jackpot fields. Payments already made stand. This deadline also applies after a prolonged RNG outage. Custom battles keep their existing lifecycle.
+
+Scheduled bets and each wallet's day-seat record reuse 64 day banks. Public bet IDs and event identities retain the actual day. Once a bank is overwritten, old bet/seat data is unavailable; use events for history. Per-day budgets, boards and jackpot accounting keep their logical keys.
+
 ## UI interface
 
 ```solidity

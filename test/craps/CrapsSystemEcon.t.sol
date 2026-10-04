@@ -11,7 +11,7 @@ import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 
 contract SysHarness is CrapsViews {
     function fundedBounty(uint64 slot) external view returns (uint256) {
-        return _slotWindow(slot).stakeUnits * 100 ether;
+        return _slotWindow(slot).stakeUnits * 100;
     }
 }
 
@@ -233,7 +233,7 @@ contract CrapsSystemEconTest is CrapsPins {
                 vm.warp(_dayStart() + _closeOf(p));
                 uint64 slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + p + 1);
                 uint256 word = uint256(keccak256(abi.encode("table", salt, d, p)));
-                if (p == 5) _startDailyBattle(craps,day + 1,word,100_000 ether);
+                if (p == 5) _startDailyBattle(craps,day + 1,word,100_000);
                 else { uint48 idx = craps.armWindow(slot); _setWord(idx,word); }
                 _settleAndSplit(L, slot, day, p);
                 ++L.fields;
@@ -346,33 +346,33 @@ contract CrapsSystemEconTest is CrapsPins {
         emit log("");
         emit log(name);
         emit log_named_uint("  days / fields        ", L.daysRun * 1_000_000 + L.fields);
-        emit log_named_uint("  action FLIP/day      ", L.action / dn / 1 ether);
-        emit log_named_uint("  high action FLIP/day ", L.highAction / dn / 1 ether);
-        emit log_named_uint("  BURNED FLIP/day      ", L.burned / dn / 1 ether);
-        emit log_named_uint("  CREDITED FLIP/day    ", L.credited / dn / 1 ether);
+        emit log_named_uint("  action FLIP/day      ", L.action / dn / 1);
+        emit log_named_uint("  high action FLIP/day ", L.highAction / dn / 1);
+        emit log_named_uint("  BURNED FLIP/day      ", L.burned / dn / 1);
+        emit log_named_uint("  CREDITED FLIP/day    ", L.credited / dn / 1);
         emit log_named_int(
-            "  NET BURN FLIP/day    ", (int256(L.burned) - int256(L.credited)) / int256(dn) / 1 ether
+            "  NET BURN FLIP/day    ", (int256(L.burned) - int256(L.credited)) / int256(dn) / 1
         );
-        emit log_named_uint("  -- run credit /day   ", L.runCredit / dn / 1 ether);
-        emit log_named_uint("  -- pot credit /day   ", L.potCredit / dn / 1 ether);
-        emit log_named_uint("  ---- of which bounty ", L.bounty / dn / 1 ether);
+        emit log_named_uint("  -- run credit /day   ", L.runCredit / dn / 1);
+        emit log_named_uint("  -- pot credit /day   ", L.potCredit / dn / 1);
+        emit log_named_uint("  ---- of which bounty ", L.bounty / dn / 1);
         emit log_named_uint(
-            "  ---- of which BOOST  ", (L.potCredit > L.bounty ? L.potCredit - L.bounty : 0) / dn / 1 ether
+            "  ---- of which BOOST  ", (L.potCredit > L.bounty ? L.potCredit - L.bounty : 0) / dn / 1
         );
-        emit log_named_uint("  -- lane credit /day  ", L.laneCredit / dn / 1 ether);
-        emit log_named_uint("  ---- of which stake  ", L.lanePrincipal / dn / 1 ether);
-        emit log_named_uint("  -- rider (in run)/day", L.riderCredit / dn / 1 ether);
-        emit log_named_uint("  budget quoted /day   ", L.budget / dn / 1 ether);
+        emit log_named_uint("  -- lane credit /day  ", L.laneCredit / dn / 1);
+        emit log_named_uint("  ---- of which stake  ", L.lanePrincipal / dn / 1);
+        emit log_named_uint("  -- rider (in run)/day", L.riderCredit / dn / 1);
+        emit log_named_uint("  budget quoted /day   ", L.budget / dn / 1);
         emit log_named_uint("  ENGINE EDGE      bps ", _bps(L.action > L.runCredit ? L.action - L.runCredit : 0, L.action));
-        emit log_named_uint("  body action /day     ", L.bodyAction / dn / 1 ether);
-        emit log_named_int("  house run credit /day", int256(L.houseCredit - L.housePot) / int256(dn) / 1 ether);
+        emit log_named_uint("  body action /day     ", L.bodyAction / dn / 1);
+        emit log_named_int("  house run credit /day", int256(L.houseCredit - L.housePot) / int256(dn) / 1);
         // The FIELD's own edge, with the protocol bodies' blank all-cell runs taken back out.
         // The bodies play every window on a blank board, so leaving them in measures a different
         // board on a different set of terms.
         if (L.action > L.bodyAction) {
             uint256 pAct = L.action - L.bodyAction;
             uint256 pRun = L.runCredit - (L.houseCredit - L.housePot) - (L.vaultCredit - L.vaultPot);
-            emit log_named_uint("  player action /day   ", pAct / dn / 1 ether);
+            emit log_named_uint("  player action /day   ", pAct / dn / 1);
             emit log_named_uint("  PLAYER-ONLY EDGE bps ", _bps(pAct > pRun ? pAct - pRun : 0, pAct));
         }
         emit log_named_uint("  budget rate      bps ", _bps(L.budget, L.action));
@@ -622,7 +622,7 @@ contract CrapsSystemEconTest is CrapsPins {
     ///         behind and the day nets `624 * tickets - 50,000`. This is a division, not a
     ///         sample: it fixes the curve the simulator and the docs are held to.
     function test_F2_theBaseSubsidySetsABreakEvenTicketCount() public {
-        uint256 baseFlip = craps.BASE_MAIN_BUDGET() / 1 ether;
+        uint256 baseFlip = craps.BASE_MAIN_BUDGET() / 1;
         uint256 rateBps = craps.BOOST_ACTION_BPS();
         emit log_named_uint("base subsidy FLIP/day             ", baseFlip);
         emit log_named_uint("linear rate bps of action         ", rateBps);
@@ -665,8 +665,8 @@ contract CrapsSystemEconTest is CrapsPins {
         // only half the emission.
         (uint256 ladder, uint256 contribution) = craps.splitMainBudget(craps.BASE_MAIN_BUDGET());
         assertEq(ladder + contribution, craps.BASE_MAIN_BUDGET(), "the split did not conserve the allocation");
-        assertEq(ladder, 25_000 ether, "a cold day's ladder is not 25,000 FLIP");
-        assertEq(contribution, 25_000 ether, "a cold day's progressive contribution is not 25,000 FLIP");
+        assertEq(ladder, 25_000, "a cold day's ladder is not 25,000 FLIP");
+        assertEq(contribution, 25_000, "a cold day's progressive contribution is not 25,000 FLIP");
     }
 
     /// @notice Craps is BURN-ONLY. Every scenario above asserts it; this one states it as the
@@ -705,7 +705,7 @@ contract CrapsSystemEconTest is CrapsPins {
             // SIGNED on purpose: a replicate in which the field's runs came home for more than
             // they staked is not an error, it is the tail this test exists to show.
             int256 edge = (int256(L.action) - int256(L.runCredit)) * 10_000 / int256(L.action);
-            int256 net = (int256(L.burned) - int256(L.credited)) / int256(L.daysRun) / 1 ether;
+            int256 net = (int256(L.burned) - int256(L.credited)) / int256(L.daysRun) / 1;
             emit log_named_int("  replicate engine edge bps", edge);
             emit log_named_int("  replicate net burn/day  ", net);
             if (edge < lo) lo = edge;

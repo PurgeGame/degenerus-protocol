@@ -162,7 +162,7 @@ contract GoldenTicketArmResolve is Test {
     uint128 internal constant NEXT_POOL = 200 ether;
     uint128 internal constant FUT_POOL = 1000 ether;
     uint256 internal constant HALF_PASS = 2.25 ether;
-    uint256 internal constant COIN_UNIT = 1000 ether;
+    uint256 internal constant COIN_UNIT = 1000;
 
     event GoldenTicketArmed(
         address indexed winner,
@@ -447,10 +447,10 @@ contract GoldenTicketArmResolve is Test {
         assertEq(eth, 0);
         assertEq(passes, 0);
         assertEq(flip, 0);
-        assertEq(wwxrp, 100 ether, "0 golds = 100 WWXRP");
+        assertEq(wwxrp, 100, "0 golds = 100 WWXRP");
         assertEq(wwxrpRec.calls(), 1);
         assertEq(wwxrpRec.lastTo(), winner);
-        assertEq(wwxrpRec.lastAmount(), 100 ether);
+        assertEq(wwxrpRec.lastAmount(), 100);
         assertEq(h.claimableOf(winner), claimBefore, "no ETH leg");
         assertEq(h.whalePassOf(winner), passBefore, "no pass leg");
     }
@@ -509,7 +509,7 @@ contract GoldenTicketArmResolve is Test {
         assertEq(passes, (2 * expEth) / HALF_PASS, "double the ETH leg in passes");
         uint256 expFlipValue = uint256(futBefore) / 20;
         uint256 expFlip = (expFlipValue * COIN_UNIT) / PriceLookupLib.priceForLevel(LVL + 1);
-        expFlip = (expFlip / 100 ether) * 100 ether;
+        expFlip = (expFlip / 100) * 100;
         assertEq(flip, expFlip, "5% fp as flip credit at ticket rate");
         assertEq(flipRec.calls(), 1);
         assertEq(flipRec.lastPlayer(), winner);
@@ -544,7 +544,7 @@ contract GoldenTicketArmResolve is Test {
         assertEq(passes, passValue / HALF_PASS, "75% of remainder in half-passes");
         uint256 expFlip = ((remainder - passValue) * COIN_UNIT) /
             PriceLookupLib.priceForLevel(LVL + 1);
-        expFlip = (expFlip / 100 ether) * 100 ether;
+        expFlip = (expFlip / 100) * 100;
         assertEq(flip, expFlip, "25% of remainder, truncated to whole 100-FLIP credit");
         assertEq(wwxrp, 0);
         assertEq(h.claimableOf(winner) - claimBefore, expEth, "only ETH leg hits claimable");

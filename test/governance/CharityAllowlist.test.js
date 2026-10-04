@@ -472,6 +472,27 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
       expect(await charity.hasVoted(1, voter1.address, 5)).to.equal(false);
     });
 
+    it("reuses the voter mask after transition without retaining stale slot votes", async function () {
+      const { charity, deployer, recipient1, recipient2, voter1, gameAddress } =
+        await loadFixture(deployGNRUSFixture);
+      await setCharityFromVaultOwner(charity, deployer, 5, recipient1.address);
+      await setCharityFromVaultOwner(charity, deployer, 7, recipient2.address);
+      await charity.connect(voter1).vote(5);
+      await charity.connect(voter1).vote(7);
+      await runLevelTransitionViaGame(charity, gameAddress, 0);
+      expect(await charity.hasVoted(0, voter1.address, 5)).to.equal(false);
+      expect(await charity.hasVoted(1, voter1.address, 5)).to.equal(false);
+      expect(await charity.hasVoted(1, voter1.address, 7)).to.equal(false);
+      const winner = await charity.lastWinningRecipient();
+      const slot = winner === recipient1.address ? 7 : 5;
+      await charity.connect(voter1).vote(slot);
+      expect(await charity.hasVoted(1, voter1.address, slot)).to.equal(true);
+      expect(await charity.hasVoted(1, voter1.address, slot === 5 ? 7 : 5)).to.equal(false);
+      expect(await charity.slotApproveWeight(0, 5)).to.equal(100n);
+      await expect(charity.connect(voter1).vote(slot))
+        .to.be.revertedWithCustomError(charity, "VoteRejected").withArgs(REJECT_ALREADY_VOTED);
+    });
+
     it("InvalidSlot on slot == 20 (boundary)", async function () {
       const { charity, voter1 } = await loadFixture(deployGNRUSFixture);
       await expect(

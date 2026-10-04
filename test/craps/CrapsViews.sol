@@ -18,8 +18,8 @@ contract CrapsViews is CrapsBattle {
     ///      in Settlement.rank and has no reason to compute it again.
     function _compositeOf(Settlement memory s) internal pure returns (uint256) {
         SlipResult memory r;
-        r.bankrollOut = s.won;
-        r.peakBankroll = s.peak;
+        r.bankrollOut = s.won * FLIP;
+        r.peakBankroll = s.peak * FLIP;
         r.handsPlayed = s.handsPlayed;
         r.stop = s.stop;
         return _rankOf(r);
@@ -171,19 +171,19 @@ contract CrapsViews is CrapsBattle {
     /// @dev The RAW stored bet word, so a suite can grade the packed slices — the boon mask at
     ///      206..208 above all — rather than only the decoded struct.
     function betWordOf(uint256 betId) external view returns (uint256) {
-        return _bets[betId];
+        return _loadBet(betId);
     }
 
     /// @dev Overwrite a stored bet word. Test-only, and the ONLY way to grade a settlement with
     ///      and without a boon on the SAME run: seats are seeded individually, so two slips are
     ///      two different runs and could never be compared.
     function setBetWord(uint256 betId, uint256 word) external {
-        _bets[betId] = word;
+        _storeBet(betId, word);
     }
 
     /// @dev The craps boon riding a slip, one-hot as stored.
     function boonMaskOf(uint256 betId) external view returns (uint256) {
-        return (_bets[betId] >> BET_BOON_SHIFT()) & BET_BOON_MASK();
+        return (_loadBet(betId) >> BET_BOON_SHIFT()) & BET_BOON_MASK();
     }
 
     function BET_CHIPS_SHIFT() external pure returns (uint256) {
@@ -244,7 +244,7 @@ contract CrapsViews is CrapsBattle {
     /// @dev The table a slot shut onto, plus one — zero for a window still taking bets. The raw
     ///      field, so a fixture can tell "armed" from "not armed" without inferring it.
     function slotIndexOf(uint64 slot) external view returns (uint48) {
-        return _slotIndex[slot];
+        return _slotIndexOf(slot);
     }
 
     function bonusWindowOf(uint256 period)
@@ -360,16 +360,17 @@ contract CrapsViews is CrapsBattle {
     function dayStateOf(uint24 day, address player) external view returns (uint256) {
         // `_daySlotOf` is private on the contract; the derivation is one multiply, so the view
         // restates it rather than asking for a visibility change on production code.
-        return _daySeated[uint256(day) * BONUS_SLOTS_PER_DAY][player] == 0 ? 0 : 1;
+        return _loadDaySeat(uint256(day) * BONUS_SLOTS_PER_DAY, player) == 0 ? 0 : 1;
     }
 
     /// @dev The holder's day-ticket seat number, or zero — the raw stored value.
     function daySeatNumberOf(uint24 day, address player) external view returns (uint256) {
-        return _daySeated[uint256(day) * BONUS_SLOTS_PER_DAY][player] & _MASK32;
+        return _loadDaySeat(uint256(day) * BONUS_SLOTS_PER_DAY, player) & _MASK32;
     }
 
     function seatedIn(uint64 slot, address player) external view returns (bool) {
-        return _bonusSeated[bytes32(uint256(slot))][player];
+        if (slot >= _CUSTOM_SLOT_BASE) return _bonusSeated[_slotWindow(slot).key][player];
+        return _loadDaySeat(uint256(slot) & ~uint256(7), player) & (uint256(1) << (32 + (slot & 7))) != 0;
     }
 
     function windowReservedOf(uint64 slot) external view returns (uint256 count, uint256 high) {
@@ -392,7 +393,7 @@ contract CrapsViews is CrapsBattle {
         uint256 daySlot = uint256(day) * BONUS_SLOTS_PER_DAY;
         uint64 n = uint32(_dayTickets[daySlot]);
         for (uint64 i = 1; i <= n; ++i) {
-            uint256 w = _bets[(daySlot << 64) | i];
+            uint256 w = _loadBet((daySlot << 64) | i);
             if (address(uint160(w)) == player) return w & _BET_HIGH_BIT != 0;
         }
         return false;
@@ -401,9 +402,9 @@ contract CrapsViews is CrapsBattle {
     /// @dev The seven per-period high flags of `player`'s day ticket, bit `p` for period `p`.
     function daySeatHighMaskOf(uint24 day, address player) external view returns (uint256) {
         uint256 daySlot = uint256(day) * BONUS_SLOTS_PER_DAY;
-        uint256 seat = _daySeated[daySlot][player];
+        uint256 seat = _loadDaySeat(daySlot, player);
         if (seat == 0) return 0;
-        return (_bets[(daySlot << 64) | seat] >> _BET_HIGH_SHIFT)
+        return (_loadBet((daySlot << 64) | seat) >> _BET_HIGH_SHIFT)
             & (_BET_DAYHIGH_MASK >> _BET_HIGH_SHIFT);
     }
 
@@ -507,7 +508,7 @@ contract CrapsViews is CrapsBattle {
 
     /// @dev The whole settlement of a bet, high point included — what the paying path computes.
     function settlementOf(uint256 betId) external view returns (Settlement memory) {
-        uint256 header = _bets[betId];
+        uint256 header = _loadBet(betId);
         uint256 slot = betId >> 64;
         return _settlementOf(betId, header, _slotWindow(slot), _wordAt(_indexOf(slot)));
     }
@@ -515,7 +516,7 @@ contract CrapsViews is CrapsBattle {
     /// @dev The table index a slip settles on, whichever way it was bound. Test-side: the
     ///      production contract has no reader for it since the preview moved here.
     function _indexOf(uint256 slot) internal view returns (uint48 index) {
-        index = _slotIndex[slot];
+        index = _slotIndexOf(slot);
         if (index == 0) revert RngNotReady();
         unchecked {
             index -= 1;
@@ -528,7 +529,7 @@ contract CrapsViews is CrapsBattle {
     ///      settlement banks day passes out of the lane's protocol share (`_splitAward`), so the
     ///      suite compares it against the pre-conversion total, not against what lands liquid.
     function previewSettlement(uint256 betId) external view returns (uint256 won, uint256 paid) {
-        uint256 header = _bets[betId];
+        uint256 header = _loadBet(betId);
         if (address(uint160(header)) == address(0)) revert NoSuchBet();
         // Through `_indexOf`, so a slip previews on the table its slot actually shut onto.
         uint256 word = _wordAt(_indexOf(betId >> 64));
@@ -590,7 +591,7 @@ contract CrapsViews is CrapsBattle {
     /// @dev How far a slot's field has settled. Production has no such reader (mineFlip's craps stages
     ///      report their own progress); the suites grade batches by it.
     function bonusCursorOf(uint64 slot) external view returns (uint64) {
-        return _bonusCursor[slot];
+        return _bonusCursorOf(slot);
     }
 
     /// @dev The scheduled cursor, raw. Zero until the first day opens.
@@ -642,7 +643,7 @@ contract CrapsViews is CrapsBattle {
         if (_isJackpotSlot(slot)) revert BonusStillRunning();
         (,, uint256 open) = _currentBonusSlot();
         if (slot >= open) revert BonusStillRunning();
-        if (_slotIndex[slot] != 0) revert BonusPeriodSpent();
+        if (_slotIndexOf(slot) != 0) revert BonusPeriodSpent();
         Window memory w = _slotWindow(slot);
         if (_battles[w.key] == 0) revert BonusPeriodSpent();
         if (_boostBudget[uint24(slot / _BONUS_SLOTS_PER_DAY)] == 0) revert BonusPeriodSpent();
@@ -692,7 +693,7 @@ contract CrapsViews is CrapsBattle {
     ///      ticket too: a day ticket's own slot never shuts onto a table, so it is quoted on the
     ///      window that settles it. The harness bound is built on this figure.
     function settlementOn(uint256 betId, uint64 slot) external view returns (uint256 paid) {
-        uint256 header = _bets[betId];
+        uint256 header = _loadBet(betId);
         if (address(uint160(header)) == address(0)) return 0;
         uint256 word = _wordAt(_indexOf(slot));
         if (word == 0) revert RngNotReady();

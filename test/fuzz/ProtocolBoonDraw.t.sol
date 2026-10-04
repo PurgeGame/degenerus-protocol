@@ -45,7 +45,7 @@ contract ProtocolBoonFixture is DegenerusGameStorage {
     }
     function bet(uint48 index, uint64 id) external view returns (uint256) { return degeneretteQueue[index & 1][id - 1]; }
     function heroWeight(uint24 day, uint8 symbol) external view returns (uint32) {
-        return uint32(dailyHeroWagers[day][symbol >> 3] >> ((symbol & 7) * 32));
+        return uint32(_dailyHeroWagerWord(day, symbol >> 3) >> ((symbol & 7) * 32));
     }
     function openIndex() external { rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12); }
     function clearDeity(uint8 symbol) external { deityBySymbol[symbol] = address(0); }
@@ -501,7 +501,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
     }
 
     function testOnlyEthAndProtocolSymbolsCreateEntries() public {
-        vm.prank(address(game)); coin.mintForGame(bettor, 1000 ether);
+        vm.prank(address(game)); coin.mintForGame(bettor, 1000);
         vm.prank(address(game)); wwxrp.mintPrize(bettor, 10 ether);
         for (uint8 symbol; symbol < 32; ++symbol) {
             if (symbol >= 24) vm.expectRevert(bytes4(keccak256("InvalidBet()")));
@@ -509,7 +509,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         }
         for (uint8 i; i < 2; ++i) {
             uint8 symbol = i == 0 ? 0 : 6;
-            vm.prank(bettor); game.placeDegeneretteBet(address(0), 1, 100 ether, 1, symbol);
+            vm.prank(bettor); game.placeDegeneretteBet(address(0), 1, 100, 1, symbol);
             vm.expectRevert(bytes4(keccak256("UnsupportedCurrency()")));
             vm.prank(bettor); game.placeDegeneretteBet(address(0), 3, 1 ether, 1, symbol);
         }

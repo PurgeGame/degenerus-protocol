@@ -63,7 +63,7 @@ contract CrapsHighReserveTest is CrapsPins {
         vm.warp(dayStart + 1 days);
         game.setRngLocked(true);
         vm.prank(ContractAddresses.GAME);
-        api.lockJackpotBattle(day + 1, added / 500, 2);
+        api.lockJackpotBattle(day + 1, added * 1 ether / 500, 2);
     }
 
     function _start(uint256 word, uint256 awards) internal {
@@ -110,11 +110,11 @@ contract CrapsHighReserveTest is CrapsPins {
 
     function test_fivePercentIsFundedOnceBeforeTheMultiplierAndAwardsUseGrossAdded() public {
         _enter(ALICE, true, false);
-        _lock(150_000 ether);
-        assertEq(cold.highRollerReserve(), 7_500 ether);
+        _lock(150_000);
+        assertEq(cold.highRollerReserve(), 7_500);
         vm.prank(ContractAddresses.GAME);
         api.lockJackpotBattle(day + 1, 1_000 ether, 2);
-        assertEq(cold.highRollerReserve(), 7_500 ether, "lock retry funded twice");
+        assertEq(cold.highRollerReserve(), 7_500, "lock retry funded twice");
         uint256 snap = vm.snapshotState();
         uint256[4] memory wanted = [uint256(5_000), 30_000, 200_000, 1_000_000];
         for (uint256 j; j < wanted.length; ++j) {
@@ -127,49 +127,49 @@ contract CrapsHighReserveTest is CrapsPins {
             _start(word, 15);
             (CrapsBattleStorage.JackpotRound memory r,,) = cold.jackpotBattleOf(slot);
             assertEq(r.awardTarget, 15);
-            assertEq(r.totalPool, (80_000 ether + 142_500 ether) * wanted[j] / 10_000);
-            assertEq(cold.highRollerReserve(), 7_500 ether, "pool multiplier reached reserve");
+            assertEq(r.totalPool, (80_000 + 142_500) * wanted[j] / 10_000);
+            assertEq(cold.highRollerReserve(), 7_500, "pool multiplier reached reserve");
             vm.prank(ContractAddresses.GAME);
             api.prepareJackpotBattle(2, word + 1);
-            assertEq(cold.highRollerReserve(), 7_500 ether, "prepare retry funded twice");
+            assertEq(cold.highRollerReserve(), 7_500, "prepare retry funded twice");
         }
     }
 
     function test_emptyEventsAccumulateWithoutAnAttempt() public {
         for (uint256 i; i < 3; ++i) {
             if (i != 0) { dayStart += 1 days; _openDay(10); }
-            _lock(50_000 ether);
+            _lock(50_000);
             vm.recordLogs();
             _start(_word(true), 0);
-            _assertDrawLog(vm.getRecordedLogs(), 0, address(0), 0, (i + 1) * 2_500 ether);
+            _assertDrawLog(vm.getRecordedLogs(), 0, address(0), 0, (i + 1) * 2_500);
             CrapsBattleStorage.HighRollerDraw memory d = cold.highRollerDrawOf(slot);
             assertTrue(d.resolved); assertFalse(d.won);
         }
-        assertEq(cold.highRollerReserve(), 7_500 ether);
+        assertEq(cold.highRollerReserve(), 7_500);
     }
 
     function test_sdgnrsAndNormalOrAwardedSeatsCannotTriggerTheReserve() public {
         _enter(ContractAddresses.SDGNRS, true, true);
         _enter(ALICE, false, false);
-        _lock(50_000 ether); _start(_word(true), 5);
+        _lock(50_000); _start(_word(true), 5);
         vm.recordLogs(); _finish(1);
-        _assertDrawLog(vm.getRecordedLogs(), 0, address(0), 0, 2_500 ether);
+        _assertDrawLog(vm.getRecordedLogs(), 0, address(0), 0, 2_500);
         assertEq(cold.highRollerDrawOf(slot).eligible, 0);
-        assertEq(cold.highRollerReserve(), 2_500 ether);
+        assertEq(cold.highRollerReserve(), 2_500);
     }
 
     /// @dev The cold delegate must pay the reserve through creditFlip in the table context.
     function test_vaultCanTriggerAndWinAloneEvenWhenSdgnrsIsHighToo() public {
         _enter(ContractAddresses.SDGNRS, true, true);
         _enter(ContractAddresses.VAULT, true, false);
-        _lock(50_000 ether); _start(_word(true), 5);
+        _lock(50_000); _start(_word(true), 5);
         uint256 comps = flip.compLane();
         uint256 action = table.dayStaked(day);
         vm.recordLogs(); _finish(1);
-        _assertDrawLog(vm.getRecordedLogs(), 1, ContractAddresses.VAULT, 2_500 ether, 0);
+        _assertDrawLog(vm.getRecordedLogs(), 1, ContractAddresses.VAULT, 2_500, 0);
         assertEq(cold.highRollerDrawOf(slot).nominee, ContractAddresses.VAULT);
         assertEq(cold.highRollerReserve(), 0);
-        assertGe(coinflip.staked(ContractAddresses.VAULT), 2_500 ether);
+        assertGe(coinflip.staked(ContractAddresses.VAULT), 2_500);
         assertEq(flip.compLane(), comps, "reserve award generated comps");
         assertEq(table.dayStaked(day), action, "reserve award generated action");
     }
@@ -178,36 +178,36 @@ contract CrapsHighReserveTest is CrapsPins {
         game.setMintHistory(ALICE, 0);
         game.setScore(ALICE, 0);
         _enter(ALICE, true, false);
-        assertEq(flip.burned(ALICE), 84_000 ether);
-        _lock(50_000 ether); _start(_word(true), 0);
+        assertEq(flip.burned(ALICE), 84_000);
+        _lock(50_000); _start(_word(true), 0);
         vm.recordLogs(); _finish(WHOLE_FIELD);
-        _assertDrawLog(vm.getRecordedLogs(), 1, ALICE, 2_500 ether, 0);
+        _assertDrawLog(vm.getRecordedLogs(), 1, ALICE, 2_500, 0);
         assertEq(cold.highRollerDrawOf(slot).nominee, ALICE);
     }
 
     function test_missAndEmptyDayCarryIntoTheNextWinner() public {
         _enter(ALICE, true, false);
-        _lock(50_000 ether); _start(_word(false), 0);
+        _lock(50_000); _start(_word(false), 0);
         vm.recordLogs(); _finish(1);
-        _assertDrawLog(vm.getRecordedLogs(), 1, address(0), 0, 2_500 ether);
+        _assertDrawLog(vm.getRecordedLogs(), 1, address(0), 0, 2_500);
         dayStart += 1 days; _openDay(10);
-        _lock(50_000 ether); _start(_word(true), 0);
-        assertEq(cold.highRollerReserve(), 5_000 ether);
+        _lock(50_000); _start(_word(true), 0);
+        assertEq(cold.highRollerReserve(), 5_000);
         dayStart += 1 days; _openDay(100);
         _enter(BOB, true, false);
-        _lock(50_000 ether); _start(_word(true), 0);
+        _lock(50_000); _start(_word(true), 0);
         vm.recordLogs(); _finish(WHOLE_FIELD);
-        _assertDrawLog(vm.getRecordedLogs(), 1, BOB, 7_500 ether, 0);
+        _assertDrawLog(vm.getRecordedLogs(), 1, BOB, 7_500, 0);
     }
 
     function test_upgradesAndCompedHighEntriesQualifyAtTheirAcceptedTerms() public {
         _enter(ALICE, false, true);
         vm.prank(ALICE); table.upgradeDayWindows(day, 1 << 5);
         uint256 code = uint160(BOB) | (uint256(1) << 168) | (uint256(5) << 176);
-        flip.setCompLane(1_000_000 ether);
+        flip.setCompLane(1_000_000);
         vm.prank(ContractAddresses.VAULT); table.vaultComp(code);
         assertEq(flip.burned(BOB), 0);
-        _lock(50_000 ether); _start(_word(true), 5); _finish(1);
+        _lock(50_000); _start(_word(true), 5); _finish(1);
         assertEq(cold.highRollerDrawOf(slot).eligible, 2);
         assertTrue(cold.highRollerDrawOf(slot).won);
     }
@@ -219,14 +219,14 @@ contract CrapsHighReserveTest is CrapsPins {
         table.setPassCredits(ContractAddresses.VAULT, 1, 0);
         dayStart += 1 days; _openDay(10, true);
         assertEq(flip.burned(ALICE), 0);
-        _lock(50_000 ether); _start(_word(true), 0); _finish(1);
+        _lock(50_000); _start(_word(true), 0); _finish(1);
         assertEq(cold.highRollerDrawOf(slot).eligible, 1);
         assertEq(cold.highRollerDrawOf(slot).nominee, ALICE);
     }
 
     function test_lateEntryUpgradeAndDirectHookCannotChangeEligibility() public {
         _enter(ALICE, false, true);
-        _lock(50_000 ether);
+        _lock(50_000);
         vm.prank(ALICE); vm.expectRevert(); table.upgradeDayWindows(day, 1 << 5);
         vm.prank(BOB); vm.expectRevert(); table.enterBonusBattle(5, 0, multiple);
         vm.expectRevert(JackpotBattle.OnlyTableSelf.selector); cold.settleHighRollerReserve(slot);
@@ -244,7 +244,7 @@ contract CrapsHighReserveTest is CrapsPins {
         for (uint160 i; i < heads; ++i) _enter(address(0x1000 + i), true, i % 2 == 0);
         _enter(ContractAddresses.SDGNRS, true, false);
         _enter(ALICE, false, false);
-        _lock(50_000 ether); _start(seed == 0 ? 1 : seed, 5);
+        _lock(50_000); _start(seed == 0 ? 1 : seed, 5);
         uint256 snap = vm.snapshotState();
         _finish(WHOLE_FIELD);
         CrapsBattleStorage.HighRollerDraw memory one = cold.highRollerDrawOf(slot);
@@ -267,15 +267,15 @@ contract CrapsHighReserveTest is CrapsPins {
 
     function test_paidFieldLargerThanOneBatchIsBoundedAndPaysOnce() public {
         for (uint160 i; i < 270; ++i) _enter(address(0x1000 + i), true, false);
-        _lock(50_000 ether); _start(_word(true), 0);
+        _lock(50_000); _start(_word(true), 0);
         vm.recordLogs();
         table.settleSlot(slot, WHOLE_FIELD);
         assertEq(cold.highRollerDrawOf(slot).eligible, 96);
         assertFalse(cold.highRollerDrawOf(slot).resolved);
-        assertEq(cold.highRollerReserve(), 2_500 ether);
+        assertEq(cold.highRollerReserve(), 2_500);
         _finish(1);
         CrapsBattleStorage.HighRollerDraw memory d = cold.highRollerDrawOf(slot);
         assertEq(d.eligible, 270);
-        _assertDrawLog(vm.getRecordedLogs(), 270, d.nominee, 2_500 ether, 0);
+        _assertDrawLog(vm.getRecordedLogs(), 270, d.nominee, 2_500, 0);
     }
 }

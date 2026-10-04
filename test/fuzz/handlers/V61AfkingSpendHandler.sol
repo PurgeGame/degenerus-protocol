@@ -39,7 +39,7 @@ contract V61AfkingSpendHandler is Test {
     uint256 private constant MINTPACKED_SLOT = 9;
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS score bit (subscribe gate)
     uint256 private constant CURSE_COUNT_SHIFT = 215;
-    uint256 private constant PRICE_COIN_UNIT = 1000 ether;
+    uint256 private constant PRICE_COIN_UNIT = 1000;
     uint256 private constant SMITE_BURN = PRICE_COIN_UNIT / 5; // 200 FLIP
     uint256 private constant DECURSE_BURN = PRICE_COIN_UNIT / 10; // 100 FLIP
 

@@ -72,8 +72,8 @@ contract FlipRoundBernoulliTester {
         returns (uint256 hundreds, uint256 remFlip, uint256 dustWei)
     {
         hundreds = amount / FlipRoundLib.FLIP_ROUND_UNIT;
-        remFlip = (amount % FlipRoundLib.FLIP_ROUND_UNIT) / 1 ether;
-        dustWei = amount % 1 ether;
+        remFlip = amount % FlipRoundLib.FLIP_ROUND_UNIT;
+        dustWei = 0;
     }
 
     /// @notice Expose the [0..99] compare value consumed by the round-up gate.

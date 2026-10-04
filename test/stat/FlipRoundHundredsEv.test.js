@@ -26,7 +26,7 @@
 import { expect } from "chai";
 import hre from "hardhat";
 
-const ONE_FLIP = 10n ** 18n;
+const ONE_FLIP = 1n;
 const UNIT = 100n * ONE_FLIP; // FLIP_ROUND_UNIT
 const THRESHOLD = 1_000n * ONE_FLIP; // FLIP_ROUND_THRESHOLD
 
@@ -148,21 +148,12 @@ describe("FlipRoundHundredsEv (stat-suite) — 100-FLIP award collapse", functio
       }
     });
 
-    it("discards sub-1-FLIP dust unconditionally, exactly as the old whole-FLIP floor did", async function () {
-      const rng = makeRng(hre.ethers.id("flip-round-dust"));
-      // 3 units + 99 whole FLIP + 0.999… FLIP of dust: the dust can never tip the
-      // round-up, because the remainder is reduced to whole FLIP before the compare.
-      const dust = ONE_FLIP - 1n;
-      const amount = 3n * UNIT + 99n * ONE_FLIP + dust;
-      for (let k = 0; k < 64; k++) {
-        const entropy = rng();
-        const withDust = await tester.roundFlipToHundreds(amount, entropy);
-        const withoutDust = await tester.roundFlipToHundreds(
-          amount - dust,
-          entropy
-        );
-        expect(withDust).to.equal(withoutDust);
-      }
+    it("treats one raw unit as one token and has no fractional dust", async function () {
+      expect(await tester.floorWholeFlip(399n)).to.equal(399n);
+      const [hundreds, remainder, dust] = await tester.decompose(399n);
+      expect(hundreds).to.equal(3n);
+      expect(remainder).to.equal(99n);
+      expect(dust).to.equal(0n);
     });
   });
 
@@ -177,7 +168,7 @@ describe("FlipRoundHundredsEv (stat-suite) — 100-FLIP award collapse", functio
         13n * ONE_FLIP,
         18n * ONE_FLIP + 1n,
         110n * ONE_FLIP,
-        352n * ONE_FLIP + 999_999_999n,
+        352n * ONE_FLIP + 1n,
         999n * ONE_FLIP + ONE_FLIP / 2n,
         THRESHOLD,
       ];
@@ -201,7 +192,7 @@ describe("FlipRoundHundredsEv (stat-suite) — 100-FLIP award collapse", functio
         ONE_FLIP - 1n,
         ONE_FLIP,
         ONE_FLIP + 1n,
-        777n * ONE_FLIP + 123_456_789n,
+        777n * ONE_FLIP + 1n,
         THRESHOLD,
       ];
       for (const amount of samples) {
@@ -221,15 +212,13 @@ describe("FlipRoundHundredsEv (stat-suite) — 100-FLIP award collapse", functio
       }
     });
 
-    it("one wei above the threshold the gate engages and the output is a 100-FLIP multiple", async function () {
+    it("one token above the threshold the gate engages and the output is a 100-FLIP multiple", async function () {
       const rng = makeRng(hre.ethers.id("flip-round-threshold-above"));
       const amount = THRESHOLD + 1n;
       for (let k = 0; k < 32; k++) {
         const paid = await tester.roundGated(amount, rng());
         expect(paid % UNIT).to.equal(0n);
-        // 1,000 FLIP is exactly 10 units with a zero whole-FLIP remainder, so the
-        // extra wei is dust and the collapse is a pure floor here.
-        expect(paid).to.equal(THRESHOLD);
+        expect(paid === THRESHOLD || paid === THRESHOLD + UNIT).to.equal(true);
       }
     });
 
@@ -275,7 +264,7 @@ describe("FlipRoundHundredsEv (stat-suite) — 100-FLIP award collapse", functio
   });
 
   describe("Decomposition boundaries", function () {
-    it("splits an award into units / whole-FLIP remainder / sub-1-FLIP dust", async function () {
+    it("splits an award into hundreds / whole-FLIP remainder / zero dust", async function () {
       const cases = [
         { amount: 0n, hundreds: 0n, rem: 0n, dust: 0n },
         { amount: ONE_FLIP - 1n, hundreds: 0n, rem: 0n, dust: ONE_FLIP - 1n },
@@ -284,10 +273,10 @@ describe("FlipRoundHundredsEv (stat-suite) — 100-FLIP award collapse", functio
         { amount: UNIT, hundreds: 1n, rem: 0n, dust: 0n },
         { amount: UNIT + ONE_FLIP - 1n, hundreds: 1n, rem: 0n, dust: ONE_FLIP - 1n },
         {
-          amount: 5n * UNIT + 37n * ONE_FLIP + 12345n,
+          amount: 5n * UNIT + 37n * ONE_FLIP,
           hundreds: 5n,
           rem: 37n,
-          dust: 12345n,
+          dust: 0n,
         },
       ];
       for (const c of cases) {

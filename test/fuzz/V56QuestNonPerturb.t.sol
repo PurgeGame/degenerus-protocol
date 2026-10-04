@@ -320,7 +320,7 @@ contract V56QuestNonPerturb is DeployProtocol {
         vm.prank(ContractAddresses.COIN);
         quests.handlePurchase(player, MINT_PRICE, 0, 0, MINT_PRICE, MINT_PRICE); // slot-0 pre-req (its reward is returned, not relevant here)
         vm.prank(ContractAddresses.COIN);
-        (reward, , , ) = quests.handlePurchase(player, 0, 0, 1 ether, MINT_PRICE, MINT_PRICE);
+        (reward, , , , ) = quests.handlePurchase(player, 0, 0, 1 ether, MINT_PRICE, MINT_PRICE);
     }
 
     /// @dev Complete slot 0 (MINT_ETH) via the COIN-gated handlePurchase with a 1-ticket ETH mint sized
@@ -330,7 +330,7 @@ contract V56QuestNonPerturb is DeployProtocol {
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
         vm.prank(ContractAddresses.COIN);
-        (reward, questType, streak, completed) = quests.handlePurchase(player, MINT_PRICE, 0, 0, MINT_PRICE, MINT_PRICE);
+        (reward, questType, streak, completed, ) = quests.handlePurchase(player, MINT_PRICE, 0, 0, MINT_PRICE, MINT_PRICE);
     }
 
     /// @dev Complete the player's own slot 1 by reading its rolled type and routing the matching
@@ -359,13 +359,13 @@ contract V56QuestNonPerturb is DeployProtocol {
             (reward, qt, s, completed) = quests.handleDegenerette(player, 10_000 ether, true, MINT_PRICE);
         } else if (t == QT_MINT_FLIP) {
             vm.prank(ContractAddresses.COIN);
-            (reward, qt, s, completed) = quests.handlePurchase(player, 0, 100, 0, MINT_PRICE, MINT_PRICE);
+            (reward, qt, s, completed, ) = quests.handlePurchase(player, 0, 100, 0, MINT_PRICE, MINT_PRICE);
         } else {
             // LOOTBOX / MINT_ETH share the purchase path; an ETH-mint spend + lootbox spend clears the
             // ETH-denominated target. handlePurchase credits the lootbox reward via the caller, so the
             // returned reward is the slot's QUEST_RANDOM_REWARD.
             vm.prank(ContractAddresses.COIN);
-            (reward, qt, s, completed) = quests.handlePurchase(player, 10 ether, 100, 10 ether, MINT_PRICE, MINT_PRICE);
+            (reward, qt, s, completed, ) = quests.handlePurchase(player, 10 ether, 100, 10 ether, MINT_PRICE, MINT_PRICE);
         }
     }
 

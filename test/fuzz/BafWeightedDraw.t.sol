@@ -69,7 +69,7 @@ contract BafWeightedDrawTest is DeployProtocol {
     ///         draw and, as the only entry, wins it for every word.
     function testMinimumDepositEntersAndCanWin() public {
         _arm(3);
-        _selfDeposit(alice, 100 ether);
+        _selfDeposit(alice, 100);
 
         (, uint96 total, uint32 count) = coinflip.bafDrawInfo();
         assertEq(total, 100, "weight is the whole-FLIP principal");
@@ -90,8 +90,8 @@ contract BafWeightedDrawTest is DeployProtocol {
     ///         deposit records exactly its principal, same rule as the minnow.
     function testNoWhaleFloorRemains() public {
         _arm(3);
-        _selfDeposit(alice, 100 ether);
-        _selfDeposit(bob, 200_000 ether);
+        _selfDeposit(alice, 100);
+        _selfDeposit(bob, 200_000);
 
         (, uint96 total, uint32 count) = coinflip.bafDrawInfo();
         assertEq(count, 2, "both sizes enter under one rule");
@@ -106,8 +106,8 @@ contract BafWeightedDrawTest is DeployProtocol {
     ///         the exact boundary rolls.
     function testExactOneToThreeIntervalBoundaries() public {
         _arm(3);
-        _selfDeposit(alice, 100 ether);
-        _selfDeposit(bob, 300 ether);
+        _selfDeposit(alice, 100);
+        _selfDeposit(bob, 300);
 
         (, uint96 total, ) = coinflip.bafDrawInfo();
         assertEq(total, 400, "total weight");
@@ -123,9 +123,9 @@ contract BafWeightedDrawTest is DeployProtocol {
     ///         per-player aggregation.
     function testRepeatDepositsRemainAdditive() public {
         _arm(3);
-        _selfDeposit(alice, 100 ether);
-        _selfDeposit(bob, 100 ether);
-        _selfDeposit(alice, 200 ether);
+        _selfDeposit(alice, 100);
+        _selfDeposit(bob, 100);
+        _selfDeposit(alice, 200);
 
         (, uint96 total, uint32 count) = coinflip.bafDrawInfo();
         assertEq(count, 3, "repeat deposits append separate intervals");
@@ -146,7 +146,7 @@ contract BafWeightedDrawTest is DeployProtocol {
         uint256 n = 1 + (seed % 24);
         for (uint256 i; i < n; ++i) {
             address p = makeAddr(string(abi.encodePacked("fz", uint8(i % 7))));
-            uint256 amount = (100 + (uint256(keccak256(abi.encode(seed, i))) % 50_000)) * 1 ether;
+            uint256 amount = (100 + (uint256(keccak256(abi.encode(seed, i))) % 50_000)) * 1;
             _selfDeposit(p, amount);
         }
 
@@ -177,7 +177,7 @@ contract BafWeightedDrawTest is DeployProtocol {
     ///         no entry event.
     function testOrdinaryDayDepositWritesNoDrawState() public {
         vm.recordLogs();
-        _selfDeposit(alice, 5_000 ether);
+        _selfDeposit(alice, 5_000);
 
         (uint24 day, uint96 total, uint32 count) = coinflip.bafDrawInfo();
         assertEq(day, 0, "nothing armed");
@@ -193,11 +193,11 @@ contract BafWeightedDrawTest is DeployProtocol {
     ///         next day targets a later flip day and appends nothing.
     function testEntriesCloseAtTheDayBoundary() public {
         _arm(3);
-        _selfDeposit(alice, 100 ether); // day-2 deposit stakes day 3: enters
+        _selfDeposit(alice, 100); // day-2 deposit stakes day 3: enters
 
         _warpToDay(3);
         vm.recordLogs();
-        _selfDeposit(bob, 100_000 ether); // stakes day 4: locked out of day 3's book
+        _selfDeposit(bob, 100_000); // stakes day 4: locked out of day 3's book
 
         (, uint96 total, uint32 count) = coinflip.bafDrawInfo();
         assertEq(count, 1, "the boundary closed the book");
@@ -221,25 +221,25 @@ contract BafWeightedDrawTest is DeployProtocol {
 
         // Permissionless gift: bob funds a stake credited to alice.
         vm.prank(GAME);
-        coin.mintForGame(bob, 1_000 ether);
+        coin.mintForGame(bob, 1_000);
         vm.prank(bob);
-        coinflip.depositCoinflip(alice, 1_000 ether);
+        coinflip.depositCoinflip(alice, 1_000);
 
         // Approved-operator deposit: operator spends alice's FLIP for her stake.
         vm.prank(alice);
         game.setOperatorApproval(operator, true);
         vm.prank(GAME);
-        coin.mintForGame(alice, 1_000 ether);
+        coin.mintForGame(alice, 1_000);
         vm.prank(operator);
-        coinflip.depositCoinflip(alice, 1_000 ether);
+        coinflip.depositCoinflip(alice, 1_000);
 
         // Protocol flip credit (quest-reward shape).
         vm.prank(ContractAddresses.QUESTS);
-        coinflip.creditFlip(alice, 1_000 ether);
+        coinflip.creditFlip(alice, 1_000);
 
         // sDGNRS backing credit (FLIP de-circulation shape).
         vm.prank(ContractAddresses.COIN);
-        coinflip.creditSdgnrsBacking(1_000 ether);
+        coinflip.creditSdgnrsBacking(1_000);
 
         (, uint96 total, uint32 count) = coinflip.bafDrawInfo();
         assertEq(count, 0, "no indirect leg may enter the draw");
@@ -259,12 +259,12 @@ contract BafWeightedDrawTest is DeployProtocol {
             abi.encodeWithSelector(IDegenerusGame.consumeCoinflipBoon.selector),
             abi.encode(uint16(2500))
         );
-        _selfDeposit(alice, 1_000 ether);
+        _selfDeposit(alice, 1_000);
         vm.clearMockedCalls();
 
         assertGe(
             coinflip.coinflipAmount(alice),
-            1_250 ether,
+            1_250,
             "harness: the 25% boon boost must have landed on the stake"
         );
         (, uint96 total, uint32 count) = coinflip.bafDrawInfo();
@@ -276,20 +276,20 @@ contract BafWeightedDrawTest is DeployProtocol {
     ///         recycling bonus rides the stake, never the draw.
     function testRecycleLegCarriesNoWeight() public {
         // Bank a win: day-2 deposit stakes day 3; resolve day 3 as a win.
-        _selfDeposit(alice, 1_000 ether);
+        _selfDeposit(alice, 1_000);
         _resolveDay(3, true);
 
         // Day-3 deposits stake day 4: arm day 4 and rebet out of the winnings.
         _arm(4);
         vm.prank(alice);
-        coinflip.depositCoinflip(address(0), 500 ether);
+        coinflip.depositCoinflip(address(0), 500);
 
         (, uint96 total, uint32 count) = coinflip.bafDrawInfo();
         assertEq(count, 1, "the rebet enters once");
         assertEq(total, 500, "weight is the raw principal, not principal + recycle bonus");
         assertGt(
             coinflip.coinflipAmount(alice),
-            500 ether,
+            500,
             "harness: the recycle bonus must have landed on the stake"
         );
     }
@@ -298,7 +298,7 @@ contract BafWeightedDrawTest is DeployProtocol {
     ///         not the draw weight.
     function testRecordClaimCarriesNoWeight() public {
         _arm(3);
-        uint256 amount = 250_000 ether; // clears the record floor; bootstrap claim pays
+        uint256 amount = 250_000; // clears the record floor; bootstrap claim pays
         _selfDeposit(alice, amount);
 
         assertEq(coinflip.biggestFlipEver(), amount, "harness: the record must have armed");
@@ -328,7 +328,7 @@ contract BafWeightedDrawTest is DeployProtocol {
     ///         every other slot stays empty.
     function testSoleEntryTakesTheFivePercentSlot() public {
         _arm(3);
-        _selfDeposit(alice, 100 ether);
+        _selfDeposit(alice, 100);
         uint256 word = uint256(keccak256("sole_word"));
         assertEq(jackpots.bafHeadWinner(10, word, 1), alice, "the sole entrant wins the draw slot");
         _assertAllSlotsEmpty(word, false);
@@ -341,17 +341,17 @@ contract BafWeightedDrawTest is DeployProtocol {
         _arm(3);
         // Build board + score state through the real credit path.
         vm.startPrank(ContractAddresses.COINFLIP);
-        jackpots.recordBafFlip(alice, 10, 900 ether);
-        jackpots.recordBafFlip(bob, 10, 700 ether);
-        jackpots.recordBafFlip(carol, 10, 500 ether);
+        jackpots.recordBafFlip(alice, 10, 900);
+        jackpots.recordBafFlip(bob, 10, 700);
+        jackpots.recordBafFlip(carol, 10, 500);
         vm.stopPrank();
 
         uint256 word = uint256(keccak256("isolation_word"));
         bytes32 before = _otherSlots(word);
         assertEq(jackpots.bafHeadWinner(10, word, 1), address(0), "no entry, no draw winner");
 
-        _selfDeposit(alice, 100 ether);
-        _selfDeposit(bob, 300 ether);
+        _selfDeposit(alice, 100);
+        _selfDeposit(bob, 300);
         address drawn = jackpots.bafHeadWinner(10, word, 1);
         assertTrue(drawn == alice || drawn == bob, "the draw names an entrant");
         assertEq(_otherSlots(word), before, "every other slot is unchanged by the draw");

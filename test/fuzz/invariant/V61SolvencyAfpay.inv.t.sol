@@ -50,7 +50,7 @@ contract V61SolvencyAfpay is DeployProtocol {
     uint256 private constant BALANCES_PACKED_SLOT = 7; // [afking:hi128 | claimable:lo128]
     uint256 private constant MINTPACKED_SLOT = 9;
     uint256 private constant DEITY_SHIFT = 184;
-    uint256 private constant PRICE_COIN_UNIT = 1000 ether;
+    uint256 private constant PRICE_COIN_UNIT = 1000;
     uint256 private constant SMITE_BURN = PRICE_COIN_UNIT / 5;
 
     uint8 private _nextDeityId;

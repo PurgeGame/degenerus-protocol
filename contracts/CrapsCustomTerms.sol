@@ -7,7 +7,7 @@ error BadBattleTerms();
 ///      the validation code, while CrapsBattle uses the same constants to decode terms.
 abstract contract CrapsCustomTerms {
     /// @notice Granularity of battle stakes, seeds and tier boosts.
-    uint256 internal constant _BATTLE_STAKE_UNIT = 100 ether;
+    uint256 internal constant _BATTLE_STAKE_UNIT = 100;
     /// @notice Chips in every round. An entrant places zero through seven; the draw scatters the rest.
     uint256 internal constant _BONUS_CHIPS = 10;
     /// @dev Ceiling imposed by the scoreboard's 18-bit stake field.
@@ -68,7 +68,7 @@ abstract contract CrapsCustomTerms {
             uint256 bankroll = uint256(played) * bankMult;
             // The table's entry floor, and the bounty ceiling: a bounty rides alongside the
             // bankroll and may never exceed it. Zero is legal and leaves an empty pot to race for.
-            if (bankroll < _MIN_BANKROLL_FLIP || uint256(stakeUnits) * (_BATTLE_STAKE_UNIT / 1 ether) > bankroll) {
+            if (bankroll < _MIN_BANKROLL_FLIP || uint256(stakeUnits) * (_BATTLE_STAKE_UNIT) > bankroll) {
                 revert BadBattleTerms();
             }
             terms = uint256(played) | (uint256(bankMult) << _CB_BANK_SHIFT) | (uint256(goalMult) << _CB_GOAL_SHIFT)

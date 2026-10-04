@@ -47,10 +47,10 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
 
     uint24 internal constant DEEP_CAP = 1460; // AUTO_REBUY_OFF_CLAIM_DAYS_MAX
     uint24 internal constant WINDOW = 365; // COIN_CLAIM_DAYS
-    uint256 internal constant STAKE = 1000 ether;
+    uint256 internal constant STAKE = 1000;
     uint8 internal constant WIN_BYTE = 156; // max win reward%
     uint8 internal constant LOSS_BYTE = 1; // resolved-loss sentinel
-    uint128 internal constant TAKE_PROFIT = 1 ether; // divides each payout evenly -> carry stays 0
+    uint128 internal constant TAKE_PROFIT = 1; // divides each payout evenly -> carry stays 0
 
     address internal player;
     address internal regularPlayer;
@@ -110,7 +110,7 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
         }
         uint256 stakeWord;
         for (uint256 i = 0; i < 8; ++i) {
-            stakeWord |= (STAKE / 1 ether) << (i * 32);
+            stakeWord |= STAKE << (i * 32);
         }
         for (uint24 k = 0; k <= (n >> 3); ++k) {
             vm.store(address(coinflip), _stakeSlotByKey(k, p), bytes32(stakeWord));

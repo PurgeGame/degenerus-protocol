@@ -16,20 +16,12 @@
     "typeLabel": "mapping(address => struct DegenerusQuests.PlayerQuestState)"
   },
   {
-    "bytes": "1",
+    "bytes": "2",
     "encoding": "inplace",
-    "label": "levelQuestType",
+    "label": "_reservedLevelQuest",
     "offset": 0,
     "slot": 2,
-    "typeLabel": "uint8"
-  },
-  {
-    "bytes": "1",
-    "encoding": "inplace",
-    "label": "levelQuestVersion",
-    "offset": 1,
-    "slot": 2,
-    "typeLabel": "uint8"
+    "typeLabel": "uint16"
   },
   {
     "bytes": "32",

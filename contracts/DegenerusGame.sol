@@ -195,7 +195,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     uint256 private constant RECORD_SDGNRS_SCALE_DIV = 500;
 
     /// @dev Base cost for RNG nudge (100 FLIP), compounds +50% per queued nudge.
-    uint256 private constant RNG_NUDGE_BASE_COST = 100 ether;
+    uint256 private constant RNG_NUDGE_BASE_COST = 100;
 
     /*+======================================================================+
       |                          CONSTRUCTOR                                 |
@@ -464,6 +464,13 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         assembly {
             value := sload(slot)
         }
+    }
+
+    /// @notice Affiliate-only permanent wallet registration; the ticket module enforces access.
+    function registerAffiliateOwner(address, bool) external returns (uint32 id) {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall(msg.data);
+        if (!ok) _revertDelegate(data);
+        id = abi.decode(data, (uint32));
     }
 
     /// @notice AFKING_SUB_TOKEN-only: clear `holder`'s SEAT_ENCUMBERED latch after the
@@ -1058,13 +1065,22 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @return boostBps The boost in basis points to apply.
     /// @custom:reverts Unauthorized If caller is not COIN, COINFLIP or WWXRP.
     function consumeCoinflipBoon(
-        address
+        address player
     ) external returns (uint16 boostBps) {
         if (
             msg.sender != ContractAddresses.COIN &&
             msg.sender != ContractAddresses.COINFLIP &&
             msg.sender != ContractAddresses.WWXRP
         ) revert Unauthorized();
+        if (player == address(0)) return 0;
+        // Most deposits/entries have no boon. Check the caller's own tier here
+        // and avoid dispatching the cold module just to return zero. A nonzero
+        // tier still reaches the module for expiry, consumption and its event.
+        uint256 tier = msg.sender == ContractAddresses.COINFLIP
+            ? uint8(boonPacked[player].slot0 >> BP_COINFLIP_TIER_SHIFT)
+            : (boonPacked[player].slot1 >> (msg.sender == ContractAddresses.WWXRP ? BP_WWXRP_LANE_SHIFT : 0))
+                & BP_LANE_TIER_MASK;
+        if (tier == 0) return 0;
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_BOON_MODULE
             .delegatecall(msg.data);
@@ -1849,8 +1865,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @dev Calculate nudge cost with compounding.
-    ///      Base cost is 100 FLIP, +50% per queued nudge, then rounded up to
-    ///      the nearest whole FLIP. Rounding occurs after the full compound calculation.
+    ///      Base cost is 100 FLIP. Each +50% step floors to a whole token:
+    ///      100, 150, 225, 337, 505, ... .
     /// @param reversals Number of nudges already queued.
     /// @return cost FLIP cost for the next nudge.
     function _currentNudgeCost(
@@ -1863,8 +1879,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                 --reversals;
             }
         }
-        uint256 remainder = cost % 1 ether;
-        if (remainder != 0) cost += 1 ether - remainder;
     }
 
     /// @notice Chainlink VRF callback for random word fulfillment.
@@ -2654,7 +2668,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |                    DEGENERETTE TRACKING VIEWS                        |
       +======================================================================+*/
 
-    /// @notice Get daily hero wager for a specific quadrant/symbol on a given day.
+    /// @notice Get a retained daily hero wager. Recycled days return zero; use bet logs for history.
     /// @param day Day index (from GameTimeLib).
     /// @param quadrant Quadrant (0-3).
     /// @param symbol Symbol index within quadrant (0-7).
@@ -2665,11 +2679,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint8 symbol
     ) external view returns (uint256 wagerUnits) {
         if (quadrant >= 4 || symbol >= 8) return 0;
-        uint256 packed = dailyHeroWagers[day][quadrant];
+        uint256 packed = _dailyHeroWagerWord(day, quadrant);
         wagerUnits = (packed >> (uint256(symbol) * 32)) & 0xFFFFFFFF;
     }
 
-    /// @notice Get the winning hero symbol for a given day (most wagered across all quadrants).
+    /// @notice Get the most-wagered hero in a retained day. Recycled days return zeros.
     /// @param day Day index (from GameTimeLib).
     /// @return winQuadrant The winning quadrant.
     /// @return winSymbol The winning symbol within that quadrant.
@@ -2682,7 +2696,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         returns (uint8 winQuadrant, uint8 winSymbol, uint256 winAmount)
     {
         for (uint8 q = 0; q < DEGENERETTE_HERO_COUNT / 8; ++q) {
-            uint256 packed = dailyHeroWagers[day][q];
+            uint256 packed = _dailyHeroWagerWord(day, q);
             for (uint8 s = 0; s < 8; ++s) {
                 uint256 amount = (packed >> (uint256(s) * 32)) & 0xFFFFFFFF;
                 if (amount > winAmount) {

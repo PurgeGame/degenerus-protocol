@@ -264,7 +264,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint16 private constant LOOTBOX_DGNRS_POOL_MEGA_PPM = 8000;
     /// @dev One whole WWXRP token: the presale box's flat 10%-path award, and the floor
     ///      under every size-scaled box WWXRP amount (see `_boxWwxrpStake`).
-    uint256 private constant LOOTBOX_WWXRP_PRIZE = 1 ether;
+    uint256 private constant LOOTBOX_WWXRP_PRIZE = 1;
     /// @dev WWXRP per ETH of roll value — 5 tokens per 0.01 ETH. Since WWXRP carries 18
     ///      decimals like wei, the conversion is a bare multiply on the wei amount.
     uint256 private constant LOOTBOX_WWXRP_PER_ETH = 500;
@@ -2046,12 +2046,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         } else if (roll < 14) {
             // 15% chance: one WWXRP Degenerette spin staking the roll's size-scaled WWXRP.
             wwxrpOut = _callWwxrpSpin(
-                player, _boxWwxrpStake(amount), activityScore, EntropyLib.hash2(seed, BOX_WWXRP_SPIN_TAG)
+                player, _boxWwxrpSpinStake(amount), activityScore, EntropyLib.hash2(seed, BOX_WWXRP_SPIN_TAG)
             );
             wasSpin = true;
         } else if (roll == 14) {
             // 5% chance: large FLIP reward with variance (flat → creditFlip).
-            flipOut = _largeFlipOut(amount, seed, currentLevel);
+            flipOut = _largeFlipOut(amount, seed, currentLevel) / TOKEN_MATH_SCALE;
         } else if (roll < 17) {
             // 10% chance: CRAPS DAY PASSES, denominated out of the same flat-FLIP budget the roll
             // above pays in coin. The budget is used UNROUNDED on purpose — the whole/100-FLIP
@@ -2115,7 +2115,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev The large-FLIP output for a roll: variance-tiered BPS of `amount`, converted to
     ///      FLIP at the next-level ticket price (the box's own denomination) — FLIP is
     ///      level-less and spends at the live peg, so the rolled ticket level plays no part.
-    ///      Shared by the flat FLIP roll and the FLIP-spins stake.
+    ///      Returns 10^18 sub-units per FLIP, retaining fractions for the spin/pass branches.
+    ///      The flat award converts to whole tokens at its payment boundary.
     function _largeFlipOut(uint256 amount, uint256 seed, uint24 currentLevel) private pure returns (uint256) {
         uint256 varianceRoll = uint16(seed >> 80) % 20;
         uint256 largeFlipBps;
@@ -2127,7 +2128,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             largeFlipBps = LOOTBOX_LARGE_FLIP_HIGH_BASE_BPS + (varianceRoll - 16) * LOOTBOX_LARGE_FLIP_HIGH_STEP_BPS;
         }
         uint256 flipBudget = (amount * largeFlipBps) / 10_000;
-        return (flipBudget * PRICE_COIN_UNIT) / PriceLookupLib.priceForLevel(currentLevel);
+        return (flipBudget * (PRICE_COIN_UNIT * TOKEN_MATH_SCALE)) / PriceLookupLib.priceForLevel(currentLevel);
     }
 
     /// @dev Turn one box's flat-FLIP budget into whole day passes.
@@ -2155,8 +2156,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint16 activityScore,
         BoxAcc memory acc
     ) private returns (bool spun) {
-        bool high = budget > CrapsPriceLib.HIGH_SWITCH;
-        uint256 unit = high ? HIGH_ROLLER_DAY_PASS_VALUE : NORMAL_DAY_PASS_VALUE;
+        bool high = budget > CrapsPriceLib.HIGH_SWITCH * TOKEN_MATH_SCALE;
+        uint256 unit = (high ? HIGH_ROLLER_DAY_PASS_VALUE : NORMAL_DAY_PASS_VALUE) * TOKEN_MATH_SCALE;
         uint256 count;
         unchecked {
             count = budget / unit;
@@ -2172,7 +2173,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             // Rounded away — take the consolation spin instead. Additive by design: it is not
             // deducted from the budget and not netted off anywhere else.
             acc.wwxrp += _callWwxrpSpin(
-                player, _boxWwxrpStake(amount), activityScore, EntropyLib.hash2(seed, BOX_PASS_SPIN_TAG)
+                player, _boxWwxrpSpinStake(amount), activityScore, EntropyLib.hash2(seed, BOX_PASS_SPIN_TAG)
             );
             return true;
         }
@@ -2186,8 +2187,13 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      roll's main amount — the same basis the ticket, FLIP and DGNRS legs use, so every
     ///      box path stakes in proportion to its size, with a one-token minimum stake.
     function _boxWwxrpStake(uint256 amount) private pure returns (uint256 stake) {
+        return _boxWwxrpSpinStake(amount) / TOKEN_MATH_SCALE;
+    }
+
+    /// @dev Virtual spin stake retains fractional tokens; the one-token minimum is unchanged.
+    function _boxWwxrpSpinStake(uint256 amount) private pure returns (uint256 stake) {
         stake = amount * LOOTBOX_WWXRP_PER_ETH;
-        if (stake < LOOTBOX_WWXRP_PRIZE) stake = LOOTBOX_WWXRP_PRIZE;
+        if (stake < LOOTBOX_WWXRP_PRIZE * TOKEN_MATH_SCALE) stake = LOOTBOX_WWXRP_PRIZE * TOKEN_MATH_SCALE;
     }
 
     /// @dev Delegatecall the Degenerette module's WWXRP box-spin resolver (Game storage context).

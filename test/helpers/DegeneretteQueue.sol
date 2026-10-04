@@ -39,7 +39,7 @@ library DegeneretteQueue {
 
     /// @dev Per-spin stake in wei.
     function stake(uint256 bet) internal pure returns (uint128) {
-        uint256 unit = currency(bet) == 0 ? 1 gwei : 1 ether;
+        uint256 unit = currency(bet) == 0 ? 1 gwei : 1;
         return uint128(((bet >> 188) & type(uint64).max) * unit);
     }
 

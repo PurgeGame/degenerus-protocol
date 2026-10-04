@@ -94,7 +94,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     uint256 private constant ETH_WIN_CAP_BPS = 1_000;
     /// @dev Per-currency minimum bets (DegeneretteModule:217-223).
     uint256 private constant MIN_BET_ETH = 5 ether / 1000;
-    uint256 private constant MIN_BET_FLIP = 100 ether;
+    uint256 private constant MIN_BET_FLIP = 100;
 
     /// @dev PayoutCapped topic0 — one per ETH spin that flipped into the lootbox. Event shape
     ///      is unchanged: PayoutCapped(address indexed player, uint256 cappedEthPayout, uint256 excessConverted).
@@ -233,9 +233,9 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         uint64 first = _placeBet(CURRENCY_ETH, 0.01 ether, 3, pick);
         address secondPlayer = makeAddr("second_board_player");
         player = secondPlayer;
-        _fundFlip(player, 10_000 ether);
-        _placeBet(CURRENCY_FLIP, 100 ether, 1, pick); // decoy bet shifts the queue position
-        uint64 second = _placeBet(CURRENCY_FLIP, 200 ether, 3, pick);
+        _fundFlip(player, 10_000);
+        _placeBet(CURRENCY_FLIP, 100, 1, pick); // decoy bet shifts the queue position
+        uint64 second = _placeBet(CURRENCY_FLIP, 200, 3, pick);
         _injectLootboxRngWord(1, word);
 
 
@@ -278,10 +278,10 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         uint32 flipTicket = ethTicket;
 
         uint128 ethPerTicket = 0.01 ether;     // >= MIN_BET_ETH
-        uint128 flipPerTicket = 2_000 ether;   // >= MIN_BET_FLIP
+        uint128 flipPerTicket = 2_000;   // >= MIN_BET_FLIP
 
         // Fund the player for the FLIP bet.
-        _fundFlip(player, uint256(flipPerTicket) * 3 + 1 ether);
+        _fundFlip(player, uint256(flipPerTicket) * 3 + 1);
 
         // Place both bets (ETH=1, FLIP=2).
         uint64 ethBet = _placeBet(CURRENCY_ETH, ethPerTicket, 4, ethTicket);
@@ -390,8 +390,8 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         while (EntropyLib.hash4(word, uint160(player), 1, BET_SURVIVAL_TAG) & 1 == 1) ++word;
         uint32 ticket = _winningTicketFor(index, word);
 
-        _fundFlip(player, 1_000 ether);
-        uint64 betId = _placeBet(CURRENCY_FLIP, 200 ether, 3, ticket);
+        _fundFlip(player, 1_000);
+        uint64 betId = _placeBet(CURRENCY_FLIP, 200, 3, ticket);
         assertEq(
             uint256(keccak256(abi.encode(word, player, betId, BET_SURVIVAL_TAG))) & 1,
             0,

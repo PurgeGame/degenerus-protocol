@@ -20,6 +20,14 @@ and **70–130%** activity return target are unchanged. WWXRP's added activity
 return remains allocated to scores **6–9** in a 10/30/30/30 split, with scheduled
 return below 100% through activity **169**.
 
+FLIP and WWXRP have zero decimals. Token payouts are whole integers; internal
+reward spins retain fractional precision until the final conversion. FLIP floors
+that final award. WWXRP awards strictly between zero and one token pay **1 WWXRP**;
+zero pays zero, and larger awards still floor to whole tokens. The quoted return
+targets describe payouts before token rounding. The WWXRP minimum can increase
+the realized return of small reward spins. ETH and sDGNRS retain their existing
+denominations.
+
 ## Ticket generation and shared draws
 
 The only ticket input is a hero symbol `0..23` (Crypto, Zodiac or Cards): `quadrant = symbol >> 3`,

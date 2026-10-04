@@ -48,8 +48,8 @@ contract V61Smite is DeployProtocol {
     uint256 private constant CURSE_COUNT_CAP = 20;
     uint256 private constant SMITE_CEILING = 10; // 5 stacks * 2 points
 
-    // PRICE_COIN_UNIT = 1000 ether; smite burns PRICE_COIN_UNIT/5 = 200 FLIP; decurse PRICE_COIN_UNIT/10 = 100.
-    uint256 private constant PRICE_COIN_UNIT = 1000 ether;
+    // PRICE_COIN_UNIT = 1000; smite burns PRICE_COIN_UNIT/5 = 200 FLIP; decurse PRICE_COIN_UNIT/10 = 100.
+    uint256 private constant PRICE_COIN_UNIT = 1000;
     uint256 private constant SMITE_BURN = PRICE_COIN_UNIT / 5; // 200 FLIP
     uint256 private constant DECURSE_BURN = PRICE_COIN_UNIT / 10; // 100 FLIP
 

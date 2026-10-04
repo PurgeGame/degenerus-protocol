@@ -274,7 +274,7 @@ abstract contract BafBracketFixture is DeployProtocol {
         }
         for (uint24 target = lvl + 2; target <= lvl + 99; ++target) {
             for (uint256 k; k < FAR_PER_LEVEL; ++k) {
-                jackpots.recordBafFlip(_farHolder(target, k), lvl, (uint256(target) * 16 + k + 1) * 1 ether);
+                jackpots.recordBafFlip(_farHolder(target, k), lvl, (uint256(target) * 16 + k + 1));
             }
         }
         for (uint256 i; i < 4; ++i) {

@@ -333,3 +333,124 @@ boundaries; the final trace and rerun are in
 The production source manifest, sizes, normalized-layout comparison and isolated
 Foundry run manifests are retained there. These are focused checks, not a full
 audit or a full-suite pass.
+
+## Final Coinflip and Craps gas pass (2026-10-04)
+
+Coinflip's claim loop now caches the current 32-day result word. Stake words still
+load fresh, including after a clear; virtual seed stakes retain their existing
+handling. Craps sums its ten validated chip counts with packed arithmetic and
+writes the settlement cursor once after the admitted seats. A budget stop flushes
+the last completed seat; no progress causes no cursor write. The masked write
+preserves the field binding and precedes the accumulated Coinflip credit call.
+The existing seat and flush-tail gas reservations are unchanged. These three
+changes add no storage fields and change no external signatures.
+
+The saved implementations in `test/helpers/reference/*BeforeFinalGas.sol` (archived with
+their differential tests in `degenerus-audit-archive/2026-10-04-customer-gas-ab-evidence/`;
+also committed on branch `opt/customer-gas-followups` at `72d5f2d6a`) capture
+the combined main working tree immediately before these three changes, including
+the earlier packing, whole-token, affiliate and storage-reuse work. Their only
+reference adaptations are contract names and relative imports. Differential tests
+replace runtime code at the same address and restore the same initial snapshot,
+so calldata, dependencies, compiler settings and initial state agree.
+
+Measured gas with transaction isolation enabled:
+
+| Public call / fixture | Before | After | Gas saved |
+| --- | ---: | ---: | ---: |
+| Coinflip claim, one day | 173,855 | 174,034 | -179 |
+| Coinflip claim, 32 days across words | 291,804 | 289,661 | 2,143 |
+| Coinflip claim, 365 days | 981,151 | 960,903 | 20,248 |
+| Coinflip auto-rebuy exit, 1,460 days | 3,934,334 | 3,851,408 | 82,926 |
+| Craps preferred-board validation | 52,407 | 51,697 | 710 |
+| Craps settlement, 40 ordinary seats | 1,996,965 | 1,985,500 | 11,465 |
+| Craps settlement, 20 high-lane seats | 1,178,939 | 1,173,154 | 5,785 |
+
+These are fixture measurements, not universal worst-case bounds. The cache has a
+small one-day overhead. Craps differential settlement uses the real engine and
+JackpotBattle with mocked satellite contracts; protocol wiring is checked
+separately with the complete deployment fixture. Claim comparisons use the
+complete deployment fixture, compare ordered events and affected balances/packed
+words, and exercise mixed gaps, wins, losses, seed accounts and repeated claims.
+Chip comparisons check both outputs and exact rejection data. Settlement
+comparisons check ordered events, progress and all written storage keys on the
+table and its mocked payout dependencies, plus no-progress and partial-resume cases.
+
+Four existing Coinflip claim fixtures now use whole FLIP/WWXRP units, matching the
+earlier token-unit change. The seed-window gas fixture measures a nested cold
+protocol call so Foundry isolation does not add transaction intrinsic gas to its
+execution-only ceilings. The original ceilings are retained.
+
+Two combined-regression fixtures were also repaired: whole-token ticket rounding
+now exercises `redeemFlip` after opening its prize-target gate, checks the exact
+insufficient-FLIP error, and reads owed entries in whole-entry units. The keeper
+reward fixture nests the fee cheat and protocol call in one execution frame so
+the isolated runner retains its intended nonzero fee. The same measured work
+(1,456,514 gas) now pays the independently calculated 6 FLIP; its original payout
+equality and nonzero-reward assertions remain.
+
+The accepted latest execution of each of 21 selected roots passes: 347 test
+executions, zero failures and zero skips (imported helper checks repeat). Besides
+the new differentials, these cover claim/carry/rebuy/seed/gap lifecycle, deep-claim
+gas, Craps budgets/cursors/awards/reuse, real protocol wiring, whole-token payment
+boundaries, spin precision, affiliate identity and packed sibling preservation.
+The regression runs are `20261004T130218.838952Z-eec1bc2c` and
+`20261004T130943.073895Z-a08ea120`; the two final fixture reruns are in
+`20261004T131702.498811Z-5cee8b16`. Earlier failed fixture executions remain in the
+logs. The accepted per-root index is `.planning/final-gas-accepted-tests.json` in
+the validation checkout, with a copy under main's `.planning/final-gas-pass/`.
+
+The final combined build passes all eleven source/interface gates and the
+source-hash-validated size check for 37 deployment artifacts. Coinflip is 22,746
+runtime bytes (1,830 spare); CrapsBattle is 24,207 (369 spare). All 32 normalized
+golden layouts match, and the recursive comparison finds no mismatch across the
+16 delegate modules. The 51 assurance-tool unit tests also pass. The integration
+log is `.planning/final-gas-integration.log` in the validation checkout.
+
+The build uses the checked-in address pins (SHA-256
+`007af42d7a34fa7e9b612bccfeeb1844526d5a960d07d443f17f49554894dbe2`). At the final
+comparison, all 95 Solidity contract sources and all eleven changed/new test and
+reference files match the validated checkout, including the restored address
+pins. Main remains at `764b4ab9c`, with the work uncommitted. The accepted-source
+hashes are retained in `.planning/final-gas-pass/source.sha256.json`; the release
+audit snapshot has not been refreshed or represented as a full audit pass.
+
+The accepted differential runs are `20261004T125853.687939Z-523aff2d` (Coinflip)
+and `20261004T130108.835329Z-3bcb07e1` (Craps), under
+`/home/zak/.cache/degenerus-final-gas-pass/.audit-test-logs/foundry/`.
+Both pass nine primary cases plus six imported helper checks, including 1,000-run
+fuzz properties. All compilation/testing for this pass uses the fixed systemd
+job with an 8 GiB memory cap, zero swap and two-core CPU quota, serially with one
+Foundry source root and one thread per batch. Trait-bucket write coalescing remains
+deferred. The larger bundle's full-suite release audit remains outstanding.
+
+## WWXRP minimum positive award (2026-10-04)
+
+Positive awards below one WWXRP now pay one whole token. Skipped-BAF consolation
+uses the same minimum in its view and claim, and the shared WWXRP spin resolver
+applies it before returning the award to lootbox/foil callers and emitting
+`BoxSpin`. Zero scores, stale/claimed scores and losing spins still pay zero.
+Larger awards retain their whole-token floor. The token's existing `gameMintScale`
+still applies at mint time, including its zero-emission setting. Coinflip losses,
+presale duds, golden-ticket consolation and lootbox cold-bust awards were already
+whole-token amounts or had a one-token minimum.
+
+The focused isolated run `20261004T141035.230963Z-178f5094` passes all 38 test
+executions across `BafConsolationClaim`, `SpinPrecision` (archived with the reference
+copies, see above) and `WwxrpGameMintScale`
+(20 primary cases plus repeated imported helpers). This includes 1,000 randomized
+BAF scores, live advance/VRF bracket skipping followed by claims, smallest-score
+and whole-token boundaries, event/return agreement, replay rejection, mint-scale
+0/7 cases, 128 randomized spin comparisons and 640 fixed WWXRP spin fixtures
+against the preserved fractional-precision resolver. Fixed fixtures assert that
+losing, positive sub-token and larger winning outcomes are all exercised. The
+paired FLIP spin comparisons retain the prior floor rule.
+
+Evidence is in `/home/zak/.cache/degenerus-wwxrp-minimum/`, with the accepted source
+hashes under main's `.planning/wwxrp-minimum/`. Work remains uncommitted on main.
+
+The combined build, all eleven source/interface gates, 37 deployment-size checks,
+32 golden layouts, recursive alignment of 16 delegate modules and 51 assurance
+tool tests pass. DegenerusJackpots is 5,364 runtime bytes and the Degenerette
+module is 21,258. The accepted contract sources and changed tests match main
+exactly. The larger release audit remains outside this focused verification.

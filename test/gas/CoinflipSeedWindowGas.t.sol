@@ -10,6 +10,8 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 /// @notice Every measured call is the first protocol call of its test, so it starts on a cold
 ///         EIP-2929 access list with setUp's writes committed. Figures are logged; the ceilings
 ///         pin the seed window's single-word arm and the walk reading the seed instead of a lane.
+///         The outer self-call keeps the measured protocol call nested under --isolate, so
+///         lastCallGas reports execution gas without adding transaction intrinsic gas.
 contract CoinflipSeedWindowGas is DeployProtocol {
     address internal constant GAME = ContractAddresses.GAME;
     address internal constant VAULT = ContractAddresses.VAULT;
@@ -39,21 +41,26 @@ contract CoinflipSeedWindowGas is DeployProtocol {
         coinflip.processCoinflipPayouts(0, word, d);
     }
 
+    function measureSeedCall(address caller, bytes calldata data) external returns (uint256 used) {
+        require(msg.sender == address(this));
+        vm.prank(caller);
+        (bool ok, bytes memory result) = address(coinflip).call(data);
+        used = vm.lastCallGas().gasTotalUsed;
+        if (!ok) assembly ("memory-safe") { revert(add(result, 32), mload(result)) }
+    }
+
     /// @dev The x00 arm, cold, at a day past the deploy window.
     function test_ArmCenturySeedCold() public {
         _warpToDay(60);
-        vm.prank(GAME);
-        coinflip.armCenturySeed(100);
-        uint256 used = vm.lastCallGas().gasTotalUsed;
+        uint256 used = this.measureSeedCall(GAME, abi.encodeCall(coinflip.armCenturySeed, (100)));
         emit log_named_uint("armCenturySeed_cold_gas", used);
         assertLt(used, ARM_GAS_CEIL, "arming a window is one packed-slot write");
     }
 
     /// @dev The vault's first claim: the walk crosses the 19 resolved deploy-window days.
     function test_VaultClaimAcrossSeededWindowCold() public {
-        vm.prank(VAULT);
-        coinflip.claimCoinflips(address(0), type(uint256).max);
-        uint256 used = vm.lastCallGas().gasTotalUsed;
+        uint256 used = this.measureSeedCall(VAULT,
+            abi.encodeCall(coinflip.claimCoinflips, (address(0), type(uint256).max)));
         emit log_named_uint("vault_claim_19_seeded_days_cold_gas", used);
         assertLt(used, VAULT_WALK_GAS_CEIL, "seeded days add no lane clear to the vault walk");
     }
@@ -61,9 +68,8 @@ contract CoinflipSeedWindowGas is DeployProtocol {
     /// @dev A seeded day's resolution, which walks sDGNRS across that day.
     function test_SeededDayResolutionCold() public {
         _warpToDay(20);
-        vm.prank(GAME);
-        coinflip.processCoinflipPayouts(0, uint256(keccak256("seed_window_gas_day20")) | 1, 20);
-        uint256 used = vm.lastCallGas().gasTotalUsed;
+        uint256 used = this.measureSeedCall(GAME, abi.encodeCall(coinflip.processCoinflipPayouts,
+            (0, uint256(keccak256("seed_window_gas_day20")) | 1, 20)));
         emit log_named_uint("seeded_day_resolution_cold_gas", used);
         assertLt(used, SEEDED_DAY_RESOLVE_GAS_CEIL, "sDGNRS's seeded day costs no lane clear");
     }

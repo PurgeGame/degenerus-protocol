@@ -213,14 +213,17 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
             if (lockedAtStart) multiplierBps <<= 1;
             uint256 rate = block.basefee;
             if (rate > cap) rate = cap;
-            reward = (used - MineFlipGas.MIN_REWARDED_GAS) * rate * PRICE_COIN_UNIT * multiplierBps
-                / (rewardPrice * 10_000);
-            if (reward != 0) {
+            uint256 numerator = (used - MineFlipGas.MIN_REWARDED_GAS) * rate * PRICE_COIN_UNIT * multiplierBps;
+            uint256 denominator = rewardPrice * 10_000;
+            // Legacy raw reward was floor(numerator * 1e18 / denominator). Preserve its
+            // zero cutoff without multiplying, then pay whole FLIP with the existing minimum.
+            if (numerator >= (denominator - 1) / 1e18 + 1) {
+                reward = numerator / denominator;
+                if (reward == 0) reward = 1;
                 // Coinflip stakes are whole FLIP: a positive reward pays at least 1 FLIP, larger
                 // rewards floor to whole FLIP. Applied after the gas measurement, so the
                 // normalization cannot price itself. Both events report this figure; below the
                 // daily stake cap it is exactly what Coinflip credits.
-                reward = reward < 1 ether ? 1 ether : (reward / 1 ether) * 1 ether;
                 coinflip.creditFlip(msg.sender, reward);
                 emit MinerBounty(MINER_BOUNTY_ADVANCE, msg.sender, reward);
             }

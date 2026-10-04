@@ -58,7 +58,7 @@ contract WwxrpHostileSupply is DeployProtocol {
 
     function test_mintPastTheCeilingSaturates() public {
         wwxrp.vaultMintTo(address(this), type(uint256).max - wwxrp.totalSupply());
-        wwxrp.vaultMintTo(address(0xBEEF), 1 ether);
+        wwxrp.vaultMintTo(address(0xBEEF), 1);
         assertEq(wwxrp.totalSupply(), type(uint256).max, "a mint past the ceiling mints nothing");
         assertEq(wwxrp.balanceOf(address(0xBEEF)), 0, "and credits nobody");
     }

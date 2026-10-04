@@ -33,7 +33,7 @@ interface IDegenerusAffiliate {
     ///      Fresh ETH rewards: 25% (levels 0-3), 20% (levels 4+).
     ///      Recycled ETH rewards: 5% (all levels).
     ///      Access restricted to GAME purchase paths.
-    /// @param amount Base reward amount (18 decimals).
+    /// @param amount Base reward amount (0 decimals).
     /// @param code Affiliate code provided with the transaction (may be bytes32(0)).
     /// @param sender The player making the purchase.
     /// @param lvl Current game level (for leaderboard tracking).
@@ -89,19 +89,19 @@ interface IDegenerusAffiliate {
     ///      Used to pay the top affiliate a DGNRS pool reward at level transition.
     /// @param lvl The game level to query.
     /// @return player Address of the top affiliate.
-    /// @return score Their score in FLIP base units (18 decimals).
+    /// @return score Their score in FLIP base units (0 decimals).
     function affiliateTop(uint24 lvl) external view returns (address player, uint96 score);
 
     /// @notice Get an affiliate's base earnings score for a level.
     /// @dev Uses direct affiliate earnings only (excludes uplines and quest bonuses).
     /// @param lvl The game level to query.
     /// @param player The affiliate address to query.
-    /// @return score The base affiliate score (18 decimals).
+    /// @return score The base affiliate score (0 decimals).
     function affiliateScore(uint24 lvl, address player) external view returns (uint256 score);
 
     /// @notice Get the total affiliate score across all affiliates for a level.
     /// @param lvl The game level to query.
-    /// @return total The total affiliate score (18 decimals).
+    /// @return total The total affiliate score (0 decimals).
     function totalAffiliateScore(uint24 lvl) external view returns (uint256 total);
 
     /// @notice Calculate the affiliate bonus points for a player.

@@ -9,7 +9,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///      comp burn spends, that is never a balance, never supply and never the vault's mint
 ///      allowance.
 contract CrapsCompLane is DeployProtocol {
-    uint256 internal constant INITIAL = 4_960_000 ether;
+    uint256 internal constant INITIAL = 4_960_000;
     uint256 internal constant COMP = 0x10;
 
     address internal player = makeAddr("player");
@@ -20,18 +20,18 @@ contract CrapsCompLane is DeployProtocol {
 
     function test_theLaneOpensOnTheConvertedPassAllowance() public view {
         assertEq(coin.crapsCompAllowance(), INITIAL, "the lane did not open on 200 passes' worth");
-        assertEq(coin.crapsCompAllowance(), 200 * 24_800 ether, "the conversion is not 200 x 24,800");
+        assertEq(coin.crapsCompAllowance(), 200 * 24_800, "the conversion is not 200 x 24,800");
     }
 
     function test_onlyTheTableFeedsTheLane() public {
         vm.expectRevert(FLIP.OnlyGame.selector);
-        coin.creditCrapsComps(1 ether);
+        coin.creditCrapsComps(1);
         vm.prank(ContractAddresses.VAULT);
         vm.expectRevert(FLIP.OnlyGame.selector);
-        coin.creditCrapsComps(1 ether);
+        coin.creditCrapsComps(1);
         vm.prank(ContractAddresses.CRAPS);
-        coin.creditCrapsComps(7 ether);
-        assertEq(coin.crapsCompAllowance(), INITIAL + 7 ether, "the credit did not land");
+        coin.creditCrapsComps(7);
+        assertEq(coin.crapsCompAllowance(), INITIAL + 7, "the credit did not land");
     }
 
     function test_aCompBurnChargesTheLaneAndNobodyElse() public {
@@ -39,9 +39,9 @@ contract CrapsCompLane is DeployProtocol {
         uint256 uncirculated = coin.supplyIncUncirculated();
         uint256 vaultAllowance = coin.vaultMintAllowance();
         vm.prank(ContractAddresses.CRAPS);
-        uint8 mask = coin.burnCoinForCraps(player, (1_000 ether) | COMP);
+        uint8 mask = coin.burnCoinForCraps(player, (1_000 << 8) | COMP);
         assertEq(mask, 0, "a comp consumed a boon");
-        assertEq(coin.crapsCompAllowance(), INITIAL - 1_000 ether, "the lane was not charged the gross");
+        assertEq(coin.crapsCompAllowance(), INITIAL - 1_000, "the lane was not charged the gross");
         assertEq(coin.balanceOf(player), 0, "the recipient's balance moved");
         assertEq(coin.totalSupply(), supply, "a comp changed supply");
         assertEq(coin.supplyIncUncirculated(), uncirculated, "a comp changed the uncirculated figure");
@@ -51,16 +51,16 @@ contract CrapsCompLane is DeployProtocol {
     function test_theLaneRefusesWhatItCannotCover() public {
         vm.prank(ContractAddresses.CRAPS);
         vm.expectRevert(FLIP.Insufficient.selector);
-        coin.burnCoinForCraps(player, (INITIAL + 1 ether) | COMP);
+        coin.burnCoinForCraps(player, ((INITIAL + 1) << 8) | COMP);
         assertEq(coin.crapsCompAllowance(), INITIAL, "a refused comp moved the lane");
     }
 
     function test_theCompBitIsTheTablesAlone() public {
         vm.expectRevert(FLIP.OnlyGame.selector);
-        coin.burnCoinForCraps(player, (1 ether) | COMP);
+        coin.burnCoinForCraps(player, (1 << 8) | COMP);
         vm.prank(ContractAddresses.VAULT);
         vm.expectRevert(FLIP.OnlyGame.selector);
-        coin.burnCoinForCraps(player, (1 ether) | COMP);
+        coin.burnCoinForCraps(player, (1 << 8) | COMP);
     }
 
     function test_theLaneIsNotTheVaultsMintAllowance() public {
@@ -76,11 +76,11 @@ contract CrapsCompLane is DeployProtocol {
 
     function test_aPaidBurnStillBurnsThePlayer() public {
         vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(player, 5_000 ether);
+        coin.mintForGame(player, 5_000);
         uint256 lane = coin.crapsCompAllowance();
         vm.prank(ContractAddresses.CRAPS);
-        coin.burnCoinForCraps(player, 1_000 ether);
-        assertEq(coin.balanceOf(player), 4_000 ether, "the paid burn did not burn the player");
+        coin.burnCoinForCraps(player, 1_000 << 8);
+        assertEq(coin.balanceOf(player), 4_000, "the paid burn did not burn the player");
         assertEq(coin.crapsCompAllowance(), lane, "a paid burn touched the lane");
     }
 }

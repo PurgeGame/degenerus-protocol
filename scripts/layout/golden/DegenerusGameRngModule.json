@@ -442,10 +442,10 @@
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "affiliateDgnrsClaimedBy",
+    "label": "playerClaimWord",
     "offset": 0,
     "slot": 24,
-    "typeLabel": "mapping(uint24 => mapping(address => bool))"
+    "typeLabel": "mapping(address => uint256)"
   },
   {
     "bytes": "32",
@@ -657,11 +657,11 @@
   },
   {
     "bytes": "32",
-    "encoding": "mapping",
-    "label": "bingoClaimed",
+    "encoding": "inplace",
+    "label": "__reservedBingoClaimRoot",
     "offset": 0,
     "slot": 51,
-    "typeLabel": "mapping(uint24 => mapping(address => bool))"
+    "typeLabel": "uint256"
   },
   {
     "bytes": "32",

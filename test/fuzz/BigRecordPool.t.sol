@@ -36,12 +36,12 @@ import {
 contract BigRecordPoolTest is DeployProtocol {
     address internal constant GAME = ContractAddresses.GAME;
 
-    uint256 internal constant FLIP_MIN = 200_000 ether;
+    uint256 internal constant FLIP_MIN = 200_000;
     uint256 internal constant SHARE_FLOOR_BPS = 500;
     uint256 internal constant SHARE_PER_DAY_BPS = 50;
     uint256 internal constant SHARE_CEIL_BPS = 7_500;
-    uint256 internal constant DAILY_DRIP = 2_000 ether;
-    uint256 internal constant POOL_SEED = 10_000 ether;
+    uint256 internal constant DAILY_DRIP = 2_000;
+    uint256 internal constant POOL_SEED = 10_000;
 
     address private player;
     address private rival;
@@ -80,12 +80,12 @@ contract BigRecordPoolTest is DeployProtocol {
     function testFundRecordPoolIsGameOnly() public {
         vm.prank(player);
         vm.expectRevert();
-        coinflip.fundRecordPool(1 ether);
+        coinflip.fundRecordPool(1);
 
         uint256 before = coinflip.recordPool();
         vm.prank(GAME);
-        coinflip.fundRecordPool(123 ether);
-        assertEq(coinflip.recordPool(), before + 123 ether, "game funding lands");
+        coinflip.fundRecordPool(123);
+        assertEq(coinflip.recordPool(), before + 123, "game funding lands");
     }
 
     /// @notice A push past uint128 clamps at the width instead of wrapping to dust.
@@ -287,7 +287,7 @@ contract BigRecordPoolTest is DeployProtocol {
 
     /// @notice A deposit under the floor never arms, however large the standing pool.
     function testSubFloorDepositNeverArms() public {
-        _selfDeposit(player, FLIP_MIN - 1 ether);
+        _selfDeposit(player, FLIP_MIN - 1);
         assertEq(coinflip.biggestFlipEver(), 0, "sub-floor deposit never arms");
     }
 
@@ -312,7 +312,7 @@ contract BigRecordPoolTest is DeployProtocol {
         assertEq(coinflip.biggestFlipEver(), claimAmount, "claim ratchets the record");
         assertEq(
             coinflip.coinflipAmount(rival),
-            ((claimAmount + expected) / 1 ether) * 1 ether,
+            ((claimAmount + expected) / 1) * 1,
             "stake carries the deposit plus the claimed share (whole-FLIP stake lane)"
         );
         assertEq(coinflip.recordPool(), pool - expected, "pool paid the share");
@@ -326,7 +326,7 @@ contract BigRecordPoolTest is DeployProtocol {
 
         // Inflate the pool so the floor share (20%) dwarfs the next mark.
         vm.prank(GAME);
-        coinflip.fundRecordPool(10_000_000 ether);
+        coinflip.fundRecordPool(10_000_000);
 
         uint256 claimAmount = FLIP_MIN + FLIP_MIN / 5;
         _selfDeposit(rival, claimAmount);

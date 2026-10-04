@@ -27,7 +27,7 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 1 days);
         alice = makeAddr("alice");
         vm.prank(address(game));
-        wwxrp.mintPrize(alice, 1_000_000 ether);
+        wwxrp.mintPrize(alice, 1_000_000);
     }
 
     function _slot(address player, uint256 word) private pure returns (bytes32) {
@@ -65,7 +65,7 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
         vm.expectEmit(true, false, false, true, address(game));
         emit BoonConsumed(alice, 7, 1200);
         vm.prank(alice);
-        wwxrp.enter(25 ether);
+        wwxrp.enter(25);
         (, uint256 s1) = IGameBoonView(address(game)).boonPacked(alice);
         assertEq(s1, others, "WWXRP lane not cleared or another lane touched");
     }
@@ -78,7 +78,7 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
         _write(alice, 0, _lane(2, false, d - 10) << WWXRP_LANE_SHIFT);
         vm.expectCall(address(game), abi.encodeCall(IGameBoonView.consumeCoinflipBoon, (alice)), 1);
         vm.prank(alice);
-        wwxrp.enter(25 ether);
+        wwxrp.enter(25);
         (, uint256 s1) = IGameBoonView(address(game)).boonPacked(alice);
         assertEq(s1, 0, "expired WWXRP lane not cleared");
     }
@@ -91,7 +91,7 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
         vm.expectEmit(true, false, false, true, address(game));
         emit BoonConsumed(alice, 7, 1200);
         vm.prank(alice);
-        wwxrp.enter(25 ether);
+        wwxrp.enter(25);
         (, uint256 s1) = IGameBoonView(address(game)).boonPacked(alice);
         assertEq(s1, 0, "same-day deity lane not spent");
 
@@ -100,7 +100,7 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
         vm.expectCall(address(game), abi.encodeCall(IGameBoonView.consumeCoinflipBoon, (alice)), 1);
         vm.recordLogs();
         vm.prank(alice);
-        wwxrp.enter(25 ether);
+        wwxrp.enter(25);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             assertTrue(logs[i].topics[0] != BOON_CONSUMED_SIG, "stale deity lane paid");
@@ -113,7 +113,7 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
     ///      is skipped, the Game's consume (run on a snapshot as WWXRP) returns 0, writes nothing
     ///      and logs nothing, and enter() leaves both boon words untouched.
     function testFuzz_DispatchIffWwxrpTierNonzero(uint256 s0, uint256 s1, uint256 amount) public {
-        amount = bound(amount, 25 ether, 10_000 ether);
+        amount = bound(amount, 25, 10_000);
         _write(alice, s0, s1);
         bool nonzeroTier = (s1 >> WWXRP_LANE_SHIFT) & 3 != 0;
 

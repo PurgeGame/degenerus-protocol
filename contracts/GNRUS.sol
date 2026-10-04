@@ -215,7 +215,17 @@ contract GNRUS {
     // ^ currentLevel (3) + finalized (1) + currentActiveBitmap (4) + pendingEditSet (4) + sweptAt (5) = 17 bytes, one slot, 15 free
 
     /// @notice Whether a voter has already voted for a given (level, voter, slot) tuple
-    mapping(uint24 => mapping(address => mapping(uint8 => bool))) public hasVoted;
+    // Low 20 bits are votes; bits 20..43 authenticate the current level. One word is
+    // reused when a voter returns. Historical individual votes are indexed from Voted events.
+    mapping(address => uint256) private _voterWord;
+
+    /// @notice Whether the voter has voted on a slot of the current level.
+    /// @dev Historical levels return false; Voted events retain the permanent vote history.
+    function hasVoted(uint24 level, address voter, uint8 slot) public view returns (bool) {
+        if (level != currentLevel || slot >= MAX_ACTIVE_SLOTS) return false;
+        uint256 word = _voterWord[voter];
+        return uint24(word >> 20) == level && (word & (uint256(1) << slot)) != 0;
+    }
 
     /// @notice Current-level charity slate. Index = uint8 slot id (0..19). Address-only, no metadata.
     /// @dev `private` — access is exposed only via the explicit `getCharity(uint8)` view (with its own bounds check), not an auto-generated array getter.
@@ -642,7 +652,7 @@ contract GNRUS {
     /// @notice Cast a vote toward a charity slot in the current level.
     /// @dev Permissionless. Vote weight = `sdgnrs.balanceOf(msg.sender) / 1e18` (no bonus, no threshold).
     ///      Voter may vote on multiple slots independently per level — each (level, voter, slot) tuple
-    ///      is tracked separately via `hasVoted[level][voter][slot]`.
+    ///      is tracked in the voter's level-tagged 20-bit mask.
     ///      Locked slots (0/1/2) accept votes normally — the locked-slot guard lives exclusively in
     ///      `setCharity`. Voters CAN vote on locked slots once filled.
     ///      CEI-clean: the only external interaction (`sdgnrs.balanceOf`) is a STATICCALL view BEFORE
@@ -660,10 +670,13 @@ contract GNRUS {
         //     write, so the optimizer collapses the duplicate SLOAD).
         if (currentSlate[slot] == lastWinningRecipient) revert PreviousWinnerNotVotable();
 
-        // 3. Already-voted rejection (one cold SLOAD on hasVoted[level][voter][slot])
+        // 3. Load the reusable word; a different level starts with an empty mask.
         uint24 level = currentLevel;
         address voter = msg.sender;
-        if (hasVoted[level][voter][slot]) revert VoteRejected(REJECT_ALREADY_VOTED);
+        uint256 word = _voterWord[voter];
+        if (uint24(word >> 20) != level) word = uint256(level) << 20;
+        uint256 bit = uint256(1) << slot;
+        if (word & bit != 0) revert VoteRejected(REJECT_ALREADY_VOTED);
 
         // 4. Zero-weight rejection (cross-contract STATICCALL — fires LAST among rejection checks
         //    so sad-path callers don't pay for the indirect call)
@@ -671,7 +684,7 @@ contract GNRUS {
         if (weight == 0) revert VoteRejected(REJECT_ZERO_WEIGHT);
 
         // 5. State writes — hasVoted bit set, slotApproveWeight accumulator incremented
-        hasVoted[level][voter][slot] = true;
+        _voterWord[voter] = word | bit;
         slotApproveWeight[level][slot] += weight;
 
         // 6. Emit

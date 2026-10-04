@@ -55,7 +55,7 @@ contract DecimatorBattleHarness is DegenerusGameDecimatorModule {
     function entryOf(uint24 lvl, uint64 id) external view returns (Entry memory e) {
         uint256 entry = decBattleEntries[(uint256(lvl) << 64) | id];
         e.owner = address(uint160(entry));
-        e.stack = (entry >> 190) * 1 ether;
+        e.stack = (entry >> 190);
         e.chips = uint32((entry >> 160) & 0x3FFFFFFF);
     }
 

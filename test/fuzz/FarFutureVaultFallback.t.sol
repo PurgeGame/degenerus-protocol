@@ -41,7 +41,7 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
     // --- FLIP storage: balanceOf mapping at slot 2 (order: _supply=0, _tombstoneFlooded=1, balanceOf=2). ---
     uint256 private constant FLIP_BALANCEOF_SLOT = 2;
     /// @dev FLIP base unit (1000 ETH worth) — the ETH<->FLIP conversion denominator for the split.
-    uint256 private constant PRICE_COIN_UNIT = 1000 ether;
+    uint256 private constant PRICE_COIN_UNIT = 1000;
 
     FFKeyHarness2 private ffk;
     address private seller;

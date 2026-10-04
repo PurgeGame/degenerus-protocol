@@ -120,6 +120,7 @@ interface IDegenerusQuests {
     /// @return questType The primary quest type processed
     /// @return completed Whether the primary quest completed by this action
     /// @return streakSnapshot Pre-floor reward streak for the foil-EV activity score
+    /// @return afking Whether the buyer has an afking run (live streak resolved by Game)
     function handleFoilPurchase(
         address player,
         uint256 ethMintSpendWei,
@@ -127,7 +128,7 @@ interface IDegenerusQuests {
         uint256 lootBoxAmount,
         uint256 mintPrice,
         uint256 levelQuestPrice
-    ) external returns (uint256 reward, uint8 questType, bool completed, uint32 streakSnapshot);
+    ) external returns (uint256 reward, uint8 questType, bool completed, uint32 streakSnapshot, bool afking);
 
     /// @notice Records player affiliate activity and checks quest completion
     /// @dev Called by AFFILIATE when an affiliate's earnings are credited (onlyCoin admits COIN,
@@ -171,6 +172,7 @@ interface IDegenerusQuests {
     /// @return questType The type of quest that was processed
     /// @return streak The player's current quest streak (for score forwarding)
     /// @return completed Whether a quest was completed by this action
+    /// @return afking Whether the buyer has an afking run (live streak resolved by Game)
     function handlePurchase(
         address player,
         uint256 ethMintSpendWei,
@@ -178,7 +180,7 @@ interface IDegenerusQuests {
         uint256 lootBoxAmount,
         uint256 mintPrice,
         uint256 levelQuestPrice
-    ) external returns (uint256 reward, uint8 questType, uint32 streak, bool completed);
+    ) external returns (uint256 reward, uint8 questType, uint32 streak, bool completed, bool afking);
 
     /// @notice Awards bonus streak days to a player
     /// @dev Directly increases the player's streak count

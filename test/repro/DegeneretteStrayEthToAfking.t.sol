@@ -30,7 +30,7 @@ contract DegeneretteStrayEthToAfking is DeployProtocol {
     }
 
     function test_flip_bet_strayEth_creditsAfking() public {
-        uint128 perTicket = 100 ether;
+        uint128 perTicket = 100;
         vm.prank(address(game));
         coin.mintForGame(player, perTicket);
 
@@ -68,7 +68,7 @@ contract DegeneretteStrayEthToAfking is DeployProtocol {
     }
 
     function test_flip_bet_noEth_afkingUnchanged() public {
-        uint128 perTicket = 100 ether;
+        uint128 perTicket = 100;
         vm.prank(address(game));
         coin.mintForGame(player, perTicket);
 

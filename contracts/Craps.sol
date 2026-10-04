@@ -59,17 +59,17 @@ pragma solidity 0.8.34;
 ///          the dark lane, deliberately the dearest seat on the table: Don't Pass pays 3:4 and
 ///          runs 13.73% per decision.
 ///        * Stakes are WHOLE FLIP, uint24 per leg: the type itself is the table maximum of
-///          16,777,215 FLIP a leg. All payout math still runs in wei internally, so fractions pay
+///          16,777,215 FLIP a leg. All payout math retains 10^18 sub-units internally, so fractions pay
 ///          exactly as they always did. One consequence worth loving: the entire bet slip packs
 ///          into a single storage slot.
 ///        * Place bets and the hardways are OFF on the come-out, the table default, and there is no
 ///          toggle. Working them changes no house edge whatsoever — every roll is i.i.d. — so the
 ///          switch bought a player nothing but a decision to get wrong.
-///        * Payouts are floored. Stakes in multiples of 30 FLIP make every payout exact.
+///        * Only the final token payment floors to whole FLIP; internal fractions survive every hand.
 contract Craps {
-    /// @dev 1 FLIP in wei. Stakes are stored in whole FLIP; every payout computation scales here
-    ///      first, so the math is identical to wei-denominated stakes.
-    uint256 internal constant FLIP = 1 ether;
+    /// @dev Internal simulation precision: 10^18 sub-units per whole FLIP, independent of
+    ///      the token's zero decimals. Never pass these units to a token or custody contract.
+    uint256 internal constant FLIP = 1e18;
 
     // ---------------------------------------------------------------------------------------
     // Limits and tables
@@ -318,8 +318,8 @@ contract Craps {
     ///      runs out of stack here with them separate.
     /// @param b          The slip's chip stakes to play, shooter after shooter.
     /// @param seed       The window's shooter seed.
-    /// @param bankroll   The bankroll the run starts on, in wei.
-    /// @param goal       The bankroll that latches a Goal, in wei.
+    /// @param bankroll   The bankroll the run starts on, in internal 10^18 sub-units.
+    /// @param goal       The bankroll that latches a Goal, in internal 10^18 sub-units.
     /// @param cap        Shooter cap on the run.
     /// @param rollBudget Roll cap on the run, judged between shooters; one under `_MAX_ROLLS` is
     ///                   exact, cutting the last hand where it runs out.
@@ -472,7 +472,7 @@ contract Craps {
     /// @dev What an escrow must collect up front, and the exact ceiling on what the player can
     ///      lose. Multiply by the hand count for a session.
     function _stakeFor(Bets memory b) internal pure returns (uint256 total) {
-        // Stakes are whole FLIP; the charge is wei. Bounded far below 2^256: ten uint24 legs.
+        // Stakes are whole FLIP; the simulated charge uses 10^18 sub-units. Bounded far below 2^256: ten uint24 legs.
         unchecked {
             total =
                 (uint256(b.passLine)
@@ -857,7 +857,7 @@ contract Craps {
                 goalBit = _SC_GOAL_BIT;
                 primary = _wonComponent(r.peakBankroll);
             } else {
-                uint256 peak = r.peakBankroll / 1 ether;
+                uint256 peak = r.peakBankroll / FLIP;
                 if (peak > _SC_BUST_PEAK_MASK) peak = _SC_BUST_PEAK_MASK;
                 primary = (r.handsPlayed << _SC_BUST_HANDS_SHIFT) | (won != 0 ? _SC_BUST_LEFT_BIT : 0) | peak;
             }
@@ -871,7 +871,7 @@ contract Craps {
     ///      comparator's job is to be right past the horizon too.
     function _wonComponent(uint256 won) internal pure returns (uint256 f) {
         unchecked {
-            f = won / 1 ether;
+            f = won / FLIP;
             if (f > _SC_WON_MASK) f = _SC_WON_MASK;
         }
     }

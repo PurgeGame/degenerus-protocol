@@ -53,8 +53,8 @@ contract V61CureBountyDecurse is DeployProtocol {
     uint256 private constant CURSE_COUNT_SHIFT = 215; // (8 bits)
     uint256 private constant CURSE_COUNT_CAP = 20;
 
-    // PRICE_COIN_UNIT = 1000 ether (FLIP/Storage); decurse burns PRICE_COIN_UNIT/10 = 100 FLIP.
-    uint256 private constant PRICE_COIN_UNIT = 1000 ether;
+    // PRICE_COIN_UNIT = 1000 (FLIP/Storage); decurse burns PRICE_COIN_UNIT/10 = 100 FLIP.
+    uint256 private constant PRICE_COIN_UNIT = 1000;
     uint256 private constant DECURSE_BURN = PRICE_COIN_UNIT / 10; // 100 FLIP
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;

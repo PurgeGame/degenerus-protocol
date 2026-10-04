@@ -332,14 +332,14 @@ contract CrapsScheduledCursorTest is CrapsPins {
     ///      worse — the clamp holds the component at the ceiling instead of folding it small.
     function test_theWinningsComponentSaturatesRatherThanWrapping() public view {
         uint256 mask = 0xFFFFFFFFFFF;
-        assertEq(craps.wonComponentOf((mask - 1) * 1 ether), mask - 1, "below the field moved");
-        assertEq(craps.wonComponentOf(mask * 1 ether), mask, "the field's own top moved");
-        assertEq(craps.wonComponentOf((mask + 1) * 1 ether), mask, "one past the field did not saturate");
+        assertEq(craps.wonComponentOf((mask - 1) * 1e18), mask - 1, "below the field moved");
+        assertEq(craps.wonComponentOf(mask * 1e18), mask, "the field's own top moved");
+        assertEq(craps.wonComponentOf((mask + 1) * 1e18), mask, "one past the field did not saturate");
         assertEq(craps.wonComponentOf(type(uint128).max), mask, "a huge return did not saturate");
         // Monotone across the boundary: more money is never a worse component.
         assertGe(
-            craps.wonComponentOf((mask + 1) * 1 ether),
-            craps.wonComponentOf(mask * 1 ether),
+            craps.wonComponentOf((mask + 1) * 1e18),
+            craps.wonComponentOf(mask * 1e18),
             "the clamp broke monotonicity"
         );
     }
@@ -397,7 +397,7 @@ contract CrapsScheduledCursorTest is CrapsPins {
     function _settleWholeDay(uint24 day) internal {
         uint64 pastAll = uint64(craps._daySlotOfPub(day)) + uint64(craps.BONUS_SLOTS_PER_DAY());
         vm.warp(_dayStart() + 1 days - 1);
-        _startDailyBattle(craps, day + 1, uint256(keccak256(abi.encode("jackpot", day))), 100_000 ether);
+        _startDailyBattle(craps, day + 1, uint256(keccak256(abi.encode("jackpot", day))), 100_000);
         for (uint256 i = 0; i < 40; ++i) {
             if (craps.keeperSlot() >= pastAll) return;
             uint64 at = craps.keeperSlot();

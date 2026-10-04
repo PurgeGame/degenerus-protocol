@@ -194,14 +194,15 @@ contract DegenerusGameMintModule is
     /// @return nextShare Portion of this leg's contribution destined for the next prize pool.
     /// @return futureShare Portion destined for the future prize pool.
     /// @return claimableDraw Per-player claimable + afking drawn; caller subtracts it from claimablePool.
+    /// @return claimableUsed Recycled winnings drawn, excluding afking principal.
     /// @custom:reverts E If payment validation fails or the funding tiers fall short.
     function _recordMintPayment(
         address player,
         uint256 costWei,
         MintPaymentKind payKind,
         uint256 ethForLeg
-    ) internal returns (uint256 nextShare, uint256 futureShare, uint256 claimableDraw) {
-        claimableDraw = _processMintPayment(
+    ) internal returns (uint256 nextShare, uint256 futureShare, uint256 claimableDraw, uint256 claimableUsed) {
+        (claimableDraw, claimableUsed) = _processMintPayment(
             player,
             costWei,
             payKind,
@@ -229,15 +230,14 @@ contract DegenerusGameMintModule is
     /// @param payKind Payment method enum.
     /// @param ethForLeg Fresh ETH allocated to this leg by the caller.
     /// @return claimableDraw Per-player claimable + afking drawn; caller subtracts it from claimablePool.
+    /// @return claimableUsed Recycled winnings drawn, excluding afking principal.
     function _processMintPayment(
         address player,
         uint256 amount,
         MintPaymentKind payKind,
         uint256 ethForLeg
-    ) private returns (uint256 claimableDraw) {
+    ) private returns (uint256 claimableDraw, uint256 claimableUsed) {
         uint256 ethUsed;
-        uint256 claimableUsed;
-        uint256 newClaimableBalance;
         if (payKind == MintPaymentKind.DirectEth) {
             // Direct ETH: fresh ETH first (overpay ignored), afking covers any shortfall;
             // claimable is skipped on this kind.
@@ -251,46 +251,32 @@ contract DegenerusGameMintModule is
             } else {
                 revert E();
             }
-            // Both modes draw the remainder from claimable down to its 1-wei sentinel,
-            // then use afking. DirectEth never enters this claimable tier.
-            uint256 remaining = amount - ethUsed;
-            if (remaining != 0) {
-                uint256 claimable = _claimableOf(player);
-                if (claimable > 1) {
-                    uint256 available = claimable - 1; // Preserve 1 wei sentinel
-                    claimableUsed = remaining < available
-                        ? remaining
-                        : available;
-                    if (claimableUsed != 0) {
-                        unchecked {
-                            newClaimableBalance = claimable - claimableUsed;
-                        }
-                    }
-                }
-            }
         }
 
         // Afking tier: the player's prepaid afking covers whatever fresh ETH + claimable did
         // not. afking is fresh-ETH-equivalent (own deposited principal), so it counts toward
         // the prize contribution. Reverts when the three tiers together fall short of the cost.
         claimableDraw = amount - ethUsed;
-        uint256 afkingUsed = claimableDraw - claimableUsed;
-
-        if (claimableDraw != 0) {
-            // One load + store of the packed per-player slot; the helper's per-half guards
-            // reproduce the sequential claimable-then-afking debit reverts exactly (the
-            // high-half guard IS the afking-sufficiency check).
-            _debitClaimableAndAfking(player, claimableUsed, afkingUsed);
-            // The claimablePool decrement for this draw is deferred to the caller, which folds
-            // the ticket and lootbox legs into one RMW. claimableDraw is the per-player amount
-            // drawn here (claimable + afking) that the caller must subtract from claimablePool.
+        if (claimableDraw == 0) return (0, 0);
+        // No external calls occur between this snapshot and its write. Both payment
+        // tiers and the event balance come from the same word, and callers receive the
+        // exact recycled amount instead of re-reading the balance around this function.
+        uint256 packed = balancesPacked[player];
+        uint256 claimable = uint128(packed);
+        if (payKind != MintPaymentKind.DirectEth && claimable > 1) {
+            uint256 available = claimable - 1;
+            claimableUsed = claimableDraw < available ? claimableDraw : available;
         }
+        uint256 afkingUsed = claimableDraw - claimableUsed;
+        if ((packed >> 128) < afkingUsed) revert Insolvent();
+        balancesPacked[player] = packed - claimableUsed - (afkingUsed << 128);
+        // The caller combines this draw with the box leg's claimablePool debit.
 
         if (claimableUsed != 0) {
             emit ClaimableSpent(
                 player,
                 claimableUsed,
-                newClaimableBalance,
+                claimable - claimableUsed,
                 payKind,
                 amount
             );
@@ -410,6 +396,7 @@ contract DegenerusGameMintModule is
                 ,
                 ,
                 ,
+                ,
             ) = _callTicketPurchase(
                     buyer,
                     entryQuantityScaled,
@@ -427,7 +414,7 @@ contract DegenerusGameMintModule is
                 uint256 nextLevelPrice = PriceLookupLib.priceForLevel(
                     cachedLevel + 1
                 );
-                (uint256 questReward, , , bool questCompleted) = quests
+                (uint256 questReward, , , bool questCompleted, ) = quests
                     .handlePurchase(
                         buyer,
                         0,
@@ -443,7 +430,7 @@ contract DegenerusGameMintModule is
 
             // Queue tickets on the captured adjusted quantity.
             if (adjustedQty32 != 0) {
-                _queueEntriesScaled(buyer, targetLevel, adjustedQty32, false);
+                _queuePurchaseEntries(buyer, targetLevel, adjustedQty32);
             }
         }
     }
@@ -853,13 +840,6 @@ contract DegenerusGameMintModule is
         // the two events stay disjoint for off-chain ETH-in totals.
         if (ticketCost != 0) emit EntriesBought(buyer, entryQuantityScaled, ticketCost);
 
-        // DirectEth draws no claimable on either leg, so the recycle-bonus basis below is
-        // necessarily zero there — the balance snapshot is skipped on that kind.
-        uint256 initialClaimable;
-        if (payKind != MintPaymentKind.DirectEth) {
-            initialClaimable = _claimableOf(buyer);
-        }
-
         // ethValue is the per-slice fresh-ETH portion (== msg.value for single-tx callers; the
         // explicit afking ticket-buy slice routed through purchaseWith from the process STAGE).
         uint256 remainingEth = ethValue;
@@ -907,6 +887,7 @@ contract DegenerusGameMintModule is
         uint256 ticketFutureShare;
         // Ticket-leg claimable + afking drawn; folded with the lootbox draw into one pool RMW.
         uint256 ticketClaimableDraw;
+        uint256 ticketClaimableUsed;
         if (ticketCost != 0) {
             // Accumulated, not assigned: lootboxFlipCredit may already carry the
             // biggest-buy record claim armed above.
@@ -920,7 +901,8 @@ contract DegenerusGameMintModule is
                 ticketRecycledFlip,
                 ticketNextShare,
                 ticketFutureShare,
-                ticketClaimableDraw
+                ticketClaimableDraw,
+                ticketClaimableUsed
             ) = _callTicketPurchase(
                     buyer,
                     entryQuantityScaled,
@@ -960,12 +942,14 @@ contract DegenerusGameMintModule is
         // MINT_ETH quest progress is credited 1:1 in wei on the gross ETH-denominated
         // ticket + lootbox spend (totalCost), regardless of fresh-vs-recycled funding source.
         uint32 questStreak;
+        bool questAfking;
         {
             (
                 uint256 questReward,
                 uint8 questType,
                 uint32 streak,
-                bool questCompleted
+                bool questCompleted,
+                bool afking
             ) = quests.handlePurchase(
                     buyer,
                     totalCost,
@@ -979,11 +963,8 @@ contract DegenerusGameMintModule is
                         ? PriceLookupLib.priceForLevel(cachedLevel + 1)
                         : priceWei
                 );
-            // Unified score: a live afking sub reads the Sub-side streak (the run's funded days +
-            // in-run secondaries, reflecting any secondary just completed by this buy); a non-afker
-            // uses the streak the handler returned (no second quest STATICCALL).
-            (bool afkLive, uint32 afkStreak) = _liveAfkingStreak(buyer);
-            questStreak = afkLive ? afkStreak : streak;
+            questStreak = streak;
+            questAfking = afking;
             if (questCompleted) {
                 lootboxFlipCredit += questReward;
                 // Every purchase carries ETH spend (totalCost != 0 enforced at entry).
@@ -1004,6 +985,13 @@ contract DegenerusGameMintModule is
         //     affiliate staticcall entirely. ---
         uint256 cachedScore;
         if (lootBoxAmount != 0 || targetLevel % 100 == 0) {
+            // The quest handler already knows whether the buyer has an afking run.
+            // Ordinary ticket buys need no score; non-afkers need no Sub lookup even
+            // when buying boxes/century tickets. Lapsed runs retain the manual fallback.
+            if (questAfking) {
+                (bool afkLive, uint32 afkStreak) = _liveAfkingStreak(buyer);
+                if (afkLive) questStreak = afkStreak;
+            }
             cachedScore = _playerActivityScore(buyer, questStreak);
         }
 
@@ -1028,7 +1016,7 @@ contract DegenerusGameMintModule is
 
         // --- Queue tickets ---
         if (adjustedQty != 0) {
-            _queueEntriesScaled(buyer, targetLevel, adjustedQty, false);
+            _queuePurchaseEntries(buyer, targetLevel, adjustedQty);
         }
 
         // --- Box-order EV lane (delegatecalled; needs the post-action score) ---
@@ -1084,18 +1072,13 @@ contract DegenerusGameMintModule is
         // Recycle bonus: spending at least 3 whole tickets' worth of claimable
         // winnings (priceWei is the per-whole-ticket cost) earns 10% of the
         // recycled value back as FLIP flip credit, regardless of any remaining
-        // claimable balance. DirectEth draws no claimable on either leg, so the
-        // basis is necessarily zero there and the balance read is skipped.
-        if (payKind != MintPaymentKind.DirectEth) {
-            uint256 finalClaimable = _claimableOf(buyer);
-            uint256 totalClaimableUsed = initialClaimable > finalClaimable
-                ? initialClaimable - finalClaimable
-                : 0;
-            if (totalClaimableUsed >= priceWei * 3) {
-                lootboxFlipCredit +=
-                    (totalClaimableUsed * PRICE_COIN_UNIT) /
-                    (priceWei * 10);
-            }
+        // claimable balance. Sum the exact tier debits returned by the payment legs;
+        // DirectEth contributes zero and afking principal never earns a recycle bonus.
+        uint256 totalClaimableUsed = ticketClaimableUsed + lootboxClaimableUsed;
+        if (totalClaimableUsed >= priceWei * 3) {
+            lootboxFlipCredit +=
+                (totalClaimableUsed * PRICE_COIN_UNIT) /
+                (priceWei * 10);
         }
 
         // One Coinflip write for the buyer credit + the rolled affiliate winner. winner != buyer
@@ -1300,7 +1283,8 @@ contract DegenerusGameMintModule is
             uint256 ticketRecycledFlip,
             uint256 ticketNextShare,
             uint256 ticketFutureShare,
-            uint256 ticketClaimableDraw
+            uint256 ticketClaimableDraw,
+            uint256 ticketClaimableUsed
         )
     {
         if (quantity == 0) revert E();
@@ -1316,16 +1300,6 @@ contract DegenerusGameMintModule is
         uint256 priceWei = PriceLookupLib.priceForLevel(targetLevel);
         uint256 costWei = (priceWei * quantity) / (4 * QTY_SCALE);
         if (costWei < TICKET_MIN_BUYIN_WEI) revert E();
-        // IDs through three billion keep lazy registration at the ordinary minimum.
-        // A later first ID from a ticket buy requires a 0.04 ETH-equivalent ticket
-        // leg, before bonuses. Claimable/afking/FLIP funding uses the same value;
-        // unrelated box spend or ETH overpayment does not satisfy this floor.
-        // Passes and ticket prizes register through their own unrestricted sinks.
-        if (
-            costWei < 0.04 ether &&
-            ticketOwnerId[buyer] == 0 &&
-            ticketOwners.length >= 3_000_000_000
-        ) revert E();
         // A dust ticket leg that cannot survive the routed level's snap divide fails closed instead
         // of charging full price for zero entries. The drain divides the accumulated
         // (player, level) balance by 2^s ONCE, so a buy under 2^s scaled units truncates to nothing
@@ -1367,7 +1341,8 @@ contract DegenerusGameMintModule is
         adjustedQty32 = uint32(adjustedQuantity);
 
         if (payInCoin) {
-            uint256 coinCost = (quantity * (PRICE_COIN_UNIT / 4)) /
+            // Token debits round up: a fractional ticket price must not undercharge.
+            uint256 coinCost = (quantity * (PRICE_COIN_UNIT / 4) + QTY_SCALE - 1) /
                 QTY_SCALE;
             _coinReceive(buyer, coinCost);
 
@@ -1379,32 +1354,23 @@ contract DegenerusGameMintModule is
         } else {
             uint32 mintUnits = adjustedQty32;
 
-            // DirectEth never draws claimable, so freshEth == costWei with no balance
-            // reads; the other kinds snapshot the balance around the payment call to
-            // measure the claimable draw.
-            uint256 claimableBefore;
-            if (payKind != MintPaymentKind.DirectEth) {
-                claimableBefore = _claimableOf(buyer);
-            }
             // Direct internal payment processing — `value` is the exact ETH this leg carries. The
             // prize-pool shares are returned, not written, so the caller folds the ticket and
             // lootbox legs into one pool RMW.
             (
                 ticketNextShare,
                 ticketFutureShare,
-                ticketClaimableDraw
+                ticketClaimableDraw,
+                ticketClaimableUsed
             ) = _recordMintPayment(buyer, costWei, payKind, value);
-            // Mint-data recording runs after the payment processing, before the freshEth
-            // read (it touches neither claimable nor pool state either way).
+            // Mint-data recording runs after payment, before quest eligibility is checked.
             _recordMintData(buyer, targetLevel, mintUnits);
 
             // Fresh ETH for the affiliate split = ticket cost minus the recycled claimable
             // portion the payment just drew; the afking-drawn portion counts as fresh (own
             // principal -> fresh-rate affiliate, including the lootbox activity score). Pay-kind
             // validation already ran inside the payment processing.
-            uint256 freshEth = payKind == MintPaymentKind.DirectEth
-                ? costWei
-                : costWei - (claimableBefore - _claimableOf(buyer));
+            uint256 freshEth = costWei - ticketClaimableUsed;
 
             // Day before final jackpot draw (not turbo): +100 FLIP per ticket for affiliates
             // Basis inflated by 7/5 (lvl 0-3, 25% rate) or 3/2 (lvl 4+, 20% rate) to yield +100 after scaling

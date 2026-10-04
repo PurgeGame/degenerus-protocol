@@ -57,7 +57,7 @@ pragma solidity 0.8.34;
  *        address's burns on a day share that bucket; the player cannot pick it.
  *      - Each burn snapshots the player's activity score, consumes any live
  *        WWXRP boon (+4/8/12%), and records
- *        effectiveScore = amount * multBps * (10_000 + boonBps) / (1e8 * 1e18) — whole-WWXRP
+ *        effectiveScore = amount * multBps * (10_000 + boonBps) / 1e8 — whole-WWXRP
  *        units, where multBps rescales the shared Decimator curve
  *        (1.0x-1.7833x) to 1.0x-3.0x. Activity affects only winner weight
  *        within a bucket — never prize odds or size.
@@ -74,7 +74,9 @@ pragma solidity 0.8.34;
  *        transaction. claim(day, entryIndex) recomputes the outcome from the
  *        immutable word and verifies the supplied entry's cumulative interval
  *        in O(1) storage reads. Claiming is permissionless but always credits
- *        the prize to the player recorded in the winning entry.
+ *        the prize to the player recorded in the winning entry. Claims are open
+ *        on d+1 and d+2 only. Three tagged storage banks recycle expired daily
+ *        headers and entries; historical getters return zero after overwrite.
  *
  * @dev DRAW SECURITY — WHY day d SETTLES ON WORD d+1:
  *      _recordedDailyWord(X) is only ever written for days X <= the current wall
@@ -169,7 +171,7 @@ contract WWXRP {
     /// @param player Entrant (always msg.sender of the burn)
     /// @param bucket Deterministic bucket for (day, player)
     /// @param entryIndex Index of this entry within the bucket
-    /// @param burnAmount WWXRP burned (18 decimals)
+    /// @param burnAmount WWXRP burned (0 decimals)
     /// @param effectiveScore Activity- and boon-weighted score recorded for this burn
     ///        (whole-WWXRP units)
     /// @param cumulativeScore Bucket cumulative score endpoint after this burn
@@ -188,7 +190,7 @@ contract WWXRP {
     /// @param day Participation day that won
     /// @param winner Player recorded in the winning entry (prize recipient)
     /// @param big True for the BIG prize, false for SMALL
-    /// @param prize FLIP amount credited as coinflip stake (18 decimals)
+    /// @param prize FLIP amount credited as coinflip stake (0 decimals)
     /// @param bucket Winning bucket
     /// @param entryIndex Winning entry index within the bucket
     event DrawClaimed(
@@ -204,11 +206,11 @@ contract WWXRP {
     /// @param bracket Century bracket the burn bets on (level x00)
     /// @param player Entrant (always msg.sender of the burn)
     /// @param entryIndex Index of this entry within the bracket
-    /// @param burnAmount WWXRP burned (18 decimals)
+    /// @param burnAmount WWXRP burned (0 decimals)
     /// @param effectiveScore Activity- and boon-weighted score recorded for this burn
-    ///        (wei units — full precision)
+    ///        (whole tokens units — full precision)
     /// @param cumulativeScore Bracket cumulative score endpoint after this
-    ///        burn (wei units)
+    ///        burn (whole tokens units)
     event IncineratorEntered(
         uint24 indexed bracket,
         address indexed player,
@@ -232,7 +234,7 @@ contract WWXRP {
     /// @param winner Player recorded in the winning entry (paid game-side)
     /// @param flipAward FLIP credited to the winner by the game as flip credit
     /// @param roll Winner roll in [0, totalScore)
-    /// @param totalScore Bracket total effective score (wei units)
+    /// @param totalScore Bracket total effective score (whole tokens units)
     event IncineratorResolved(
         uint24 indexed bracket,
         address indexed winner,
@@ -301,7 +303,7 @@ contract WWXRP {
     string public constant symbol = "WWXRP";
 
     /// @notice Number of decimals
-    uint8 public constant decimals = 18;
+    uint8 public constant decimals = 0;
 
     /// @notice Total minted WWXRP less burns, including tokens held by the vault.
     uint256 public totalSupply;
@@ -342,14 +344,14 @@ contract WWXRP {
     /// @notice Number of equal draw buckets every participation day
     uint256 public constant BUCKET_COUNT = 10;
 
-    /// @notice BIG draw prize (FLIP, 18 decimals), gated at 1/365 per day
-    uint256 public constant BIG_PRIZE = 100_000 ether;
+    /// @notice BIG draw prize (FLIP, 0 decimals), gated at 1/365 per day
+    uint256 public constant BIG_PRIZE = 100_000;
 
-    /// @notice SMALL draw prize (FLIP, 18 decimals), gated at 1/30 when BIG misses
-    uint256 public constant SMALL_PRIZE = 10_000 ether;
+    /// @notice SMALL draw prize (FLIP, 0 decimals), gated at 1/30 when BIG misses
+    uint256 public constant SMALL_PRIZE = 10_000;
 
-    /// @notice Minimum WWXRP burn per draw entry (18 decimals)
-    uint256 public constant MIN_BURN = 25 ether;
+    /// @notice Minimum WWXRP burn per draw entry (0 decimals)
+    uint256 public constant MIN_BURN = 25;
 
     /// @dev Prize gate moduli
     uint256 private constant BIG_GATE = 365;
@@ -371,10 +373,9 @@ contract WWXRP {
     uint256 private constant GAME_WWXRP_LANE_SHIFT = 232;
     uint256 private constant GAME_LANE_TIER_MASK = 0x3;
 
-    /// @dev Draw accumulators are denominated in WHOLE WWXRP (sub-token dust
-    ///      burns but adds no weight): uint96 then holds ~7.9e28 tokens per
+    /// @dev Draw accumulators use whole WWXRP; weighted amounts floor after BPS ratios.
+    ///      uint96 holds ~7.9e28 tokens per
     ///      (day, bucket) — headroom for an arbitrarily inflationary supply.
-    uint256 private constant SCORE_UNIT = 1 ether;
 
     /// @dev Domain tags for the draw's bucket hash and four outcome hashes
     bytes32 private constant DOM_BUCKET = "WWXRP_DRAW_BUCKET";
@@ -404,14 +405,17 @@ contract WWXRP {
     ///      bits [96..191]  total effective score (last cumulative endpoint,
     ///                      whole-WWXRP units)
     ///      bits [192..223] entry count
-    ///      Key: (day << 8) | bucket.
+    ///      bits [224..255] participation day + 1 (zero means never initialized)
+    ///      Key: ((day % 3) << 8) | bucket. A bank can only be replaced after
+    ///      its previous day's two-day claim window closes.
     mapping(uint256 => uint256) private _drawHeader;
 
     /// @dev Entry per (day, bucket, index):
     ///      bits [0..95]    cumulative effective score endpoint (exclusive,
     ///                      whole-WWXRP units)
     ///      bits [96..255]  player address
-    ///      Key: (day << 40) | (bucket << 32) | index. Never zero for a
+    ///      Key: ((day % 3) << 40) | (bucket << 32) | index. Only entries below
+    ///      the exact-day tagged header's count are live. Never zero for a
     ///      recorded entry (endpoint >= 25 units via MIN_BURN at 1.0x).
     mapping(uint256 => uint256) private _drawEntry;
 
@@ -423,25 +427,25 @@ contract WWXRP {
       +======================================================================+
       |  Burn-weighted entries recorded during a level x99, betting that the |
       |  next century BAF (level x00) skips. Interval accounting mirrors the |
-      |  daily draw but is keyed by bracket and denominated in full wei.     |
+      |  daily draw but is keyed by bracket and denominated in full whole tokens.     |
       +======================================================================+*/
 
     /// @dev Unlike the whole-token daily draw, incinerator scores are full
-    ///      18-decimal wei: the supply is uncapped-inflationary, so no
+    ///      whole tokens: the supply is uncapped-inflationary, so no
     ///      whole-token uint96 bound can be guaranteed. uint192 for the
-    ///      bracket total (~6.3e57 wei at a 3x activity ceiling) is safe for
+    ///      bracket total (~6.3e57 whole tokens at a 3x activity ceiling) is safe for
     ///      any reachable supply; entry endpoints get a full uint256 slot.
 
     /// @dev Header per bracket (level x00):
     ///      bits [0..191]   total effective score (last cumulative endpoint,
-    ///                      wei units)
+    ///                      whole tokens units)
     ///      bits [192..223] entry count
     mapping(uint24 => uint256) private _incinHeader;
 
     /// @notice One incinerator interval entry (two slots: full-precision
     ///         endpoint + player).
     struct IncinEntry {
-        /// @notice Cumulative effective score endpoint (exclusive, wei units).
+        /// @notice Cumulative effective score endpoint (exclusive, whole tokens units).
         uint256 cum;
         /// @notice Entrant credited if the winner roll lands in this interval.
         address player;
@@ -572,7 +576,7 @@ contract WWXRP {
     ///      at the supply room in _mint), so the scaled path cannot revert on the amount; a
     ///      trusted minter mints the exact amount.
     /// @param to Recipient of the minted WWXRP
-    /// @param amount Amount to mint (18 decimals), before the game mint scale
+    /// @param amount Amount to mint (0 decimals), before the game mint scale
     /// @custom:reverts OnlyMinter When caller is not an authorized minter
     ///      A zero recipient mints nothing.
     function mintPrize(address to, uint256 amount) external {
@@ -646,7 +650,7 @@ contract WWXRP {
     /// @notice Burn WWXRP for game bets
     /// @dev Callable by the game contract or a trusted minter. Silently returns if amount is zero.
     /// @param from Address to burn from
-    /// @param amount Amount to burn (18 decimals)
+    /// @param amount Amount to burn (0 decimals)
     /// @custom:reverts OnlyMinter When caller is neither the game contract nor a trusted minter
     /// @custom:reverts InsufficientBalance When from has insufficient balance
     function burnForGame(address from, uint256 amount) external {
@@ -675,7 +679,7 @@ contract WWXRP {
     ///      incinerator piggyback needs no such care: its deciding word's
     ///      request bumps the level off x99 first (see
     ///      _recordIncineratorEntry).
-    /// @param amount WWXRP to burn (18 decimals, at least MIN_BURN). The full
+    /// @param amount WWXRP to burn (0 decimals, at least MIN_BURN). The full
     ///        amount burns; winner weight counts whole WWXRP only.
     /// @custom:reverts BelowMinBurn When amount is under 25 WWXRP.
     /// @custom:reverts ScoreOverflow When the bucket entry count would overflow.
@@ -689,38 +693,38 @@ contract WWXRP {
         uint24 day = GameTimeLib.currentDayIndex();
         uint8 bucket = bucketOf(day, msg.sender);
         // Consume once for the whole burn. Both draws share the same activity/boon snapshot;
-        // daily weight truncates to whole WWXRP, while the century keeps full wei precision.
+        // both daily and century weights floor to whole WWXRP at the same BPS boundaries.
         // The Game's consume returns 0 with no write and no event when the WWXRP lane's tier is
         // 0, so reading the lane first and skipping the dispatch for an empty lane is exact.
         uint16 boonBps;
         if (_holdsWwxrpBoon(msg.sender)) boonBps = game.consumeCoinflipBoon(msg.sender);
         uint256 multBps = drawMultBps(game.playerActivityScore(msg.sender));
         uint256 fullWeight = _entryWeight(amount, multBps, boonBps);
-        uint256 effective = fullWeight / SCORE_UNIT;
+        uint256 effective = fullWeight;
 
         uint256 hKey = _drawHeaderKey(day, bucket);
-        uint256 header = _drawHeader[hKey];
+        uint256 header = _readDrawHeader(day, bucket);
         uint256 raw = header & type(uint96).max;
         uint256 total = (header >> 96) & type(uint96).max;
-        uint256 count = header >> 192;
+        uint256 count = uint32(header >> 192);
 
-        uint256 newRaw = raw + amount / SCORE_UNIT;
+        uint256 rawHeadroom = type(uint96).max - raw;
+        uint256 newRaw = raw + (amount > rawHeadroom ? rawHeadroom : amount);
         uint256 newTotal = total + effective;
         if (count >= type(uint32).max) revert ScoreOverflow();
         // Saturate rather than revert: a capped bucket keeps accepting burns.
         // Post-cap entries record zero-width intervals (cumEnd == cumStart ==
         // cap), so they carry no winner weight and can never falsely verify.
-        if (newRaw > type(uint96).max) newRaw = type(uint96).max;
         if (newTotal > type(uint96).max) newTotal = type(uint96).max;
 
-        _drawHeader[hKey] = newRaw | (newTotal << 96) | ((count + 1) << 192);
+        _drawHeader[hKey] = newRaw | (newTotal << 96) | ((count + 1) << 192) | ((uint256(day) + 1) << 224);
         _drawEntry[_drawEntryKey(day, bucket, uint32(count))] =
             newTotal |
             (uint256(uint160(msg.sender)) << 96);
 
         // Level-x99 burns double as century BAF-incinerator entries: the same
         // burn and activity/boon multipliers also arm the next x00 bracket's skip
-        // draw (at full wei precision there — no whole-token truncation).
+        // draw (at whole-token precision there — no whole-token truncation).
         uint24 lvl = game.level();
         if (lvl % 100 == 99) {
             _recordIncineratorEntry(lvl + 1, amount, fullWeight);
@@ -780,10 +784,13 @@ contract WWXRP {
     /// @custom:reverts NotWinningEntry When the roll is outside the interval.
     /// @custom:reverts AlreadyClaimed When the day was already paid.
     function claim(uint24 day, uint32 entryIndex) external {
-        (bool big, uint8 bucket, uint256 roll, uint256 total) = _outcome(day);
+        (bool big, uint8 bucket, uint256 roll, uint256 total, uint32 count) = _outcome(day);
         // _outcome reverts NoPrize/WordUnavailable; empty bucket is a dud.
         if (total == 0) revert EmptyWinningBucket();
         if (dayClaimed[day]) revert AlreadyClaimed();
+        // A reused bank may retain a longer previous day's tail. Its entries
+        // are not members of this draw, even if their cumulative interval fits.
+        if (entryIndex >= count) revert EntryMissing();
 
         uint256 entry = _drawEntry[_drawEntryKey(day, bucket, entryIndex)];
         if (entry == 0) revert EntryMissing();
@@ -839,7 +846,7 @@ contract WWXRP {
             BASE_SPAN_BPS;
     }
 
-    /// @notice Draw bucket totals for a (day, bucket).
+    /// @notice Draw bucket totals for a (day, bucket); zero after that bank is reused.
     /// @return rawBurned Whole WWXRP burned into the bucket (dust excluded).
     /// @return totalScore Total effective (activity/boon-weighted) score in
     ///         whole-WWXRP units.
@@ -852,19 +859,21 @@ contract WWXRP {
         view
         returns (uint256 rawBurned, uint256 totalScore, uint32 entryCount)
     {
-        uint256 header = _drawHeader[_drawHeaderKey(day, bucket)];
+        uint256 header = _readDrawHeader(day, bucket);
         rawBurned = header & type(uint96).max;
         totalScore = (header >> 96) & type(uint96).max;
         entryCount = uint32(header >> 192);
     }
 
     /// @notice A recorded draw entry's player and cumulative score endpoint
-    ///         (whole-WWXRP units).
+    ///         (whole-WWXRP units). Returns zero for an overwritten day or an index
+    ///         outside that day's live count, including tails from a previous draw.
     function entryAt(
         uint24 day,
         uint8 bucket,
         uint32 index
     ) external view returns (address player, uint256 cumulativeScore) {
+        if (index >= uint32(_readDrawHeader(day, bucket) >> 192)) return (address(0), 0);
         uint256 entry = _drawEntry[_drawEntryKey(day, bucket, index)];
         player = address(uint160(entry >> 96));
         cumulativeScore = entry & type(uint96).max;
@@ -905,7 +914,7 @@ contract WWXRP {
         winningBucket = uint8(
             _drawHash(DOM_WIN_BUCKET, day, word) % BUCKET_COUNT
         );
-        uint256 header = _drawHeader[_drawHeaderKey(day, winningBucket)];
+        uint256 header = _readDrawHeader(day, winningBucket);
         totalScore = (header >> 96) & type(uint96).max;
         if (totalScore == 0) {
             // Gate hit but the bucket is empty: dud day, no prize, no reroll.
@@ -935,7 +944,7 @@ contract WWXRP {
         uint8 bucket = uint8(
             _drawHash(DOM_WIN_BUCKET, day, word) % BUCKET_COUNT
         );
-        uint256 header = _drawHeader[_drawHeaderKey(day, bucket)];
+        uint256 header = _readDrawHeader(day, bucket);
         uint256 total = (header >> 96) & type(uint96).max;
         if (total == 0) return (false, 0, address(0));
         uint256 roll = _drawHash(DOM_WINNER, day, word) % total;
@@ -971,7 +980,7 @@ contract WWXRP {
 
     /// @dev Record an incinerator entry riding a daily-draw burn during a
     ///      level x99. The burn itself happened in enter(); this only appends
-    ///      the bracket-keyed interval entry, weighting the FULL 18-decimal
+    ///      the bracket-keyed interval entry, weighting the whole-token
     ///      amount by the same activity/boon multipliers the carrying entry
     ///      snapshotted (no whole-token truncation). The level increments to
     ///      x00 in the same transaction that requests the VRF word whose
@@ -982,8 +991,8 @@ contract WWXRP {
     ///      of the hedge (the daily-draw entry it rode on still settles
     ///      normally).
     /// @param bracket Century bracket being armed (level x00).
-    /// @param amount WWXRP burned by the carrying enter() (18 decimals).
-    /// @param effective Full-wei activity/boon weight computed by the carrying entry.
+    /// @param amount WWXRP burned by the carrying enter() (0 decimals).
+    /// @param effective Whole-token activity/boon weight computed by the carrying entry.
     /// @custom:reverts ScoreOverflow When the bracket entry count would overflow.
     function _recordIncineratorEntry(
         uint24 bracket,
@@ -1077,7 +1086,7 @@ contract WWXRP {
         (uint24 armedDay, uint96 lostFlip, ) = coinflip.bafDrawInfo();
         (uint16 rewardPercent, bool armedWin) = coinflip.getCoinflipDayResult(armedDay);
         uint256 flipAward = (!armedWin && rewardPercent != 0)
-            ? (uint256(lostFlip) * 1 ether * INCINERATOR_FLIP_BPS) / 10_000
+            ? (uint256(lostFlip) * INCINERATOR_FLIP_BPS) / 10_000
             : 0;
         if (flipAward != 0) coinflip.creditFlip(winner, flipAward);
 
@@ -1085,7 +1094,7 @@ contract WWXRP {
     }
 
     /// @notice Incinerator bracket totals.
-    /// @return totalScore Total effective (activity/boon-weighted) score in wei
+    /// @return totalScore Total effective (activity/boon-weighted) score in whole tokens
     ///         units.
     /// @return entryCount Number of entries recorded.
     function incineratorInfo(
@@ -1097,7 +1106,7 @@ contract WWXRP {
     }
 
     /// @notice A recorded incinerator entry's player and cumulative score
-    ///         endpoint (wei units).
+    ///         endpoint (whole tokens units).
     function incineratorEntryAt(
         uint24 bracket,
         uint32 index
@@ -1124,7 +1133,7 @@ contract WWXRP {
     )
         private
         view
-        returns (bool big, uint8 bucket, uint256 roll, uint256 total)
+        returns (bool big, uint8 bucket, uint256 roll, uint256 total, uint32 count)
     {
         if (!_drawClaimOpen(day)) revert WordUnavailable();
         uint256 word = game.rngWordForDay(day + 1);
@@ -1134,11 +1143,19 @@ contract WWXRP {
             revert NoPrize();
         }
         bucket = uint8(_drawHash(DOM_WIN_BUCKET, day, word) % BUCKET_COUNT);
-        total = (_drawHeader[_drawHeaderKey(day, bucket)] >> 96) &
-            type(uint96).max;
+        uint256 header = _readDrawHeader(day, bucket);
+        total = (header >> 96) & type(uint96).max;
+        count = uint32(header >> 192);
         if (total != 0) {
             roll = _drawHash(DOM_WINNER, day, word) % total;
         }
+    }
+
+    /// @dev Authentication is mandatory before any entry read: reused words have
+    ///      no tag of their own, and a shorter replacement leaves old tail slots.
+    function _readDrawHeader(uint24 day, uint8 bucket) private view returns (uint256 header) {
+        header = _drawHeader[_drawHeaderKey(day, bucket)];
+        if (uint32(header >> 224) != uint256(day) + 1) return 0;
     }
 
     function _drawClaimOpen(uint24 participationDay) private view returns (bool) {
@@ -1166,7 +1183,7 @@ contract WWXRP {
         uint24 day,
         uint8 bucket
     ) private pure returns (uint256) {
-        return (uint256(day) << 8) | bucket;
+        return (uint256(day % 3) << 8) | bucket;
     }
 
     function _drawEntryKey(
@@ -1174,6 +1191,6 @@ contract WWXRP {
         uint8 bucket,
         uint32 index
     ) private pure returns (uint256) {
-        return (uint256(day) << 40) | (uint256(bucket) << 32) | index;
+        return (uint256(day % 3) << 40) | (uint256(bucket) << 32) | index;
     }
 }

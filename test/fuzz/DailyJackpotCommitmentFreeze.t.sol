@@ -40,7 +40,7 @@ contract DailyJackpotCommitmentSeeder is DegenerusGame, BucketSeed {
         _recordDailyRng(day - 1, 123_456);
         // One settled hero: quadrant 1, symbol 5. A wager placed during the request
         // window belongs to `day`, never to this sealed ledger.
-        dailyHeroWagers[day - 1][1] = uint256(1000) << (5 * 32);
+        lootboxRngPacked = _recordDailyHeroWager(day - 1, 1, 5, 1000, lootboxRngPacked);
         whalePassClaims[attacker] = 2;
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12);
 
@@ -127,8 +127,10 @@ contract DailyJackpotCommitmentFreezeTest is DeployProtocol {
         return uint256(vm.load(address(game), bytes32(0)));
     }
 
-    function _hero(uint24 forDay) private view returns (uint256) {
-        return uint256(vm.load(address(game), bytes32(uint256(keccak256(abi.encode(forDay, uint256(44)))) + 1)));
+    function _hero(uint24 forDay) private view returns (uint256 packed) {
+        for (uint8 symbol; symbol < 8; ++symbol) {
+            packed |= game.getDailyHeroWager(forDay, 1, symbol) << (uint256(symbol) * 32);
+        }
     }
 
     /// @dev One public mineFlip. The engine composes every admitted checkpoint into a call, so

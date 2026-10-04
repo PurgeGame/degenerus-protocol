@@ -1147,7 +1147,7 @@ contract StakedStonkRedemption is DeployProtocol {
         // Fund sDGNRS with a large FLIP backing (uncirculated coinflip claimable), so the
         // redeemer's proportional FLIP share is non-trivial — exactly the case a pre-fix
         // FLIP-reserve leg could have stalled. Submit settles it all at submit.
-        _fundSdgnrsFlip(2_000_000 ether);
+        _fundSdgnrsFlip(2_000_000);
         _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(burnAmount);
@@ -1180,7 +1180,7 @@ contract StakedStonkRedemption is DeployProtocol {
     ///      slice. backing*amount/supply >= 1e18 needs backing >= supply/amount whole tokens; at the
     ///      ~1e12-token deploy supply with a 1000-token burn that is ~1e9 FLIP, so 1e12 FLIP
     ///      yields ~1000 whole-token escrow with comfortable headroom.
-    uint256 internal constant SDGNRS_FLIP_FUND = 1_000_000_000_000 ether;
+    uint256 internal constant SDGNRS_FLIP_FUND = 1_000_000_000_000;
 
     /// @notice FLIP-04 (submit-time backing removal): the redeemed FLIP share is REMOVED from
     ///         sDGNRS's backing at submit (claimable consumed → carry decremented) and
@@ -1192,7 +1192,7 @@ contract StakedStonkRedemption is DeployProtocol {
     /// @dev Universe scalar = coin.totalSupply() + sdgnrs.flipReserve() + coinflipAmount(redeemer).
     ///      sDGNRS holds no wallet balance; its FLIP backing is uncirculated coinflip claimable
     ///      (flipReserve = claimable + carry), so withdrawRedeemedFlip consumes the escrow out of
-    ///      claimable → flipReserve drops by escrowWei (totalSupply untouched, nothing was minted);
+    ///      claimable → flipReserve drops by escrowAmount (totalSupply untouched, nothing was minted);
     ///      the redeemer's stake is untouched at submit; the escrow is recorded in
     ///      pendingRedemptions[redeemer][day].
     function testRedeemFlipRemovedFromBackingAtSubmit() public {
@@ -1215,7 +1215,7 @@ contract StakedStonkRedemption is DeployProtocol {
         // The escrowed slice is recorded WHOLE-token against (redeemer, dayBurn).
         (, , uint96 escrowWhole) = sdgnrs.pendingRedemptions(playerA, uint24(dayBurn));
         assertGt(uint256(escrowWhole), 0, "FLIP-04: escrow not recorded (backing*amount/supply should be > 0)");
-        uint256 escrowWei = uint256(escrowWhole) * 1e18;
+        uint256 escrowAmount = uint256(escrowWhole);
 
         uint256 universeAfter = coin.totalSupply()
             + sdgnrs.flipReserve()
@@ -1225,7 +1225,7 @@ contract StakedStonkRedemption is DeployProtocol {
         // sDGNRS's backing now, with nothing credited to the redeemer (paid later on a day+1 win).
         assertEq(
             universeBefore - universeAfter,
-            escrowWei,
+            escrowAmount,
             "FLIP-04: submit must remove exactly the escrowed slice from the spendable universe"
         );
 
@@ -1250,7 +1250,7 @@ contract StakedStonkRedemption is DeployProtocol {
         sdgnrs.burn(1000 ether);
         (, , uint96 escrowWhole) = sdgnrs.pendingRedemptions(playerA, uint24(dayBurn));
         assertGt(uint256(escrowWhole), 0, "win: escrow must be recorded at submit");
-        uint256 escrowWei = uint256(escrowWhole) * 1e18;
+        uint256 escrowAmount = uint256(escrowWhole);
 
         _advanceWallDay();
         _resolveDay(dayBurn, 100);
@@ -1264,7 +1264,7 @@ contract StakedStonkRedemption is DeployProtocol {
         // then rides the redeemer's own next flip.
         assertEq(
             coinflip.coinflipAmount(playerA) - redeemerStakeBefore,
-            escrowWei * 2,
+            escrowAmount * 2,
             "win: redeemer must receive escrow + day+1 win multiplier (2x at rewardPercent=100)"
         );
         // Slot fully cleared (ETH + FLIP).
@@ -1286,7 +1286,7 @@ contract StakedStonkRedemption is DeployProtocol {
         sdgnrs.burn(1000 ether);
         (, , uint96 escrowWhole) = sdgnrs.pendingRedemptions(playerA, uint24(dayBurn));
         assertGt(uint256(escrowWhole), 0, "mult: escrow must be recorded at submit");
-        uint256 escrowWei = uint256(escrowWhole) * 1e18;
+        uint256 escrowAmount = uint256(escrowWhole);
 
         _advanceWallDay();
         _resolveDay(dayBurn, 100);
@@ -1296,7 +1296,7 @@ contract StakedStonkRedemption is DeployProtocol {
         _settleCohort();
 
         // principal + principal*78/100 (computed the same way the contract does).
-        uint256 expected = escrowWei + (escrowWei * 78) / 100;
+        uint256 expected = escrowAmount + (escrowAmount * 78) / 100;
         assertEq(
             coinflip.coinflipAmount(playerA) - redeemerStakeBefore,
             expected,

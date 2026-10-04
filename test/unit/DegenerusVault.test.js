@@ -7,6 +7,8 @@ import {
 } from "../helpers/deployFixture.js";
 import {
   eth,
+  flip,
+  wwxrp,
   advanceToNextDay,
   getEvent,
   getEvents,
@@ -288,15 +290,15 @@ describe("DegenerusVault", function () {
       await hre.ethers.provider.send("hardhat_impersonateAccount", [gameAddr]);
       await hre.ethers.provider.send("hardhat_setBalance", [gameAddr, "0x1000000000000000000"]);
       try {
-        await coin.connect(await hre.ethers.getSigner(gameAddr)).vaultEscrow(eth("1000"));
+        await coin.connect(await hre.ethers.getSigner(gameAddr)).vaultEscrow(flip("1000"));
       } finally {
         await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
       }
       const shares = INITIAL_SUPPLY / 4n;
-      expect(await vault.previewCoin(shares)).to.equal(eth("250"));
+      expect(await vault.previewCoin(shares)).to.equal(flip("250"));
       await expect(vault.connect(deployer).burnCoin(shares))
-        .to.changeTokenBalance(coin, deployer, eth("250"));
-      expect(await coin.vaultMintAllowance()).to.equal(eth("750"));
+        .to.changeTokenBalance(coin, deployer, flip("250"));
+      expect(await coin.vaultMintAllowance()).to.equal(flip("750"));
       const dgvf = await shareToken(vault, 1);
       expect(await dgvf.totalSupply()).to.equal(INITIAL_SUPPLY - shares);
     });
@@ -344,7 +346,7 @@ describe("DegenerusVault", function () {
       const { vault, coin } = await loadFixture(deployFullProtocol);
       // The genesis allowance is zero, so any positive requested output
       // exceeds the available reserve.
-      const HUGE = hre.ethers.parseEther("1000000000"); // 1 billion FLIP
+      const HUGE = flip("1000000000"); // 1 billion FLIP
       await expect(
         vault.previewBurnForCoinOut(HUGE)
       ).to.be.revertedWithCustomError(vault, "Insufficient");
@@ -426,7 +428,7 @@ describe("DegenerusVault", function () {
     it("coinDepositCoinflip reverts when caller is not vault owner", async function () {
       const { vault, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        vault.connect(alice).coinDepositCoinflip(eth("1"))
+        vault.connect(alice).coinDepositCoinflip(flip("1"))
       ).to.be.revertedWithCustomError(vault, "NotVaultOwner");
     });
 
@@ -449,7 +451,7 @@ describe("DegenerusVault", function () {
     it("wwxrpMint reverts when caller is not vault owner", async function () {
       const { vault, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        vault.connect(alice).wwxrpMint(alice.address, eth("1"))
+        vault.connect(alice).wwxrpMint(alice.address, wwxrp("1"))
       ).to.be.revertedWithCustomError(vault, "NotVaultOwner");
     });
 

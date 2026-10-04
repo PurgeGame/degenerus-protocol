@@ -16,12 +16,12 @@ contract CrapsMaintenanceDueHarness is CrapsBattle {
         uint256 slot = uint256(day) * 8 + remainder;
         if (remainder == 0) _dayTickets[slot] = count;
         else _battles[bytes32(slot)] = count;
-        _bonusCursor[slot] = cursor;
+        _setBonusCursor(slot, cursor);
     }
 
     function armed(uint24 day, uint8 remainder, uint32 resolved) external {
         uint256 slot = uint256(day) * 8 + remainder;
-        _slotIndex[slot] = 1;
+        _setSlotIndex(slot, 1);
         _battles[bytes32(slot)] |= uint256(resolved) << _BG_RESOLVED_SHIFT;
     }
 }

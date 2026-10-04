@@ -85,7 +85,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
     ///      Operator-routed so the deposit is INDIRECT: it cannot set the biggest-flip
     ///      record or arm the bounty, keeping the carry arithmetic exact.
     function _enterRebuyWithStake(uint256 takeProfit) internal returns (uint256 stake) {
-        stake = 100_000 ether;
+        stake = 100_000;
         vm.prank(GAME);
         coin.mintForGame(player, stake);
         vm.prank(player);
@@ -203,7 +203,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
 
         vm.prank(player);
         vm.expectRevert(Coinflip.RngLocked.selector);
-        coinflip.setCoinflipAutoRebuyTakeProfit(address(0), 1 ether);
+        coinflip.setCoinflipAutoRebuyTakeProfit(address(0), 1);
     }
 
     function test_TakeProfitChangeOpensOnceTodaysFlipResolvedUnderHeldLock() public {
@@ -212,11 +212,11 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
 
         _lockRng();
         vm.prank(player);
-        coinflip.setCoinflipAutoRebuyTakeProfit(address(0), 1 ether);
+        coinflip.setCoinflipAutoRebuyTakeProfit(address(0), 1);
         vm.clearMockedCalls();
 
         (, uint256 stop, , ) = coinflip.coinflipAutoRebuyInfo(player);
-        assertEq(stop, 1 ether, "C: re-split lands under a still-held lock");
+        assertEq(stop, 1, "C: re-split lands under a still-held lock");
     }
 
     /// ARMING is NOT gated: a position not yet on auto-rebuy holds no carry, so there is
@@ -241,7 +241,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
 
         vm.prank(player);
         vm.expectRevert(Coinflip.RngLocked.selector);
-        coinflip.setCoinflipAutoRebuy(address(0), true, 1 ether);
+        coinflip.setCoinflipAutoRebuy(address(0), true, 1);
     }
 
     /// A player not on auto-rebuy meets AutoRebuyNotEnabled, never the freeze — the freeze is
@@ -251,11 +251,11 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
 
         vm.prank(player);
         vm.expectRevert(Coinflip.AutoRebuyNotEnabled.selector);
-        coinflip.setCoinflipAutoRebuyTakeProfit(address(0), 1 ether);
+        coinflip.setCoinflipAutoRebuyTakeProfit(address(0), 1);
 
         vm.prank(player);
         vm.expectRevert(Coinflip.AutoRebuyNotEnabled.selector);
-        coinflip.claimCoinflipCarry(address(0), 1 ether);
+        coinflip.claimCoinflipCarry(address(0), 1);
     }
 
     // ---------------------------------------------------------------------
@@ -293,7 +293,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
     /// recycle bonus rides. The threshold itself is frozen, so nobody can read today's word and
     /// then decide to bank more of what is already staked.
     function test_OnlyThePreCommittedBankLeavesDuringTheFreeze() public {
-        uint256 T = 50_000 ether;
+        uint256 T = 50_000;
         uint256 stake = _enterRebuyWithStake(T);
         _resolveDay(3, true);
         _warpToDay(4);
@@ -314,7 +314,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
 
         vm.prank(player);
         vm.expectRevert(Coinflip.RngLocked.selector);
-        coinflip.setCoinflipAutoRebuyTakeProfit(address(0), 1 ether);
+        coinflip.setCoinflipAutoRebuyTakeProfit(address(0), 1);
     }
 
     // ---------------------------------------------------------------------
@@ -325,7 +325,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
     /// resolved. Lowering take-profit afterwards must not retroactively re-split it
     /// (which would move already-rolled carry into the mintable bank, or vice versa).
     function test_TakeProfitChangeSettlesUnderOldValueNotNew() public {
-        uint256 takeProfit = 30_001 ether;
+        uint256 takeProfit = 30_001;
         uint256 stake = _enterRebuyWithStake(takeProfit);
         _resolveDay(3, true);
 
@@ -483,7 +483,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
 
     function testFuzz_OversizedTakeProfitCannotChangePendingWin(uint256 raw) public {
         uint256 invalid = bound(raw, uint256(type(uint128).max) + 1, type(uint256).max);
-        _enterRebuyWithStake(30_001 ether);
+        _enterRebuyWithStake(30_001);
         _resolveDay(3, true);
         bytes32 stateBefore = _rebuyConfigHash();
         uint256 balanceBefore = coin.balanceOf(player);
@@ -527,11 +527,11 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
     }
 
     function test_DisableStillIgnoresUnusedOversizedThreshold() public {
-        uint256 stake = _enterRebuyWithStake(7 ether);
+        uint256 stake = _enterRebuyWithStake(7);
         _resolveDay(3, true);
         uint256 payout = _payoutOf(stake, 3);
         // The unbanked remainder earns the same 75 bps rebuy credit as an ordinary exit.
-        uint256 expected = payout + ((payout % 7 ether) * 75) / 10_000;
+        uint256 expected = payout + ((payout % 7) * 75) / 10_000;
         vm.prank(player);
         coinflip.setCoinflipAutoRebuy(player, false, type(uint256).max);
         (bool enabled,, uint256 carry,) = coinflip.coinflipAutoRebuyInfo(player);
@@ -542,7 +542,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
 
     function test_DepositAlwaysTargetsDayAfterLastResolved() public {
         vm.prank(GAME);
-        coin.mintForGame(player, 1_000_000 ether);
+        coin.mintForGame(player, 1_000_000);
 
         for (uint24 d = 3; d <= 8; d++) {
             _resolveDay(d, d % 2 == 1);
@@ -550,7 +550,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
             // Wall clock is at day d and day d is now resolved. A fresh deposit must
             // land strictly after it.
             vm.prank(player);
-            coinflip.depositCoinflip(address(0), 100 ether);
+            coinflip.depositCoinflip(address(0), 100);
 
             // coinflipAmount reads the stake at _targetFlipDay() == wallDay + 1.
             assertGt(

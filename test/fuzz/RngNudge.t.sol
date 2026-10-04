@@ -23,21 +23,21 @@ contract RngNudge is Test {
         bob = makeAddr("nudge-bob");
     }
 
-    function test_nudgeQuotesRoundUpToWholeFlip() public {
+    function test_nudgeQuotesFloorEachCompoundingStep() public {
         uint256[6] memory expected = [
-            uint256(100 ether),
-            150 ether,
-            225 ether,
-            338 ether,
-            507 ether,
-            760 ether
+            uint256(100),
+            150,
+            225,
+            337,
+            505,
+            757
         ];
 
         for (uint256 i = 0; i < expected.length; ++i) {
             (uint256 queued, uint256 cost) = game.rngNudgeQuote();
             assertEq(queued, i, "queued count");
             assertEq(cost, expected[i], "rounded quote");
-            assertEq(cost % 1 ether, 0, "quote must be whole FLIP");
+            assertGt(cost, 0, "positive whole-token price");
 
             bytes memory burnCall = abi.encodeCall(
                 IDegenerusCoin.burnCoin,
@@ -51,7 +51,7 @@ contract RngNudge is Test {
 
         (uint256 finalQueued, uint256 nextCost) = game.rngNudgeQuote();
         assertEq(finalQueued, expected.length, "final queued count");
-        assertEq(nextCost, 1_140 ether, "seventh quote");
+        assertEq(nextCost, 1_135, "seventh quote");
     }
 
     function test_staleQuoteRevertsBeforeBurn() public {
@@ -67,7 +67,7 @@ contract RngNudge is Test {
 
         (uint256 queued, uint256 liveCost) = game.rngNudgeQuote();
         assertEq(queued, 1, "bob queued first nudge");
-        assertEq(liveCost, 150 ether, "live price advanced");
+        assertEq(liveCost, 150, "live price advanced");
 
         vm.mockCallRevert(
             ContractAddresses.COIN,
@@ -80,6 +80,6 @@ contract RngNudge is Test {
 
         (queued, liveCost) = game.rngNudgeQuote();
         assertEq(queued, 1, "stale quote queued no nudge");
-        assertEq(liveCost, 150 ether, "live quote unchanged after revert");
+        assertEq(liveCost, 150, "live quote unchanged after revert");
     }
 }

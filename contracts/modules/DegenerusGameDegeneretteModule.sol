@@ -218,7 +218,7 @@ contract DegenerusGameDegeneretteModule is
     uint256 private constant MIN_BET_ETH = 5 ether / 1000;
 
     /// @dev Minimum bet amount for FLIP (100 tokens with 18 decimals).
-    uint256 private constant MIN_BET_FLIP = 100 ether;
+    uint256 private constant MIN_BET_FLIP = 100;
 
     // -------------------------------------------------------------------------
     // Biggest-Spin Record Bonus (ETH only)
@@ -317,7 +317,7 @@ contract DegenerusGameDegeneretteModule is
     ///      cover any stake (about 1.8e10 ETH or 1.8e19 FLIP per spin). Placement rejects an
     ///      amount that is not a whole unit; a boon bonus floors to the unit.
     uint256 private constant ETH_STAKE_UNIT = 1 gwei;
-    uint256 private constant FLIP_STAKE_UNIT = 1 ether;
+    uint256 private constant FLIP_STAKE_UNIT = 1;
 
     // Whole bets remain atomic; only admission bounds depend on spin count.
     uint256 private constant BET_ETH_BASE_GAS = GasBounds.DEGENERETTE_ETH_BASE_GAS;
@@ -506,7 +506,7 @@ contract DegenerusGameDegeneretteModule is
             funder == player
         );
 
-        _collectBetFunds(funder, currency, totalBet);
+        _collectBetFunds(funder, currency, totalBet, symbol);
 
         // Quest progress for Degenerette bets (slot 1 only) — credited to the funder (the
         // spender earns the quest, e.g. a gifter advancing their own streak).
@@ -548,10 +548,11 @@ contract DegenerusGameDegeneretteModule is
         if (spinCount == 0 || spinCount > maxSpins) revert InvalidBet();
         if (uint256(amountPerSpin) < minBet || uint256(amountPerSpin) % unit != 0) revert InvalidBet();
         if (symbol >= DEGENERETTE_HERO_COUNT) revert InvalidBet();
-        uint8 heroQuadrant = symbol >> 3;
 
         uint48 index = _rngWriteBuffer();
-        if (_lootboxWord(index) != 0) revert RngNotReady();
+        // The physical write buffer is always the opposite of the published
+        // read buffer. Its word cannot be exposed by _lootboxWord; admission
+        // already fixes this bet to the next session before any external call.
 
         totalBet = uint256(amountPerSpin) * uint256(spinCount);
         // Decay-aware effective quest streak: a streak
@@ -560,11 +561,10 @@ contract DegenerusGameDegeneretteModule is
         // lootbox-share EV multiplier). This snapshot precedes the new bet's quest credit.
         uint32 questStreak = _effectiveQuestStreak(player);
         uint16 activityScore = uint16(
-            _playerActivityScore(player, questStreak, lvl + 1)
+            _playerActivityScoreAt(player, questStreak, lvl + 1, lvl)
         );
 
-        // ETH-only per-bet bookkeeping: the biggest-spin record and the daily hero
-        // wager ledger, sharing one currency branch.
+        // ETH-only per-bet bookkeeping: biggest-spin record and protocol boon entries.
         uint256 recordBounty;
         if (currency == CURRENCY_ETH) {
             uint24 day = _simulatedDayIndex();
@@ -585,24 +585,11 @@ contract DegenerusGameDegeneretteModule is
                     RECORD_KIND_SPIN,
                     player,
                     totalBet
-                ) / LR_FLIP_SCALE;
+                );
                 recordBounty = whole;
             }
 
-            // Daily hero symbol tracking (heroQuadrant validated to {0..2} above)
-            uint8 heroSymbol = symbol & 7;
             uint256 wagerUnit = totalBet / 1e14;
-            if (wagerUnit > 0) {
-                uint256 wPacked = dailyHeroWagers[day][heroQuadrant];
-                uint256 shift = uint256(heroSymbol) * 32;
-                uint256 current = (wPacked >> shift) & 0xFFFFFFFF;
-                uint256 updated = current + wagerUnit;
-                if (updated > 0xFFFFFFFF) updated = 0xFFFFFFFF;
-                wPacked =
-                    (wPacked & ~(uint256(0xFFFFFFFF) << shift)) |
-                    (updated << shift);
-                dailyHeroWagers[day][heroQuadrant] = wPacked;
-            }
             if (symbol == 0 || symbol == 6) {
                 // Canonical boon score uses the routed ticket level. Reuse the
                 // effective quest streak already read, before this bet's quest credit.
@@ -616,7 +603,7 @@ contract DegenerusGameDegeneretteModule is
         }
 
         // Degenerette stake boon: consumed here, AFTER every raw-stake consumer above (the
-        // biggest-spin record, the daily hero wager ledger, and the caller's `totalBet` —
+        // biggest-spin record, protocol boon entries, and the caller's `totalBet` —
         // which funds collection and the pool credit). The bonus rides the PACKED bet only,
         // so the player spins on more than they paid without any unfunded ETH entering the
         // pools. ETH solvency is unaffected: an ETH win is capped at a share of the live pool
@@ -701,7 +688,8 @@ contract DegenerusGameDegeneretteModule is
     function _collectBetFunds(
         address player,
         uint8 currency,
-        uint256 totalBet
+        uint256 totalBet,
+        uint8 symbol
     ) private {
         if (currency == CURRENCY_ETH) {
             // ETH covers the bet first; any shortfall draws claimable (to the 1-wei
@@ -719,12 +707,21 @@ contract DegenerusGameDegeneretteModule is
                 (uint128 next, uint128 future) = _getPrizePools();
                 _setPrizePools(next, future + uint128(totalBet));
             }
-            _lrAdd(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK, _packEthToMilliEth(totalBet));
+            // The raw paid total also feeds the hero ledger. Merge its ring metadata
+            // into the already-required pending-ETH write: no extra metadata word or
+            // SSTORE on a bet. The minimum ETH stake guarantees nonzero hero units.
+            uint256 lrWord = _recordDailyHeroWager(
+                _simulatedDayIndex(), symbol >> 3, symbol & 7, totalBet / 1e14, lootboxRngPacked
+            );
+            uint256 pendingEth = ((lrWord >> LR_PENDING_ETH_SHIFT) & LR_PENDING_ETH_MASK)
+                + _packEthToMilliEth(totalBet);
+            lootboxRngPacked = (lrWord & ~(LR_PENDING_ETH_MASK << LR_PENDING_ETH_SHIFT))
+                | ((pendingEth & LR_PENDING_ETH_MASK) << LR_PENDING_ETH_SHIFT);
             // No max payout check needed: ETH payouts are capped at 10% of pool at distribution
             // time, so solvency is guaranteed regardless of jackpot size
         } else if (currency == CURRENCY_FLIP) {
             coin.burnCoin(player, totalBet);
-            _lrAdd(LR_PENDING_FLIP_SHIFT, LR_PENDING_FLIP_MASK, _packFlipToWhole(totalBet));
+            _lrAdd(LR_PENDING_FLIP_SHIFT, LR_PENDING_FLIP_MASK, totalBet);
             // A token bet consumes no ETH; any ETH sent alongside it is absorbed to the funder's
             // withdrawable afking balance (solvency-preserving) rather than stranded in the pool.
             // Zero-value is a no-op, so a normal token bet pays no extra gas.
@@ -906,7 +903,7 @@ contract DegenerusGameDegeneretteModule is
             delete degeneretteRecordBounty[key];
             _flipSpinChain(
                 player,
-                recordBounty * LR_FLIP_SCALE,
+                recordBounty * TOKEN_MATH_SCALE,
                 activityScore,
                 EntropyLib.hash4(rngWord, uint160(player), betId, RECORD_SPIN_TAG),
                 symbol,
@@ -1432,8 +1429,10 @@ contract DegenerusGameDegeneretteModule is
     }
 
     /// @notice One WWXRP Degenerette spin staking a lootbox WWXRP roll (replaces the flat mint).
-    /// @dev Uses the 5% reel rig, shared table and 70–130% activity target. The payout is
-    ///      WWXRP only, returned for the calling box entry to mint its WWXRP lane once.
+    /// @dev Uses the 5% reel rig, shared table and 70–130% activity target before token rounding.
+    ///      Stake is in 10^18 sub-units per WWXRP. The final payout converts to whole
+    ///      WWXRP with a minimum of one for a positive sub-token win; a loss stays zero.
+    ///      Returned for the calling box or foil entry to mint its WWXRP lane once.
     function resolveWwxrpSpinFromBox(
         address player,
         uint256 stake,
@@ -1448,7 +1447,9 @@ contract DegenerusGameDegeneretteModule is
         uint128 betAmount = uint128(stake);
 
         SpinResult memory spin = _rollSpin(seed, EntropyLib.hash2(seed, RESULT_TICKET_TAG), symbol, CURRENCY_WWXRP);
-        uint256 payout = _degenerettePayout(spin, CURRENCY_WWXRP, betAmount, activityScore);
+        uint256 rawPayout = _degenerettePayout(spin, CURRENCY_WWXRP, betAmount, activityScore);
+        uint256 payout = rawPayout / TOKEN_MATH_SCALE;
+        if (payout == 0 && rawPayout != 0) payout = 1;
 
         // Returned, not minted: the caller sums every WWXRP lane in the entry and mints once.
         wwxrpOut = payout;
@@ -1465,7 +1466,8 @@ contract DegenerusGameDegeneretteModule is
     }
 
     /// @notice Three FLIP Degenerette spins under one survival flip (FLIP-only, safe on any box).
-    /// @dev The total stake splits into three equal per-spin stakes (totalStake / 3; the 0-2 wei integer remainder is dropped, un-staked); the summed payout then double-or-
+    /// @dev Stake uses 10^18 sub-units per FLIP. The split drops at most two sub-units;
+    ///      spin payouts retain this precision until their sum completes the double-or-
     ///      nothings on one fair flip (EV-neutral) and is returned for the box entry's FLIP
     ///      lane (credited via coinflip.creditFlip at flush; only the record-bounty chain mints
     ///      here). No pool / ETH / recirc touch, so this is solvency-safe on every box path
@@ -1522,6 +1524,7 @@ contract DegenerusGameDegeneretteModule is
         bool survived = total != 0 &&
             (EntropyLib.hash2(seed, BOX_SURVIVAL_TAG) & 1 == 1);
         total = survived ? total * 2 : 0;
+        total /= TOKEN_MATH_SCALE;
         // Collapse the surviving mint onto a whole 100-FLIP multiple, EV-preserving, above
         // the threshold; a minimum box stakes about 13 FLIP at the milestone price, so
         // smaller spins keep the whole-FLIP floor rather than round to nothing. The box seed

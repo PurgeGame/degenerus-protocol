@@ -277,7 +277,7 @@ contract BattleHeapExperiment {
             vm.cool(address(engine));
             uint256 beforeGas = gasleft();
             Craps.SlipResult memory r = engine.settleSlip(
-                0, 60, scatter, 10, seed, 3000 ether, 0, address(uint160(i + 1)), (72 << 8) | 15);
+                0, 60, scatter, 10, seed, 3000e18, 0, address(uint160(i + 1)), (72 << 8) | 15);
             uint256 used = beforeGas - gasleft();
             totalGas += used; totalRolls += r.totalRolls;
             if (used > maxGas) maxGas = used;

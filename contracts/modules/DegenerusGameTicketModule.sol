@@ -24,6 +24,15 @@ import {IDegenerusGameFoilPackModule} from "../interfaces/IDegenerusGameModules.
 ///      of that partition. The miner dispatcher owns
 ///      admission/publication and must not replace the word before this work ends.
 contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
+    /// @notice Assign/reuse a permanent wallet ID without queueing tickets.
+    /// @dev Required direct affiliates fail atomically at capacity. Optional upline caches
+    ///      receive zero and keep resolving by address. Constructors do not call this hook.
+    function registerAffiliateOwner(address owner, bool required) external returns (uint32 id) {
+        if (msg.sender != ContractAddresses.AFFILIATE) revert E();
+        id = _ensureWalletId(owner);
+        if (required && id == 0) revert E();
+    }
+
     // Each bound includes cold writes. TAIL covers all cursor/seat persistence,
     // queue release, completion flags and the return after the last admitted item.
     uint256 internal constant TAIL = GasBounds.TICKET_TAIL;

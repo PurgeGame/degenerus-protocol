@@ -60,7 +60,7 @@ contract V61RngFreezeIntact is DeployProtocol {
     uint256 private constant AFFILIATE_BONUS_POINTS_SHIFT = 209; // (6 bits)
     uint256 private constant CURSE_COUNT_SHIFT = 215; // (8 bits)
 
-    uint256 private constant PRICE_COIN_UNIT = 1000 ether;
+    uint256 private constant PRICE_COIN_UNIT = 1000;
     uint256 private constant SMITE_BURN = PRICE_COIN_UNIT / 5; // 200 FLIP
 
     bytes32 private constant AFKING_SPENT_SIG = keccak256("AfkingSpent(address,uint256)");

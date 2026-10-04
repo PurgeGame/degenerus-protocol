@@ -48,6 +48,24 @@ class GasMeterGateTest(unittest.TestCase):
         }''')
         self.assertTrue(mutated - original)
 
+    def test_identity_auth_guard_does_not_exempt_other_ambient_inputs(self):
+        source = '''contract T {
+          function registerAffiliateOwner(address owner, bool required) external {
+            if (msg.sender != ContractAddresses.AFFILIATE) revert E();
+          }
+        }'''
+        path = "modules/DegenerusGameTicketModule.sol"
+        _, bad = scan_source(path, source)
+        self.assertFalse(bad)
+        for mutation in (
+            "if (msg.sender != ContractAddresses.VAULT) revert E();",
+            "if (msg.sender != ContractAddresses.AFFILIATE) revert E(); uint256 x = block.timestamp;",
+            "uint256 x = uint160(msg.sender);",
+        ):
+            _, bad = scan_source(path, source.replace(
+                "if (msg.sender != ContractAddresses.AFFILIATE) revert E();", mutation))
+            self.assertEqual(len(bad), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

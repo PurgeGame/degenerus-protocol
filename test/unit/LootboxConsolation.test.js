@@ -278,33 +278,33 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
         expect(
           await tester.boxWwxrpStake(hre.ethers.parseEther(eth)),
           `stake at ${eth} ETH roll`
-        ).to.equal(hre.ethers.parseEther(expected));
+        ).to.equal(BigInt(expected));
       }
     });
 
     it("[03b] tester mirror preserves the one-token minimum spin stake", async function () {
       const tester = await deployTester();
-      const oneEther = hre.ethers.parseEther("1");
+      const oneToken = 1n;
       // Below 0.002 ETH the ×500 scaling would fall under one token; the floor holds
       // it at exactly one WWXRP. The floor sizes the token spin; it grants no whale pass.
       for (const eth of ["0", "0.0000001", "0.0005", "0.001", "0.0019"]) {
         expect(
           await tester.boxWwxrpStake(hre.ethers.parseEther(eth)),
           `floor at ${eth} ETH roll`
-        ).to.equal(oneEther);
+        ).to.equal(oneToken);
       }
       // 0.002 ETH is the exact crossover — scaling takes over at and above it.
-      expect(await tester.boxWwxrpStake(hre.ethers.parseEther("0.002"))).to.equal(oneEther);
+      expect(await tester.boxWwxrpStake(hre.ethers.parseEther("0.002"))).to.equal(oneToken);
       expect(
         await tester.boxWwxrpStake(hre.ethers.parseEther("0.003"))
-      ).to.equal(hre.ethers.parseEther("1.5"));
+      ).to.equal(1n);
     });
 
     it("[03c] production module declares the ratio and the floor, and the helper applies both", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       expect(
-        source.match(/uint256 private constant LOOTBOX_WWXRP_PRIZE\s*=\s*1 ether;/),
-        "LOOTBOX_WWXRP_PRIZE = 1 ether declaration missing"
+        source.match(/uint256 private constant LOOTBOX_WWXRP_PRIZE\s*=\s*1;/),
+        "LOOTBOX_WWXRP_PRIZE = 1 declaration missing"
       ).to.not.be.null;
       expect(
         source.match(/uint256 private constant LOOTBOX_WWXRP_PER_ETH\s*=\s*500;/),
@@ -313,7 +313,7 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
       // The helper must both scale and floor — dropping either half is the drift
       // this catches (an unfloored stake changes the smallest boxes' token payouts).
       expect(
-        source.includes("stake = amount * LOOTBOX_WWXRP_PER_ETH;"),
+        source.includes("stake = (amount * LOOTBOX_WWXRP_PER_ETH) / 1 ether;"),
         "`_boxWwxrpStake` must scale by LOOTBOX_WWXRP_PER_ETH"
       ).to.equal(true);
       expect(

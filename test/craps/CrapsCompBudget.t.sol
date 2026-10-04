@@ -38,7 +38,7 @@ contract CrapsCompBudgetTest is CrapsPins {
     CompHarness internal craps;
 
     uint256 internal constant PLAIN_WORD = 40 << 8;
-    uint256 internal constant GRANULE = 100e18;
+    uint256 internal constant GRANULE = 100;
 
     uint8 internal constant KIND_WINDOW = 0;
     uint8 internal constant KIND_DAY = 1;
@@ -66,7 +66,7 @@ contract CrapsCompBudgetTest is CrapsPins {
         game.setScore(dave, floor_);
         game.setScore(erin, floor_);
         // The pins open the lane on a wei; a comp needs something to spend.
-        flip.setCompLane(100_000_000 ether);
+        flip.setCompLane(100_000_000);
     }
 
     // ── fixtures ────────────────────────────────────────────────────────────
@@ -447,13 +447,13 @@ contract CrapsCompBudgetTest is CrapsPins {
         vm.prank(bob);
         craps.buyFutureCrapsDays(day + 1, 2, false);
         uint256 charged = _comp(KIND_FUTURE_DAYS, dave, false, day + 1, 2);
-        assertEq(charged, 2 * 25_000 ether, "normal future comps did not use the retail price");
+        assertEq(charged, 2 * 25_000, "normal future comps did not use the retail price");
         assertEq(charged, flip.burned(bob), "two comped days were priced other than two bought days");
         assertEq(flip.compFor(dave), charged, "the lane was charged other than the price");
         assertTrue(craps.dayStateOf(day + 1, dave) != 0 && craps.dayStateOf(day + 2, dave) != 0, "a day is not reserved");
         // High lane: anything above one.
         uint256 hi = _comp(KIND_FUTURE_DAYS, erin, true, day + 3, 1);
-        assertEq(hi, 500_000 ether, "a high reservation was priced other than the fixed high price");
+        assertEq(hi, 500_000, "a high reservation was priced other than the fixed high price");
         assertEq(flip.compFor(erin), hi, "the high reservation did not debit the comp lane");
     }
 
@@ -496,11 +496,11 @@ contract CrapsCompBudgetTest is CrapsPins {
 
     function test_aWindowAheadIsPricedAtItsClassesExpectedSeat() public {
         uint24 day = craps.currentDayIndex() + 1;
-        assertEq(_ahead(dave, false, day, 0, 1), 4_520 ether, "the opener is not priced at its expected seat");
-        assertEq(_ahead(dave, false, day, 2, 2), 2 * 2_595 ether, "a routine window is not priced at its expected seat");
-        assertEq(_ahead(dave, false, day, 5, 1), 8_000 ether, "the tail is not priced at its expected seat");
-        assertEq(_ahead(erin, true, day, 5, 1), 21 * 8_000 ether, "a high seat is not twenty-one expected seats");
-        assertEq(flip.compFor(dave), (4_520 + 2 * 2_595 + 8_000) * 1 ether, "the lane was charged other than the sum");
+        assertEq(_ahead(dave, false, day, 0, 1), 4_520, "the opener is not priced at its expected seat");
+        assertEq(_ahead(dave, false, day, 2, 2), 2 * 2_595, "a routine window is not priced at its expected seat");
+        assertEq(_ahead(dave, false, day, 5, 1), 8_000, "the tail is not priced at its expected seat");
+        assertEq(_ahead(erin, true, day, 5, 1), 21 * 8_000, "a high seat is not twenty-one expected seats");
+        assertEq(flip.compFor(dave), (4_520 + 2 * 2_595 + 8_000) * 1, "the lane was charged other than the sum");
         assertTrue(craps.seatedIn(_slotAt(day, 0), dave) && craps.seatedIn(_slotAt(day, 2), dave) && craps.seatedIn(_slotAt(day, 5), dave), "a window is not held");
         assertTrue(!craps.seatedIn(_slotAt(day, 1), dave), "an unreserved window is held");
         assertTrue(craps.seatedIn(_slotAt(day + 1, 2), dave), "the second day of the run is not reserved");
@@ -522,9 +522,9 @@ contract CrapsCompBudgetTest is CrapsPins {
             sum[1] += _priceOf(day, 3, 1);
             sum[2] += _priceOf(day, 5, 1);
         }
-        assertApproxEqRel(sum[0] / n, 4_520 ether, 0.03e18, "the opener's expected seat drifted from the table");
-        assertApproxEqRel(sum[1] / n, 2_595 ether, 0.03e18, "the routine expected seat drifted from the table");
-        assertApproxEqRel(sum[2] / n, 8_000 ether, 0.06e18, "the tail's expected seat drifted from the table");
+        assertApproxEqRel(sum[0] / n, 4_520, 0.03e18, "the opener's expected seat drifted from the table");
+        assertApproxEqRel(sum[1] / n, 2_595, 0.03e18, "the routine expected seat drifted from the table");
+        assertApproxEqRel(sum[2] / n, 8_000, 0.06e18, "the tail's expected seat drifted from the table");
     }
 
     function test_aReservedWindowIsRefusedWhereItCannotSit() public {
@@ -625,7 +625,7 @@ contract CrapsCompBudgetTest is CrapsPins {
 
         uint256 laneBefore = flip.compLane();
         uint256 charged = _ahead(dave, false, day, 0, 1);
-        assertEq(charged, 4_520 ether, "the vault's own comp did not price the opener seat");
+        assertEq(charged, 4_520, "the vault's own comp did not price the opener seat");
         assertEq(laneBefore - flip.compLane(), charged, "the vault's comp did not burn from the lane");
     }
 

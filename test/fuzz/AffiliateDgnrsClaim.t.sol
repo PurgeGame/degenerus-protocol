@@ -162,7 +162,7 @@ contract AffiliateDgnrsClaim is DeployProtocol {
     }
 
     /// @notice Score below AFFILIATE_DGNRS_MIN_SCORE (10 ETH) reverts.
-    ///         The claim gate is `score < AFFILIATE_DGNRS_MIN_SCORE` (10 ether) at
+    ///         The claim gate is `score < AFFILIATE_DGNRS_MIN_SCORE` (10) at
     ///         DegenerusGameBingoModule:226. An affiliate who never recorded a buy under
     ///         their own code has score 0 (genuinely below the 10-ether floor), so the
     ///         claim reverts at the gate. A single qualifying buy now scores far above the
@@ -174,7 +174,7 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         _setAllocation(1, 1_000_000 ether);
 
         uint256 bobScore = affiliate.affiliateScore(1, bob);
-        assertTrue(bobScore < 10 ether, "Score below min");
+        assertTrue(bobScore < 10, "Score below min");
 
         vm.expectRevert();
         _claimDgnrs(bob);
@@ -214,8 +214,8 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         uint256 aliceScore = affiliate.affiliateScore(lvl, alice);
         uint256 bobScore   = affiliate.affiliateScore(lvl, bob);
 
-        assertTrue(aliceScore > 10 ether, "Alice above min");
-        assertTrue(bobScore > 10 ether, "Bob above min");
+        assertTrue(aliceScore > 10, "Alice above min");
+        assertTrue(bobScore > 10, "Bob above min");
 
         uint256 aliceBefore = sdgnrs.balanceOf(alice);
         uint256 bobBefore   = sdgnrs.balanceOf(bob);

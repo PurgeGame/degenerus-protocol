@@ -34,11 +34,11 @@ contract CrapsLapsedDayArmTest is CrapsPins {
     LapseArmHarness internal craps;
 
     uint256 internal constant PLAIN_WORD = 40 << 8;
-    uint256 internal constant GRANULE = 100e18;
+    uint256 internal constant GRANULE = 100;
     uint8 internal constant KIND_WINDOW_AHEAD = 5;
-    uint256 internal constant ROUTINE_WINDOW_PRICE = 2_595 ether;
-    uint256 internal constant OPENER_SEAT_VALUE = 4_520 ether;
-    uint256 internal constant TAIL_WINDOW_PRICE = 8_000 ether;
+    uint256 internal constant ROUTINE_WINDOW_PRICE = 2_595;
+    uint256 internal constant OPENER_SEAT_VALUE = 4_520;
+    uint256 internal constant TAIL_WINDOW_PRICE = 8_000;
 
     address internal alice = makeAddr("alice");
     address internal dave = makeAddr("dave");
@@ -52,7 +52,7 @@ contract CrapsLapsedDayArmTest is CrapsPins {
         uint256 floor_ = craps.SYBIL_SCORE_FLOOR();
         game.setScore(alice, floor_);
         game.setScore(dave, floor_);
-        flip.setCompLane(100_000_000 ether);
+        flip.setCompLane(100_000_000);
     }
 
     function _code(uint8 kind, address to, bool high, uint24 arg, uint8 count) internal pure returns (uint256) {

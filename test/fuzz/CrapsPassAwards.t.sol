@@ -189,13 +189,13 @@ contract CrapsPassAwards is DeployProtocol {
     uint256 private constant SLOT_PRESALE_BOX_CREDIT = 17;
     uint256 private constant SLOT_LOOTBOX_RNG_PACKED = 33;
     uint256 private constant SLOT_LOOTBOX_RNG_WORD = 34;
-    uint256 private constant NORMAL_UNIT = 24_800 ether;
-    uint256 private constant HIGH_UNIT = 21 * 24_800 ether;
+    uint256 private constant NORMAL_UNIT = 24_800;
+    uint256 private constant HIGH_UNIT = 21 * 24_800;
     uint256 private constant HIGH_CAP = 12;
     uint256 private constant FLIP_ROUND_TAG = 0x466c6970526f756e64; // "FlipRound"
     uint256 private constant PASS_ROUND_TAG = 0x50617373526f756e64; // "PassRound"
     uint256 private constant PASS_SIDE_TAG = 0x5061737353696465; // "PassSide"
-    uint256 private constant WWXRP_DUD = 1 ether;
+    uint256 private constant WWXRP_DUD = 1;
 
     uint48 private presaleBuffer;
 
@@ -257,7 +257,7 @@ contract CrapsPassAwards is DeployProtocol {
         uint256 seed = _seedOf(word, who);
         uint256 vr = uint16(seed >> 80) % 20;
         uint256 bps = vr < 16 ? 14_098 + vr * 1_158 : 74_534 + (vr - 16) * 22_890;
-        flipOut = (((amount * bps) / 10_000) * 1000 ether) / 0.01 ether;
+        flipOut = (((amount * bps) / 10_000) * 1000) / 0.01 ether;
         flipOut = flipOut > FlipRoundLib.FLIP_ROUND_THRESHOLD
             ? FlipRoundLib.roundFlipToHundreds(flipOut, EntropyLib.hash2(seed, FLIP_ROUND_TAG))
             : FlipRoundLib.floorWholeFlip(flipOut);

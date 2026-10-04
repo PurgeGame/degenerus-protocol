@@ -54,7 +54,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
     bytes4 private constant MARKET_GATES =
         bytes4(keccak256("marketBetGates(address,uint24)"));
 
-    uint256 private constant STAKE = 1_000 ether;
+    uint256 private constant STAKE = 1_000;
 
     address private alice = address(0xA11CE);
     address private bob = address(0xB0B);
@@ -377,7 +377,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
 
     /// The stake is fixed, so exactly one ticket's worth of FLIP leaves the bettor.
     function testFixedStakeBurnsExactlyOneTicket() public {
-        _fund(alice, STAKE + 7 ether);
+        _fund(alice, STAKE + 7);
         uint256 before = _flipReach(alice);
 
         _mockOpenAt(50, 0, true);
@@ -912,7 +912,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
     /// lands. This is the sole corrective for parimutuel's last-mover advantage, so the
     /// schedule itself is the invariant.
     function testQuestRewardLadderSharesTheTopTierAcrossDayOne() public {
-        uint256[3] memory expected = [uint256(150 ether), 150 ether, 37 ether];
+        uint256[3] memory expected = [uint256(150), 150, 37];
         for (uint8 day; day < 3; ++day) {
             _mockOpenAt(50, day, true);
             (, , , uint256 reward, , , , ) = parimutuel.marketState(alice, 50);
@@ -929,7 +929,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
     function testQuestRewardQuotesTheTopTierWhileClosed() public {
         _mockOpenAt(50, 0, false);
         (, , , uint256 reward, , , , ) = parimutuel.marketState(alice, 50);
-        assertEq(reward, 150 ether, "a closed market must quote the first day's tier");
+        assertEq(reward, 150, "a closed market must quote the first day's tier");
     }
 
     /// A player past the lifetime bar but short of the LEVEL quest still bets, and earns
@@ -963,7 +963,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
 
         assertEq(
             before - _flipReach(alice),
-            STAKE - 150 ether,
+            STAKE - 150,
             "an afking bettor with no minted units must still earn the day-1 reward"
         );
     }
@@ -1003,11 +1003,11 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
     function testQuestRewardRejectsForeignCaller() public {
         vm.prank(alice);
         vm.expectRevert();
-        quests.recordGrowthBet(alice, 50, 150 ether);
+        quests.recordGrowthBet(alice, 50, 150);
 
         vm.prank(address(game));
         vm.expectRevert();
-        quests.recordGrowthBet(alice, 50, 150 ether);
+        quests.recordGrowthBet(alice, 50, 150);
     }
 
     // =====================================================================

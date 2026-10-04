@@ -72,9 +72,9 @@ contract CoinflipClaimableRebet is DeployProtocol {
         bonus = (amount * RECYCLE_BPS) / 10_000;
     }
 
-    /// @dev Stake lanes hold whole FLIP: each deposit's principal plus bonuses floors once.
+    /// @dev FLIP amounts and stake lanes already use whole-token units.
     function _whole(uint256 amount) internal pure returns (uint256) {
-        return (amount / 1 ether) * 1 ether;
+        return amount;
     }
 
     /// @dev Stake `amount` for `player` on day 3 out of a freshly minted wallet balance, then win
@@ -100,7 +100,7 @@ contract CoinflipClaimableRebet is DeployProtocol {
     // ---------------------------------------------------------------- 1. REBET
 
     function test_RebetSpendsClaimableWithZeroWalletAndPaysBonus() public {
-        uint256 payout = _bankAWin(100_000 ether);
+        uint256 payout = _bankAWin(100_000);
 
         // This payout clears the 200,000-FLIP record floor, so the deposit is also the
         // first-ever biggest-flip mark and claims its launch-accrued pool share into the
@@ -127,8 +127,8 @@ contract CoinflipClaimableRebet is DeployProtocol {
     // ---------------------------------------------------------------- 2. BASIS
 
     function test_BonusScalesWithTheClaimableActuallyDrawn() public {
-        uint256 payout = _bankAWin(10_000 ether);
-        uint256 draw = 10_000 ether;
+        uint256 payout = _bankAWin(10_000);
+        uint256 draw = 10_000;
         assertLt(draw, payout, "fixture: draw only part of the bank");
 
         vm.prank(player);
@@ -147,7 +147,7 @@ contract CoinflipClaimableRebet is DeployProtocol {
     }
 
     function test_FullDrawBonusesTheWholePayout() public {
-        uint256 payout = _bankAWin(10_000 ether);
+        uint256 payout = _bankAWin(10_000);
 
         vm.prank(player);
         coinflip.depositCoinflip(address(0), payout);
@@ -164,7 +164,7 @@ contract CoinflipClaimableRebet is DeployProtocol {
     ///         deposit's whole-FLIP stake floors away. Nothing is gained by chunking, and the
     ///         same percentage reaches a whale and a minnow.
     function test_SplittingARecycleEarnsTheSameAsOneDeposit() public {
-        uint256 payout = _bankAWin(100_000 ether);
+        uint256 payout = _bankAWin(100_000);
         uint256 half = payout / 2;
         assertEq(half * 2, payout, "fixture: payout splits evenly");
 
@@ -174,11 +174,10 @@ contract CoinflipClaimableRebet is DeployProtocol {
         vm.stopPrank();
 
         assertEq(coinflip.previewClaimCoinflips(player), 0, "both halves drew the bank");
-        assertEq(
-            _recyclingBonus(half) * 2,
-            _recyclingBonus(payout),
-            "the rate is size-independent: two halves bonus exactly as one whole"
-        );
+        uint256 splitBonus = _recyclingBonus(half) * 2;
+        uint256 wholeBonus = _recyclingBonus(payout);
+        assertLe(splitBonus, wholeBonus, "splitting cannot increase the bonus");
+        assertLe(wholeBonus - splitBonus, 1, "two integer floors lose at most one FLIP");
         uint256 split = coinflip.coinflipAmount(player);
         assertEq(
             split,
@@ -186,13 +185,13 @@ contract CoinflipClaimableRebet is DeployProtocol {
             "each half floors its own stake"
         );
         assertLe(split, _whole(payout + _recyclingBonus(payout)), "split recycling earns no more than one deposit");
-        assertGe(split + 2 ether, _whole(payout + _recyclingBonus(payout)), "and loses at most the floored dust");
+        assertGe(split + 2, _whole(payout + _recyclingBonus(payout)), "and loses at most the floored dust");
     }
 
     // ---------------------------------------------------------------- 3. FRESH
 
     function test_WalletFundedDepositWithNoBankPaysNoBonus() public {
-        uint256 amount = 100_000 ether;
+        uint256 amount = 100_000;
         vm.prank(GAME);
         coin.mintForGame(player, amount);
 
@@ -210,8 +209,8 @@ contract CoinflipClaimableRebet is DeployProtocol {
     // ---------------------------------------------------------------- 4. MIXED
 
     function test_MixedFundingBurnsOnlyTheShortfallAndBonusesTheBankLeg() public {
-        uint256 payout = _bankAWin(10_000 ether);
-        uint256 topUp = 40_000 ether;
+        uint256 payout = _bankAWin(10_000);
+        uint256 topUp = 40_000;
         uint256 amount = payout + topUp;
 
         vm.prank(GAME);
@@ -238,8 +237,8 @@ contract CoinflipClaimableRebet is DeployProtocol {
     // ---------------------------------------------------------------- 5. GIFT
 
     function test_GiftFundsFromCallerAndLeavesThePlayersBankAlone() public {
-        uint256 payout = _bankAWin(100_000 ether);
-        uint256 gift = 5_000 ether;
+        uint256 payout = _bankAWin(100_000);
+        uint256 gift = 5_000;
 
         vm.prank(GAME);
         coin.mintForGame(gifter, gift);
@@ -262,7 +261,7 @@ contract CoinflipClaimableRebet is DeployProtocol {
     }
 
     function test_ApprovedOperatorMayDrawThePlayersBank() public {
-        uint256 payout = _bankAWin(100_000 ether);
+        uint256 payout = _bankAWin(100_000);
 
         vm.prank(operator);
         coinflip.depositCoinflip(player, payout);
@@ -281,8 +280,8 @@ contract CoinflipClaimableRebet is DeployProtocol {
     ///         bonuses that draw. The rolling carry is a separate bucket the deposit never
     ///         touches — it earns its own bonus where it rolls, inside the settle walk.
     function test_AutoRebuyDepositDrawsTheBankAndLeavesTheCarryAlone() public {
-        uint256 stake = 100_000 ether;
-        uint256 takeProfit = 100_000 ether;
+        uint256 stake = 100_000;
+        uint256 takeProfit = 100_000;
 
         vm.prank(GAME);
         coin.mintForGame(player, stake);
@@ -305,7 +304,7 @@ contract CoinflipClaimableRebet is DeployProtocol {
         (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(player);
         assertEq(carry, expectedCarry, "remainder rolled into the carry");
 
-        uint256 draw = 50_000 ether;
+        uint256 draw = 50_000;
 
         vm.prank(player);
         coinflip.depositCoinflip(address(0), draw);
@@ -335,8 +334,8 @@ contract CoinflipClaimableRebet is DeployProtocol {
     ///      they raise is still `RngLocked`. Level is 0 here, so
     ///      `_coinflipLockedDuringTransition`'s x10 gate is false either way.
     function test_DepositUnderRngLockCannotReachTheCarry() public {
-        uint256 stake = 100_000 ether;
-        uint256 takeProfit = 100_000 ether;
+        uint256 stake = 100_000;
+        uint256 takeProfit = 100_000;
 
         vm.prank(GAME);
         coin.mintForGame(player, stake);
@@ -364,7 +363,7 @@ contract CoinflipClaimableRebet is DeployProtocol {
         coinflip.setCoinflipAutoRebuy(address(0), false, 0);
 
         // The deposit is still open, and it can only push MORE onto tomorrow's flip.
-        uint256 draw = 50_000 ether;
+        uint256 draw = 50_000;
         vm.prank(player);
         coinflip.depositCoinflip(address(0), draw);
 
@@ -390,7 +389,7 @@ contract CoinflipClaimableRebet is DeployProtocol {
     // ---------------------------------------------------------------- 6. SUPPLY
 
     function test_FullyRecycledRebetIsSupplyNeutral() public {
-        uint256 payout = _bankAWin(100_000 ether);
+        uint256 payout = _bankAWin(100_000);
         uint256 supplyBefore = coin.totalSupply();
 
         vm.prank(player);
@@ -407,8 +406,8 @@ contract CoinflipClaimableRebet is DeployProtocol {
 
     function test_ClaimableFundedSelfDepositIsRecordEligible() public {
         // Bank enough that the payout clears the 200k FLIP record entry floor.
-        uint256 payout = _bankAWin(200_000 ether);
-        assertGt(payout, 200_000 ether, "fixture: the payout must clear the floor");
+        uint256 payout = _bankAWin(200_000);
+        assertGt(payout, 200_000, "fixture: the payout must clear the floor");
 
         vm.prank(player);
         coinflip.depositCoinflip(address(0), payout);

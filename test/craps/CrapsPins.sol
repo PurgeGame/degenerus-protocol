@@ -145,7 +145,7 @@ contract MockFlip {
 
     function burnCoinForCraps(address target, uint256 grossAndFlags) external returns (uint8 mask) {
         if (burnRefused[target]) revert MockBurnRefused();
-        uint256 gross = grossAndFlags & ~uint256(0xFF);
+        uint256 gross = grossAndFlags >> 8;
         lastCrapsFlags = uint8(grossAndFlags);
         if (grossAndFlags & 0x10 != 0) {
             if (gross > compLane) revert MockCompLaneShort();
@@ -191,7 +191,7 @@ contract MockCoinflip {
     ///      strict-improvement ratchet, and the accruing share with its reset. The real Coinflip
     ///      credits the claim itself, so this one does too — a settle walk makes one call and the
     ///      winner takes one credit.
-    uint128 public recordPool = 10_000 ether;
+    uint128 public recordPool = 10_000;
     uint256 public biggestDiceRunEver;
     uint24 public recordDayDiceRun;
     uint256 public diceRunArms;
@@ -281,8 +281,8 @@ contract MockQuests {
 abstract contract CrapsPins is Test {
     function _startDailyBattle(CrapsViews table, uint24 requestDay, uint256 word, uint256 added) internal {
         JackpotBattle api = JackpotBattle(address(table));
-        // Level 2 prices at 0.01 ETH, so a pool of `added / 500` locks exactly `added` (floor 50,000).
-        vm.prank(ContractAddresses.GAME); api.lockJackpotBattle(requestDay, added / 500, 2);
+        // Level 2 prices at 0.01 ETH, so a pool of `added * 1 ether / 500` locks exactly `added` (floor 50,000).
+        vm.prank(ContractAddresses.GAME); api.lockJackpotBattle(requestDay, added * 1 ether / 500, 2);
         uint256[] memory empty = new uint256[](0);
         vm.startPrank(ContractAddresses.GAME);
         api.prepareJackpotBattle(7, word);

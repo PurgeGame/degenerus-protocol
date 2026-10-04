@@ -114,7 +114,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @param player Score owner credited with the mint (claims are permissionless).
     /// @param lvl Skipped BAF bracket level.
     /// @param score Frozen bracket score consumed by the claim (FLIP-denominated).
-    /// @param wwxrpAmount WWXRP requested (score / 1000), before WWXRP's gameMintScale.
+    /// @param wwxrpAmount WWXRP requested (score / 1000, minimum 1 for a positive score), before gameMintScale.
     event BafConsolationClaimed(
         address indexed player,
         uint24 indexed lvl,
@@ -191,7 +191,8 @@ contract DegenerusJackpots is IDegenerusJackpots {
     bytes32 private constant BAF_WINNERS_TAG = keccak256("degenerus.baf.winners");
 
     /// @dev Skipped-bracket consolation rate: 1 WWXRP per 1000 FLIP of frozen
-    ///      bracket score (both 18 decimals). WWXRP emission is economically
+    ///      bracket score (both whole tokens), with a minimum of 1 for a positive score.
+    ///      WWXRP emission is economically
     ///      inert — daily-draw prizes are fixed FLIP amounts at fixed odds —
     ///      so the mint carries no protocol liability.
     uint256 private constant CONSOLATION_DIVISOR = 1000;
@@ -433,7 +434,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  forward but the players' accumulated scores are wasted. Those       |
       |  scores are frozen in storage (the epoch only bumps on resolution,   |
       |  and no new credit can target a past bracket), so each score can be  |
-      |  redeemed once for WWXRP at score / 1000.                            |
+      |  redeemed once at score / 1000, minimum 1 for a positive score.      |
       +======================================================================+*/
 
     /// @notice Claim the WWXRP consolation for a player's skipped BAF bracket.
@@ -450,13 +451,13 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @param player Score owner credited with the mint.
     /// @param lvl Skipped bracket level to claim.
     /// @custom:reverts NothingToClaim When the bracket is not skipped, the
-    ///         score is stale/absent/already claimed, or rounds to zero.
+    ///         score is stale/absent/already claimed.
     function claimBafConsolation(address player, uint24 lvl) external {
         BafLevel memory lv = bafLevel[lvl];
         if (!lv.skipped) revert NothingToClaim();
         BafPlayer memory ps = bafPlayer[lvl][player];
         if (ps.epoch != lv.epoch) revert NothingToClaim();
-        uint256 amount = uint256(ps.total) / CONSOLATION_DIVISOR;
+        uint256 amount = _bafConsolationAmount(ps.total);
         if (amount == 0) revert NothingToClaim();
         delete bafPlayer[lvl][player];
         emit BafConsolationClaimed(player, lvl, ps.total, amount);
@@ -472,7 +473,14 @@ contract DegenerusJackpots is IDegenerusJackpots {
         if (!lv.skipped) return 0;
         BafPlayer memory ps = bafPlayer[lvl][player];
         if (ps.epoch != lv.epoch) return 0;
-        return uint256(ps.total) / CONSOLATION_DIVISOR;
+        return _bafConsolationAmount(ps.total);
+    }
+
+    /// @dev Round positive sub-token consolation up to one; an absent score stays zero.
+    function _bafConsolationAmount(uint256 score) private pure returns (uint256) {
+        if (score == 0) return 0;
+        uint256 amount = score / CONSOLATION_DIVISOR;
+        return amount == 0 ? 1 : amount;
     }
 
     /*+======================================================================+
@@ -496,7 +504,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @param s Raw score in base units.
     /// @return Capped score in whole tokens.
     function _score96(uint256 s) private pure returns (uint96) {
-        uint256 wholeTokens = s / 1 ether;
+        uint256 wholeTokens = s;
         if (wholeTokens > type(uint96).max) {
             wholeTokens = type(uint96).max;
         }

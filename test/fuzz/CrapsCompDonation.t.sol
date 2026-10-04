@@ -27,7 +27,7 @@ contract CrapsCompDonationTest is DeployProtocol {
         slot = crapsBattle.createBattle(300, 4, 5, 2, uint40(block.timestamp + 1 hours), false, 0);
         index = slot - crapsBattle.CUSTOM_SLOT_BASE();
         vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(player, 2_000 ether);
+        coin.mintForGame(player, 2_000);
         vm.prank(player);
         uint256 betId = crapsBattle.enterBattle(slot, uint32(0), 1);
         key = crapsBattle.battleKeyOf(betId);
@@ -40,45 +40,45 @@ contract CrapsCompDonationTest is DeployProtocol {
         uint256 playerBalance = coin.balanceOf(player);
         uint256 ownerBalance = coin.balanceOf(ContractAddresses.CREATOR);
         vm.prank(ContractAddresses.CREATOR);
-        vault.setCrapsCompAllowance(ContractAddresses.CREATOR, 1 ether);
+        vault.setCrapsCompAllowance(ContractAddresses.CREATOR, 1);
 
         vm.prank(ContractAddresses.CREATOR);
         vm.expectEmit(true, true, true, true, address(vault));
-        emit CrapsCompDonated(ContractAddresses.CREATOR, true, index, 1_000 ether);
+        emit CrapsCompDonated(ContractAddresses.CREATOR, true, index, 1_000);
         uint256 charged = vault.crapsCompDonate(true, index, 10);
 
-        assertEq(charged, 1_000 ether);
+        assertEq(charged, 1_000);
         assertEq(crapsBattle.battleOf(key).seed, charged);
         assertEq(coin.crapsCompAllowance(), lane - charged);
         assertEq(coin.totalSupply(), supply);
         assertEq(coin.vaultMintAllowance(), vaultBacking);
         assertEq(coin.balanceOf(player), playerBalance);
         assertEq(coin.balanceOf(ContractAddresses.CREATOR), ownerBalance);
-        assertEq(vault.crapsCompAllowanceOf(ContractAddresses.CREATOR), 1 ether, "owner used delegate allowance");
+        assertEq(vault.crapsCompAllowanceOf(ContractAddresses.CREATOR), 1, "owner used delegate allowance");
     }
 
     function test_delegateSharesOneLimitAcrossPassGrantsAndDonations() public {
         uint256 lane = coin.crapsCompAllowance();
         vm.prank(ContractAddresses.CREATOR);
-        vault.setCrapsCompAllowance(delegate, 25_800 ether);
+        vault.setCrapsCompAllowance(delegate, 25_800);
         uint256[] memory codes = new uint256[](1);
         // Bank one normal day pass for the player: 24,800 FLIP.
         codes[0] = uint256(uint160(player)) | (uint256(4) << 160) | (uint256(1) << 200);
         vm.prank(delegate);
         vault.crapsComp(codes);
-        assertEq(vault.crapsCompAllowanceOf(delegate), 1_000 ether);
+        assertEq(vault.crapsCompAllowanceOf(delegate), 1_000);
 
         vm.prank(delegate);
         vm.expectRevert(DegenerusVault.Insufficient.selector);
         vault.crapsCompDonate(true, index, 11);
         assertEq(crapsBattle.battleOf(key).seed, 0, "failed donation left a seed");
-        assertEq(coin.crapsCompAllowance(), lane - 24_800 ether, "failed donation spent comp budget");
-        assertEq(vault.crapsCompAllowanceOf(delegate), 1_000 ether);
+        assertEq(coin.crapsCompAllowance(), lane - 24_800, "failed donation spent comp budget");
+        assertEq(vault.crapsCompAllowanceOf(delegate), 1_000);
 
         vm.prank(delegate);
         vault.crapsCompDonate(true, index, 10);
-        assertEq(crapsBattle.battleOf(key).seed, 1_000 ether);
-        assertEq(coin.crapsCompAllowance(), lane - 25_800 ether);
+        assertEq(crapsBattle.battleOf(key).seed, 1_000);
+        assertEq(coin.crapsCompAllowance(), lane - 25_800);
         assertEq(vault.crapsCompAllowanceOf(delegate), 0);
         vm.prank(delegate);
         vm.expectRevert(DegenerusVault.NotVaultOwner.selector);
@@ -91,7 +91,7 @@ contract CrapsCompDonationTest is DeployProtocol {
         vm.expectRevert(DegenerusVault.NotVaultOwner.selector);
         vault.crapsCompDonate(true, index, 1);
         vm.startPrank(ContractAddresses.CREATOR);
-        vault.setCrapsCompAllowance(delegate, 1_000 ether);
+        vault.setCrapsCompAllowance(delegate, 1_000);
         vault.setCrapsCompAllowance(delegate, 0);
         vm.stopPrank();
         vm.prank(delegate);
@@ -104,11 +104,11 @@ contract CrapsCompDonationTest is DeployProtocol {
     function test_insufficientSharedBudgetRollsBackDelegateAllowanceAndSeed() public {
         uint256 lane = coin.crapsCompAllowance();
         vm.prank(ContractAddresses.CREATOR);
-        vault.setCrapsCompAllowance(delegate, lane + 100 ether);
+        vault.setCrapsCompAllowance(delegate, lane + 100);
         vm.prank(delegate);
         vm.expectRevert(FLIP.Insufficient.selector);
-        vault.crapsCompDonate(true, index, uint24(lane / 100 ether + 1));
-        assertEq(vault.crapsCompAllowanceOf(delegate), lane + 100 ether);
+        vault.crapsCompDonate(true, index, uint24(lane / 100 + 1));
+        assertEq(vault.crapsCompAllowanceOf(delegate), lane + 100);
         assertEq(coin.crapsCompAllowance(), lane);
         assertEq(crapsBattle.battleOf(key).seed, 0);
     }
@@ -116,12 +116,12 @@ contract CrapsCompDonationTest is DeployProtocol {
     function test_aClosedPoolCannotReceiveCompFunds() public {
         uint256 lane = coin.crapsCompAllowance();
         vm.prank(ContractAddresses.CREATOR);
-        vault.setCrapsCompAllowance(delegate, 1_000 ether);
+        vault.setCrapsCompAllowance(delegate, 1_000);
         vm.warp(block.timestamp + 1 hours);
         vm.prank(delegate);
         vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);
         vault.crapsCompDonate(true, index, 10);
-        assertEq(vault.crapsCompAllowanceOf(delegate), 1_000 ether);
+        assertEq(vault.crapsCompAllowanceOf(delegate), 1_000);
         assertEq(coin.crapsCompAllowance(), lane);
         assertEq(crapsBattle.battleOf(key).seed, 0);
     }
@@ -132,7 +132,7 @@ contract CrapsCompDonationTest is DeployProtocol {
         vm.prank(player);
         crapsBattle.donate(true, index, 1);
         assertEq(coin.crapsCompAllowance(), lane);
-        assertEq(coin.balanceOf(player), playerBalance - 100 ether);
-        assertEq(crapsBattle.battleOf(key).seed, 100 ether);
+        assertEq(coin.balanceOf(player), playerBalance - 100);
+        assertEq(crapsBattle.battleOf(key).seed, 100);
     }
 }

@@ -86,7 +86,15 @@ contract LootboxCraps is Craps {
     ///      opened window directly; a day reserved ahead is seated before its word exists, which
     ///      is the reservation's whole point.
     function _dailyWordAt(uint24 day) internal view returns (uint256) {
-        uint256 tags = uint256(_extsload(bytes32(RNG_DAY_TAGS_SLOT)));
+        return _dailyWordAt(day, _dailyWordTags());
+    }
+
+    function _dailyWordTags() internal view returns (uint256) {
+        return uint256(_extsload(bytes32(RNG_DAY_TAGS_SLOT)));
+    }
+
+    /// @dev A caller making only read-only Game calls may reuse the same day tags.
+    function _dailyWordAt(uint24 day, uint256 tags) internal view returns (uint256) {
         if (day == 0 || uint24(tags >> ((day & 1) * 24)) != day) return 0;
         return uint256(_extsload(bytes32(_hash2(day & 1, RNG_WORD_BY_DAY_SLOT))));
     }

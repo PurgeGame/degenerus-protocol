@@ -31,7 +31,7 @@ contract CrapsSlipHarness is CrapsViews {
     /// @dev The whole settlement of a bet, stop included — production decides a FORFEIT off the
     ///      stop, so a suite grading the money path has to be able to see it.
     function settlementAt(uint256 betId) external view returns (Settlement memory) {
-        return _settlementOf(betId, _bets[betId], _slotWindow(betId >> 64), _wordAt(_indexOf(betId >> 64)));
+        return _settlementOf(betId, _loadBet(betId), _slotWindow(betId >> 64), _wordAt(_indexOf(betId >> 64)));
     }
 
     /// @dev Engine-only: a run off a bare table seed, for comparisons that hold no bet.
@@ -95,9 +95,9 @@ contract CrapsSlipHarness is CrapsViews {
     ///      Production draws it inside settlement and does not expose it — a client rebuilds it
     ///      from the slot, the word and the owner with one keccak.
     function drawnBoardOf(uint256 betId) external view returns (Craps.Bets memory board) {
-        uint256 header = _bets[betId];
+        uint256 header = _loadBet(betId);
         Window memory w = _slotWindow(betId >> 64);
-        uint256 chipFlip = (w.played / 1 ether) / BONUS_CHIPS;
+        uint256 chipFlip = (w.played / 1) / BONUS_CHIPS;
         uint256 packed = (header >> _BET_CHIPS_SHIFT) & _BET_CHIPS_MASK;
         uint256 placed;
         (, placed) = _packChips(uint32(packed));
@@ -171,13 +171,13 @@ contract CrapsSlipTest is CrapsPins {
     /// @dev The legacy leg size the oracle fixtures still measure in — those drive the engine
     ///      directly and never pass the table's chip rule. `L` is one round on the pass line.
     uint24 internal constant U = 180;
-    uint128 internal constant UW = 180e18;
+    uint128 internal constant UW = 180;
     /// @dev The chip. A round is ten of them and an entry places SEVEN, so `C * 7` is what a
     ///      board posts, `C * 10` is the round it grows into, and the fixtures below are cut in
     ///      multiples of it.
     uint24 internal constant C = 60;
     uint24 internal constant L = 600;
-    uint128 internal constant LW = 600e18;
+    uint128 internal constant LW = 600;
 
     address internal alice = makeAddr("alice");
     address internal bob = makeAddr("bob");
@@ -293,7 +293,7 @@ contract CrapsSlipTest is CrapsPins {
     function test_placeBurnsExactlyTheBankroll() public {
         (uint256 betId, uint64 slot) = _seat(alice, _bets(), 5, uint16(GOAL_FAR_MULT));
 
-        assertEq(flip.burned(alice), uint256(PLAYED) * 5 * 1 ether, "burned the bankroll");
+        assertEq(flip.burned(alice), uint256(PLAYED) * 5 * 1, "burned the bankroll");
         assertEq(betId, (uint256(slot) << 64) | 1, "the id is the slot and the seat");
 
         CrapsBattle.Bet memory bet = craps.betOf(betId);
@@ -485,7 +485,7 @@ contract CrapsSlipTest is CrapsPins {
     ///      to nothing. That is a rare false failure, not a real divergence, and this is where it
     ///      is closed.
     function test_previewIsExactlyWhatSettlementPays() public {
-        uint256 bankroll = uint256(PLAYED) * 3 * 1 ether;
+        uint256 bankroll = uint256(PLAYED) * 3 * 1;
         for (uint256 i = 0; i < 12; ++i) {
             uint48 idx = uint48(i & 1);
             (uint256 betId, uint64 slot) =
@@ -510,7 +510,7 @@ contract CrapsSlipTest is CrapsPins {
         b.place6 = 3;
         b.place8 = 1;
         b.hard8 = 3;
-        uint256 bankroll = uint256(PLAYED) * 5 * 1 ether;
+        uint256 bankroll = uint256(PLAYED) * 5 * 1;
 
         for (uint256 i = 0; i < 12; ++i) {
             uint256 trialSnapshot = vm.snapshotState();
@@ -551,7 +551,7 @@ contract CrapsSlipTest is CrapsPins {
         b.place6 = uint24(rest > 3 ? 3 : rest);
         if (rest > 3) b.place8 = uint24(rest - 3);
 
-        uint256 bankroll = uint256(PLAYED) * 4 * 1 ether;
+        uint256 bankroll = uint256(PLAYED) * 4 * 1;
         (uint256 betId, uint64 slot) = _run(alice, b, 4, uint16(GOAL_FAR_MULT), 0, word);
 
         (uint256 won,) = craps.previewSettlement(betId);
@@ -576,7 +576,7 @@ contract CrapsSlipTest is CrapsPins {
         b.dontPass = 3;
         b.place6 = 3;
         b.place8 = 1;
-        uint256 bankroll = uint256(PLAYED) * 5 * 1 ether;
+        uint256 bankroll = uint256(PLAYED) * 5 * 1;
 
         for (uint256 i = 0; i < 12; ++i) {
             uint256 trialSnapshot = vm.snapshotState();
@@ -622,7 +622,7 @@ contract CrapsSlipTest is CrapsPins {
 
         vm.prank(alice);
         uint256 betId = craps.enterBattle(slot, _bets(), 1);
-        assertEq(flip.burned(alice), uint256(PLAYED) * 4 * 1 ether, "burned the bankroll");
+        assertEq(flip.burned(alice), uint256(PLAYED) * 4 * 1, "burned the bankroll");
 
         // Bankroll and target are the SLOT's, held as multiples of the round it plays.
         (,, uint256 terms) = craps.customBattleOf(slot);
@@ -747,7 +747,7 @@ contract CrapsSlipTest is CrapsPins {
         b.passLine = 3;
         b.place6 = 2;
         b.place8 = 2;
-        uint256 bankroll = uint256(PLAYED) * 10 * 1 ether;
+        uint256 bankroll = uint256(PLAYED) * 10 * 1;
 
         (uint256 betId, uint64 slot) = _run(alice, b, 10, 50, 0, uint256(keccak256("slipvrf")));
 
@@ -840,7 +840,7 @@ contract CrapsSlipTest is CrapsPins {
         // about a run is derivable from its table's word, its slot and its owner — which is what
         // makes the lean event sufficient for an indexer.
         (uint256 betId, uint64 slot) = _run(alice, _bets(), 3, uint16(GOAL_FAR_MULT), 0, uint256(keccak256("logvrf")));
-        uint256 bankroll = uint256(PLAYED) * 3 * 1 ether;
+        uint256 bankroll = uint256(PLAYED) * 3 * 1;
 
         (uint256 won,) = craps.previewSettlement(betId);
 
@@ -894,7 +894,7 @@ contract CrapsSlipTest is CrapsPins {
     /// @dev A goal is paid what its table returned, to the award-rounding granule; a bust is paid
     ///      zero and its remainder is deleted.
     function test_aGoalIsPaidAndABustIsDeleted() public {
-        uint256 goal = uint256(PLAYED) * 4 * 5 * 1 ether;
+        uint256 goal = uint256(PLAYED) * 4 * 5 * 1;
         uint256 goalWonTotal;
         uint256 paidTotal;
         uint256 sawGoal;
@@ -908,8 +908,8 @@ contract CrapsSlipTest is CrapsPins {
             (uint256 won, uint256 paid) = craps.previewSettlement(betId);
             if (won >= goal) {
                 // Award rounding moves a goal by at most one 100-FLIP granule in either direction.
-                assertLe(paid, won + 100 ether, "paid more than the table returned");
-                assertGe(paid + 100 ether, won, "goal paid below its rounding band");
+                assertLe(paid, won + 100, "paid more than the table returned");
+                assertGe(paid + 100, won, "goal paid below its rounding band");
                 goalWonTotal += won;
                 ++sawGoal;
             } else {
@@ -949,7 +949,7 @@ contract CrapsSlipTest is CrapsPins {
             if (paid > FlipRoundLib.FLIP_ROUND_THRESHOLD) {
                 assertEq(paid % FlipRoundLib.FLIP_ROUND_UNIT, 0, "not a whole 100 FLIP");
             } else {
-                assertEq(paid % 1 ether, 0, "not a whole FLIP");
+                assertEq(paid % 1, 0, "not a whole FLIP");
             }
             vm.revertToStateAndDelete(trialSnapshot);
         }
@@ -1087,7 +1087,7 @@ contract CrapsSlipTest is CrapsPins {
         // At least a 300-FLIP round, so the bankroll clears the floor at any depth.
         uint32 played = uint32(bound(uint256(rawPlayed), 30, 1_500_000) * 10);
         uint8 rounds = uint8(bound(uint256(rawRounds), 1, craps.MAX_BANKROLL_MULT()));
-        uint256 bankroll = uint256(played) * rounds * 1 ether;
+        uint256 bankroll = uint256(played) * rounds * 1;
 
         uint48 idx = uint48(seed & 1);
         uint64 slot = _openBattle(craps, played, rounds, uint16(GOAL_FAR_MULT), 0);

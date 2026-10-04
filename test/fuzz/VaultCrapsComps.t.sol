@@ -33,7 +33,7 @@ contract CompCrapsDouble {
         uint8 kind = uint8(code >> 160);
         uint8 count = uint8(code >> 200);
         asks.push(Ask(kind, address(uint160(code)), code & (1 << 168) != 0, uint24(code >> 176), count));
-        charged = uint256(count) * 1 ether + kind;
+        charged = uint256(count) * 1 + kind;
     }
 
     function calls() external view returns (uint256) {
@@ -74,7 +74,7 @@ contract VaultCrapsCompsTest is Test {
     function test_everyFieldReachesTheTableUntouched() public {
         vm.prank(owner);
         vm.expectEmit(true, true, false, true, address(vault));
-        emit CrapsCompGranted(owner, streamer, 3, 5 ether + 3);
+        emit CrapsCompGranted(owner, streamer, 3, 5 + 3);
         vault.crapsComp(_one(3, streamer, true, 123_456, 5));
         assertEq(craps.calls(), 1, "the table was not called once");
         (uint8 kind, address to, bool high, uint24 arg, uint8 count) = craps.asks(0);
@@ -120,34 +120,34 @@ contract VaultCrapsCompsTest is Test {
     function test_onlyTheOwnerSetsAnAllowance() public {
         vm.prank(stranger);
         vm.expectRevert(DegenerusVault.NotVaultOwner.selector);
-        vault.setCrapsCompAllowance(host, 10 ether);
+        vault.setCrapsCompAllowance(host, 10);
         vm.prank(owner);
         vm.expectRevert(DegenerusVault.ZeroAddress.selector);
-        vault.setCrapsCompAllowance(address(0), 10 ether);
+        vault.setCrapsCompAllowance(address(0), 10);
         vm.prank(owner);
         vm.expectEmit(true, true, false, true, address(vault));
-        emit CrapsCompAllowanceSet(owner, host, 10 ether);
-        vault.setCrapsCompAllowance(host, 10 ether);
-        assertEq(vault.crapsCompAllowanceOf(host), 10 ether, "the allowance did not land");
+        emit CrapsCompAllowanceSet(owner, host, 10);
+        vault.setCrapsCompAllowance(host, 10);
+        assertEq(vault.crapsCompAllowanceOf(host), 10, "the allowance did not land");
     }
 
     function test_aDelegateSpendsItsAllowanceAtTheTablesPrice() public {
         vm.prank(owner);
-        vault.setCrapsCompAllowance(host, 10 ether);
-        // The double charges count x 1 ether + kind: 3 + 0 and 2 + 0 = 5 ether.
+        vault.setCrapsCompAllowance(host, 10);
+        // The double charges count x 1 + kind: 3 + 0 and 2 + 0 = 5.
         uint256[] memory r = new uint256[](2);
         r[0] = _code(0, streamer, false, 1, 3);
         r[1] = _code(0, stranger, false, 2, 2);
         vm.prank(host);
         vault.crapsComp(r);
         assertEq(craps.calls(), 2, "the delegate's batch did not reach the table");
-        assertEq(vault.crapsCompAllowanceOf(host), 5 ether, "the allowance was not charged what the table charged");
+        assertEq(vault.crapsCompAllowanceOf(host), 5, "the allowance was not charged what the table charged");
         // Over the remainder: refused whole, nothing reaches the table, nothing is spent.
         vm.prank(host);
         vm.expectRevert(DegenerusVault.Insufficient.selector);
         vault.crapsComp(_one(0, streamer, false, 1, 6));
         assertEq(craps.calls(), 2, "a refused batch reached the table");
-        assertEq(vault.crapsCompAllowanceOf(host), 5 ether, "a refused batch spent the allowance");
+        assertEq(vault.crapsCompAllowanceOf(host), 5, "a refused batch spent the allowance");
         // Exactly the remainder is fine, and then the delegate is nobody again.
         vm.prank(host);
         vault.crapsComp(_one(0, streamer, false, 1, 5));
@@ -159,15 +159,15 @@ contract VaultCrapsCompsTest is Test {
 
     function test_theOwnerSpendsNoAllowance() public {
         vm.prank(owner);
-        vault.setCrapsCompAllowance(owner, 1 ether);
+        vault.setCrapsCompAllowance(owner, 1);
         vm.prank(owner);
         vault.crapsComp(_one(0, streamer, false, 1, 50));
-        assertEq(vault.crapsCompAllowanceOf(owner), 1 ether, "the owner's grant drew on an allowance");
+        assertEq(vault.crapsCompAllowanceOf(owner), 1, "the owner's grant drew on an allowance");
     }
 
     function test_revokingAnAllowanceStopsTheDelegate() public {
         vm.prank(owner);
-        vault.setCrapsCompAllowance(host, 10 ether);
+        vault.setCrapsCompAllowance(host, 10);
         vm.prank(owner);
         vault.setCrapsCompAllowance(host, 0);
         vm.prank(host);

@@ -279,7 +279,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      (a private constant not visible cross-contract). Each delivered afking buy accrues
     ///      `QUEST_SLOT0_REWARD` (whole FLIP) into the sub's claimable `pendingFlip`, pulled
     ///      via `claimAfkingFlip`. Only values the FLIP mint, off the solvency path.
-    uint256 internal constant QUEST_SLOT0_REWARD = 100 ether;
+    uint256 internal constant QUEST_SLOT0_REWARD = 100;
 
     /// @dev Prize-pool routing splits for the batched afking buy, mirroring the canonical
     ///      `DegenerusGameMintModule.LOOTBOX_SPLIT_FUTURE_BPS` (9000) and
@@ -967,7 +967,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             if (amount >= 10 * 4 * QTY_SCALE) {
                 bonusBase += (amount * PRICE_COIN_UNIT) / (80 * QTY_SCALE); // +5% → 15% on ≥10 tickets
             }
-            uint256 bonusWhole = bonusBase / 1 ether;
+            uint256 bonusWhole = bonusBase;
             if (bonusWhole != 0) {
                 uint256 newOwed = uint256(sub.pendingFlip) + bonusWhole;
                 if (newOwed > type(uint24).max) newOwed = type(uint24).max;
@@ -1033,7 +1033,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // The compute-on-read streak markers were advanced before materialization so the frozen
         // lootbox score observes the same real-miss decision as the persisted run framing.
         {
-            uint256 base = ((_ethToFlip(ethValue + claimableUse, mp) * 7) / 100) / 1 ether;
+            uint256 base = ((_ethToFlip(ethValue + claimableUse, mp) * 7) / 100);
             if (base != 0) {
                 uint256 newBase = uint256(sub.affiliateBase) + base;
                 if (newBase > 100_000_000) newBase = 100_000_000;
@@ -1041,7 +1041,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             }
             {
                 uint256 newOwed = uint256(sub.pendingFlip) +
-                    (QUEST_SLOT0_REWARD / 1 ether);
+                    (QUEST_SLOT0_REWARD);
                 if (newOwed > type(uint24).max) newOwed = type(uint24).max;
                 sub.pendingFlip = uint24(newOwed);
             }
@@ -1195,7 +1195,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             presaleBoxCredit[player] += credit;
         }
         emit AfkingFlipClaimed(player, owed);
-        coinflip.creditFlip(player, owed * 1 ether); // whole → base units
+        coinflip.creditFlip(player, owed); // whole → base units
     }
 
     /*------------------------------------------------------------------

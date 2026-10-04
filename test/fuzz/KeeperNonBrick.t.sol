@@ -90,7 +90,7 @@ contract KeeperNonBrick is DeployProtocol {
     uint256 private constant CRANK_GAS_PRICE_REF = 0.5 gwei;
     uint256 private constant CRANK_RESOLVE_BET_GAS_UNITS = 66_528;
     uint256 private constant CRANK_OPEN_BOX_GAS_UNITS = 71_203;
-    uint256 private constant PRICE_COIN_UNIT = 1000 ether;
+    uint256 private constant PRICE_COIN_UNIT = 1000;
 
     uint48 private constant INDEX = 1; // default lootboxRngIndex seeded in setUp
     uint256 private constant LOOTBOX_MIN = 0.01 ether; // mint-module DirectEth lootbox floor

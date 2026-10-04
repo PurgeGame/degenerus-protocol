@@ -10,7 +10,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 contract BudgetHarness is CrapsViews {
     function betsAt(uint256 id) external view returns (uint256) {
-        return _bets[id];
+        return _loadBet(id);
     }
 
     function resolveMaxSeats() external pure returns (uint64) {
@@ -128,7 +128,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
         for (uint256 mode = 0; mode < 3; ++mode) {
             uint256 snap = vm.snapshotState();
             (uint64 slot, uint24 day) = _field(PLAIN_WORD, wordSalt);
-            craps.seedProgressive(1_000_000 ether);
+            craps.seedProgressive(1_000_000);
 
             if (mode == 0) {
                 craps.settleSlot(slot, WHOLE_FIELD);

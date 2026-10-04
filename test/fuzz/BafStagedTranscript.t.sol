@@ -1030,8 +1030,8 @@ abstract contract BafTranscriptFixture is DeployProtocol {
         h = keccak256(abi.encode(h, w0, w1));
         Bracket memory b = _bracket();
         h = keccak256(abi.encode(h, b.levelWord, b.top, b.resolvedDay));
-        // DegenerusQuests slot 2: levelQuestType | levelQuestVersion.
-        h = keccak256(abi.encode(h, vm.load(address(quests), bytes32(uint256(2))), address(game).balance));
+        // Level type/version share the active daily-quest word at bits 128..143.
+        h = keccak256(abi.encode(h, bytes32(uint256(uint16(uint256(vm.load(address(quests), bytes32(0))) >> 128))), address(game).balance));
     }
 
     /// @dev Every address an award log names, in first-seen order.

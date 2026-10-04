@@ -27,10 +27,10 @@ contract DecimatorEngineProbe {
     ) external pure returns (Craps.SlipResult memory r) {
         uint256 named;
         for (uint256 i; i < 30; i += 3) named += (chips >> i) & 7;
-        require(chip == 60 && count == 10 - named && bankroll == 3000 ether && bounds == (511 << 16 | 48));
+        require(chip == 60 && count == 10 - named && bankroll == 3000e18 && bounds == (511 << 16 | 48));
         // The normal battles' shooter-boost row (Craps._shooterBoostTerms).
         require(boost == (0x050c070c0a0c0e0c120c140c190c1e0c >> (named << 4)) & 0xFFFF);
-        r.peakBankroll = bankroll + board % (1_000_000 ether);
+        r.peakBankroll = bankroll + board % (1_000_000e18);
         r.totalRolls = 30;
     }
 }
@@ -43,7 +43,7 @@ contract DecimatorFlatProbe {
         pure
         returns (Craps.SlipResult memory r)
     {
-        require(chips == 0 && chip == 60 && count == 10 && bankroll == 3000 ether);
+        require(chips == 0 && chip == 60 && count == 10 && bankroll == 3000e18);
         r.peakBankroll = bankroll;
         r.totalRolls = 30;
     }
@@ -56,7 +56,7 @@ contract DecimatorHugePeakProbe {
         pure
         returns (Craps.SlipResult memory r)
     {
-        r.peakBankroll = (uint256(1) << 200) + board % (1_000_000 ether);
+        r.peakBankroll = (uint256(1) << 200) + board % (1_000_000);
         r.totalRolls = 30;
     }
 }
@@ -100,7 +100,7 @@ contract DecimatorBattleTest is Test {
 
     function _populate(DecimatorBattleHarness target, uint24 lvl, uint64 n) internal {
         for (uint64 i = 1; i <= n; ++i) {
-            _burn(target, address(uint160(i)), lvl, (uint256(i) + 1) * 1000 ether, 10_000);
+            _burn(target, address(uint160(i)), lvl, (uint256(i) + 1) * 1000, 10_000);
         }
     }
 
@@ -132,49 +132,49 @@ contract DecimatorBattleTest is Test {
     }
 
     function test_TopupsPreserveEarlyCreditAndUseCurrentMultiplier() public {
-        assertEq(_burn(h, address(1), LVL, 1_000_000 ether, 19_000), 1);
+        assertEq(_burn(h, address(1), LVL, 1_000_000, 19_000), 1);
         vm.warp(vm.getBlockTimestamp() + 1 days);
-        assertEq(_burn(h, address(1), LVL, 1_000_000 ether, 20_000), 1);
+        assertEq(_burn(h, address(1), LVL, 1_000_000, 20_000), 1);
         vm.warp(vm.getBlockTimestamp() + 1 days);
-        _burn(h, address(1), LVL, 1_000_000 ether, 10_000);
+        _burn(h, address(1), LVL, 1_000_000, 10_000);
         DecimatorBattleHarness.Entry memory e = h.entryOf(LVL, 1);
-        assertEq(e.stack, 4_510_000 ether);
+        assertEq(e.stack, 4_510_000);
         assertEq(h.roundOf(LVL).count, 1);
     }
 
     function test_FirstBurnDoesNotStartClockAndNoOld500kCap() public {
         vm.warp(vm.getBlockTimestamp() + 3 days);
-        _burn(h, address(1), LVL, 10_000_000 ether, 20_000);
-        assertEq(h.entryOf(LVL, 1).stack, 14_580_000 ether);
+        _burn(h, address(1), LVL, 10_000_000, 20_000);
+        assertEq(h.entryOf(LVL, 1).stack, 14_580_000);
     }
 
     function test_ResetBoundary() public {
         vm.warp(vm.getBlockTimestamp() + 1 days - 2);
-        _burn(h, address(1), LVL, 1000 ether, 10_000);
+        _burn(h, address(1), LVL, 1000, 10_000);
         vm.warp(vm.getBlockTimestamp() + 1);
-        _burn(h, address(2), LVL, 1000 ether, 10_000);
-        assertEq(h.entryOf(LVL, 1).stack, 1000 ether);
-        assertEq(h.entryOf(LVL, 2).stack, 900 ether);
+        _burn(h, address(2), LVL, 1000, 10_000);
+        assertEq(h.entryOf(LVL, 1).stack, 1000);
+        assertEq(h.entryOf(LVL, 2).stack, 900);
     }
 
     function test_RecordAccessAndSealGuards() public {
         vm.expectRevert();
-        h.recordDecBurn(address(1), LVL, 1000 ether, 10_000, 0);
+        h.recordDecBurn(address(1), LVL, 1000, 10_000, 0);
         vm.startPrank(ContractAddresses.COIN);
         vm.expectRevert();
-        h.recordDecBurn(address(1), LVL + 1, 1000 ether, 10_000, 0);
+        h.recordDecBurn(address(1), LVL + 1, 1000, 10_000, 0);
         vm.expectRevert();
-        h.recordDecBurn(address(1), LVL, 1000 ether, 20_001, 0);
+        h.recordDecBurn(address(1), LVL, 1000, 20_001, 0);
         vm.expectRevert();
-        h.recordDecBurn(address(0), LVL, 1000 ether, 10_000, 0);
+        h.recordDecBurn(address(0), LVL, 1000, 10_000, 0);
         vm.stopPrank();
-        _burn(h, address(1), LVL, 1000 ether, 10_000);
+        _burn(h, address(1), LVL, 1000, 10_000);
         vm.expectRevert();
         h.runDecimatorJackpot(1 ether, LVL, 123);
         h.seal(LVL, 1 ether, 123);
         vm.prank(ContractAddresses.COIN);
         vm.expectRevert();
-        h.recordDecBurn(address(1), LVL, 1000 ether, 10_000, 0);
+        h.recordDecBurn(address(1), LVL, 1000, 10_000, 0);
         assertEq(h.seal(LVL, 1 ether, 456), 1 ether);
         assertEq(h.activeWord(), 123);
         assertEq(h.reserved(), 1 ether);
@@ -187,7 +187,7 @@ contract DecimatorBattleTest is Test {
     }
 
     function test_SingleHeadsGetsEverythingAndNoDoublePay() public {
-        _burn(h, address(1), LVL, 1000 ether, 10_000);
+        _burn(h, address(1), LVL, 1000, 10_000);
         uint256 word = 2;
         while (!_heads(word, LVL, 1)) ++word;
         h.seal(LVL, 13 ether + 17, word);
@@ -208,7 +208,7 @@ contract DecimatorBattleTest is Test {
     }
 
     function test_DailyLockDefersAllTailsReserveRelease() public {
-        _burn(h, address(1), LVL, 1000 ether, 10_000);
+        _burn(h, address(1), LVL, 1000, 10_000);
         uint256 word = 2;
         while (_heads(word, LVL, 1)) ++word;
         h.seal(LVL, 7 ether, word);
@@ -227,7 +227,7 @@ contract DecimatorBattleTest is Test {
     /// @dev A tails run never reaches the engine: an engine that always reverts cannot stop it.
     function test_TailsSkipsTheEngine() public {
         vm.etch(ContractAddresses.CRAPS_ENGINE, hex"fe");
-        _burn(h, address(1), LVL, 1000 ether, 10_000);
+        _burn(h, address(1), LVL, 1000, 10_000);
         uint256 word = 2;
         while (_heads(word, LVL, 1)) ++word;
         h.seal(LVL, 5 ether, word);
@@ -269,8 +269,8 @@ contract DecimatorBattleTest is Test {
         h.seal(15, 4 ether, 22);
         _drain(h);
         assertEq(h.roundOf(15).phase, 3);
-        assertEq(h.entryOf(LVL, 1).stack, 2000 ether);
-        assertEq(h.entryOf(15, 1).stack, 2000 ether);
+        assertEq(h.entryOf(LVL, 1).stack, 2000);
+        assertEq(h.entryOf(15, 1).stack, 2000);
     }
 
     function test_BatchesHaveIdenticalRealDiceAndPayouts() public {
@@ -353,13 +353,13 @@ contract DecimatorBattleTest is Test {
                     uint256(keccak256(abi.encode(BOARD, word, LVL, id))),
                     10,
                     seed,
-                    3000 ether,
+                    3000e18,
                     address(uint160(id)),
                     (30 << 8) | 12,
                     (511 << 16) | 48
                 );
-            assertEq(node.score, h.entryOf(LVL, id).stack / 1 ether * run.peakBankroll);
-            assertGe(run.peakBankroll, 3000 ether);
+            assertEq(node.score, h.entryOf(LVL, id).stack / 1 * run.peakBankroll);
+            assertGe(run.peakBankroll, 3000e18);
         }
     }
 
@@ -398,8 +398,8 @@ contract DecimatorBattleTest is Test {
         }
         for (uint64 id = 1; id <= 1001; ++id) {
             if (!_heads(777, LVL, id) || h.balanceOf(address(uint160(id))) != 0 || id == round.champion) continue;
-            uint256 peak = 3000 ether + uint256(keccak256(abi.encode(BOARD, uint256(777), LVL, id))) % (1_000_000 ether);
-            assertLe(h.entryOf(LVL, id).stack / 1 ether * peak, root.score);
+            uint256 peak = 3000 + uint256(keccak256(abi.encode(BOARD, uint256(777), LVL, id))) % (1_000_000);
+            assertLe(h.entryOf(LVL, id).stack / 1 * peak, root.score);
         }
     }
 
@@ -408,7 +408,7 @@ contract DecimatorBattleTest is Test {
         uint256 word = 2;
         while (_heads(word, LVL, 1) || !_heads(word, LVL, 2)) ++word;
         _burn(h, address(1), LVL, type(uint160).max, 10_000);
-        _burn(h, address(2), LVL, 1000 ether, 10_000);
+        _burn(h, address(2), LVL, 1000, 10_000);
         h.seal(LVL, 1 ether, word);
         _drain(h);
         assertEq(h.roundOf(LVL).champion, 2);
@@ -428,16 +428,16 @@ contract DecimatorBattleTest is Test {
         vm.startPrank(ContractAddresses.COIN);
         for (uint256 i; i < bad.length; ++i) {
             vm.expectRevert();
-            h.recordDecBurn(address(1), LVL, 1000 ether, 10_000, bad[i]);
+            h.recordDecBurn(address(1), LVL, 1000, 10_000, bad[i]);
         }
         uint32 seven = 3 | 3 << 3 | 1 << 6;
-        h.recordDecBurn(address(1), LVL, 1000 ether, 10_000, seven);
+        h.recordDecBurn(address(1), LVL, 1000, 10_000, seven);
         assertEq(h.entryOf(LVL, 1).chips, seven);
         // A later burn sets the board; the stack keeps accumulating.
-        h.recordDecBurn(address(1), LVL, 1000 ether, 10_000, 1 << 27);
+        h.recordDecBurn(address(1), LVL, 1000, 10_000, 1 << 27);
         vm.stopPrank();
         assertEq(h.entryOf(LVL, 1).chips, 1 << 27);
-        assertEq(h.entryOf(LVL, 1).stack, 2000 ether);
+        assertEq(h.entryOf(LVL, 1).stack, 2000);
     }
 
     /// @dev A chosen board reaches the engine with the scatter count and boost row for its size.
@@ -446,7 +446,7 @@ contract DecimatorBattleTest is Test {
         uint256 word = 2;
         while (!_heads(word, LVL, 1)) ++word;
         vm.prank(ContractAddresses.COIN);
-        h.recordDecBurn(address(1), LVL, 1000 ether, 10_000, 2 | 3 << 12 | 1 << 21);
+        h.recordDecBurn(address(1), LVL, 1000, 10_000, 2 | 3 << 12 | 1 << 21);
         h.seal(LVL, 1 ether, word);
         _drain(h); // the probe reverts unless chips, scatter count and boost all match
         assertEq(h.balanceOf(address(1)), 1 ether);
@@ -466,7 +466,7 @@ contract DecimatorBattleTest is Test {
         uint256 word = 2;
         while (!_heads(word, LVL, 1) || !_heads(word, LVL, 2)) ++word;
         for (uint160 i = 1; i <= 35; ++i) {
-            uint256 amount = i <= 2 ? 2000 ether : 1000 ether;
+            uint256 amount = i <= 2 ? 2000 : 1000;
             _burn(h, address(i), LVL, amount, 10_000);
             _burn(other, address(i), LVL, amount, 10_000);
         }
@@ -525,8 +525,8 @@ contract DecimatorBattleTest is Test {
         h.open(15);
         fresh.open(15);
         for (uint160 i = 1; i <= 25; ++i) { // three places
-            _burn(h, address(i + 1000), 15, (uint256(i) + 1) * 1000 ether, 10_000);
-            _burn(fresh, address(i + 1000), 15, (uint256(i) + 1) * 1000 ether, 10_000);
+            _burn(h, address(i + 1000), 15, (uint256(i) + 1) * 1000, 10_000);
+            _burn(fresh, address(i + 1000), 15, (uint256(i) + 1) * 1000, 10_000);
         }
         h.seal(15, 3 ether + 1, 22);
         fresh.seal(15, 3 ether + 1, 22);
@@ -642,17 +642,17 @@ contract DecimatorBattleTest is Test {
     /// @dev Whole FLIP of chips: a burn's credit rounds down to a whole FLIP, and one that rounds
     ///      to zero reverts.
     function test_StackCountsWholeFlip() public {
-        _burn(h, address(1), LVL, 1000 ether + 0.9 ether, 10_000);
-        assertEq(h.entryOf(LVL, 1).stack, 1000 ether);
+        _burn(h, address(1), LVL, 1001, 10_000);
+        assertEq(h.entryOf(LVL, 1).stack, 1001);
         vm.prank(ContractAddresses.COIN);
         vm.expectRevert();
-        h.recordDecBurn(address(2), LVL, 0.9 ether, 10_000, 0);
+        h.recordDecBurn(address(2), LVL, 0, 10_000, 0);
     }
 
     /// @dev Past 2^66 FLIP the stack saturates: later burns still record, and the owner and board
     ///      beside it are untouched.
     function test_StackSaturatesInsteadOfWrapping() public {
-        uint256 cap = ((uint256(1) << 66) - 1) * 1 ether;
+        uint256 cap = ((uint256(1) << 66) - 1) * 1;
         _burn(h, address(1), LVL, type(uint160).max, 10_000);
         assertEq(h.entryOf(LVL, 1).stack, cap);
         vm.prank(ContractAddresses.COIN);
@@ -671,7 +671,7 @@ contract DecimatorBattleTest is Test {
         uint256 word = 2;
         while (!_heads(word, LVL, 1) || !_heads(word, LVL, 2)) ++word;
         _burn(h, address(1), LVL, type(uint160).max, 10_000);
-        _burn(h, address(2), LVL, 1000 ether, 10_000);
+        _burn(h, address(2), LVL, 1000, 10_000);
         h.seal(LVL, 1 ether, word);
         _drain(h);
         assertEq(h.roundOf(LVL).winners, 1);

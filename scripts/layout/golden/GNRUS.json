@@ -58,10 +58,10 @@
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "hasVoted",
+    "label": "_voterWord",
     "offset": 0,
     "slot": 3,
-    "typeLabel": "mapping(uint24 => mapping(address => mapping(uint8 => bool)))"
+    "typeLabel": "mapping(address => uint256)"
   },
   {
     "bytes": "640",

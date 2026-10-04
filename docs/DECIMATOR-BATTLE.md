@@ -22,14 +22,14 @@ Each burn adds:
 
 ```
 base = amount + completed quest bonus + consumed Decimator boon bonus
-chips = floor(base × degenMultBps × dayFactor / (10,000 × 10^18 × 10^18))   (whole FLIP)
+chips = floor(base × degenMultBps × dayFactor / (10,000 × 10^18))   (whole FLIP)
 startingStack += chips
 ```
 
 Chips count in whole FLIP, so a burn's credit rounds down to a whole FLIP (under 0.1% of the
 1,000-FLIP minimum). A stack saturates at 2^66 − 1 FLIP, far past FLIP's supply; a burn past it
 still records but adds nothing, and cannot spill into the other packed fields. Events and the
-Lens report chips in wei.
+Lens report chips as whole FLIP, with no 10^18 token multiplier.
 
 Existing quest rewards still credit Coinflip; their chip addition and the existing boon
 bonus (which applies to at most 50,000 base FLIP per burn) are retained. The protocol's
@@ -57,6 +57,11 @@ bounded by the 24-bit day offset. A burn that rounds to zero chips reverts atomi
 
 ## Run and ranking
 
+FLIP uses zero decimals, while the stateless engine retains 10^18 simulation
+sub-units per FLIP through every hand and hot bonus. Its normalized peak and the
+ranking product keep that precision. These mathematical units are not token
+balances; no fractional FLIP is minted, burned, or transferred.
+
 Entry closes before the resolving VRF word is known. The sealed round stores its full word,
 entrant count and ETH pool. All entries use the same event dice. Each plays ten chips: the
 ones its board names, the dice scattering the rest, with total opening wager equal to
@@ -80,9 +85,9 @@ Ranking uses the highest bankroll at a **completed shooter boundary**, including
 initial bankroll; a run the roll cap stops mid-hand takes its last reading at the cut.
 Busting later does not erase the high point. To avoid a wager-type cap on large burns, the
 engine runs in normalized units: 3,000 starting FLIP and ten 60-FLIP chips. The score is the
-whole-FLIP starting stack times the normalized peak (the common denominator is 3,000 FLIP), so
+whole-FLIP starting stack times the normalized peak (the common denominator is 3,000 × 10^18 simulation sub-units), so
 comparisons carry no truncation beyond the stack's whole-FLIP rounding. The run bounds keep a
-peak far below 2^126 wei, so a real score stays well inside the 192 bits a node gives it; a
+peak far below 2^126 simulation sub-units, so a real score stays well inside the 192 bits a node gives it; a
 score past them would saturate, not wrap, and equal capped scores fall to the tiebreak. This
 normalized process defines the virtual chips' rounding behavior.
 
@@ -196,7 +201,7 @@ No ETH is pushed to winners during settlement; the existing claim flow applies.
 - `DecimatorClaimed` reports each payout: the ETH credited and the half passes queued (one of the two is zero, except the champion's). `PlayerCredited` also fires for ETH.
 - Lens: `decBurnOf` (a wallet's entry for its latest event only) and `decEntryAt` (owner,
   stack and board by event and id, readable for every event), `decBattleRoundOf`,
-  `decWinnerAt` (the score and the full ordering key; the absolute peak in wei is score / 3000;
+  `decWinnerAt` (the score and the full ordering key; the absolute peak in whole FLIP is score / (3000 × 10^18);
   answers only while the round is at the head of the queue, since the next round reuses the
   slots; finished rounds are recorded by their `DecimatorRanked` and `DecimatorClaimed` events),
   `decSettleCursorOf`. Winner indices expose heap order, not display rank. Sort by the

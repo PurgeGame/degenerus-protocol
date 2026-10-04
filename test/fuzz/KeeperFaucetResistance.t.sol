@@ -300,14 +300,14 @@ contract KeeperFaucetResistance is DeployProtocol {
         bool flip = shape == 1 || shape == 4;
         if (flip) {
             vm.prank(address(game));
-            coin.mintForGame(player, 100_000_000 ether);
+            coin.mintForGame(player, 100_000_000);
         }
         if (shape == 2) _warmBoonRing(address(vault), n + 5);
         uint256 placeGas;
         for (uint256 i; i < n; ++i) {
             vm.prank(player);
             uint256 g = gasleft();
-            if (flip) game.placeDegeneretteBet(address(0), 1, 100 ether, spinsOf[shape], 9);
+            if (flip) game.placeDegeneretteBet(address(0), 1, 100, spinsOf[shape], 9);
             else game.placeDegeneretteBet{value: uint256(0.005 ether) * spinsOf[shape]}(
                 address(0), 0, 0.005 ether, spinsOf[shape], shape == 2 ? 0 : 9
             );
@@ -497,7 +497,7 @@ contract KeeperFaucetResistance is DeployProtocol {
 
     /// @dev Coinflip stake lanes hold whole FLIP: a credit floors to the whole FLIP it lands as.
     function _whole(uint256 amount) internal pure returns (uint256) {
-        return (amount / 1 ether) * 1 ether;
+        return amount;
     }
 
     /// @dev Mirror of the miner pay for `measured` gas at the current base fee and clock.
@@ -515,7 +515,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         uint256 raw = (measured - MineFlipGas.MIN_REWARDED_GAS) * rate * PRICE_COIN_UNIT * bps / (game.mintPrice() * 10_000);
         // Whole-FLIP normalization at the payment site: 0 stays 0, positive sub-FLIP pays 1 FLIP.
         if (raw == 0) return 0;
-        return raw < 1 ether ? 1 ether : _whole(raw);
+        return raw < 1 ether ? 1 : raw / 1 ether;
     }
 
     /// @dev Settle the game to a clean state (advance not due, not rng-locked) — the open leg's `else` arm

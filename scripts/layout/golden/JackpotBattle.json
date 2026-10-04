@@ -42,18 +42,18 @@
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "_slotIndex",
+    "label": "_slotState",
     "offset": 0,
     "slot": 5,
-    "typeLabel": "mapping(uint256 => uint48)"
+    "typeLabel": "mapping(uint256 => uint256)"
   },
   {
     "bytes": "32",
-    "encoding": "mapping",
-    "label": "_bonusCursor",
+    "encoding": "inplace",
+    "label": "__reservedBonusCursorRoot",
     "offset": 0,
     "slot": 6,
-    "typeLabel": "mapping(uint256 => uint64)"
+    "typeLabel": "uint256"
   },
   {
     "bytes": "32",

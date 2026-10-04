@@ -98,7 +98,7 @@ contract CoinflipCompactGapTest is CoinflipRngSpineBehavioral {
         uint256 prefixPool = coinflip.recordPool();
         _gap(root, GAP_START, GAP_END);
         _assertGap(root, GAP_START, GAP_END);
-        assertEq(coinflip.recordPool(), prefixPool + 18 * 2_000 ether, "only remaining days fund the pool");
+        assertEq(coinflip.recordPool(), prefixPool + 18 * 2_000, "only remaining days fund the pool");
     }
 
     function test_GapKeepsNeighboringPackedResults() public {
@@ -147,7 +147,7 @@ contract CoinflipCompactGapTest is CoinflipRngSpineBehavioral {
         CoinflipGapRecoveryHarness(GAME).recover(root, GAP_START, requestedEnd);
         vm.etch(GAME, gameCode);
         _assertGap(root, GAP_START, GAP_END);
-        assertEq(coinflip.recordPool(), pool + 31 * 2_000 ether, "recovery settles only its bounded batch");
+        assertEq(coinflip.recordPool(), pool + 31 * 2_000, "recovery settles only its bounded batch");
         (uint16 nextResult,) = coinflip.getCoinflipDayResult(GAP_END);
         assertEq(nextResult, 0, "day beyond recovery batch stays untouched");
     }
@@ -173,8 +173,8 @@ contract CoinflipCompactGapTest is CoinflipRngSpineBehavioral {
         vm.warp((uint256(GAP_START - 2) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
         reserve = _backing();
         vm.prank(ContractAddresses.COIN);
-        coinflip.creditSdgnrsBacking(100_000 ether);
-        assertEq(coinflip.coinflipAmount(ContractAddresses.SDGNRS), 100_000 ether, "funded gap starts with an actual stake");
+        coinflip.creditSdgnrsBacking(100_000);
+        assertEq(coinflip.coinflipAmount(ContractAddresses.SDGNRS), 100_000, "funded gap starts with an actual stake");
         (bool enabled, , , ) = coinflip.coinflipAutoRebuyInfo(ContractAddresses.SDGNRS);
         assertTrue(enabled, "sDGNRS rebuy armed before the gap");
     }
@@ -186,7 +186,7 @@ contract CoinflipCompactGapTest is CoinflipRngSpineBehavioral {
         uint256 batchPool = coinflip.recordPool();
         uint256 batchBacking = _backing();
         (, , uint256 batchCarry, ) = coinflip.coinflipAutoRebuyInfo(ContractAddresses.SDGNRS);
-        uint256 expectedCarry = 100_000 ether;
+        uint256 expectedCarry = 100_000;
         for (uint24 day = GAP_START; day < GAP_END; ++day) {
             uint256 payout = expectedCarry * 2;
             expectedCarry = payout + payout * 75 / 10_000;
@@ -209,11 +209,10 @@ contract CoinflipCompactGapTest is CoinflipRngSpineBehavioral {
     function test_BackfillManualClaimsPayDoubleOrNothing() public {
         _fundGap();
         address player = makeAddr("backfill_manual_claimant");
-        uint256 stake = 100 ether + 7;
+        uint256 stake = 100 + 7;
         vm.prank(GAME);
         coinflip.creditFlip(player, stake);
-        // Stake lanes hold whole FLIP: the 7 wei of dust floors away at the credit.
-        stake = 100 ether;
+        // All 107 raw units are whole tokens and survive the credit.
         assertEq(coinflip.coinflipAmount(player), stake, "actual funded next-day stake");
         uint256 snapshot = vm.snapshotState();
         _gap(2, GAP_START, GAP_START + 1);

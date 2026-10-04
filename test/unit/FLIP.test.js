@@ -6,6 +6,7 @@ import {
   restoreAddresses,
 } from "../helpers/deployFixture.js";
 import {
+  flip,
   eth,
   getEvent,
   getEvents,
@@ -18,7 +19,7 @@ import {
  * Contract: contracts/FLIP.sol
  *
  * Architecture summary:
- *   - Custom ERC20 "FLIP" with 18 decimals
+ *   - Custom ERC20 "FLIP" with 0 decimals
  *   - Initial totalSupply = 0, vaultAllowance = 2,000,000 FLIP
  *   - Vault escrow: virtual reserve, minted via vaultMintTo()
  *   - Game/Affiliate bypass for minting, burning, and flip credits
@@ -78,9 +79,9 @@ describe("FLIP", function () {
       expect(await coin.symbol()).to.equal("FLIP");
     });
 
-    it("decimals is 18", async function () {
+    it("decimals is 0", async function () {
       const { coin } = await getFixture();
-      expect(await coin.decimals()).to.equal(18);
+      expect(await coin.decimals()).to.equal(0);
     });
 
     it("totalSupply is 0 on deploy (initial emission arrives as coinflip seed stakes)", async function () {
@@ -120,12 +121,12 @@ describe("FLIP", function () {
   describe("approve()", function () {
     it("sets allowance and emits Approval event", async function () {
       const { coin, alice, bob } = await getFixture();
-      const tx = await coin.connect(alice).approve(bob.address, eth(500));
+      const tx = await coin.connect(alice).approve(bob.address, flip(500));
       await expect(tx)
         .to.emit(coin, "Approval")
-        .withArgs(alice.address, bob.address, eth(500));
+        .withArgs(alice.address, bob.address, flip(500));
       expect(await coin.allowance(alice.address, bob.address)).to.equal(
-        eth(500)
+        flip(500)
       );
     });
 
@@ -138,29 +139,29 @@ describe("FLIP", function () {
 
     it("can reduce allowance by calling approve again", async function () {
       const { coin, alice, bob } = await getFixture();
-      await coin.connect(alice).approve(bob.address, eth(100));
-      await coin.connect(alice).approve(bob.address, eth(50));
+      await coin.connect(alice).approve(bob.address, flip(100));
+      await coin.connect(alice).approve(bob.address, flip(50));
       expect(await coin.allowance(alice.address, bob.address)).to.equal(
-        eth(50)
+        flip(50)
       );
     });
 
     it("can set allowance to 0 (effectively revoke)", async function () {
       const { coin, alice, bob } = await getFixture();
-      await coin.connect(alice).approve(bob.address, eth(100));
+      await coin.connect(alice).approve(bob.address, flip(100));
       await coin.connect(alice).approve(bob.address, 0);
       expect(await coin.allowance(alice.address, bob.address)).to.equal(0n);
     });
 
     it("does NOT emit Approval when the new amount equals the current allowance", async function () {
       const { coin, alice, bob } = await getFixture();
-      await coin.connect(alice).approve(bob.address, eth(100));
+      await coin.connect(alice).approve(bob.address, flip(100));
       // Setting the same value — contract skips the assignment but still emits
       // (the contract always emits even if value unchanged — let's verify)
-      const tx = await coin.connect(alice).approve(bob.address, eth(100));
+      const tx = await coin.connect(alice).approve(bob.address, flip(100));
       await expect(tx)
         .to.emit(coin, "Approval")
-        .withArgs(alice.address, bob.address, eth(100));
+        .withArgs(alice.address, bob.address, flip(100));
     });
   });
 
@@ -169,7 +170,7 @@ describe("FLIP", function () {
   // ---------------------------------------------------------------------------
 
   describe("transfer()", function () {
-    async function mintToAlice(coin, game, alice, amount = eth(1000)) {
+    async function mintToAlice(coin, game, alice, amount = flip(1000)) {
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
       await coin.connect(gameSigner).mintForGame(alice.address, amount);
@@ -180,29 +181,29 @@ describe("FLIP", function () {
       const { coin, game, alice, bob } = await getFixture();
       await mintToAlice(coin, game, alice);
 
-      const tx = await coin.connect(alice).transfer(bob.address, eth(200));
+      const tx = await coin.connect(alice).transfer(bob.address, flip(200));
       await expect(tx)
         .to.emit(coin, "Transfer")
-        .withArgs(alice.address, bob.address, eth(200));
+        .withArgs(alice.address, bob.address, flip(200));
 
-      expect(await coin.balanceOf(alice.address)).to.equal(eth(800));
-      expect(await coin.balanceOf(bob.address)).to.equal(eth(200));
+      expect(await coin.balanceOf(alice.address)).to.equal(flip(800));
+      expect(await coin.balanceOf(bob.address)).to.equal(flip(200));
     });
 
     it("reverts (underflow) when balance is insufficient", async function () {
       const { coin, alice, bob } = await getFixture();
       // alice has no balance
       await expect(
-        coin.connect(alice).transfer(bob.address, eth(1))
+        coin.connect(alice).transfer(bob.address, flip(1))
       ).to.be.reverted;
     });
 
     it("allows transferring entire balance", async function () {
       const { coin, game, alice, bob } = await getFixture();
       await mintToAlice(coin, game, alice);
-      await coin.connect(alice).transfer(bob.address, eth(1000));
+      await coin.connect(alice).transfer(bob.address, flip(1000));
       expect(await coin.balanceOf(alice.address)).to.equal(0n);
-      expect(await coin.balanceOf(bob.address)).to.equal(eth(1000));
+      expect(await coin.balanceOf(bob.address)).to.equal(flip(1000));
     });
 
     it("transfer of zero amount is a no-op (balance unchanged)", async function () {
@@ -220,13 +221,13 @@ describe("FLIP", function () {
       const vaultAllowBefore = await coin.vaultMintAllowance();
       const totalBefore = await coin.totalSupply();
 
-      await coin.connect(alice).transfer(vaultAddr, eth(100));
+      await coin.connect(alice).transfer(vaultAddr, flip(100));
 
       // totalSupply decreases (tokens burned from circulation)
-      expect(await coin.totalSupply()).to.equal(totalBefore - eth(100));
+      expect(await coin.totalSupply()).to.equal(totalBefore - flip(100));
       // vaultAllowance increases
       expect(await coin.vaultMintAllowance()).to.equal(
-        vaultAllowBefore + eth(100)
+        vaultAllowBefore + flip(100)
       );
       // VAULT receives no ERC20 balance
       expect(await coin.balanceOf(vaultAddr)).to.equal(0n);
@@ -236,10 +237,10 @@ describe("FLIP", function () {
       const { coin, game, alice, vault } = await getFixture();
       await mintToAlice(coin, game, alice);
       const vaultAddr = await vault.getAddress();
-      const tx = await coin.connect(alice).transfer(vaultAddr, eth(50));
+      const tx = await coin.connect(alice).transfer(vaultAddr, flip(50));
       await expect(tx)
         .to.emit(coin, "VaultEscrowRecorded")
-        .withArgs(alice.address, eth(50));
+        .withArgs(alice.address, flip(50));
     });
   });
 
@@ -251,18 +252,18 @@ describe("FLIP", function () {
     async function setup(coin, game, alice, bob) {
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).mintForGame(alice.address, eth(1000));
+      await coin.connect(gameSigner).mintForGame(alice.address, flip(1000));
       await stopImpersonate(gameAddr);
-      await coin.connect(alice).approve(bob.address, eth(500));
+      await coin.connect(alice).approve(bob.address, flip(500));
     }
 
     it("transfers within allowance and decrements allowance", async function () {
       const { coin, game, alice, bob, carol } = await getFixture();
       await setup(coin, game, alice, bob);
 
-      await coin.connect(bob).transferFrom(alice.address, carol.address, eth(200));
-      expect(await coin.balanceOf(carol.address)).to.equal(eth(200));
-      expect(await coin.allowance(alice.address, bob.address)).to.equal(eth(300));
+      await coin.connect(bob).transferFrom(alice.address, carol.address, flip(200));
+      expect(await coin.balanceOf(carol.address)).to.equal(flip(200));
+      expect(await coin.allowance(alice.address, bob.address)).to.equal(flip(300));
     });
 
     it("reverts when allowance is insufficient", async function () {
@@ -270,7 +271,7 @@ describe("FLIP", function () {
       await setup(coin, game, alice, bob);
 
       await expect(
-        coin.connect(bob).transferFrom(alice.address, carol.address, eth(600))
+        coin.connect(bob).transferFrom(alice.address, carol.address, flip(600))
       ).to.be.reverted;
     });
 
@@ -278,13 +279,13 @@ describe("FLIP", function () {
       const { coin, game, alice, bob, carol } = await getFixture();
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).mintForGame(alice.address, eth(1000));
+      await coin.connect(gameSigner).mintForGame(alice.address, flip(1000));
       await stopImpersonate(gameAddr);
       await coin.connect(alice).approve(bob.address, hre.ethers.MaxUint256);
 
       await coin
         .connect(bob)
-        .transferFrom(alice.address, carol.address, eth(100));
+        .transferFrom(alice.address, carol.address, flip(100));
       expect(await coin.allowance(alice.address, bob.address)).to.equal(
         hre.ethers.MaxUint256
       );
@@ -294,14 +295,14 @@ describe("FLIP", function () {
       const { coin, game, alice, bob } = await getFixture();
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).mintForGame(alice.address, eth(500));
+      await coin.connect(gameSigner).mintForGame(alice.address, flip(500));
       // No approve() call needed
       await coin
         .connect(gameSigner)
-        .transferFrom(alice.address, bob.address, eth(100));
+        .transferFrom(alice.address, bob.address, flip(100));
       await stopImpersonate(gameAddr);
 
-      expect(await coin.balanceOf(bob.address)).to.equal(eth(100));
+      expect(await coin.balanceOf(bob.address)).to.equal(flip(100));
     });
 
     it("emits Approval event when allowance is decremented", async function () {
@@ -310,10 +311,10 @@ describe("FLIP", function () {
 
       const tx = await coin
         .connect(bob)
-        .transferFrom(alice.address, carol.address, eth(100));
+        .transferFrom(alice.address, carol.address, flip(100));
       await expect(tx)
         .to.emit(coin, "Approval")
-        .withArgs(alice.address, bob.address, eth(400));
+        .withArgs(alice.address, bob.address, flip(400));
     });
   });
 
@@ -329,20 +330,20 @@ describe("FLIP", function () {
 
       const tx = await coin
         .connect(gameSigner)
-        .mintForGame(alice.address, eth(1000));
+        .mintForGame(alice.address, flip(1000));
       await expect(tx)
         .to.emit(coin, "Transfer")
-        .withArgs(ZERO_ADDRESS, alice.address, eth(1000));
+        .withArgs(ZERO_ADDRESS, alice.address, flip(1000));
 
       await stopImpersonate(gameAddr);
-      expect(await coin.balanceOf(alice.address)).to.equal(eth(1000));
-      expect(await coin.totalSupply()).to.equal(eth(1000));
+      expect(await coin.balanceOf(alice.address)).to.equal(flip(1000));
+      expect(await coin.totalSupply()).to.equal(flip(1000));
     });
 
     it("reverts with OnlyGame when called by non-GAME address", async function () {
       const { coin, alice, bob } = await getFixture();
       await expect(
-        coin.connect(alice).mintForGame(bob.address, eth(100))
+        coin.connect(alice).mintForGame(bob.address, flip(100))
       ).to.be.revertedWithCustomError(coin, "OnlyGame");
     });
 
@@ -371,10 +372,10 @@ describe("FLIP", function () {
       const gameSigner = await impersonate(gameAddr);
       const beforeTotal = await coin.totalSupply();
 
-      await coin.connect(gameSigner).mintForGame(alice.address, eth(500));
+      await coin.connect(gameSigner).mintForGame(alice.address, flip(500));
       await stopImpersonate(gameAddr);
 
-      expect(await coin.totalSupply()).to.equal(beforeTotal + eth(500));
+      expect(await coin.totalSupply()).to.equal(beforeTotal + flip(500));
     });
   });
 
@@ -386,7 +387,7 @@ describe("FLIP", function () {
     it("burnForCoinflip reverts with OnlyGame when called by non-COINFLIP address", async function () {
       const { coin, alice, bob } = await getFixture();
       await expect(
-        coin.connect(alice).burnForCoinflip(bob.address, eth(1))
+        coin.connect(alice).burnForCoinflip(bob.address, flip(1))
       ).to.be.revertedWithCustomError(coin, "OnlyGame");
     });
 
@@ -395,17 +396,17 @@ describe("FLIP", function () {
       // Mint first via game
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).mintForGame(alice.address, eth(5000));
+      await coin.connect(gameSigner).mintForGame(alice.address, flip(5000));
       await stopImpersonate(gameAddr);
 
       const coinflipAddr = await coinflip.getAddress();
       const coinflipSigner = await impersonate(coinflipAddr);
       await coin
         .connect(coinflipSigner)
-        .burnForCoinflip(alice.address, eth(1000));
+        .burnForCoinflip(alice.address, flip(1000));
       await stopImpersonate(coinflipAddr);
 
-      expect(await coin.balanceOf(alice.address)).to.equal(eth(4000));
+      expect(await coin.balanceOf(alice.address)).to.equal(flip(4000));
     });
 
     // mintForCoinflip removed in Phase 146 (merged into mintForGame, which now accepts COINFLIP + GAME)
@@ -421,7 +422,7 @@ describe("FLIP", function () {
     it("reverts with OnlyVault when called by an unauthorized address", async function () {
       const { coin, alice } = await getFixture();
       await expect(
-        coin.connect(alice).vaultEscrow(eth(100))
+        coin.connect(alice).vaultEscrow(flip(100))
       ).to.be.revertedWithCustomError(coin, "OnlyVault");
     });
 
@@ -431,10 +432,10 @@ describe("FLIP", function () {
       const gameSigner = await impersonate(gameAddr);
       const before = await coin.vaultMintAllowance();
 
-      await coin.connect(gameSigner).vaultEscrow(eth(500));
+      await coin.connect(gameSigner).vaultEscrow(flip(500));
       await stopImpersonate(gameAddr);
 
-      expect(await coin.vaultMintAllowance()).to.equal(before + eth(500));
+      expect(await coin.vaultMintAllowance()).to.equal(before + flip(500));
     });
 
     it("increases vaultAllowance when called by VAULT", async function () {
@@ -443,10 +444,10 @@ describe("FLIP", function () {
       const vaultSigner = await impersonate(vaultAddr);
       const before = await coin.vaultMintAllowance();
 
-      await coin.connect(vaultSigner).vaultEscrow(eth(1000));
+      await coin.connect(vaultSigner).vaultEscrow(flip(1000));
       await stopImpersonate(vaultAddr);
 
-      expect(await coin.vaultMintAllowance()).to.equal(before + eth(1000));
+      expect(await coin.vaultMintAllowance()).to.equal(before + flip(1000));
     });
 
     it("emits VaultEscrowRecorded event", async function () {
@@ -454,10 +455,10 @@ describe("FLIP", function () {
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
 
-      const tx = await coin.connect(gameSigner).vaultEscrow(eth(100));
+      const tx = await coin.connect(gameSigner).vaultEscrow(flip(100));
       await expect(tx)
         .to.emit(coin, "VaultEscrowRecorded")
-        .withArgs(gameAddr, eth(100));
+        .withArgs(gameAddr, flip(100));
       await stopImpersonate(gameAddr);
     });
 
@@ -467,7 +468,7 @@ describe("FLIP", function () {
       const gameSigner = await impersonate(gameAddr);
       const supplyBefore = await coin.totalSupply();
 
-      await coin.connect(gameSigner).vaultEscrow(eth(1000));
+      await coin.connect(gameSigner).vaultEscrow(flip(1000));
       await stopImpersonate(gameAddr);
 
       expect(await coin.totalSupply()).to.equal(supplyBefore);
@@ -482,7 +483,7 @@ describe("FLIP", function () {
     it("reverts with OnlyVault when called by a non-VAULT address", async function () {
       const { coin, alice, bob } = await getFixture();
       await expect(
-        coin.connect(alice).vaultMintTo(bob.address, eth(100))
+        coin.connect(alice).vaultMintTo(bob.address, flip(100))
       ).to.be.revertedWithCustomError(coin, "OnlyVault");
     });
 
@@ -491,18 +492,18 @@ describe("FLIP", function () {
       // Seed an allowance to mint from (starts at 0 — emission arrives as coinflip seed stakes).
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).vaultEscrow(eth(1000));
+      await coin.connect(gameSigner).vaultEscrow(flip(1000));
       await stopImpersonate(gameAddr);
       const vaultAddr = await vault.getAddress();
       const vaultSigner = await impersonate(vaultAddr);
       const allowBefore = await coin.vaultMintAllowance();
 
-      await coin.connect(vaultSigner).vaultMintTo(alice.address, eth(100));
+      await coin.connect(vaultSigner).vaultMintTo(alice.address, flip(100));
       await stopImpersonate(vaultAddr);
 
-      expect(await coin.balanceOf(alice.address)).to.equal(eth(100));
+      expect(await coin.balanceOf(alice.address)).to.equal(flip(100));
       expect(await coin.vaultMintAllowance()).to.equal(
-        allowBefore - eth(100)
+        allowBefore - flip(100)
       );
     });
 
@@ -511,16 +512,16 @@ describe("FLIP", function () {
       // Seed an allowance to mint from (starts at 0 — emission arrives as coinflip seed stakes).
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).vaultEscrow(eth(1000));
+      await coin.connect(gameSigner).vaultEscrow(flip(1000));
       await stopImpersonate(gameAddr);
       const vaultAddr = await vault.getAddress();
       const vaultSigner = await impersonate(vaultAddr);
       const totalBefore = await coin.totalSupply();
 
-      await coin.connect(vaultSigner).vaultMintTo(alice.address, eth(200));
+      await coin.connect(vaultSigner).vaultMintTo(alice.address, flip(200));
       await stopImpersonate(vaultAddr);
 
-      expect(await coin.totalSupply()).to.equal(totalBefore + eth(200));
+      expect(await coin.totalSupply()).to.equal(totalBefore + flip(200));
     });
 
     it("emits VaultAllowanceSpent and Transfer events", async function () {
@@ -528,17 +529,17 @@ describe("FLIP", function () {
       // Seed an allowance to mint from (starts at 0 — emission arrives as coinflip seed stakes).
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).vaultEscrow(eth(1000));
+      await coin.connect(gameSigner).vaultEscrow(flip(1000));
       await stopImpersonate(gameAddr);
       const vaultAddr = await vault.getAddress();
       const vaultSigner = await impersonate(vaultAddr);
 
       const tx = await coin
         .connect(vaultSigner)
-        .vaultMintTo(alice.address, eth(50));
+        .vaultMintTo(alice.address, flip(50));
       await expect(tx)
         .to.emit(coin, "Transfer")
-        .withArgs(ZERO_ADDRESS, alice.address, eth(50));
+        .withArgs(ZERO_ADDRESS, alice.address, flip(50));
       await expect(tx).to.emit(coin, "VaultAllowanceSpent");
       await stopImpersonate(vaultAddr);
     });
@@ -550,7 +551,7 @@ describe("FLIP", function () {
       const allow = await coin.vaultMintAllowance();
 
       await expect(
-        coin.connect(vaultSigner).vaultMintTo(alice.address, allow + eth(1))
+        coin.connect(vaultSigner).vaultMintTo(alice.address, allow + flip(1))
       ).to.be.revertedWithCustomError(coin, "Insufficient");
       await stopImpersonate(vaultAddr);
     });
@@ -561,7 +562,7 @@ describe("FLIP", function () {
       const vaultSigner = await impersonate(vaultAddr);
 
       await expect(
-        coin.connect(vaultSigner).vaultMintTo(ZERO_ADDRESS, eth(1))
+        coin.connect(vaultSigner).vaultMintTo(ZERO_ADDRESS, flip(1))
       ).to.be.revertedWithCustomError(coin, "ZeroAddress");
       await stopImpersonate(vaultAddr);
     });
@@ -571,13 +572,13 @@ describe("FLIP", function () {
       // Seed an allowance to mint from (starts at 0 — emission arrives as coinflip seed stakes).
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).vaultEscrow(eth(1000));
+      await coin.connect(gameSigner).vaultEscrow(flip(1000));
       await stopImpersonate(gameAddr);
       const vaultAddr = await vault.getAddress();
       const vaultSigner = await impersonate(vaultAddr);
       const before = await coin.supplyIncUncirculated();
 
-      await coin.connect(vaultSigner).vaultMintTo(alice.address, eth(300));
+      await coin.connect(vaultSigner).vaultMintTo(alice.address, flip(300));
       await stopImpersonate(vaultAddr);
 
       expect(await coin.supplyIncUncirculated()).to.equal(before);
@@ -592,7 +593,7 @@ describe("FLIP", function () {
     it("reverts with OnlyGame when called by an unauthorized address", async function () {
       const { coin, alice, bob } = await getFixture();
       await expect(
-        coin.connect(alice).burnCoin(bob.address, eth(1))
+        coin.connect(alice).burnCoin(bob.address, flip(1))
       ).to.be.revertedWithCustomError(coin, "OnlyGame");
     });
 
@@ -600,25 +601,25 @@ describe("FLIP", function () {
       const { coin, game, alice } = await getFixture();
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).mintForGame(alice.address, eth(1000));
+      await coin.connect(gameSigner).mintForGame(alice.address, flip(1000));
 
-      await coin.connect(gameSigner).burnCoin(alice.address, eth(300));
+      await coin.connect(gameSigner).burnCoin(alice.address, flip(300));
       await stopImpersonate(gameAddr);
 
-      expect(await coin.balanceOf(alice.address)).to.equal(eth(700));
+      expect(await coin.balanceOf(alice.address)).to.equal(flip(700));
     });
 
     it("reverts with OnlyGame when called by AFFILIATE", async function () {
       const { coin, game, affiliate, alice } = await getFixture();
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).mintForGame(alice.address, eth(500));
+      await coin.connect(gameSigner).mintForGame(alice.address, flip(500));
       await stopImpersonate(gameAddr);
 
       const affiliateAddr = await affiliate.getAddress();
       const affiliateSigner = await impersonate(affiliateAddr);
       await expect(
-        coin.connect(affiliateSigner).burnCoin(alice.address, eth(100))
+        coin.connect(affiliateSigner).burnCoin(alice.address, flip(100))
       ).to.be.revertedWithCustomError(coin, "OnlyGame");
       await stopImpersonate(affiliateAddr);
     });
@@ -627,13 +628,13 @@ describe("FLIP", function () {
       const { coin, game, alice } = await getFixture();
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).mintForGame(alice.address, eth(1000));
+      await coin.connect(gameSigner).mintForGame(alice.address, flip(1000));
       const totalBefore = await coin.totalSupply();
 
-      await coin.connect(gameSigner).burnCoin(alice.address, eth(400));
+      await coin.connect(gameSigner).burnCoin(alice.address, flip(400));
       await stopImpersonate(gameAddr);
 
-      expect(await coin.totalSupply()).to.equal(totalBefore - eth(400));
+      expect(await coin.totalSupply()).to.equal(totalBefore - flip(400));
     });
   });
 
@@ -652,7 +653,7 @@ describe("FLIP", function () {
       const { coin, game, alice } = await getFixture();
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).mintForGame(alice.address, eth(500));
+      await coin.connect(gameSigner).mintForGame(alice.address, flip(500));
       await stopImpersonate(gameAddr);
 
       const spendable = await coin.balanceOfWithClaimable(alice.address);
@@ -686,11 +687,11 @@ describe("FLIP", function () {
       const vaultSigner = await impersonate(vaultAddr);
 
       // Mint some
-      await coin.connect(gameSigner).mintForGame(alice.address, eth(500));
+      await coin.connect(gameSigner).mintForGame(alice.address, flip(500));
       // Escrow some
-      await coin.connect(gameSigner).vaultEscrow(eth(200));
+      await coin.connect(gameSigner).vaultEscrow(flip(200));
       // MintTo some from vault
-      await coin.connect(vaultSigner).vaultMintTo(bob.address, eth(100));
+      await coin.connect(vaultSigner).vaultMintTo(bob.address, flip(100));
 
       await stopImpersonate(gameAddr);
       await stopImpersonate(vaultAddr);
@@ -711,11 +712,11 @@ describe("FLIP", function () {
       const { coin, game, alice } = await getFixture();
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).mintForGame(alice.address, eth(100));
+      await coin.connect(gameSigner).mintForGame(alice.address, flip(100));
       await stopImpersonate(gameAddr);
 
       await expect(
-        coin.connect(alice).transfer(ZERO_ADDRESS, eth(1))
+        coin.connect(alice).transfer(ZERO_ADDRESS, flip(1))
       ).to.be.revertedWithCustomError(coin, "ZeroAddress");
     });
   });

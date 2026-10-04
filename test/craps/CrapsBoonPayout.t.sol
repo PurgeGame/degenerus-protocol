@@ -38,8 +38,8 @@ contract CrapsBoonPayoutTest is CrapsPins {
     address internal bob = makeAddr("bob");
 
     uint24 internal constant PLAYED = 600;
-    uint128 internal constant BANK = 600e18;
-    uint128 internal constant GOAL = 6000e18;
+    uint128 internal constant BANK = 600;
+    uint128 internal constant GOAL = 6000;
     uint256 internal constant PER = 1;
 
     uint256 internal constant MASK_5 = 1;
@@ -245,7 +245,7 @@ contract CrapsBoonPayoutTest is CrapsPins {
                 "the bonus was not taken off the scaled payment"
             );
             if (paidPlain > cap) {
-                assertEq(paidBooned - paidPlain, 9_000 ether, "the ceiling did not bite on the scaled base");
+                assertEq(paidBooned - paidPlain, 9_000, "the ceiling did not bite on the scaled base");
                 sawCapped = true;
             }
             vm.revertToStateAndDelete(trialSnapshot);

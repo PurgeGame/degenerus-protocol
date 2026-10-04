@@ -88,8 +88,8 @@ contract CrapsRngSealHandler is Test {
     uint256 internal constant PERIODS = 7;
     uint256 internal constant SLOTS_PER_DAY = 8;
     uint256 internal constant CUSTOM_SLOT_BASE = 1 << 40;
-    uint256 internal constant FLIP_TOP_UP = 1_000_000 ether;
-    uint256 internal constant FLIP_FLOOR = 50_000 ether;
+    uint256 internal constant FLIP_TOP_UP = 1_000_000;
+    uint256 internal constant FLIP_FLOOR = 50_000;
 
     address[] public actors;
     address internal currentActor;
@@ -1144,7 +1144,7 @@ contract CrapsRngSealHandler is Test {
             // drawn the same way off the high base. The table quotes that ceiling itself as
             // `_boostBase(w) * _BOOST_MAX_MULT`; a day's running budget is only the MEAN of it.
             // Ten granules of slack cover the nearest-ten rounding of each figure.
-            bound += (craps.boostBaseOf(slot) + craps.highBaseOf(slot)) * 100 + 10 * 100 ether;
+            bound += (craps.boostBaseOf(slot) + craps.highBaseOf(slot)) * 100 + 10 * 100;
             // A contested lane pays its winner the other high seats' pooled principal, (hm - 1)
             // stakes per seat, which no seat's own preview contains.
             bound += bt.battleStake * (bt.entrants == 0 ? 1 : bt.entrants) * (hm - 1);

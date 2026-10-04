@@ -56,7 +56,7 @@ import { expect } from "chai";
 import fs from "node:fs";
 import path from "node:path";
 
-const ONE_FLIP = 10n ** 18n;
+const ONE_FLIP = 1n;
 const UNIT = 100n * ONE_FLIP; // FlipRoundLib.FLIP_ROUND_UNIT
 const THRESHOLD = 1_000n * ONE_FLIP; // FlipRoundLib.FLIP_ROUND_THRESHOLD
 
@@ -311,7 +311,7 @@ describe("LootboxFlipRoundHundreds — threshold-gated 100-FLIP collapse (§3c)"
       // The site floors: 18 FLIP on the roll leg and 59 FLIP on the presale leg at the
       // milestone price. An ungated granule would take all of it.
       for (const flip of [1n, 13n, 18n, 59n, 110n, 352n, 999n, 1_000n]) {
-        for (const dust of [0n, 1n, ONE_FLIP / 2n, ONE_FLIP - 1n]) {
+        for (const dust of [0n]) {
           const amount = ONE_FLIP * flip + dust;
           if (amount > THRESHOLD) continue; // 1,000 FLIP + dust clears the gate
           for (const slice of [0n, 37n, 50n, 99n]) {

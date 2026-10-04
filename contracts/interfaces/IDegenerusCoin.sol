@@ -58,7 +58,7 @@ interface IDegenerusCoin {
 
     /// @notice Burn FLIP for a salvage swap, draining held -> claimable -> auto-rebuy carry.
     /// @param target The buyer whose FLIP backs the swap.
-    /// @param amount The FLIP (wei) to destroy.
+    /// @param amount The FLIP (whole tokens) to destroy.
     function burnCoinForSalvage(address target, uint256 amount) external;
 
     /// @notice GAME-only sDGNRS decimator entry, capped at 500,000 FLIP; the advance calls it at most once per opening (a stalled arming word skips it).

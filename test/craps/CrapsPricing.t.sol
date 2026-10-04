@@ -25,7 +25,7 @@ contract CrapsPricingTest is CrapsPins {
         uint256 sum;
         // lcm(100 tier buckets, 256 * 3 bounty buckets).
         for (uint256 roll; roll < 19_200; ++roll) sum += table.presetPrice(roll, 1);
-        assertEq(sum, 19_200 * 2_595 ether);
+        assertEq(sum, 19_200 * 2_595);
         assertEq(sum / 19_200, CrapsPriceLib.ROUTINE_EV);
     }
 
@@ -39,7 +39,7 @@ contract CrapsPricingTest is CrapsPins {
                 sum += price;
             }
         }
-        assertEq(sum, 300 * 4_520 ether);
+        assertEq(sum, 300 * 4_520);
         assertEq(sum / 300, CrapsPriceLib.BOOKEND_EV);
     }
 
@@ -55,30 +55,30 @@ contract CrapsPricingTest is CrapsPins {
         assertEq(tails, 11);
         assertEq(sum, 90 * 21);
         assertEq(CrapsPriceLib.HIGH_EV, 21);
-        assertEq(CrapsPriceLib.DAY_EV, 24_825 ether);
-        assertEq(CrapsPriceLib.DAY_EV * CrapsPriceLib.HIGH_EV, 521_325 ether);
+        assertEq(CrapsPriceLib.DAY_EV, 24_825);
+        assertEq(CrapsPriceLib.DAY_EV * CrapsPriceLib.HIGH_EV, 521_325);
         uint256 normalPrice = table.NORMAL_FUTURE_DAY_PRICE();
         uint256 highPrice = table.HIGH_FUTURE_DAY_PRICE();
-        assertEq(normalPrice, 25_000 ether);
-        assertEq(highPrice, 500_000 ether);
+        assertEq(normalPrice, 25_000);
+        assertEq(highPrice, 500_000);
         assertGe(normalPrice, CrapsPriceLib.DAY_EV);
         assertLe(normalPrice * 100, CrapsPriceLib.DAY_EV * 101);
         assertLt(highPrice, CrapsPriceLib.DAY_EV * 21);
         assertGe(highPrice * 100, CrapsPriceLib.DAY_EV * 21 * 95);
-        assertEq(table.NORMAL_PASS_VALUE(), 24_800 ether);
-        assertEq(table.HIGH_PASS_VALUE(), 520_800 ether);
+        assertEq(table.NORMAL_PASS_VALUE(), 24_800);
+        assertEq(table.HIGH_PASS_VALUE(), 520_800);
         assertGt(CrapsPriceLib.HIGH_SWITCH, CrapsPriceLib.HIGH_VALUE);
-        assertEq(table.presetPrice(type(uint256).max, 5), 8_000 ether);
+        assertEq(table.presetPrice(type(uint256).max, 5), 8_000);
     }
 
     function test_jackpotAddedFloorsAndAwardCount() public pure {
-        assertEq(CrapsPriceLib.jackpotAdded(0, 0), 150_000 ether);
-        assertEq(CrapsPriceLib.jackpotAdded(25_000 ether, 0), 150_000 ether);
-        assertEq(CrapsPriceLib.jackpotAdded(25_000 ether, 1), 150_000 ether);
-        assertEq(CrapsPriceLib.jackpotAdded(400_000 ether, 1), 400_000 ether);
-        assertEq(CrapsPriceLib.jackpotAdded(25_000 ether, 2), 50_000 ether);
-        assertEq(CrapsPriceLib.jackpotAdded(60_000 ether, 2), 60_000 ether);
-        assertEq(CrapsPriceLib.jackpotAdded(0, type(uint24).max), 50_000 ether);
+        assertEq(CrapsPriceLib.jackpotAdded(0, 0), 150_000);
+        assertEq(CrapsPriceLib.jackpotAdded(25_000, 0), 150_000);
+        assertEq(CrapsPriceLib.jackpotAdded(25_000, 1), 150_000);
+        assertEq(CrapsPriceLib.jackpotAdded(400_000, 1), 400_000);
+        assertEq(CrapsPriceLib.jackpotAdded(25_000, 2), 50_000);
+        assertEq(CrapsPriceLib.jackpotAdded(60_000, 2), 60_000);
+        assertEq(CrapsPriceLib.jackpotAdded(0, type(uint24).max), 50_000);
         assertEq(CrapsPriceLib.JACKPOT_EARLY_MIN_ADDED / CrapsPriceLib.JACKPOT_AWARD_VALUE, 15);
         assertEq(CrapsPriceLib.JACKPOT_MIN_ADDED / CrapsPriceLib.JACKPOT_AWARD_VALUE, 5);
         // Added per award never falls below the fee, so paid entries never fund awards.

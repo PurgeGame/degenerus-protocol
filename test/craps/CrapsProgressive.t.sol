@@ -31,13 +31,13 @@ contract ProgHarness is CrapsViews {
         w.bound = uint48(slot);
         // A REAL SCHEDULED SHAPE, because the fold pays the field the moment it completes it —
         // 3,000 FLIP five rounds deep chasing 5x.
-        w.bankroll = 3000 ether;
-        w.goal = 15_000 ether;
-        w.played = 600 ether;
+        w.bankroll = 3000;
+        w.goal = 15_000;
+        w.played = 600;
         // This fold-only fixture bypasses armWindow. Enroll its real field before
         // its first score so finalization has the same obligation as an armed field.
         if (uint32(_battles[key] >> _BG_RESOLVED_SHIFT) == 0 && uint32(_battles[key]) != 0) {
-            _slotIndex[w.bound] = 1;
+            _setSlotIndex(w.bound, 1);
             IReadCohortLifecycle(address(this)).registerRngSlot(0, w.bound, key);
         }
         _scoreBattle(w, score, seat, 0);
@@ -48,8 +48,8 @@ contract ProgHarness is CrapsViews {
     function goalScore(uint256 peakFlip, uint256 endFlip, uint256 standing) external pure returns (uint256) {
         Settlement memory s;
         s.stop = Craps.SlipStop.Goal;
-        s.peak = peakFlip * 1 ether;
-        s.won = endFlip * 1 ether;
+        s.peak = peakFlip * 1;
+        s.won = endFlip * 1;
         return _compositeOf(s);
     }
 
@@ -60,7 +60,7 @@ contract ProgHarness is CrapsViews {
         Settlement memory s;
         s.stop = Craps.SlipStop.Bust;
         s.handsPlayed = hands;
-        s.won = endFlip * 1 ether;
+        s.won = endFlip * 1;
         s.peak = 1e30; // saturates the bust's high-point bits, identical across these scores
         return _compositeOf(s);
     }
@@ -84,13 +84,13 @@ contract ProgHarness is CrapsViews {
         Window memory w;
         w.bound = uint48(slot);
         w.key = keccak256(abi.encode("prog", slot, bankrollFlip, peakFlip, standing));
-        w.bankroll = uint128(bankrollFlip * 1 ether);
-        w.played = (bankrollFlip / SCHED_BANK_MULT) * 1 ether;
-        w.goal = uint128(bankrollFlip * SCHED_GOAL * 1 ether);
+        w.bankroll = uint128(bankrollFlip * 1);
+        w.played = (bankrollFlip / SCHED_BANK_MULT) * 1;
+        w.goal = uint128(bankrollFlip * SCHED_GOAL * 1);
 
         Settlement memory st;
         st.stop = goal ? Craps.SlipStop.Goal : Craps.SlipStop.Bust;
-        st.peak = peakFlip * 1 ether;
+        st.peak = peakFlip * 1;
         st.handsPlayed = 7;
         (,, uint256 peak,) = _decodeBest(_compositeOf(st));
 
@@ -105,11 +105,11 @@ contract ProgHarness is CrapsViews {
     }
 
     function settlementAt(uint256 betId) external view returns (Settlement memory) {
-        return _settlementOf(betId, _bets[betId], _slotWindow(betId >> 64), _wordAt(_indexOf(betId >> 64)));
+        return _settlementOf(betId, _loadBet(betId), _slotWindow(betId >> 64), _wordAt(_indexOf(betId >> 64)));
     }
 
     function settlementIn(uint256 betId, uint64 slot) external view returns (Settlement memory) {
-        return _settlementOf(betId, _bets[betId], _slotWindow(slot), _wordAt(_indexOf(slot)));
+        return _settlementOf(betId, _loadBet(betId), _slotWindow(slot), _wordAt(_indexOf(slot)));
     }
 
     /// @dev The RAW scoreboard word, and a raw writer for it. The packing claim — a 105-bit
@@ -241,12 +241,12 @@ contract CrapsProgressiveTest is CrapsPins {
         vm.warp(vm.getBlockTimestamp() + 10 days);
         uint24 today = craps.currentDayIndex();
         (uint256 raw, uint256 high) = craps.drawBudgetsFor(today);
-        assertEq(raw, 50_000 ether, "a cold day did not raise 50,000 FLIP");
+        assertEq(raw, 50_000, "a cold day did not raise 50,000 FLIP");
         assertEq(high, 0, "a cold day funded a high lane");
 
         (uint256 ladder, uint256 contribution) = craps.splitMainBudget(raw);
-        assertEq(ladder, 25_000 ether, "the ladder half is not 25,000 FLIP");
-        assertEq(contribution, 25_000 ether, "the progressive contribution is not 25,000 FLIP");
+        assertEq(ladder, 25_000, "the ladder half is not 25,000 FLIP");
+        assertEq(contribution, 25_000, "the progressive contribution is not 25,000 FLIP");
     }
 
     /// @dev THE CONSERVATION LAW, on every residue. `ladder + progressive == raw` for the odd
@@ -269,7 +269,7 @@ contract CrapsProgressiveTest is CrapsPins {
         uint24 today = craps.currentDayIndex();
         uint256 days_ = craps.BOOST_ACTION_WINDOW_DAYS();
         uint256 base = craps.BASE_MAIN_BUDGET();
-        uint256 perDay = 7_000_000 ether;
+        uint256 perDay = 7_000_000;
 
         for (uint256 i = 1; i <= days_; ++i) craps.bookDay(today - uint24(i), perDay);
         (uint256 m, uint256 h) = craps.drawBudgetsFor(today);
@@ -320,7 +320,7 @@ contract CrapsProgressiveTest is CrapsPins {
         vm.warp(vm.getBlockTimestamp() + 10 days);
         uint24 today = craps.currentDayIndex();
         uint256 days_ = craps.BOOST_ACTION_WINDOW_DAYS();
-        for (uint256 i = 1; i <= days_; ++i) craps.bookDay(today - uint24(i), 3_600_000 ether);
+        for (uint256 i = 1; i <= days_; ++i) craps.bookDay(today - uint24(i), 3_600_000);
         _setDailyWord(today, PLAIN_WORD);
 
         // Quoted BEFORE the day opens: every window's share, and the event's, off the ladder half.
@@ -398,7 +398,7 @@ contract CrapsProgressiveTest is CrapsPins {
     /// @dev BOTH CUTOFFS FROM BOTH SIDES. One FLIP below a cutoff is the rung below it; the
     ///      cutoff is inclusive.
     function test_eachCutoffIsInclusiveAndOneFlipBelowItIsNot() public {
-        uint256 pool = 1_000_000 ether;
+        uint256 pool = 1_000_000;
         // TAP_SLOT is a ROUTINE window, so these are the 5% and 10% rungs.
         uint256 ROUTINE_COMMON = craps.poolShareOf(pool, craps.PROG_ROUTINE_COMMON_BPS());
         uint256 ROUTINE_RARE = craps.poolShareOf(pool, craps.PROG_ROUTINE_RARE_BPS());
@@ -420,7 +420,7 @@ contract CrapsProgressiveTest is CrapsPins {
     /// @dev RARE OVERRIDES, it does not stack. A run that clears the rare cutoff has cleared the
     ///      common one too, and takes the half ALONE.
     function test_rareOverridesCommonAndNeverPaysBoth() public {
-        uint256 pool = 1_000_000 ether;
+        uint256 pool = 1_000_000;
         uint256 ROUTINE_RARE = craps.poolShareOf(pool, craps.PROG_ROUTINE_RARE_BPS());
         (uint256 c, uint256 r) = craps.progressiveThresholds();
         assertGt(r, c, "the fixture's rare cutoff is not above its common one");
@@ -451,7 +451,7 @@ contract CrapsProgressiveTest is CrapsPins {
     ///      got — past the rare cutoff included. A bust's peak reaches the composite's primary
     ///      field in neither product, so the stop is a structural gate rather than a tiebreak.
     function test_aShortGoalAndAHighBustBothPayNothing() public {
-        uint256 pool = 900_000 ether;
+        uint256 pool = 900_000;
         (uint256 c, uint256 r) = craps.progressiveThresholds();
 
         uint256 cFlip = (TAP_BANKROLL * c) / craps.BPS_DENOMINATOR();
@@ -471,7 +471,7 @@ contract CrapsProgressiveTest is CrapsPins {
     /// @dev A CUSTOM BATTLE IS OUTSIDE THE POOL IN BOTH DIRECTIONS: it never funds it and it never
     ///      draws on it, whatever its terms and however long its winner ran.
     function test_aCustomBattleNeitherFundsNorDrawsOnThePool() public {
-        uint256 pool = 500_000 ether;
+        uint256 pool = 500_000;
         craps.seedProgressive(pool);
         uint64 customSlot = uint64(craps.customSlotBase() + 1);
         assertEq(
@@ -495,26 +495,26 @@ contract CrapsProgressiveTest is CrapsPins {
     /// @dev SEQUENTIAL AWARDS EAT THE LIVE BALANCE. No day's contribution is reserved for a window
     ///      and no snapshot is taken: the second award is a share of what the first left.
     function test_sequentialAwardsUseTheReducedLiveBalance() public {
-        craps.seedProgressive(1_000_000 ether);
+        craps.seedProgressive(1_000_000);
         // Both taps are ROUTINE windows: 10% of a million, then 5% of the 900,000 it left.
         assertEq(
             craps.awardAt(TAP_SLOT, TAP_BANKROLL, true, TAP_BANKROLL * 120, 12, alice),
-            100_000 ether,
+            100_000,
             "the rare rung is wrong"
         );
-        assertEq(craps.progressivePool(), 900_000 ether, "the pool is not what the rare rung left");
+        assertEq(craps.progressivePool(), 900_000, "the pool is not what the rare rung left");
         assertEq(
             craps.awardAt(TAP_SLOT + 1, TAP_BANKROLL, true, TAP_BANKROLL * 25, 12, bob),
-            45_000 ether,
+            45_000,
             "the common rung is wrong"
         );
-        assertEq(craps.progressivePool(), 855_000 ether, "the pool is not what the common rung left");
+        assertEq(craps.progressivePool(), 855_000, "the pool is not what the common rung left");
         assertEq(
             craps.awardAt(TAP_SLOT + 2, TAP_BANKROLL, true, TAP_BANKROLL * 120, 12, carol),
-            85_500 ether,
+            85_500,
             "the third rung is wrong"
         );
-        assertEq(craps.progressivePool(), 769_500 ether, "funding minus payouts is not the pool");
+        assertEq(craps.progressivePool(), 769_500, "funding minus payouts is not the pool");
     }
 
     /// @dev INTEGER DIVISION CANNOT OVERDRAW, and a pool too small to pay a rung produces a zero
@@ -568,16 +568,16 @@ contract CrapsProgressiveTest is CrapsPins {
     ///      constants the award reads — so the schedule is graded, not restated. A routine window
     ///      and the day's jackpot slot pay the same 5% common and 10% rare.
     function test_allFourBaseRungsAreTheirPublishedShares() public {
-        uint256 pool = 1_000_000 ether;
-        assertEq(_rungAt(TAP_SLOT,pool,COMMON_PEAK),50_000 ether);
-        assertEq(_rungAt(TAP_SLOT,pool,RARE_PEAK),100_000 ether);
-        assertEq(_rungAt(TAP_EVENT_SLOT,pool,COMMON_PEAK),50_000 ether);
-        assertEq(_rungAt(TAP_EVENT_SLOT,pool,RARE_PEAK),100_000 ether);
+        uint256 pool = 1_000_000;
+        assertEq(_rungAt(TAP_SLOT,pool,COMMON_PEAK),50_000);
+        assertEq(_rungAt(TAP_SLOT,pool,RARE_PEAK),100_000);
+        assertEq(_rungAt(TAP_EVENT_SLOT,pool,COMMON_PEAK),50_000);
+        assertEq(_rungAt(TAP_EVENT_SLOT,pool,RARE_PEAK),100_000);
     }
 
     /// @dev The jackpot slot's award log carries the rung it applied: 500 bps, not rare, at 25x.
     function test_theJackpotSlotLogsTheRungItApplies() public {
-        uint256 pool = 1_000_000 ether;
+        uint256 pool = 1_000_000;
         craps.seedProgressive(pool);
         vm.recordLogs();
         craps.awardAt(TAP_EVENT_SLOT, TAP_BANKROLL, true, COMMON_PEAK, craps.SYBIL_SCORE_FLOOR(), alice);
@@ -589,7 +589,7 @@ contract CrapsProgressiveTest is CrapsPins {
                 abi.decode(logs[i].data, (bool, uint16, uint256, uint256, uint256, uint256, uint256));
             assertFalse(rare, "a 25x high point is not rare");
             assertEq(poolBps, 500, "the common rung did not log 500 bps");
-            assertEq(candidate, 50_000 ether, "the logged candidate is not the common rung");
+            assertEq(candidate, 50_000, "the logged candidate is not the common rung");
             seen = true;
         }
         assertTrue(seen, "the award was not logged");
@@ -599,7 +599,7 @@ contract CrapsProgressiveTest is CrapsPins {
     ///      read as a period. Custom slots begin at a multiple of eight, so one of them lands on
     ///      the remainder the day's EVENT uses — and it still pays nothing.
     function test_aCustomSlotOnTheEventsRemainderIsStillOutside() public {
-        uint256 pool = 1_000_000 ether;
+        uint256 pool = 1_000_000;
         uint64 customEventLike = uint64(craps.customSlotBase() + 7);
         assertEq(customEventLike % 8, 7, "the fixture is not on the event's remainder");
 
@@ -640,7 +640,7 @@ contract CrapsProgressiveTest is CrapsPins {
     function test_progressivePaysTheFullShareAtEveryActivityScore() public {
         uint16[5] memory scores = [uint16(0), 1, 6, 11, 12];
         for (uint256 i = 0; i < 5; ++i) {
-            uint256 pool = 900_000 ether;
+            uint256 pool = 900_000;
             craps.seedProgressive(pool);
             uint256 candidate = craps.poolShareOf(pool, craps.PROG_ROUTINE_COMMON_BPS());
             uint256 expected = candidate;
@@ -650,19 +650,19 @@ contract CrapsProgressiveTest is CrapsPins {
         }
 
         // The worked example the specification states, in its own terms.
-        craps.seedProgressive(900_000 ether);
+        craps.seedProgressive(900_000);
         assertEq(
             craps.awardAt(TAP_SLOT, TAP_BANKROLL, true, TAP_BANKROLL * 25, 6, alice),
-            45_000 ether,
+            45_000,
             "activity score reduced the full 5% award"
         );
-        assertEq(craps.progressivePool(), 855_000 ether, "pool did not debit the full award");
+        assertEq(craps.progressivePool(), 855_000, "pool did not debit the full award");
     }
 
     /// @dev AT FULL STANDING THERE IS NO RETENTION AND NO ROLLOVER — on the award and on the
     ///      ladder alike. Every forfeiture path is silent for a score at the floor.
     function test_fullStandingCreatesNoRetentionAnywhere() public {
-        uint256 pool = 1_000_000 ether;
+        uint256 pool = 1_000_000;
         craps.seedProgressive(pool);
         vm.recordLogs();
         uint256 credited = craps.awardAt(TAP_SLOT, TAP_BANKROLL, true, TAP_BANKROLL * 25, craps.SYBIL_SCORE_FLOOR(), alice);
@@ -680,7 +680,7 @@ contract CrapsProgressiveTest is CrapsPins {
     /// @dev THE PAYOUT LOG RECONCILES: old balance, rung, candidate, credit, retention, new
     ///      balance — all six recoverable from one event and the curve.
     function test_theAwardLogReconstructsTheWholeTransaction() public {
-        uint256 pool = 900_000 ether;
+        uint256 pool = 900_000;
         craps.seedProgressive(pool);
         vm.recordLogs();
         craps.awardAt(TAP_SLOT, TAP_BANKROLL, true, TAP_BANKROLL * 25, 6, alice);
@@ -869,8 +869,8 @@ contract CrapsProgressiveTest is CrapsPins {
                 // EVERY CUTOFF LANDS ON A WHOLE FLIP. The award compares whole-FLIP figures, so a
                 // format whose cutoff fell between two of them would be judged on a floor.
                 (uint256 c, uint256 r) = craps.progressiveThresholds();
-                assertEq((uint256(bank) * c) % 1 ether, 0, "a common cutoff is not a whole number of FLIP");
-                assertEq((uint256(bank) * r) % 1 ether, 0, "a rare cutoff is not a whole number of FLIP");
+                assertEq((uint256(bank) * c) % 1, 0, "a common cutoff is not a whole number of FLIP");
+                assertEq((uint256(bank) * r) % 1, 0, "a rare cutoff is not a whole number of FLIP");
             }
         }
     }
@@ -1017,8 +1017,8 @@ contract CrapsProgressiveTest is CrapsPins {
         uint256[] memory ends = new uint256[](entrants + 1);
         for (uint64 n = 1; n <= entrants; ++n) {
             CrapsBattle.Settlement memory st = craps.settlementIn(_idAt(slot, n), slot);
-            peaks[n] = st.peak / 1 ether;
-            ends[n] = st.won / 1 ether;
+            peaks[n] = st.peak / 1;
+            ends[n] = st.won / 1;
             assertGe(st.peak, st.won, "a run's high point sat below its ending bankroll");
         }
 
@@ -1086,7 +1086,7 @@ contract CrapsProgressiveTest is CrapsPins {
         _setWord(index, uint256(keccak256("batched")));
 
         uint64 slot = _slotAt(PER);
-        craps.seedProgressive(1_000_000 ether);
+        craps.seedProgressive(1_000_000);
         // A cutoff of zero: every goal qualifies, so a double payment would be unmissable.
         // (The table's cutoffs are fixed, so the fixture instead reads what actually happened.)
         vm.recordLogs();
@@ -1121,7 +1121,7 @@ contract CrapsProgressiveTest is CrapsPins {
         uint48 index = _armAt(PER);
         _setWord(index, uint256(keccak256("order-invariant")));
         uint64 slot = _slotAt(PER);
-        craps.seedProgressive(1_000_000 ether);
+        craps.seedProgressive(1_000_000);
         uint256 snap = vm.snapshotState();
 
         for (uint256 pass = 0; pass < 2; ++pass) {
@@ -1151,15 +1151,15 @@ contract CrapsProgressiveTest is CrapsPins {
         vm.etch(ContractAddresses.COINFLIP, address(watcher).code);
         PoolWatcher(ContractAddresses.COINFLIP).arm(address(craps));
 
-        craps.seedProgressive(1_000_000 ether);
+        craps.seedProgressive(1_000_000);
         uint256 credited = craps.awardAt(TAP_SLOT, TAP_BANKROLL, true, TAP_BANKROLL * 120, 12, alice);
-        assertEq(credited, 100_000 ether, "the fixture did not draw the routine rare rung");
+        assertEq(credited, 100_000, "the fixture did not draw the routine rare rung");
         assertEq(
             PoolWatcher(ContractAddresses.COINFLIP).seen(),
-            900_000 ether,
+            900_000,
             "the callee saw a pool that still held the award"
         );
-        assertEq(craps.progressivePool(), 900_000 ether, "the pool did not settle on the post-payment balance");
+        assertEq(craps.progressivePool(), 900_000, "the pool did not settle on the post-payment balance");
     }
 
     /// @dev NONE OF THIS TOUCHES THE ACTION BOOKS. `_dayStaked` is bankroll handle and nothing
@@ -1173,7 +1173,7 @@ contract CrapsProgressiveTest is CrapsPins {
 
         // Funding, a rollover and an award, all with the books held up against them.
         _openDay();
-        craps.seedProgressive(1_000_000 ether);
+        craps.seedProgressive(1_000_000);
         craps.awardAt(TAP_SLOT, TAP_BANKROLL, true, TAP_BANKROLL * 130, 12, alice);
         assertEq(craps.dayStaked(day), staked, "progressive money reached the day's action");
         assertEq(craps.highStakedOf(day), highStaked, "progressive money reached the high action");
@@ -1196,7 +1196,7 @@ contract CrapsProgressiveTest is CrapsPins {
     /// @dev THE MAIN WINNER IS THE ONE THE COMPARATOR NAMED — the progressive does not choose, and
     ///      a high multiple does not scale what it pays.
     function test_theProgressiveNeitherChoosesTheWinnerNorScalesWithTheMultiple() public {
-        uint256 pool = 1_000_000 ether;
+        uint256 pool = 1_000_000;
         // The same qualifying result, at the ordinary seat and at a high one: identical award.
         craps.seedProgressive(pool);
         uint256 plain = craps.awardAt(TAP_SLOT, TAP_BANKROLL, true, TAP_BANKROLL * 120, 12, alice);
@@ -1235,7 +1235,7 @@ contract CrapsProgressiveTest is CrapsPins {
         Vm.Log[] memory logs;
         for (uint256 i = 0; i < 96 && !split; ++i) {
             _setWord(index, uint256(keccak256(abi.encode("lane-vs-main", i))));
-            craps.seedProgressive(1_000_000 ether);
+            craps.seedProgressive(1_000_000);
             vm.recordLogs();
             craps.settleSlot(slot, WHOLE_FIELD);
             logs = vm.getRecordedLogs();
@@ -1344,7 +1344,7 @@ contract CrapsProgressiveTest is CrapsPins {
             (, quoted[n]) = craps.previewSettlement(_idAt(slot, n));
         }
 
-        craps.seedProgressive(1_000_000 ether);
+        craps.seedProgressive(1_000_000);
         vm.recordLogs();
         craps.settleSlot(slot, WHOLE_FIELD);
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -1401,12 +1401,12 @@ contract CrapsProgressiveTest is CrapsPins {
         emit log_named_uint("  per entrant                ", whole / entrants);
 
         // THREE: the qualifying award itself, on a pool that pays.
-        craps.seedProgressive(1_000_000 ether);
+        craps.seedProgressive(1_000_000);
         g = gasleft();
         craps.awardAt(TAP_SLOT, TAP_BANKROLL, true, TAP_BANKROLL * 120, 12, alice);
         emit log_named_uint("a paying rare award          ", g - gasleft());
 
-        craps.seedProgressive(1_000_000 ether);
+        craps.seedProgressive(1_000_000);
         g = gasleft();
         craps.awardAt(TAP_SLOT, TAP_BANKROLL, true, TAP_BANKROLL * 10, 12, alice);
         emit log_named_uint("a non-qualifying test        ", g - gasleft());
@@ -1453,7 +1453,7 @@ contract CrapsProgressiveTest is CrapsPins {
         vm.warp(_dayStart() + 10 days + _closeOf(PER - 1));
         uint24 today = craps.currentDayIndex();
         for (uint256 i = 1; i <= craps.BOOST_ACTION_WINDOW_DAYS(); ++i) {
-            craps.bookHighDay(today - uint24(i), 40_000_000 ether);
+            craps.bookHighDay(today - uint24(i), 40_000_000);
         }
         _setDailyWord(today, PLAIN_WORD);
         _openDay();
@@ -1566,7 +1566,7 @@ contract CrapsProgressiveTest is CrapsPins {
         vm.warp(_dayStart() + 10 days + _closeOf(PER - 1));
         uint24 today = craps.currentDayIndex();
         for (uint256 i = 1; i <= craps.BOOST_ACTION_WINDOW_DAYS(); ++i) {
-            craps.bookDay(today - uint24(i), 40_000_000 ether);
+            craps.bookDay(today - uint24(i), 40_000_000);
         }
         _setDailyWord(today, PLAIN_WORD);
         _openDay();
@@ -1576,7 +1576,7 @@ contract CrapsProgressiveTest is CrapsPins {
     ///      standing-admitted award — a pass is that award paying in a different shape — while
     ///      the Coinflip credit is only the liquid remainder, and the two conserve the gross.
     function test_aProgressiveAwardDebitsGrossAndPaysLiquidPlusPasses() public {
-        uint256 pool = 1_000_000 ether;
+        uint256 pool = 1_000_000;
         craps.seedProgressive(pool);
         uint256 candidate = craps.poolShareOf(pool, craps.PROG_ROUTINE_COMMON_BPS());
         uint256 before = coinflip.staked(alice);
@@ -1608,7 +1608,7 @@ contract CrapsProgressiveTest is CrapsPins {
     ///      still falls by the whole gross, and everything the cap refused pays out liquid.
     function test_aHugeProgressiveAwardCapsAtThirtyHighs() public {
         // Big enough that half the 5% award buys more than thirty 520,800-FLIP high passes.
-        uint256 pool = 700_000_000 ether;
+        uint256 pool = 700_000_000;
         craps.seedProgressive(pool);
         uint256 candidate = craps.poolShareOf(pool, craps.PROG_ROUTINE_COMMON_BPS());
         uint256 before = coinflip.staked(alice);

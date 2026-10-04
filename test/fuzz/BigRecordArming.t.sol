@@ -114,9 +114,9 @@ contract BigRecordArmingTest is DeployProtocol {
     /// @notice Non-ETH currencies never touch the record.
     function testFlipCurrencyBetNeverArms() public {
         vm.prank(address(game));
-        coin.mintForGame(player, 10_000 ether);
+        coin.mintForGame(player, 10_000);
         vm.prank(player);
-        game.placeDegeneretteBet(address(0), CURRENCY_FLIP, 1_000 ether, 1, 3);
+        game.placeDegeneretteBet(address(0), CURRENCY_FLIP, 1_000, 1, 3);
         assertEq(coinflip.biggestSpinEver(), 0, "FLIP bets stay off the record");
     }
 
@@ -146,7 +146,7 @@ contract BigRecordArmingTest is DeployProtocol {
         );
         uint64 betId = DQ.lastBetId(vm, address(game), BET_INDEX);
         assertTrue(_lastBetPacked() & BET_RECORD_FLAG != 0, "the bet word flags the claim");
-        assertEq(_recordBounty(betId), expected / 1 ether, "the claim waits beside the bet in whole FLIP");
+        assertEq(_recordBounty(betId), expected, "the claim waits beside the bet in whole FLIP");
     }
 
     /// @notice A bet under the beat bar carries no bounty at all.
@@ -309,7 +309,7 @@ contract BigRecordArmingTest is DeployProtocol {
 
         assertEq(
             coinflip.coinflipAmount(rival) - coinflip.coinflipAmount(bystander),
-            (expected / 1 ether) * 1 ether,
+            expected,
             "the claim joins the buyer's own purchase flip credit (whole-FLIP stake lane)"
         );
     }

@@ -102,7 +102,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         uint8 symbol = 11;
         uint64 a = _place(alice, 0, 10, symbol, 0.005 ether);
         uint64 a2 = _place(alice, 0, 5, symbol, 0.01 ether);
-        uint64 b = _place(bob, 1, 5, symbol, 100 ether);
+        uint64 b = _place(bob, 1, 5, symbol, 100);
         uint256 word = uint256(keccak256("shared prefix"));
         _land(word);
         (uint32[] memory longRun, uint32 houseA) = _resolve(alice, a, symbol, word);
@@ -142,9 +142,9 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         vm.prank(alice);
         game.setOperatorApproval(bob, true);
         vm.prank(address(game));
-        wwxrp.mintPrize(alice, 123 ether);
+        wwxrp.mintPrize(alice, 123);
         vm.prank(address(game));
-        coin.mintForGame(alice, 456 ether);
+        coin.mintForGame(alice, 456);
         bytes32 boonSlot = bytes32(uint256(keccak256(abi.encode(alice, uint256(50)))) + 1);
         uint256 lane = (uint256(game.currentDayView()) << 3) | 3;
         vm.store(address(game), boonSlot, bytes32((lane << 184) | (lane << 208)));
@@ -192,16 +192,16 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         vm.prank(alice);
         game.setOperatorApproval(bob, true);
         vm.prank(address(game));
-        coin.mintForGame(alice, 1000 ether);
+        coin.mintForGame(alice, 1000);
         vm.prank(address(game));
-        coin.mintForGame(gifter, 1000 ether);
+        coin.mintForGame(gifter, 1000);
         bytes32 boonSlot = bytes32(uint256(keccak256(abi.encode(alice, uint256(50)))) + 1);
         address[3] memory callers = [alice, bob, gifter];
         for (uint256 route; route < callers.length; ++route) {
             for (uint8 currency; currency < 2; ++currency) {
                 bytes32 beforeState = _rejectionState(callers[route], boonSlot);
                 uint256 beforeFlip = coin.balanceOf(callers[route]);
-                uint128 stake = currency == 0 ? uint128(0.005 ether) : uint128(100 ether);
+                uint128 stake = currency == 0 ? uint128(0.005 ether) : uint128(100);
                 for (uint8 symbol = 24; symbol < 32; ++symbol) {
                     vm.expectRevert(bytes4(keccak256("InvalidBet()")));
                     vm.prank(callers[route]);
@@ -225,8 +225,8 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         (s, g) = math.score(0x38383838, 0, 0);
         assertEq(s, 5);
         assertEq(g, 0, "unmatched gold must not boost");
-        assertEq(math.payout(4, 1, 1, 1 ether, 0), 11.25 ether);
-        assertEq(math.payout(4, 1, 3, 1 ether, 0), 7.707_337_088_75 ether, "WWXRP base is calibrated for its rig");
+        assertEq(math.payout(4, 1, 1, 1, 0), 11);
+        assertEq(math.payout(4, 1, 3, 1, 0), 7, "WWXRP base is calibrated for its rig");
         assertEq(math.payout(1, 1, 0, 1 ether, 0), 0);
     }
 
@@ -313,7 +313,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
             (bytes memory returned, Vm.Log[] memory logs) = _awardCall(
                 abi.encodeCall(
                     IDegenerusGameDegeneretteModule.resolveFlipSpinsFromBox,
-                    (alice, 3000 ether, uint16(305), seed, symbol)
+                    (alice, 3000e18, uint16(305), seed, symbol)
                 )
             );
             (uint256 packed, uint256 payout) = _boxRecord(logs);
@@ -329,12 +329,12 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
                 assertEq(r, Ref.traits(uint256(keccak256(abi.encode(ss, uint256(0x446567656e526573756c74))))));
                 (uint8 score, uint8 gold) = Ref.score(p, r, hero >> 3);
                 assertEq(uint8(packed >> (i * 72 + 64)), score);
-                expectedTotal += math.payout(score, gold, 1, 1000 ether, 305);
+                expectedTotal += math.payout(score, gold, 1, 1000e18, 305);
             }
             bool survived =
                 expectedTotal != 0 && uint256(keccak256(abi.encode(seed, uint256(0x537572766976616c)))) & 1 == 1;
             assertEq((packed >> 224) & 1, survived ? 1 : 0);
-            expectedTotal = survived ? expectedTotal * 2 : 0;
+            expectedTotal = survived ? expectedTotal * 2 / 1e18 : 0;
             expectedTotal = expectedTotal > FlipRoundLib.FLIP_ROUND_THRESHOLD
                 ? FlipRoundLib.roundFlipToHundreds(
                     expectedTotal, uint256(keccak256(abi.encode(seed, uint256(0x466c6970526f756e64))))
@@ -351,7 +351,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
             if (chosen >= 24 && chosen != 32) continue;
             (bytes memory returned, Vm.Log[] memory logs) = _awardCall(
                 abi.encodeCall(
-                    IDegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox, (alice, 1 ether, uint16(305), seed, chosen)
+                    IDegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox, (alice, 1e18, uint16(305), seed, chosen)
                 )
             );
             (uint256 packed, uint256 payout) = _boxRecord(logs);
@@ -368,7 +368,10 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
             assertEq((packed >> 225) & 3, symbol >> 3);
             (uint8 score, uint8 gold) = Ref.score(p, r, symbol >> 3);
             assertEq(uint8(packed >> 64), score);
-            assertEq(payout, math.payout(score, gold, 3, 1 ether, 305));
+            uint256 rawPayout = math.payout(score, gold, 3, 1e18, 305);
+            uint256 expected = rawPayout / 1e18;
+            if (expected == 0 && rawPayout != 0) expected = 1;
+            assertEq(payout, expected);
             assertEq(abi.decode(returned, (uint256)), payout);
         }
     }
@@ -400,12 +403,12 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         (bytes memory returned, Vm.Log[] memory logs) = _awardCall(
             abi.encodeCall(
                 IDegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox,
-                (alice, 1 ether, uint16(0), seed, symbol)
+                (alice, 1e18, uint16(0), seed, symbol)
             )
         );
         (uint256 packed, uint256 payout) = _boxRecord(logs);
         assertEq(uint8(packed >> 64), 9, "production spin kept the natural jackpot");
-        assertEq(payout, 616_586.9671 ether, "WWXRP jackpot payout changed");
+        assertEq(payout, 616_586, "WWXRP jackpot payout changed");
         assertEq(abi.decode(returned, (uint256)), payout, "caller receives the token payout");
         assertEq(vm.load(address(game), claimsSlot), bytes32(type(uint256).max), "WWXRP changed whale-pass claims");
         assertEq(vm.load(address(game), bracketSlot), bytes32(0), "WWXRP consumed a whale-pass bracket");

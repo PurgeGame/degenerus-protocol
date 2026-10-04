@@ -50,7 +50,7 @@ contract DegeneretteBoonStake is DeployProtocol {
 
     /// @dev Enforcement-site caps for the two supported betting currencies.
     uint256 private constant CAP_ETH = 10 ether;
-    uint256 private constant CAP_FLIP = 100_000 ether;
+    uint256 private constant CAP_FLIP = 100_000;
 
     /// @dev Lootbox-rolled boons live `stampDay + 2`; deity-granted ones die at midnight.
     uint24 private constant EXPIRY_DAYS = 2;
@@ -165,7 +165,7 @@ contract DegeneretteBoonStake is DeployProtocol {
             uint256 packed = abi.decode(logs[i].data, (uint256));
             assertEq(math.paidStake(packed), paidPerSpin, "queued boon tier must recover the paid wager");
             assertEq(packed >> 254, 0, "remaining reserved bits stay zero");
-            uint256 unit = (packed >> BET_CURRENCY_SHIFT) & 1 == 0 ? 1 gwei : 1 ether;
+            uint256 unit = (packed >> BET_CURRENCY_SHIFT) & 1 == 0 ? 1 gwei : 1;
             return ((packed >> BET_STAKE_SHIFT) & type(uint64).max) * unit;
         }
         revert("DegeneretteBetPlaced not emitted");
@@ -230,9 +230,9 @@ contract DegeneretteBoonStake is DeployProtocol {
         uint24 today = game.currentDayView();
         _grantBoon(player, CURRENCY_ETH, 3, today, false); // ETH +12%
 
-        _fundFlip(player, 1_000 ether);
-        uint256 flipStake = _placeAndReadPackedStake(CURRENCY_FLIP, 100 ether, 1);
-        assertEq(flipStake, 100 ether, "FLIP bet took an ETH boon's bonus");
+        _fundFlip(player, 1_000);
+        uint256 flipStake = _placeAndReadPackedStake(CURRENCY_FLIP, 100, 1);
+        assertEq(flipStake, 100, "FLIP bet took an ETH boon's bonus");
         assertEq(_readTier(player, CURRENCY_ETH), 3, "FLIP bet consumed a boon it could not use");
 
         // The ETH bet it was actually for still gets it.
@@ -270,11 +270,11 @@ contract DegeneretteBoonStake is DeployProtocol {
 
             // --- FLIP ---
             _grantBoon(player, CURRENCY_FLIP, uint8(1 + step), today, false);
-            _fundFlip(player, 10_000 ether);
-            got = _placeAndReadPackedStake(CURRENCY_FLIP, 1_000 ether, 1);
+            _fundFlip(player, 10_000);
+            got = _placeAndReadPackedStake(CURRENCY_FLIP, 1_000, 1);
             assertEq(
                 got,
-                uint256(1_000 ether) + (uint256(1_000 ether) * bps[step]) / 10_000,
+                uint256(1_000) + (uint256(1_000) * bps[step]) / 10_000,
                 "FLIP tier bps"
             );
 
@@ -289,10 +289,10 @@ contract DegeneretteBoonStake is DeployProtocol {
         _grantBoon(player, CURRENCY_FLIP, 3, today, false); // FLIP +12%
 
         // The FLIP bet spends the FLIP lane alone.
-        _fundFlip(player, 10_000 ether);
+        _fundFlip(player, 10_000);
         assertEq(
-            _placeAndReadPackedStake(CURRENCY_FLIP, 1_000 ether, 1),
-            1_120 ether,
+            _placeAndReadPackedStake(CURRENCY_FLIP, 1_000, 1),
+            1_120,
             "FLIP lane did not pay its own bet"
         );
         assertEq(_readTier(player, CURRENCY_FLIP), 0, "FLIP lane not spent");
@@ -332,8 +332,8 @@ contract DegeneretteBoonStake is DeployProtocol {
         uint24 today = game.currentDayView();
         _grantBoon(player, CURRENCY_FLIP, 3, today, false); // FLIP +12%
 
-        uint128 perSpin = 300_000 ether;
-        _fundFlip(player, 1_000_000 ether);
+        uint128 perSpin = 300_000;
+        _fundFlip(player, 1_000_000);
         uint256 stake = _placeAndReadPackedStake(CURRENCY_FLIP, perSpin, 1);
 
         uint256 expectedBonus = (CAP_FLIP * 1200) / 10_000; // 12k FLIP, not 36k
@@ -391,8 +391,8 @@ contract DegeneretteBoonStake is DeployProtocol {
     function test_noBoonLeavesEveryCurrencyUnchanged() public {
         assertEq(_placeAndReadPackedStake(CURRENCY_ETH, 1 ether, 1), 1 ether, "ETH");
 
-        _fundFlip(player, 10_000 ether);
-        assertEq(_placeAndReadPackedStake(CURRENCY_FLIP, 1_000 ether, 1), 1_000 ether, "FLIP");
+        _fundFlip(player, 10_000);
+        assertEq(_placeAndReadPackedStake(CURRENCY_FLIP, 1_000, 1), 1_000, "FLIP");
 
     }
 

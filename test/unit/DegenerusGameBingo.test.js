@@ -11,11 +11,11 @@ import {
 const REWARD_POOL = 3;
 const BINGO_DGNRS_BPS = 5n;
 const BPS_DENOMINATOR = 10_000n;
-const BINGO_FLIP = hre.ethers.parseEther("1000");
+const BINGO_FLIP = 1000n;
 const ZERO_SLOTS = Array(8).fill(0);
 
 let lvlTraitEntrySlot;
-let bingoClaimedSlot;
+let playerClaimWordSlot;
 
 
 
@@ -81,21 +81,12 @@ async function seedBingo(gameAddress, level, symbol, holders) {
   }
 }
 
-function bingoClaimLeaf(level, player) {
-  const inner = hre.ethers.keccak256(
+function bingoClaimLeaf(_level, player) {
+  return BigInt(hre.ethers.keccak256(
     hre.ethers.AbiCoder.defaultAbiCoder().encode(
-      ["uint24", "uint256"],
-      [level, bingoClaimedSlot]
+      ["address", "uint256"], [player, playerClaimWordSlot]
     )
-  );
-  return BigInt(
-    hre.ethers.keccak256(
-      hre.ethers.AbiCoder.defaultAbiCoder().encode(
-        ["address", "bytes32"],
-        [player, inner]
-      )
-    )
-  );
+  ));
 }
 
 async function bingoAtGame(game) {
@@ -121,16 +112,16 @@ function bingoEvents(receipt, bingo) {
 describe("DegenerusGame simple bingo", function () {
   before(async function () {
     lvlTraitEntrySlot = await deriveStorageSlot("lvlTraitEntry");
-    bingoClaimedSlot = await deriveStorageSlot("bingoClaimed");
+    playerClaimWordSlot = await deriveStorageSlot("playerClaimWord");
     expect(lvlTraitEntrySlot).to.equal(8n);
-    expect(bingoClaimedSlot).to.equal(51n);
+    expect(playerClaimWordSlot).to.equal(24n);
   });
 
   after(function () {
     restoreAddresses();
   });
 
-  it("pays the normal 5 bps + 1,000 FLIP reward and stores one bool", async function () {
+  it("pays the normal 5 bps + 1,000 FLIP reward and stores its parity stamp", async function () {
     const { game, sdgnrs, coinflip, alice } = await loadFixture(
       deployFullProtocol
     );
@@ -175,7 +166,7 @@ describe("DegenerusGame simple bingo", function () {
           wordHex(bingoClaimLeaf(level, alice.address))
         )
       )
-    ).to.equal(1n);
+    ).to.equal(BigInt(level + 1) << (BigInt(level & 1) * 25n));
 
     const events = bingoEvents(receipt, bingo);
     expect(events).to.have.length(1);
@@ -295,6 +286,27 @@ describe("DegenerusGame simple bingo", function () {
       .claimBingo(hre.ethers.ZeroAddress, level, 4, ZERO_SLOTS);
 
     expect(await coinflip.coinflipAmount(alice.address)).to.equal(BINGO_FLIP);
+  });
+
+  it("preserves both parity claims, retires old stamps, and supports level zero", async function () {
+    const { game, coinflip, alice } = await loadFixture(deployFullProtocol);
+    const gameAddress = await game.getAddress();
+    const bingo = await bingoAtGame(game);
+    for (const level of [0, 1]) await seedBingo(gameAddress, level, 4, [alice.address]);
+    for (const level of [1, 0]) {
+      await bingo.connect(alice).claimBingo(alice.address, level, 4, ZERO_SLOTS);
+    }
+    for (const level of [0, 1]) {
+      await expect(bingo.connect(alice).claimBingo(alice.address, level, 4, ZERO_SLOTS))
+        .to.be.revertedWithCustomError(bingo, "AlreadyClaimed");
+    }
+    await seedBingo(gameAddress, 2, 4, [alice.address]);
+    await bingo.connect(alice).claimBingo(alice.address, 2, 4, ZERO_SLOTS);
+    await expect(bingo.connect(alice).claimBingo(alice.address, 0, 4, ZERO_SLOTS))
+      .to.be.revertedWithCustomError(bingo, "BingoExpired");
+    await expect(bingo.connect(alice).claimBingo(alice.address, 1, 4, ZERO_SLOTS))
+      .to.be.revertedWithCustomError(bingo, "AlreadyClaimed");
+    expect(await coinflip.coinflipAmount(alice.address)).to.equal(3n * BINGO_FLIP);
   });
 
   it("rejects invalid symbols and ownership proofs without consuming the claim", async function () {

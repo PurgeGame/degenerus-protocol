@@ -952,7 +952,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         }
         uint256 prize = spanDays * SEAT_DRAW_FLIP_PER_DAY;
         if (prize > SEAT_DRAW_MAX_FLIP) prize = SEAT_DRAW_MAX_FLIP;
-        coinflip.creditFlip(winner, prize * 1 ether);
+        coinflip.creditFlip(winner, prize);
         emit SubDrawWon(winner, day, uint24(spanDays), prize);
     }
 

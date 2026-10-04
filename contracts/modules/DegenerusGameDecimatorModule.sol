@@ -51,7 +51,8 @@ interface IDecimatorCrapsEngine {
 /// @dev Delegatecalled by Game. A sealed round finishes on the active session word before
 ///      the next request can replace it. No transaction walks the unbounded entrant population.
 contract DegenerusGameDecimatorModule is DegenerusGameStorage {
-    uint256 private constant SCALE = 3000 ether;
+    // Pure engine amounts retain fractional simulation precision independently of FLIP decimals.
+    uint256 private constant SCALE = 3000 * 1e18;
     bytes32 private constant DICE_TAG = keccak256("decimator.battle.dice.v1");
     bytes32 private constant BOARD_TAG = keccak256("decimator.battle.board.v1");
     bytes32 private constant COIN_TAG = keccak256("decimator.battle.final-coin.v1");
@@ -117,7 +118,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         uint256 factor = _dayFactor(day - round.openedDay);
         // Whole FLIP of chips. Multiply timing first to avoid overflow for very large, heavily
         // decayed burns.
-        uint256 credited = Math.mulDiv(baseAmount, factor * multBps, 1 ether * 10_000 * 1 ether);
+        uint256 credited = Math.mulDiv(baseAmount, factor * multBps, 1 ether * 10_000);
         if (credited == 0) revert E();
         // The wallet slot finds a top-up; a new window's first burn overwrites it. Settlement reads
         // only the entry, so an older round still in the queue keeps its own.
@@ -135,7 +136,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         if (stack > MAX_STACK) stack = MAX_STACK;
         decBattleEntries[_entryKey(lvl, id)] =
             (stack << STACK_SHIFT) | (uint256(chips) << CHIPS_SHIFT) | uint256(uint160(player));
-        emit DecBurnRecorded(player, lvl, id, baseAmount, credited * 1 ether, stack * 1 ether, chips);
+        emit DecBurnRecorded(player, lvl, id, baseAmount, credited, stack, chips);
     }
 
     /// @dev A normal battle's board rules: at most three chips on a leg, seven named in all, and

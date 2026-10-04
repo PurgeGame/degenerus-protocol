@@ -7,6 +7,7 @@ import {
 } from "../helpers/deployFixture.js";
 import {
   eth,
+  flip,
   getEvents,
   getEvent,
   ZERO_ADDRESS,
@@ -403,7 +404,7 @@ describe("DegenerusAffiliate", function () {
       await expect(
         affiliate
           .connect(alice)
-          .payAffiliate(eth(1), ZERO_BYTES32, bob.address, 1, true, 0)
+          .payAffiliate(flip(1000000), ZERO_BYTES32, bob.address, 1, true, 0)
       ).to.be.revertedWithCustomError(affiliate, "OnlyAuthorized");
     });
 
@@ -414,7 +415,7 @@ describe("DegenerusAffiliate", function () {
           hre.ethers,
           coin,
           affiliate,
-          eth(1),
+          flip(1000000),
           ZERO_BYTES32,
           alice.address,
           1,
@@ -430,7 +431,7 @@ describe("DegenerusAffiliate", function () {
           hre.ethers,
           game,
           affiliate,
-          eth(1),
+          flip(1000000),
           ZERO_BYTES32,
           alice.address,
           1,
@@ -456,7 +457,7 @@ describe("DegenerusAffiliate", function () {
         hre.ethers,
         game,
         affiliate,
-        eth(10),
+        flip(10000000),
         code,
         bob.address,
         1,
@@ -480,7 +481,7 @@ describe("DegenerusAffiliate", function () {
         hre.ethers,
         game,
         affiliate,
-        eth(100),
+        flip(100000000),
         code,
         bob.address,
         1,
@@ -507,14 +508,14 @@ describe("DegenerusAffiliate", function () {
         hre.ethers,
         game,
         affiliate,
-        eth(1),
+        flip(1000000),
         code,
         bob.address,
         1,
         true
       );
 
-      expect(staticResult).to.equal(eth("0.025"));
+      expect(staticResult).to.equal(flip(25000));
     });
 
     it("fresh ETH level 1-3 uses 25% reward scale", async function () {
@@ -530,14 +531,14 @@ describe("DegenerusAffiliate", function () {
         hre.ethers,
         game,
         affiliate,
-        eth(1),
+        flip(1000000),
         code,
         bob.address,
         1,
         true
       );
       const evs = await getEvents(tx, affiliate, "AffiliateEarningsRecorded");
-      expect((evs[0].args.packed >> 24n)).to.equal(eth("0.25")); // 25% of 1
+      expect((evs[0].args.packed >> 24n)).to.equal(flip(250000)); // 25% of 1
     });
 
     it("fresh ETH level 4+ uses 20% reward scale", async function () {
@@ -553,14 +554,14 @@ describe("DegenerusAffiliate", function () {
         hre.ethers,
         game,
         affiliate,
-        eth(1),
+        flip(1000000),
         code,
         bob.address,
         4,
         true
       );
       const evs = await getEvents(tx, affiliate, "AffiliateEarningsRecorded");
-      expect((evs[0].args.packed >> 24n)).to.equal(eth("0.2")); // 20% of 1
+      expect((evs[0].args.packed >> 24n)).to.equal(flip(200000)); // 20% of 1
     });
 
     it("recycled ETH uses 5% reward scale", async function () {
@@ -576,14 +577,14 @@ describe("DegenerusAffiliate", function () {
         hre.ethers,
         game,
         affiliate,
-        eth(1),
+        flip(1000000),
         code,
         bob.address,
         1,
         false
       );
       const evs = await getEvents(tx, affiliate, "AffiliateEarningsRecorded");
-      expect((evs[0].args.packed >> 24n)).to.equal(eth("0.05")); // 5% of 1
+      expect((evs[0].args.packed >> 24n)).to.equal(flip(50000)); // 5% of 1
     });
 
     it("blank referral code locks player to VAULT (REF_CODE_LOCKED)", async function () {
@@ -593,7 +594,7 @@ describe("DegenerusAffiliate", function () {
         hre.ethers,
         game,
         affiliate,
-        eth(10),
+        flip(10000000),
         ZERO_BYTES32,
         alice.address,
         1,
@@ -612,7 +613,7 @@ describe("DegenerusAffiliate", function () {
         hre.ethers,
         game,
         affiliate,
-        eth(10),
+        flip(10000000),
         unknownCode,
         bob.address,
         1,
@@ -632,7 +633,7 @@ describe("DegenerusAffiliate", function () {
         hre.ethers,
         game,
         affiliate,
-        eth(10),
+        flip(10000000),
         code,
         alice.address,
         1,
@@ -660,7 +661,7 @@ describe("DegenerusAffiliate", function () {
         hre.ethers,
         game,
         affiliate,
-        eth(100),
+        flip(100000000),
         bobCode,
         carol.address,
         1,
@@ -702,7 +703,7 @@ describe("DegenerusAffiliate", function () {
         hre.ethers,
         game,
         affiliate,
-        eth(1),
+        flip(1000000),
         code,
         bob.address,
         1,
@@ -710,7 +711,7 @@ describe("DegenerusAffiliate", function () {
       );
 
       const score = await affiliate.affiliateScore(1, alice.address);
-      expect(score).to.equal(eth("0.25")); // 25% of 1
+      expect(score).to.equal(flip(250000)); // 25% of 1
     });
 
     it("affiliateTop reflects top affiliate after activity", async function () {
@@ -725,7 +726,7 @@ describe("DegenerusAffiliate", function () {
         hre.ethers,
         game,
         affiliate,
-        eth(100),
+        flip(100000000),
         code,
         bob.address,
         1,
@@ -748,7 +749,7 @@ describe("DegenerusAffiliate", function () {
         hre.ethers,
         game,
         affiliate,
-        eth(100),
+        flip(100000000),
         code,
         bob.address,
         1,
@@ -794,7 +795,7 @@ describe("DegenerusAffiliate", function () {
       // Weighted referred volume: levels 1-3 fresh 25% => 2 * 1.25 = 2.5 ETH each;
       // levels 4-5 fresh 20% => 2.0 ETH each. Total 11.5 ETH =>
       // 20 + floor((11.5 - 5) * 1.5) = 29 points.
-      const PCU = eth(1000);
+      const PCU = flip(1000);
       for (let lvl = 1; lvl <= 5; lvl++) {
         const price = lvl <= 4 ? eth("0.01") : eth("0.02");
         const inputAmt = (eth("0.5") * PCU) / price;
@@ -823,7 +824,7 @@ describe("DegenerusAffiliate", function () {
       await affiliate.connect(alice).createAffiliateCode(code, 0);
       await affiliate.connect(bob).referPlayer(code);
 
-      const PCU = eth(1000);
+      const PCU = flip(1000);
 
       // One minimum ticket entry (0.0025 ETH at level-1 price 0.01) in FLIP basis:
       // weighted volume ~0.003 ETH -> 0 points (not the 50-point cap).
@@ -871,10 +872,10 @@ describe("DegenerusAffiliate", function () {
 
       // 1 ETH fresh L1 => 25% = 0.25 ETH (under 0.5 cap)
       const tx = await payAffiliateAsGame(
-        hre.ethers, game, affiliate, eth(1), code, bob.address, 1, true
+        hre.ethers, game, affiliate, flip(1000000), code, bob.address, 1, true
       );
       const evs = await getEvents(tx, affiliate, "AffiliateEarningsRecorded");
-      expect((evs[0].args.packed >> 24n)).to.equal(eth("0.25"));
+      expect((evs[0].args.packed >> 24n)).to.equal(flip(250000));
     });
 
     it("records full uncapped commission for a large purchase", async function () {
@@ -887,10 +888,10 @@ describe("DegenerusAffiliate", function () {
 
       // 100 ETH fresh L1 => 25% = 25 ETH; cap removed so the full amount accrues
       const tx = await payAffiliateAsGame(
-        hre.ethers, game, affiliate, eth(100), code, bob.address, 1, true
+        hre.ethers, game, affiliate, flip(100000000), code, bob.address, 1, true
       );
       const evs = await getEvents(tx, affiliate, "AffiliateEarningsRecorded");
-      expect((evs[0].args.packed >> 24n)).to.equal(eth("25"));
+      expect((evs[0].args.packed >> 24n)).to.equal(flip(25000000));
     });
 
     it("second purchase still records earnings (no cap) and emits Affiliate", async function () {
@@ -903,18 +904,18 @@ describe("DegenerusAffiliate", function () {
 
       // First call
       await payAffiliateAsGame(
-        hre.ethers, game, affiliate, eth(100), code, bob.address, 1, true
+        hre.ethers, game, affiliate, flip(100000000), code, bob.address, 1, true
       );
 
       // Second call: still accrues 10 ETH * 25% = 2.5 ETH (no cap)
       const tx = await payAffiliateAsGame(
-        hre.ethers, game, affiliate, eth(10), code, bob.address, 1, true
+        hre.ethers, game, affiliate, flip(10000000), code, bob.address, 1, true
       );
       const earningsEvs = await getEvents(tx, affiliate, "AffiliateEarningsRecorded");
       expect(earningsEvs.length).to.equal(1);
       // The event carries the running total, so this call's 2.5 shows as the delta over
       // the first call's 25 (100 ETH * 25%).
-      expect((earningsEvs[0].args.packed >> 24n) - eth("25")).to.equal(eth("2.5"));
+      expect((earningsEvs[0].args.packed >> 24n) - flip(25000000)).to.equal(flip(2500000));
       // Affiliate event with the original amount is still emitted
       const affEvs = await getEvents(tx, affiliate, "Affiliate");
       expect(affEvs.length).to.be.gte(1);
@@ -930,14 +931,14 @@ describe("DegenerusAffiliate", function () {
 
       // First call
       await payAffiliateAsGame(
-        hre.ethers, game, affiliate, eth(100), code, bob.address, 1, true
+        hre.ethers, game, affiliate, flip(100000000), code, bob.address, 1, true
       );
 
       // Second call: 10 ETH * 25% = 2.5 scaled, 25% kickback = 0.625 ETH
       const result = await payAffiliateAsGameStatic(
-        hre.ethers, game, affiliate, eth(10), code, bob.address, 1, true
+        hre.ethers, game, affiliate, flip(10000000), code, bob.address, 1, true
       );
-      expect(result).to.equal(eth("0.625"));
+      expect(result).to.equal(flip(625000));
     });
 
     it("second purchase records the full scaled amount (no clamp)", async function () {
@@ -950,21 +951,21 @@ describe("DegenerusAffiliate", function () {
 
       // First call: 1 ETH fresh L1 => 0.25 ETH
       await payAffiliateAsGame(
-        hre.ethers, game, affiliate, eth(1), code, bob.address, 1, true
+        hre.ethers, game, affiliate, flip(1000000), code, bob.address, 1, true
       );
-      expect(await affiliate.affiliateScore(1, alice.address)).to.equal(eth("0.25"));
+      expect(await affiliate.affiliateScore(1, alice.address)).to.equal(flip(250000));
 
       // Second call: 2 ETH fresh L1 => 0.5 ETH scaled, recorded in full (no cap)
       const tx = await payAffiliateAsGame(
-        hre.ethers, game, affiliate, eth(2), code, bob.address, 1, true
+        hre.ethers, game, affiliate, flip(2000000), code, bob.address, 1, true
       );
       const evs = await getEvents(tx, affiliate, "AffiliateEarningsRecorded");
       // The event carries the running total; this call's 0.5 is its delta over the first
       // call's 0.25.
-      expect((evs[0].args.packed >> 24n) - eth("0.25")).to.equal(eth("0.5"));
+      expect((evs[0].args.packed >> 24n) - flip(250000)).to.equal(flip(500000));
 
       // Total should be 0.25 + 0.5 = 0.75
-      expect(await affiliate.affiliateScore(1, alice.address)).to.equal(eth("0.75"));
+      expect(await affiliate.affiliateScore(1, alice.address)).to.equal(flip(750000));
     });
 
     it("different senders accrue independently", async function () {
@@ -978,20 +979,20 @@ describe("DegenerusAffiliate", function () {
 
       // Bob: 100 ETH => 25 ETH (uncapped)
       await payAffiliateAsGame(
-        hre.ethers, game, affiliate, eth(100), code, bob.address, 1, true
+        hre.ethers, game, affiliate, flip(100000000), code, bob.address, 1, true
       );
-      expect(await affiliate.affiliateScore(1, alice.address)).to.equal(eth("25"));
+      expect(await affiliate.affiliateScore(1, alice.address)).to.equal(flip(25000000));
 
       // Carol contributes independently: 1 ETH => 0.25
       const tx = await payAffiliateAsGame(
-        hre.ethers, game, affiliate, eth(1), code, carol.address, 1, true
+        hre.ethers, game, affiliate, flip(1000000), code, carol.address, 1, true
       );
       const evs = await getEvents(tx, affiliate, "AffiliateEarningsRecorded");
       // Running total: carol's 0.25 is the delta over bob's 25.
-      expect((evs[0].args.packed >> 24n) - eth("25")).to.equal(eth("0.25"));
+      expect((evs[0].args.packed >> 24n) - flip(25000000)).to.equal(flip(250000));
 
       // Total now 25.25
-      expect(await affiliate.affiliateScore(1, alice.address)).to.equal(eth("25.25"));
+      expect(await affiliate.affiliateScore(1, alice.address)).to.equal(flip(25250000));
     });
 
     it("earnings tracked per level", async function () {
@@ -1004,17 +1005,17 @@ describe("DegenerusAffiliate", function () {
 
       // Level 1: 100 ETH => 25 ETH (uncapped)
       await payAffiliateAsGame(
-        hre.ethers, game, affiliate, eth(100), code, bob.address, 1, true
+        hre.ethers, game, affiliate, flip(100000000), code, bob.address, 1, true
       );
-      expect(await affiliate.affiliateScore(1, alice.address)).to.equal(eth("25"));
+      expect(await affiliate.affiliateScore(1, alice.address)).to.equal(flip(25000000));
 
       // Same sender earns again at level 2 (independent per-level tracking)
       const tx = await payAffiliateAsGame(
-        hre.ethers, game, affiliate, eth(1), code, bob.address, 2, true
+        hre.ethers, game, affiliate, flip(1000000), code, bob.address, 2, true
       );
       const evs = await getEvents(tx, affiliate, "AffiliateEarningsRecorded");
-      expect((evs[0].args.packed >> 24n)).to.equal(eth("0.25"));
-      expect(await affiliate.affiliateScore(2, alice.address)).to.equal(eth("0.25"));
+      expect((evs[0].args.packed >> 24n)).to.equal(flip(250000));
+      expect(await affiliate.affiliateScore(2, alice.address)).to.equal(flip(250000));
     });
   });
 
@@ -1032,9 +1033,9 @@ describe("DegenerusAffiliate", function () {
 
       // 1 ETH fresh L1 => 0.25 scaled, 25% kickback = 0.0625
       const result = await payAffiliateAsGameStatic(
-        hre.ethers, game, affiliate, eth(1), code, bob.address, 1, true, 0
+        hre.ethers, game, affiliate, flip(1000000), code, bob.address, 1, true, 0
       );
-      expect(result).to.equal(eth("0.0625"));
+      expect(result).to.equal(flip(62500));
     });
 
     it("no taper when activity score is below 100", async function () {
@@ -1046,10 +1047,10 @@ describe("DegenerusAffiliate", function () {
       await affiliate.connect(bob).referPlayer(code);
 
       const result = await payAffiliateAsGameStatic(
-        hre.ethers, game, affiliate, eth(1), code, bob.address, 1, true, 99
+        hre.ethers, game, affiliate, flip(1000000), code, bob.address, 1, true, 99
       );
       // Same as no-taper: 0.25 * 25% = 0.0625
-      expect(result).to.equal(eth("0.0625"));
+      expect(result).to.equal(flip(62500));
     });
 
     it("25% floor taper when activity score >= 25500", async function () {
@@ -1063,9 +1064,9 @@ describe("DegenerusAffiliate", function () {
       // At max taper: scaledAmount * 25% => 0.25 * 0.25 = 0.0625
       // kickback = 0.0625 * 25% = 0.015625
       const result = await payAffiliateAsGameStatic(
-        hre.ethers, game, affiliate, eth(1), code, bob.address, 1, true, 25500
+        hre.ethers, game, affiliate, flip(1000000), code, bob.address, 1, true, 25500
       );
-      expect(result).to.equal(eth("0.015625"));
+      expect(result).to.equal(flip(15625));
     });
 
     it("25% floor also applies above 25500", async function () {
@@ -1077,10 +1078,10 @@ describe("DegenerusAffiliate", function () {
       await affiliate.connect(bob).referPlayer(code);
 
       const result = await payAffiliateAsGameStatic(
-        hre.ethers, game, affiliate, eth(1), code, bob.address, 1, true, 30000
+        hre.ethers, game, affiliate, flip(1000000), code, bob.address, 1, true, 30000
       );
       // Same as 25500: 0.015625
-      expect(result).to.equal(eth("0.015625"));
+      expect(result).to.equal(flip(15625));
     });
 
     it("linear taper in range (score 200)", async function () {
@@ -1096,11 +1097,11 @@ describe("DegenerusAffiliate", function () {
       // effectiveBps = 10000 - 4838 = 5162
       // Scaled = 0.25 * 5162 / 10000 = 0.12905
       const tx = await payAffiliateAsGame(
-        hre.ethers, game, affiliate, eth(1), code, bob.address, 1, true, 200
+        hre.ethers, game, affiliate, flip(1000000), code, bob.address, 1, true, 200
       );
       // Event records the post-taper amount
       const evs = await getEvents(tx, affiliate, "AffiliateEarningsRecorded");
-      expect((evs[0].args.packed >> 24n)).to.equal(eth("0.12905")); // post-taper
+      expect((evs[0].args.packed >> 24n)).to.equal(flip(129050)); // post-taper
     });
 
     it("leaderboard tracks post-taper amount", async function () {
@@ -1113,11 +1114,11 @@ describe("DegenerusAffiliate", function () {
 
       // Max taper: score=25500 triggers 25% floor
       await payAffiliateAsGame(
-        hre.ethers, game, affiliate, eth(1), code, bob.address, 1, true, 25500
+        hre.ethers, game, affiliate, flip(1000000), code, bob.address, 1, true, 25500
       );
 
       // score=25500: 0.25 ETH scaled * 25% floor = 0.0625 ETH recorded
-      expect(await affiliate.affiliateScore(1, alice.address)).to.equal(eth("0.0625"));
+      expect(await affiliate.affiliateScore(1, alice.address)).to.equal(flip(62500));
     });
 
     it("taper reduces kickback proportionally", async function () {
@@ -1130,16 +1131,16 @@ describe("DegenerusAffiliate", function () {
 
       // No taper: 0.25 scaled * 25% kickback = 0.0625
       const noTaper = await payAffiliateAsGameStatic(
-        hre.ethers, game, affiliate, eth(1), code, bob.address, 1, true, 0
+        hre.ethers, game, affiliate, flip(1000000), code, bob.address, 1, true, 0
       );
 
       // Max taper (25% floor): 0.25 * 25% = 0.0625 * 25% kickback = 0.015625
       const maxTaper = await payAffiliateAsGameStatic(
-        hre.ethers, game, affiliate, eth(1), code, bob.address, 1, true, 25500
+        hre.ethers, game, affiliate, flip(1000000), code, bob.address, 1, true, 25500
       );
 
-      expect(noTaper).to.equal(eth("0.0625"));
-      expect(maxTaper).to.equal(eth("0.015625"));
+      expect(noTaper).to.equal(flip(62500));
+      expect(maxTaper).to.equal(flip(15625));
       // Max taper kickback should be exactly one quarter of no-taper kickback
       expect(maxTaper * 4n).to.equal(noTaper);
     });
@@ -1155,9 +1156,9 @@ describe("DegenerusAffiliate", function () {
       // Score exactly at 100: excess = 0, reductionBps = 0, 100% payout
       // Same as no taper
       const result = await payAffiliateAsGameStatic(
-        hre.ethers, game, affiliate, eth(1), code, bob.address, 1, true, 100
+        hre.ethers, game, affiliate, flip(1000000), code, bob.address, 1, true, 100
       );
-      expect(result).to.equal(eth("0.0625"));
+      expect(result).to.equal(flip(62500));
     });
 
     it("recycled ETH with taper score still gets no taper (taper only affects payout, not scale)", async function () {
@@ -1171,15 +1172,15 @@ describe("DegenerusAffiliate", function () {
       // Recycled: 5% scale => 0.05 ETH
       // Max taper (25% floor): 0.05 * 25% = 0.0125 => 25% kickback = 0.003125
       const result = await payAffiliateAsGameStatic(
-        hre.ethers, game, affiliate, eth(1), code, bob.address, 1, false, 25500
+        hre.ethers, game, affiliate, flip(1000000), code, bob.address, 1, false, 25500
       );
-      expect(result).to.equal(eth("0.003125"));
+      expect(result).to.equal(flip(3125));
 
       // Without taper: 0.05 * 25% = 0.0125
       const noTaper = await payAffiliateAsGameStatic(
-        hre.ethers, game, affiliate, eth(1), code, bob.address, 1, false, 0
+        hre.ethers, game, affiliate, flip(1000000), code, bob.address, 1, false, 0
       );
-      expect(noTaper).to.equal(eth("0.0125"));
+      expect(noTaper).to.equal(flip(12500));
     });
 
     it("taper applies to the full uncapped scaled amount", async function () {
@@ -1193,15 +1194,15 @@ describe("DegenerusAffiliate", function () {
       // 100 ETH fresh L1 => 25 ETH scaled (no cap), then 25% floor taper => 6.25 ETH
       // Kickback = 6.25 * 25% = 1.5625
       const result = await payAffiliateAsGameStatic(
-        hre.ethers, game, affiliate, eth(100), code, bob.address, 1, true, 25500
+        hre.ethers, game, affiliate, flip(100000000), code, bob.address, 1, true, 25500
       );
-      expect(result).to.equal(eth("1.5625"));
+      expect(result).to.equal(flip(1562500));
 
       // Leaderboard records the post-taper amount: 25 ETH * 25% floor = 6.25 ETH
       await payAffiliateAsGame(
-        hre.ethers, game, affiliate, eth(100), code, bob.address, 1, true, 25500
+        hre.ethers, game, affiliate, flip(100000000), code, bob.address, 1, true, 25500
       );
-      expect(await affiliate.affiliateScore(1, alice.address)).to.equal(eth("6.25"));
+      expect(await affiliate.affiliateScore(1, alice.address)).to.equal(flip(6250000));
     });
   });
 
@@ -1220,14 +1221,14 @@ describe("DegenerusAffiliate", function () {
     it("carries level and the running total, and nothing else", async function () {
       const { affiliate, game, bob, code } = await setup();
       const tx = await payAffiliateAsGame(
-        hre.ethers, game, affiliate, eth(1), code, bob.address, 1, true
+        hre.ethers, game, affiliate, flip(1000000), code, bob.address, 1, true
       );
       const ev = (await getEvents(tx, affiliate, "AffiliateEarningsRecorded"))[0];
       // Exactly two decodable fields; no source/sender/code/day rides this word.
       expect(Object.keys(unpackEarnings(ev))).to.deep.equal(["level", "newTotal"]);
       const { level, newTotal } = unpackEarnings(ev);
       expect(level).to.equal(1);
-      expect(newTotal).to.equal(eth("0.25")); // 1 ETH fresh at L1 => 25%
+      expect(newTotal).to.equal(flip(250000)); // 1 ETH fresh at L1 => 25%
       expect(newTotal).to.equal(await affiliate.affiliateScore(1, ev.args.affiliate));
     });
 
@@ -1236,22 +1237,22 @@ describe("DegenerusAffiliate", function () {
       // Same call shape, different rate leg: only the credited amount differs, and
       // it is read as the delta of the running total.
       const t1 = await payAffiliateAsGame(
-        hre.ethers, game, affiliate, eth(1), code, bob.address, 1, true
+        hre.ethers, game, affiliate, flip(1000000), code, bob.address, 1, true
       );
       const t2 = await payAffiliateAsGame(
-        hre.ethers, game, affiliate, eth(1), code, bob.address, 1, false
+        hre.ethers, game, affiliate, flip(1000000), code, bob.address, 1, false
       );
       const a = unpackEarnings((await getEvents(t1, affiliate, "AffiliateEarningsRecorded"))[0]);
       const b = unpackEarnings((await getEvents(t2, affiliate, "AffiliateEarningsRecorded"))[0]);
-      expect(a.newTotal).to.equal(eth("0.25")); // fresh 25%
-      expect(b.newTotal - a.newTotal).to.equal(eth("0.05")); // recycled 5%
+      expect(a.newTotal).to.equal(flip(250000)); // fresh 25%
+      expect(b.newTotal - a.newTotal).to.equal(flip(50000)); // recycled 5%
     });
 
     it("payAffiliateCombined pools its four legs into ONE emit", async function () {
       const { affiliate, game, bob, code } = await setup();
       const tx = await payAffiliateCombinedAsGame(
         hre.ethers, game, affiliate, code, bob.address, 1,
-        { tktFresh: eth(1), tktRecycled: eth(1), lbFresh: eth(1), lbRecycled: eth(1) }
+        { tktFresh: flip(1000000), tktRecycled: flip(1000000), lbFresh: flip(1000000), lbRecycled: flip(1000000) }
       );
       const evs = await getEvents(tx, affiliate, "AffiliateEarningsRecorded");
       expect(evs.length).to.equal(1, "combined pools into a single emit");

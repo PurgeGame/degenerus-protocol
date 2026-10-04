@@ -240,7 +240,7 @@ contract sDGNRS {
     ///        the game is live; pushed as ETH (stETH covering any shortfall) in terminal mode.
     /// @param lootboxEth ETH staked into a lootbox roll for the claimant (0 if terminal or
     ///        below the dust floor).
-    /// @param flipPaid Escrowed FLIP (wei) minted to the redeemer as a flip credit — nonzero only
+    /// @param flipPaid Escrowed FLIP (whole tokens) minted to the redeemer as a flip credit — nonzero only
     ///        on a winning resolving-day coinflip; 0 on a loss or in terminal mode (FLIP ignored).
     event RedemptionClaimed(address indexed player, uint16 roll, uint256 ethPayout, uint256 lootboxEth, uint256 flipPaid);
 
@@ -1036,7 +1036,7 @@ contract sDGNRS {
             (uint16 rewardPercent, bool flipWon) = coinflip.getCoinflipDayResult(day + 1);
             if (flipWon) {
                 // Same win payout a held backing slice earns: principal + principal * rewardPercent%.
-                uint256 principal = uint256(claim.flipEscrow) * 1e18;
+                uint256 principal = uint256(claim.flipEscrow);
                 flipPaid = principal + (principal * uint256(rewardPercent)) / 100;
                 coinflip.creditFlip(player, flipPaid);
             }
@@ -1121,7 +1121,7 @@ contract sDGNRS {
             uint256 claimableFlip = coinflip.previewClaimCoinflips(address(this));
             (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(address(this));
             uint256 totalFlip = claimableFlip + carry;
-            flipOut = ((totalFlip * amount) / supply / 1e18) * 1e18;
+            flipOut = (totalFlip * amount) / supply;
         }
     }
 
@@ -1211,7 +1211,7 @@ contract sDGNRS {
         // The share is truncated to whole FLIP; the sub-token dust stays as backing for remaining
         // holders. No reserve subtraction: the slice is removed from the backing just below.
         uint256 coinBacking = coinflip.redeemableFlipBacking();
-        uint256 flipEscrowWhole = (coinBacking * amount) / supplyBefore / 1e18;
+        uint256 flipEscrowWhole = (coinBacking * amount) / supplyBefore;
 
         // Snap ETH base to gwei at the source. Eliminates pool↔cumulative-scalar drift by ensuring
         // pool.ethBase × 1e9 reconstructs the exact sum-of-claims at resolve.
@@ -1255,10 +1255,10 @@ contract sDGNRS {
         // credit ONLY if the resolving day's (currentPeriod + 1) coinflip wins — resolved at claim.
         // On a loss it pays nothing, symmetric with the auto-rebuy carry zeroing for every holder on a
         // losing flip. Removing it here keeps the next submit's backing read net of outstanding escrow.
-        uint256 flipEscrowWei;
+        uint256 flipEscrowAmount;
         if (flipEscrowWhole != 0) {
-            flipEscrowWei = flipEscrowWhole * 1e18;
-            coinflip.withdrawRedeemedFlip(flipEscrowWei);
+            flipEscrowAmount = flipEscrowWhole;
+            coinflip.withdrawRedeemedFlip(flipEscrowAmount);
         }
 
         // Composite-keyed per-claim slot for (beneficiary, currentPeriod): records the ETH base
@@ -1283,7 +1283,7 @@ contract sDGNRS {
             claim.activityScore = uint16(game.playerActivityScore(beneficiary)) + 1;
         }
 
-        emit RedemptionSubmitted(beneficiary, amount, ethValueOwed, flipEscrowWei, currentPeriod);
+        emit RedemptionSubmitted(beneficiary, amount, ethValueOwed, flipEscrowAmount, currentPeriod);
     }
 
     /// @dev Pay the redemption from this contract's balance: ETH first, falling back to stETH if the

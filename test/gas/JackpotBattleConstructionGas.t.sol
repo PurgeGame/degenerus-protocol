@@ -96,8 +96,8 @@ contract BattleConstructionTableSeed is CrapsBattleStorage {
         _battles[bytes32(uint256(slot))] = 50;
         _highField[bytes32(uint256(slot))] = 25;
         for (uint256 i = 1; i <= 50; ++i) {
-            _bets[(uint256(slot) << 64) | i] = uint160(address(uint160(0x310000 + i)));
-            _bets[(daySlot << 64) | i] = uint160(address(uint160(0x320000 + i)));
+            _storeBet((uint256(slot) << 64) | i, uint160(address(uint160(0x310000 + i))));
+            _storeBet((daySlot << 64) | i, uint160(address(uint160(0x320000 + i))));
         }
     }
 
@@ -153,8 +153,8 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
         }
         vm.etch(address(crapsBattle), tableCode);
         vm.etch(address(game), gameCode);
-        uint256 added = target * 10_000 ether;
-        uint256 pool = added * PriceLookupLib.priceForLevel(CEILING) * 200 / 1000 ether;
+        uint256 added = target * 10_000;
+        uint256 pool = added * PriceLookupLib.priceForLevel(CEILING) * 200 / 1000;
         vm.prank(address(game));
         JackpotBattle(address(crapsBattle)).lockJackpotBattle(day, pool, CEILING);
         (slot,,,) = JackpotBattle(address(crapsBattle)).jackpotProgress();

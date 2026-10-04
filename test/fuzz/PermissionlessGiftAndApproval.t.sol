@@ -20,7 +20,7 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
     uint8 private constant CURRENCY_FLIP = 1;
     uint8 private constant CURRENCY_WWXRP = 3;
 
-    uint128 private constant MIN_BET_FLIP = 200 ether;
+    uint128 private constant MIN_BET_FLIP = 200;
     uint128 private constant BET_ETH = 0.01 ether;
 
     // Same selectors across the contracts that declare them.
@@ -119,9 +119,9 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
     /// @notice A coinflip deposit gift burns the FUNDER's FLIP, leaves the player's FLIP untouched,
     ///         and credits the stake to the player (the CoinflipDeposit event is keyed on player).
     function testCoinflipDepositGiftNoDrain() public {
-        uint256 amt = 100 ether; // MIN
+        uint256 amt = 100; // MIN
         _fundFlip(gifter, amt);
-        _fundFlip(player, 500 ether);
+        _fundFlip(player, 500);
         uint256 playerBefore = coin.balanceOf(player);
         uint256 gifterBefore = coin.balanceOf(gifter);
 

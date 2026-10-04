@@ -49,7 +49,7 @@ contract CrapsHarness is CrapsBattle {
         pure
         returns (Craps.Bets memory board)
     {
-        uint256 chipFlip = (boardStakeWei / 1 ether) / 10;
+        uint256 chipFlip = (boardStakeWei / 1) / 10;
         uint256 placed;
         (, placed) = _packChips(uint32(packed));
         board = _boardFrom(packed, chipFlip);

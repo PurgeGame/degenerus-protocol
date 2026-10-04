@@ -540,7 +540,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     /// @dev 5% bonus in basis points for coinflip boon
     uint16 private constant LOOTBOX_BOON_BONUS_BPS = 500;
     /// @dev Maximum bonus amount for coinflip boon (5000 FLIP)
-    uint256 private constant LOOTBOX_BOON_MAX_BONUS = 5000 ether;
+    uint256 private constant LOOTBOX_BOON_MAX_BONUS = 5000;
     /// @dev Deity pass base price; the nominal figure BOON_FIXED_WEIGHTED_MAX was derived from,
     ///      not read at runtime.
     uint256 private constant DEITY_PASS_BASE = 24 ether;
@@ -770,12 +770,12 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     /// @dev Coinflip boon cap for max deposit (100k FLIP). FLIP-denominated, so its ETH value
     ///      scales with the ticket price: the nominal figure BOON_PRICE_WEIGHT was derived from,
     ///      not read at runtime.
-    uint256 private constant COINFLIP_BOON_MAX_DEPOSIT = 100_000 ether;
+    uint256 private constant COINFLIP_BOON_MAX_DEPOSIT = 100_000;
 
     /// @dev Decimator boon cap for base amount (50k FLIP). FLIP-denominated, so its ETH value
     ///      scales with the ticket price: the nominal figure BOON_PRICE_WEIGHT was derived from,
     ///      not read at runtime.
-    uint256 private constant DECIMATOR_BOON_CAP = 50_000 ether;
+    uint256 private constant DECIMATOR_BOON_CAP = 50_000;
 
     /// @dev 15% lootbox boost in basis points
     uint16 private constant LOOTBOX_BOOST_15_BONUS_BPS = 1500;

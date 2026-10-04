@@ -70,11 +70,10 @@ interface ICoinflip {
     ///      caller funds the whole stake by burning their own FLIP as a gift credited to
     ///      `player`, leaving the player's winnings untouched. The recycling bonus pays on the
     ///      winnings leg only.
-    ///      Stakes are stored in whole FLIP: the principal is floored to whole FLIP before it is
-    ///      funded (the remainder stays with the funder), bonuses are summed in wei and the total
-    ///      added to the day's stake floors once. CoinflipStakeUpdated reports the accepted stake.
+    ///      Stakes and principal use whole FLIP. Each percentage bonus floors at its
+    ///      calculation boundary before it is added to the day's stake. CoinflipStakeUpdated reports the accepted stake.
     /// @param player The player making the deposit (address(0) or msg.sender for direct deposit).
-    /// @param amount Amount of FLIP to deposit (must be >= 100 FLIP minimum); floored to whole FLIP.
+    /// @param amount Amount of FLIP to deposit (must be >= 100 FLIP minimum).
     /// @custom:reverts AmountLTMin If amount is non-zero but less than 100 FLIP.
     /// @custom:reverts StakeAboveDailyCap If the stake with its bonuses would exceed the player's
     ///                 per-day cap of type(uint32).max whole FLIP; every prior mutation rolls back.
@@ -186,7 +185,7 @@ interface ICoinflip {
     ///      saturates at the player's per-day cap of type(uint32).max whole FLIP rather than
     ///      reverting; CoinflipStakeUpdated reports the amount the lane accepted.
     /// @param player The player receiving the flip credit.
-    /// @param amount Amount of flip credit to add to next day's stake, FLIP wei.
+    /// @param amount Amount of flip credit to add to next day's stake, whole FLIP.
     /// @custom:reverts OnlyFlipCreditors If caller is not an authorized creditor.
     function creditFlip(address player, uint256 amount) external;
 
@@ -254,12 +253,12 @@ interface ICoinflip {
     /// @custom:reverts OnlysDGNRS If caller is not the sDGNRS contract.
     function redeemableFlipBacking() external returns (uint256 backing);
 
-    /// @notice Remove `base` (wei) of sDGNRS's FLIP backing at redemption submit.
+    /// @notice Remove `base` whole FLIP of sDGNRS's FLIP backing at redemption submit.
     /// @dev sDGNRS-only. Waterfall: settled claimable (consumed) → auto-rebuy carry (decremented) —
     ///      sDGNRS holds no wallet balance, so backing lives entirely in these two. Credits nothing;
     ///      the redeemer's escrowed slice is paid later on the resolving day's coinflip win via
     ///      creditFlip. Fail-closed if backing < base.
-    /// @param base Whole-token-aligned FLIP backing (wei) to remove from sDGNRS.
+    /// @param base Whole-FLIP backing to remove from sDGNRS.
     /// @custom:reverts OnlysDGNRS If caller is not the sDGNRS contract.
     function withdrawRedeemedFlip(uint256 base) external;
 
@@ -277,10 +276,10 @@ interface ICoinflip {
 
     /// @notice Get player's current coinflip stake for the next day's flip.
     /// @dev Returns the stake amount deposited for the upcoming flip day. Stakes are whole FLIP
-    ///      (stored as uint32 units), returned in wei. For VAULT and sDGNRS it includes the seed
-    ///      when that day lies in the active seed window.
+    ///      (stored as uint32 units), returned without scaling. For VAULT and sDGNRS it includes
+    ///      the seed when that day lies in the active seed window.
     /// @param player The player to check.
-    /// @return The stake amount in FLIP wei for the next flip.
+    /// @return The stake amount in whole FLIP for the next flip.
     function coinflipAmount(address player) external view returns (uint256);
 
     /// @notice Get player's auto-rebuy configuration.

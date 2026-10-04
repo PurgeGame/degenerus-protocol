@@ -2,7 +2,7 @@
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "affiliateCode",
+    "label": "_affiliateCode",
     "offset": 0,
     "slot": 0,
     "typeLabel": "mapping(bytes32 => struct DegenerusAffiliate.AffiliateCodeInfo)"

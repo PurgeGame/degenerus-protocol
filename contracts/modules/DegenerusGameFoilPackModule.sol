@@ -133,13 +133,13 @@ contract DegenerusGameFoilPackModule is
     // -------------------------------------------------------------------------
 
     /// @dev FLIP face value: one face stakes 1,000 FLIP into the spin.
-    uint256 private constant FLIP_FACE_AMOUNT = 1000e18;
+    uint256 private constant FLIP_FACE_AMOUNT = 1000;
 
     /// @dev WWXRP face value: one face stakes 1 WWXRP into the spin. WWXRP is a worthless
     ///      currency by design — the spin/score is revealed first and the currency only
     ///      after, so a WWXRP outcome is a deliberate dud. The 1-coin stake is cosmetic
     ///      (the lane carries no value); only the ETH and FLIP lanes pay.
-    uint256 private constant WWXRP_FACE_AMOUNT = 1e18;
+    uint256 private constant WWXRP_FACE_AMOUNT = 1;
 
     // Per-score face counts for the graded match (see _tryClaimFoilMatch).
     // One face stakes 1,000 FLIP or priceForLevel(L) ETH — one ticket of value either
@@ -167,19 +167,19 @@ contract DegenerusGameFoilPackModule is
     // ladder's value tracks activity the way the boost that produced it does.
     // Rungs accelerate ~3x against a ~10x rarity step, so the low rung carries the EV
     // (3 golds = 58% of it, 4 golds = 31%) and the tail is a lottery, not a subsidy.
-    uint256 private constant GOLD_LADDER_3 = 20_000e18;
-    uint256 private constant GOLD_LADDER_4 = 80_000e18;
-    uint256 private constant GOLD_LADDER_5 = 250_000e18;
-    uint256 private constant GOLD_LADDER_6 = 750_000e18;
-    uint256 private constant GOLD_LADDER_7 = 2_500_000e18;
-    uint256 private constant GOLD_LADDER_8 = 7_500_000e18;
+    uint256 private constant GOLD_LADDER_3 = 20_000;
+    uint256 private constant GOLD_LADDER_4 = 80_000;
+    uint256 private constant GOLD_LADDER_5 = 250_000;
+    uint256 private constant GOLD_LADDER_6 = 750_000;
+    uint256 private constant GOLD_LADDER_7 = 2_500_000;
+    uint256 private constant GOLD_LADDER_8 = 7_500_000;
 
     /// @dev Kicker on top of the ladder when the pack holds exactly ONE all-gold ticket
     ///      — four golds landing in the SAME ticket rather than scattered, which is
     ///      ~1 pack in 107,000 at score 300 against 1 in 381 for four golds anywhere.
     ///      It pays for the shape, not the count. Two all-gold tickets skip both the
     ///      ladder and this and take the grand.
-    uint256 private constant GOLDEN_TICKET_FLIP = 25_000e18;
+    uint256 private constant GOLDEN_TICKET_FLIP = 25_000;
 
     /// @dev Budget units the grand's own writes cost when a pack pushes it from the
     ///      drain: the futurePrizePool debit, the winner's claimable credit, the
@@ -380,7 +380,7 @@ contract DegenerusGameFoilPackModule is
         uint256 levelQuestPrice = jackpotPhaseFlag
             ? PriceLookupLib.priceForLevel(level + 1)
             : priceWei;
-        (uint256 reward, uint8 qType, bool questCompleted, uint32 streakSnapshot) = quests
+        (uint256 reward, uint8 qType, bool questCompleted, uint32 streakSnapshot, bool afking) = quests
             .handleFoilPurchase(buyer, cost, 0, 0, priceWei, levelQuestPrice);
         if (questCompleted) {
             kickback += reward;
@@ -414,8 +414,11 @@ contract DegenerusGameFoilPackModule is
         // value when a run is active — the same basis the mint path's cachedScore uses for the
         // lootbox EV. The raw score is also frozen into the record and reused as the claim
         // spin's RTP input, so the spin's RTP is fixed at buy (the match resolves later, against the future resolveDay word).
-        (bool afkLive, uint32 afkStreak) = _liveAfkingStreak(buyer);
-        uint256 score = _playerActivityScore(buyer, afkLive ? afkStreak : streakSnapshot);
+        if (afking) {
+            (bool afkLive, uint32 afkStreak) = _liveAfkingStreak(buyer);
+            if (afkLive) streakSnapshot = afkStreak;
+        }
+        uint256 score = _playerActivityScore(buyer, streakSnapshot);
         uint16 multBps = uint16(ActivityCurveLib.foilBoostBps(score));
 
         // The daily request's foil swap freezes this pack before that request; a mid-day
@@ -755,7 +758,7 @@ contract DegenerusGameFoilPackModule is
             _foilSpin(
                 IDegenerusGameDegeneretteModule.resolveFlipSpinsFromBox.selector,
                 player,
-                faces * FLIP_FACE_AMOUNT,
+                faces * FLIP_FACE_AMOUNT * TOKEN_MATH_SCALE,
                 activityScore,
                 seed,
                 symbol
@@ -765,7 +768,7 @@ contract DegenerusGameFoilPackModule is
             _foilSpin(
                 IDegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox.selector,
                 player,
-                faces * WWXRP_FACE_AMOUNT,
+                faces * WWXRP_FACE_AMOUNT * TOKEN_MATH_SCALE,
                 activityScore,
                 seed,
                 symbol

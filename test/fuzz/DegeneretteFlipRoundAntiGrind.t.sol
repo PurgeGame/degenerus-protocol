@@ -67,7 +67,7 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
     /// @dev Per-spin stake well above `MIN_BET_FLIP` (100 FLIP), so a winning bet's payout
     ///      clears `FLIP_ROUND_THRESHOLD` and the collapse actually engages. A stake at the
     ///      minimum would sit under the threshold and only be floored, making the test vacuous.
-    uint128 private constant FLIP_PER_SPIN = 5_000 ether;
+    uint128 private constant FLIP_PER_SPIN = 5_000;
     uint8 private constant SPINS = 3;
 
     address private player;
@@ -174,7 +174,7 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
     function _placeWinningFlipBets(uint48 index, uint256 word) internal {
         _fundFlip(
             player,
-            uint256(FLIP_PER_SPIN) * SPINS * BET_COUNT + 1 ether
+            uint256(FLIP_PER_SPIN) * SPINS * BET_COUNT + 1
         );
         uint32 ticket = _winningTicketFor(index, word);
 

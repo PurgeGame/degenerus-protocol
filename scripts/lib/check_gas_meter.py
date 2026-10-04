@@ -45,6 +45,13 @@ AMBIENT = re.compile(r"\b(?:msg\s*\.\s*sender|tx\s*\.|block\s*\.|blockhash\s*\()
 DRAINS = set("""_seatEntry _runRound _resolveFoilBuyer _bucketAppendRun _bucketAppendLanes
 _rollRemainder""".split())
 
+# This entry allocates a permanent ID; it never derives ticket entropy. Pin the
+# exact access-control statement, rather than exempting the whole function.
+TICKET_AUTH_GUARDS = {
+    ("modules/DegenerusGameTicketModule.sol", "registerAffiliateOwner",
+     "if(msg.sender!=ContractAddresses.AFFILIATE)revertE();"),
+}
+
 
 def compact(code):
     return re.sub(r"\s+", "", code)
@@ -60,7 +67,8 @@ def scan_source(path, source):
         if GAS_READ.search(line):
             reads[(path, fn, compact(line))] += 1
         if (all_ticket or fn in DRAINS) and AMBIENT.search(line):
-            bad.append(f"{path}:{index + 1} ambient input in {fn}: {line.strip()}")
+            if (path, fn, compact(line)) not in TICKET_AUTH_GUARDS:
+                bad.append(f"{path}:{index + 1} ambient input in {fn}: {line.strip()}")
     return reads, bad
 
 

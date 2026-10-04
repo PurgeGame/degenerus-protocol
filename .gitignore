@@ -56,6 +56,7 @@ docs/*
 !docs/DEITY-BOONS.md
 !docs/WWXRP-BOONS.md
 !docs/DEITY-PASS-CUSTOMIZATION.md
+!docs/TOKEN-UNITS.md
 !docs/abi/
 docs/abi/*
 !docs/abi/DeityPassCustomizationRenderer.json

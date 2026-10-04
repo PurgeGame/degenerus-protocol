@@ -65,41 +65,41 @@ contract CrapsProtocolWiringTest is DeployProtocol {
     ///      standing authority with no call site to bound it.
     function test_flipOpensTheBurnSinkToCrapsAndNotTheMint() public {
         vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(PLAYER, 1000 ether);
+        coin.mintForGame(PLAYER, 1000);
 
         vm.prank(ContractAddresses.CRAPS);
-        coin.burnCoin(PLAYER, 400 ether);
-        assertEq(coin.balanceOf(PLAYER), 600 ether, "craps could not burn a stake");
+        coin.burnCoin(PLAYER, 400);
+        assertEq(coin.balanceOf(PLAYER), 600, "craps could not burn a stake");
 
         vm.prank(ContractAddresses.CRAPS);
         vm.expectRevert();
-        coin.mintForGame(PLAYER, 1 ether);
+        coin.mintForGame(PLAYER, 1);
 
         // Negative controls: the gates admit the table, not the world.
         vm.prank(STRANGER);
         vm.expectRevert();
-        coin.mintForGame(PLAYER, 1 ether);
+        coin.mintForGame(PLAYER, 1);
 
         vm.prank(STRANGER);
         vm.expectRevert();
-        coin.burnCoin(PLAYER, 1 ether);
+        coin.burnCoin(PLAYER, 1);
     }
 
     /// @dev Both payout lanes, with a stranger refused at each.
     function test_coinflipHonoursTheCrapsAddressForBothCreditLanes() public {
         vm.prank(ContractAddresses.CRAPS);
-        coinflip.creditFlip(PLAYER, 100 ether);
+        coinflip.creditFlip(PLAYER, 100);
 
         address[] memory players = new address[](1);
         uint256[] memory amounts = new uint256[](1);
         players[0] = PLAYER;
-        amounts[0] = 100 ether;
+        amounts[0] = 100;
         vm.prank(ContractAddresses.CRAPS);
         coinflip.creditFlipBatch(players, amounts);
 
         vm.prank(STRANGER);
         vm.expectRevert();
-        coinflip.creditFlip(PLAYER, 100 ether);
+        coinflip.creditFlip(PLAYER, 100);
 
         vm.prank(STRANGER);
         vm.expectRevert();
@@ -128,7 +128,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         board.place9 = 1;
         // Ten rounds deep. A bankroll of exactly one round is a walk absorbed at zero, which
         // never pays; ten gives the escalator room to leave a remainder the table has to settle.
-        uint128 bankroll = 6000 ether;
+        uint128 bankroll = 6000;
 
         vm.prank(ContractAddresses.GAME);
         coin.mintForGame(PLAYER, uint256(bankroll) * 105 / 100);
@@ -193,7 +193,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
 
         uint32 board = uint32(3 | (3 << 12) | (1 << 15));
         vm.prank(ContractAddresses.GAME);
-        coin.mintForGame(address(vault), 630 ether);
+        coin.mintForGame(address(vault), 630);
         vm.prank(ContractAddresses.CREATOR);
         uint256 betId = vault.crapsEnterBattle(slot, board, 1);
 
@@ -289,8 +289,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         uint256 dueAt = _minerRewardDueAt();
         bool lockedAtStart = game.rngLocked();
         vm.recordLogs();
-        vm.prank(KEEPER);
-        game.mineFlip();
+        this.walkAtNonzeroFee();
         assertGt(crapsBattle.bonusCursorOf(slot), 0, "the crank did not walk the shut field");
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 paid = _assertMinerPaysAsStake(logs, coinflip.coinflipAmount(KEEPER) - before);
@@ -301,6 +300,15 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         assertEq(paid, _expectedMinerPay(measured, lockedAtStart, dueAt), "the walk is paid its measured gas");
         assertGt(paid, 0, "the walk did not pay");
         assertEq(coin.balanceOf(KEEPER), 0, "the walk bounty minted liquid FLIP");
+    }
+
+    /// @dev Keep the fee cheat and protocol call in one execution frame. Under --isolate,
+    ///      a top-level protocol call rebuilds its transaction environment after vm.fee.
+    function walkAtNonzeroFee() external {
+        require(msg.sender == address(this));
+        vm.fee(1 gwei);
+        vm.prank(KEEPER);
+        game.mineFlip();
     }
 
     /// @dev THE ADVANCE STILL COMES FIRST. The craps leg is deliberately in the ELSE branch: an
@@ -401,7 +409,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
             uint256[] memory amt = new uint256[](n);
             for (uint256 i = 0; i < n; ++i) {
                 who[i] = address(uint160(uint256(keccak256(abi.encode("cold", s, i)))));
-                amt[i] = 1 ether;
+                amt[i] = 1;
             }
             vm.prank(ContractAddresses.CRAPS);
             uint256 g = gasleft();
@@ -423,7 +431,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         address[] memory one = new address[](1);
         uint256[] memory oneAmt = new uint256[](1);
         one[0] = repeat;
-        oneAmt[0] = 1 ether;
+        oneAmt[0] = 1;
         vm.startPrank(ContractAddresses.CRAPS);
         uint256 gc = gasleft();
         coinflip.creditFlipBatch(one, oneAmt);
@@ -503,10 +511,8 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         uint256 cap = 0.5 gwei << steps;
         uint256 rate = 1 gwei < cap ? 1 gwei : cap;
         uint256 bps = (3_000 + 4_500 * steps) * (lockedAtStart ? 2 : 1);
-        uint256 pay = (measured - 1_000_000) * rate * 1000 ether * bps / (game.mintPrice() * 10_000);
-        if (pay == 0) return 0;
-        // Coinflip stakes are whole FLIP: at least 1 FLIP, larger pay floored.
-        return pay < 1 ether ? 1 ether : (pay / 1 ether) * 1 ether;
+        uint256 legacy = (measured - 1_000_000) * rate * 1000 ether * bps / (game.mintPrice() * 10_000);
+        return legacy == 0 ? 0 : legacy < 1 ether ? 1 : legacy / 1 ether;
     }
 
     /// @dev Crank `mineFlip` until `slot` is armed, feeding the CURSOR's own pending word each

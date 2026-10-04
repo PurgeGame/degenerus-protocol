@@ -1,5 +1,8 @@
 # Degenerette bet queue
 
+FLIP has zero decimals: pass integer token amounts directly to the API. ETH remains
+wei. The packed FLIP stake already used whole tokens and keeps its existing width.
+
 Degenerette bets resolve the same way lootboxes do: a permissionless miner crank
 walks a queue and settles what it can afford, instead of the player or a
 dedicated resolver paying to settle each bet. This replaces the old per-player

@@ -35,10 +35,10 @@ contract CoinflipPackedStake is DeployProtocol {
     address internal constant VAULT = ContractAddresses.VAULT;
     address internal constant SDGNRS = ContractAddresses.SDGNRS;
 
-    uint256 internal constant UNIT = 1 ether;
+    uint256 internal constant UNIT = 1;
     uint256 internal constant LANE_MAX = type(uint32).max;
     uint256 internal constant CAP = LANE_MAX * UNIT;
-    uint256 internal constant SEED = 200_000 ether;
+    uint256 internal constant SEED = 200_000;
     bytes32 internal constant STAKE_SIG = keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
 
     CoinflipCodecHarness internal codec;
@@ -135,11 +135,11 @@ contract CoinflipPackedStake is DeployProtocol {
         }
     }
 
-    function test_WriteFloorsToWholeFlipAndSaturates() public {
+    function test_WritePreservesWholeFlipAndSaturates() public {
         address p = address(0xB0B);
-        assertEq(codec.setStake(9, p, 1234.999 ether), 1234 ether, "write returns the stored whole FLIP");
-        assertEq(codec.stake(9, p), 1234 ether);
-        assertEq(codec.setStake(9, p, 0.999 ether), 0, "sub-FLIP floors to zero");
+        assertEq(codec.setStake(9, p, 1234), 1234, "write returns the stored whole FLIP");
+        assertEq(codec.stake(9, p), 1234);
+        assertEq(codec.setStake(9, p, 0), 0, "zero clears the lane");
         assertEq(codec.setStake(9, p, CAP), CAP, "the lane holds exactly type(uint32).max FLIP");
         assertEq(codec.setStake(9, p, CAP + UNIT), CAP, "one FLIP over the cap saturates");
         assertEq(codec.setStake(9, p, type(uint256).max), CAP, "an oversized input saturates");
@@ -180,24 +180,22 @@ contract CoinflipPackedStake is DeployProtocol {
     //                 2. AUTOMATIC CREDITS: floor + saturate
     // =====================================================================
 
-    function test_FractionalCreditsFloorPerAdditionWithExactEvents() public {
+    function test_IntegerCreditsPreserveUnitsWithExactEvents() public {
         uint24 day = _targetDay();
         vm.recordLogs();
-        _credit(player, 0.75 ether);
+        _credit(player, 1);
         (uint24 d, uint256 amount, uint256 total) = _stakeEvent(vm.getRecordedLogs(), player);
         assertEq(d, day);
-        assertEq(amount, 0, "a sub-FLIP credit adds nothing");
-        assertEq(total, 0, "and reports the actual total");
-        _credit(player, 0.75 ether);
-        assertEq(coinflip.coinflipAmount(player), 0, "two 0.75 FLIP credits do not accumulate");
-
+        assertEq(amount, 1);
+        assertEq(total, 1);
+        _credit(player, 0);
+        assertEq(coinflip.coinflipAmount(player), 1, "zero credit adds nothing");
         vm.recordLogs();
-        _credit(player, 1000.75 ether);
+        _credit(player, 1001);
         (, amount, total) = _stakeEvent(vm.getRecordedLogs(), player);
-        assertEq(amount, 1000 ether, "delta is the accepted whole FLIP");
-        assertEq(total, 1000 ether);
-        assertEq(coinflip.coinflipAmount(player), 1000 ether);
-        assertEq(_rawStake(day, player), 1000 ether, "raw lane agrees with the view");
+        assertEq(amount, 1001);
+        assertEq(total, 1002);
+        assertEq(_rawStake(day, player), 1002, "raw lane agrees with the view");
     }
 
     function test_CreditSaturatesAtTheCapWithPartialAcceptance() public {
@@ -205,13 +203,13 @@ contract CoinflipPackedStake is DeployProtocol {
         assertEq(coinflip.coinflipAmount(player), CAP - UNIT);
 
         vm.recordLogs();
-        _credit(player, 5 ether);
+        _credit(player, 5);
         (, uint256 amount, uint256 total) = _stakeEvent(vm.getRecordedLogs(), player);
         assertEq(amount, UNIT, "only the room left is accepted");
         assertEq(total, CAP);
 
         vm.recordLogs();
-        _credit(player, 5 ether);
+        _credit(player, 5);
         (, amount, total) = _stakeEvent(vm.getRecordedLogs(), player);
         assertEq(amount, 0, "a credit at the cap adds nothing but still reports");
         assertEq(total, CAP);
@@ -219,32 +217,32 @@ contract CoinflipPackedStake is DeployProtocol {
         assertEq(_rawStake(_targetDay() + 1, player), 0, "no spill into the next day");
     }
 
-    function test_BatchAndPairDuplicatesFloorEachLeg() public {
+    function test_BatchAndPairDuplicatesCreditEachLeg() public {
         address[] memory players = new address[](2);
         uint256[] memory amounts = new uint256[](2);
         players[0] = player;
         players[1] = player;
-        amounts[0] = 1.5 ether;
-        amounts[1] = 1.5 ether;
+        amounts[0] = 1;
+        amounts[1] = 1;
         vm.prank(GAME);
         coinflip.creditFlipBatch(players, amounts);
-        assertEq(coinflip.coinflipAmount(player), 2 ether, "each batch leg floors on its own");
+        assertEq(coinflip.coinflipAmount(player), 2, "duplicate batch recipients accumulate both legs");
 
         vm.recordLogs();
         vm.prank(GAME);
-        coinflip.creditFlipPair(player, 0.5 ether, player, 0.5 ether);
+        coinflip.creditFlipPair(player, 1, player, 1);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 events;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter == address(coinflip) && logs[i].topics[0] == STAKE_SIG) {
                 (uint256 amount, uint256 total) = abi.decode(logs[i].data, (uint256, uint256));
-                assertEq(amount, 0, "sub-FLIP pair legs add nothing");
-                assertEq(total, 2 ether);
+                assertEq(amount, 1, "each integer leg adds one token");
+                assertEq(total, 3 + events);
                 ++events;
             }
         }
         assertEq(events, 2, "both nonzero legs report");
-        assertEq(coinflip.coinflipAmount(player), 2 ether);
+        assertEq(coinflip.coinflipAmount(player), 4);
 
         // A recipient already at the cap never bricks a batch.
         _credit(player, CAP);
@@ -257,21 +255,21 @@ contract CoinflipPackedStake is DeployProtocol {
     //                 3. MANUAL DEPOSITS: normalize + cap revert
     // =====================================================================
 
-    function test_SelfDepositNormalizesPrincipalAndLeavesTheRemainderInTheWallet() public {
-        _mint(player, 200 ether);
+    function test_SelfDepositSpendsExactIntegerPrincipal() public {
+        _mint(player, 200);
         vm.recordLogs();
         vm.prank(player);
-        coinflip.depositCoinflip(address(0), 100.9 ether);
+        coinflip.depositCoinflip(address(0), 100);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         (, uint256 amount, uint256 total) = _stakeEvent(logs, player);
-        assertEq(coin.balanceOf(player), 100 ether, "0.9 FLIP stays with the funder");
+        assertEq(coin.balanceOf(player), 100, "only the principal leaves the wallet");
         assertEq(total, _whole(total), "the stake is whole FLIP");
-        assertGe(amount, 100 ether, "the normalized principal (plus any quest bonus) is staked");
+        assertGe(amount, 100, "the normalized principal (plus any quest bonus) is staked");
         bytes32 depositSig = keccak256("CoinflipDeposit(address,uint256)");
         bool seen;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter == address(coinflip) && logs[i].topics[0] == depositSig) {
-                assertEq(abi.decode(logs[i].data, (uint256)), 100 ether, "CoinflipDeposit reports the funded principal");
+                assertEq(abi.decode(logs[i].data, (uint256)), 100, "CoinflipDeposit reports the funded principal");
                 seen = true;
             }
         }
@@ -280,28 +278,28 @@ contract CoinflipPackedStake is DeployProtocol {
 
         vm.prank(player);
         vm.expectRevert(Coinflip.AmountLTMin.selector);
-        coinflip.depositCoinflip(address(0), 99.999 ether);
+        coinflip.depositCoinflip(address(0), 99);
     }
 
     function test_SelfDepositOverTheCapRevertsAndRollsBack() public {
-        _credit(player, CAP - 100_000 ether);
-        _mint(player, 200_000 ether);
+        _credit(player, CAP - 100_000);
+        _mint(player, 200_000);
         vm.prank(player);
-        coinflip.depositCoinflip(address(0), 100 ether);
+        coinflip.depositCoinflip(address(0), 100);
         uint256 stake = coinflip.coinflipAmount(player);
-        assertGe(stake, CAP - 100_000 ether + 100 ether, "a deposit inside the cap is accepted");
+        assertGe(stake, CAP - 100_000 + 100, "a deposit inside the cap is accepted");
         uint256 wallet = coin.balanceOf(player);
 
         vm.prank(player);
         vm.expectRevert(Coinflip.StakeAboveDailyCap.selector);
-        coinflip.depositCoinflip(address(0), 100_000 ether);
+        coinflip.depositCoinflip(address(0), 100_000);
         assertEq(coin.balanceOf(player), wallet, "the burn rolled back");
         assertEq(coinflip.coinflipAmount(player), stake, "nothing was added");
     }
 
     function test_RecycleBonusPushingOverTheCapRevertsAndRestoresTheBank() public {
         // Bank a win: the payout is whole FLIP, its 0.75% recycle bonus is what overflows.
-        uint256 stake = 10_000 ether;
+        uint256 stake = 10_000;
         _mint(player, stake);
         vm.prank(operator);
         coinflip.depositCoinflip(player, stake);
@@ -325,27 +323,27 @@ contract CoinflipPackedStake is DeployProtocol {
     }
 
     function test_OperatorAndGiftDepositsOverTheCapRevert() public {
-        _credit(player, CAP - 50 ether);
-        _mint(player, 100 ether);
-        _mint(gifter, 100 ether);
+        _credit(player, CAP - 50);
+        _mint(player, 100);
+        _mint(gifter, 100);
 
         vm.prank(operator);
         vm.expectRevert(Coinflip.StakeAboveDailyCap.selector);
-        coinflip.depositCoinflip(player, 100 ether);
+        coinflip.depositCoinflip(player, 100);
 
         vm.prank(gifter);
         vm.expectRevert(Coinflip.StakeAboveDailyCap.selector);
-        coinflip.depositCoinflip(player, 100 ether);
+        coinflip.depositCoinflip(player, 100);
 
-        assertEq(coin.balanceOf(player), 100 ether);
-        assertEq(coin.balanceOf(gifter), 100 ether);
+        assertEq(coin.balanceOf(player), 100);
+        assertEq(coin.balanceOf(gifter), 100);
     }
 
-    function test_GiftDepositBelowMinimumAfterNormalizationIsRejected() public {
-        _mint(gifter, 100 ether);
+    function test_GiftDepositBelowMinimumIsRejected() public {
+        _mint(gifter, 100);
         vm.prank(gifter);
         vm.expectRevert(Coinflip.AmountLTMin.selector);
-        coinflip.depositCoinflip(player, 100 ether - 1);
+        coinflip.depositCoinflip(player, 100 - 1);
     }
 
     // =====================================================================
@@ -365,7 +363,7 @@ contract CoinflipPackedStake is DeployProtocol {
         _warpToDay(40);
         uint24 first = _targetDay();
         // sDGNRS already holds a stake on the window's first day.
-        _credit(SDGNRS, 5_000.5 ether);
+        _credit(SDGNRS, 5_000);
         vm.recordLogs();
         vm.prank(GAME);
         coinflip.armCenturySeed(100);
@@ -373,11 +371,11 @@ contract CoinflipPackedStake is DeployProtocol {
         for (uint256 i; i < logs.length; ++i) {
             assertTrue(logs[i].topics[0] != STAKE_SIG, "arming emits no stake event");
         }
-        assertEq(_rawStake(first, SDGNRS), 5_000 ether, "the lane keeps its stored stake only");
+        assertEq(_rawStake(first, SDGNRS), 5_000, "the lane keeps its stored stake only");
         for (uint24 i; i < 20; ++i) {
             assertEq(_rawStake(first + i, VAULT), 0, "no vault lane written");
         }
-        assertEq(coinflip.coinflipAmount(SDGNRS), 5_000 ether + SEED, "the seed adds to the lane");
+        assertEq(coinflip.coinflipAmount(SDGNRS), 5_000 + SEED, "the seed adds to the lane");
         assertEq(coinflip.coinflipAmount(VAULT), SEED);
 
         // A lane at the cap never stalls the arm: arming writes no lane, and the seed rides on top
@@ -390,31 +388,31 @@ contract CoinflipPackedStake is DeployProtocol {
         assertEq(coinflip.coinflipAmount(SDGNRS), CAP + SEED, "the seed is held outside the lane");
     }
 
-    function test_SdgnrsBackingFloorsWhileFlipDecirculatesTheWholeTransfer() public {
+    function test_SdgnrsBackingMatchesTheWholeTransfer() public {
         // Day 3 is a deploy-window day: the view carries the seed, the lane and its event do not.
         uint256 before = coinflip.coinflipAmount(SDGNRS);
         assertEq(before, SEED);
         vm.recordLogs();
         vm.prank(COIN);
-        coinflip.creditSdgnrsBacking(100.5 ether);
+        coinflip.creditSdgnrsBacking(100);
         (, uint256 amount, uint256 total) = _stakeEvent(vm.getRecordedLogs(), SDGNRS);
-        assertEq(amount, 100 ether);
-        assertEq(total, 100 ether, "the event reports the stored lane");
-        assertEq(coinflip.coinflipAmount(SDGNRS), before + 100 ether);
+        assertEq(amount, 100);
+        assertEq(total, 100, "the event reports the stored lane");
+        assertEq(coinflip.coinflipAmount(SDGNRS), before + 100);
 
         // A real transfer into sDGNRS: FLIP removes the full amount from supply.
-        _mint(player, 50.5 ether);
+        _mint(player, 50);
         uint256 supply = coin.totalSupply();
         uint256 stake = coinflip.coinflipAmount(SDGNRS);
         vm.prank(player);
-        coin.transfer(SDGNRS, 50.5 ether);
-        assertEq(supply - coin.totalSupply(), 50.5 ether, "the whole transfer left circulation");
-        assertEq(coinflip.coinflipAmount(SDGNRS) - stake, 50 ether, "only the whole FLIP becomes stake");
+        coin.transfer(SDGNRS, 50);
+        assertEq(supply - coin.totalSupply(), 50, "the whole transfer left circulation");
+        assertEq(coinflip.coinflipAmount(SDGNRS) - stake, 50, "the full transfer becomes stake");
 
         // Backing at the cap saturates without reverting FLIP's transfer path.
         _credit(SDGNRS, CAP);
         vm.prank(COIN);
-        coinflip.creditSdgnrsBacking(1 ether);
+        coinflip.creditSdgnrsBacking(1);
         assertEq(_rawStake(_targetDay(), SDGNRS), CAP, "the stored lane saturates");
         assertEq(coinflip.coinflipAmount(SDGNRS), CAP + SEED, "the seed rides on top of the saturated lane");
     }
@@ -424,9 +422,9 @@ contract CoinflipPackedStake is DeployProtocol {
     // =====================================================================
 
     function test_PreviewMatchesClaimAndClearedLanesCannotReplay() public {
-        _mint(player, 1_000 ether);
+        _mint(player, 1_000);
         vm.prank(player);
-        coinflip.depositCoinflip(address(0), 1_000 ether);
+        coinflip.depositCoinflip(address(0), 1_000);
         uint256 stakeDay3 = coinflip.coinflipAmount(player);
         _resolveDay(3, true);
         (uint16 r,) = coinflip.getCoinflipDayResult(3);

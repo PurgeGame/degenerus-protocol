@@ -18,7 +18,7 @@ import {VmSafe} from "forge-std/Vm.sol";
 contract RecycleBonusClaimablePurchase is DeployProtocol {
     uint256 private constant BALANCES_PACKED_SLOT = 7;
     uint256 private constant POOL_SLOT = 1; // claimablePool = bits [128,256)
-    uint256 private constant PRICE_COIN_UNIT = 1000 ether;
+    uint256 private constant PRICE_COIN_UNIT = 1000;
     uint256 private constant QTY_SCALE = 100;
 
     bytes32 private constant STAKE_UPDATED_SIG =

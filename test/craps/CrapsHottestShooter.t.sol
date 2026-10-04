@@ -55,7 +55,7 @@ contract CrapsHottestShooterTest is CrapsPins {
         uint256 lane = 2 | (uint256(123) << 32) | (uint256(2) << 137) | (1 << 169);
         table.prime(SLOT, 2, 0, 0, _heatForSeat(2, 2, 38), lane);
         uint256 before = table.sideboard(SLOT);
-        uint256 pot = 1001 ether + 7;
+        uint256 pot = 1001 + 7;
         table.pay(SLOT, winner, pot, 0, WORD);
         assertEq(coinflip.staked(bob), pot / 10, "high roller is eligible for the regular prize");
         assertEq(coinflip.staked(alice), pot - pot / 10);
@@ -66,8 +66,8 @@ contract CrapsHottestShooterTest is CrapsPins {
     function test_battleWinnerCanAlsoBeHottest() public {
         uint256 winner = _bet(SLOT, 1, alice, false);
         table.prime(SLOT, 1, 0, 0, _heatForSeat(1, 1, 9), 0);
-        table.pay(SLOT, winner, 1234 ether, 0, WORD);
-        assertEq(coinflip.staked(alice), 1234 ether);
+        table.pay(SLOT, winner, 1234, 0, WORD);
+        assertEq(coinflip.staked(alice), 1234);
     }
 
     function test_dayAndAwardedSeatsUseDenseRotationOrdinals() public {
@@ -77,14 +77,14 @@ contract CrapsHottestShooterTest is CrapsPins {
         for (uint256 seat = 2; seat <= 3; ++seat) {
             table.prime(SLOT, 1, 1, 1, _heatForSeat(seat, 3, 20), 0);
             vm.recordLogs();
-            table.pay(SLOT, winner, 1000 ether, 0, WORD);
+            table.pay(SLOT, winner, 1000, 0, WORD);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             bool found;
             for (uint256 i; i < logs.length; ++i) if (logs[i].topics[0] == HOT_EVENT) {
                 found = true;
                 assertEq(uint256(logs[i].topics[1]), seat == 2 ? dayId : awardId);
                 (uint16 rolls, uint256 paid) = abi.decode(logs[i].data, (uint16, uint256));
-                assertEq(rolls, 20); assertEq(paid, 100 ether);
+                assertEq(rolls, 20); assertEq(paid, 100);
             }
             assertTrue(found);
         }
@@ -94,8 +94,8 @@ contract CrapsHottestShooterTest is CrapsPins {
         uint256 winner = _bet(SLOT, 1, alice, false);
         _bet(SLOT, 2, bob, false);
         table.prime(SLOT, 2, 0, 0, _heatForSeat(2, 2, 27), 0);
-        uint256 pot = 1_000_000 ether;
-        uint256 boost = 900_000 ether;
+        uint256 pot = 1_000_000;
+        uint256 boost = 900_000;
         table.pay(SLOT, winner, pot, boost, WORD);
         (uint256 an, uint256 ah) = table.passCreditsOf(alice);
         (uint256 bn, uint256 bh) = table.passCreditsOf(bob);
@@ -109,14 +109,14 @@ contract CrapsHottestShooterTest is CrapsPins {
     function test_customBattleKeepsItsWholePot() public {
         uint64 slot = (1 << 40) + 1;
         uint256 winner = _bet(slot, 1, alice, false);
-        table.pay(slot, winner, 1000 ether, 0, WORD);
-        assertEq(coinflip.staked(alice), 1000 ether);
+        table.pay(slot, winner, 1000, 0, WORD);
+        assertEq(coinflip.staked(alice), 1000);
         assertEq(coinflip.credits(), 1);
     }
 
     function test_externalCallerCannotInvokePayout() public {
         vm.expectRevert(JackpotBattle.OnlyTableSelf.selector);
-        IReadCohortLifecycle(address(table)).payBattlePot(SLOT, bytes32(uint256(SLOT)), 1, 1000 ether, 0, WORD);
+        IReadCohortLifecycle(address(table)).payBattlePot(SLOT, bytes32(uint256(SLOT)), 1, 1000, 0, WORD);
     }
 
     function test_zeroPotDoesNotCreateCredit() public {

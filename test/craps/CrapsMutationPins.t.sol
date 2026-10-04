@@ -10,7 +10,7 @@ import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 
 contract PinHarness is CrapsViews {
     function isHighOf(uint256 betId) external view returns (bool) {
-        return _bets[betId] & _BET_HIGH_BIT != 0;
+        return _loadBet(betId) & _BET_HIGH_BIT != 0;
     }
 
     function customSlotBase() external pure returns (uint256) {
@@ -30,7 +30,7 @@ contract PinHarness is CrapsViews {
 ///         no test on it, pinned here.
 contract CrapsMutationPins is CrapsPins {
     PinHarness internal craps;
-    uint128 internal constant LW = 600e18;
+    uint128 internal constant LW = 600;
     uint24 internal constant SU = 0;
     uint256 internal constant PLAIN_WORD = 40 << 8;
 
@@ -80,7 +80,7 @@ contract CrapsMutationPins is CrapsPins {
     ///         never the day-ticket rule that keys on `slot % 8 == 0` for scheduled slots.
     function test_eighthCustomBattleAmendsUnderTheCustomClose() public {
         uint40 close = uint40(vm.getBlockTimestamp() + 1 hours);
-        uint32 played = uint32(LW / 1 ether);
+        uint32 played = uint32(LW / 1);
         uint64 slot;
         for (uint256 i; i < 8; ++i) {
             vm.prank(vaultOwner);
@@ -111,7 +111,7 @@ contract CrapsMutationPins is CrapsPins {
     ///         at two is then a high seat, one is the ordinary seat, and anything else is refused.
     function test_customBattleHighLaneOfTwoIsAHighSeat() public {
         uint40 close = uint40(vm.getBlockTimestamp() + 1 hours);
-        uint32 played = uint32(LW / 1 ether);
+        uint32 played = uint32(LW / 1);
         vm.prank(vaultOwner);
         uint64 slot = craps.createBattle(played, 2, 5, SU, close, true, 2);
 

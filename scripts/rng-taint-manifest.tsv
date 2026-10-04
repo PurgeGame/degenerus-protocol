@@ -334,3 +334,9 @@ PURE-DERIVE	ARG	TicketEntropy.queueStart	_roundPhase	modules/DegenerusGameTicket
 PURE-DERIVE	PARAM	entropy	queueStart	libraries/TicketEntropy.sol	Committed cohort word; domain-separated rotation depends only on the sealed key, frozen length and word.
 PURE-DERIVE	PARAM	seed	replacement	libraries/GoldSixLib.sol	Immutable candidate LCG state, full round seed, foil-line seed or daily root; separate replacement domain and no mutable financial input.
 PURE-DERIVE	PARAM	word	daily	libraries/GoldSixLib.sol	Committed daily word supplies the independent 1/6 keep gate and seven-way replacement hash.
+NOT-RNG	PARAM	earningsWord	_ensureBootstrapIdentity	DegenerusAffiliate.sol	Packed affiliate earnings and immutable upline IDs; contains no RNG value.
+NOT-RNG	PARAM	word	_purchaseWinner	DegenerusAffiliate.sol	Packed affiliate earnings and immutable upline IDs; contains no RNG value.
+NOT-RNG	PARAM	word	_recordEarnings	DegenerusAffiliate.sol	Packed affiliate earnings and immutable upline IDs; contains no RNG value.
+NOT-RNG	PARAM	word	_routeCache	DegenerusAffiliate.sol	Packed affiliate earnings and immutable upline IDs; contains no RNG value.
+NOT-RNG	PARAM	word	_storeBet	storage/CrapsBattleStorage.sol	Packed bet or day membership; authenticates a calendar day tag, with no RNG value.
+NOT-RNG	PARAM	word	_storeDaySeat	storage/CrapsBattleStorage.sol	Packed bet or day membership; authenticates a calendar day tag, with no RNG value.

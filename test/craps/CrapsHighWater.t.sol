@@ -36,7 +36,7 @@ contract WaterHarness is CrapsViews {
 
     function settlementAt(uint256 betId) external view returns (Settlement memory) {
         uint256 slot = betId >> 64;
-        return _settlementOf(betId, _bets[betId], _slotWindow(slot), _wordAt(_indexOf(slot)));
+        return _settlementOf(betId, _loadBet(betId), _slotWindow(slot), _wordAt(_indexOf(slot)));
     }
 
     /// @dev A slot's terms, so a fixture can drive the engine on exactly what a settlement did.
@@ -52,9 +52,9 @@ contract WaterHarness is CrapsViews {
     /// @dev The board a slip actually PLAYS — its own chips grown by the ones the dice place.
     function drawnBoardOf(uint256 betId) external view returns (Craps.Bets memory board) {
         uint64 slot = uint64(betId >> 64);
-        uint256 header = _bets[betId];
+        uint256 header = _loadBet(betId);
         Window memory w = _slotWindow(slot);
-        uint256 chipFlip = (w.played / 1 ether) / BONUS_CHIPS;
+        uint256 chipFlip = (w.played / 1) / BONUS_CHIPS;
         uint256 packed = (header >> _BET_CHIPS_SHIFT) & _BET_CHIPS_MASK;
         uint256 placed;
         (, placed) = _packChips(uint32(packed));
@@ -83,7 +83,7 @@ contract WaterHarness is CrapsViews {
 
     /// @dev A bet header, so the synthesized winner is a real address carrying a real standing.
     function writeBet(uint256 betId, address player, uint256 standing) external {
-        _bets[betId] = uint256(uint160(player)) | (standing << _BET_SCORE_SHIFT);
+        _storeBet(betId, uint256(uint160(player)) | (standing << _BET_SCORE_SHIFT));
     }
 
     /// @dev THE SHIPPED FOLD, and — on the seat that completes the field — the shipped payout,
@@ -94,11 +94,11 @@ contract WaterHarness is CrapsViews {
         Window memory w;
         w.key = key;
         w.bound = uint48(slot);
-        w.bankroll = uint128(bankrollFlip * 1 ether);
-        w.goal = uint128(bankrollFlip * SCHED_GOAL * 1 ether);
-        w.played = (bankrollFlip / _SCHED_BANK_MULT) * 1 ether;
+        w.bankroll = uint128(bankrollFlip * 1);
+        w.goal = uint128(bankrollFlip * SCHED_GOAL * 1);
+        w.played = (bankrollFlip / _SCHED_BANK_MULT) * 1;
         // Synthetic scheduled fields must enter the real completion registry.
-        _slotIndex[slot] = 1;
+        _setSlotIndex(slot, 1);
         (bool registered,) = address(this).call(
             abi.encodeWithSignature("registerRngSlot(uint48,uint64,bytes32)", uint48(0), slot, key)
         );
@@ -110,8 +110,8 @@ contract WaterHarness is CrapsViews {
     function goalScore(uint256 peakFlip, uint256 endFlip, uint256 standing) external pure returns (uint256) {
         Settlement memory s;
         s.stop = Craps.SlipStop.Goal;
-        s.peak = peakFlip * 1 ether;
-        s.won = endFlip * 1 ether;
+        s.peak = peakFlip * 1;
+        s.won = endFlip * 1;
         return _compositeOf(s);
     }
 }
@@ -467,16 +467,16 @@ contract CrapsHighWaterTest is CrapsPins {
 
     function _goal(uint256 peakFlip, uint256 endFlip) internal pure returns (CrapsBattle.Settlement memory s) {
         s.stop = Craps.SlipStop.Goal;
-        s.peak = peakFlip * 1 ether;
-        s.won = endFlip * 1 ether;
+        s.peak = peakFlip * 1;
+        s.won = endFlip * 1;
         s.handsPlayed = 11;
     }
 
     function _bust(uint256 hands, uint256 endFlip) internal pure returns (CrapsBattle.Settlement memory s) {
         s.stop = Craps.SlipStop.Bust;
         s.handsPlayed = hands;
-        s.won = endFlip * 1 ether;
-        s.peak = 1e12 ether; // a bust's high point must reach neither field
+        s.won = endFlip * 1;
+        s.peak = 1e12; // a bust's high point must reach neither field
     }
 
     /// @dev THE SCHEDULED LADDER, in order: a goal beats every bust; among goals the larger high
@@ -582,7 +582,8 @@ contract CrapsCustomBoundaryTest is CrapsPins {
             CrapsBattle.Settlement memory s = craps.settlementAt(betId);
 
             CrapsBattle.Window memory w = craps.windowOf(slot);
-            (uint256 bank, uint256 goal) = (w.bankroll, w.goal);
+            // The engine plays in 10^18 sub-units per whole FLIP and pays the floored whole result.
+            (uint256 bank, uint256 goal) = (uint256(w.bankroll) * 1e18, uint256(w.goal) * 1e18);
             Craps.SlipResult memory bare = craps.slipUnder(
                 craps.drawnBoardOf(betId),
                 craps.seedForSlot(slot),
@@ -593,7 +594,7 @@ contract CrapsCustomBoundaryTest is CrapsPins {
                 craps.betOf(betId).player,
                 0
             );
-            assertEq(s.won, bare.bankrollOut, "a custom copy did not settle to the bare legacy engine");
+            assertEq(s.won, bare.bankrollOut / 1e18, "a custom copy did not settle to the bare legacy engine");
             assertEq(s.handsPlayed, bare.handsPlayed, "a custom copy played a different number of shooters");
             assertEq(s.totalRolls, bare.totalRolls, "a custom copy threw a different number of dice");
 
@@ -609,8 +610,8 @@ contract CrapsCustomBoundaryTest is CrapsPins {
                 craps.betOf(betId).player,
                 craps.shooterBoostTerms(7)
             );
-            if (scheduled.bankrollOut != bare.bankrollOut) {
-                assertTrue(s.won != scheduled.bankrollOut, "a custom copy settled under the scheduled engine");
+            if (scheduled.bankrollOut / 1e18 != bare.bankrollOut / 1e18) {
+                assertTrue(s.won != scheduled.bankrollOut / 1e18, "a custom copy settled under the scheduled engine");
             }
         }
     }
@@ -622,7 +623,7 @@ contract CrapsCustomBoundaryTest is CrapsPins {
         uint24 day = craps.currentDayIndex();
         uint256 stakedBefore = craps.dayStaked(day);
         uint256 highBefore = craps.highStakedOf(day);
-        craps.seedProgressive(1_000_000 ether);
+        craps.seedProgressive(1_000_000);
         uint256 poolBefore = craps.progressivePool();
         uint256 armsBefore = coinflip.diceRunArms();
 
@@ -741,7 +742,7 @@ contract CrapsCustomBoundaryTest is CrapsPins {
         uint64 slot = uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + PER + 1);
         vm.warp(vm.getBlockTimestamp() + 5 hours);
         _setWord(craps.armWindow(slot), uint256(keccak256("permute")));
-        craps.seedProgressive(1_000_000 ether);
+        craps.seedProgressive(1_000_000);
         bytes32 key = craps.keyOfSlot(slot);
 
         uint64[3] memory winner;

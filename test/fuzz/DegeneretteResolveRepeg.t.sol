@@ -98,8 +98,8 @@ contract DegeneretteResolveRepeg is DeployProtocol {
         while (uint256(keccak256(abi.encode(word, player, uint256(1), BET_SURVIVAL_TAG))) & 1 == 0) ++word;
         uint32 ticket = _winningTicketFor(index, word);
 
-        _fundFlip(player, 1_000 ether);
-        uint64 b1 = _placeBet(CURRENCY_FLIP, 200 ether, 2, ticket);
+        _fundFlip(player, 1_000);
+        uint64 b1 = _placeBet(CURRENCY_FLIP, 200, 2, ticket);
         uint64 b0 = _placeBet(CURRENCY_ETH, 0.01 ether, 2, ticket);
         uint64 b2 = _placeBet(CURRENCY_ETH, 0.01 ether, 2, ticket);
 

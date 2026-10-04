@@ -40,6 +40,10 @@ enum MintPaymentKind {
 ///      payout phase (jackpotPhase()==true) once the prize target is met, then the level advances.
 ///      Ticket purchases stay open in both phases. gameOver() is terminal.
 interface IDegenerusGame {
+    /// @notice Affiliate-only permanent identity allocation; optional caches return zero at capacity.
+    function registerAffiliateOwner(address owner, bool required) external returns (uint32 id);
+    /// @notice Read a raw storage slot; used for permanent identity lookups with pinned roots.
+    function extsload(bytes32 slot) external view returns (bytes32 value);
     /// @notice Allowed read consumer: 0 blocked, 1 redemption, 2 AFK, 3 boxes/bets, 4 Decimator, 5 Craps, 6 complete.
     function rngConsumerStage() external view returns (uint8);
 
@@ -428,9 +432,9 @@ interface IDegenerusGame {
     // Degenerette Tracking Views
     // -------------------------------------------------------------------------
 
-    /// @notice Get total wager units for a specific hero symbol on a given day.
+    /// @notice Get hero wager units in a retained day. Recycled days return zero; use logs for history.
     function getDailyHeroWager(uint24 day, uint8 quadrant, uint8 symbol) external view returns (uint256 wagerUnits);
-    /// @notice Get the winning hero symbol and amount for a given day.
+    /// @notice Get the most-wagered hero in a retained day. Recycled days return zeros.
     function getDailyHeroWinner(uint24 day) external view returns (uint8 winQuadrant, uint8 winSymbol, uint256 winAmount);
 
     // -------------------------------------------------------------------------

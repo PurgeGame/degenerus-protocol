@@ -10,7 +10,8 @@ import {BafViews} from "../helpers/BafViews.sol";
 ///
 /// @notice When a bracket's BAF skips (daily flip lost at the x10 transition),
 ///         players' accumulated bracket scores are frozen in storage. Each score
-///         is redeemable once for WWXRP at score / 1000 via the permissionless
+///         is redeemable once for WWXRP at score / 1000, with a one-token minimum
+///         for positive scores, via the permissionless
 ///         DegenerusJackpots.claimBafConsolation(player, lvl) — the mint always
 ///         goes to the recorded score owner.
 ///
@@ -64,8 +65,8 @@ contract BafConsolationClaimTest is DeployProtocol {
     }
 
     function testClaimAfterSkipMintsScoreOverThousand() public {
-        _record(alice, 10, 5000 ether);
-        _record(bob, 10, 250 ether);
+        _record(alice, 10, 5000);
+        _record(bob, 10, 250);
 
         // Bracket not skipped yet: nothing claimable.
         assertEq(jackpots.bafConsolationOf(alice, 10), 0, "no claim before skip");
@@ -74,14 +75,14 @@ contract BafConsolationClaimTest is DeployProtocol {
 
         _skip(10);
 
-        assertEq(jackpots.bafConsolationOf(alice, 10), 5 ether, "view after skip");
+        assertEq(jackpots.bafConsolationOf(alice, 10), 5, "view after skip");
 
         // Permissionless: keeper executes, mint goes to alice.
         vm.expectEmit(true, true, false, true, address(jackpots));
-        emit BafConsolationClaimed(alice, 10, 5000 ether, 5 ether);
+        emit BafConsolationClaimed(alice, 10, 5000, 5);
         vm.prank(keeper);
         jackpots.claimBafConsolation(alice, 10);
-        assertEq(wwxrp.balanceOf(alice), 5 ether, "alice minted score/1000");
+        assertEq(wwxrp.balanceOf(alice), 5, "alice minted score/1000");
         assertEq(wwxrp.balanceOf(keeper), 0, "keeper gets nothing");
         assertEq(jackpots.bafConsolationOf(alice, 10), 0, "claim consumed score");
 
@@ -89,14 +90,40 @@ contract BafConsolationClaimTest is DeployProtocol {
         vm.expectRevert(NothingToClaim.selector);
         jackpots.claimBafConsolation(alice, 10);
 
-        // Bob's independent score still claimable (self-executed).
+        // A positive score below 1000 receives one whole WWXRP and is consumed once.
+        assertEq(jackpots.bafConsolationOf(bob, 10), 1);
+        vm.expectEmit(true, true, false, true, address(jackpots));
+        emit BafConsolationClaimed(bob, 10, 250, 1);
         vm.prank(bob);
         jackpots.claimBafConsolation(bob, 10);
-        assertEq(wwxrp.balanceOf(bob), 0.25 ether, "bob minted score/1000");
+        assertEq(wwxrp.balanceOf(bob), 1);
+        assertEq(jackpots.bafConsolationOf(bob, 10), 0);
+        vm.expectRevert(NothingToClaim.selector);
+        jackpots.claimBafConsolation(bob, 10);
+    }
+
+    function testWholeTokenConsolationBoundaries() public {
+        _record(alice, 10, 999);
+        _record(bob, 10, 1000);
+        _record(keeper, 10, 1999);
+        _record(buyer, 10, 2000);
+        _skip(10);
+        assertEq(jackpots.bafConsolationOf(alice, 10), 1);
+        assertEq(jackpots.bafConsolationOf(bob, 10), 1);
+        assertEq(jackpots.bafConsolationOf(keeper, 10), 1);
+        assertEq(jackpots.bafConsolationOf(buyer, 10), 2);
+        jackpots.claimBafConsolation(alice, 10);
+        jackpots.claimBafConsolation(bob, 10);
+        jackpots.claimBafConsolation(keeper, 10);
+        jackpots.claimBafConsolation(buyer, 10);
+        assertEq(wwxrp.balanceOf(alice), 1);
+        assertEq(wwxrp.balanceOf(bob), 1);
+        assertEq(wwxrp.balanceOf(keeper), 1);
+        assertEq(wwxrp.balanceOf(buyer), 2);
     }
 
     function testResolvedBracketPaysNothing() public {
-        _record(alice, 20, 1000 ether);
+        _record(alice, 20, 1000);
 
         // Real resolution: `beginBaf` at consolidation opens it, the award stage draws from the
         // frozen scores, and `finalizeBaf` with the last award group bumps the epoch. The
@@ -128,47 +155,81 @@ contract BafConsolationClaimTest is DeployProtocol {
     }
 
     function testVaultConsolationEscrowsToAllowance() public {
-        _record(ContractAddresses.VAULT, 10, 5000 ether);
+        _record(ContractAddresses.VAULT, 10, 5000);
         _skip(10);
 
-        assertEq(jackpots.bafConsolationOf(ContractAddresses.VAULT, 10), 5 ether, "vault claimable");
+        assertEq(jackpots.bafConsolationOf(ContractAddresses.VAULT, 10), 5, "vault claimable");
 
         uint256 balanceBefore = wwxrp.balanceOf(ContractAddresses.VAULT);
         uint256 supplyBefore = wwxrp.totalSupply();
         vm.prank(keeper);
         jackpots.claimBafConsolation(ContractAddresses.VAULT, 10);
 
-        assertEq(wwxrp.balanceOf(ContractAddresses.VAULT), balanceBefore + 5 ether, "vault prize balance");
-        assertEq(wwxrp.totalSupply(), supplyBefore + 5 ether, "vault rewards circulate");
+        assertEq(wwxrp.balanceOf(ContractAddresses.VAULT), balanceBefore + 5, "vault prize balance");
+        assertEq(wwxrp.totalSupply(), supplyBefore + 5, "vault rewards circulate");
 
         vm.expectRevert(NothingToClaim.selector);
         jackpots.claimBafConsolation(ContractAddresses.VAULT, 10);
     }
 
-    function testZeroScoreAndDustClaimsRevert() public {
+    function testZeroScoreRevertsAndSmallestScorePaysOne() public {
         _skip(10);
 
         // No score at all.
         vm.expectRevert(NothingToClaim.selector);
         jackpots.claimBafConsolation(alice, 10);
 
-        // Sub-1000-wei dust rounds to zero and must not be silently consumed.
-        _record(bob, 10, 999);
+        assertEq(jackpots.bafConsolationOf(alice, 10), 0);
+
+        _record(bob, 10, 1);
+        assertEq(jackpots.bafConsolationOf(bob, 10), 1, "smallest positive score pays one");
+        jackpots.claimBafConsolation(bob, 10);
+        assertEq(wwxrp.balanceOf(bob), 1);
         vm.expectRevert(NothingToClaim.selector);
         jackpots.claimBafConsolation(bob, 10);
-        assertEq(jackpots.bafConsolationOf(bob, 10), 0, "dust score worth zero");
+        assertEq(jackpots.bafConsolationOf(bob, 10), 0, "small score consumed once");
+    }
+
+    function testFractionalConsolationRespectsMintScaleAtClaim() public {
+        _record(alice, 10, 1);
+        _record(bob, 10, 999);
+        _skip(10);
+        vm.prank(ContractAddresses.CREATOR);
+        wwxrp.setGameMintScale(7);
+        assertEq(jackpots.bafConsolationOf(alice, 10), 1, "view reports the unscaled award");
+        jackpots.claimBafConsolation(alice, 10);
+        assertEq(wwxrp.balanceOf(alice), 7);
+        vm.prank(ContractAddresses.CREATOR);
+        wwxrp.setGameMintScale(0);
+        jackpots.claimBafConsolation(bob, 10);
+        assertEq(wwxrp.balanceOf(bob), 0, "zero mint scale still disables emission");
+        assertEq(jackpots.bafConsolationOf(bob, 10), 0, "disabled mint still consumes the claim");
+    }
+
+    function testFuzzPositiveScoreMinimumAndSingleClaim(uint96 score) public {
+        score = uint96(bound(score, 1, type(uint96).max));
+        _record(alice, 10, score);
+        _skip(10);
+        uint256 expected = score < 1000 ? 1 : uint256(score) / 1000;
+        assertEq(jackpots.bafConsolationOf(alice, 10), expected);
+        vm.prank(keeper);
+        jackpots.claimBafConsolation(alice, 10);
+        assertEq(wwxrp.balanceOf(alice), expected);
+        assertEq(jackpots.bafConsolationOf(alice, 10), 0);
+        vm.expectRevert(NothingToClaim.selector);
+        jackpots.claimBafConsolation(alice, 10);
     }
 
     function testIndependentBracketsClaimSeparately() public {
-        _record(alice, 10, 3000 ether);
-        _record(alice, 20, 7000 ether);
+        _record(alice, 10, 3000);
+        _record(alice, 20, 7000);
         _skip(10);
         _skip(20);
 
         jackpots.claimBafConsolation(alice, 10);
-        assertEq(wwxrp.balanceOf(alice), 3 ether, "bracket 10 minted");
+        assertEq(wwxrp.balanceOf(alice), 3, "bracket 10 minted");
         jackpots.claimBafConsolation(alice, 20);
-        assertEq(wwxrp.balanceOf(alice), 10 ether, "bracket 20 minted on top");
+        assertEq(wwxrp.balanceOf(alice), 10, "bracket 20 minted on top");
     }
 
     // ==================== Driven e2e (forced-even VRF words) ====================
@@ -191,7 +252,7 @@ contract BafConsolationClaimTest is DeployProtocol {
 
             if (currentLevel >= 9 && !injected) {
                 for (uint256 i = 0; i < players.length; i++) {
-                    _record(players[i], 10, (1000 + i * 500) * 1 ether);
+                    _record(players[i], 10, (1000 + i * 500) * 1);
                 }
                 injected = true;
 
@@ -221,7 +282,7 @@ contract BafConsolationClaimTest is DeployProtocol {
 
         // Every word was even => the level-10 BAF skipped through mineFlip.
         for (uint256 i = 0; i < players.length; i++) {
-            uint256 score = (1000 + i * 500) * 1 ether;
+            uint256 score = (1000 + i * 500) * 1;
             assertEq(
                 jackpots.bafConsolationOf(players[i], 10),
                 score / 1000,

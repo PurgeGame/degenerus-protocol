@@ -17,7 +17,7 @@ import {CrapsPins} from "./CrapsPins.sol";
 contract UpgradeHarness is CrapsViews {
     function dayRunAt(uint256 betId, uint64 slot) external view returns (uint256 won, uint256 paid) {
         Settlement memory s =
-            _settlementOf(betId, _bets[betId], _slotWindow(slot), _wordAt(_indexOf(slot)));
+            _settlementOf(betId, _loadBet(betId), _slotWindow(slot), _wordAt(_indexOf(slot)));
         return (s.won, s.paid);
     }
 }

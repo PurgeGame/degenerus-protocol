@@ -35,11 +35,11 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
  * @notice Delegate-called module handling claimBingo color-completion claims.
  * @dev A player who owns one post-RNG-resolved ticket entry in each of the 8 color
  *      buckets of a single symbol on a level may claim one reward for that level:
- *      0.05% Pool.Reward + 1_000e18 FLIP.
+ *      0.05% Pool.Reward + 1_000 FLIP.
  *      All storage reads/writes operate on the inherited DegenerusGameStorage layout.
  *      claimBingo is a strict READ-ONLY consumer of lvlTraitEntry — it adds NO write
  *      to it (RNG-freeze-safe). The only state it writes is
- *      its own per-player/per-level bingoClaimed flag. CEI: the claim flag is set
+ *      its own bingo parity stamp in playerClaimWord. CEI: the claim flag is set
  *      before interactions (transferFromPool / creditFlip).
  */
 contract DegenerusGameBingoModule is DegenerusGameStorage {
@@ -76,7 +76,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     uint256 internal constant BINGO_DGNRS_BPS = 5;
 
     /// @dev FLIP credit paid for a bingo.
-    uint256 internal constant BINGO_FLIP = 1_000e18;
+    uint256 internal constant BINGO_FLIP = 1_000;
 
     // -------------------------------------------------------------------------
     // claimAffiliateDgnrs constants
@@ -90,7 +90,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
 
     /// @dev Minimum FLIP-basis affiliate score to claim without a deity pass — a dust
     ///      filter; the payout itself is score-proportional, so units cancel there.
-    uint256 private constant AFFILIATE_DGNRS_MIN_SCORE = 10 ether;
+    uint256 private constant AFFILIATE_DGNRS_MIN_SCORE = 10;
 
     // -------------------------------------------------------------------------
     // Events (player-only indexed; amounts/level/symbol non-indexed)
@@ -124,12 +124,12 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     /// @dev Permissionless: the reward settles to `player` (the slot owner the 8-color check
     ///      verifies), never the caller, so an uninvited claim only ever harvests inward.
     ///      Each player may claim at most once per level, regardless of which qualifying
-    ///      symbol they use. A level's bingo is claimable until the next level starts: once the
-    ///      game's `level` passes it, an unclaimed bingo is gone.
+    ///      symbol they use. A level's bingo remains claimable until L+2 takes over its
+    ///      parity ticket buffer; starting the next level alone does not expire it.
     /// @param player The bingo owner to claim for (address(0) = msg.sender).
     /// @param lvl The level to claim on (uint24 — the internal storage key width;
     ///        the ABI decoder fail-closes on an oversized value, no truncation).
-    /// @custom:reverts BingoExpired If `lvl` is below the current game level.
+    /// @custom:reverts BingoExpired If a later same-parity level has taken over the ticket buffer.
     /// @param symbol Symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7).
     /// @param slots Per-color positions in lvlTraitEntry[lvl][traitId] the owner occupies.
     function claimBingo(address player, uint24 lvl, uint8 symbol, uint32[8] calldata slots) external {
@@ -145,7 +145,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         if (gameOver) revert GameOver();
         if (_ticketLevelRetired(lvl)) revert BingoExpired();
         if (symbol >= 32) revert InvalidSymbol();
-        if (bingoClaimed[lvl][player]) revert AlreadyClaimed();
+        if (_bingoClaimed(lvl, player)) revert AlreadyClaimed();
 
         uint8 quadrant = symbol >> 3; // bits 7-6 of the trait byte
         uint8 symInQ = symbol & 7; // bits 2-0 of the trait byte
@@ -171,7 +171,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         }
 
         // ---- Per-player/per-level dedup (EFFECT) ----
-        bingoClaimed[lvl][player] = true;
+        _markBingoClaimed(lvl, player);
 
         // ---- Interactions (after all effects) ----
         // sDGNRS draw: transferFromPool clamps to the available Reward pool and
@@ -216,7 +216,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         uint24 currLevel = level;
         if (currLevel == 0) revert NotStarted();
 
-        if (affiliateDgnrsClaimedBy[currLevel][player]) revert AlreadyClaimed();
+        if (_affiliateDgnrsClaimed(currLevel, player)) revert AlreadyClaimed();
 
         uint256 score = affiliate.affiliateScore(currLevel, player);
         bool isDeityHolder = mintPacked_[player] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0;
@@ -230,6 +230,9 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         uint256 reward = (allocation * score) / denominator;
         if (reward == 0) revert ZeroValue();
 
+        // Mark before interactions. A failed transfer reverts the stamp; a callback cannot
+        // replay this claim or be overwritten by a stale copy of the shared bingo word.
+        _markAffiliateDgnrsClaimed(currLevel, player);
         uint256 paid = dgnrs.transferFromPool(
             IsDGNRS.Pool.Affiliate,
             player,
@@ -253,7 +256,6 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
             }
         }
 
-        affiliateDgnrsClaimedBy[currLevel][player] = true;
         emit AffiliateDgnrsClaimed(player, currLevel, msg.sender, score, paid);
     }
 }

@@ -41,13 +41,17 @@ contract BoostHarness is CrapsViews {
         address player,
         uint256 boost
     ) external pure returns (Craps.SlipResult memory) {
-        return _settleSlip(b, seed, bankroll, goal, _MAX_SLIP_HANDS, _SLIP_ROLL_BUDGET, player, boost);
+        Craps.SlipResult memory r = _settleSlip(b, seed, bankroll * FLIP, goal * FLIP, _MAX_SLIP_HANDS, _SLIP_ROLL_BUDGET, player, boost);
+        r.bankrollIn /= FLIP;
+        r.bankrollOut /= FLIP;
+        r.peakBankroll /= FLIP;
+        return r;
     }
 
     /// @dev The whole settlement of a bet, UNSCALED — a high seat's multiple applies after it, so
     ///      this is the one boosted base run a suite has to be able to see on its own.
     function settlementAt(uint256 betId) external view returns (Settlement memory) {
-        return _settlementOf(betId, _bets[betId], _slotWindow(betId >> 64), _wordAt(_indexOf(betId >> 64)));
+        return _settlementOf(betId, _loadBet(betId), _slotWindow(betId >> 64), _wordAt(_indexOf(betId >> 64)));
     }
 
     /// @dev The field's frozen entrant count — own seats and the day's appended seats.
@@ -72,7 +76,7 @@ contract BoostHarness is CrapsViews {
         uint256 ownN = w.entrants - dayN;
         id = seat <= ownN ? (uint256(slot) << 64) | seat : (daySlot << 64) | (seat - ownN);
         w.seat = uint64(seat);
-        result = _settlementOf(id, _bets[id], w, _wordAt(_indexOf(slot)));
+        result = _settlementOf(id, _loadBet(id), w, _wordAt(_indexOf(slot)));
     }
 
     function longestOf(uint64 slot) external view returns (uint256) {
@@ -91,10 +95,10 @@ contract BoostHarness is CrapsViews {
     ///      word placed. Rebuilt from the same published inputs a client replay uses, so a suite
     ///      can drive the bare engine with exactly the board a settlement drove it with.
     function playedBoardOf(uint256 betId, uint64 slot) external view returns (Craps.Bets memory board) {
-        uint256 header = _bets[betId];
+        uint256 header = _loadBet(betId);
         Window memory w = _slotWindow(slot);
         uint256 word = _wordAt(_indexOf(slot));
-        uint256 chipFlip = (w.played / 1 ether) / _BONUS_CHIPS;
+        uint256 chipFlip = (w.played / 1) / _BONUS_CHIPS;
         uint256 packed = (header >> _BET_CHIPS_SHIFT) & _BET_CHIPS_MASK;
         uint256 placed;
         (, placed) = _packChips(uint32(packed));
@@ -422,13 +426,13 @@ contract CrapsShooterBoostTest is CrapsPins {
 
             CrapsBattle.Settlement memory s = craps.settlementAt(betId);
             // The terms this fixture opened the battle on: a 600-FLIP round, five rounds deep.
-            uint256 bank = 600e18 * 5;
+            uint256 bank = 600 * 5e18;
             uint256 goal = bank * goalMult;
             Craps.SlipResult memory bare = craps.slip(
                 _scattered(betId, slot), craps.seedForBet(slot), bank, goal, craps.MAX_SLIP_HANDS(), alice, 0
             );
-            assertEq(s.won, bare.bankrollOut, "a custom battle settled to something the bare engine did not");
-            assertEq(s.peak, bare.peakBankroll, "a custom boost changed the run's high point");
+            assertEq(s.won, bare.bankrollOut / 1e18, "a custom battle settled to something the bare engine did not");
+            assertEq(s.peak, bare.peakBankroll / 1e18, "a custom boost changed the run's high point");
             assertEq(s.handsPlayed, bare.handsPlayed, "a custom boost changed the shooter count");
             assertEq(s.totalRolls, bare.totalRolls, "a custom boost changed the dice walk");
             assertEq(uint8(s.stop), uint8(bare.stop), "a custom boost changed the stop class");
@@ -442,7 +446,7 @@ contract CrapsShooterBoostTest is CrapsPins {
         vm.warp(vm.getBlockTimestamp() + 10 days);
         _warpToDayStart();
         uint24 day = craps.currentDayIndex();
-        craps.bookDay(day - 1, 3_000_000 ether);
+        craps.bookDay(day - 1, 3_000_000);
         _setDailyWord(day, PLAIN_WORD);
         vm.prank(ContractAddresses.GAME);
         craps.openBonusDay();
@@ -539,9 +543,9 @@ contract CrapsShooterBoostTest is CrapsPins {
         assertEq(againA, wonA, "the preview moved between two identical calls");
         assertGt(sA.handsPlayed + sB.handsPlayed, 0, "neither seat played a shooter");
         if (sA.stop == Craps.SlipStop.Bust) assertEq(sA.paid, 0, "a busted seat was paid");
-        else assertApproxEqAbs(sA.paid, sA.won, 100 ether, "the payment left the run behind");
+        else assertApproxEqAbs(sA.paid, sA.won, 100, "the payment left the run behind");
         if (sB.stop == Craps.SlipStop.Bust) assertEq(sB.paid, 0, "a busted seat was paid");
-        else assertApproxEqAbs(sB.paid, sB.won, 100 ether, "the payment left the run behind");
+        else assertApproxEqAbs(sB.paid, sB.won, 100, "the payment left the run behind");
 
         // THE COMPOSITE TOO. A battle ranks on the stop, the high point, the shooter count and
         // the ending bankroll, every one of which comes off this same call — so pinning the
@@ -627,7 +631,7 @@ contract CrapsShooterBoostTest is CrapsPins {
         vm.warp(vm.getBlockTimestamp() + 10 days);
         _warpToDayStart();
         uint24 day = craps.currentDayIndex();
-        craps.bookDay(day - 1, 3_000_000 ether);
+        craps.bookDay(day - 1, 3_000_000);
         _setDailyWord(day, PLAIN_WORD);
         vm.prank(ContractAddresses.GAME);
         craps.openBonusDay();
@@ -669,7 +673,7 @@ contract CrapsShooterBoostTest is CrapsPins {
         _warpToDayStart();
         uint24 day = craps.currentDayIndex();
         for (uint256 i = 1; i <= craps.BOOST_ACTION_WINDOW_DAYS(); ++i) {
-            craps.bookDay(day - uint24(i), 6_000_000 ether);
+            craps.bookDay(day - uint24(i), 6_000_000);
         }
 
         uint256 matchingPairs;
@@ -804,7 +808,7 @@ contract CrapsShooterBoostTest is CrapsPins {
         vm.warp(vm.getBlockTimestamp() + 10 days);
         _warpToDayStart();
         uint24 day = craps.currentDayIndex();
-        craps.bookDay(day - 1, 3_000_000 ether);
+        craps.bookDay(day - 1, 3_000_000);
         _setDailyWord(day, PLAIN_WORD);
         vm.prank(ContractAddresses.GAME);
         craps.openBonusDay();
@@ -853,7 +857,7 @@ contract CrapsShooterBoostTest is CrapsPins {
         vm.warp(vm.getBlockTimestamp() + 10 days);
         _warpToDayStart();
         uint24 day = craps.currentDayIndex();
-        craps.bookDay(day - 1, 3_000_000 ether);
+        craps.bookDay(day - 1, 3_000_000);
         _setDailyWord(day, PLAIN_WORD);
         vm.prank(ContractAddresses.GAME);
         craps.openBonusDay();
@@ -1011,7 +1015,7 @@ contract CrapsShooterBoostTest is CrapsPins {
         vm.warp(vm.getBlockTimestamp() + 10 days);
         _warpToDayStart();
         day = craps.currentDayIndex();
-        craps.bookDay(day - 1, 3_000_000 ether);
+        craps.bookDay(day - 1, 3_000_000);
         _setDailyWord(day, PLAIN_WORD);
         vm.prank(ContractAddresses.GAME);
         craps.openBonusDay();

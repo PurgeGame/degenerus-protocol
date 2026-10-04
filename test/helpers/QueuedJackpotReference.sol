@@ -191,7 +191,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
     /// @dev Small-lootbox threshold for the jackpot lootbox portion split.
 
     /// @dev Golden-ticket consolation when the armed ticket's resolving main board shows 0 golds: 100 WWXRP.
-    uint256 private constant GOLDEN_TICKET_WWXRP = 100 ether;
+    uint256 private constant GOLDEN_TICKET_WWXRP = 100; // Denomination adapter: shared draw reference now uses whole WWXRP
 
     /// @dev Golden-ticket routes, stamped on GoldenTicketWin. BOARD is the armed
     ///      cross-day board resolution; FOIL is a foil pack holding two or more

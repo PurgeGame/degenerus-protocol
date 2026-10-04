@@ -110,13 +110,13 @@ contract MinerMaintenanceTable is CrapsBattle {
         if (remainder == 0) {
             _dayTickets[_keeperSlot] = entrants;
             for (uint256 i = 1; i <= entrants; ++i) {
-                _bets[(uint256(_keeperSlot) << 64) | i] = uint160(address(uint160(0xA000 + i)));
+                _storeBet((uint256(_keeperSlot) << 64) | i, uint160(address(uint160(0xA000 + i))));
             }
         } else _battles[bytes32(uint256(_keeperSlot))] = entrants;
     }
     function head() external view returns (uint64) { return _keeperSlot; }
-    function binding(uint64 slot) external view returns (uint48) { return _slotIndex[slot]; }
-    function cursor(uint64 slot) external view returns (uint64) { return _bonusCursor[slot]; }
+    function binding(uint64 slot) external view returns (uint48) { return _slotIndexOf(slot); }
+    function cursor(uint64 slot) external view returns (uint64) { return _bonusCursorOf(slot); }
     function credits(address player) external view returns (uint256) { return _passCredits[player]; }
 }
 

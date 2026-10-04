@@ -17,25 +17,25 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///      consumes, and `scoreAt` drives the shipped scoreboard fold directly.
 contract BattleHarness is CrapsViews {
     function settlementAt(uint256 betId) external view returns (Settlement memory) {
-        return _settlementOf(betId, _bets[betId], _slotWindow(betId >> 64), _wordAt(_indexOf(betId >> 64)));
+        return _settlementOf(betId, _loadBet(betId), _slotWindow(betId >> 64), _wordAt(_indexOf(betId >> 64)));
     }
 
 
     function isHighOf(uint256 betId) external view returns (bool) {
-        return _bets[betId] & _BET_HIGH_BIT != 0;
+        return _loadBet(betId) & _BET_HIGH_BIT != 0;
     }
 
     /// @dev Copy a slip's stored word onto another id, so a suite can settle the SAME ticket from
     ///      two different slots and compare. Nothing else about the field is touched.
     function copyBetTo(uint256 from, uint256 to) external {
-        _bets[to] = _bets[from];
+        _storeBet(to, _loadBet(from));
     }
 
     /// @dev The same settlement, for a slip whose id does NOT name the window it plays. A day
     ///      ticket sits in all seven, so the terms and the word are the WINDOW's, not the id's —
     ///      the very pair settlement hands `_resolve` for a seat in the day tail.
     function settlementIn(uint256 betId, uint64 slot) external view returns (Settlement memory) {
-        return _settlementOf(betId, _bets[betId], _slotWindow(slot), _wordAt(_indexOf(slot)));
+        return _settlementOf(betId, _loadBet(betId), _slotWindow(slot), _wordAt(_indexOf(slot)));
     }
 
     /// @dev The fold takes the whole WINDOW now, because the boost it announces at finalization
@@ -94,9 +94,9 @@ contract BattleHarness is CrapsViews {
     }
 
     function _drawnBoardAt(uint256 betId, uint64 slot) private view returns (Craps.Bets memory board) {
-        uint256 header = _bets[betId];
+        uint256 header = _loadBet(betId);
         Window memory w = _slotWindow(slot);
-        uint256 chipFlip = (w.played / 1 ether) / BONUS_CHIPS;
+        uint256 chipFlip = (w.played / 1) / BONUS_CHIPS;
         uint256 packed = (header >> _BET_CHIPS_SHIFT) & _BET_CHIPS_MASK;
         uint256 placed;
         (, placed) = _packChips(uint32(packed));
@@ -110,7 +110,7 @@ contract BattleHarness is CrapsViews {
     }
 
     function placedCountOf(uint256 betId) external view returns (uint256 count) {
-        (, count) = _packChips(uint32((_bets[betId] >> _BET_CHIPS_SHIFT) & _BET_CHIPS_MASK));
+        (, count) = _packChips(uint32((_loadBet(betId) >> _BET_CHIPS_SHIFT) & _BET_CHIPS_MASK));
     }
 
     /// @dev Where the custom lane starts. Internal on the contract, so the suite reads it here
@@ -122,7 +122,7 @@ contract BattleHarness is CrapsViews {
     /// @dev Whether a slot has SHUT. That is the moment the day field is folded into its entrant
     ///      count, so it is also the moment a seat number means the own-then-day range.
     function isShut(uint64 slot) external view returns (bool) {
-        return _slotIndex[slot] != 0;
+        return _slotIndexOf(slot) != 0;
     }
 
     /// @dev What ONE window of a day puts up before the multiplier — the day's budget split seven
@@ -192,10 +192,10 @@ contract CrapsBattleTest is CrapsPins {
     ///      every bankroll and stop-round below is unmoved.
     uint24 internal constant C = 60;
     uint24 internal constant P = C * 7;
-    uint128 internal constant LW = 600e18;
+    uint128 internal constant LW = 600;
     /// @dev The battle-stake granule, and the suite's default entry: three of them, which is
     ///      inside the 20%-to-100% band a 1,200 FLIP bankroll allows.
-    uint256 internal constant GRANULE = 100e18;
+    uint256 internal constant GRANULE = 100;
     uint24 internal constant SU = 3;
     uint256 internal constant SUW = uint256(SU) * GRANULE;
 
@@ -288,7 +288,7 @@ contract CrapsBattleTest is CrapsPins {
         if (slot == 0) {
             slot = _openBattle(
                 craps,
-                uint32(LW / 1 ether),
+                uint32(LW / 1),
                 uint8(uint256(bank) / LW),
                 goal == 0 ? uint16(GOAL_FAR_MULT) : uint16(uint256(goal) / bank),
                 su
@@ -409,9 +409,9 @@ contract CrapsBattleTest is CrapsPins {
         assertEq(craps.battleOf(key).entrants, 8, "the custom field did not gather every shape");
 
         _closeOn(craps, slot, 0, uint256(keccak256("chips")));
-        uint256 round = uint256(C) * 10 * 1 ether;
+        uint256 round = uint256(C) * 10 * 1;
         for (uint256 placed = 0; placed <= 7; ++placed) {
-            assertEq(craps.stakeFor(craps.drawnBoardOf(ids[placed])), round, "a custom board missed ten chips");
+            assertEq(craps.stakeFor(craps.drawnBoardOf(ids[placed])) / 1e18, round, "a custom board missed ten chips");
         }
 
         craps.settleSlot(slot, WHOLE_FIELD);
@@ -432,7 +432,7 @@ contract CrapsBattleTest is CrapsPins {
         _runSlot(LW * 2, LW * 11, SU, 0, uint256(keccak256("split-terms")));
         keys[4] = craps.battleKeyOf(_placeBattle(alice, _boardA(), LW * 2, LW * 11, SU + 1));
         _runSlot(LW * 3, LW * 15, SU, 1, uint256(keccak256("split-terms-second")));
-        uint64 differentSlot = _openBattle(craps, uint32(LW / 1 ether), 2, 5, SU);
+        uint64 differentSlot = _openBattle(craps, uint32(LW / 1), 2, 5, SU);
         vm.prank(alice);
         keys[5] = craps.battleKeyOf(craps.enterBattle(differentSlot, _boardA(), 1));
 
@@ -457,7 +457,7 @@ contract CrapsBattleTest is CrapsPins {
         vm.prank(vaultOwner);
         vm.expectRevert(CrapsBattleStorage.BadBattleTerms.selector);
         craps.createBattle(
-            uint32(LW / 1 ether), 2, 5, uint24((LW * 2) / GRANULE) + 1, uint40(block.timestamp + 1 hours), false
+            uint32(LW / 1), 2, 5, uint24((LW * 2) / GRANULE) + 1, uint40(block.timestamp + 1 hours), false
         , 0);
     }
 
@@ -497,15 +497,15 @@ contract CrapsBattleTest is CrapsPins {
                 g[k] = st.stop == Craps.SlipStop.Goal;
                 h[k] = st.handsPlayed;
                 prim[k] = g[k]
-                    ? st.peak / 1 ether
-                    : (st.handsPlayed << 64) | (uint256(st.won >= 1 ether ? 1 : 0) << 63) | (st.peak / 1 ether);
+                    ? st.peak / 1
+                    : (st.handsPlayed << 64) | (uint256(st.won >= 1 ? 1 : 0) << 63) | (st.peak / 1);
                 w[k] = st.won;
             }
             // Rank, then the money, then — when those are dead level, which is the whole
             // composite here since the three share a standing — the word's own coin.
             uint256 best = 0;
             for (uint256 k = 1; k < 3; ++k) {
-                bool level = g[k] == g[best] && prim[k] == prim[best] && w[k] / 1 ether == w[best] / 1 ether;
+                bool level = g[k] == g[best] && prim[k] == prim[best] && w[k] / 1 == w[best] / 1;
                 bool takes = level
                     ? _tag(word, ids[k]) > _tag(word, ids[best])
                     : _beatsFully(g[k], prim[k], w[k], g[best], prim[best], w[best]);
@@ -540,7 +540,7 @@ contract CrapsBattleTest is CrapsPins {
             // A GOAL RANKS ON ITS HIGH POINT, so the composite carries no shooter count for one;
             // a BUST's primary LEADS with its shooter count.
             assertEq(info.winningHands, g[best] ? 0 : h[best], "winning hand count");
-            assertEq(info.winningEnd, w[best] / 1 ether, "the winner's ending bankroll");
+            assertEq(info.winningEnd, w[best] / 1, "the winner's ending bankroll");
 
             assertEq(pot.betId, ids[best], "the pot went to a seat other than the winner");
             assertEq(pot.player, craps.betOf(ids[best]).player, "the pot reached the wrong address");
@@ -859,7 +859,7 @@ contract CrapsBattleTest is CrapsPins {
         _closeOn(craps, slot, 0, uint256(keccak256("tenleg")));
         Craps.Bets memory drawn = craps.drawnBoardOf(betId);
         assertGe(drawn.dontPass, C, "the dark leg did not survive the decode");
-        assertEq(craps.stakeFor(drawn), uint256(L) * 1 ether, "the drawn board is not the whole round");
+        assertEq(craps.stakeFor(drawn) / 1e18, uint256(L) * 1, "the drawn board is not the whole round");
     }
 
     /// @dev The maximum three chips on the dark side sit in the TOP three bits of the chip region,
@@ -869,7 +869,7 @@ contract CrapsBattleTest is CrapsPins {
     function test_aMaxDontPassCountDoesNotCorruptItsNeighbours() public {
         // A HIGH lane at nine, so the multiple byte and the high-roller flag above the day field
         // are both non-zero and every neighbour of the chip region is under load at once.
-        uint64 slot = _openHigh(craps, uint32(LW / 1 ether), 2, 10, SU, 9);
+        uint64 slot = _openHigh(craps, uint32(LW / 1), 2, 10, SU, 9);
         Craps.Bets memory c;
         c.dontPass = 3;
         c.place6 = 3;
@@ -1025,7 +1025,7 @@ contract CrapsBattleTest is CrapsPins {
         for (uint64 n = 1; n <= entrants; ++n) {
             Craps.Bets memory d = craps.drawnBoardAt(_idAt(slot, n), slot);
             // Ten chips, every time, however they fell.
-            assertEq(craps.stakeFor(d), round, "a drawn board is not the slot's whole round");
+            assertEq(craps.stakeFor(d) / 1e18, round, "a drawn board is not the slot's whole round");
             uint24[10] memory legs = [
                 d.passLine, d.place4, d.place5, d.place6, d.place8,
                 d.place9, d.place10, d.hard4, d.hard8, d.dontPass
@@ -1158,7 +1158,7 @@ contract CrapsBattleTest is CrapsPins {
     ///      Entry is BINARY now: one copy, or exactly the field's multiple. Nothing between.
     function test_aMultipliedSeatBuysCopiesOfTheRun() public {
         uint16 top = uint16(craps.MAX_HIGH_MULT());
-        uint64 slot = _openHigh(craps, uint32(LW / 1 ether), 2, 10, SU, top);
+        uint64 slot = _openHigh(craps, uint32(LW / 1), 2, 10, SU, top);
         game.setScore(alice, craps.SYBIL_SCORE_FLOOR());
         game.setScore(bob, craps.SYBIL_SCORE_FLOOR());
         vm.prank(alice);
@@ -1223,7 +1223,7 @@ contract CrapsBattleTest is CrapsPins {
         for (uint256 i = 0; i < 40; ++i) {
             // A battle of its own each pass, so the twin seats are always seats one and two, and
             // a goal the dice will not reach so the runs bust with matching money.
-            uint64 slot = _openHigh(craps, uint32(LW / 1 ether) + uint32(i) * 10, 2, farGoal, SU, 10);
+            uint64 slot = _openHigh(craps, uint32(LW / 1) + uint32(i) * 10, 2, farGoal, SU, 10);
             vm.prank(alice);
             uint256 plain = craps.enterBattle(slot, _boardA(), 1);
             vm.prank(alice);
@@ -1259,7 +1259,7 @@ contract CrapsBattleTest is CrapsPins {
         game.setScore(bob, craps.SYBIL_SCORE_FLOOR());
         uint40 close = uint40(vm.getBlockTimestamp() + 1 hours);
         vm.prank(vaultOwner);
-        uint32 played = uint32(LW / 1 ether);
+        uint32 played = uint32(LW / 1);
         uint64 single = craps.createBattle(played, 2, 5, SU, close, false, 0);
 
         vm.prank(alice);
@@ -1280,7 +1280,7 @@ contract CrapsBattleTest is CrapsPins {
         assertEq(craps.battleOf(_slotKeyOf(many)).entrants, 2, "a second seat was refused");
         assertEq(
             flip.burned(bob) - burnedBefore,
-            2 * (uint256(played + 10) * 2 * 1 ether + SUW),
+            2 * (uint256(played + 10) * 2 * 1 + SUW),
             "a repeat seat was not charged in full"
         );
 
@@ -1312,8 +1312,8 @@ contract CrapsBattleTest is CrapsPins {
         uint256 plain = _placeBattle(bob, _boardA(), LW * 2, LW * 10, SU);
         _closeOn(craps, slot, 0, uint256(keccak256("blank-named")));
         assertEq(
-            craps.stakeFor(craps.drawnBoardOf(betId)),
-            craps.stakeFor(craps.drawnBoardOf(plain)),
+            craps.stakeFor(craps.drawnBoardOf(betId)) / 1e18,
+            craps.stakeFor(craps.drawnBoardOf(plain)) / 1e18,
             "naming a shape changed the round played"
         );
     }
@@ -1447,7 +1447,7 @@ contract CrapsBattleTest is CrapsPins {
         vm.warp(vm.getBlockTimestamp() + 10 days);
         uint24 today = craps.currentDayIndex();
         uint256 days_ = craps.BOOST_ACTION_WINDOW_DAYS();
-        uint256 perDay = 3_600_000 ether;
+        uint256 perDay = 3_600_000;
         for (uint256 i = 1; i <= days_; ++i) craps.bookDay(today - uint24(i), perDay);
 
         uint256 y = perDay * days_;
@@ -1456,7 +1456,7 @@ contract CrapsBattleTest is CrapsPins {
         assertEq(highBudget, 0, "ordinary action funded a high lane");
         assertEq(mainBudget, craps.BASE_MAIN_BUDGET() + linear, "a day's budget is not base + 12% of action");
         // The same figure said plainly, so the rule is pinned in the terms it was chosen in.
-        assertEq(mainBudget, 50_000 ether + (y / days_) * 12 / 100, "a day's budget is not 50k + 12%");
+        assertEq(mainBudget, 50_000 + (y / days_) * 12 / 100, "a day's budget is not 50k + 12%");
 
         // ADDITIVE, NOT A FLOOR. The linear term dwarfs the base here, so a `max(base, linear)`
         // implementation would land exactly on `linear` and this is what separates the two.
@@ -1487,12 +1487,12 @@ contract CrapsBattleTest is CrapsPins {
         uint24 today = craps.currentDayIndex();
         (uint256 mainBudget, uint256 highBudget) = craps.drawBudgetsFor(today);
         assertEq(mainBudget, craps.BASE_MAIN_BUDGET(), "a cold table did not open on exactly the base");
-        assertEq(mainBudget, 50_000 ether, "the base subsidy is not 50,000 FLIP");
+        assertEq(mainBudget, 50_000, "the base subsidy is not 50,000 FLIP");
         assertEq(highBudget, 0, "a cold table funded a high lane");
 
         (uint256 ladder, uint256 contribution) = craps.splitMainBudget(mainBudget);
-        assertEq(ladder, 25_000 ether, "a cold day's ladder is not half the base");
-        assertEq(contribution, 25_000 ether, "a cold day's progressive contribution is not half the base");
+        assertEq(ladder, 25_000, "a cold day's ladder is not half the base");
+        assertEq(contribution, 25_000, "a cold day's progressive contribution is not half the base");
         assertEq(ladder + contribution, mainBudget, "the split lost or created a wei");
         assertEq(craps.ladderBudgetFor(today), ladder, "the pre-open ladder quote disagrees with the split");
 
@@ -1517,7 +1517,7 @@ contract CrapsBattleTest is CrapsPins {
         uint256 base = craps.BASE_MAIN_BUDGET();
 
         // Regular action alone: 12% to the main lane, nothing to the high one.
-        uint256 perDay = 7_000_000 ether;
+        uint256 perDay = 7_000_000;
         for (uint256 i = 1; i <= days_; ++i) craps.bookDay(today - uint24(i), perDay);
         (uint256 m, uint256 h) = craps.drawBudgetsFor(today);
         assertEq(m, base + perDay * 12 / 100, "regular action is not worth 12% to the main lane");
@@ -1570,7 +1570,7 @@ contract CrapsBattleTest is CrapsPins {
         // spread back over the week. The per-day figure is FLOORED before it is summed, so the
         // fixture uses an action the rate divides exactly — otherwise "twice the action, twice
         // the linear term" is off by a wei of flooring and says nothing about the rule.
-        uint256 perDay = 3_600_000 ether;
+        uint256 perDay = 3_600_000;
         uint256 days_ = craps.BOOST_ACTION_WINDOW_DAYS();
         for (uint256 i = 1; i <= days_; ++i) craps.bookDay(today - uint24(i), perDay);
         uint256 week = perDay * days_;
@@ -1626,12 +1626,12 @@ contract CrapsBattleTest is CrapsPins {
         uint24 today = craps.currentDayIndex();
         // Big enough that ONE day of action dwarfs the base on its own: the budget spreads the
         // week, so a fixture sized too small would be almost all base and prove little.
-        craps.bookDay(today - 1, 36_000_000 ether);
+        craps.bookDay(today - 1, 36_000_000);
         uint256 drawn = craps.drawBudgetFor(today);
         assertGt(drawn, craps.BASE_MAIN_BUDGET(), "the fixture never leaves the base");
         // Settling more of the SAME action changes nothing; only fresh action moves it.
         assertEq(craps.drawBudgetFor(today), drawn, "the budget drifted without new action");
-        craps.bookDay(today - 1, 36_000_000 ether);
+        craps.bookDay(today - 1, 36_000_000);
         assertGt(craps.drawBudgetFor(today), drawn, "fresh action did not raise the budget");
     }
 
@@ -1721,7 +1721,7 @@ contract CrapsBattleTest is CrapsPins {
         // A busy prior week funds a window whose upper boost rungs cross rounding.
         vm.warp(vm.getBlockTimestamp() + 10 days);
         uint24 today = craps.currentDayIndex();
-        for (uint24 back = 1; back <= 7; ++back) craps.bookDay(today - back, 3_600_000 ether);
+        for (uint24 back = 1; back <= 7; ++back) craps.bookDay(today - back, 3_600_000);
         _setDailyWord(today, PLAIN_WORD);
         _openDay();
         _enter(alice, PER);
@@ -1773,7 +1773,7 @@ contract CrapsBattleTest is CrapsPins {
     ///      loyalty spend is at stake — and a creator who wants a standing requirement already has
     ///      the bar it set at creation. A scoreless winner there takes the whole donation.
     function test_aCustomBattleDoesNotRationItsDonation() public {
-        uint64 slot = _openBattle(craps, uint32(LW / 1 ether), 2, 5, SU);
+        uint64 slot = _openBattle(craps, uint32(LW / 1), 2, 5, SU);
         for (uint256 i = 0; i < 3; ++i) {
             address who = makeAddr(string(abi.encodePacked("customSeat", i)));
             assertEq(game.score(who), 0, "the custom seat is not scoreless");
@@ -1970,7 +1970,7 @@ contract CrapsBattleTest is CrapsPins {
     ///      is checked against the day that was actually produced.
     function _weightOf(uint24 day, uint256 period) internal view returns (uint256) {
         (uint128 bank,,,,,) = craps.bonusTermsFor(day, period);
-        uint256 flip = uint256(bank) / 1 ether;
+        uint256 flip = uint256(bank) / 1;
         if (flip == craps.BONUS_SMALL_BANKROLL()) return 1;
         if (flip == craps.BONUS_MED_BANKROLL()) return 2;
         if (flip == craps.BONUS_LARGE_BANKROLL()) return 4;
@@ -2367,7 +2367,7 @@ contract CrapsBattleTest is CrapsPins {
         // One that asks for a bar holds every entrant to it, the same generic gate. The number is
         // the CREATOR's now, not the protocol's — a window sets none — so the fixture names it.
         uint16 creatorBar = 40;
-        uint64 barred = _openBattle(craps, uint32(LW / 1 ether), 2, 5, SU, creatorBar);
+        uint64 barred = _openBattle(craps, uint32(LW / 1), 2, 5, SU, creatorBar);
         game.setScore(carol, creatorBar - 1);
         vm.prank(carol);
         craps.enterBattle(barred, _boardA(), 1);
@@ -2527,9 +2527,9 @@ contract CrapsBattleTest is CrapsPins {
             uint256 allocation;
             for (uint256 p; p < 5; ++p) {
                 (uint128 bank,,,uint256 bounty,uint256 seed,) = craps.bonusTermsFor(day,p);
-                uint256 tier = bank == 600 ether ? 0 : bank == 1800 ether ? 1 : 2;
-                assertEq(bank, tier == 0 ? 600 ether : tier == 1 ? 1800 ether : 4500 ether);
-                assertLe(bounty,bank); assertEq(bounty % 100 ether,0);
+                uint256 tier = bank == 600 ? 0 : bank == 1800 ? 1 : 2;
+                assertEq(bank, tier == 0 ? 600 : tier == 1 ? 1800 : 4500);
+                assertLe(bounty,bank); assertEq(bounty % 100,0);
                 uint256 share = craps.ladderBudgetFor(day) * _weightOf(day,p) / weight;
                 assertEq(seed,share * craps.BOOST_MAX_MULT());
                 allocation += share;
@@ -2541,7 +2541,7 @@ contract CrapsBattleTest is CrapsPins {
             (uint128 b,,,uint256 bb,,) = craps.bonusTermsFor(day,4);
             assertEq(a,b); assertEq(ab,bb);
             (uint128 pending,,,uint256 fee,,) = craps.bonusTermsFor(day,5);
-            assertEq(pending,0); assertEq(fee,8_000 ether);
+            assertEq(pending,0); assertEq(fee,8_000);
         }
         // Routine odds are 55/25/20; bookend odds are 20/30/50.
         assertApproxEqAbs(routine[0]*100,1200*55,6000);
@@ -2601,7 +2601,7 @@ contract CrapsBattleTest is CrapsPins {
         assertEq(_idAt(_slotAt(PER), 2), seat + 1, "the vault is not the second");
         // A day ticket plays each window on THAT window's chip, so the board is read at the slot.
         Craps.Bets memory hb = craps.drawnBoardAt(seat, _slotAt(PER));
-        assertEq(craps.stakeFor(hb), BON_STACK / 7 * 10, "the house's round missed the window's");
+        assertEq(craps.stakeFor(hb) / 1e18, BON_STACK / 7 * 10, "the house's round missed the window's");
     }
 
     /// @dev ONE WINDOW, ONE SHOOTER — across BOTH buckets. A shut window's field is its own
@@ -3133,7 +3133,7 @@ contract CrapsBattleTest is CrapsPins {
     function test_aWindowTakesEveryPlacedCountFromZeroThroughSeven() public {
         _openDay();
         bytes32 key = _keyOf(PER);
-        uint256 chip = (BON_STACK / 1 ether) / 7;
+        uint256 chip = (BON_STACK / 1) / 7;
         assertGt(chip, 0, "the stack did not divide into whole chips");
 
         uint256[8] memory ids;
@@ -3158,7 +3158,7 @@ contract CrapsBattleTest is CrapsPins {
         _setWord(index, uint256(keccak256("placed-counts")));
         uint256 played = BON_STACK / 7 * 10;
         for (uint256 placed = 0; placed <= 7; ++placed) {
-            assertEq(craps.stakeFor(craps.drawnBoardOf(ids[placed])), played, "a board did not grow to ten chips");
+            assertEq(craps.stakeFor(craps.drawnBoardOf(ids[placed])) / 1e18, played, "a board did not grow to ten chips");
         }
     }
 
@@ -3192,9 +3192,9 @@ contract CrapsBattleTest is CrapsPins {
         // than sitting where it was posted.
         Craps.Bets memory drawnA = craps.drawnBoardOf(a);
         Craps.Bets memory drawnB = craps.drawnBoardOf(b);
-        assertEq(craps.stakeFor(drawnA), played, "the blank ticket missed the round");
-        assertEq(craps.stakeFor(drawnB), played, "the picked ticket missed the round");
-        assertLt(drawnA.passLine, uint24(played / 1 ether), "the blank ticket never left the pass line");
+        assertEq(craps.stakeFor(drawnA) / 1e18, played, "the blank ticket missed the round");
+        assertEq(craps.stakeFor(drawnB) / 1e18, played, "the picked ticket missed the round");
+        assertLt(drawnA.passLine, uint24(played / 1), "the blank ticket never left the pass line");
         assertTrue(keccak256(abi.encode(drawnA)) != keccak256(abi.encode(drawnB)), "two players drew one board");
 
         // And they settle together: one field, one verdict.
@@ -3212,8 +3212,8 @@ contract CrapsBattleTest is CrapsPins {
             _setDailyWord(d, uint256(keccak256(abi.encode("format", d))));
             for (uint256 p = 0; p + 1 < craps.BONUS_PERIODS_PER_DAY(); ++p) {
                 (uint128 bank, uint128 goal, uint256 stack,,,) = craps.bonusTermsFor(d, p);
-                uint256 bankFlip = uint256(bank) / 1 ether;
-                uint256 stackFlip = stack / 1 ether;
+                uint256 bankFlip = uint256(bank) / 1;
+                uint256 stackFlip = stack / 1;
 
                 // The posted stack is seven whole chips; ten of that chip make the base.
                 assertEq(stackFlip % 7, 0, "the posted stack is not seven whole chips");
@@ -3254,8 +3254,8 @@ contract CrapsBattleTest is CrapsPins {
 
         // Drawn, grown to the full ten-chip round, and different between the two players.
         uint256 played = BON_STACK / 7 * 10;
-        assertEq(craps.stakeFor(boardA), played, "the drawn board missed the round");
-        assertEq(craps.stakeFor(boardB), played, "the drawn board missed the round");
+        assertEq(craps.stakeFor(boardA) / 1e18, played, "the drawn board missed the round");
+        assertEq(craps.stakeFor(boardB) / 1e18, played, "the drawn board missed the round");
         assertTrue(keccak256(abi.encode(boardA)) != keccak256(abi.encode(boardB)), "two players drew one board");
 
         // And it settles on what it drew — through the slot lane, the only door a window has.

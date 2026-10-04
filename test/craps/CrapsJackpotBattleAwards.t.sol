@@ -13,7 +13,7 @@ contract CrapsJackpotBattleAwardsTest is CrapsPins {
         _installPins();
         vm.cloneAccount(address(new MockCoinflip()), address(coinflip));
         c = new CrapsViews();
-        c.seedProgressive(100_000_000 ether);
+        c.seedProgressive(100_000_000);
     }
 
     function test_ThresholdsAndPassSplitConserveThePool() public {
@@ -21,9 +21,9 @@ contract CrapsJackpotBattleAwardsTest is CrapsPins {
         for (uint256 i; i < scores.length; ++i) {
             uint256 snapshot = vm.snapshotState();
             uint256 score = scores[i];
-            uint256 gross = score >= 1_200_000 ? 10_000_000 ether : score >= 250_000 ? 5_000_000 ether : 0;
+            uint256 gross = score >= 1_200_000 ? 10_000_000 : score >= 250_000 ? 5_000_000 : 0;
             c.payProgressiveAt(KEY, winner, score * 300 / 10_000, score);
-            assertEq(c.progressivePool(), 100_000_000 ether - gross);
+            assertEq(c.progressivePool(), 100_000_000 - gross);
             (uint256 normal, uint256 high) = c.passCreditsOf(winner);
             uint256 passValue = normal * c.NORMAL_PASS_VALUE() + high * c.HIGH_PASS_VALUE();
             assertEq(passValue + coinflip.staked(winner), gross);

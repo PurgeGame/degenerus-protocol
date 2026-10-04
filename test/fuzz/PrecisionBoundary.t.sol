@@ -16,7 +16,7 @@ contract PrecisionBoundaryTest is Test {
     // =========================================================================
 
     uint256 constant QTY_SCALE = 100;
-    uint256 constant PRICE_COIN_UNIT = 1000 ether;
+    uint256 constant PRICE_COIN_UNIT = 1000;
     uint256 constant TICKET_MIN_BUYIN_WEI = 0.0025 ether;
     uint256 constant BPS_DENOMINATOR = 10_000;
     uint256 constant LOOTBOX_MIN = 0.01 ether;

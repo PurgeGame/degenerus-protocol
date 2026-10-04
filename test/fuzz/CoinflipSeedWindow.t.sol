@@ -15,8 +15,8 @@ contract StoredSeedReference is Coinflip {
         uint24 start = seedWindowStart;
         for (uint24 i; i < 20; ++i) {
             uint24 d = start + i;
-            _setFlipStake(d, ContractAddresses.VAULT, _flipStake(d, ContractAddresses.VAULT) + 200_000 ether);
-            _setFlipStake(d, ContractAddresses.SDGNRS, _flipStake(d, ContractAddresses.SDGNRS) + 200_000 ether);
+            _setFlipStake(d, ContractAddresses.VAULT, _flipStake(d, ContractAddresses.VAULT) + 200_000);
+            _setFlipStake(d, ContractAddresses.SDGNRS, _flipStake(d, ContractAddresses.SDGNRS) + 200_000);
         }
         seedWindowStart = type(uint24).max;
     }
@@ -42,7 +42,7 @@ contract CoinflipSeedWindowTest is DeployProtocol {
     address internal constant VAULT = ContractAddresses.VAULT;
     address internal constant SDGNRS = ContractAddresses.SDGNRS;
 
-    uint256 internal constant SEED = 200_000 ether;
+    uint256 internal constant SEED = 200_000;
     uint24 internal constant SEED_DAYS = 20;
     uint256 internal constant FIELDS = 19;
     bytes32 internal constant STAKE_SIG = keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
@@ -107,7 +107,7 @@ contract CoinflipSeedWindowTest is DeployProtocol {
     function _rawStake(uint24 day, address p) internal view returns (uint256) {
         bytes32 inner = keccak256(abi.encode(uint256(day >> 3), uint256(0)));
         uint256 w = uint256(vm.load(address(coinflip), keccak256(abi.encode(p, uint256(inner)))));
-        return uint256(uint32(w >> ((uint256(day) & 7) * 32))) * 1 ether;
+        return uint256(uint32(w >> ((uint256(day) & 7) * 32)));
     }
 
     function _stateSlot(address p) internal pure returns (bytes32) {
@@ -226,11 +226,11 @@ contract CoinflipSeedWindowTest is DeployProtocol {
             _warpToDay(d);
             uint256 r = uint256(keccak256(abi.encode(bits, d)));
             // Credits stake tomorrow, a seeded day for most of the run.
-            if (r & 2 != 0) _creditVault(1_000 ether + ((r >> 8) % 90_000 ether) + 0.4 ether);
-            if (r & 4 != 0) _creditSdgnrs(500 ether + ((r >> 72) % 40_000 ether) + 0.7 ether);
+            if (r & 2 != 0) _creditVault(1_000 + ((r >> 8) % 90_000));
+            if (r & 4 != 0) _creditSdgnrs(500 + ((r >> 72) % 40_000));
             _resolve(d, r & 1 != 0);
 
-            if (d % 4 == 0 && d < 40) _vaultClaim((r >> 136) % 400_000 ether);
+            if (d % 4 == 0 && d < 40) _vaultClaim((r >> 136) % 400_000);
             if (d == 10 || d == 62 || d == 75) {
                 // Anyone may settle the vault; day 62 passes the first century window before
                 // the second arms.
@@ -241,7 +241,7 @@ contract CoinflipSeedWindowTest is DeployProtocol {
                 vm.prank(SDGNRS);
                 uint256 backing = coinflip.redeemableFlipBacking();
                 vm.prank(SDGNRS);
-                coinflip.withdrawRedeemedFlip(((backing / 4) / 1 ether) * 1 ether);
+                coinflip.withdrawRedeemedFlip(backing / 4);
             }
             if (d == 17 || d == 52) {
                 uint256 salvage = coinflip.previewSalvageFlipBacking(VAULT);
@@ -250,13 +250,13 @@ contract CoinflipSeedWindowTest is DeployProtocol {
             }
             if (d == 40) {
                 vm.prank(VAULT);
-                coinflip.setCoinflipAutoRebuy(address(0), true, 150_000 ether + ((r >> 200) % 300_000 ether));
+                coinflip.setCoinflipAutoRebuy(address(0), true, 150_000 + ((r >> 200) % 300_000));
                 // The century arm rides the day's transition close; a credit already sits on day 41.
                 _arm(100, stored);
             }
             if (d == 44 || d == 49) {
                 vm.prank(VAULT);
-                coinflip.claimCoinflipCarry(address(0), (r >> 140) % 250_000 ether);
+                coinflip.claimCoinflipCarry(address(0), (r >> 140) % 250_000);
             }
             if (d == 46) {
                 vm.prank(VAULT);
@@ -280,7 +280,7 @@ contract CoinflipSeedWindowTest is DeployProtocol {
         for (uint24 d = 1; d <= 5; ++d) {
             _warpToDay(d);
             uint256 r = uint256(keccak256(abi.encode(bits, d)));
-            if (r & 2 != 0) _creditVault(2_500 ether);
+            if (r & 2 != 0) _creditVault(2_500);
             _resolve(d, r & 1 != 0);
             _observe(t);
         }
@@ -300,8 +300,8 @@ contract CoinflipSeedWindowTest is DeployProtocol {
         for (uint24 d = 196; d <= 220; ++d) {
             _warpToDay(d);
             uint256 r = uint256(keccak256(abi.encode(bits, d)));
-            if (r & 2 != 0) _creditVault(7_000 ether + 0.9 ether);
-            if (r & 4 != 0) _creditSdgnrs(3_000 ether);
+            if (r & 2 != 0) _creditVault(7_000);
+            if (r & 4 != 0) _creditSdgnrs(3_000);
             _resolve(d, r & 1 != 0);
             _observe(t);
         }
@@ -340,9 +340,9 @@ contract CoinflipSeedWindowTest is DeployProtocol {
         for (uint24 d = 1; d <= 22; ++d) {
             _warpToDay(d);
             if (d == 2 || d == 9 || d == 21) {
-                _creditVault(12_345.6 ether);
-                _creditSdgnrs(9_876.5 ether);
-                lane[d + 1] = 12_345 ether;
+                _creditVault(12_345);
+                _creditSdgnrs(9_876);
+                lane[d + 1] = 12_345;
             }
             _resolve(d, d % 3 != 0);
             (, bool win) = coinflip.getCoinflipDayResult(d);
@@ -351,7 +351,7 @@ contract CoinflipSeedWindowTest is DeployProtocol {
             if (win) vaultExpected += _payout(stake, d);
             else if (stake != 0) ++vaultLosses;
 
-            uint256 sStake = (lane[d] == 0 ? 0 : 9_876 ether) + (d <= SEED_DAYS ? SEED : 0) + sdgnrsCarry;
+            uint256 sStake = (lane[d] == 0 ? 0 : 9_876) + (d <= SEED_DAYS ? SEED : 0) + sdgnrsCarry;
             if (d <= SEED_DAYS) {
                 if (win) sdgnrsClaimable += _payout(sStake, d);
             } else if (win) {
@@ -368,7 +368,7 @@ contract CoinflipSeedWindowTest is DeployProtocol {
         assertEq(_vaultClaim(type(uint256).max), vaultExpected, "claim pays lane + seed per winning day");
         assertEq(coin.vaultMintAllowance() - allowance0, vaultExpected, "minted into the vault allowance");
         assertEq(_bafWord(VAULT) & type(uint192).max, vaultExpected, "every winning payout is BAF credit");
-        assertEq(wwxrp.balanceOf(VAULT) - wwxrpVault0, vaultLosses * 1 ether, "one loss prize per staked losing day");
+        assertEq(wwxrp.balanceOf(VAULT) - wwxrpVault0, vaultLosses * 1, "one loss prize per staked losing day");
         assertEq(_vaultClaim(type(uint256).max), 0, "the cursor consumed each seed once");
         assertEq(_rawStake(3, VAULT) + _rawStake(10, VAULT) + _rawStake(22, VAULT), 0, "stored lanes cleared");
 
@@ -396,11 +396,11 @@ contract CoinflipSeedWindowTest is DeployProtocol {
         }
 
         _warpToDay(5);
-        _creditVault(1_234 ether);
+        _creditVault(1_234);
         vm.prank(GAME);
-        coinflip.creditFlip(alice, 1_234 ether);
-        assertEq(coinflip.coinflipAmount(VAULT), 1_234 ether + SEED, "seed joins the stored stake");
-        assertEq(coinflip.coinflipAmount(alice), 1_234 ether);
+        coinflip.creditFlip(alice, 1_234);
+        assertEq(coinflip.coinflipAmount(VAULT), 1_234 + SEED, "seed joins the stored stake");
+        assertEq(coinflip.coinflipAmount(alice), 1_234);
 
         // Century window armed on wall day 60: days 61..80.
         _warpToDay(60);
@@ -547,6 +547,6 @@ contract CoinflipSeedWindowTest is DeployProtocol {
         _resolve(22, true);
         _resolve(23, true);
         assertEq(coinflip.previewClaimCoinflips(VAULT), 0, "day 21 onward carries no seed");
-        assertEq(wwxrp.balanceOf(VAULT) - wwxrp0, 19 ether, "days 2..20 lost a seed each; day 21 had no stake");
+        assertEq(wwxrp.balanceOf(VAULT) - wwxrp0, 19, "days 2..20 lost a seed each; day 21 had no stake");
     }
 }

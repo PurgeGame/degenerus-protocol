@@ -29,6 +29,7 @@ import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 import {TicketWorkPlan} from "../libraries/JackpotTicketPlan.sol";
 
 interface IDegenerusGameTicketModule {
+    function registerAffiliateOwner(address owner, bool required) external returns (uint32 id);
     function runJackpotTicketAwards(TicketWorkPlan calldata plan, uint256 allowance)
         external returns (MineFlipGas.Result memory);
     function runTicketWork(uint24 anchor, uint256 gasAllowance) external returns (MineFlipGas.Result memory);
@@ -557,11 +558,11 @@ interface IDegenerusGameDegeneretteModule {
 
     /// @notice Resolve a lootbox WWXRP roll as a single WWXRP Degenerette spin.
     /// @param player The reward recipient.
-    /// @param stake The WWXRP bet amount staked for the one spin.
+    /// @param stake Virtual WWXRP stake in 10^18 sub-units per token (not an ERC20 amount).
     /// @param activityScore Frozen activity score in whole points from the box's commitment.
     /// @param seed Domain-separated spin seed (hash2-tagged off the box seed).
     /// @param symbol Hero symbol 0..23 (no Dice), or 32 for a random eligible hero.
-    /// @return wwxrpOut The spin's WWXRP payout, returned for the box entry's WWXRP lane (the
+    /// @return wwxrpOut The spin's whole-token WWXRP payout, returned for the box entry's WWXRP lane (the
     ///         caller mints once).
     function resolveWwxrpSpinFromBox(
         address player,
@@ -576,11 +577,11 @@ interface IDegenerusGameDegeneretteModule {
 
     /// @notice Resolve a lootbox roll as three FLIP Degenerette spins under one survival flip.
     /// @param player The reward recipient.
-    /// @param totalStake The total FLIP budget split across the three spins.
+    /// @param totalStake Virtual FLIP budget in 10^18 sub-units per token, split across three spins.
     /// @param activityScore Frozen activity score in whole points from the box's commitment.
     /// @param seed Domain-separated spin seed (hash2-tagged off the box seed).
     /// @param symbol Hero symbol 0..23 (no Dice), or 32 for a random eligible hero.
-    /// @return flipOut The summed payout after its survival flip, returned for the box entry's
+    /// @return flipOut Whole-token payout after the survival flip, returned for the box entry's
     ///         FLIP lane (credited by the caller at flush).
     function resolveFlipSpinsFromBox(
         address player,

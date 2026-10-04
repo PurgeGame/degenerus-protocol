@@ -199,7 +199,11 @@ abstract contract DegenerusGameStorage {
     /// @dev Conversion factor for FLIP token amounts.
     ///      FLIP uses 18 decimals, so 1000 FLIP = 1e21 base units.
     ///      Used in price calculations: price / PRICE_COIN_UNIT = FLIP per mint.
-    uint256 internal constant PRICE_COIN_UNIT = 1000 ether;
+    uint256 internal constant PRICE_COIN_UNIT = 1000;
+
+    /// @dev Fractional precision for virtual reward spins, independent of token decimals.
+    ///      Divide once at the final award boundary; custody and stored token amounts are whole.
+    uint256 internal constant TOKEN_MATH_SCALE = 1e18;
 
     /// @dev Scale factor for fractional ticket calculations (2 decimal places).
     ///      100 means 1 ticket = 100 scaled units.
@@ -1266,8 +1270,25 @@ abstract contract DegenerusGameStorage {
         bool rngBypass
     ) internal {
         if (entriesScaled == 0) return;
+        _queueEntriesScaledCore(buyer, targetLevel, entriesScaled, rngBypass, targetLevel > _mintCeiling());
+    }
+
+    /// @dev Purchase callers route through _activeTicketLevel(), which never exceeds level+1.
+    ///      These entries are always inside the normal ceiling, including final-jackpot reroutes;
+    ///      skip the far-future ceiling's cold earlyTicketLevel read and share the same codec.
+    function _queuePurchaseEntries(address buyer, uint24 targetLevel, uint32 entriesScaled) internal {
+        if (entriesScaled == 0) return;
+        _queueEntriesScaledCore(buyer, targetLevel, entriesScaled, false, false);
+    }
+
+    function _queueEntriesScaledCore(
+        address buyer,
+        uint24 targetLevel,
+        uint32 entriesScaled,
+        bool rngBypass,
+        bool isFarFuture
+    ) private {
         // No liveness gate (see _queueEntries): post-liveness queued tickets are harmless.
-        bool isFarFuture = targetLevel > _mintCeiling();
         uint24 wk = isFarFuture
             ? _tqFarFutureKey(targetLevel)
             : _tqWriteKey(targetLevel);
@@ -1527,18 +1548,24 @@ abstract contract DegenerusGameStorage {
         }
     }
 
-    /// @dev Resolve or allocate the wallet's permanent nonzero uint32 ID before
-    ///      queueing. Generated lanes use ID minus one. Existing IDs remain usable
-    ///      when the lifetime registry is full; return zero only for a new wallet.
-    ///      Paid sinks revert on exhaustion; advance awards retain their cap policy.
+    /// @dev Lifetime identity ceiling shared by tickets and affiliates. Existing identities
+    ///      remain usable at capacity; IDs are never recycled or reassigned.
+    uint256 internal constant MAX_WALLET_IDS = 3_000_000_000;
+
+    function _ensureWalletId(address owner) internal returns (uint32 id) {
+        id = ticketOwnerId[owner];
+        if (id != 0) return id;
+        if (owner == address(0) || ticketOwners.length >= MAX_WALLET_IDS) return 0;
+        ticketOwners.push(owner);
+        id = uint32(ticketOwners.length);
+        ticketOwnerId[owner] = id;
+    }
+
+    /// @dev Identity allocation is separate from queue discovery: affiliate-only registration
+    ///      emits no fictitious level entry. Automatic ticket awards remain fail-soft at capacity.
     function _registerEntryOwner(address buyer, uint24 targetLevel) internal returns (uint80) {
-        uint32 id = ticketOwnerId[buyer];
-        if (id == 0) {
-            if (ticketOwners.length >= type(uint32).max) return 0;
-            ticketOwners.push(buyer);
-            id = uint32(ticketOwners.length);
-            ticketOwnerId[buyer] = id;
-        }
+        uint32 id = _ensureWalletId(buyer);
+        if (id == 0) return 0;
         emit EntryOwnerRegistered(targetLevel, id - 1, buyer);
         return uint80(id) << OWNER_IDX_SHIFT;
     }
@@ -2554,9 +2581,30 @@ abstract contract DegenerusGameStorage {
     /// @dev Per-level prize pool snapshot used for affiliate DGNRS weighting.
     mapping(uint24 => uint256) internal levelPrizePool;
 
-    /// @dev Per-level per-affiliate claim tracking (true if claimed).
-    mapping(uint24 => mapping(address => bool))
-        internal affiliateDgnrsClaimedBy;
+    /// @dev One reusable claim word per player. Bits 0..24 and 25..49 hold
+    ///      bingo level+1 stamps for even/odd ticket buffers (zero = never claimed).
+    ///      Bits 50..73 hold the affiliate claim level (level zero is not claimable).
+    ///      A bingo stamp is overwritten only after that parity's old ticket level retires.
+    mapping(address => uint256) internal playerClaimWord;
+
+    function _bingoClaimed(uint24 lvl, address player) internal view returns (bool) {
+        return ((playerClaimWord[player] >> ((lvl & 1) * 25)) & 0x1ffffff) == uint256(lvl) + 1;
+    }
+
+    function _markBingoClaimed(uint24 lvl, address player) internal {
+        uint256 shift = (lvl & 1) * 25;
+        playerClaimWord[player] = (playerClaimWord[player] & ~(uint256(0x1ffffff) << shift))
+            | ((uint256(lvl) + 1) << shift);
+    }
+
+    function _affiliateDgnrsClaimed(uint24 lvl, address player) internal view returns (bool) {
+        return uint24(playerClaimWord[player] >> 50) == lvl;
+    }
+
+    function _markAffiliateDgnrsClaimed(uint24 lvl, address player) internal {
+        playerClaimWord[player] = (playerClaimWord[player] & ~(uint256(type(uint24).max) << 50))
+            | (uint256(lvl) << 50);
+    }
 
     /// @dev Segregated DGNRS allocation + cumulative claimed per level, packed into one
     ///      slot: bits [0:128) = allocation (5% of affiliate pool, snapshot at transition),
@@ -3038,11 +3086,13 @@ abstract contract DegenerusGameStorage {
     // =========================================================================
     //
     // Layout (LSB -> MSB):
-    //   [bits   0:47]   unused
+    //   [bits   0:23]   heroBufferDay             uint24   (latest day in the hero ring)
+    //   [bits  24:29]   heroQuadrantsValid        uint6    (3 quadrant bits per parity)
+    //   [bits  30:47]   unused
     //   [bits  48:111]  lootboxRngPendingEth     uint64   (scaled /1e15, 0.001 ETH res, far exceeds ETH supply)
     //   [bits 112:175]  lootboxRngThreshold      uint64   (scaled /1e15, 0.001 ETH res, far exceeds ETH supply)
     //   [bits 176:183]  middayMaxBasefeeGwei     uint8    (whole gwei, 0 disables the gate)
-    //   [bits 184:223]  lootboxRngPendingFlip  uint40   (scaled /1e18, 1 FLIP res, max ~1.1T FLIP)
+    //   [bits 184:223]  lootboxRngPendingFlip  uint40   (whole FLIP, max ~1.1T FLIP)
     //   [bits 224:231]  midDayTicketRngPending   uint8    (0=idle, 1=ordinary, 2=isolated future pool)
     //   [bits 232:239]  gameOverDeadLatched      uint8    (bool flag, 8 bits)
     //   [bits 240:247]  gameOverDrainLevelLatch  uint8    (0=unset, 1=lvl, 2=lvl+1)
@@ -3109,8 +3159,6 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Scale factor for ETH/LINK packing (0.001 resolution).
     uint256 internal constant LR_ETH_SCALE = 1e15;
-    /// @dev Scale factor for FLIP packing (1 token resolution).
-    uint256 internal constant LR_FLIP_SCALE = 1e18;
 
     // Activity score EV multiplier constants (ETH lootbox only)
     /// @dev 60-point activity score = neutral 100% EV
@@ -3161,10 +3209,6 @@ abstract contract DegenerusGameStorage {
         return uint256(milli) * LR_ETH_SCALE;
     }
 
-    /// @dev Pack a wei amount to whole FLIP (divide by 1e18). 1 FLIP resolution.
-    function _packFlipToWhole(uint256 wei_) internal pure returns (uint40) {
-        return uint40(wei_ / LR_FLIP_SCALE);
-    }
 
     /// @dev Total boxes in a packed order — the four bought tiers plus the cover box, if any.
     ///      The sweep's skip check wants only this, and it runs per entry.
@@ -3357,12 +3401,74 @@ abstract contract DegenerusGameStorage {
     // Degenerette Hero Wager Tracking (Daily)
     // =========================================================================
 
-    /// @dev Daily hero symbol wagers (ETH only), indexed by day.
-    ///      Key: day index (from GameTimeLib). Value: 4 packed uint256s.
+    /// @dev Daily hero symbol wagers (ETH only). Keys 0/1 are reusable day-parity buffers;
+    ///      their day and quadrant-valid bits live in lootboxRngPacked's low 30 bits.
+    ///      While advance is behind, days beyond dailyIdx+1 use their full day as the key
+    ///      (always >=2), preserving the frozen jackpot pool until settlement catches up.
+    ///      Value: 4 packed uint256s (only the first three quadrants are eligible).
     ///      Each uint256 packs 8 × 32-bit amounts (one per symbol in that quadrant).
     ///      Amounts stored in units of 1e14 wei (0.0001 ETH) to fit 32 bits
     ///      (max ~429,500 ETH per symbol per day).
     mapping(uint24 => uint256[4]) internal dailyHeroWagers;
+
+    uint256 internal constant HERO_BUFFER_META_MASK = (1 << 30) - 1;
+
+    /// @dev Read a retained hero pool. Days older than the ring return zero, including
+    ///      any retired spill prefix. An invalid quadrant never exposes an old buffer.
+    function _dailyHeroWagerWord(uint24 day, uint8 quadrant) internal view returns (uint256) {
+        unchecked {
+            if (quadrant >= 3) return 0;
+            uint256 meta = lootboxRngPacked;
+            uint256 latest = uint24(meta);
+            if (uint256(day) + 1 < latest) return 0;
+            uint256 bit = uint256(1) << (24 + (day & 1) * 3 + quadrant);
+            if (latest >= day && meta & bit != 0) {
+                return dailyHeroWagers[day & 1][quadrant];
+            }
+            return day > 1 ? dailyHeroWagers[day][quadrant] : 0;
+        }
+    }
+
+    /// @dev Only a day at/before dailyIdx+1 can recycle a buffer: everything evicted is
+    ///      strictly older than the jackpot's frozen dailyIdx. Later wall-clock days spill
+    ///      instead. When advance catches up, each quadrant lazily imports its spill word.
+    ///      Valid bits reset counts logically; the old nonzero word is overwritten directly,
+    ///      avoiding both a clearing SSTORE and a fresh zero-to-nonzero SSTORE.
+    ///      The caller merges returned metadata with its existing pending-ETH write.
+    function _recordDailyHeroWager(uint24 day, uint8 quadrant, uint8 symbol, uint256 units, uint256 meta)
+        internal returns (uint256)
+    {
+        // Validated symbol <24 bounds every shift; the uint24 days are widened before
+        // adding one. Paid units come from <=25 uint128 stakes /1e14, so adding a
+        // uint32 lane is also far below uint256's limit before saturation.
+        unchecked {
+            uint24 key = day;
+            uint256 packed;
+            uint256 latest = uint24(meta);
+            if (day == latest || uint256(day) <= uint256(dailyIdx) + 1) {
+                key = day & 1;
+                uint256 valid = (meta >> 24) & 63;
+                if (day != latest) {
+                    valid = uint256(day) == latest + 1 ? valid & ~(uint256(7) << (key * 3)) : 0;
+                }
+                uint256 bit = uint256(1) << (key * 3 + quadrant);
+                if (valid & bit != 0) {
+                    packed = dailyHeroWagers[key][quadrant];
+                } else {
+                    // A day first seen during a stall may already have paid wagers.
+                    packed = day > 1 ? dailyHeroWagers[day][quadrant] : 0;
+                    meta = (meta & ~HERO_BUFFER_META_MASK) | day | ((valid | bit) << 24);
+                }
+            } else {
+                packed = dailyHeroWagers[key][quadrant];
+            }
+            uint256 shift = uint256(symbol) * 32;
+            uint256 updated = uint32(packed >> shift) + units;
+            if (updated > type(uint32).max) updated = type(uint32).max;
+            dailyHeroWagers[key][quadrant] = (packed & ~(uint256(type(uint32).max) << shift)) | (updated << shift);
+            return meta;
+        }
+    }
 
     // =========================================================================
     // Segregated Yield Accumulator
@@ -3502,16 +3608,9 @@ abstract contract DegenerusGameStorage {
     ///      must move those too (pinned by test/fuzz/WwxrpBoonLaneSkip.t.sol).
     mapping(address => BoonPacked) public boonPacked;
 
-    // =========================================================================
-    // claimBingo color-completion flags (claimBingo-EXCLUSIVE)
-    //
-    // Keyed by uint24 level. The ONLY reader/writer of these mappings is
-    // DegenerusGameBingoModule.claimBingo.
-    // =========================================================================
-
-    /// @dev Whether a player has claimed their one bingo reward on a level.
-    ///      bingoClaimed[level][player].
-    mapping(uint24 => mapping(address => bool)) internal bingoClaimed;
+    /// @dev Reserved former bingo mapping root; claim stamps now share playerClaimWord.
+    ///      Keep subsequent raw-slot readers and delegatecall layouts at their existing offsets.
+    uint256 private __reservedBingoClaimRoot;
 
     // ---- Slot 0 shifts ----
     uint256 internal constant BP_COINFLIP_DAY_SHIFT = 0;
@@ -3550,7 +3649,7 @@ abstract contract DegenerusGameStorage {
     ///      total, up to the cap). The WWXRP ecosystem boon has a separate token consume path.
     ///      Shared by the Degenerette module and the Boon module's EV normalization.
     uint256 internal constant DEGENERETTE_BOON_ETH_CAP = 10 ether;
-    uint256 internal constant DEGENERETTE_BOON_FLIP_CAP = 100_000 ether;
+    uint256 internal constant DEGENERETTE_BOON_FLIP_CAP = 100_000;
 
     /// @dev What ONE Craps day pass is worth, as a lootbox denomination. This is the expected cost
     ///      of entering all six scheduled windows at 1x: 24,825 FLIP, rounded to 24,800.

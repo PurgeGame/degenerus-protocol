@@ -23,9 +23,9 @@ contract EconHarness is CrapsViews {
     ///      oracle cross-check and the theo have to be taken against this, never against only the
     ///      counts the ticket named.
     function drawnBoardOf(uint256 betId) external view returns (Craps.Bets memory board) {
-        uint256 header = _bets[betId];
+        uint256 header = _loadBet(betId);
         Window memory w = _slotWindow(betId >> 64);
-        uint256 chipFlip = (w.played / 1 ether) / BONUS_CHIPS;
+        uint256 chipFlip = (w.played / 1) / BONUS_CHIPS;
         uint256 packed = (header >> _BET_CHIPS_SHIFT) & _BET_CHIPS_MASK;
         uint256 placed;
         (, placed) = _packChips(uint32(packed));
@@ -41,7 +41,7 @@ contract EconHarness is CrapsViews {
     /// @dev The whole settlement of a bet, stop included — production decides a FORFEIT off the
     ///      stop, so a suite grading the money path has to be able to see it.
     function settlementAt(uint256 betId) external view returns (Settlement memory) {
-        return _settlementOf(betId, _bets[betId], _slotWindow(betId >> 64), _wordAt(_indexOf(betId >> 64)));
+        return _settlementOf(betId, _loadBet(betId), _slotWindow(betId >> 64), _wordAt(_indexOf(betId >> 64)));
     }
 
     /// @dev Engine-only: a run off a bare table seed, for comparisons that hold no bet.
@@ -228,7 +228,7 @@ contract CrapsEconomicsTest is CrapsPins {
     function test_theTableIsANetBurn() public {
         Craps.Bets memory b = _board(4);
         uint8 bankMult = 4;
-        uint256 bankroll = uint256(PLAYED) * bankMult * 1 ether;
+        uint256 bankroll = uint256(PLAYED) * bankMult * 1;
         // A REACHABLE target, so runs actually come home and the mint is a real number rather
         // than the trivial zero an unreachable goal produces.
         uint16 goalMult = uint16(craps.MIN_BATTLE_GOAL_MULT());
@@ -326,7 +326,7 @@ contract CrapsEconomicsTest is CrapsPins {
         // what is being measured here is that the table is a net burn anyway.
         Craps.Bets memory b = _board(2);
         uint8 bankMult = 4;
-        uint256 bankroll = uint256(PLAYED) * bankMult * 1 ether;
+        uint256 bankroll = uint256(PLAYED) * bankMult * 1;
         uint16 goalMult = uint16(craps.MIN_BATTLE_GOAL_MULT());
 
         uint256 burned;

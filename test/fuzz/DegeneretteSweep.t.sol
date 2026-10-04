@@ -60,8 +60,8 @@ contract DegeneretteSweep is DeployProtocol {
         _setActiveIndex(IDX);
         _setFuturePool(1_000_000 ether);
         vm.startPrank(address(game));
-        coin.mintForGame(alice, 1_000_000 ether);
-        coin.mintForGame(bob, 1_000_000 ether);
+        coin.mintForGame(alice, 1_000_000);
+        coin.mintForGame(bob, 1_000_000);
         vm.stopPrank();
     }
 
@@ -140,11 +140,11 @@ contract DegeneretteSweep is DeployProtocol {
     /// @dev A mixed queue: both owners, both currencies, short and long bets, owner runs.
     function _placeMixedQueue() private {
         _place(alice, ETH, 0.01 ether, 25);
-        _place(alice, FLIP, 200 ether, 15);
-        _place(bob, FLIP, 100 ether, 3);
+        _place(alice, FLIP, 200, 15);
+        _place(bob, FLIP, 100, 3);
         _place(bob, ETH, 0.05 ether, 1);
         _place(alice, ETH, 0.02 ether, 7);
-        _place(bob, FLIP, 1_000 ether, 15);
+        _place(bob, FLIP, 1_000, 15);
     }
 
     struct Fingerprint {
@@ -208,7 +208,7 @@ contract DegeneretteSweep is DeployProtocol {
     function testPlacementQueuesOneWordPerBet() public {
         vm.recordLogs();
         _place(alice, ETH, 0.01 ether, 3);
-        _place(bob, FLIP, 200 ether, 2);
+        _place(bob, FLIP, 200, 2);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         uint256 seen;
@@ -243,11 +243,7 @@ contract DegeneretteSweep is DeployProtocol {
         vm.expectRevert(bytes4(keccak256("InvalidBet()")));
         game.placeDegeneretteBet{value: 0.01 ether + 1}(address(0), ETH, 0.01 ether + 1, 1, SYMBOL);
 
-        vm.prank(alice);
-        vm.expectRevert(bytes4(keccak256("InvalidBet()")));
-        game.placeDegeneretteBet(address(0), FLIP, 100.5 ether, 1, SYMBOL);
-
-        _place(alice, FLIP, 101 ether, 1); // any whole FLIP is fine
+        _place(alice, FLIP, 101, 1); // any whole FLIP is fine
         assertEq((game.degeneretteBetInfo(IDX, 1) >> 188) & type(uint64).max, 101, "whole FLIP accepted");
     }
 
@@ -276,7 +272,7 @@ contract DegeneretteSweep is DeployProtocol {
     }
 
     function testSweepResumesAcrossCallsWithoutPayingTwice() public {
-        for (uint256 i; i < 12; ++i) _place(i % 2 == 0 ? alice : bob, FLIP, 300 ether, 15);
+        for (uint256 i; i < 12; ++i) _place(i % 2 == 0 ? alice : bob, FLIP, 300, 15);
         _landWord(IDX, uint256(keccak256("sweep_resume_word")));
 
         uint256 snap = vm.snapshotState();
@@ -438,7 +434,7 @@ contract DegeneretteSweep is DeployProtocol {
     }
 
     function testFlipWinFlushesThroughMintForGame() public {
-        _place(bob, FLIP, 1_000 ether, 1);
+        _place(bob, FLIP, 1_000, 1);
         _landWord(IDX, _wordScoring(4));
         uint256 before = coin.balanceOf(bob);
         _resolveCohort();
@@ -498,7 +494,7 @@ contract DegeneretteSweep is DeployProtocol {
     /// @notice A real backlog still pays the crank: resolving 120 bets measures past the unpaid
     ///         first MIN_REWARDED_GAS (48 bets measured ~0.68M, inside it), and the excess is paid.
     function testBacklogPastTheUnpaidFirstMillionEarnsTheBounty() public {
-        for (uint256 i; i < 120; ++i) _place(i % 2 == 0 ? alice : bob, FLIP, 100 ether, 1);
+        for (uint256 i; i < 120; ++i) _place(i % 2 == 0 ? alice : bob, FLIP, 100, 1);
         _landWord(IDX, uint256(keccak256("keeper_word")));
         _readyKeeperLeg();
         (uint256 resolved, uint256 bounty, uint256 used) = _crank(makeAddr("sweepKeeper"));
@@ -511,7 +507,7 @@ contract DegeneretteSweep is DeployProtocol {
     ///         (here ten zeroed bet slots) as progress, so mineFlip commits the walk and finishes
     ///         the cohort instead of refusing the call as workless.
     function testSweepThatOpensNothingStillProgresses() public {
-        for (uint256 i; i < 10; ++i) _place(alice, FLIP, 100 ether, 1);
+        for (uint256 i; i < 10; ++i) _place(alice, FLIP, 100, 1);
         _landWord(IDX, uint256(keccak256("hole_word")));
         // Holes ahead of the cursor: zero the ten queued words in place, leaving the cursor
         // where it stands, to reach the walk's zeroed-bet skip.

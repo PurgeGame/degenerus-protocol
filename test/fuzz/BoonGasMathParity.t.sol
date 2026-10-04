@@ -17,7 +17,7 @@ contract BoonGasMathHarness is DegenerusGameBoonModule {
 
 /// @notice Exact-equivalence locks for the closed-form boon normalization and packed lazy-price lookup.
 contract BoonGasMathParity is Test {
-    uint256 private constant PRICE_COIN_UNIT = 1000 ether;
+    uint256 private constant PRICE_COIN_UNIT = 1000;
     BoonGasMathHarness private harness;
 
     function setUp() public {
@@ -67,18 +67,18 @@ contract BoonGasMathParity is Test {
         uint256 weighted;
 
         // Coinflip deposits: 5/10/25% of a 100k-FLIP cap, weights 200/40/8.
-        weighted += 200 * _flipValue(5000 ether, priceWei);
-        weighted += 40 * _flipValue(10_000 ether, priceWei);
-        weighted += 8 * _flipValue(25_000 ether, priceWei);
+        weighted += 200 * _flipValue(5000, priceWei);
+        weighted += 40 * _flipValue(10_000, priceWei);
+        weighted += 8 * _flipValue(25_000, priceWei);
 
         // Lootbox and purchase boosts: 5/15/25% of a 10-ETH cap.
         weighted += 200 * 0.5 ether + 30 * 1.5 ether + 8 * 2.5 ether;
         weighted += 400 * 0.5 ether + 80 * 1.5 ether + 16 * 2.5 ether;
 
         // Decimator: 10/25/50% of a 50k-FLIP cap.
-        weighted += 40 * _flipValue(5000 ether, priceWei);
-        weighted += 8 * _flipValue(12_500 ether, priceWei);
-        weighted += 2 * _flipValue(25_000 ether, priceWei);
+        weighted += 40 * _flipValue(5000, priceWei);
+        weighted += 8 * _flipValue(12_500, priceWei);
+        weighted += 2 * _flipValue(25_000, priceWei);
 
         // Whale discounts at 4 ETH and deity discounts at the fixed 160-ETH nominal price.
         weighted += 28 * 0.4 ether + 10 * 0.8 ether + 2 * 1.4 ether;
@@ -92,16 +92,16 @@ contract BoonGasMathParity is Test {
 
         // Degenerette ETH and FLIP stake boons. WWXRP/activity/quest carry zero nominal value.
         weighted += 200 * 0.4 ether + 50 * 0.8 ether + 10 * 1.2 ether;
-        weighted += 200 * _flipValue(4000 ether, priceWei);
-        weighted += 50 * _flipValue(8000 ether, priceWei);
-        weighted += 10 * _flipValue(12_000 ether, priceWei);
+        weighted += 200 * _flipValue(4000, priceWei);
+        weighted += 50 * _flipValue(8000, priceWei);
+        weighted += 10 * _flipValue(12_000, priceWei);
 
         // Craps bankroll-payout boons: 5/10/15% of a 60k-FLIP payout base, weights 200/40/8. The
         // top tier is 15% rather than a quarter because the boon lifts EVERY window a ticket
         // plays, and a whole-day ticket plays seven.
-        weighted += 200 * _flipValue(3000 ether, priceWei);
-        weighted += 40 * _flipValue(6000 ether, priceWei);
-        weighted += 8 * _flipValue(9000 ether, priceWei);
+        weighted += 200 * _flipValue(3000, priceWei);
+        weighted += 40 * _flipValue(6000, priceWei);
+        weighted += 8 * _flipValue(9000, priceWei);
 
         return weighted / 2856;
     }

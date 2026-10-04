@@ -69,7 +69,7 @@ contract CoinflipCarryClaim is DeployProtocol {
     ///      The deposit is operator-routed (indirect) so it cannot set the
     ///      biggest-flip record or arm the bounty - keeps the carry math exact.
     function _enterRebuyWithStake(uint256 takeProfit) internal returns (uint256 stake) {
-        stake = 100_000 ether;
+        stake = 100_000;
         vm.prank(GAME);
         coin.mintForGame(player, stake);
         vm.prank(player);
@@ -94,7 +94,7 @@ contract CoinflipCarryClaim is DeployProtocol {
         _resolveDay(3, true);
 
         uint256 expectedCarry = _carryAfterWin(stake, 3);
-        uint256 take = 50_000 ether;
+        uint256 take = 50_000;
         uint256 balBefore = coin.balanceOf(player);
 
         vm.prank(player);
@@ -149,9 +149,9 @@ contract CoinflipCarryClaim is DeployProtocol {
     }
 
     function test_TakeProfitBanksReservedChunksAndCarriesRemainder() public {
-        // Not a 1000-ether multiple, so the payout (always one) can never split
+        // Not a 1000-FLIP multiple, so the payout (always one) can never split
         // evenly into chunks: both the reserved and remainder legs are exercised.
-        uint256 takeProfit = 30_001 ether;
+        uint256 takeProfit = 30_001;
         uint256 stake = _enterRebuyWithStake(takeProfit);
         _resolveDay(3, true);
 
@@ -205,7 +205,7 @@ contract CoinflipCarryClaim is DeployProtocol {
 
         vm.prank(player);
         vm.expectRevert(Coinflip.RngLocked.selector);
-        coinflip.claimCoinflipCarry(address(0), 1 ether);
+        coinflip.claimCoinflipCarry(address(0), 1);
     }
 
     /// The other side: day 3's payouts are applied and the lock is STILL held (mineFlip
@@ -218,11 +218,11 @@ contract CoinflipCarryClaim is DeployProtocol {
 
         _lockRng();
         vm.prank(player);
-        uint256 claimed = coinflip.claimCoinflipCarry(address(0), 1 ether);
+        uint256 claimed = coinflip.claimCoinflipCarry(address(0), 1);
         vm.clearMockedCalls();
 
-        assertEq(claimed, 1 ether, "settled carry withdraws under a still-held lock");
-        assertEq(coin.balanceOf(player), 1 ether, "and mints to the player");
+        assertEq(claimed, 1, "settled carry withdraws under a still-held lock");
+        assertEq(coin.balanceOf(player), 1, "and mints to the player");
     }
 
     function _lockRng() internal {
@@ -246,7 +246,7 @@ contract CoinflipCarryClaim is DeployProtocol {
     /// position is frozen, a live carry rides the unapplied day, and a consume for an arbitrary
     /// amount must take the settled bank and leave the carry exactly as it found it.
     function testFuzz_BurnConsumeNeverReachesTheCarry(uint96 wantRaw) public {
-        _enterRebuyWithStake(50_000 ether); // take-profit banks chunks AND leaves a carry
+        _enterRebuyWithStake(50_000); // take-profit banks chunks AND leaves a carry
         _resolveDay(3, true);
         vm.prank(player);
         coinflip.claimCoinflipCarry(address(0), 0); // settle while day 3 is applied
@@ -305,7 +305,7 @@ contract CoinflipCarryClaim is DeployProtocol {
     ///                                 so it can only ever fold ALREADY-public resolved days,
     ///                                 and `lastClaim` makes that idempotent. Driven below.
     function test_NoReachablePathMovesTheCarryRidingAnUnappliedDay() public {
-        _enterRebuyWithStake(50_000 ether);
+        _enterRebuyWithStake(50_000);
         _resolveDay(3, true);
         vm.prank(player);
         coinflip.claimCoinflipCarry(address(0), 0); // settle while day 3 is applied
@@ -321,11 +321,11 @@ contract CoinflipCarryClaim is DeployProtocol {
 
         vm.prank(player);
         vm.expectRevert(Coinflip.RngLocked.selector);
-        coinflip.setCoinflipAutoRebuy(address(0), true, 1 ether);
+        coinflip.setCoinflipAutoRebuy(address(0), true, 1);
 
         vm.prank(player);
         vm.expectRevert(Coinflip.RngLocked.selector);
-        coinflip.setCoinflipAutoRebuyTakeProfit(address(0), 1 ether);
+        coinflip.setCoinflipAutoRebuyTakeProfit(address(0), 1);
 
         vm.prank(player);
         vm.expectRevert(Coinflip.RngLocked.selector);
@@ -341,9 +341,9 @@ contract CoinflipCarryClaim is DeployProtocol {
 
         // --- a fresh deposit rides TOMORROW, never the unapplied day ---
         vm.prank(GAME);
-        coin.mintForGame(player, 10_000 ether);
+        coin.mintForGame(player, 10_000);
         vm.prank(player);
-        coinflip.depositCoinflip(address(0), 10_000 ether);
+        coinflip.depositCoinflip(address(0), 10_000);
 
         (, , uint256 carry1, ) = coinflip.coinflipAutoRebuyInfo(player);
         assertEq(carry1, carry0, "no reachable path moved the carry riding the unapplied day");
@@ -352,6 +352,6 @@ contract CoinflipCarryClaim is DeployProtocol {
     function test_RevertsWithoutAutoRebuy() public {
         vm.prank(player);
         vm.expectRevert(Coinflip.AutoRebuyNotEnabled.selector);
-        coinflip.claimCoinflipCarry(address(0), 1 ether);
+        coinflip.claimCoinflipCarry(address(0), 1);
     }
 }

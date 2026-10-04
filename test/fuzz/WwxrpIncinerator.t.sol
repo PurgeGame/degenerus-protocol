@@ -122,9 +122,9 @@ contract WwxrpIncineratorTest is DeployProtocol {
 
     function testEnterOutsideX99RecordsNoIncineratorEntry() public {
         // Default level (not an x99) and an explicit x00.
-        _enterAs(alice, 100 ether);
+        _enterAs(alice, 100);
         _setLevel(100);
-        _enterAs(alice, 100 ether);
+        _enterAs(alice, 100);
 
         (uint256 total100, uint32 count100) = wwxrp.incineratorInfo(100);
         (uint256 total101, uint32 count101) = wwxrp.incineratorInfo(101);
@@ -136,9 +136,8 @@ contract WwxrpIncineratorTest is DeployProtocol {
     function testEnterAtX99RecordsDualEntryFullPrecision() public {
         _setLevel(99);
 
-        // Fractional amount: the daily draw truncates to whole tokens, the
-        // incinerator records full wei.
-        uint256 amt = 25 ether + 0.5 ether;
+        // Both draws record the same integer amount at 1x activity.
+        uint256 amt = 26;
         vm.prank(address(game));
         wwxrp.mintPrize(alice, amt);
         vm.expectEmit(true, true, false, true, address(wwxrp));
@@ -147,7 +146,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
         wwxrp.enter(amt);
 
         (uint256 total, uint32 count) = wwxrp.incineratorInfo(100);
-        assertEq(total, amt, "full-wei score at 1.0x activity");
+        assertEq(total, amt, "whole-token score at 1.0x activity");
         assertEq(count, 1, "one entry");
 
         (address p0, uint256 cum0) = wwxrp.incineratorEntryAt(100, 0);
@@ -155,21 +154,21 @@ contract WwxrpIncineratorTest is DeployProtocol {
         assertEq(cum0, amt, "entry endpoint");
 
         // Second entrant appends a cumulative interval.
-        _enterAs(bob, 100 ether);
+        _enterAs(bob, 100);
         (total, count) = wwxrp.incineratorInfo(100);
-        assertEq(total, amt + 100 ether, "cumulative total");
+        assertEq(total, amt + 100, "cumulative total");
         assertEq(count, 2, "two entries");
         (address p1, uint256 cum1) = wwxrp.incineratorEntryAt(100, 1);
         assertEq(p1, bob, "second player");
-        assertEq(cum1, amt + 100 ether, "second endpoint");
+        assertEq(cum1, amt + 100, "second endpoint");
     }
 
     function testEnterAtLaterCenturyUsesItsBracket() public {
         _setLevel(199);
-        _enterAs(alice, 50 ether);
+        _enterAs(alice, 50);
 
         (uint256 total, uint32 count) = wwxrp.incineratorInfo(200);
-        assertEq(total, 50 ether, "bracket 200 armed");
+        assertEq(total, 50, "bracket 200 armed");
         assertEq(count, 1, "one entry");
         (uint256 total100, ) = wwxrp.incineratorInfo(100);
         assertEq(total100, 0, "bracket 100 untouched");
@@ -187,11 +186,11 @@ contract WwxrpIncineratorTest is DeployProtocol {
         uint256 mult = wwxrp.drawMultBps(score);
         assertGt(mult, BPS, "mocked score maps above 1.0x");
 
-        _enterAs(alice, 100 ether);
+        _enterAs(alice, 100);
         vm.clearMockedCalls();
 
         (uint256 total, ) = wwxrp.incineratorInfo(100);
-        assertEq(total, (100 ether * mult) / BPS, "activity-weighted full-wei score");
+        assertEq(total, (100 * mult) / BPS, "activity-weighted whole-token score");
     }
 
     function testScoreSaturatesInsteadOfReverting() public {
@@ -206,7 +205,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
         assertEq(count, 1, "entry recorded");
 
         // Post-cap entry: accepted, zero-width interval.
-        _enterAs(bob, 100 ether);
+        _enterAs(bob, 100);
         (total, count) = wwxrp.incineratorInfo(100);
         assertEq(total, type(uint192).max, "total unchanged");
         assertEq(count, 2, "post-cap entry recorded");
@@ -236,15 +235,15 @@ contract WwxrpIncineratorTest is DeployProtocol {
 
     function testResolveWinnerMatchesIntervalRoll() public {
         _setLevel(99);
-        _enterAs(alice, 100 ether); // interval [0, 100e18)
-        _enterAs(bob, 300 ether); // interval [100e18, 400e18)
+        _enterAs(alice, 100); // interval [0, 100e18)
+        _enterAs(bob, 300); // interval [100e18, 400e18)
 
         uint256 word = uint256(keccak256("incin_resolve_word"));
-        uint256 roll = _roll(100, word, 400 ether);
-        address expected = roll < 100 ether ? alice : bob;
+        uint256 roll = _roll(100, word, 400);
+        address expected = roll < 100 ? alice : bob;
 
         vm.expectEmit(true, true, false, true, address(wwxrp));
-        emit IncineratorResolved(100, expected, 0, roll, 400 ether); // no armed-day book -> zero award, winner still drawn
+        emit IncineratorResolved(100, expected, 0, roll, 400); // no armed-day book -> zero award, winner still drawn
         vm.prank(address(game));
         address winner = wwxrp.resolveIncinerator(100, word);
         assertEq(winner, expected, "winner matches mirrored interval roll");
@@ -252,15 +251,15 @@ contract WwxrpIncineratorTest is DeployProtocol {
 
     function testResolveBothIntervalsReachable() public {
         _setLevel(99);
-        _enterAs(alice, 100 ether);
-        _enterAs(bob, 300 ether);
+        _enterAs(alice, 100);
+        _enterAs(bob, 300);
 
         // Grind one word per side to prove both intervals are hittable.
         uint256 wordAlice;
         uint256 wordBob;
         for (uint256 w = 1; wordAlice == 0 || wordBob == 0; w++) {
-            uint256 roll = _roll(100, w, 400 ether);
-            if (roll < 100 ether) {
+            uint256 roll = _roll(100, w, 400);
+            if (roll < 100) {
                 if (wordAlice == 0) wordAlice = w;
             } else if (wordBob == 0) {
                 wordBob = w;
@@ -319,14 +318,14 @@ contract WwxrpIncineratorTest is DeployProtocol {
             if (currentLevel > 100) break;
 
             if (currentLevel == 99 && !entered) {
-                _enterAs(alice, 100 ether);
-                _enterAs(bob, 300 ether);
+                _enterAs(alice, 100);
+                _enterAs(bob, 300);
                 entered = true;
             }
             // A third party burns wallet FLIP into the coinflip every day from level 99
             // on, so the armed x00 day's draw book is non-empty and its loss funds the
             // incinerator award. Neither entrant deposits.
-            if (currentLevel >= 99) _selfDeposit(depositor, 1_000 ether);
+            if (currentLevel >= 99) _selfDeposit(depositor, 1_000);
 
             _finishReadConsumers();
             simTime += 1 days + 1;
@@ -379,7 +378,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
         // flip credit: exactly one CoinflipStakeUpdated for the winner carries it, the
         // loser is never credited, and no ETH moved claimable-side for either.
         (, uint96 bookTotal, ) = coinflip.bafDrawInfo();
-        assertEq(flipAward, (uint256(bookTotal) * 1 ether) / 10, "award is 10% of the lost book");
+        assertEq(flipAward, (uint256(bookTotal) * 1) / 10, "award is 10% of the lost book");
         bytes32 stakeTopic = keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
         address loser = winner == alice ? bob : alice;
         uint256 credits;
@@ -416,7 +415,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
 
         // Entries remain recorded (dead), and nothing was credited.
         (uint256 total, uint32 count) = wwxrp.incineratorInfo(100);
-        assertEq(total, 400 ether, "entries persist unresolved");
+        assertEq(total, 400, "entries persist unresolved");
         assertEq(count, 2, "both entries persist");
         assertEq(game.claimableWinningsOf(alice), 0, "alice uncredited");
         assertEq(game.claimableWinningsOf(bob), 0, "bob uncredited");

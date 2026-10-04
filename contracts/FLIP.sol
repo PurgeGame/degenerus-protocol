@@ -27,7 +27,7 @@ pragma solidity 0.8.34;
 /**
  * @title FLIP
  * @author Burnie Degenerus
- * @notice ERC20 in-game token (FLIP, 18 decimals) with minting, burning, and supply management.
+ * @notice ERC20 in-game token (FLIP, 0 decimals) with minting, burning, and supply management.
  *
  * @dev ARCHITECTURE:
  *      - ERC20 standard with game contract transfer bypass
@@ -83,7 +83,7 @@ contract FLIP {
     /// @dev Emitted on transfer, mint (from=0), and burn (to=0).
     /// @param from Sender (zero on mint).
     /// @param to Recipient (zero on burn).
-    /// @param amount Amount transferred, in wei.
+    /// @param amount Amount transferred, in whole tokens.
     event Transfer(address indexed from, address indexed to, uint256 amount);
 
     /// @notice Standard ERC20 approval event.
@@ -94,22 +94,22 @@ contract FLIP {
 
     /// @notice Emitted when a player burns FLIP during a decimator window.
     /// @param player The burner's address.
-    /// @param amountBurned The amount burned (18 decimals).
+    /// @param amountBurned The amount burned (0 decimals).
     /// @param entryId The wallet's accumulated battle entry id.
     event DecimatorBurn(address indexed player, uint256 amountBurned, uint64 entryId);
 
     /// @notice Emitted when virtual coin is escrowed to the vault reserve.
     /// @param sender The account tied to the escrow: the original transfer sender when routed to VAULT via _transfer, address(0) on a direct mint to VAULT, or the calling contract (GAME/VAULT) for vaultEscrow/tombstoneAtGameOver.
-    /// @param amount The amount added to vault mint allowance (18 decimals).
+    /// @param amount The amount added to vault mint allowance (0 decimals).
     event VaultEscrowRecorded(address indexed sender, uint256 amount);
     /// @notice Emitted when the vault spends from its mint allowance (may or may not mint tokens).
     /// @param spender The account tied to the allowance decrease: VAULT when any burn routed at the vault (burnCoin, burnCoinForCraps, burnCoinForSalvage) spends the virtual allowance through _burn's VAULT branch, or the FLIP contract (address(this)) when minted out via vaultMintTo.
-    /// @param amount The amount consumed from allowance (18 decimals).
+    /// @param amount The amount consumed from allowance (0 decimals).
     event VaultAllowanceSpent(address indexed spender, uint256 amount);
 
     /// @notice The craps comp lane paid for an entry, passes, an upgrade or a battle donation.
     /// @param player Who was comped, or the vault for a battle donation.
-    /// @param amount The FLIP wei charged to the lane.
+    /// @param amount The FLIP whole tokens charged to the lane.
     event CrapsCompSpent(address indexed player, uint256 amount);
 
     /// @notice A completed craps battle fed the comp lane.
@@ -172,21 +172,21 @@ contract FLIP {
     string public constant symbol = "FLIP";
 
     /// @dev Minimum FLIP amount for decimator burns (prevents dust spam).
-    uint256 private constant DECIMATOR_MIN = 1000 ether;
+    uint256 private constant DECIMATOR_MIN = 1000;
 
     /// @dev Maximum sDGNRS backing spent once per decimator opening.
-    uint256 private constant SDGNRS_DECIMATOR_CAP = 500_000 ether;
+    uint256 private constant SDGNRS_DECIMATOR_CAP = 500_000;
 
     /// @dev Max base amount eligible for decimator boon boost.
-    uint256 private constant DECIMATOR_BOON_CAP = 50_000 ether;
+    uint256 private constant DECIMATOR_BOON_CAP = 50_000;
 
     /// @dev Basis points denominator (10000 = 1x).
     uint16 private constant BPS_DENOMINATOR = 10_000;
 
-    /// @dev Gameover tombstone flood: 1e36 wei (1 quintillion FLIP) added one-shot to the
-    ///      VAULT mint allowance as a worthless-token overhang signal. ~340x headroom under
+    /// @dev Gameover tombstone flood: 1e18 FLIP (1 quintillion FLIP) added one-shot to the
+    ///      VAULT mint allowance as a worthless-token overhang signal. Far below
     ///      uint128 max (~3.4e38), so the checked add never realistically reverts.
-    uint256 private constant FLIP_TOMBSTONE_WEI = 1e36;
+    uint256 private constant FLIP_TOMBSTONE_AMOUNT = 1e18;
 
     /// @dev Packed supply state to keep total/vault allowance in a single slot.
     struct Supply {
@@ -203,7 +203,7 @@ contract FLIP {
     /// @notice One-shot latch for the gameover FLIP tombstone flood (set on first flood).
     bool private _tombstoneFlooded;
 
-    /// @notice The craps comp lane: FLIP-wei the vault may spend seating players at the craps
+    /// @notice The craps comp lane: FLIP-whole tokens the vault may spend seating players at the craps
     ///         table or funding battle pools. An ACCOUNTING allowance — never minted, never a balance,
     ///         out of `vaultMintTo`'s reach — that the table feeds at two percent of every
     ///         completed battle's eligible bankroll and a comp burn spends. Opens on the converted
@@ -319,7 +319,7 @@ contract FLIP {
 
     /// @notice Virtual coin reserved for the ContractAddresses.VAULT (not yet circulating).
     /// @dev Exposed for the ContractAddresses.VAULT share math and external dashboards.
-    /// @return The current ContractAddresses.VAULT mint allowance in FLIP (18 decimals).
+    /// @return The current ContractAddresses.VAULT mint allowance in FLIP (0 decimals).
     function vaultMintAllowance() external view returns (uint256) {
         return _supply.vaultAllowance;
     }
@@ -329,8 +329,8 @@ contract FLIP {
       +======================================================================+*/
 
     /// @notice Number of decimal places for FLIP token.
-    /// @dev 18 decimals (standard ERC20). 1 FLIP = 1e18 base units.
-    uint8 public constant decimals = 18;
+    /// @dev 0 decimals (standard ERC20). 1 FLIP = 1 raw unit.
+    uint8 public constant decimals = 0;
 
     /*+======================================================================+
       |                       ERC20 FUNCTIONS                                |
@@ -357,7 +357,7 @@ contract FLIP {
     /// @notice Transfer `amount` tokens from caller to `to`.
     /// @dev Standard ERC20 transfer. Reverts on insufficient balance.
     /// @param to The recipient address.
-    /// @param amount The amount to transfer (18 decimals).
+    /// @param amount The amount to transfer (0 decimals).
     /// @return True on success.
     function transfer(address to, uint256 amount) external returns (bool) {
         _transfer(msg.sender, to, amount);
@@ -370,7 +370,7 @@ contract FLIP {
     ///      This enables seamless gameplay transactions without pre-approval steps.
     /// @param from The source address.
     /// @param to The destination address.
-    /// @param amount The amount to transfer (18 decimals).
+    /// @param amount The amount to transfer (0 decimals).
     /// @return True on success.
     function transferFrom(address from, address to, uint256 amount) external returns (bool) {
         // Game contract bypass: no allowance check needed for trusted game operations
@@ -446,7 +446,7 @@ contract FLIP {
     /// @notice Internal mint helper - creates new tokens.
     /// @dev Increases totalSupply and recipient balance. Emits Transfer from address(0).
     /// @param to The recipient address (cannot be zero).
-    /// @param amount The amount to mint (18 decimals).
+    /// @param amount The amount to mint (0 decimals).
     function _mint(address to, uint256 amount) internal {
         if (to == address(0)) revert ZeroAddress();
         uint128 amount128 = _toUint128(amount);
@@ -475,9 +475,17 @@ contract FLIP {
     ///      Ordering in burnCoin/burnCoinForCraps/decimatorBurn: the trusted coinflip shortfall
     ///      consumption runs first, then this burn, then any boon/quest/game accounting calls.
     /// @param from The address to burn from (cannot be zero).
-    /// @param amount The amount to burn (18 decimals).
+    /// @param amount The amount to burn (0 decimals).
     function _burn(address from, uint256 amount) internal {
         if (from == address(0)) revert ZeroAddress();
+        // A purchase funded entirely from unminted coinflip winnings has no
+        // wallet/supply leg. Keep the existing zero-amount event without loading
+        // and rewriting either unchanged storage word.
+        if (amount == 0) {
+            if (from == ContractAddresses.VAULT) emit VaultAllowanceSpent(from, 0);
+            else emit Transfer(from, address(0), 0);
+            return;
+        }
         uint128 amount128 = _toUint128(amount);
         if (from == ContractAddresses.VAULT) {
             uint128 allowanceVault = _supply.vaultAllowance;
@@ -506,7 +514,7 @@ contract FLIP {
     ///      this contract carries no per-caller error type, so a trace reads OnlyGame() for a
     ///      gate that admits COINFLIP alone.
     /// @param from The player's address to burn from.
-    /// @param amount The amount of FLIP to burn (18 decimals).
+    /// @param amount The amount of FLIP to burn (0 decimals).
     function burnForCoinflip(address from, uint256 amount) external {
         if (msg.sender != ContractAddresses.COINFLIP) revert OnlyGame();
         _burn(from, amount);
@@ -515,7 +523,7 @@ contract FLIP {
     /// @notice Mint FLIP to a player (coinflip claims, degenerette wins, craps wins).
     /// @dev Only callable by COINFLIP or GAME.
     /// @param to The player's address to mint to.
-    /// @param amount The amount of FLIP to mint (18 decimals).
+    /// @param amount The amount of FLIP to mint (0 decimals).
     function mintForGame(address to, uint256 amount) external {
         // CRAPS is deliberately absent: the table is burn-only and pays every winning in coinflip
         // credit, so a liquid mint is authority it has no call site for.
@@ -613,7 +621,7 @@ contract FLIP {
         emit VaultEscrowRecorded(sender, amount);
     }
 
-    /// @notice One-shot gameover tombstone: floods the VAULT mint allowance by 1e36 wei as a
+    /// @notice One-shot gameover tombstone: floods the VAULT mint allowance by 1e18 FLIP as a
     ///         worthless-token overhang signal. The signal lands only in supplyIncUncirculated(),
     ///         vaultMintAllowance(), and balanceOfWithClaimable(VAULT) — balanceOf(VAULT) and
     ///         circulating totalSupply() are untouched.
@@ -623,8 +631,8 @@ contract FLIP {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
         if (_tombstoneFlooded) return;
         _tombstoneFlooded = true;
-        _supply.vaultAllowance = _toUint128(uint256(_supply.vaultAllowance) + FLIP_TOMBSTONE_WEI);
-        emit VaultEscrowRecorded(msg.sender, FLIP_TOMBSTONE_WEI);
+        _supply.vaultAllowance = _toUint128(uint256(_supply.vaultAllowance) + FLIP_TOMBSTONE_AMOUNT);
+        emit VaultEscrowRecorded(msg.sender, FLIP_TOMBSTONE_AMOUNT);
     }
 
     /// @notice Mint tokens to recipient from vault's allowance.
@@ -650,17 +658,16 @@ contract FLIP {
     ///      Used for purchases, fees, affiliate utilities, growth-bet stakes, and craps stakes.
     ///      Reverts on zero address or insufficient balance.
     /// @param target The address to burn from.
-    /// @param amount The amount to burn (18 decimals).
+    /// @param amount The amount to burn (0 decimals).
     function burnCoin(address target, uint256 amount) external onlyGameOrParimutuel {
         uint256 consumed = _consumeCoinflipShortfall(target, amount);
         _burn(target, amount - consumed);
     }
 
-    /// @dev Action flags ride the LOW BYTE of the craps burn amount. Every eligible craps price is
-    ///      an integer multiple of 1 ether — the three cost expressions in `CrapsBattle` contain no
-    ///      division, and their only wei atoms are `1 ether` and the 100-FLIP bounty granule — and
-    ///      256 divides 1e18, so that byte is always zero before tagging. `CrapsBattle` guards the
-    ///      property at the tag site rather than trusting it here.
+    /// @dev Craps passes (whole-token amount << 8) | action flags. Bits 0..4 are valid;
+    ///      decoding the amount with >> 8 preserves arbitrary integer token prices.
+    error InvalidCrapsFlags();
+
     uint256 private constant CRAPS_FLAG_MASK = 0xFF;
 
     /// @dev The comp bit in that byte: the craps comp lane pays, not the player. Only the table's
@@ -681,7 +688,7 @@ contract FLIP {
     ///      is carried back to the table as a one-hot mask and boosts only that slip's BANKROLL
     ///      RETURN when it settles, so nothing is credited until a run actually comes home.
     /// @param player The buyer.
-    /// @param grossAndFlags The undiscounted price with the action flags in its low byte.
+    /// @param grossAndFlags The encoded price: (whole FLIP << 8) | action flags.
     /// @return boonMask One-hot tier for the caller to store on the slip — 1, 2 or 4 for the
     ///         tiers the table pays at 5/10/15%, and 0 on every burn that did not consume a boon.
     /// @custom:reverts OnlyGame If the caller is not the craps table.
@@ -691,8 +698,9 @@ contract FLIP {
     {
         if (msg.sender != ContractAddresses.CRAPS) revert OnlyGame();
 
-        uint256 gross = grossAndFlags & ~CRAPS_FLAG_MASK;
+        uint256 gross = grossAndFlags >> 8;
         uint8 flags = uint8(grossAndFlags & CRAPS_FLAG_MASK);
+        if (flags & ~uint8(0x1F) != 0) revert InvalidCrapsFlags();
 
         // A COMP. The vault funded an entry or a battle pool: the comp lane pays, no wallet
         // FLIP is touched, no boon is consumed and no quest is credited.
@@ -726,14 +734,14 @@ contract FLIP {
         if (flags != 0) questModule.recordCrapsAction(player, flags);
     }
 
-    /// @notice The craps comp lane's live balance, in FLIP wei.
+    /// @notice The craps comp lane's live balance, in FLIP whole tokens.
     function crapsCompAllowance() external view returns (uint256) {
         return _crapsCompAllowance;
     }
 
     /// @notice Feed the craps comp lane. CRAPS-only: the table calls it once per completed
     ///         battle with two percent of the field's eligible bankroll.
-    /// @param amount FLIP wei to add to the lane.
+    /// @param amount FLIP whole tokens to add to the lane.
     /// @custom:reverts OnlyGame If the caller is not the craps table.
     function creditCrapsComps(uint256 amount) external {
         if (msg.sender != ContractAddresses.CRAPS) revert OnlyGame();
@@ -752,7 +760,7 @@ contract FLIP {
     ///      then carry). Caller caps `amount` at balanceOfSpendableForSalvage(target), so the drain
     ///      always covers; fail-closed otherwise.
     /// @param target The buyer whose FLIP backs the swap (sDGNRS or the vault).
-    /// @param amount The FLIP (wei) to destroy.
+    /// @param amount The FLIP (whole tokens) to destroy.
     function burnCoinForSalvage(address target, uint256 amount) external onlyGame {
         if (amount == 0) return;
         uint256 remainder = amount;
@@ -808,7 +816,7 @@ contract FLIP {
     /// @dev SECURITY: Burns BEFORE downstream calls (CEI pattern).
     ///      Quest and boon bonuses add chips before the degen and entry-day multipliers.
     /// @param player Player address to burn for (address(0) = msg.sender).
-    /// @param amount Amount (18 decimals) to burn; must satisfy MIN (1,000 FLIP).
+    /// @param amount Amount (0 decimals) to burn; must satisfy MIN (1,000 FLIP).
     /// @param chips The entry's board as a normal battle entry takes it (zero to seven named
     ///        chips, the dice scattering the rest); each burn sets it, so the last one counts.
     function decimatorBurn(address player, uint256 amount, uint32 chips) external {

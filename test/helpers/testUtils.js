@@ -68,6 +68,19 @@ export function eth(n) {
   return hre.ethers.parseEther(String(n));
 }
 
+// FLIP and WWXRP have zero decimals. Reject fractional inputs at the API boundary.
+export function flip(n) {
+  const value = String(n);
+  if (!/^\d+$/.test(value)) throw new TypeError("FLIP requires a nonnegative integer");
+  return BigInt(value);
+}
+
+export function wwxrp(n) {
+  const value = String(n);
+  if (!/^\d+$/.test(value)) throw new TypeError("WWXRP requires a nonnegative integer");
+  return BigInt(value);
+}
+
 export function formatEth(wei) {
   return hre.ethers.formatEther(wei);
 }
