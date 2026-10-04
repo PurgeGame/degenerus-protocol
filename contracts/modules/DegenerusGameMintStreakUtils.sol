@@ -708,21 +708,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
 
         // Score at the actual game level; the recorded ticket level can be one ahead.
         // Piggyback the current-level affiliate cache on this existing SSTORE.
-        {
-            uint256 affPoints = affiliate.affiliateBonusPointsBest(level, player);
-            data = BitPackingLib.setPacked(
-                data,
-                BitPackingLib.AFFILIATE_BONUS_LEVEL_SHIFT,
-                BitPackingLib.MASK_24,
-                level
-            );
-            data = BitPackingLib.setPacked(
-                data,
-                BitPackingLib.AFFILIATE_BONUS_POINTS_SHIFT,
-                BitPackingLib.MASK_6,
-                affPoints
-            );
-        }
+        data = _cacheAffiliateBonus(player, level, data);
 
         // ---------------------------------------------------------------------
         // Commit to storage (only if changed)

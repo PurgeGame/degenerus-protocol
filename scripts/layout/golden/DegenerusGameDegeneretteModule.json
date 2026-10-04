@@ -760,14 +760,6 @@
     "typeLabel": "uint16"
   },
   {
-    "bytes": "2",
-    "encoding": "inplace",
-    "label": "_openBountyCarry",
-    "offset": 25,
-    "slot": 56,
-    "typeLabel": "uint16"
-  },
-  {
     "bytes": "32",
     "encoding": "mapping",
     "label": "boxPlayers",

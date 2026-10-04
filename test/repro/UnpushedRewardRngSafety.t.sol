@@ -38,7 +38,6 @@ contract RewardRngBoundaryFixture is DegenerusGame {
         _subOpenCursor = 0;
         _subCursor = 0;
         boxCursor = 0;
-        _openBountyCarry = 0;
     }
 }
 

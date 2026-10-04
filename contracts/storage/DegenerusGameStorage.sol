@@ -4103,18 +4103,6 @@ abstract contract DegenerusGameStorage {
     ///      (GameAfkingModule.SUBSCRIBER_CAP).
     uint16 internal _pendingBoxCount;
 
-    /// @dev Afking opens already knee-credited in the CURRENT forced-split bounty batch.
-    ///      The weighted walk can split one logical drain across chunks (a long skip run eats
-    ///      budget), and each split chunk would otherwise re-satisfy the
-    ///      OPEN_KNEE and re-pay a full bounty. The rewarded crank credits only
-    ///      min(carry + opened, KNEE) - min(carry, KNEE) toward the knee, carries the batch
-    ///      total while the walk is budget-exhausted with boxes still pending (always < 80,
-    ///      fits uint16), and the batch closes — carry zeroed — when the pending counter
-    ///      drains to zero (any open path) or a chunk reaches the full OPEN_BATCH of opens.
-    ///      Aggregate bounty over the split chunks equals the unsplit call's. Packs into the
-    ///      cursor slot (warm for every reader/writer).
-    uint16 internal _openBountyCarry;
-
     /// @dev Players with an open box queued per lootbox RNG index, enqueued once at
     ///      first deposit (the lootboxEth amount == 0 signal). Keyed on the lootbox index,
     ///      which re-couples to the VRF-rotation orphan-index keyspace — the box auto-open

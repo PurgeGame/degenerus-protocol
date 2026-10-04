@@ -543,7 +543,7 @@ contract DegenerusAdmin {
     /// @notice Chainlink LINK/ETH price feed address.
     address public linkEthPriceFeed;
 
-    /// @dev FLIP conversion constant: 1000 FLIP = 1e21 base units.
+    /// @dev FLIP conversion constant: 1000 FLIP per ticket price (FLIP has 0 decimals).
     uint256 private constant PRICE_COIN_UNIT = 1000;
 
     /// @dev Expected LINK/ETH feed decimals.
