@@ -180,21 +180,6 @@ contract DegenerusAffiliate {
     // =====================================================================
 
     /**
-     * @notice Packed struct for leaderboard tracking (fits in single slot).
-     * @dev Used in affiliateTopByLevel mapping to track best performer per level.
-     *
-     * STORAGE LAYOUT (32 bytes):
-     * +----------------------------------------------------+
-     * | [0:20]  player   address   Top affiliate address   |
-     * | [20:32] score    uint96    Raw FLIP earned         |
-     * +----------------------------------------------------+
-     */
-    struct PlayerScore {
-        address player; // 20 bytes - address of top affiliate
-        uint96 score; // 12 bytes - raw 18-decimal amount (capped to uint96 max)
-    }
-
-    /**
      * @notice Affiliate code ownership and kickback configuration.
      * @dev Packed into single storage slot for gas efficiency.
      *
@@ -235,6 +220,9 @@ contract DegenerusAffiliate {
         (25 ether * uint256(REWARD_SCALE_FRESH_L4P_BPS) * PRICE_COIN_UNIT) /
             BPS_DENOMINATOR;
     bytes32 private constant AFFILIATE_ROLL_TAG = keccak256("affiliate-payout-roll-v1");
+    /// @dev `_totalAffiliateScore` word: bits [0:160) level total, bits [160:256) leader score.
+    uint256 private constant TOTAL_SCORE_MASK = type(uint160).max;
+    uint256 private constant TOP_SCORE_SHIFT = 160;
 
     /// @notice Sentinel value indicating a player's referral slot is permanently locked.
     /// @dev Set when a player makes an invalid referral attempt (self-referral, unknown code)
@@ -277,13 +265,15 @@ contract DegenerusAffiliate {
     mapping(address => bytes32) private playerReferralCode;
 
     /// @notice Top affiliate per game level for bonus calculations.
-    /// @dev Private storage; use affiliateTop() view to read.
-    ///      Updated in _updateTopAffiliate() when affiliate exceeds current top.
-    mapping(uint24 => PlayerScore) private affiliateTopByLevel;
+    /// @dev Private storage; use affiliateTop() view to read. Written by _recordScore only
+    ///      when the lead changes; the leader's score lives in `_totalAffiliateScore`.
+    mapping(uint24 => address) private affiliateTopByLevel;
 
-    /// @notice Total affiliate score across all affiliates for a level.
-    /// @dev Running sum updated in payAffiliate; used as the exact denominator
-    ///      for score-proportional DGNRS claim distribution.
+    /// @notice Total affiliate score across all affiliates for a level, packed with the
+    ///      leader's score.
+    /// @dev Bits [0:160): running sum, the exact denominator for score-proportional DGNRS
+    ///      claim distribution. Bits [160:256): the leader's uint96-capped score. Every
+    ///      earning already rewrites this word, so checking the lead reads no other slot.
     mapping(uint24 => uint256) private _totalAffiliateScore;
 
     // =====================================================================
@@ -575,12 +565,11 @@ contract DegenerusAffiliate {
         // Update leaderboard tracking (post-taper amount).
         uint256 newTotal = earned[affiliateAddr] + scaledAmount;
         earned[affiliateAddr] = newTotal;
-        _totalAffiliateScore[lvl] += scaledAmount;
         emit AffiliateEarningsRecorded(
             affiliateAddr,
             uint256(lvl) | (newTotal << AFF_EARN_TOTAL_SHIFT)
         );
-        _updateTopAffiliate(affiliateAddr, newTotal, lvl);
+        _recordScore(affiliateAddr, newTotal, scaledAmount, lvl);
 
         // Calculate kickback (returned to player) and affiliate share.
         uint256 affiliateShareBase;
@@ -707,12 +696,11 @@ contract DegenerusAffiliate {
 
         uint256 newTotal = affiliateCoinEarned[lvl][affiliateAddr] + sumScaled;
         affiliateCoinEarned[lvl][affiliateAddr] = newTotal;
-        _totalAffiliateScore[lvl] += sumScaled;
         emit AffiliateEarningsRecorded(
             affiliateAddr,
             uint256(lvl) | (newTotal << AFF_EARN_TOTAL_SHIFT)
         );
-        _updateTopAffiliate(affiliateAddr, newTotal, lvl);
+        _recordScore(affiliateAddr, newTotal, sumScaled, lvl);
 
         uint256 sumShareBase = sumScaled - playerKickback;
         if (sumShareBase != 0) {
@@ -904,8 +892,7 @@ contract DegenerusAffiliate {
         mapping(address => uint256) storage earned = affiliateCoinEarned[lvl];
         uint256 newTotal = earned[a] + scaled;
         earned[a] = newTotal;
-        _totalAffiliateScore[lvl] += scaled;
-        _updateTopAffiliate(a, newTotal, lvl);
+        _recordScore(a, newTotal, scaled, lvl);
         // Mirror the auto-path AffiliateEarningsRecorded at the claim() leaderboard write so the
         // per-level affiliate score is fully event-derived. The receipt's AffiliateBaseDrained
         // identifies this as the manual-claim path (sumB != 0 is checked above, so a claim
@@ -934,8 +921,7 @@ contract DegenerusAffiliate {
      * @return score Their score in FLIP base units (18 decimals).
      */
     function affiliateTop(uint24 lvl) external view returns (address player, uint96 score) {
-        PlayerScore memory stored = affiliateTopByLevel[lvl];
-        return (stored.player, stored.score);
+        return (affiliateTopByLevel[lvl], uint96(_totalAffiliateScore[lvl] >> TOP_SCORE_SHIFT));
     }
 
     /**
@@ -957,7 +943,7 @@ contract DegenerusAffiliate {
      * @return total The total affiliate score (18 decimals).
      */
     function totalAffiliateScore(uint24 lvl) external view returns (uint256 total) {
-        return _totalAffiliateScore[lvl];
+        return _totalAffiliateScore[lvl] & TOTAL_SCORE_MASK;
     }
 
     /**
@@ -1119,20 +1105,28 @@ contract DegenerusAffiliate {
     }
 
     /**
-     * @notice Update the top affiliate for a level if the new score beats current.
-     * @dev Only updates storage if score exceeds current top.
-     *      Leaderboard tracking is per-level (resets each level).
+     * @notice Add an earning to the level total and take the lead if it beats the leader.
+     * @dev One read-modify-write of the packed `_totalAffiliateScore` word; the leader
+     *      address slot is written only when the lead changes. Ties keep the earlier leader.
+     *      The total saturates at uint160 max (unreachable) so it never spills into the
+     *      leader bits.
      * @param player The affiliate whose score is being checked.
      * @param total The affiliate's new total earnings (raw, 18 decimals).
+     * @param added The amount added to the level total by this earning.
      * @param lvl The game level.
      */
-    function _updateTopAffiliate(address player, uint256 total, uint24 lvl) private {
+    function _recordScore(address player, uint256 total, uint256 added, uint24 lvl) private {
+        uint256 packed = _totalAffiliateScore[lvl];
+        uint256 sum = (packed & TOTAL_SCORE_MASK) + added;
+        if (sum > TOTAL_SCORE_MASK) sum = TOTAL_SCORE_MASK;
+        uint256 leader = packed >> TOP_SCORE_SHIFT;
         uint96 score = _score96(total);
-        PlayerScore memory current = affiliateTopByLevel[lvl];
-        if (score > current.score) {
-            affiliateTopByLevel[lvl] = PlayerScore({player: player, score: score});
+        if (score > leader) {
+            leader = score;
+            affiliateTopByLevel[lvl] = player;
             emit AffiliateTopUpdated(lvl, player, score);
         }
+        _totalAffiliateScore[lvl] = sum | (leader << TOP_SCORE_SHIFT);
     }
 
     /// @dev Reduce affiliate payout for high-activity lootbox buyers.

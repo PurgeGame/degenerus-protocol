@@ -29,7 +29,7 @@
     "label": "affiliateTopByLevel",
     "offset": 0,
     "slot": 3,
-    "typeLabel": "mapping(uint24 => struct DegenerusAffiliate.PlayerScore)"
+    "typeLabel": "mapping(uint24 => address)"
   },
   {
     "bytes": "32",
