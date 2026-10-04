@@ -6,6 +6,7 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
+import {GoldSixLib} from "../../contracts/libraries/GoldSixLib.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 import {AdvanceStageStream} from "../helpers/AdvanceStageStream.sol";
 import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
@@ -50,6 +51,8 @@ contract PhaseEndSeeder is DegenerusGame, BucketSeed {
         _afkingResetDay = day;
         rngWordCurrent = word < 2 ? RNG_WORD_WAITING : word;
         _recordDailyRng(day, word);
+        // The completed ETH leg records this exact board before the ticket stage.
+        dailyFoilDraw[day & 1] = _packFoilDraw(JackpotBucketLib.packWinningTraits(mainTraits), lvl, day, word);
         vrfRequestId = 1;
         dailyJackpotCoinTicketsPending = true;
         // dailyEntries = 4000 (bits 8..71): 1000 whole tickets, so the ticket leg saturates the
@@ -237,6 +240,7 @@ contract Lvl100PhaseEndAdvanceGas is BoundaryGasFixture {
 
         uint256 word = uint256(keccak256("lvl100-phase-end")) | 1;
         uint8[4] memory mainT = JackpotBucketLib.getRandomTraits(word);
+        mainT[3] = GoldSixLib.daily(mainT[3], word);
 
         bytes memory realCode = address(game).code;
         PhaseEndSeeder seeder = _etchSeedRestore();

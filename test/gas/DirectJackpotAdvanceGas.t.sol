@@ -35,6 +35,7 @@ contract DirectAdvanceSeeder is DegenerusGame, BucketSeed {
         _setPrizePools(500 ether, 500 ether);
         uint8[4] memory traits = JackpotBucketLib.getRandomTraits(word);
         traits[3] = GoldSixLib.daily(traits[3], word);
+        dailyFoilDraw[day & 1] = _packFoilDraw(JackpotBucketLib.packWinningTraits(traits), level, day, word);
         for (uint8 q; q < 4; ++q) _seedBucketDistinct(41, traits[q], 128, uint160(0x10000 + uint256(q) * 0x10000));
         _setTicketBufferLevel(42);
     }

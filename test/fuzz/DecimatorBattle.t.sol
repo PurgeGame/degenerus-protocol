@@ -207,6 +207,60 @@ contract DecimatorBattleTest is Test {
         assertFalse(r.progressed);
     }
 
+    function test_SmallHeadsRoundSimulatesRanksAndPaysInOneCall() public {
+        _burn(h, address(1), LVL, 1000, 10_000);
+        uint256 word = 2;
+        while (!_heads(word, LVL, 1)) ++word;
+        h.seal(LVL, 13 ether + 17, word);
+
+        MineFlipGas.Result memory result = h.runDecimatorWork{gas: 2_000_000}(1_900_000);
+
+        assertTrue(result.progressed);
+        assertTrue(result.done, "one worker call drains the small round");
+        assertEq(result.rewardBasis, 3, "one simulation, one ranking and one payment");
+        DegenerusGameStorage.DecBattleRound memory round = h.roundOf(LVL);
+        assertEq(round.cursor, 1);
+        assertEq(round.phase, 3);
+        assertEq(round.champion, 1);
+        assertEq(round.paid, 1);
+        assertEq(h.queue(), 0, "the read cohort no longer waits on decimator");
+        assertEq(h.passesOf(address(1)), 2);
+        assertEq(h.balanceOf(address(1)), 13 ether + 17 - 2 * 2.25 ether);
+        assertEq(h.reserved() + h.future(), 13 ether + 17);
+    }
+
+    function test_InsufficientRankGasCheckpointsWithoutChangingTranscript() public {
+        _burn(h, address(1), LVL, 1000, 10_000);
+        uint256 word = 2;
+        while (_heads(word, LVL, 1)) ++word;
+        h.seal(LVL, 7 ether, word);
+        uint256 snapshot = vm.snapshotState();
+
+        vm.recordLogs();
+        MineFlipGas.Result memory full = h.runDecimatorWork{gas: 1_000_000}(1_000_000);
+        assertTrue(full.done);
+        bytes32 fullTranscript = _transcript(h, vm.getRecordedLogs());
+        bytes32 fullState = _settledState(h);
+        assertTrue(vm.revertToState(snapshot));
+
+        vm.recordLogs();
+        MineFlipGas.Result memory simulated = h.runDecimatorWork{gas: 200_000}(200_000);
+        assertTrue(simulated.progressed);
+        assertFalse(simulated.done, "ranking keeps its own admission bound");
+        assertEq(simulated.rewardBasis, 1);
+        DegenerusGameStorage.DecBattleRound memory checkpoint = h.roundOf(LVL);
+        assertEq(checkpoint.cursor, checkpoint.count);
+        assertEq(checkpoint.phase, 1);
+        assertEq(h.reserved(), 7 ether, "the reservation waits for ranking");
+
+        MineFlipGas.Result memory ranked = h.runDecimatorWork{gas: 500_000}(500_000);
+        assertTrue(ranked.progressed);
+        assertTrue(ranked.done, "zero winners finish without entering payment terms");
+        assertEq(simulated.rewardBasis + ranked.rewardBasis, full.rewardBasis);
+        assertEq(_transcript(h, vm.getRecordedLogs()), fullTranscript);
+        assertEq(_settledState(h), fullState);
+    }
+
     function test_DailyLockDefersAllTailsReserveRelease() public {
         _burn(h, address(1), LVL, 1000, 10_000);
         uint256 word = 2;
@@ -232,8 +286,9 @@ contract DecimatorBattleTest is Test {
         while (_heads(word, LVL, 1)) ++word;
         h.seal(LVL, 5 ether, word);
         MineFlipGas.Result memory r = h.runDecimatorWork(gasleft());
-        assertEq(r.rewardBasis, 1);
-        _drain(h);
+        assertEq(r.rewardBasis, 2, "the tails simulation chains directly into ranking");
+        assertTrue(r.done, "an all-tails round completes in one call");
+        assertEq(h.roundOf(LVL).phase, 3);
         assertEq(h.roundOf(LVL).winners, 0);
         assertEq(h.future(), 5 ether, "all-tails pool returns to future");
     }
@@ -305,7 +360,12 @@ contract DecimatorBattleTest is Test {
             ++calls;
         }
         assertEq(target.queue(), 0, "native worker completes");
-        Vm.Log[] memory logs = vm.getRecordedLogs();
+        transcript = _transcript(target, vm.getRecordedLogs());
+    }
+
+    function _transcript(DecimatorBattleHarness target, Vm.Log[] memory logs)
+        internal pure returns (bytes32 transcript)
+    {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter == address(target)) {
                 transcript = keccak256(abi.encode(transcript, logs[i].topics, logs[i].data));

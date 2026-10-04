@@ -17,6 +17,8 @@ contract EightWinnerHarness is DegenerusGameJackpotModule, BucketSeed {
         uint24 source = kind == 1 ? 41 : 42;
         uint8[4] memory traits = JackpotBucketLib.getRandomTraits(word);
         traits[3] = GoldSixLib.daily(traits[3], word);
+        dailyFoilDraw[(dailyIdx + 1) & 1] = _packFoilDraw(
+            JackpotBucketLib.packWinningTraits(traits), level, dailyIdx + 1, word);
         for (uint8 q; q < 4; ++q) {
             if ((mask & (1 << q)) != 0) {
                 _seedBucketDistinct(source, traits[q], 64, uint160(0x10000 + uint256(q) * 0x1000));

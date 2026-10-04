@@ -23,6 +23,8 @@ abstract contract DirectTicketFixture is BucketSeed {
         _registerEntryOwner(address(1), 41);
         uint8[4] memory traits = JackpotBucketLib.getRandomTraits(word);
         traits[3] = GoldSixLib.daily(traits[3], word);
+        dailyFoilDraw[(dailyIdx + 1) & 1] = _packFoilDraw(
+            JackpotBucketLib.packWinningTraits(traits), level, dailyIdx + 1, word);
         for (uint8 q; q < 4; ++q) {
             if (repeated) _seedBucket(41, traits[q], address(0xBEEF), holders);
             else _seedBucketDistinct(41, traits[q], holders, uint160(0x10000 + uint256(q) * 0x10000));

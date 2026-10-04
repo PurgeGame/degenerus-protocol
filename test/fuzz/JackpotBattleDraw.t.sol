@@ -18,7 +18,22 @@ contract JackpotBattleDrawHarness is DegenerusGameJackpotDrawModule {
     function collect(uint24 ceiling, uint256 word, uint256 cursor, uint256 remaining)
         external view returns (address[] memory, uint256, bool)
     {
-        return _collectJackpotChunk(ceiling, word, cursor, remaining);
+        return _collectJackpotChunkWithLevels(ceiling, word, cursor, remaining, _jackpotDrawLevels(ceiling, cursor));
+    }
+
+    function collectCached(uint24 ceiling, uint256 word, uint256 count)
+        external view returns (address[] memory all, uint256 cursor)
+    {
+        JackpotDrawLevels memory snapshot = _jackpotDrawLevels(ceiling, 0);
+        all = new address[](count);
+        uint256 used;
+        while (used < count) {
+            (address[] memory seats, uint256 next, bool exhausted) =
+                _collectJackpotChunkWithLevels(ceiling, word, cursor, count - used, snapshot);
+            require(!exhausted && seats.length != 0, "fixture must have eligible levels");
+            cursor = next;
+            for (uint256 i; i < seats.length; ++i) all[used++] = seats[i];
+        }
     }
 
     function queued(uint24 target) external view returns (address[] memory owners) {
@@ -167,7 +182,7 @@ contract JackpotBattleDrawTest is Test {
         h.seed(CEILING + 48, levels[1], true);
         h.seed(CEILING + 99, levels[2], true);
         uint256 count = 1 + uint256(rawCount) % 500;
-        (address[] memory full, uint256 fullCursor) = _draw(word, count, JackpotBattleFieldLib.MAX_CHUNK);
+        (address[] memory full, uint256 fullCursor) = h.collectCached(CEILING, word, count);
         (address[] memory split, uint256 splitCursor) = _draw(word, count, 1 + uint256(rawChunk) % JackpotBattleFieldLib.MAX_CHUNK);
         assertEq(full, _oracle(levels, word, count));
         assertEq(split, full);

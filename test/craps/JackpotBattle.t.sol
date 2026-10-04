@@ -111,7 +111,8 @@ contract JackpotBattleTest is CrapsPins {
 
     function setUp() public {
         _installPins();
-        table = new JackpotTableHarness();
+        // Deployed from the artifact: embedding its creation code here overflows solc's tag width.
+        table = JackpotTableHarness(deployCode("JackpotBattle.t.sol:JackpotTableHarness"));
         api = IJackpotBattle(address(table));
         cold = JackpotBattle(address(table));
         uint256 elapsed = (vm.getBlockTimestamp() - 82_620) % 1 days;

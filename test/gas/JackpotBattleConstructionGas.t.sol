@@ -80,7 +80,7 @@ contract BattleConstructionGameSeed is DegenerusGameStorage {
 /// @dev Exposes only the existing production draw loop for component calibration.
 contract BattleConstructionDrawProbe is DegenerusGameJackpotDrawModule {
     function collectProbe(uint24 ceiling, uint256 word) external view returns (address[] memory players) {
-        (players,,) = _collectJackpotChunk(ceiling, word, 0, 150);
+        (players,,) = _collectJackpotChunkWithLevels(ceiling, word, 0, 150, _jackpotDrawLevels(ceiling, 0));
     }
 }
 
@@ -232,6 +232,40 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
             assertEq(round.drawnCount, (i + 1) * 50);
             assertEq(round.word == 0, i < 9);
         }
+    }
+
+    function test_CachedLevelListMatchesResumedConstructionTranscript() public {
+        _seed(500, 3);
+        uint256 snapshot = vm.snapshotState();
+        vm.recordLogs();
+        MineFlipGas.Result memory result = BattleConstructionGameSeed(address(game)).runDraw{gas: 30_000_000}(
+            CEILING, WORD, 30_000_000
+        );
+        assertTrue(result.progressed);
+        assertFalse(result.done, "construction remains separate from simulation");
+        bytes32 transcript = keccak256(abi.encode(vm.getRecordedLogs()));
+        (CrapsBattleStorage.JackpotRound memory round, uint256 board, uint64 resolved) =
+            JackpotBattle(address(crapsBattle)).jackpotBattleOf(slot);
+        assertEq(round.drawnCount, 500, "one invocation must reuse the list across ten chunks");
+        assertGt(round.word, 0, "the final chunk seals the field");
+        assertEq(resolved, 0);
+        bytes32 state = keccak256(abi.encode(round, board, resolved));
+        uint256 comps = coin.crapsCompAllowance();
+        assertTrue(vm.revertToStateAndDelete(snapshot));
+
+        vm.recordLogs();
+        for (uint256 i; i < 10; ++i) {
+            result = BattleConstructionGameSeed(address(game)).runDraw{gas: 10_000_000}(
+                CEILING, WORD, GasBounds.JACKPOT_BATTLE_DRAW + GasBounds.DAILY_PHASE_TAIL + 100_000
+            );
+            assertTrue(result.progressed);
+            assertFalse(result.done);
+            (round, board, resolved) = JackpotBattle(address(crapsBattle)).jackpotBattleOf(slot);
+            assertEq(round.drawnCount, (i + 1) * 50, "reference rebuilds the list once per chunk");
+        }
+        assertEq(keccak256(abi.encode(vm.getRecordedLogs())), transcript, "identical ordered award and seal events");
+        assertEq(keccak256(abi.encode(round, board, resolved)), state, "identical cursor, field and sealed terms");
+        assertEq(coin.crapsCompAllowance(), comps, "identical final comp accounting");
     }
 
     function test_ColdSingletonVisitBranchWithinBound() public { _seed(50, 1); _worker(); }

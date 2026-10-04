@@ -151,54 +151,43 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
     }
 
     // The Decimator worker runs under the allowance it is given, admitting each step by its
-    // declared bound: RUN_ALLOWANCE admits about one heads run, RANK_ALLOWANCE the ranking
-    // step, PAY_ALLOWANCE a small prefix of ETH awards (at least one PAYMENT plus its tail).
-    uint256 private constant RUN_ALLOWANCE = 1_000_000;
-    uint256 private constant RANK_ALLOWANCE = 700_000;
+    // declared bound and carrying on into the next phase while the rest still covers it:
+    // RUN_ALLOWANCE admits a heads run and a cold frame, so a call runs only a few of the flat
+    // engine's cheap heads; PAY_ALLOWANCE admits one PAYMENT plus its tail.
+    uint256 private constant RUN_ALLOWANCE =
+        GasBounds.DECIMATOR_RUN_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + 100_000;
     uint256 private constant PAY_ALLOWANCE = 230_000;
 
-    function test_ActiveWordSurvivesPartialRunsRankingAndEveryPayoutUntilRequest() public {
+    function test_ActiveWordSurvivesEveryWorkerCheckpointUntilRequest() public {
         _requestBlocked();
-        DegenerusGameStorage.DecBattleRound memory r;
-        uint64 previous;
-        for (uint256 i; previous < COUNT && i < COUNT; ++i) {
-            (, uint256 used) = _runDecimator(RUN_ALLOWANCE);
-            assertLe(used, RUN_ALLOWANCE, "partial call stays inside its allowance");
-            r = lens.decBattleRoundOf(address(game), LVL);
-            assertGt(r.cursor, previous);
-            previous = r.cursor;
-            assertEq(r.phase, 1);
-            _requestBlocked();
-        }
-        assertEq(r.cursor, COUNT, "every entrant ran before ranking");
-        _runDecimator(RANK_ALLOWANCE); // Ranking is a separately reserved bounded step.
-        r = lens.decBattleRoundOf(address(game), LVL);
-        assertEq(r.phase, 2);
-        assertEq(r.winners, 4);
         uint64 champion;
         for (uint64 id = 1; id <= COUNT; ++id) {
             if (uint256(keccak256(abi.encode(COIN, WORD, LVL, id))) & 1 == 0) continue;
             if (champion == 0 || _key(id) > _key(champion)) champion = id;
         }
-        assertEq(r.champion, champion, "ranking uses the same active word as every run");
-        assertEq(lens.decWinnerAt(address(game), LVL, 0).key, _key(champion));
-        _requestBlocked();
-        // Payouts are admitted per award (PAYMENT bound) under the supplied gas, so a bounded call
-        // pays a bounded prefix; the active word must survive every partial payout call.
-        uint256 payCalls;
-        while (lens.decBattleRoundOf(address(game), LVL).phase == 2 && payCalls < 16) {
-            uint256 paidBefore = lens.decBattleRoundOf(address(game), LVL).paid;
-            _runDecimator(PAY_ALLOWANCE);
-            ++payCalls;
-            DegenerusGameStorage.DecBattleRound memory p = lens.decBattleRoundOf(address(game), LVL);
-            if (p.phase == 2) {
-                assertGt(p.paid, paidBefore, "each bounded payout call pays at least one award");
-                _requestBlocked();
+        DegenerusGameStorage.DecBattleRound memory r;
+        uint256 checkpoints;
+        for (uint256 i; i < 2 * COUNT; ++i) {
+            DegenerusGameStorage.DecBattleRound memory before = lens.decBattleRoundOf(address(game), LVL);
+            uint256 allowance = before.phase == 2 ? PAY_ALLOWANCE : RUN_ALLOWANCE;
+            (, uint256 used) = _runDecimator(allowance);
+            assertLe(used, allowance, "each call stays inside its allowance");
+            r = lens.decBattleRoundOf(address(game), LVL);
+            assertTrue(r.cursor > before.cursor || r.phase > before.phase || r.paid > before.paid,
+                "each bounded call makes progress");
+            if (r.phase > 1) {
+                assertEq(r.cursor, COUNT, "every entrant ran before ranking");
+                assertEq(r.winners, 4);
+                assertEq(r.champion, champion, "ranking uses the same active word as every run");
             }
+            if (r.phase == 3) break;
+            if (r.phase == 2) assertEq(lens.decWinnerAt(address(game), LVL, 0).key, _key(champion));
+            // Every checkpoint before completion, in any phase, keeps the word and refuses a request.
+            _requestBlocked();
+            ++checkpoints;
         }
-        assertGt(payCalls, 1, "payouts span bounded calls");
-        r = lens.decBattleRoundOf(address(game), LVL);
         assertEq(r.phase, 3);
+        assertGt(checkpoints, 1, "the round spans bounded calls");
         uint256 sum;
         for (uint64 id = 1; id <= COUNT; ++id) sum += game.claimableWinningsOf(address(uint160(0xD000 + id)));
         assertEq(sum, POOL, "all payouts finish before the next request");
@@ -212,7 +201,11 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
 
     function test_TerminalReplacementWordCannotResumeOldNormalBattleBeforeGameOver() public {
         _runDecimator(RUN_ALLOWANCE);
-        bytes memory beforeRound = abi.encode(lens.decBattleRoundOf(address(game), LVL));
+        DegenerusGameStorage.DecBattleRound memory started = lens.decBattleRoundOf(address(game), LVL);
+        assertEq(started.phase, 1, "the normal battle is part-run when the terminal word lands");
+        assertGt(started.cursor, 0);
+        assertLt(started.cursor, COUNT);
+        bytes memory beforeRound = abi.encode(started);
         _seed(abi.encodeCall(UnpushedDecimatorSessionSeeder.terminalWord, (uint256(0xDEADCAFE))));
         assertFalse(game.gameOver());
         assertEq(RecyclingState.currentWord(address(game)), 0xDEADCAFE);

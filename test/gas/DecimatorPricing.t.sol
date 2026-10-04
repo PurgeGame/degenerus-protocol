@@ -3,6 +3,7 @@ pragma solidity 0.8.34;
 
 import {Test} from "forge-std/Test.sol";
 import {DecimatorBattleHarness} from "../fuzz/helpers/DecimatorBattleHarness.sol";
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
@@ -124,28 +125,61 @@ contract DecimatorPricingTest is Test {
     uint256 private maxOneRun;
     uint256 private maxOnePay;
 
-    /// @dev Settle with allowances that admit exactly one heads run or one payment per call, so
-    ///      each measured call is a single indivisible item plus the worker's fixed frame.
+    bytes32 private constant COIN = keccak256("decimator.battle.final-coin.v1");
+
+    function _heads(uint24 lvl, uint64 id) private view returns (bool) {
+        return uint256(keccak256(abi.encode(COIN, h.activeWord(), lvl, id))) & 1 != 0;
+    }
+
+    function _measure(uint256 allowance) private returns (uint256 used) {
+        vm.cool(address(h));
+        vm.cool(ContractAddresses.CRAPS_ENGINE);
+        MineFlipGas.Result memory result;
+        (used, result) = meter.settle{gas: 15_000_000}(h, allowance);
+        assertTrue(result.progressed, "one-item allowance admits its item");
+    }
+
+    /// @dev Settle with allowances that admit one heads run, one stretch of tails coins, the
+    ///      ranking or one payment per call, so each priced call is a single kind of step plus
+    ///      the worker's fixed frame. A simulation call whose slack also covers the ranking is not
+    ///      priced; the ranking is priced alone instead, over the entries already run.
     function _settleOneByOne() private {
         // The worker's frame before its first admission check, but less than one more item.
-        uint256 runAllowance = GasBounds.DECIMATOR_RUN_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + 40_000;
-        uint256 payAllowance = GasBounds.DECIMATOR_PAYMENT_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + 30_000;
+        uint256 tail = GasBounds.DECIMATOR_WORK_TAIL_GAS;
+        uint256 runAllowance = GasBounds.DECIMATOR_RUN_GAS_MAX + tail + 40_000;
+        uint256 tailsAllowance = GasBounds.DECIMATOR_TAILS_GAS_MAX + tail + 40_000;
+        uint256 rankAllowance = GasBounds.DECIMATOR_RANK_GAS_MAX + tail + 30_000;
+        uint256 payAllowance = GasBounds.DECIMATOR_PAYMENT_GAS_MAX + tail + 30_000;
         for (uint256 guard; uint24(h.queue()) != 0 && guard < 20_000; ++guard) {
             uint24 lvl = uint24(h.queue());
-            uint8 phase = h.roundOf(lvl).phase;
-            bool ranking = phase == 1 && h.roundOf(lvl).cursor == h.roundOf(lvl).count;
-            uint256 allowance = ranking ? 14_000_000 : phase == 2 ? payAllowance : runAllowance;
-            vm.cool(address(h));
-            vm.cool(ContractAddresses.CRAPS_ENGINE);
-            (uint256 used, MineFlipGas.Result memory result) = meter.settle{gas: 15_000_000}(h, allowance);
-            assertTrue(result.progressed, "one-item allowance admits its item");
-            if (ranking) {
-                if (used > maxRankGas) maxRankGas = used;
-            } else if (phase == 2) {
+            DegenerusGameStorage.DecBattleRound memory r = h.roundOf(lvl);
+            if (r.phase == 2) {
+                uint256 used = _measure(payAllowance);
                 if (used > maxOnePay) maxOnePay = used;
-            } else if (used > maxOneRun) maxOneRun = used;
+            } else if (r.cursor == r.count) {
+                uint256 used = _measure(rankAllowance);
+                if (h.roundOf(lvl).paid == 0 && used > maxRankGas) maxRankGas = used;
+            } else {
+                uint256 allowance = _heads(lvl, r.cursor + 1) ? runAllowance : tailsAllowance;
+                uint256 snapshot = vm.snapshotState();
+                uint256 used = _measure(allowance);
+                if (h.roundOf(lvl).phase == 1) {
+                    vm.deleteStateSnapshot(snapshot);
+                    if (used > maxOneRun) maxOneRun = used;
+                    continue;
+                }
+                // Snapshots also restore this contract's maxima, so the alone figure stays local.
+                vm.revertToState(snapshot);
+                h.forceCount(lvl, r.cursor);
+                uint256 rankUsed = _measure(rankAllowance);
+                bool rankAlone = h.roundOf(lvl).paid == 0;
+                assertTrue(vm.revertToStateAndDelete(snapshot));
+                if (rankAlone && rankUsed > maxRankGas) maxRankGas = rankUsed;
+                _measure(allowance);
+            }
         }
         assertEq(uint24(h.queue()), 0, "settled");
+        assertGt(maxRankGas, 0, "a ranking was priced alone");
     }
 
     /// @dev Per-item cold maxima against their declared bounds: one heads run (heaviest heap

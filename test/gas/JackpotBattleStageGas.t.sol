@@ -6,6 +6,7 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
+import {GoldSixLib} from "../../contracts/libraries/GoldSixLib.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 import {AdvanceStageStream} from "../helpers/AdvanceStageStream.sol";
 import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
@@ -61,6 +62,7 @@ contract JackpotBattleStageSeeder is DegenerusGame, BucketSeed {
         _afkingResetDay = day;
         rngWordCurrent = s.word < 2 ? RNG_WORD_WAITING : s.word;
         _recordDailyRng(day, s.word);
+        dailyFoilDraw[day & 1] = _packFoilDraw(JackpotBucketLib.packWinningTraits(mainTraits), s.lvl, day, s.word);
         vrfRequestId = 1;
         // The daily phase of a delivered, published request.
         rngRequestDay = day;
@@ -132,6 +134,7 @@ abstract contract JackpotBattleStageFixture is AdvanceStageStream {
         _deployProtocol();
         JackpotBattleStageSeeder.Shape memory s = _shape();
         uint8[4] memory mainT = JackpotBucketLib.getRandomTraits(s.word);
+        mainT[3] = GoldSixLib.daily(mainT[3], s.word);
         bytes memory realCode = address(game).code;
         _warpToDay(400, 3 hours);
         vm.etch(address(game), type(JackpotBattleStageSeeder).runtimeCode);

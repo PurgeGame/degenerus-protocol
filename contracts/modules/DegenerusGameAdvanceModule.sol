@@ -202,16 +202,19 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
             // The word is now finalized and yesterday's pools are closed.
             // Six bounded draws share this existing daily RNG call; no player
             // claim or additional advance step. Recorded-word retries skip it.
-            // Pools live in two-day rings (protocolBoonPools); the draw itself skips a slot
-            // tagged with another day, so an older day's weight here costs one no-op call.
-            if (day > 1 && (
-                protocolBoonPools[ContractAddresses.VAULT][(day - 1) & 1].totalWeight != 0 ||
-                protocolBoonPools[ContractAddresses.SDGNRS][(day - 1) & 1].totalWeight != 0
-            )) {
-                (bool ok, bytes memory data) = ContractAddresses.GAME_BOON_MODULE.delegatecall(
-                    abi.encodeWithSelector(IDegenerusGameBoonModule.resolveProtocolBoonDraws.selector, day)
-                );
-                if (!ok) _revertDelegate(data);
+            // Weight, day tag and award mask share one word. Skip the delegatecall
+            // when both ring slots are stale, empty or already drawn.
+            if (day > 1) {
+                uint24 poolDay = day - 1;
+                ProtocolBoonPool storage vaultPool = protocolBoonPools[ContractAddresses.VAULT][poolDay & 1];
+                ProtocolBoonPool storage sdgnrsPool = protocolBoonPools[ContractAddresses.SDGNRS][poolDay & 1];
+                if ((vaultPool.day == poolDay && vaultPool.totalWeight != 0 && vaultPool.awardedMask == 0)
+                    || (sdgnrsPool.day == poolDay && sdgnrsPool.totalWeight != 0 && sdgnrsPool.awardedMask == 0)) {
+                    (bool ok, bytes memory data) = ContractAddresses.GAME_BOON_MODULE.delegatecall(
+                        abi.encodeWithSelector(IDegenerusGameBoonModule.resolveProtocolBoonDraws.selector, day)
+                    );
+                    if (!ok) _revertDelegate(data);
+                }
             }
         }
 

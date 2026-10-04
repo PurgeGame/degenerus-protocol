@@ -689,8 +689,8 @@ contract ProtocolBoonDrawTest is DeployProtocol {
     }
 
     /// @dev Production advance over a stale ring slot: two days after a drawn pool, a quiet day's
-    ///      draw finds the older pool's weight in the shared slot, calls the draw, which awards
-    ///      nothing and writes nothing, and the daily advance still completes.
+    ///      draw finds the older pool's weight in the shared slot, skips the draw dispatch,
+    ///      awards nothing and writes nothing, and the daily advance still completes.
     function testRealAdvanceOverAStaleRingSlotAwardsNothing() public {
         // A delivered word of 0 or 1 leaves the request waiting (the RNG_WORD_WAITING sentinel), so
         // the first day's word is 5 rather than 1; the later days keep 2, 3 and 4.
@@ -712,6 +712,9 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         }
         uint256 vaultWord = _poolWord(address(vault), x);
         uint256 sdgnrsWord = _poolWord(address(sdgnrs), x);
+        vm.mockCallRevert(address(boonModule),
+            abi.encodeWithSelector(IDegenerusGameBoonModule.resolveProtocolBoonDraws.selector),
+            abi.encodeWithSignature("Error(string)", "stale pool dispatched"));
         vm.recordLogs();
         _finishDailyAdvance(4);
         assertEq(_countAwards(vm.getRecordedLogs()), 0, "stale slot awarded");

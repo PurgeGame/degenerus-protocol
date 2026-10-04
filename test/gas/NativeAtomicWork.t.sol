@@ -2,6 +2,7 @@
 pragma solidity 0.8.34;
 
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 import {Craps} from "../../contracts/Craps.sol";
@@ -88,6 +89,10 @@ contract NativeAtomicDecimatorTest is Test {
         for (uint256 i; i < 30; i += 3) named += (chips >> i) & 7;
     }
 
+    function _heads(uint256 word, uint64 id) private pure returns (bool) {
+        return uint256(keccak256(abi.encode(keccak256("decimator.battle.final-coin.v1"), word, uint24(5), id))) & 1 != 0;
+    }
+
     function test_LongRealDiceRunWithHeapInsertionFitsOneStep() public {
         vm.warp(uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
@@ -98,7 +103,7 @@ contract NativeAtomicDecimatorTest is Test {
         uint64 longest;
         uint256 rolls;
         for (uint64 id = 1; id <= 200; ++id) {
-            if (uint256(keccak256(abi.encode(keccak256("decimator.battle.final-coin.v1"), word, uint24(5), id))) & 1 == 0) continue;
+            if (!_heads(word, id)) continue;
             (uint32 chips, uint256 named) = _board(id);
             Craps.SlipResult memory run = CrapsEngine(ContractAddresses.CRAPS_ENGINE).settleSlipBounded(
                 chips, 60, uint256(keccak256(abi.encode(keccak256("decimator.battle.board.v1"), word, uint24(5), id))),
@@ -108,24 +113,34 @@ contract NativeAtomicDecimatorTest is Test {
             if (run.totalRolls > rolls) { rolls = run.totalRolls; longest = id; }
         }
         assertGt(rolls, 300, "fixture exercises a long real dice run");
+        // A later heads entry stays unrun, so the measured call can never reach the ranking.
+        uint64 stop = longest + 1;
+        while (!_heads(word, stop)) ++stop;
         host.open(5);
-        for (uint64 id = 1; id <= longest; ++id) {
+        for (uint64 id = 1; id <= stop; ++id) {
             (uint32 chips,) = _board(id);
             vm.prank(ContractAddresses.COIN);
             host.recordDecBurn(address(uint160(id) + 0x1000), 5, 1000 ether + uint256(id) * 1 ether, 10_000, chips);
         }
         host.seal(5, 50 ether, word);
-        // Temporarily expose the prefix as the loop frontier, without ranking it.
-        // Restore the original count before measuring the final real entry and heap.
-        host.forceCount(5, longest - 1);
-        while (host.roundOf(5).cursor < longest - 1) host.runDecimatorWork{gas: 15_000_000}(14_000_000);
-        host.forceCount(5, longest);
+        // Each call admits at most one heads run; tails-only calls admit none. The prefix
+        // therefore stops on the measured entry without running it.
+        uint256 runAllowance = GasBounds.DECIMATOR_RUN_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + 40_000;
+        uint256 tailsAllowance = GasBounds.DECIMATOR_TAILS_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + 40_000;
+        while (host.roundOf(5).cursor < longest - 1) {
+            bool heads = _heads(word, host.roundOf(5).cursor + 1);
+            host.runDecimatorWork{gas: 15_000_000}(heads ? runAllowance : tailsAllowance);
+        }
+        assertEq(host.roundOf(5).cursor, longest - 1);
         vm.cool(address(host)); vm.cool(ContractAddresses.CRAPS_ENGINE);
         uint256 beforeGas = gasleft();
-        MineFlipGas.Result memory result = host.runDecimatorWork{gas: 15_000_000}(14_000_000);
+        MineFlipGas.Result memory result = host.runDecimatorWork{gas: 15_000_000}(runAllowance);
         uint256 used = beforeGas - gasleft();
-        assertEq(result.rewardBasis, 1);
-        assertEq(host.roundOf(5).cursor, longest);
+        uint64 cursor = host.roundOf(5).cursor;
+        assertGe(cursor, longest);
+        assertLt(cursor, stop, "the next heads run is not admitted");
+        assertEq(host.roundOf(5).phase, 1, "the measured call runs entries only");
+        assertEq(result.rewardBasis, cursor - (longest - 1));
         assertLt(used, 10_000_000, "one real dice run meets the chunk sizing guideline");
         emit log_named_uint("atomic_decimator_long_run_rolls", rolls);
         emit log_named_uint("cold_atomic_decimator_run_and_heap", used);

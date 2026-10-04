@@ -151,6 +151,45 @@ contract TicketCheckpointDeterminismTest is Test {
         assertEq(actual, expected);
         assertEq(h.control(), control);
     }
+    function test_soloScratchReuseAcrossOwnersAndShortTails() public {
+        // Fewer than four owners selects the solo path. Each owner has several
+        // groups and a different final tail, so reused memory contains counters
+        // from both earlier chunks of this stream and unrelated owner streams.
+        h.credit(player(0), 1, 32_175);
+        h.credit(player(1), 1, 17_750);
+        h.credit(player(2), 1, 16_399);
+        h.commit(WORD, false);
+        uint256 snap = vm.snapshotState();
+        vm.recordLogs();
+        MineFlipGas.Result memory result = h.runTicketWork{gas: 30_000_000}(2, 30_000_000);
+        assertTrue(result.done && result.progressed);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 chunks;
+        uint256 emitted;
+        uint256 owners;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length != 2 || logs[i].topics[0]
+                != keccak256("TraitsGenerated(address,uint256,uint32)")) continue;
+            (, uint32 take) = abi.decode(logs[i].data, (uint256, uint32));
+            address owner = address(uint160(uint256(logs[i].topics[1])));
+            for (uint256 j; j < 3; ++j) if (owner == player(j)) owners |= 1 << j;
+            emitted += take;
+            ++chunks;
+        }
+        assertGe(chunks, 7, "scratch memory is reused within one worker invocation");
+        assertEq(owners, 7, "all three distinct owner streams ran");
+        (bytes32 expected, uint256 count) = h.digest(1);
+        assertEq(count, emitted, "no stale counter creates or drops occurrences");
+        assertGe(count, 661);
+        assertLe(count, 664);
+        bytes32 control = h.control();
+        assertTrue(vm.revertToStateAndDelete(snap));
+        assertGt(finish(2, 950_000, false), 1, "reference uses fresh worker frames");
+        (bytes32 actual, uint256 actualCount) = h.digest(1);
+        assertEq(actualCount, count, "same whole entries and fractional results");
+        assertEq(actual, expected, "same ordered owner lanes after dirty scratch reuse");
+        assertEq(h.control(), control, "caller meter and checkpoint state remain intact");
+    }
     /// @dev The terminal swap can bring a new read queue to the level of a part-drained
     ///      cohort. Its checkpoint must not resume on that queue.
     function test_terminalSwapNeverResumesStaleCheckpointOnNewQueue() public {

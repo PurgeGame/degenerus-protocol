@@ -143,7 +143,7 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
 
     /// @dev The daily jackpot battle over unminted future levels, played as one closed craps battle,
     ///      one bounded group per checkpoint. While the field is open a call draws groups of up to
-    ///      JACKPOT_BATTLE_ENTRANTS awarded entries (see _collectJackpotChunk), reads their saved
+    ///      JACKPOT_BATTLE_ENTRANTS awarded entries (see _collectJackpotChunkWithLevels), reads their saved
     ///      boards in one batch and appends them while another group fits; the chunk that reaches the award target, or finds
     ///      no eligible level, seals the field. Settlement starts in its own subsequent call;
     ///      its available execution gas never stacks on top of field construction. The latch
@@ -173,8 +173,10 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
         if (!MineFlipGas.canRun(meter, GasBounds.JACKPOT_BATTLE_DRAW, GasBounds.DAILY_PHASE_TAIL)) return result;
         uint256 battleWord = uint256(keccak256(abi.encode(rngWord, lvl, FAR_FUTURE_FLIP_TAG)));
         (uint256 word, uint256 cursor, uint256 remaining) = battle.prepareJackpotBattle(lvl, battleWord);
+        JackpotDrawLevels memory levels = _jackpotDrawLevels(lvl, cursor);
         do {
-            (address[] memory winners, uint256 next, bool exhausted) = _collectJackpotChunk(lvl, word, cursor, remaining);
+            (address[] memory winners, uint256 next, bool exhausted) =
+                _collectJackpotChunkWithLevels(lvl, word, cursor, remaining, levels);
             uint256[] memory field = JackpotBattleFieldLib.prepare(winners);
             bool last = exhausted || winners.length == remaining;
             battle.appendJackpotBattle(field, next, last);
@@ -201,19 +203,22 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
         uint256 left;
     }
 
-    /// @dev Snapshot the eligible levels once (99 bounded queue reads), then collect at most
-    ///      JACKPOT_BATTLE_ENTRANTS seats per call by walking randomly selected levels. Repeated
-    ///      wallets keep separate seats. Cursor: next visit ordinal [0:31], eligible-level bitset
-    ///      [32:130], active level offset [131:137], next queue position [138:169], positions left
-    ///      in the visit [170:201]. A chunk boundary never starts a new visit or changes its draw.
-    ///      All registries and queues remain frozen under the daily lock, including across
-    ///      midnight and retries. Packed queue words are loaded once per group of up to eight.
-    function _collectJackpotChunk(uint24 lvl, uint256 word, uint256 cursor, uint256 remaining)
-        internal view returns (address[] memory winners, uint256 next, bool exhausted)
+    struct JackpotDrawLevels {
+        uint24[99] levels;
+        uint256 count;
+        uint256 eligible;
+    }
+
+    /// @dev Build the ascending eligible-level list once per worker invocation. The first
+    ///      invocation snapshots 99 bounded queue reads; resumptions rebuild from the frozen
+    ///      cursor bitmap. Appending seats changes only battle state, so later chunks in the
+    ///      same invocation can reuse this list without rescanning or allocating it again.
+    function _jackpotDrawLevels(uint24 lvl, uint256 cursor)
+        internal view returns (JackpotDrawLevels memory snapshot)
     {
         uint256 eligible = (cursor >> 32) & ((uint256(1) << 99) - 1);
-        uint24[99] memory levels;
         uint256 count;
+        uint24[99] memory levels = snapshot.levels;
         for (uint256 offset; offset < 99; ++offset) {
             uint24 candidate = lvl + 1 + uint24(offset);
             bool live = cursor == 0 ? _ticketQueueLength(_tqFarFutureKey(candidate)) != 0
@@ -223,8 +228,23 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
                 levels[count++] = candidate;
             }
         }
+        snapshot.eligible = eligible;
+        snapshot.count = count;
+    }
+
+    /// @dev Collect at most JACKPOT_BATTLE_ENTRANTS seats by walking randomly selected levels. Repeated
+    ///      wallets keep separate seats. Cursor: next visit ordinal [0:31], eligible-level bitset
+    ///      [32:130], active level offset [131:137], next queue position [138:169], positions left
+    ///      in the visit [170:201]. A chunk boundary never starts a new visit or changes its draw.
+    ///      All registries and queues remain frozen under the daily lock, including across
+    ///      midnight and retries. Packed queue words are loaded once per group of up to eight.
+    function _collectJackpotChunkWithLevels(
+        uint24 lvl, uint256 word, uint256 cursor, uint256 remaining, JackpotDrawLevels memory snapshot
+    )
+        internal view returns (address[] memory winners, uint256 next, bool exhausted)
+    {
         uint256 wanted = remaining < JACKPOT_BATTLE_ENTRANTS ? remaining : JACKPOT_BATTLE_ENTRANTS;
-        if (count == 0) return (new address[](0), 0, true);
+        if (snapshot.count == 0) return (new address[](0), 0, true);
         winners = new address[](wanted);
         JackpotDrawWalk memory walk = JackpotDrawWalk(
             uint32(cursor), (cursor >> 131) & 127, uint32(cursor >> 138), uint32(cursor >> 170)
@@ -234,7 +254,7 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
             uint256 entropy;
             if (walk.left == 0) {
                 entropy = EntropyLib.hash2(word, walk.ordinal++);
-                walk.offset = levels[entropy % count] - lvl - 1;
+                walk.offset = snapshot.levels[entropy % snapshot.count] - lvl - 1;
             }
             uint24 candidate = lvl + 1 + uint24(walk.offset);
             uint256[] storage queue = ticketQueue[_ticketQueueStorageKey(_tqFarFutureKey(candidate))];
@@ -274,7 +294,7 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
                 take -= lanes;
             }
         }
-        next = walk.ordinal | (eligible << 32) | (walk.offset << 131)
+        next = walk.ordinal | (snapshot.eligible << 32) | (walk.offset << 131)
             | (walk.position << 138) | (walk.left << 170);
     }
 

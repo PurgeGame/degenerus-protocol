@@ -202,6 +202,63 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         assertEq(base, 0); assertEq(escrow, 0);
     }
 
+    function _escrowCohort() private returns (uint24 day, address[] memory players) {
+        vm.deal(address(sdgnrs), 0);
+        vm.mockCall(address(coinflip), abi.encodeWithSelector(coinflip.redeemableFlipBacking.selector), abi.encode(1_000_000));
+        vm.mockCall(address(coinflip), abi.encodeWithSelector(coinflip.withdrawRedeemedFlip.selector), abi.encode());
+        day = game.currentDayView();
+        players = _newBurners(3, sdgnrs.totalSupply() / 1000);
+        _resolve(day, 100, 99);
+    }
+
+    function _assertEscrowBatchResult(bool won) private {
+        (uint24 day, address[] memory players) = _escrowCohort();
+        uint256[] memory expected = new uint256[](players.length);
+        for (uint256 i; i < players.length; ++i) {
+            (uint96 base,, uint96 escrow) = sdgnrs.pendingRedemptions(players[i], day);
+            assertEq(base, 0);
+            assertGt(escrow, 0);
+            expected[i] = coinflip.coinflipAmount(players[i]) + (won ? uint256(escrow) + uint256(escrow) * 75 / 100 : 0);
+        }
+        bytes memory query = abi.encodeWithSelector(coinflip.getCoinflipDayResult.selector, day + 1);
+        vm.mockCall(address(coinflip), query, abi.encode(uint16(won ? 75 : 1), won));
+        vm.expectCall(address(coinflip), query, uint64(1));
+        (bool done,, uint256 count) = _batch(9_000_000);
+        assertTrue(done);
+        assertEq(count, players.length);
+        for (uint256 i; i < players.length; ++i) {
+            assertEq(coinflip.coinflipAmount(players[i]), expected[i], "same absolute-day result for every escrow");
+            (uint96 base,, uint96 escrow) = sdgnrs.pendingRedemptions(players[i], day);
+            assertEq(uint256(base) + escrow, 0, "claim consumed exactly once");
+        }
+    }
+
+    function test_WinningEscrowResultIsReadOncePerBatch() public {
+        _assertEscrowBatchResult(true);
+    }
+
+    function test_LosingEscrowResultIsReadOncePerBatch() public {
+        _assertEscrowBatchResult(false);
+    }
+
+    function test_CoinflipResultNotReadBeforeClaimAdmission() public {
+        (uint24 day, address[] memory players) = _escrowCohort();
+        vm.mockCallRevert(address(coinflip), abi.encodeWithSelector(coinflip.getCoinflipDayResult.selector, day + 1),
+            abi.encodeWithSignature("Error(string)", "unadmitted escrow queried"));
+        (bool done,, uint256 count) = _batch(100_000);
+        assertFalse(done);
+        assertEq(count, 0);
+        assertEq(_redemptionCursor(), 0);
+        (, , uint96 escrow) = sdgnrs.pendingRedemptions(players[0], day);
+        assertGt(escrow, 0);
+    }
+
+    function test_CachedEscrowRewardCannotBeSuppliedByAnExternalCaller() public {
+        uint24 day = game.currentDayView();
+        vm.expectRevert(sDGNRS.Unauthorized.selector);
+        sdgnrs.settleRedemptionHead(alice, day, 100, 99, type(uint16).max);
+    }
+
     function test_PerClaimStepsAndOneCallPlayerEventsAndBalancesAreIdentical() public {
         uint24 day = game.currentDayView();
         _burn(alice, sdgnrs.totalSupply() / 1000);

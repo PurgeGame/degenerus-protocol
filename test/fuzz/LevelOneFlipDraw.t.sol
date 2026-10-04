@@ -109,7 +109,7 @@ contract LevelOneFlipDrawTest is Test {
 
     uint24 internal constant LVL = 1;
     uint256 internal constant WORD = uint256(keccak256("level-one-flip-draw-word"));
-    uint256 internal constant UNIT = 100 ether;
+    uint256 internal constant UNIT = 100;
     uint256 internal constant CAP_MAX = 50;
 
     bytes32 internal constant FLIP_WIN_SIG = keccak256("JackpotFlipWin(address,uint24,uint8,uint256,uint256)");
@@ -119,6 +119,9 @@ contract LevelOneFlipDrawTest is Test {
     function setUp() public {
         vm.warp((uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) + 5) * 1 days + 82_620 + 1 hours);
         h = new FlipDrawHarness();
+        // Advance records the level-one board before entering the FLIP leg.
+        vm.prank(ContractAddresses.GAME);
+        h.emitDailyWinningTraits(WORD);
         vm.etch(ContractAddresses.GAME_JACKPOT_DRAW_MODULE, address(new DegenerusGameJackpotDrawModule()).code);
         assertGt(ContractAddresses.GAME_JACKPOT_DRAW_MODULE.code.length, 0, "the delegated draw has code");
         vm.etch(ContractAddresses.COINFLIP, address(new FlipDrawCoinflipDouble()).code);
@@ -145,8 +148,8 @@ contract LevelOneFlipDrawTest is Test {
     ///      2,500-FLIP sub-share remainder (125 units is not a multiple of 50) is never minted.
     function test_fiftyWinnersEqualSharesRemainderUnminted() public {
         h.seedAllTraits(LVL, 4);
-        h.seedBudgetFor(LVL, 12_500 ether);
-        assertEq(h.coinBudgetOf(LVL), 12_500 ether, "budget seed did not round-trip");
+        h.seedBudgetFor(LVL, 12_500);
+        assertEq(h.coinBudgetOf(LVL), 12_500, "budget seed did not round-trip");
         Vm.Log[] memory logs = _runTrait();
 
         assertEq(_countSig(logs, FLIP_WIN_SIG), CAP_MAX, "50 winners");
@@ -157,7 +160,7 @@ contract LevelOneFlipDrawTest is Test {
         }
         assertEq(coinflip.batches(), 1, "one batch");
         assertEq(coinflip.total(), CAP_MAX * 2 * UNIT, "credited total != 50 * amount");
-        assertLt(coinflip.total(), 12_500 ether, "the sub-share remainder was minted");
+        assertLt(coinflip.total(), 12_500, "the sub-share remainder was minted");
         assertEq(craps.creditPassesCalls(), 0, "the draw banked a craps pass");
         assertEq(craps.vaultCompCalls(), 0, "the draw seated or reserved a craps window");
     }
@@ -166,7 +169,7 @@ contract LevelOneFlipDrawTest is Test {
     ///      exactly one 100-FLIP unit each, with nothing left over.
     function test_smallBudgetCapsAtUnitCount() public {
         h.seedAllTraits(LVL, 4);
-        h.seedBudgetFor(LVL, 3_125 ether);
+        h.seedBudgetFor(LVL, 3_125);
         Vm.Log[] memory logs = _runTrait();
 
         assertEq(_countSig(logs, FLIP_WIN_SIG), 31, "cap = units when units < 50");
@@ -183,7 +186,7 @@ contract LevelOneFlipDrawTest is Test {
     /// @dev A budget under one whole unit skips entirely: no winner, no batch, nothing minted.
     function test_belowOneUnitSkipsEntirely() public {
         h.seedAllTraits(LVL, 4);
-        h.seedBudgetFor(LVL, 99 ether);
+        h.seedBudgetFor(LVL, 99);
         Vm.Log[] memory logs = _runTrait();
 
         assertEq(_countSig(logs, FLIP_WIN_SIG), 0, "no winner under one whole unit");
@@ -195,7 +198,7 @@ contract LevelOneFlipDrawTest is Test {
     ///      only the found winners' shares are.
     function test_emptyBucketsSkipWithoutMinting() public {
         h.seedQuadrant(LVL, 0, 4);
-        h.seedBudgetFor(LVL, 625_000 ether);
+        h.seedBudgetFor(LVL, 625_000);
         Vm.Log[] memory logs = _runTrait();
 
         // units = 6,250, cap = 50, amount = 125 * UNIT; only i % 4 == 0 ever finds a winner
@@ -211,7 +214,7 @@ contract LevelOneFlipDrawTest is Test {
     function test_realCrapsTableStaysUntouched() public {
         vm.etch(ContractAddresses.CRAPS, address(new CrapsViews()).code);
         h.seedAllTraits(LVL, 4);
-        h.seedBudgetFor(LVL, 250_000 ether);
+        h.seedBudgetFor(LVL, 250_000);
 
         Vm.Log[] memory logs = _runTrait();
         assertGt(_countSig(logs, FLIP_WIN_SIG), 0, "fixture must actually draw winners");
@@ -224,7 +227,7 @@ contract LevelOneFlipDrawTest is Test {
 
     /// @dev Fuzzed budgets never overspend and never pay more shares than CAP_MAX, whole buckets.
     function test_fuzz_theDrawNeverOverspendsOrExceedsTheCap(uint256 seed) public {
-        uint256 b = bound(seed, 1, 5_000) * 250 ether;
+        uint256 b = bound(seed, 1, 5_000) * 250;
         h.seedAllTraits(LVL, 4);
         h.seedBudgetFor(LVL, b);
         Vm.Log[] memory logs = _runTrait();

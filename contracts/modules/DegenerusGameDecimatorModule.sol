@@ -201,36 +201,38 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         if (round.phase == 1) {
             uint64 cursor = round.cursor;
             uint64 count = round.count;
-            if (cursor == count) {
-                if (!MineFlipGas.canRun(meter, RANK_GAS_MAX, WORK_TAIL_GAS)) return result;
+            if (cursor < count) {
+                uint256 capacity = round.capacity;
+                uint256 winners = round.winners;
+                uint256 winnersBefore = winners;
+                bytes32 seed = keccak256(abi.encode(DICE_TAG, word, lvl));
+                uint256 free;
+                assembly ("memory-safe") { free := mload(0x40) }
+                while (cursor < count) {
+                    uint64 next = cursor + 1;
+                    bool heads = uint256(keccak256(abi.encode(COIN_TAG, word, lvl, next))) & 1 != 0;
+                    if (!MineFlipGas.canRun(meter, heads ? RUN_GAS_MAX : TAILS_GAS_MAX, WORK_TAIL_GAS)) break;
+                    if (heads) winners = _run(lvl, next, word, seed, capacity, winners);
+                    cursor = next;
+                    ++result.rewardBasis;
+                    assembly ("memory-safe") { mstore(0x40, free) }
+                }
+                if (cursor != round.cursor) {
+                    round.cursor = cursor;
+                    result.progressed = true;
+                }
+                if (winners != winnersBefore) round.winners = uint8(winners);
+            }
+            // Phase boundaries are gas checkpoints: finish the simulation's writes before
+            // ranking, then continue into payments whenever their existing bounds fit.
+            if (cursor == count && MineFlipGas.canRun(meter, RANK_GAS_MAX, WORK_TAIL_GAS)) {
                 _rank(lvl, round, word);
                 result.progressed = true;
-                result.rewardBasis = 1;
-                result.done = decBattleQueue == 0;
-                MineFlipGas.finish(meter);
-                return result;
-            }
-            uint256 capacity = round.capacity;
-            uint256 winners = round.winners;
-            uint256 winnersBefore = winners;
-            bytes32 seed = keccak256(abi.encode(DICE_TAG, word, lvl));
-            uint256 free;
-            assembly ("memory-safe") { free := mload(0x40) }
-            while (cursor < count) {
-                uint64 next = cursor + 1;
-                bool heads = uint256(keccak256(abi.encode(COIN_TAG, word, lvl, next))) & 1 != 0;
-                if (!MineFlipGas.canRun(meter, heads ? RUN_GAS_MAX : TAILS_GAS_MAX, WORK_TAIL_GAS)) break;
-                if (heads) winners = _run(lvl, next, word, seed, capacity, winners);
-                cursor = next;
                 ++result.rewardBasis;
-                assembly ("memory-safe") { mstore(0x40, free) }
             }
-            if (cursor != round.cursor) {
-                round.cursor = cursor;
-                result.progressed = true;
-            }
-            if (winners != winnersBefore) round.winners = uint8(winners);
-        } else if (round.phase == 2) {
+        }
+        // An all-tails rank finishes at phase 3; it must never enter _payTerms with zero winners.
+        if (round.phase == 2) {
             uint256 winners = round.winners;
             uint256 paid = round.paid;
             (uint256 base, uint256 champ, uint256 champPasses, uint256 perEth,, bool passMode) = _payTerms(round);

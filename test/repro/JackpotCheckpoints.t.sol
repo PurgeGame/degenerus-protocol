@@ -9,6 +9,7 @@ import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGame
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
+import {GoldSixLib} from "../../contracts/libraries/GoldSixLib.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 
@@ -21,6 +22,9 @@ contract JackpotCheckpointHarness is DegenerusGameJackpotModule, BucketSeed {
         for (uint8 q; q < (concentrated ? 1 : 4); ++q) {
             this.seedOne(lvl, traits[q], uint160(0x10000 + uint256(q) * 0x10000));
         }
+        traits[3] = GoldSixLib.daily(traits[3], word);
+        dailyFoilDraw[(dailyIdx + 1) & 1] = _packFoilDraw(
+            JackpotBucketLib.packWinningTraits(traits), level, dailyIdx + 1, word);
         // 1,000 tickets (40 ETH at 0.04): 192 winners at 5 tickets each.
         dailyTicketBudgetsPacked = uint256(1000 * 4) << 144;
     }

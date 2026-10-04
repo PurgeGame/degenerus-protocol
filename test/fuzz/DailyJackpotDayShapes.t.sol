@@ -99,7 +99,7 @@ contract DailyJackpotDayShapes is Test {
     }
 
     /// @dev A mixed-colour board with deep buckets at both the purchase level and the next: the
-    ///      early-bird and coin+tickets stages both re-roll this same main board from the word.
+    ///      early-bird and coin+tickets stages both read this same recorded main board.
     function _board(uint256 salt) internal returns (uint256 word) {
         word = salt;
         uint8[4] memory traits;

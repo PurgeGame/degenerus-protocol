@@ -512,7 +512,13 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
         if (emitted != 0) {
             bool goldSixTaken = _goldSixTaken(lvl);
             uint256 replayFlag = goldSixTaken ? TicketEntropy.GOLD_SIX_TAKEN : 0;
+            // The generator retains no memory references and makes no external calls.
+            // Reclaim its arrays and hash preimages after their complete storage flush;
+            // Solidity zero-initializes the scratch arrays again on the next run.
+            uint256 free;
+            assembly ("memory-safe") { free := mload(0x40) }
             _generateTraitRun(stream, offset, uint32(emitted), entropy, uint256(ownerPos) - 1, goldSixTaken);
+            assembly ("memory-safe") { mstore(0x40, free) }
             emit TraitsGenerated(player, stream | uint256(offset) | replayFlag, uint32(emitted));
         }
         complete = finalTail;

@@ -131,6 +131,26 @@ contract BudgetDecimatorFixture is DecimatorBattleHarness {
         _pendingBoxCount = stage == 2 ? 1 : 0;
         humanReadComplete = stage != 3;
     }
+
+    /// @dev The single-head fixture after its flat-engine run, optionally after ranking.
+    ///      Seed reachable checkpoints so each admission bound can be tested independently
+    ///      even when a cheap preceding phase normally chains straight through it.
+    function completedRunCheckpoint(bool ranked) external {
+        uint24 lvl = uint24(decBattleQueue);
+        DecBattleRound storage round = decBattleRounds[lvl];
+        require(round.count == 1 && round.cursor == 0 && round.phase == 1);
+        uint256 entry = decBattleEntries[(uint256(lvl) << 64) | 1];
+        decBattleHeap[0] = (((entry >> 190) * 3000e18) << 64) | 1;
+        round.cursor = 1;
+        round.winners = 1;
+        if (ranked) {
+            round.phase = 2;
+            round.champion = 1;
+            uint256 recycled = uint256(round.poolWei) / 2 / HALF_WHALE_PASS_PRICE * HALF_WHALE_PASS_PRICE;
+            claimablePool -= uint128(recycled);
+            _setFuturePrizePool(_getFuturePrizePool() + recycled);
+        }
+    }
 }
 contract BudgetBoundedEngine {
     function settleSlipBounded(uint256, uint256, uint256, uint256, bytes32, uint256 bankroll, address, uint256, uint256)
@@ -151,26 +171,45 @@ contract MineFlipDecimatorBudgetTest is Test {
         while (uint256(keccak256(abi.encode(keccak256("decimator.battle.final-coin.v1"), word, LVL, uint64(1)))) & 1 == 0) ++word;
         host.seal(LVL, 30 ether, word);
     }
-    function test_RunRankAndPayEachReserveBeforeMutation() public {
+    function test_RunReservesBeforeMutationThenChainsRankAndPay() public {
         MineFlipGas.Result memory result = host.runDecimatorWork(500_000);
         assertFalse(result.progressed);
         assertEq(host.roundOf(LVL).cursor, 0);
         result = host.runDecimatorWork(1_000_000);
-        assertEq(result.rewardBasis, 1);
+        assertEq(result.rewardBasis, 3);
         assertEq(host.roundOf(LVL).cursor, 1);
-        result = host.runDecimatorWork(300_000);
-        assertFalse(result.progressed);
-        assertEq(host.roundOf(LVL).phase, 1);
-        result = host.runDecimatorWork(700_000);
-        assertTrue(result.progressed);
-        assertEq(host.roundOf(LVL).phase, 2);
-        result = host.runDecimatorWork(100_000);
-        assertFalse(result.progressed);
-        assertEq(host.roundOf(LVL).paid, 0);
-        result = host.runDecimatorWork(400_000);
         assertTrue(result.done);
         assertEq(host.roundOf(LVL).phase, 3);
         assertEq(host.queue(), 0);
+    }
+    function test_RankReservesBeforeMutationThenChainsPayment() public {
+        host.completedRunCheckpoint(false);
+        MineFlipGas.Result memory result = host.runDecimatorWork(300_000);
+        assertFalse(result.progressed);
+        assertEq(host.roundOf(LVL).phase, 1);
+        assertEq(host.roundOf(LVL).champion, 0);
+        assertEq(host.reserved(), 30 ether);
+        result = host.runDecimatorWork(700_000);
+        assertTrue(result.progressed);
+        assertEq(result.rewardBasis, 2);
+        assertTrue(result.done);
+        assertEq(host.roundOf(LVL).phase, 3);
+    }
+    function test_PaymentReservesBeforeMutation() public {
+        host.completedRunCheckpoint(true);
+        MineFlipGas.Result memory result = host.runDecimatorWork(100_000);
+        assertFalse(result.progressed);
+        assertEq(host.roundOf(LVL).paid, 0);
+        assertEq(host.balanceOf(address(0xA11CE)), 0);
+        assertEq(host.passesOf(address(0xA11CE)), 0);
+        result = host.runDecimatorWork(400_000);
+        assertTrue(result.done);
+        assertEq(result.rewardBasis, 1);
+        assertEq(host.roundOf(LVL).phase, 3);
+        assertEq(host.queue(), 0);
+        assertEq(host.balanceOf(address(0xA11CE)), 16.5 ether);
+        assertEq(host.passesOf(address(0xA11CE)), 6);
+        assertEq(host.reserved() + host.future(), 30 ether);
     }
     function test_DecimatorCannotBypassAnyEarlierStage() public {
         bytes memory beforeRound = abi.encode(host.roundOf(LVL));

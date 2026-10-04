@@ -21,14 +21,15 @@ function body(signature) {
 describe("JackpotFarFutureCoinUnits — the daily jackpot battle's award draw", function () {
   it("snapshots the eligible unminted +1 through +99 levels and draws at most one chunk", function () {
     expect(source).to.match(/JACKPOT_BATTLE_ENTRANTS\s*=\s*JackpotBattleFieldLib\.MAX_CHUNK\s*;/);
-    const draw = body("function _collectJackpotChunk(");
-    expect(draw).to.include("for (uint256 offset; offset < 99; ++offset)");
-    expect(draw).to.include("uint24 candidate = lvl + 1 + uint24(offset)");
+    const snapshot = body("function _jackpotDrawLevels(");
+    expect(snapshot).to.include("for (uint256 offset; offset < 99; ++offset)");
+    expect(snapshot).to.include("uint24 candidate = lvl + 1 + uint24(offset)");
+    const draw = body("function _collectJackpotChunkWithLevels(");
     expect(draw).to.include("remaining < JACKPOT_BATTLE_ENTRANTS ? remaining : JACKPOT_BATTLE_ENTRANTS");
   });
 
   it("reads the far-future queues without mutating them", function () {
-    const draw = body("function _collectJackpotChunk(");
+    const draw = body("function _collectJackpotChunkWithLevels(");
     expect(draw).to.include("ticketQueue[_ticketQueueStorageKey(_tqFarFutureKey(candidate))]");
     expect(draw).to.include("(entropy >> 128) % len");
     expect(draw).to.include("_tqWordAt(queue, walk.position)");

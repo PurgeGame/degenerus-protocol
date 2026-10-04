@@ -389,6 +389,8 @@ contract sDGNRS {
         uint16 roll = redemptionPeriods[day];
         uint256 word = _redemptionWord;
         uint256 initialCursor = cursor;
+        uint16 flipReward;
+        bool flipResultRead;
         while (cursor < total) {
             address player = _redemptionPlayers[cursor];
             PendingRedemption memory claim = pendingRedemptions[player][day];
@@ -403,12 +405,19 @@ contract sDGNRS {
             // The self-call keeps its whole bound after EIP-150 retention.
             if (!MineFlipGas.canRun(meter, nextMax + nextMax / 63 + MineFlipGas.CALL_RESERVE,
                 REDEMPTION_TAIL_GAS)) break;
+            // Every escrow in this frozen cohort uses the same absolute day + 1 result.
+            // The pinned getter only reads that immutable result; defer it until an
+            // escrowed claim is admitted, then reuse it for this invocation only.
+            if (claim.flipEscrow != 0 && !flipResultRead) {
+                flipReward = _redemptionFlipReward(day);
+                flipResultRead = true;
+            }
             ++cursor;
             // Commit the frontier before any nested calls.
             _redemptionCursor = uint32(cursor);
             // A refusing dependency must not hold every later RNG request: park the claim with
             // its session word and move on. Gas failures still revert the whole transaction.
-            try this.settleRedemptionHead(player, day, roll, word) returns (bool paid) {
+            try this.settleRedemptionHead(player, day, roll, word, flipReward) returns (bool paid) {
                 if (paid) ++result.rewardBasis;
             } catch (bytes memory reason) {
                 MineFlipGas.rethrowGasFailure(reason);
@@ -431,9 +440,11 @@ contract sDGNRS {
     }
 
     /// @dev Self-call target of the miner drain, so a refused claim rolls back alone.
-    function settleRedemptionHead(address player, uint24 day, uint16 roll, uint256 word) external returns (bool) {
+    function settleRedemptionHead(address player, uint24 day, uint16 roll, uint256 word, uint16 flipReward)
+        external returns (bool)
+    {
         if (msg.sender != address(this)) revert Unauthorized();
-        return _claimRedemptionFor(player, day, roll, false, word);
+        return _claimRedemptionFor(player, day, roll, false, word, flipReward);
     }
 
     /// @notice Settle a parked claim on its own session word. Player or approved operator only.
@@ -446,7 +457,11 @@ contract sDGNRS {
         bool isTerminal = game.gameOver();
         if (!isTerminal && game.livenessTriggered()) revert EndingPending();
         delete _parkedRedemptionWord[player][day];
-        if (!_claimRedemptionFor(player, day, redemptionPeriods[day], isTerminal, word)) revert NoClaim();
+        uint16 flipReward;
+        if (!isTerminal && pendingRedemptions[player][day].flipEscrow != 0) {
+            flipReward = _redemptionFlipReward(day);
+        }
+        if (!_claimRedemptionFor(player, day, redemptionPeriods[day], isTerminal, word, flipReward)) revert NoClaim();
     }
 
     /// @notice Supply immediately after the last century refill (initial supply before the first).
@@ -969,7 +984,7 @@ contract sDGNRS {
         // before that, it can still read false again, and a terminal settlement taken then would stick.
         if (!game.gameOver()) revert NotGameOver();
         if (player != msg.sender && !game.isOperatorApproved(player, msg.sender)) revert Unauthorized();
-        if (!_claimRedemptionFor(player, day, roll, true, 0)) revert NoClaim();
+        if (!_claimRedemptionFor(player, day, roll, true, 0, 0)) revert NoClaim();
     }
 
     /// @dev The estimator and execution use identical rounding and dust treatment.
@@ -986,12 +1001,22 @@ contract sDGNRS {
         }
     }
 
+    /// @dev Zero means no escrow payout, including both a loss and an unresolved day.
+    ///      The fixed Coinflip getter reads one packed result slot and makes no calls.
+    function _redemptionFlipReward(uint24 day) private view returns (uint16) {
+        (uint16 rewardPercent, bool won) = coinflip.getCoinflipDayResult(day + 1);
+        return won ? rewardPercent : 0;
+    }
+
     /// @dev Shared settle core for the single and batch claim entry points. Callers must have
     ///      verified the period is resolved and (in terminal mode) that the caller is `player`
     ///      or an operator `player` approved on the Game; the
     ///      pending-claim existence check lives here (one slot load), returning false on an
     ///      empty (player, day) slot so the batch path skips and the single path reverts.
-    function _claimRedemptionFor(address player, uint24 day, uint16 roll, bool isTerminal, uint256 rngWordNext) private returns (bool) {
+    ///      flipReward is the trusted day + 1 win percentage (zero on loss/unresolved/terminal).
+    function _claimRedemptionFor(
+        address player, uint24 day, uint16 roll, bool isTerminal, uint256 rngWordNext, uint16 flipReward
+    ) private returns (bool) {
         PendingRedemption memory claim = pendingRedemptions[player][day];
         // Existence: a live-game claim is reachable on a nonzero ETH base OR a nonzero FLIP escrow
         // (a gwei-floored zero-ETH claim can still owe escrowed FLIP). In terminal mode FLIP is
@@ -1033,11 +1058,10 @@ contract sDGNRS {
             // `day` runs on the advance that settles day + 1). `win` is true only on a resolved win;
             // a resolved loss — or an unresolved day in the narrow level-0 gameOver pre-latch window,
             // where day + 1's coinflip is never stored — reads false and correctly pays nothing.
-            (uint16 rewardPercent, bool flipWon) = coinflip.getCoinflipDayResult(day + 1);
-            if (flipWon) {
+            if (flipReward != 0) {
                 // Same win payout a held backing slice earns: principal + principal * rewardPercent%.
                 uint256 principal = uint256(claim.flipEscrow);
-                flipPaid = principal + (principal * uint256(rewardPercent)) / 100;
+                flipPaid = principal + (principal * uint256(flipReward)) / 100;
                 coinflip.creditFlip(player, flipPaid);
             }
         }

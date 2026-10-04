@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {Vm} from "forge-std/Vm.sol";
 import {BoundaryGasFixture, PhaseEndSeeder} from "./Lvl100PhaseEndAdvanceGas.t.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
+import {GoldSixLib} from "../../contracts/libraries/GoldSixLib.sol";
 import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
 
 contract TicketStageGasSeeder is PhaseEndSeeder {
@@ -27,6 +28,7 @@ contract DailyTicketStageGas is BoundaryGasFixture {
         _warpToDay(400, 3 hours);
         uint256 word = uint256(keccak256("lvl100-phase-end")) | 1;
         uint8[4] memory mainTraits = JackpotBucketLib.getRandomTraits(word);
+        mainTraits[3] = GoldSixLib.daily(mainTraits[3], word);
         bytes memory original = address(game).code;
         vm.etch(address(game), type(TicketStageGasSeeder).runtimeCode);
         TicketStageGasSeeder seeder = TicketStageGasSeeder(payable(address(game)));

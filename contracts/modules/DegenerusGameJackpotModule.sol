@@ -577,8 +577,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     ///      this stage, the last, pays the main-board tickets. It advances the counter and the
     ///      caller seals the day (or ends the level) in the same tx.
     ///
-    ///      The main board is re-rolled from the word exactly as Phase 1 rolled it (see
-    ///      `_rollMainTraits`).
+    ///      The main board is the sealed draw recorded when Phase 1 completed.
     /// @param word VRF entropy (the day's recorded word, the one Phase 1 used).
     /// @param allowance Gas the call may spend before checkpointing.
     function runDailyJackpotTickets(uint256 word, uint256 allowance)
@@ -610,8 +609,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     ///      of dailyTicketBudgetsPacked), with the same day's word from rngGate, ahead of the
     ///      coin+tickets stage. Phase 1 already moved the full 3% budget future -> next; this
     ///      distributes the latched entries through the shared ticket plan (`_ticketWorkPlan`).
-    ///      Winners come from `lvlTraitEntry[level + 1]` on the day's main board, re-rolled
-    ///      from the word exactly as Phase 1 rolled it, across its three non-solo quadrants:
+    ///      Winners come from `lvlTraitEntry[level + 1]` on the day's recorded main board,
+    ///      across its three non-solo quadrants:
     ///      the solo quadrant is the one the ETH leg picked (from its own entropy,
     ///      hash2(word, level)), and it carries only the solo ETH prize. Tickets queue at
     ///      level + 1. No pool moves in this stage.
@@ -643,13 +642,15 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
             uint256 packed = dailyTicketBudgetsPacked;
             work.budget = kind == 4 ? uint128(packed >> 208)
                 : uint128(uint64(packed >> (kind == 5 ? 144 : 8)));
-            if (kind == 4) (, work.traits,) = _foilDrawFor(uint256(dailyIdx) + 1);
-            else work.traits = _rollMainTraits(word);
+            // Advance drains the ETH work before any ticket leg; that work records this
+            // exact logical day's board before retiring. The lock keeps the tag stable
+            // across checkpoints and wall-day stalls, including the final jackpot day.
+            (, work.traits,) = _foilDrawFor(uint256(dailyIdx) + 1);
             result.progressed = true;
         }
         if (MineFlipGas.canRun(meter, JACKPOT_PLAN_GAS, JACKPOT_TAIL_GAS)) {
             TicketWorkPlan memory plan = _ticketWorkPlan(work, word);
-            {
+            if (work.quadrant < 4) {
                 // delegatecall-alignment: justified — IDegenerusGameTicketModule selector forwarded to GAME_TICKET_MODULE by the gas-capped delegatecall below
                 (bool ok, bytes memory data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall{
                     gas: MineFlipGas.forwardable(MineFlipGas.remaining(meter), JACKPOT_TAIL_GAS)
@@ -1290,10 +1291,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     }
 
     /// @dev The day's one winning board. The hero is banned from the golden ticket's armed
-    ///      quadrant on its resolve draw (see `_goldenTicketBanQuadrant`). A day's later legs
-    ///      re-roll it from the same word and get the same board: the hero pool and the ban
-    ///      read the same on every roll of a day, the resolve-day ban fields holding the ban
-    ///      after the resolve clears the armed ones.
+    ///      quadrant on its resolve draw (see `_goldenTicketBanQuadrant`). Later ticket and
+    ///      FLIP legs read the recorded board rather than rolling it again.
     function _rollMainTraits(uint256 randWord) private view returns (uint32) {
         uint32 board = _rollBoard(randWord, _goldenTicketBanQuadrant(goldenTicket, dailyIdx));
         uint8 dice = GoldSixLib.daily(uint8(board >> 24), randWord);
@@ -1387,7 +1386,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
 
     /// @notice Level 1's trait-matched FLIP draw over level-1 ticket holders.
     /// @dev Runs in level 1's purchase-day advance, after emitDailyWinningTraits rolled and
-    ///      recorded the day's main board, which it re-rolls from the same word. Awards 0.25% of
+    ///      recorded the day's main board. Awards 0.25% of
     ///      the previous level's recorded prize pool (`levelPrizePool[lvl - 1]`, the ratchet
     ///      target before any century floor), converted to FLIP at the current level's ticket
     ///      price, as up to COIN_DRAW_SHARES equal whole-unit shares to trait-matched ticket
@@ -1397,9 +1396,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     /// @param minLevel Minimum target level for the coin distribution (inclusive).
     /// @param maxLevel Maximum target level for the coin distribution (inclusive).
     function payDailyFlipJackpot(uint24 lvl, uint256 randWord, uint24 minLevel, uint24 maxLevel) external {
+        (, uint32 traits,) = _foilDrawFor(uint256(dailyIdx) + 1);
         _delegateJackpotDraw(abi.encodeWithSelector(
             IDegenerusGameJackpotDrawModule.awardDailyFlipJackpot.selector,
-            minLevel, maxLevel, _rollMainTraits(randWord), _calcDailyCoinBudget(lvl, level), randWord
+            minLevel, maxLevel, traits, _calcDailyCoinBudget(lvl, level), randWord
         ));
     }
 

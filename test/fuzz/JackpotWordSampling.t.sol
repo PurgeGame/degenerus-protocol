@@ -7,13 +7,18 @@ import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {PackedTicketSampleLib} from "../../contracts/libraries/PackedTicketSampleLib.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
+import {GoldSixLib} from "../../contracts/libraries/GoldSixLib.sol";
 import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 
 contract WordJackpotHarness is DegenerusGameJackpotModule, BucketSeed {
-    function seed(uint8 trait, uint256 len, address deity, uint256 awards) external {
+    function seed(uint256 word, uint8 trait, uint256 len, address deity, uint256 awards) external {
         level = 41;
+        uint8[4] memory traits = JackpotBucketLib.getRandomTraits(word);
+        traits[3] = GoldSixLib.daily(traits[3], word);
+        dailyFoilDraw[(dailyIdx + 1) & 1] = _packFoilDraw(
+            JackpotBucketLib.packWinningTraits(traits), level, dailyIdx + 1, word);
         dailyTicketBudgetsPacked = (awards * 4) << 144;
         _seedBucketDistinct(42, trait, len, 0x10000);
         deityBySymbol[(trait >> 6) * 8 + (trait & 7)] = deity;
@@ -114,7 +119,7 @@ contract JackpotWordSamplingTest is Test {
         expected.entropy = uint256(keccak256(abi.encode(
             uint256(keccak256(abi.encode(word, uint24(42)))), uint8(0)
         )));
-        h.seed(expected.trait, len, expected.deity, awards);
+        h.seed(word, expected.trait, len, expected.deity, awards);
         vm.recordLogs();
         h.runEarlyBirdTickets(word, gasleft());
         Vm.Log[] memory logs = vm.getRecordedLogs();
