@@ -131,9 +131,8 @@ contract BinaryRngBuffersTest is DeployProtocol {
             assertEq(uint256(game.extsload(keccak256(abi.encode(write, uint256(57))))), 0, "write boxes header reset");
             assertEq(uint256(game.extsload(keccak256(abi.encode(write, uint256(21))))), 0, "write bets header reset");
             _buy();
-            // The low 48 bits of lootboxRngPacked are now LR_WORK_READY (the miner's pricing
-            // clock: the last accepted callback, 60d31f775), not an index; a request must leave
-            // them untouched, so no request-epoch counter exists anywhere in the word.
+            // The low 48 bits of lootboxRngPacked are unused; a request must leave them
+            // untouched, so no request-epoch counter exists anywhere in the word.
             uint48 workReady = uint48(uint256(game.extsload(bytes32(uint256(33)))));
             uint256 id = _request();
             assertEq(RecyclingState.readBuffer(address(game)), write);

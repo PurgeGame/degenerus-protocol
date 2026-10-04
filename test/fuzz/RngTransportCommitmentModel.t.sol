@@ -58,7 +58,6 @@ contract RngTransportModelHarness is DegenerusGameRngModule {
         }
         if (word < 2) return;
         rngWordCurrent = word;
-        _lrWrite(LR_WORK_READY_SHIFT, LR_WORK_READY_MASK, uint48(block.timestamp));
     }
 }
 

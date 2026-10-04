@@ -19,7 +19,6 @@ contract MinerDispatchHarness is DegenerusGameMinerModule {
         rngFlagsAndNudges = uint16(1) << 15;
         rngWordCurrent = 1234;
         rngRequestTime = uint48(block.timestamp);
-        _lrWrite(LR_WORK_READY_SHIFT, LR_WORK_READY_MASK, block.timestamp);
         if (!ticketsDone) _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 1);
     }
 

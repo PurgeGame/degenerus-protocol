@@ -244,12 +244,12 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
             && ((packed >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) & BitPackingLib.MASK_24) >= level;
     }
 
-    /// @dev One clock for every action in a call: the wait since the latest accepted VRF
-    ///      callback, or since the current day's reset when that is later, so the reset's
-    ///      daily work starts at the base rate. Callers cannot move it: only callbacks and
+    /// @dev One clock for every action in a call: the wait since the latest VRF request (a
+    ///      retry keeps its origin), or since the current day's reset when that is later, so the
+    ///      reset's daily work starts at the base rate. Callers cannot move it: only requests and
     ///      the calendar do. Read before work; no worker writes it.
     function _minerRewardDueAt() internal view returns (uint256 due) {
-        due = _lrRead(LR_WORK_READY_SHIFT, LR_WORK_READY_MASK);
+        due = rngRequestTime & ~uint48(1);
         uint256 reset = block.timestamp - (block.timestamp - 82_620) % 1 days;
         if (reset > due) due = reset;
     }

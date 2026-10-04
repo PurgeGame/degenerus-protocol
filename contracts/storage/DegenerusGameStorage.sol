@@ -3021,7 +3021,7 @@ abstract contract DegenerusGameStorage {
     // =========================================================================
     //
     // Layout (LSB -> MSB):
-    //   [bits   0:47]   workReadyAt              uint48 (accepted callback timestamp; reward age only)
+    //   [bits   0:47]   unused
     //   [bits  48:111]  lootboxRngPendingEth     uint64   (scaled /1e15, 0.001 ETH res, far exceeds ETH supply)
     //   [bits 112:175]  lootboxRngThreshold      uint64   (scaled /1e15, 0.001 ETH res, far exceeds ETH supply)
     //   [bits 176:183]  middayMaxBasefeeGwei     uint8    (whole gwei, 0 disables the gate)
@@ -3042,10 +3042,6 @@ abstract contract DegenerusGameStorage {
         | (uint256(5) << 176);                      // middayMaxBasefeeGwei = 5
 
     // ---- lootboxRng shifts and masks ----
-    // Retained after completion, overwritten only by a new accepted callback. Consumers
-    // consult it only for the current read cohort; new requests never inherit its age.
-    uint256 internal constant LR_WORK_READY_SHIFT = 0;
-    uint256 internal constant LR_WORK_READY_MASK = 0xFFFFFFFFFFFF;
     uint256 internal constant LR_PENDING_ETH_SHIFT = 48;
     uint256 internal constant LR_PENDING_ETH_MASK = 0xFFFFFFFFFFFFFFFF;      // 64 bits
     uint256 internal constant LR_THRESHOLD_SHIFT = 112;

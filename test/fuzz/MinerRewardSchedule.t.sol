@@ -25,11 +25,10 @@ contract MinerRewardScheduleHarness is DegenerusGameMinerModule {
         level = currentLevel;
     }
 
-    function seed(uint24 processedDay, uint24 preparationDay, uint48 requestTime, uint48 readyAt) external {
+    function seed(uint24 processedDay, uint24 preparationDay, uint48 requestTime) external {
         dailyIdx = processedDay;
         _afkingResetDay = preparationDay;
         rngRequestTime = requestTime;
-        _lrWrite(LR_WORK_READY_SHIFT, LR_WORK_READY_MASK, readyAt);
     }
 }
 
@@ -91,29 +90,31 @@ contract MinerRewardScheduleTest is Test {
         return block.timestamp - (block.timestamp - 82_620) % 1 days;
     }
 
-    function test_LaterCallbackIsTheClockForEveryAction() public {
+    function test_LaterRequestIsTheClockForEveryAction() public {
         vm.warp(30 days + 5 hours);
-        uint48 callback = uint48(_reset() + 2 hours);
-        harness.seed(27, 28, 100_000, callback);
-        assertEq(harness.dueAt(), callback, "work waits from the accepted callback");
+        uint48 request = uint48(_reset() + 2 hours) & ~uint48(1);
+        harness.seed(27, 28, request);
+        assertEq(harness.dueAt(), request, "work waits from the request");
+        harness.seed(27, 28, request | 1);
+        assertEq(harness.dueAt(), request, "a retry keeps the request's origin");
         vm.warp(block.timestamp + 6 hours);
-        assertEq(harness.dueAt(), callback, "a late miner cannot restart the clock");
+        assertEq(harness.dueAt(), request, "a late miner cannot restart the clock");
     }
 
-    function test_ResetIsTheClockWhenTheLastCallbackIsOlder() public {
+    function test_ResetIsTheClockWhenTheLastRequestIsOlder() public {
         vm.warp(30 days + 5 hours);
-        harness.seed(27, 28, 100_000, uint48(_reset() - 20 hours));
+        harness.seed(27, 28, uint48(_reset() - 20 hours));
         assertEq(harness.dueAt(), _reset(), "reset-time work starts at the base rate");
-        harness.seed(27, 31, 300_000, 0);
-        assertEq(harness.dueAt(), _reset(), "no callback yet still uses the reset");
+        harness.seed(27, 31, 1);
+        assertEq(harness.dueAt(), _reset(), "no request yet still uses the reset");
     }
 
-    function test_ClockIgnoresCallerProgressAndOtherStorage() public {
+    function test_ClockIgnoresCallerProgress() public {
         vm.warp(30 days + 5 hours);
-        uint48 callback = uint48(_reset() + 1 hours);
-        harness.seed(27, 27, 100_000, callback);
+        uint48 request = uint48(_reset() + 1 hours) & ~uint48(1);
+        harness.seed(27, 27, request);
         uint256 due = harness.dueAt();
-        harness.seed(28, 31, 900_000, callback);
-        assertEq(harness.dueAt(), due, "daily progress and request time never move the clock");
+        harness.seed(28, 31, request);
+        assertEq(harness.dueAt(), due, "daily progress never moves the clock");
     }
 }
