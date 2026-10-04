@@ -32,7 +32,7 @@ contract LootboxBoonCoexistence is DeployProtocol {
     uint256 constant SLOT_LOOTBOX_RNG_IDX = 33;   // lootboxRngPacked (low 48 bits = lootboxRngIndex)
     uint256 constant SLOT_LOOTBOX_WORD    = 34;   // mapping(uint48 => uint256) lootboxRngWordByIndex
     uint256 constant SLOT_BOX_PLAYERS     = 57;   // mapping(uint48 => address[]) boxPlayers (queue the sweep walks)
-    uint256 constant SLOT_BOX_CURSORS     = 56;   // packed (boxCursor @ byte 7, boxCursorIndex @ byte 13)
+    uint256 constant SLOT_BOX_CURSORS     = 56;   // packed (boxCursor @ byte 7, humanReadComplete @ byte 13)
 
     // Packed lootboxOrder bit layout (mirrors DegenerusGameStorage lootboxOrder — see LB_* there).
     uint256 constant LB_SCORE_SHIFT       = 24;   // score        [24:39]
@@ -130,12 +130,8 @@ contract LootboxBoonCoexistence is DeployProtocol {
     }
 
     /// @dev Set up a lootbox ready to open: record ETH at index for player, set VRF word, enqueue
-    ///      the player for the permissionless sweep, and finalize+park the sweep frontier on
-    ///      `index` (box-order migration: the removed per-(player,index) `openBox` read
-    ///      lootboxOrder[index][player] straight from the mapping and had no notion of
-    ///      "finalized" or a discovery queue; its sweep replacement, `openBoxes`, only ever
-    ///      finds a box by walking `boxPlayers[index & 1]`, and only for indices at or below
-    ///      LR_INDEX-1 — neither of which this vm.store-only setup produced before).
+    ///      the player in `boxPlayers[index & 1]` (the only way mineFlip's human-box stage finds a
+    ///      box), and park the stage's frontier on `index`'s read buffer.
     function _setupLootbox(
         address player,
         uint48 index,
@@ -162,8 +158,8 @@ contract LootboxBoonCoexistence is DeployProtocol {
 
         // Enqueue `player` into boxPlayers[index & 1] (the sweep's discovery queue — every real
         // purchase path pushes here on first deposit; this forged setup bypasses all of them) and
-        // finalize+park the sweep frontier exactly on `index` so a full-budget openBoxes() call
-        // can only ever reach this one entry.
+        // park the frontier exactly on `index` so the engine's human-box stage can only ever
+        // reach this one entry.
         _enqueueForSweep(index, player);
         _finalizeAndParkSweep(index);
     }
@@ -186,7 +182,7 @@ contract LootboxBoonCoexistence is DeployProtocol {
         bytes32 cursorSlot = bytes32(uint256(SLOT_BOX_CURSORS));
         uint256 cur = uint256(vm.load(address(game), cursorSlot));
         cur &= ~(mask48 << (7 * 8));
-        cur &= ~(mask48 << (13 * 8));
+        cur &= ~(uint256(0xff) << (13 * 8)); // humanReadComplete = false
         vm.store(address(game), cursorSlot, bytes32(cur));
     }
 
@@ -197,9 +193,11 @@ contract LootboxBoonCoexistence is DeployProtocol {
         assertFalse(game.rngLocked(), "seeded boon fixture must be unlocked");
         assertGt(uint256(vm.load(address(game), orderSlot)), 0, "seeded box must exist");
         vm.prank(player);
-        uint256 opened = game.openBoxes(type(uint256).max);
-        assertEq(opened, 1, "preservation proof must actually open its one box");
+        game.mineFlip();
         assertTrue(uint256(vm.load(address(game), orderSlot)) >> 255 != 0, "seeded order must carry its consumed marker");
+        // The forged queue holds exactly this one entry, so a completed frontier on its buffer
+        // means the call opened exactly one box.
+        assertTrue(game.boxIndexComplete(index), "preservation proof must actually open its one box");
     }
 
     // ──────────────────────────────────────────────────────────────────────

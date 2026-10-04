@@ -343,7 +343,7 @@ contract CrapsHighRollerTest is CrapsPins {
             (slot, hi, r) = _laneOfOne(uint48(i));
             (, p) = craps.baseRunOf(hi);
             if (p != 0) break;
-            craps.resolveSlot(slot, WHOLE_FIELD);
+            craps.settleSlot(slot, WHOLE_FIELD);
         }
         assertGt(p, 0, "no pass in this sweep came home with money");
 
@@ -378,7 +378,7 @@ contract CrapsHighRollerTest is CrapsPins {
         for (uint256 i = 0; i < 40; ++i) {
             (uint64 slot, uint256 hi,) = _laneOfOne(uint48(i));
             (, uint256 basePaid) = craps.baseRunOf(hi);
-            if (basePaid != 0) { craps.resolveSlot(slot, WHOLE_FIELD); continue; }
+            if (basePaid != 0) { craps.settleSlot(slot, WHOLE_FIELD); continue; }
 
             // Read off the rider's own announcement rather than the balance: the same call also
             // pays the field's main pot, and an all-bust field still has a best bust to pay it to.
@@ -408,7 +408,7 @@ contract CrapsHighRollerTest is CrapsPins {
         // that pays the main pot — so what a claim used to collect is now one entry in this
         // stream.
         vm.recordLogs();
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         PaidOut[] memory lane = _lanePaymentsIn(logs, false);
         assertEq(lane.length, 1, "a contested lane paid other than once");
@@ -506,7 +506,7 @@ contract CrapsHighRollerTest is CrapsPins {
             craps.enterBattle(slot, _boardA(), 10);
             _closeOn(craps, slot, uint48(i & 1), uint256(keccak256(abi.encode("rank", i))));
             (uint256 won,) = craps.previewSettlement(plain);
-            craps.resolveSlot(slot, WHOLE_FIELD);
+            craps.settleSlot(slot, WHOLE_FIELD);
             if (won == 0) continue;
             ++live;
             if (craps.battleOf(craps.battleKeyOf(plain)).winnerId == uint64(plain)) ++plainWins;
@@ -652,7 +652,7 @@ contract CrapsHighRollerTest is CrapsPins {
 
     function _settle(uint64 slot, uint48 index) internal {
         _closeOn(craps, slot, index, uint256(keccak256(abi.encode("settle", slot))));
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
     }
 
     function _slotAt(uint24 day, uint256 period) internal view returns (uint64) {
@@ -787,7 +787,7 @@ contract CrapsHighRollerGasTest is CrapsPins {
         _closeOn(craps, slot, 0, uint256(keccak256("nohigh")));
 
         vm.record();
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(address(craps));
 
         bytes32 field = _slotOfMapping(key, _HIGH_FIELD_SLOT);
@@ -813,7 +813,7 @@ contract CrapsHighRollerGasTest is CrapsPins {
         _closeOn(craps, slot, 1, uint256(keccak256("high")));
 
         vm.record();
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         (, bytes32[] memory writes) = vm.accesses(address(craps));
 
         bytes32 field = _slotOfMapping(key, _HIGH_FIELD_SLOT);

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.33;
 import {RoundDrainChunkGas, ChunkHarness} from "./RoundDrainChunkGas.t.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
 /// @notice Fixed-work comparisons for the packed-tail optimization, including event digests.
 /// @dev Cooling resets access warmth between chunks, but does not create separate transactions
@@ -19,8 +20,9 @@ contract TicketOptimizationGas is RoundDrainChunkGas {
         while (!done && calls < 1000) {
             _cool();
             uint256 beforeGas = gasleft();
-            bool worked;
-            (done, worked) = h.processTicketBatch{gas: GAS_TARGET}(LVL + 1);
+            MineFlipGas.Result memory r = h.runTicketWork{gas: GAS_TARGET}(LVL + 1, GAS_TARGET);
+            done = r.done;
+            bool worked = r.progressed;
             uint256 used = beforeGas - gasleft();
             assertTrue(done || worked, "every bounded chunk makes progress");
             totalGas += used;

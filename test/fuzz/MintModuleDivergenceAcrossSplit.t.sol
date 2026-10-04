@@ -13,24 +13,25 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 // `lvlTraitEntry[lvl][0..255]` must be byte-identical however the work is split.
 //
 // Cross-path oracle (D-TST03-02): from ONE seeded pre-state (snapshot), Path A
-// drains the cohort contiguously in a single ample-gas door call; after
-// reverting to the snapshot, Path B drives the same door with bounded gas so
+// drains the cohort contiguously in a single ample-gas worker call; after
+// reverting to the snapshot, Path B drives the same worker with bounded gas so
 // every call admits only a short aligned prefix and resumes from the persisted
 // `ticketSoloOffset` checkpoint. Path B asserts it really split (several calls,
 // each stopping on an advancing 16-aligned offset with owed conserved). The
 // per-player trait-id occurrence digest, read from storage via vm.load, must
 // match across the two paths.
 //
-// Host: `processTicketBatch` on the deployed MintModule delegates to the
-// production ticket module, so the MintModule's own storage (identical
-// DegenerusGameStorage layout) hosts the queue, owed lanes and trait buffers;
-// the Game's storage is not perturbed. No contracts/*.sol is mutated.
+// Host: the ticket worker `runTicketWork` (the one mineFlip's Tickets stage
+// delegatecalls) is called directly on the deployed TicketModule, so its own
+// storage (identical DegenerusGameStorage layout) hosts the queue, owed lanes and
+// trait buffers; the Game's storage is not perturbed. No contracts/*.sol is mutated.
 // =============================================================================
 
 import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {IDegenerusGameMintModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
+import {IDegenerusGameTicketModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
 contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
     // -------------------------------------------------------------------------
@@ -78,7 +79,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
 
     /// @dev Bounded per-call gas for the split path. The base admits one 16-entry aligned
     ///      run (TICKET_SOLO_BASE + 16 * TICKET_ENTRY_MAX + TICKET_TAIL ~= 0.68M plus the
-    ///      bridge's call overhead); larger steps admit longer first runs, and the shrinking
+    ///      call overhead); larger steps admit longer first runs, and the shrinking
     ///      remainder of each call admits shorter aligned runs after it.
     uint256 private constant SPLIT_GAS_BASE = 1_600_000;
     uint256 private constant SPLIT_GAS_STEP = 500_000;
@@ -142,15 +143,18 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
         return uint32(uint256(vm.load(host, bytes32(SLOT_TICKET_CURSOR_LEVEL))) >> SOLO_OFFSET_SHIFT);
     }
 
-    /// @dev One `processTicketBatch` door call on the host; `gasLimit == 0` forwards all gas.
+    /// @dev One `runTicketWork` call on the host, its allowance the gas it is sent;
+    ///      `gasLimit == 0` forwards all gas.
     function _callBatch(address host, uint24 lvl, uint256 gasLimit)
         private returns (bool finished, bool didWork)
     {
-        bytes memory callData = abi.encodeWithSelector(IDegenerusGameMintModule.processTicketBatch.selector, lvl);
+        bytes memory callData = abi.encodeWithSelector(
+            IDegenerusGameTicketModule.runTicketWork.selector, lvl, gasLimit == 0 ? gasleft() : gasLimit
+        );
         (bool ok, bytes memory data) = gasLimit == 0 ? host.call(callData) : host.call{gas: gasLimit}(callData);
-        require(ok, "TST-03: processTicketBatch reverted");
-        require(data.length >= 64, "TST-03: processTicketBatch returned no (finished, didWork)");
-        (finished, didWork) = abi.decode(data, (bool, bool));
+        require(ok, "TST-03: runTicketWork reverted");
+        MineFlipGas.Result memory r = abi.decode(data, (MineFlipGas.Result));
+        (finished, didWork) = (r.done, r.progressed);
     }
 
     /// @dev keccak digest of the player's per-traitId occurrence counts across all 256 trait
@@ -181,7 +185,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
     // Path-A and Path-B drivers (cross-path equality per D-TST03-02)
     // =========================================================================
 
-    /// @dev Path A: one door call with ample gas runs every admitted solo run to completion.
+    /// @dev Path A: one worker call with ample gas runs every admitted solo run to completion.
     function _runPathA_Contiguous(address host, uint24 lvl, address player)
         private returns (bytes32 digest, uint256 totalTraits)
     {
@@ -240,7 +244,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
         private
         returns (bytes32 digestA, uint256 totalA, bytes32 digestB, uint256 totalB, uint256 callsB)
     {
-        address host = address(mintModule);
+        address host = address(ticketModule);
         _seedEntropy(host, entropy);
         _seedSinglePlayerQueue(host, ANCHOR_LVL, player, owed);
         uint256 snap = vm.snapshotState();
@@ -258,7 +262,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
         assertEq(runsA, (uint256(owed) + 159) / 160, "TST-03: contiguous path uses full 160-entry runs");
         // A real split: more checkpoints than the contiguous path, across several calls.
         assertGt(runsB, runsA, "TST-03: bounded gas must split the cohort at more checkpoints");
-        assertGt(callsB, 1, "TST-03: the split spans several door calls");
+        assertGt(callsB, 1, "TST-03: the split spans several worker calls");
     }
 
     // =========================================================================

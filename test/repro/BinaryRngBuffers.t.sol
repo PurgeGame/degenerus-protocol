@@ -6,8 +6,20 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {IVRFCoordinator, VRFRandomWordsRequest} from "../../contracts/interfaces/IVRFCoordinator.sol";
+import {IDegenerusGameRngModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
-/// @dev Observe the real request boundary, including a reentrant request attempt.
+/// @dev The RNG module's mid-day request worker (the one mineFlip's RequestMidday stage
+///      dispatches), called alone in the Game's context to observe its own gates.
+contract MiddayRequestWorker is DegenerusGame {
+    function requestMidday() external {
+        (bool ok, bytes memory reason) = ContractAddresses.GAME_RNG_MODULE.delegatecall(
+            abi.encodeWithSelector(IDegenerusGameRngModule.requestMinerRng.selector));
+        if (!ok) assembly ("memory-safe") { revert(add(reason, 32), mload(reason)) }
+    }
+}
+
+/// @dev Observe the real request boundary, including a reentrant mineFlip attempt.
 contract CompletionCheckingCoordinator {
     DegenerusGame private immutable game;
     constructor(DegenerusGame game_) { game = game_; }
@@ -16,7 +28,7 @@ contract CompletionCheckingCoordinator {
     }
     function requestRandomWords(VRFRandomWordsRequest calldata) external returns (uint256) {
         require(!game.rngComplete(), "completion remained true during request");
-        try game.requestLootboxRng() { revert("nested fresh request was accepted"); }
+        try game.mineFlip() { revert("nested fresh request was accepted"); }
         catch (bytes memory reason) {
             require(bytes4(reason) == bytes4(keccak256("RngNotReady()")), "nested request reached another gate");
         }
@@ -70,16 +82,25 @@ contract BinaryRngBuffersTest is DeployProtocol {
     function _drainSession() private {
         for (uint256 i; i < 1024 && !game.rngComplete(); ++i) game.mineFlip{gas: 2_000_000}();
     }
+    /// @dev The buyer's mineFlip, with the read session complete, issues the mid-day request.
     function _request() private returns(uint256 id) {
-        uint256 old = mockVRF.lastRequestId(); vm.prank(buyer); game.requestLootboxRng();
+        uint256 old = mockVRF.lastRequestId(); vm.prank(buyer); game.mineFlip();
         id = mockVRF.lastRequestId(); assertGt(id, old, "fresh production request");
     }
+    /// @dev No fresh request is reachable: the engine selects none for the credited buyer, and the
+    ///      mid-day request worker itself refuses at its completion gate without touching state.
     function _assertNextRequestBlocked(uint256 id) private {
+        vm.prank(buyer);
+        uint8 action = game.minerAction();
+        assertTrue(action != 17 && action != 18, "the engine selects no fresh request");
         bytes32 state = game.extsload(bytes32(0));
         uint256 credit = game.middayRngCredits(buyer);
+        bytes memory production = address(game).code;
+        vm.etch(address(game), address(new MiddayRequestWorker()).code);
         vm.prank(buyer);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.requestLootboxRng();
+        MiddayRequestWorker(payable(address(game))).requestMidday();
+        vm.etch(address(game), production);
         assertEq(game.extsload(bytes32(0)), state, "blocked request changed session state");
         assertEq(game.middayRngCredits(buyer), credit, "blocked request charged donor");
         assertEq(mockVRF.lastRequestId(), id, "blocked request reached coordinator");
@@ -108,7 +129,7 @@ contract BinaryRngBuffersTest is DeployProtocol {
         CompletionCheckingCoordinator observer = new CompletionCheckingCoordinator(game);
         vm.prank(address(admin));
         game.updateVrfCoordinatorAndSub(address(observer), 1, bytes32(uint256(1)));
-        vm.prank(buyer); game.requestLootboxRng();
+        vm.prank(buyer); game.mineFlip();
         assertFalse(game.rngComplete());
         assertEq(uint256(game.extsload(bytes32(uint256(4)))), 90001);
     }
@@ -119,7 +140,7 @@ contract BinaryRngBuffersTest is DeployProtocol {
         uint256 credit = game.middayRngCredits(buyer);
         uint256 id = mockVRF.lastRequestId();
         vm.mockCallRevert(address(mockVRF), abi.encodeWithSelector(IVRFCoordinator.requestRandomWords.selector), "coordinator unavailable");
-        vm.prank(buyer); vm.expectRevert(bytes("coordinator unavailable")); game.requestLootboxRng();
+        vm.prank(buyer); vm.expectRevert(bytes("coordinator unavailable")); game.mineFlip();
         assertEq(game.extsload(bytes32(0)), state, "failed request changed buffer or completion");
         assertEq(game.extsload(bytes32(uint256(33))), cursor, "failed request changed pending commitments");
         assertEq(game.middayRngCredits(buyer), credit);
@@ -133,11 +154,11 @@ contract BinaryRngBuffersTest is DeployProtocol {
             _buy();
             // The low 48 bits of lootboxRngPacked are unused; a request must leave them
             // untouched, so no request-epoch counter exists anywhere in the word.
-            uint48 workReady = uint48(uint256(game.extsload(bytes32(uint256(33)))));
+            uint48 lowBits = uint48(uint256(game.extsload(bytes32(uint256(33)))));
             uint256 id = _request();
             assertEq(RecyclingState.readBuffer(address(game)), write);
             assertEq(RecyclingState.writeBuffer(address(game)), write ^ 1);
-            assertEq(uint48(uint256(game.extsload(bytes32(uint256(33))))), workReady, "no increasing epoch counter");
+            assertEq(uint48(uint256(game.extsload(bytes32(uint256(33))))), lowBits, "no increasing epoch counter");
             assertFalse(game.rngComplete()); assertEq(RecyclingState.currentWord(address(game)), 0);
             mockVRF.fulfillRandomWords(id, cycle + 42);
             assertFalse(game.rngComplete(), "delivery cannot skip settlement");
@@ -146,8 +167,7 @@ contract BinaryRngBuffersTest is DeployProtocol {
                 _buy();
                 assertEq(uint256(game.extsload(keccak256(abi.encode(write ^ 1, uint256(21))))), 1);
             }
-            vm.prank(buyer); vm.expectRevert(); game.requestLootboxRng();
-            assertEq(mockVRF.lastRequestId(), id);
+            _assertNextRequestBlocked(id);
             _drainSession();
             assertTrue(game.rngComplete(), "bounded production keeper completed all consumers");
             assertTrue(game.boxIndexComplete(write));

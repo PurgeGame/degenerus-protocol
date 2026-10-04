@@ -17,7 +17,7 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 ///        ([[open-e-operator-approval-trust-boundary]]).
 ///
 /// @notice The two open routes are GENUINELY SEPARATE (no selector / queue overlap):
-///   - HUMAN box open: `game.openBoxes(maxCount)` (DegenerusGame.sol:1787) walks `boxPlayers[index & 1]`.
+///   - HUMAN box open: `game.mineFlip()`'s HumanBoxes stage walks `boxPlayers[index & 1]`.
 ///   - AFKING box open: `game.mineFlip()`'s open leg (GameAfkingModule.sol:1000-1009, only when
 ///     !advanceDue) walks `_subscribers` via `_autoOpen`. The afking module's own `autoOpen` selector
 ///     COLLIDES with the human `autoOpen(uint256)` so it is NOT re-exposed on the Game (DegenerusGame.sol
@@ -95,7 +95,7 @@ contract V55SetMutationOpenE is DeployProtocol {
     // =========================================================================
 
     /// @dev Drive the per-sub buy STAGE for a NEW day (Δ4 successor to afKing.autoBuy): warp +1 day,
-    ///      settle so processSubscriberStage(SUB_STAGE_BATCH) stamps the funded set + the day word lands.
+    ///      settle so the Afking stage (SUB_STAGE_BATCH) stamps the funded set + the day word lands.
     function _runStageNewDay(uint256 vrfWord) internal {
         _settleGame(vrfWord ^ 0xF00D);
         vm.warp(block.timestamp + 1 days);

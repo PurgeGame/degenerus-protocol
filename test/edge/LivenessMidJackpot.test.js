@@ -114,7 +114,7 @@ describe("LivenessMidJackpot", function () {
    * Repeatedly call mineFlip until gameOver latches. Once the deadman has
    * fired mid-jackpot, mineFlip enters _handleGameOverPath every call: it
    * requests its own terminal word (fulfilled below), applies it, drains queued
-   * tickets one batch per tx, then handleGameOverDrain sets gameOver.
+   * tickets one batch per tx, then the terminal drain sets gameOver.
    */
   async function driveToGameOver(game, deployer, mockVRF) {
     for (let i = 0; i < 600; i++) {

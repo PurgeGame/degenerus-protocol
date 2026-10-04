@@ -40,7 +40,7 @@ contract RngRetryLootboxStallTest is DeployProtocol {
         vm.deal(attacker, 1_000 ether);
         vm.deal(address(game), 5_000 ether);
 
-        // Fund the VRF subscription LINK so requestLootboxRng() passes its >= 40 LINK gate.
+        // Fund the VRF subscription LINK so the mid-day request passes its >= 40 LINK gate.
         // Admin's constructor created subscription id 1 on the mock.
         mockVRF.fundSubscription(1, 1_000 ether);
     }
@@ -65,10 +65,14 @@ contract RngRetryLootboxStallTest is DeployProtocol {
         vm.prank(attacker);
         game.purchase{value: 3 ether}(attacker, 0, BoxOrderLib.boCustomFloor(3 ether), bytes32(0), MintPaymentKind.DirectEth, false);
 
-        // 2) fire the mid-day lootbox RNG request (leaves rngLockedFlag = false).
+        // 2) fire the mid-day lootbox RNG request through mineFlip, its only door (leaves
+        //    rngLockedFlag = false).
+        uint256 priorReqId = mockVRF.lastRequestId();
         vm.prank(attacker);
-        game.requestLootboxRng();
+        game.mineFlip();
         uint256 lootboxReqId = mockVRF.lastRequestId();
+        assertGt(lootboxReqId, priorReqId, "mineFlip issued the mid-day request");
+        assertFalse(game.rngLocked(), "the request is a mid-day one");
 
         // 3) confirm it is genuinely in flight (we will NEVER fulfill it).
         (, , bool fulfilled) = mockVRF.pendingRequests(lootboxReqId);
@@ -96,7 +100,7 @@ contract RngRetryLootboxStallTest is DeployProtocol {
 
     /// @notice Drive the game (level >= 1) until it sits in a last-purchase-day window with
     ///         the daily RNG already consumed and unlocked (lastPurchaseDay && !rngLocked) —
-    ///         exactly the state in which requestLootboxRng() is callable.
+    ///         exactly the state in which mineFlip's mid-day request is reachable.
     function _driveToLastPurchaseDay() internal returns (uint24) {
         uint256 simTime = block.timestamp;
         for (uint256 day = 0; day < 800; day++) {

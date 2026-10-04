@@ -5,6 +5,7 @@ import {ChunkHarness, TicketChunkProbe} from "./RoundDrainChunkGas.t.sol";
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
 import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
 /// @dev Preparation commits before the measured transaction. The resumed frozen-pool drain is
 ///      exercised against distinct owners, nonzero registry positions and a cold storage access
@@ -46,7 +47,8 @@ abstract contract QueueDrainColdFixture is TicketChunkProbe {
         // anchor = level = TARGET_LVL - 1 (the purchase level under the last-purchase lock); the
         // read window [TARGET_LVL-2 .. TARGET_LVL] is empty, so the call reaches the frozen-pool
         // continuation and mints TARGET_LVL's far-future queue on the supplied gas.
-        (bool finishedOuter, bool worked) = h.processTicketBatch{gas: gasLimit}(TARGET_LVL - 1);
+        MineFlipGas.Result memory r = h.runTicketWork{gas: gasLimit}(TARGET_LVL - 1, gasLimit);
+        (bool finishedOuter, bool worked) = (r.done, r.progressed);
         uint256 used = beforeGas - gasleft();
         uint256 cursorAfter = h.cursor();
         emit log_named_uint(tag, used);

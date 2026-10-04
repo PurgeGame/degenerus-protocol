@@ -3,6 +3,7 @@ pragma solidity 0.8.34;
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {Vm} from "forge-std/Vm.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {IsDGNRS} from "../../contracts/interfaces/IsDGNRS.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
@@ -35,6 +36,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
     uint256 private constant FLIP_ROUND_TAG = 0x466c6970526f756e64;
     uint256 private constant PASS_ROUND_TAG = 0x50617373526f756e64;
     uint256 private constant NORMAL_PASS_VALUE = 24_800 ether;
+    bytes32 private constant MINER_WORK_SIG = keccak256("MinerWork(address,uint8,uint256,uint256)");
 
     struct Outcome {
         uint256[51] entries;
@@ -129,7 +131,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
     ///      daily cohort's read consumers run in the same call that releases the day's lock, and
     ///      the final day chunk's declared bound leaves room for both owners' entries; the AFKing
     ///      stage precedes human boxes, so a backlog of stamped boxes holds the human stage to its
-    ///      own later call, where openBoxes reaches the owners' entries. Mid-day cohorts carry no
+    ///      own later call, where mineFlip reaches the owners' entries. Mid-day cohorts carry no
     ///      stamps and are unaffected.
     function _spawnAfkingSubscribers(uint256 n) private {
         for (uint256 i; i < n; ++i) {
@@ -161,7 +163,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
 
     /// @dev Drive the delivered cohort (publication, tickets, and on a daily request the whole
     ///      day's processing) in minimal checkpoints up to its human-box stage, where the box
-    ///      orders are the next read consumer: openBoxes is the door that opens them from here.
+    ///      orders are the next read consumer of mineFlip.
     function _advanceToHumanBoxes(uint48 index, uint256[2] memory orders) private {
         for (uint256 i; i < 400; ++i) {
             if (game.nextMinerAction() == 10) return; // MinerAction.HumanBoxes
@@ -176,19 +178,19 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         if (_order(index, BOB) == 0) ++n;
     }
 
-    /// @dev The smallest openBoxes allowance that drains the next owner's entry (bisection over
-    ///      snapshots): each entry is admitted only while the remaining allowance covers its
+    /// @dev The smallest mineFlip allowance that drains the next `entries` owner entries (bisection
+    ///      over snapshots): each entry is admitted only while the remaining allowance covers its
     ///      declared bound, and both owners' entries carry the same bound, so this budget opens
-    ///      exactly one.
-    function _oneEntryBudget(uint48 index) private returns (uint256) {
+    ///      exactly `entries` and leaves too little to admit a later request.
+    function _drainBudget(uint48 index, uint256 entries) private returns (uint256) {
         uint256 before = _drained(index);
         uint256 lo = 100_000;
         uint256 hi = 30_000_000;
         while (hi - lo > 1_000) {
             uint256 mid = (lo + hi) / 2;
             uint256 snap = vm.snapshotState();
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("openBoxes(uint256)", uint256(2)));
-            bool opened = ok && _drained(index) > before;
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip()"));
+            bool opened = ok && _drained(index) >= before + entries;
             vm.revertToStateAndDelete(snap);
             if (opened) hi = mid;
             else lo = mid;
@@ -375,19 +377,49 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         return keccak256(abi.encode(expected));
     }
 
-    function _open(uint256 budget, address caller, uint256 expectedCount, uint48 index) private {
+    /// @dev The FLIP a single recorded mineFlip paid its caller (MinerWork.flipReward).
+    function _minerReward(Vm.Log[] memory logs) private view returns (uint256 reward) {
+        uint256 seen;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter == address(game) && logs[i].topics.length != 0 && logs[i].topics[0] == MINER_WORK_SIG) {
+                (,, reward) = abi.decode(logs[i].data, (uint8, uint256, uint256));
+                ++seen;
+            }
+        }
+        assertEq(seen, 1, "one MinerWork per mineFlip");
+    }
+
+    /// @dev One mineFlip by `caller`. `boxesPerOrder` is each owner's committed box count, so the
+    ///      owners' consumed orders give the exact number of consumed boxes.
+    function _open(uint256 budget, address caller, uint256 expectedCount, uint48 index, uint256 boxesPerOrder) private {
         uint256 nextAlice = _order((index ^ 1), ALICE);
         uint256 nextBob = _order((index ^ 1), BOB);
         uint256 next = game.nextPrizePoolView();
         uint256 future = game.futurePrizePoolView();
         uint256 current = game.currentPrizePoolView();
         uint256 liability = game.claimablePoolView();
-        // The walk-unit count became a gas allowance (60d31f775): a budget of 2 is the smallest
-        // allowance that opens one owner's entry; a large budget is an unbounded call.
-        uint256 allowance = budget == 2 ? _oneEntryBudget(index) : 0;
+        uint256 drainedBefore = _drained(index);
+        uint256 callerFlip = coinflip.coinflipAmount(caller);
+        // A budget of 2 is the smallest allowance that opens one owner's entry; a large budget is
+        // the smallest allowance that opens every expected entry in one call, so the call stops at
+        // the cohort's checkpoint rather than committing the next request in the same transaction.
+        // With nothing left to open the call is unbounded.
+        uint256 entries = expectedCount / boxesPerOrder;
+        uint256 allowance = budget == 2 ? _drainBudget(index, 1) : entries != 0 ? _drainBudget(index, entries) : 0;
+        vm.recordLogs();
         vm.prank(caller);
-        if (allowance == 0) assertEq(game.openBoxes(budget), expectedCount, "exact number of consumed boxes");
-        else assertEq(game.openBoxes{gas: allowance}(budget), expectedCount, "exact number of consumed boxes");
+        (bool ok, bytes memory ret) = allowance == 0
+            ? address(game).call(abi.encodeWithSignature("mineFlip()"))
+            : address(game).call{gas: allowance}(abi.encodeWithSignature("mineFlip()"));
+        uint256 reward;
+        if (ok) {
+            reward = _minerReward(vm.getRecordedLogs());
+        } else {
+            // Only a fully consumed cohort can leave the engine idle.
+            assertEq(expectedCount, 0, "the engine had work while boxes remained");
+            assertEq(bytes4(ret), bytes4(keccak256("NoWork()")), "an idle engine reports NoWork");
+        }
+        assertEq((_drained(index) - drainedBefore) * boxesPerOrder, expectedCount, "exact number of consumed boxes");
         assertEq(_order((index ^ 1), ALICE), nextAlice, "unrevealed Alice order survives old-index opening");
         assertEq(_order((index ^ 1), BOB), nextBob, "unrevealed Bob order survives old-index opening");
         assertEq(game.nextPrizePoolView(), next, "ordinary reward does not spend ticket backing");
@@ -396,7 +428,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         assertEq(game.claimablePoolView(), liability);
         assertEq(game.claimableWinningsOf(caller), 0, "third-party keeper receives no owner ETH");
         assertEq(sdgnrs.balanceOf(caller), 0, "third-party keeper receives no owner sDGNRS");
-        assertEq(coinflip.coinflipAmount(caller), 0, "unrewarded opener receives no owner FLIP");
+        assertEq(coinflip.coinflipAmount(caller), callerFlip + reward, "the keeper's only FLIP is its measured miner reward");
     }
 
     function _run(uint48 index, uint256[2] memory orders, uint256 count, uint256 word, bool daily, bool perturb)
@@ -407,7 +439,8 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
             vm.warp(block.timestamp + 1 days);
             _requestDaily();
         } else {
-            game.requestLootboxRng();
+            // The owners' pending ETH clears the threshold: the engine's mid-day request.
+            game.mineFlip();
         }
         _assertOrders(index, orders, false);
         assertEq(_word(index), 0);
@@ -416,7 +449,8 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         (,, bool fulfilled) = mockVRF.pendingRequests(request);
         assertFalse(fulfilled);
         vm.prank(KEEPER_ONE);
-        assertEq(game.openBoxes(1000), 0, "unready orders cannot be silently consumed");
+        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
+        game.mineFlip();
         _assertOrders(index, orders, false);
         if (perturb) _perturb(index, orders, false);
         mockVRF.fulfillRandomWords(request, word);
@@ -449,7 +483,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         Balance memory beforeAlice = _balance(ALICE);
         Balance memory beforeBob = _balance(BOB);
         if (perturb) {
-            _open(2, KEEPER_ONE, count, index);
+            _open(2, KEEPER_ONE, count, index, count);
             assertEq(_order(index, ALICE), 0, "first owner consumed exactly once");
             assertEq(_order(index, BOB), orders[1], "budget break preserves second owner");
             _assertDelta(ALICE, beforeAlice, alice);
@@ -461,11 +495,11 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
             // writes separately so the second open is graded only for its own rewards.
             beforeAlice = _balance(ALICE);
             beforeBob = _balance(BOB);
-            _open(2, KEEPER_TWO, count, index);
+            _open(2, KEEPER_TWO, count, index, count);
             _assertDelta(ALICE, beforeAlice, none);
             _assertDelta(BOB, beforeBob, bob);
         } else {
-            _open(1000, KEEPER_TWO, count * 2, index);
+            _open(1000, KEEPER_TWO, count * 2, index, count);
             _assertDelta(ALICE, beforeAlice, alice);
             _assertDelta(BOB, beforeBob, bob);
         }
@@ -478,7 +512,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         assertEq(_word((index ^ 1)), 0);
         beforeAlice = _balance(ALICE);
         beforeBob = _balance(BOB);
-        _open(1000, KEEPER_ONE, 0, index);
+        _open(1000, KEEPER_ONE, 0, index, count);
         Outcome memory zero;
         _assertDelta(ALICE, beforeAlice, zero);
         _assertDelta(BOB, beforeBob, zero);

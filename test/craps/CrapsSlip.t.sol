@@ -324,7 +324,7 @@ contract CrapsSlipTest is CrapsPins {
         assertEq(craps.currentIndex(), 1, "the close moved the cursor: it makes no request of its own");
         assertEq(craps.wordAt(index), 0, "the table it took already carried a word");
 
-        game.requestLootboxRng(); // the next ordinary request seals the bound table
+        game.requestRng(); // the next ordinary request seals the bound table
         assertEq(craps.currentIndex(), 0, "the sealing request did not move the cursor past the bound table");
         assertEq(craps.wordAt(index), 0, "the sealed table carried a word before its fulfilment");
     }
@@ -415,22 +415,24 @@ contract CrapsSlipTest is CrapsPins {
     // Settling
     // ---------------------------------------------------------------------------------------
 
-    /// @dev A table that has not rolled is passed OVER, never stopped on — that is what makes
-    ///      "resolve everything from here" a call anyone can make without knowing which ids are
-    ///      ready. What must not happen is a payout.
+    /// @dev A table that has not rolled is passed OVER, never stopped on — that is what lets
+    ///      mineFlip's read stage run without anyone knowing which ids are ready. What must not
+    ///      happen is a payout.
     function test_cannotSettleBeforeTheTableRolls() public {
         (uint256 betId, uint64 slot) = _seat(alice, _bets(), 3, uint16(GOAL_FAR_MULT));
 
         // Unshut: no table has been chosen, so there is nothing to settle against.
         vm.expectRevert(LootboxCraps.RngNotReady.selector);
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
 
-        // Shut, but the word has not landed.
+        // Shut, but the word has not landed: the read stage passes the cohort over, and a direct
+        // settle of the field refuses.
         _setIndex(0);
         vm.warp(block.timestamp + 2 hours);
-        craps.closeBattle(slot);
+        uint48 index = craps.closeBattle(slot);
+        assertFalse(_readWork(craps, index).progressed, "the read stage moved a cohort whose table has not rolled");
         vm.expectRevert(LootboxCraps.RngNotReady.selector);
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
 
         assertFalse(craps.betOf(betId).settled, "settled before its table rolled");
         assertEq(coinflip.staked(alice), 0, "paid before its table rolled");
@@ -439,18 +441,18 @@ contract CrapsSlipTest is CrapsPins {
     function test_settlesOnceAndOnlyOnce() public {
         (uint256 betId, uint64 slot) = _run(alice, _bets(), 3, uint16(GOAL_FAR_MULT), 0, uint256(keccak256("vrf")));
 
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         assertTrue(craps.betOf(betId).settled, "settled");
         uint256 paidOnce = coinflip.staked(alice);
 
         // A second sweep is not an error, it is a no-op: the cursor has already passed the whole
         // field, so there is nothing left in the range to walk.
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         assertEq(coinflip.staked(alice), paidOnce, "a second sweep paid the field again");
     }
 
-    /// @dev Settlement is permissionless because it can only ever pay the bet's owner. A stranger
-    ///      settling someone else's bet must move the money to that someone else.
+    /// @dev Settlement can only ever pay the bet's owner, whoever drives it. A stranger settling
+    ///      someone else's bet must move the money to that someone else.
     function test_anyoneMaySettleButOnlyTheOwnerIsPaid() public {
         // Search for a table that actually pays, so the assertion is about who gets the money
         // rather than about a run that happened to bust.
@@ -464,7 +466,7 @@ contract CrapsSlipTest is CrapsPins {
 
             uint256 before = coinflip.staked(alice);
             vm.prank(settler);
-            craps.resolveSlot(slot, WHOLE_FIELD);
+            craps.settleSlot(slot, WHOLE_FIELD);
 
             assertEq(coinflip.staked(alice) - before, expected, "owner paid");
             assertEq(coinflip.staked(settler), 0, "settler paid nothing");
@@ -491,7 +493,7 @@ contract CrapsSlipTest is CrapsPins {
 
             (uint256 won, uint256 expected) = craps.previewSettlement(betId);
             uint256 before = coinflip.staked(alice);
-            craps.resolveSlot(slot, WHOLE_FIELD);
+            craps.settleSlot(slot, WHOLE_FIELD);
             assertEq(coinflip.staked(alice) - before, expected, "preview != paid");
             // The paying path runs lean (no per-leg books); the public view runs full. Pin them.
             assertEq(
@@ -758,7 +760,7 @@ contract CrapsSlipTest is CrapsPins {
         );
 
         vm.recordLogs();
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         assertEq(coinflip.staked(alice), expected, "paid what it previewed");
@@ -850,7 +852,7 @@ contract CrapsSlipTest is CrapsPins {
         assertGt(r.totalRolls, 0, "the replay rolled nothing");
         assertGt(r.handsPlayed, 0, "the replay played no hands");
 
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         assertTrue(craps.betOf(betId).settled, "the slip did not settle");
     }
 
@@ -858,9 +860,9 @@ contract CrapsSlipTest is CrapsPins {
     // The survival flip
     // ---------------------------------------------------------------------------------------
 
-    /// @dev Settlement is permissionless and the batch is caller-composed, so if the flip were
-    ///      keyed to a batch total a settler could enumerate partitions against an already-public
-    ///      word and take the best split. Keyed to the table alone — nothing in the key is
+    /// @dev Settlement runs from any caller's mineFlip and the caller's gas composes the batch,
+    ///      so if the flip were keyed to a batch total a settler could enumerate partitions
+    ///      against an already-public word and take the best split. Keyed to the table alone — nothing in the key is
     ///      caller-composed — every partition pays identically by construction.
     function test_howAFieldIsSplitCannotChangeWhatItPays() public {
         uint64 slot = _openBattle(craps, PLAYED, 2, uint16(GOAL_FAR_MULT), 0);
@@ -1094,7 +1096,7 @@ contract CrapsSlipTest is CrapsPins {
         assertEq(flip.burned(alice), bankroll, "burned exactly the bankroll");
 
         _closeOn(craps, slot, idx, uint256(keccak256(abi.encode(seed))));
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
 
         // Settlement credits; it never burns again. The placement burn is the entire cost.
         assertEq(flip.burned(alice), bankroll, "settlement reached back into the wallet");

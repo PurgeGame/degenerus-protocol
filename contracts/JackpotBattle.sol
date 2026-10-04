@@ -96,24 +96,9 @@ contract JackpotBattle is CrapsBattleStorage {
         return keccak256(abi.encode(BATTLE_TAG, uint48(slot), bank, goal, played, terms));
     }
 
-    /// @notice Drain the committed read FIFO with the available execution gas.
-    /// @dev Compatibility budget arguments never select a successful prefix.
-    function keepRngCohort(uint48 index, uint64) external returns (bool moved, bool settled) {
-        MineFlipGas.Result memory result = _keepRngCohort(index, MineFlipGas.available());
-        return (result.progressed, result.rewardBasis != 0);
-    }
-
-    function keepRngCohortBudgeted(uint48 index, uint64)
-        external returns (bool moved, bool settled, uint64 charged)
-    {
-        uint256 start = gasleft();
-        MineFlipGas.Result memory result = _keepRngCohort(index, MineFlipGas.available());
-        return (result.progressed, result.rewardBasis != 0, uint64(start - gasleft()));
-    }
-
+    /// @notice Drain the committed read FIFO within `allowance`.
     function runCrapsReadWork(uint48 index, uint256 allowance) external returns (MineFlipGas.Result memory result) {
-        // The table's public compatibility route supplies the same available gas.
-        if (msg.sender != ContractAddresses.GAME && msg.sender != address(this)) revert OnlyGame();
+        if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
         return _keepRngCohort(index, allowance);
     }
 
@@ -1084,39 +1069,13 @@ contract JackpotBattle is CrapsBattleStorage {
     }
 
     function runCrapsMaintenance(uint256 allowance) external returns (MineFlipGas.Result memory result) {
-        if (msg.sender != _GAME && msg.sender != address(this)) revert OnlyGame();
+        if (msg.sender != _GAME) revert OnlyGame();
         return _keepScheduled(allowance);
-    }
-
-    function keepScheduled(uint64) external returns (bool progressed, uint64 slot) {
-        (MineFlipGas.Result memory result,) = _scheduledWork();
-        return (result.progressed, _keeperSlot);
-    }
-
-    function keepScheduledBudgeted(uint64) external returns (bool progressed, uint64 slot, uint64 charged) {
-        (MineFlipGas.Result memory result, uint256 used) = _scheduledWork();
-        return (result.progressed, _keeperSlot, uint64(used));
-    }
-
-    function _scheduledWork() private returns (MineFlipGas.Result memory result, uint256 used) {
-        uint256 start = gasleft();
-        if (_readCrapsStage() == 6) {
-            result = _keepRngCohort(_writeBuffer() ^ 1, MineFlipGas.available());
-        } else {
-            result = _keepScheduled(MineFlipGas.available());
-        }
-        used = start - gasleft();
     }
     /// @notice Dedicated daily battle work, metered against the enclosing phase's remainder.
     function runDailyBattleWork(uint256 allowance) external returns (MineFlipGas.Result memory result) {
         if (msg.sender != _GAME) revert OnlyGame();
         return _runDailyBattleWork(allowance);
-    }
-
-    /// @dev Historical ABI; its argument cannot raise its available gas.
-    function advanceJackpotBattle(uint64) external returns (bool) {
-        if (msg.sender != _GAME) revert OnlyGame();
-        return _runDailyBattleWork(MineFlipGas.available()).done;
     }
 
     function _runDailyBattleWork(uint256 allowance) private returns (MineFlipGas.Result memory result) {

@@ -20,7 +20,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 /// @notice D-351-02 REMOVED-SURFACE DROP (logged BY NAME for the 351-09 REGRESSION-BASELINE-v55 ledger):
 ///   the v49 keeper batch-purchase per-slice try/catch isolation leg is GONE — the standalone AfKing
 ///   batch-buy entrypoint (and its BatchBuy event) was v55 P5 dead-code (349.1) and has NO game-resident
-///   successor. The per-buy work folded into `mineFlip()`'s required-path `processSubscriberStage` STAGE,
+///   successor. The per-buy work folded into `mineFlip()`'s required-path Afking STAGE,
 ///   which is revert-free by construction (no valve to isolate a poisoned slice — a FUNDED, well-formed
 ///   slice can never poison the batch; an underfunded NORMAL sub is auto-paused/swap-popped, never
 ///   reverted). The six dropped tests (no behavioral successor — recorded for the ledger):
@@ -35,7 +35,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///
 /// @dev Builds on the DeployProtocol fixture (GameAfkingModule at GAME_AFKING_MODULE). Drives REAL
 ///      lootbox purchases through the public mint API; the per-sub buy is `mineFlip()`'s pre-RNG STAGE
-///      (`processSubscriberStage`); cancel is `subscribe(_, dailyQuantity=0)` (the in-place tombstone); the
+///      (the Afking stage); cancel is `subscribe(_, dailyQuantity=0)` (the in-place tombstone); the
 ///      pool ETH lives in the game-resident `afkingFunding` ledger (deposited via `depositAfkingFunding`,
 ///      withdrawn via `withdrawAfkingFunding` under CEI). RE-DERIVED every pinned slot via
 ///      `forge inspect storage DegenerusGame`. Test-only: ZERO `contracts/*.sol` mutation.

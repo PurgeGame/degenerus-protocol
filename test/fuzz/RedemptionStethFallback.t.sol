@@ -178,6 +178,41 @@ contract RedemptionStethFallback is DeployProtocol {
         assertEq(game.rngConsumerStage(), 1, "fixture: redemption is the live FIFO stage");
     }
 
+    /// @dev The Redemption-stage worker, called as the Game the way mineFlip dispatches it,
+    ///      settling the whole cohort.
+    function _settleCohort() internal {
+        vm.prank(address(game));
+        assertTrue(sdgnrs.runRedemptionWork(9_000_000).done, "fixture: keeper drained the cohort");
+        assertFalse(sdgnrs.redemptionSettlementPending(), "fixture: cohort cleared");
+    }
+
+    /// @dev One Redemption-stage step at the smallest allowance (10k steps) that moves the cohort:
+    ///      it settles exactly the FIFO head (cursor = sDGNRS `_redemptionCursor`, slot 10).
+    ///      Probed on snapshots, then applied.
+    function _settleOneClaim() internal {
+        bytes32 cursorSlot = bytes32(uint256(10));
+        uint256 cursor = uint32(uint256(vm.load(address(sdgnrs), cursorSlot)));
+        for (uint256 g = 500_000; g <= 9_000_000; g += 10_000) {
+            uint256 snap = vm.snapshotState();
+            vm.prank(address(game));
+            sdgnrs.runRedemptionWork(g);
+            bool moved = uint32(uint256(vm.load(address(sdgnrs), cursorSlot))) != cursor
+                || !sdgnrs.redemptionSettlementPending();
+            assertTrue(vm.revertToState(snap));
+            if (moved) {
+                vm.prank(address(game));
+                sdgnrs.runRedemptionWork(g);
+                assertTrue(
+                    uint32(uint256(vm.load(address(sdgnrs), cursorSlot))) == cursor + 1
+                        || !sdgnrs.redemptionSettlementPending(),
+                    "fixture: the step consumed exactly the FIFO head"
+                );
+                return;
+            }
+        }
+        revert("fixture: no allowance settles a beneficiary");
+    }
+
     /// @dev THE load-bearing v47 REDEEM-08 solvency invariant under the fallback: sDGNRS's own
     ///      backing (its ETH balance + its stETH balance) covers both the segregated reservation
     ///      (pendingRedemptionEthValue) and the global claimable pool's sDGNRS slice. The segregated
@@ -307,7 +342,7 @@ contract RedemptionStethFallback is DeployProtocol {
 
         // === Claim moves the direct half AND the forfeited dust-lootbox half in stETH (RFALL-03
         //     claim-asset selection matches the reserved asset; both media land at the GAME) ===
-        // Resolve at roll=100 (1:1) and claim. This redemption is dust (far under the 0.02 ETH lootbox
+        // Resolve at roll=100 (1:1) and settle. This redemption is dust (far under the 0.02 ETH lootbox
         // floor), so the lootbox leg is dropped: the player keeps the direct half (credited to their
         // game claimable) and the dropped lootbox half is forfeited to sDGNRS's OWN claimable on the
         // Game. Both legs move via creditRedemptionDirect; with the game ETH-depleted both arrive as stETH.
@@ -319,8 +354,7 @@ contract RedemptionStethFallback is DeployProtocol {
         uint256 sdgnrsClaimableBefore = _claimableSdgnrs();
         uint256 gameStethBefore = mockStETH.balanceOf(address(game));
 
-        vm.prank(playerA);
-        sdgnrs.claimRedemption(playerA, uint24(burnDay));
+        _settleCohort();
 
         // Live game: nothing is pushed at the claimant — the direct half is a game-claimable credit.
         assertEq(playerA.balance - playerEthBefore, 0, "(b) claim: no ETH pushed at the claimant (live game)");
@@ -360,13 +394,14 @@ contract RedemptionStethFallback is DeployProtocol {
     // =====================================================================
 
     /// @notice C-2 strand regression. With sDGNRS mid-game ETH-depleted (0 ETH, stETH-only) AND the
-    ///         REAL lootbox forward un-mocked, claimRedemption must NOT strand. Pre-fix the claim
-    ///         forwarded the lootbox half as `{value: lootboxEth}` ETH, which reverts when liquid ETH
-    ///         < lootboxEth, reverting the whole claim despite stETH fully backing it (the suite's
-    ///         setUp no-op mock was MASKING this). The fix funds the leg as a mix: msg.value carries
-    ///         whatever ETH is free, the GAME pulls the remainder as stETH (here the full half, since
-    ///         ETH is 0). So the claim succeeds — the game's stETH balance rises by the lootbox half,
-    ///         and the player is paid the direct half in stETH.
+    ///         REAL lootbox forward un-mocked, live settlement must NOT strand the claim. An
+    ///         ETH-only `{value: lootboxEth}` lootbox forward reverts when liquid ETH < lootboxEth,
+    ///         refusing the whole claim (the keeper drain would park it) despite stETH fully backing
+    ///         it (the suite's setUp no-op mock masks this, so this test runs the real forward).
+    ///         The leg is funded as a mix: msg.value carries whatever ETH is free, the GAME pulls
+    ///         the remainder as stETH (here the full half, since ETH is 0). So the claim settles —
+    ///         the game's stETH balance rises by the lootbox half, and the player is paid the
+    ///         direct half in stETH.
     function test_RFALL_C2_StethOnlyClaim_RealForward_NoStrand() public {
         // Drop the setUp lootbox no-op so the REAL funding path runs; re-establish only the coinflip
         // mocks the burn/claim still need (the lootbox resolution itself is left real).
@@ -403,10 +438,11 @@ contract RedemptionStethFallback is DeployProtocol {
         uint256 playerStethBefore = mockStETH.balanceOf(playerA);
         uint256 playerClaimableBefore = game.claimableWinningsOf(playerA);
 
-        // THE PoC: pre-fix this reverts (ETH-only {value: lootboxEth} forward against a 0 balance);
-        // post-fix it succeeds via the stETH pull.
-        vm.prank(playerA);
-        sdgnrs.claimRedemption(playerA, uint24(burnDay));
+        // THE PoC: an ETH-only {value: lootboxEth} forward against a 0 balance refuses the claim;
+        // the mixed forward settles it via the stETH pull.
+        _settleCohort();
+        (uint96 owed,,) = sdgnrs.pendingRedemptions(playerA, uint24(burnDay));
+        assertEq(owed, 0, "(b2) the claim settled rather than parking");
 
         // Both halves were funded by stETH pulls into the game (msg.value was 0 on each leg).
         assertGt(
@@ -569,13 +605,12 @@ contract RedemptionStethFallback is DeployProtocol {
 
         _assertSolvency("(e) post-two-submits");
 
-        // --- Resolve the shared period (roll=100 = 1:1) and claim both ---
+        // --- Resolve the shared period (roll=100 = 1:1) and settle both, one keeper step each ---
         _advanceWallDayAndResolve(day, 100);
 
         // Claimant A — the live-game direct half lands as a game-claimable credit.
         uint256 aClaimableBefore = game.claimableWinningsOf(playerA);
-        vm.prank(playerA);
-        sdgnrs.claimRedemption(playerA, uint24(day));
+        _settleOneClaim();
         assertGt(
             game.claimableWinningsOf(playerA) - aClaimableBefore,
             0,
@@ -585,8 +620,7 @@ contract RedemptionStethFallback is DeployProtocol {
 
         // Claimant B
         uint256 bClaimableBefore = game.claimableWinningsOf(playerB);
-        vm.prank(playerB);
-        sdgnrs.claimRedemption(playerB, uint24(day));
+        _settleOneClaim();
         assertGt(
             game.claimableWinningsOf(playerB) - bClaimableBefore,
             0,
@@ -629,8 +663,7 @@ contract RedemptionStethFallback is DeployProtocol {
         // The coinflip claimCoinflipsForRedemption mock returns 0 (FLIP side delivers nothing), yet
         // the ETH-value (stETH here) claim path completes and credits the player's game claimable.
         uint256 claimableBefore = game.claimableWinningsOf(playerA);
-        vm.prank(playerA);
-        sdgnrs.claimRedemption(playerA, uint24(day));
+        _settleCohort();
         assertGt(
             game.claimableWinningsOf(playerA) - claimableBefore,
             0,
@@ -752,7 +785,7 @@ contract RedemptionStethFallback is DeployProtocol {
 
     /// @dev Advance the wall day (so we are off the burn day) then resolve `day` at `roll`.
     ///      After the warp the current view day is `day + 1`; prime its RNG word so the subsequent
-    ///      claimRedemption(day) lootbox leg (which reads rngWordForDay(day + 1)) resolves on a drawn
+    ///      claim's settlement lootbox leg (which reads rngWordForDay(day + 1)) resolves on a drawn
     ///      day rather than a not-yet-drawn zero word (window-(b) flow under the burn-side gate).
     function _advanceWallDayAndResolve(uint32 day, uint16 roll) internal {
         vm.warp(block.timestamp + 1 days);
@@ -760,7 +793,7 @@ contract RedemptionStethFallback is DeployProtocol {
         _resolveDay(day, roll);
     }
 
-    /// @dev Accept ETH so the redemption-claim payout plumbing (claimRedemption ETH legs) and any
+    /// @dev Accept ETH so the redemption-claim payout plumbing (settlement ETH legs) and any
     ///      test value transfers don't revert.
     receive() external payable {}
 }

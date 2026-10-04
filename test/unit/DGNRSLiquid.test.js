@@ -28,7 +28,7 @@ const SECONDS_912_DAYS = 912 * 86400;
 
 /**
  * Drive the level-0 idle-timeout game-over flow. The terminal drain is multi-tx
- * (entropy round, ticket drain, then handleGameOverDrain), so loop mineFlip —
+ * (entropy round, ticket drain, then the terminal drain), so loop mineFlip —
  * fulfilling any VRF request — until gameOver latches.
  */
 async function triggerGameOver(game, caller, mockVRF) {

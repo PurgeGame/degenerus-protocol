@@ -7,7 +7,7 @@ import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @dev Chosen-roll accounting fixture: explicitly supplies the completed ticket
-///      prerequisites and the same published session lifecycle that live claims require.
+///      prerequisites and the same published session lifecycle that live settlement requires.
 ///      The production engine reachability is covered by AutomaticRedemptionSettlement.
 contract CenturyRedemptionSessionFixture is DegenerusGame {
     function publishRedemptionSession(uint24 day, uint256 word) external {
@@ -57,6 +57,33 @@ contract SdgnrsCenturyRecycleTest is DeployProtocol {
     function _award(sDGNRS.Pool pool, address recipient, uint256 amount) private returns (uint256) {
         vm.prank(address(game));
         return sdgnrs.transferFromPool(pool, recipient, amount);
+    }
+
+    /// @dev One Redemption-stage step as mineFlip dispatches it (the live worker, called as the
+    ///      Game) at the smallest allowance (10k steps) that moves the cohort: it settles exactly
+    ///      the FIFO head. Probed on snapshots, then applied.
+    function _settleOneClaim() private {
+        bytes32 cursorSlot = bytes32(uint256(10)); // sDGNRS _redemptionCursor (low 32 bits)
+        uint256 cursor = uint32(uint256(vm.load(address(sdgnrs), cursorSlot)));
+        for (uint256 g = 500_000; g <= 9_000_000; g += 10_000) {
+            uint256 snap = vm.snapshotState();
+            vm.prank(address(game));
+            sdgnrs.runRedemptionWork(g);
+            bool moved = uint32(uint256(vm.load(address(sdgnrs), cursorSlot))) != cursor
+                || !sdgnrs.redemptionSettlementPending();
+            assertTrue(vm.revertToState(snap));
+            if (moved) {
+                vm.prank(address(game));
+                sdgnrs.runRedemptionWork(g);
+                assertTrue(
+                    uint32(uint256(vm.load(address(sdgnrs), cursorSlot))) == cursor + 1
+                        || !sdgnrs.redemptionSettlementPending(),
+                    "harness: the step consumed exactly the FIFO head"
+                );
+                return;
+            }
+        }
+        revert("harness: no allowance settles a beneficiary");
     }
 
     function _pools() private view returns (uint256[5] memory amounts) {
@@ -318,7 +345,7 @@ contract SdgnrsCenturyRecycleTest is DeployProtocol {
         vm.etch(address(game), type(CenturyRedemptionSessionFixture).runtimeCode);
         CenturyRedemptionSessionFixture(payable(address(game))).publishRedemptionSession(day, RNG_WORD);
         vm.etch(address(game), originalCode);
-        assertEq(game.rngConsumerStage(), 1, "claims use published redemption cohort after predecessors");
+        assertEq(game.rngConsumerStage(), 1, "settlement uses the published redemption cohort after predecessors");
         uint256 reserved = sdgnrs.pendingRedemptionEthValue();
         _award(sDGNRS.Pool.Whale, address(sdgnrs), 7_000 ether);
         fingerprint = _pendingFingerprint(day);
@@ -333,26 +360,29 @@ contract SdgnrsCenturyRecycleTest is DeployProtocol {
         vm.store(address(coinflip), resultSlot, bytes32((result & ~(uint256(255) << shift)) | (uint256(100) << shift)));
         uint256 supply = sdgnrs.totalSupply();
         uint256 beforeClaimable = game.claimableWinningsOf(ALICE);
-        vm.prank(BOB); // live-game resolution stays permissionless
-        sdgnrs.claimRedemption(ALICE, day);
+        _settleOneClaim(); // ALICE burned first, so she heads the queue
+        (uint96 bobWaiting,,) = sdgnrs.pendingRedemptions(BOB, day);
+        assertGt(bobWaiting, 0, "the next claim waits for its own step");
         uint256 expectedDirect = uint256(baseAlice) * 175 / 100 / 2;
         // Game's claimable ledger initializes a 1-wei dust sentinel on its first credit.
         uint256 credited = game.claimableWinningsOf(ALICE) - beforeClaimable;
         assertGe(credited, expectedDirect);
         assertLe(credited, expectedDirect + 1);
         assertEq(sdgnrs.pendingRedemptionEthValue(), reserved - uint256(baseAlice) * 175 / 100);
-        sdgnrs.claimRedemption(BOB, day);
+        _settleOneClaim();
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
+        assertFalse(sdgnrs.redemptionSettlementPending(), "the last claim clears the cohort");
         assertEq(sdgnrs.totalSupply(), supply, "settling a burn is not another supply reduction");
         _assertRefill(300, 0);
-        // The FIFO guard rejects a repeated beneficiary before payout. Empty
-        // metadata still owes its final automatic cleanup, even after manual claims.
-        assertTrue(sdgnrs.redemptionSettlementPending());
-        vm.expectRevert(sDGNRS.RedemptionOutOfOrder.selector);
+        // A settled claim is not paid again: a live self-claim is refused and the drained
+        // cohort's worker has nothing left to settle.
+        vm.expectRevert(sDGNRS.NotGameOver.selector);
+        vm.prank(ALICE);
         sdgnrs.claimRedemption(ALICE, day);
+        uint256 aliceCredit = game.claimableWinningsOf(ALICE);
         vm.prank(address(game));
         assertTrue(sdgnrs.runRedemptionWork(1_000_000).done);
-        assertFalse(sdgnrs.redemptionSettlementPending());
+        assertEq(game.claimableWinningsOf(ALICE), aliceCredit, "nothing paid twice");
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }
 

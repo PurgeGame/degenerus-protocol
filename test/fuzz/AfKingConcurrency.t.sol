@@ -10,7 +10,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title AfKingConcurrency -- Proves the v55.0 game-resident afking subscriber-set mutation
 ///        correctness: the per-sub buy now runs INSIDE `mineFlip()`'s required-path process
-///        STAGE (`processSubscriberStage(SUB_STAGE_BATCH=50)`, GameAfkingModule.sol:539), strictly
+///        STAGE (the Afking stage, `SUB_STAGE_BATCH=50`), strictly
 ///        PRE-RNG. The standalone `autoBuy(maxCount)` keeper entrypoint and its mid-block cursor are
 ///        GONE (D-351-01 successor remap, PATTERNS §3); the STAGE is the single per-day buy driver.
 ///        This file is the PRIMARY set-mutation / swap-pop / tombstone analog for TST-04: it proves
@@ -183,7 +183,7 @@ contract AfKingConcurrency is DeployProtocol {
     // =========================================================================
 
     /// @dev Drive the per-sub buy STAGE for a NEW day: warp a day forward, then run mineFlip +
-    ///      the mock-VRF drain so `processSubscriberStage(SUB_STAGE_BATCH)` stamps the funded set.
+    ///      the mock-VRF drain so the Afking stage (`SUB_STAGE_BATCH`) stamps the funded set.
     ///      This is the Δ4 successor to the deleted `afKing.autoBuy(N)` (the buy folded into advance).
     function _runStageNewDay(uint256 vrfWord) internal {
         _settleGame(vrfWord ^ 0xF00D); // settle any in-flight day first

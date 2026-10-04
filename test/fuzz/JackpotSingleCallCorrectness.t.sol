@@ -12,10 +12,10 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 
 /// @title JackpotSingleCallHarness -- drives the live single-call daily-ETH jackpot surface
 /// @notice Extends the production DegenerusGameJackpotModule so the inherited (external)
-///         `runTerminalJackpot` executes the live `_processDailyEth -> _processBucket ->
+///         `runTerminalJackpotWork` executes the live `_processDailyEth -> _processBucket ->
 ///         _addClaimableEth` path in THIS contract's storage. The harness only adds a
 ///         `lvlTraitEntry` seeder + read-only accounting views; it overrides NO production
-///         logic. `runTerminalJackpot` pays the fixed DAILY_ETH_MAX_WINNERS=305 terminal
+///         logic. `runTerminalJackpotWork` pays the fixed DAILY_ETH_MAX_WINNERS=305 terminal
 ///         geometry (bucket counts 152/104/48/1), in ONE call -- exactly the JGAS-03 surface.
 /// @dev Test-only. NO contracts/*.sol is mutated; this harness lives entirely under test/.
 contract JackpotSingleCallHarness is DegenerusGameJackpotModule, BucketSeed {
@@ -58,7 +58,7 @@ contract JackpotSingleCallHarness is DegenerusGameJackpotModule, BucketSeed {
 ///         - the single call fits under the mainnet block gas limit (worst-case-FIRST)
 ///         - the split path is behaviorally gone (no resume stage entered) + grep-clean
 ///
-/// @dev Drives the live `runTerminalJackpot` entry (msg.sender==GAME guard satisfied via prank)
+/// @dev Drives the live `runTerminalJackpotWork` entry (msg.sender==GAME guard satisfied via prank)
 ///      which routes straight into the single-call `_processDailyEth` at the 305 ceiling.
 ///      Source-level attestations use vm.readFile over ./contracts (foundry.toml grants read).
 contract JackpotSingleCallCorrectness is Test {
@@ -66,7 +66,7 @@ contract JackpotSingleCallCorrectness is Test {
 
     /// @dev Mirror of the production constants (DegenerusGameJackpotModule).
     uint16 internal constant DAILY_ETH_MAX_WINNERS = 305;
-    /// @dev FINAL_DAY_SHARES_PACKED = [6000, 1333, 1333, 1334] bps (runTerminalJackpot path).
+    /// @dev FINAL_DAY_SHARES_PACKED = [6000, 1333, 1333, 1334] bps (runTerminalJackpotWork path).
     uint64 internal constant FINAL_DAY_SHARES_PACKED =
         (uint64(6000)) |
             (uint64(1333) << 16) |
@@ -146,7 +146,7 @@ contract JackpotSingleCallCorrectness is Test {
         // Drive the live single-call jackpot (msg.sender==GAME via prank).
         vm.recordLogs();
         vm.prank(ContractAddresses.GAME);
-        uint256 paidWei = h.runTerminalJackpot(POOL_WEI, TARGET_LVL, _word());
+        (, uint256 paidWei) = h.runTerminalJackpotWork(POOL_WEI, TARGET_LVL, _word(), gasleft());
 
         // --- Correctness: exactly 305 JackpotEthWin emissions, one per paid winner slot. ---
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -203,7 +203,7 @@ contract JackpotSingleCallCorrectness is Test {
 
         _seedAllBuckets(traitIds);
         vm.prank(ContractAddresses.GAME);
-        h.runTerminalJackpot(POOL_WEI, TARGET_LVL, _word());
+        h.runTerminalJackpotWork(POOL_WEI, TARGET_LVL, _word(), gasleft());
 
         // For each NON-solo bucket, the sum of its holders' claimable == its computed share,
         // and per-winner == share/count (exact, integer division floor; remainder dust stranded
@@ -236,7 +236,7 @@ contract JackpotSingleCallCorrectness is Test {
         _seedAllBuckets(traitIds);
         vm.recordLogs();
         vm.prank(ContractAddresses.GAME);
-        uint256 paidWei = h.runTerminalJackpot(pool, TARGET_LVL, _word());
+        (, uint256 paidWei) = h.runTerminalJackpotWork(pool, TARGET_LVL, _word(), gasleft());
 
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 ethWins;
@@ -270,7 +270,7 @@ contract JackpotSingleCallCorrectness is Test {
         // Measure the single call's gas consumption (gasleft delta around the external call).
         vm.prank(ContractAddresses.GAME);
         uint256 gasBefore = gasleft();
-        uint256 paidWei = h.runTerminalJackpot(POOL_WEI, TARGET_LVL, _word());
+        (, uint256 paidWei) = h.runTerminalJackpotWork(POOL_WEI, TARGET_LVL, _word(), gasleft());
         uint256 gasUsed = gasBefore - gasleft();
 
         assertGt(paidWei, 0, "the measured worst-case call actually paid out");
@@ -316,7 +316,7 @@ contract JackpotSingleCallCorrectness is Test {
         // Measure the worst-case single call.
         vm.prank(ContractAddresses.GAME);
         uint256 gasBefore = gasleft();
-        uint256 paidWei = h.runTerminalJackpot(POOL_WEI, TARGET_LVL, _word());
+        (, uint256 paidWei) = h.runTerminalJackpotWork(POOL_WEI, TARGET_LVL, _word(), gasleft());
         uint256 gasUsed = gasBefore - gasleft();
 
         assertGt(paidWei, 0, "JGAS-04: the measured worst-case call actually paid out");
@@ -356,7 +356,7 @@ contract JackpotSingleCallCorrectness is Test {
 
         vm.prank(ContractAddresses.GAME);
         uint256 gasBefore = gasleft();
-        uint256 paidWei = h.runTerminalJackpot(POOL_WEI, TARGET_LVL, _word());
+        (, uint256 paidWei) = h.runTerminalJackpotWork(POOL_WEI, TARGET_LVL, _word(), gasleft());
         uint256 gasUsed = gasBefore - gasleft();
         assertGt(paidWei, 0, "JGAS-04 attribution: the measured call actually paid out");
 
@@ -428,7 +428,7 @@ contract JackpotSingleCallCorrectness is Test {
 
         _seedAllBuckets(traitIds);
         vm.prank(ContractAddresses.GAME);
-        uint256 paidWei = h.runTerminalJackpot(POOL_WEI, TARGET_LVL, _word());
+        (, uint256 paidWei) = h.runTerminalJackpotWork(POOL_WEI, TARGET_LVL, _word(), gasleft());
 
         // Full resolution in one call: everything except the in-bucket rounding dust is paid.
         // (No resumeEthPool carry could exist -- the symbol is grep-clean, proven below.)
@@ -544,7 +544,7 @@ contract JackpotSingleCallCorrectness is Test {
         }
     }
 
-    /// @dev Reproduces runTerminalJackpot's trait + effective-entropy derivation (the harness has
+    /// @dev Reproduces runTerminalJackpotWork's trait + effective-entropy derivation (the harness has
     ///      an empty dailyHeroWagers, so _applyHeroOverride is a no-op and the traits are exactly
     ///      getRandomTraits(word)).
     function _deriveTraits(uint256 word)

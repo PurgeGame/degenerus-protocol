@@ -150,8 +150,10 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
         vm.prank(address(0xF123));
         vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);
         crapsBattle.enterBonusBattle(5, 0, 1);
-        vm.expectRevert(CrapsBattleStorage.NoSuchBattle.selector);
-        crapsBattle.resolveSlot(slot, 1);
+        // The locked field settles only inside the Game's own jackpot-battle stage.
+        vm.prank(ATTACKER);
+        vm.expectRevert(CrapsBattleStorage.OnlyGame.selector);
+        crapsBattle.runDailyBattleWork(10_000_000);
         assertEq(crapsBattle.preferredBoardOf(ATTACKER), BOARD);
     }
 

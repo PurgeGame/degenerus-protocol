@@ -53,14 +53,14 @@ contract GoldenTicketArmedBitParity is Test {
     function _resolves(uint160 base) internal returns (bool found, address winner) {
         uint256 arm = _word([7, 7, 7, 7], [1, 2, 3, 4], 0xA11CE);
         _seedSingles(arm, base);
-        h.payDailyJackpot(true, LVL, arm);
+        h.runDailyJackpot(true, LVL, arm, gasleft());
         uint256 g = h.goldenTicketRaw();
         assertEq((g >> 189) & 1, 1, "armed");
         winner = address(uint160(g));
 
         h.setDailyIdx(ARM_IDX + 1);
         vm.recordLogs();
-        h.payDailyJackpot(true, LVL, _word([1, 2, 3, 4], [1, 2, 3, 4], 0xBEEF));
+        h.runDailyJackpot(true, LVL, _word([1, 2, 3, 4], [1, 2, 3, 4], 0xBEEF), gasleft());
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 topic = keccak256("GoldenTicketWin(address,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)");
         for (uint256 i; i < logs.length; ++i) {

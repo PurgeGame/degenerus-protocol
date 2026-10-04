@@ -55,7 +55,15 @@ contract VrfRotationMidDayReRoll is DeployProtocol {
         }
     }
 
-    /// @dev Drive into a state where requestLootboxRng() succeeds and its buffer swap sets
+    /// @dev The mid-day request through mineFlip, its only door, as the engine's next action.
+    function _mineMiddayRequest() internal {
+        uint256 prior = mockVRF.lastRequestId();
+        game.mineFlip();
+        assertGt(mockVRF.lastRequestId(), prior, "mineFlip issued the mid-day request");
+        assertFalse(game.rngLocked(), "a mid-day request, not the daily one");
+    }
+
+    /// @dev Drive into a state where the mid-day request succeeds and its buffer swap sets
     ///      LR_MID_DAY=1 (mirrors VrfRotationOrphanIndex._setupForMidDayRng).
     function _setupForMidDayRng() internal {
         _completeDay(0xDEAD0001);
@@ -78,9 +86,9 @@ contract VrfRotationMidDayReRoll is DeployProtocol {
         _setupForMidDayRng();
 
         // Fire the mid-day request; capture the sealed physical read buffer.
-        game.requestLootboxRng();
+        _mineMiddayRequest();
         uint48 reservedIndex = _readLootboxRngIndex() ^ 1;
-        assertEq(_readMidDayFlag(), 1, "precondition: requestLootboxRng set LR_MID_DAY=1");
+        assertEq(_readMidDayFlag(), 1, "precondition: the mid-day request set LR_MID_DAY=1");
 
         // The callback stores only the finalized payload. Metadata and the ticket
         // latch are retained until their required keeper stages run.
@@ -127,7 +135,7 @@ contract VrfRotationMidDayReRoll is DeployProtocol {
         vm.assume(vrfWord > 1);
 
         _setupForMidDayRng();
-        game.requestLootboxRng();
+        _mineMiddayRequest();
         uint48 reservedIndex = _readLootboxRngIndex() ^ 1;
         assertEq(_readLootboxWord(reservedIndex), 0, "reserved slot empty before fulfilment");
 

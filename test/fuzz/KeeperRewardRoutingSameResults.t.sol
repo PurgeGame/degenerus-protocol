@@ -209,9 +209,10 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     }
 
     function _rewardElapsed() private view returns (uint256) {
-        // One clock: the later of the last accepted callback and the current day's reset.
+        // One clock: the later of the latest VRF request stamp (rngRequestTime, slot 0 bits
+        // 48..95; a retry keeps its origin) and the current day's reset.
         uint256 ts = vm.getBlockTimestamp();
-        uint256 due = uint48(uint256(vm.load(address(game), bytes32(uint256(33)))));
+        uint256 due = uint48(uint256(vm.load(address(game), bytes32(0))) >> 48);
         uint256 reset = ts - (ts - 82_620) % 1 days;
         if (reset > due) due = reset;
         return ts > due ? ts - due : 0;
@@ -387,9 +388,8 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
 
 
     /// @notice GASOPT-01 (per-entry owed drain) same-results: a MULTI-PLAYER far-future ticket backlog
-    ///         drains every player's owed to ZERO through the advance-driven private
-    ///         `_processFutureTicketBatch` continuation (reached only via `processTicketBatch`'s
-    ///         lastPurchaseDay branch). A broken drain would skip / double-process a player, leaving
+    ///         drains every player's owed to ZERO through the engine's ticket worker
+    ///         (TicketModule `runTicketWork`, mineFlip's Tickets stage) on its far-future drain. A broken drain would skip / double-process a player, leaving
     ///         non-zero owed or mis-decrementing it; the
     ///         per-player owed RESULTS are byte-identical to the expected per-player accounting (full drain).
     function testGasopt01OwedMapHoistSameResults() public {
@@ -409,8 +409,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         assertGe(queuedBefore, M, "pre: the far-future queue holds at least the M seeded players");
 
         // Drive the protocol through the advance cycle past the FF-processing range for level L. The
-        // internal, private _processFutureTicketBatch (reached via processTicketBatch's
-        // lastPurchaseDay continuation) drains the multi-player queue.
+        // engine's ticket worker (runTicketWork) drains the multi-player queue.
         _driveAdvanceThroughFarFutureProcessing(L);
 
         // SAME-RESULTS: every seeded player's owed drained to ZERO (the rk-loop-invariant pointer processed
@@ -469,7 +468,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     }
 
     /// @dev Drive the per-sub buy STAGE for a NEW day (Δ4 successor to afKing.autoBuy): warp +1 day,
-    ///      settle so processSubscriberStage(SUB_STAGE_BATCH) stamps the funded set + the day word lands.
+    ///      settle so mineFlip's PrepareSubscriptions stage stamps the funded set + the day word lands.
     function _runStageNewDay(uint256 vrfWord) internal {
         _settleGame(vrfWord ^ 0xF00D); // settle any in-flight day first
         vm.warp(block.timestamp + 1 days);
@@ -586,9 +585,8 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
 
     // ---- gameover latch ----
 
-    /// @dev Latch the terminal gameOver public bool WITHOUT setting the gameover-time slot, so
-    ///      handleFinalSweep early-returns harmlessly ("Game not over yet" at GO_TIME==0) and mineFlip
-    ///      sees no remaining terminal work. `gameOver` is the bool at byte 21 of EVM SLOT 0 (the
+    /// @dev Latch the terminal gameOver public bool WITHOUT setting the gameover-time slot, so the
+    ///      final sweep is never due (GO_TIME==0) and mineFlip sees no remaining terminal work. `gameOver` is the bool at byte 21 of EVM SLOT 0 (the
     ///      timing/FSM/flags pack). Set only that byte, preserving every other field, and confirm the
     ///      public getter flips.
     function _latchGameOver() internal {
@@ -625,8 +623,8 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     }
 
     /// @dev Drive the protocol through enough advance cycles that the far-future queue for level L is
-    ///      processed (the constructor + seeded multi-player FF entries drain via the private
-    ///      _processFutureTicketBatch, reached only through processTicketBatch's continuation).
+    ///      processed (the constructor + seeded multi-player FF entries drain through the engine's
+    ///      ticket worker, runTicketWork).
     function _driveAdvanceThroughFarFutureProcessing(uint24 L) internal {
         uint256 simTime = block.timestamp;
         address poolFiller = makeAddr("ff_pool_filler");

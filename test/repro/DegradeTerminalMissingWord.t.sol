@@ -174,7 +174,9 @@ contract DegradeTerminalMissingWordTest is DeployProtocol {
         uint256 sdgnrsBurns = TerminalSinkStub(ContractAddresses.SDGNRS).burns();
         uint256 coinBurns = TerminalSinkStub(ContractAddresses.COIN).burns();
 
-        h.handleGameOverDrain(day);
+        // The live terminal worker (mineFlip's Terminal stage) reaches the drain: the word is
+        // marked applied and no cohort is queued.
+        h.runGameOverAdvance(day, 110, gasleft());
         (bool ended, uint256 dead, uint256 paid, bool active, bool published, uint256 liabilities) = h.endingState();
         assertFalse(ended, "no payout without a word");
         assertEq(dead, 1, "deterministic ending latched");
@@ -203,8 +205,7 @@ contract DegradeTerminalMissingWordTest is DeployProtocol {
         assertEq(TerminalSinkStub(ContractAddresses.SDGNRS).burns(), sdgnrsBurns + 1);
         assertEq(TerminalSinkStub(ContractAddresses.COIN).burns(), coinBurns + 1);
 
-        // Settled: the drain and the advance both leave the fixed pot alone.
-        h.handleGameOverDrain(day);
+        // Settled: a further terminal call leaves the fixed pot alone.
         h.runGameOverAdvance{gas: 10_000_000}(day, 110, 6_700_000);
         (uint256 potAgain,,,) = h.deadState();
         (,, paid,,, liabilities) = h.endingState();

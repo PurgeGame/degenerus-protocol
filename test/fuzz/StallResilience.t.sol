@@ -227,7 +227,7 @@ contract StallResilience is DeployProtocol {
     // ── TEST-03: Lootbox open after orphaned index backfill ─────────
 
     /// @notice Proves the lootbox index reserved by a stalled daily request gets a word once
-    ///         the swap-reissued request is answered, and openBox does not revert with RngNotReady.
+    ///         the swap-reissued request is answered, and the engine opens the box on that word.
     function test_lootboxOpenAfterOrphanedIndexBackfill() public {
         // Setup buyer with enough ETH for lootbox purchases
         address buyer = makeAddr("lootBuyer");
@@ -276,12 +276,10 @@ contract StallResilience is DeployProtocol {
         game.mineFlip();
         assertTrue(_lootboxRngWord(orphanedIndex) != 0, "Reserved index finalized by the reissued word");
 
-        // openBoxes does not revert for that index, and the box bought into the stalled cohort
-        // resolves on that word (by the helper or the engine's human-box stage, which must
-        // finish before any later request may retire the buffer): its raw order word carries
+        // The engine steps on that index without an unexpected error, and the box bought into
+        // the stalled cohort resolves on that word in the engine's human-box stage, which must
+        // finish before any later request may retire the buffer: its raw order word carries
         // BOX_PROCESSED (bit 255; lootboxOrder is mapping slot 15, keyed by buffer parity).
-        vm.prank(buyer);
-        game.openBoxes(type(uint256).max);
         uint24 sealedBefore = _dailyIdx();
         for (uint256 i = 0; i < 50 && _dailyIdx() == sealedBefore; i++) {
             if (!_step()) break;

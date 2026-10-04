@@ -12,11 +12,11 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///        wall-day straddle that reuses the prior day's VRF word (v60 R2, RNGREUSE).
 ///
 /// @notice In the jackpot phase, the "fresh daily jackpot" leg
-///         (AdvanceModule:519 `payDailyJackpot(true, lvl, rngWord)`) sets
+///         (AdvanceModule:519 the daily jackpot stage) sets
 ///         `dailyJackpotCoinTicketsPending = true` UNCONDITIONALLY
 ///         (JackpotModule:481) and breaks WITHOUT `_unlockRng`. The deferred
 ///         coin/ticket half is completed by a LATER same-day advance
-///         (AdvanceModule:506 → `payDailyJackpotCoinAndTickets` → `_unlockRng`).
+///         (AdvanceModule:506 → the daily jackpot coin/ticket leg → `_unlockRng`).
 ///
 ///         If no advance completes that pending before the wall-day boundary,
 ///         `_unlockRng(D)` never runs, so `rngWordCurrent` / `rngRequestTime`
@@ -43,7 +43,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 contract RngReuseJackpotStraddleTest is DeployProtocol {
     /// @dev prizePoolsPacked slot (confirmed via the BAF/RngRetry tests): [future:128 | next:128].
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
-    /// @dev AdvanceModule stage emitted when payDailyJackpot(true) sets the pending and breaks (no unlock).
+    /// @dev AdvanceModule stage emitted when the fresh daily jackpot leg sets the pending and breaks (no unlock).
     uint8 private constant STAGE_JACKPOT_DAILY_STARTED = 10;
     /// @dev topic0 of `event Advance(uint8 stage, uint24 lvl)` (both params non-indexed → in data).
     bytes32 private constant TOPIC_ADVANCE = keccak256("Advance(uint8,uint24)");
@@ -157,7 +157,7 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
     ///         LEVEL TRANSITION into the jackpot phase (STAGE_ENTERED_JACKPOT, :499):
     ///         day-D's word is applied + `jackpotPhaseFlag` is set, but `_unlockRng`
     ///         is deliberately skipped ("Do not unlock here", :497) and
-    ///         `payDailyJackpot(true)` (the SOLE writer of the pending flag, via
+    ///         the fresh daily jackpot leg (the SOLE writer of the pending flag, via
     ///         JackpotModule:481 ← AdvanceModule:519) has NOT run yet. So
     ///         `dailyJackpotCoinTicketsPending == false` here by construction.
     function testFix_TransitionStraddle_DPlus1GetsFreshWord() public {

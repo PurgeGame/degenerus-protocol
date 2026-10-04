@@ -21,8 +21,7 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 //      keeper's creditFlip per call (exactly one on a paid call, zero on NoWork). The source attest
 //      now targets the engine module. The history below is kept for the requirement IDs.
 /// @title KeeperRouterOneCategory -- TST-02 (Phase 351, v55.0 game-resident): one-rewarded-category-per-tx
-///        (no bounty-stacking) on `mineFlip()` + the router->game->creditFlip double-pay disposition + the
-///        UNREWARDED `openBoxes(count)` escape (the same box drain, credits nothing).
+///        (no bounty-stacking) on `mineFlip()` + the router->game->creditFlip double-pay disposition.
 ///
 /// @notice The v55 router (`game.mineFlip()`, GameAfkingModule.sol:985) is a STRUCTURAL one-category
 ///         early-return: `if (advanceDue) {advance leg} else {open leg}` (GameAfkingModule.sol:993 vs :1000).
@@ -38,7 +37,7 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 ///   `bountyEarned==0` skip (the sweep-pending gameover advance, or an ineligible keeper's advance, runs
 ///   the category but credits nothing, still no revert), and ZERO + `revert NoWork()` when there is no
 ///   work — BOTH O(1) predicates empty, OR a post-gameover idle crank with no final sweep pending. The count is taken via the
-///   recipient-isolated `_countCoinflipStakeUpdatedFor(keeper)` oracle (topics[1] == keeper) so a
+///   recipient-isolated `_countFor(logs, keeper)` oracle (topics[1] == keeper) so a
 ///   box-owner's / player's winnings credit can never inflate or mask the router bounty count. Asserting
 ///   COUNT (==1 / ==0) across both branches IS the proof the else early-return can never credit two
 ///   categories in one tx.
@@ -55,16 +54,9 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 ///   exists in this file (User verbatim: "reentrancy is not an issue, nothing here pays eth and this only
 ///   interacts with trusted contracts.").
 ///
-///   D-03 (open-leg drains BOTH box types / escapes): `mineFlip()`'s open leg runs the fixed open batch
-///   (OPEN_BATCH=80) and does NOT OOG; it drains AFKING boxes FIRST then HUMAN boxes with the leftover
-///   budget — a mirror of the unrewarded `openBoxes(count)` valve — and PAYS the keeper the single
-///   knee-pro-rated open bounty on the COMBINED count (a human box and an afking box are bountied
-///   identically). `openBoxes(count)` is the SAME drain run UNREWARDED (an emergency escape that credits
-///   NOTHING; only `mineFlip` credits). The afking cursor walk is exposed as `drainAfkingBoxes` (reached
-///   via `openBoxes`); the human sweep is `openHumanBoxes` (reached via BOTH `openBoxes` and `mineFlip`'s
-///   open leg). Gas: mineFlip's open leg is the `openBoxes(80)`-equivalent drain, covered by the existing
-///   `openBoxes(400)`/`openBoxes(100)` batch tests (V61AfpayWaterfall / V56SubHardening / this file's
-///   faucet suite) — a strictly larger batch on the identical path.
+///   D-03 (box stages): box opens run only inside `mineFlip()`, as ordered read-consumer stages — AFKING
+///   boxes first, then HUMAN boxes — and the call pays the keeper once, on its measured gas
+///   (testMintFlipOpensHumanBoxAndPaysBounty).
 ///
 /// @dev The five call-site deltas applied (D-351-01):
 ///   Δ3 doWork->mineFlip: `afKing.doWork()` -> `game.mineFlip()` (all sites).
@@ -173,7 +165,8 @@ contract KeeperRouterOneCategory is DeployProtocol {
         for (uint256 i; i < 4; ++i) {
             uint256 packed = uint256(vm.load(address(game), bytes32(uint256(33))));
             if (packed & (uint256(1) << (250 + RecyclingState.writeBuffer(address(game)))) == 0) break;
-            game.requestLootboxRng();
+            // A shut window waives the mid-day value gates, so the engine requests its word.
+            game.mineFlip();
             uint256 reqId = mockVRF.lastRequestId();
             (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
             if (!fulfilled) mockVRF.fulfillRandomWords(reqId, vrfWord + i);
@@ -268,10 +261,9 @@ contract KeeperRouterOneCategory is DeployProtocol {
         _settleGame(uint256(keccak256("nowork-settle")));
         assertFalse(game.advanceDue(), "pre: settled (advance not due)");
         assertFalse(game.rngLocked(), "pre: settled (not locked)");
-        // Catch the human-box frontier up across any finalized empty indices. Traversing those
-        // indices is bounded housekeeping progress and intentionally commits without a bounty;
-        // after the unrewarded valve does it, the next router call is genuinely stationary.
-        game.openBoxes(1_000);
+        // Mine any remaining read-cohort housekeeping (empty human-box frontiers included) so the
+        // keeper's probe below meets a genuinely stationary engine.
+        _mineAll(64);
         // No afking subscriber stamped a box (no STAGE buy was driven), so the open leg has nothing.
 
         // The crank has a craps arm now, and a shut window makes the next request real work, so a
@@ -289,7 +281,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 2 — D-01 structural reentrancy attest + D-03 one-category early-return + the human escape
+    // Task 2 — D-01 structural reentrancy attest + D-03 the rewarded human box stage
     // =========================================================================
 
     /// @notice Pin the single engine dispatcher, its single CEI-last keeper-credit site, its trusted
@@ -303,7 +295,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         string memory dispatch = _extractFunctionBody(miner, "function mineFlip() external {");
         assertGt(bytes(dispatch).length, 0, "D-01: shared dispatcher extracted");
         assertEq(_countOccurrences(dispatch, "for (uint256 transitions; transitions < 32; ++transitions) {"), 1, "one bounded dispatch loop");
-        assertEq(_countOccurrences(dispatch, "MinerAction action = transitions == 0 ? first : _nextMinerAction();"), 1, "every dispatch reselects from storage");
+        assertEq(_countOccurrences(dispatch, "MinerAction action = transitions == 0 ? first : _nextMinerAction(msg.sender);"), 1, "every dispatch reselects from storage");
         assertEq(_countOccurrences(dispatch, "coinflip.creditFlip(msg.sender, reward);"), 1, "single credit in the dispatcher");
         assertEq(_countOccurrences(miner, "creditFlip("), 1, "sole keeper-credit site in the engine");
         assertEq(_countOccurrences(afking, "creditFlip(msg.sender,"), 0, "the retired router credit site stays gone");
@@ -328,42 +320,10 @@ contract KeeperRouterOneCategory is DeployProtocol {
         assertEq(_countOccurrences(afking, ".send("), 0, "module cannot send ETH");
     }
 
-    /// @notice D-03 UNREWARDED escape: the standalone parametered HUMAN `game.openBoxes(count)` runs the
-    ///         human box leg (a queued human box opens) but credits NOTHING (only `mineFlip` credits).
-    function testStandaloneAutoOpenEscapeUnrewarded() public {
-        address boxOwner = makeAddr("esc_open_box_owner");
-        vm.deal(boxOwner, 100_000 ether);
-
-        // Settle so the human box can be queued + opened cleanly.
-        _settleGame(0xE5C0_0001);
-        uint48 index = _activeLootboxIndex();
-        _buyBox(boxOwner, LOOTBOX_WEI);
-        // The relocated multi-index sweep opens FINALIZED indices (boxCursorIndex .. LR_INDEX-1);
-        // words land at LR_INDEX-1. Advance LR_INDEX so the box at `index` is the just-finalized
-        // index the sweep reads, park the frontier there, then land its word.
-        _advanceLootboxRngIndexByOne();
-        _parkBoxFrontier(index);
-        _injectLootboxRngWord(index, FIXED_WORD);
-        assertGt(_lootboxEthBase(index, boxOwner), 0, "pre: human box queued + un-opened");
-        assertTrue(game.boxesPending(), "pre: a human box is pending");
-
-        vm.recordLogs();
-        vm.prank(keeper);
-        game.openBoxes(50);
-
-        // Work happened: the human box opened (first-deposit signal zeroed).
-        assertEq(_lootboxEthBase(index, boxOwner), 0, "non-vacuity: the standalone autoOpen opened the human box");
-
-        // ...but the keeper got NO bounty credit (only mineFlip credits). A box open can itself credit
-        // FLIP winnings to the BOX OWNER, so isolate the keeper's count: it is 0.
-        assertEq(_countCoinflipStakeUpdatedFor(keeper), 0, "UNREWARDED: openBoxes(count) credits the keeper zero");
-    }
-
     /// @notice REWARDED via mineFlip: once a delivered cohort's human boxes are the engine's next work
     ///         (the read-consumer HumanBoxes stage, 60d31f775), `mineFlip()` opens them and credits the
     ///         keeper EXACTLY ONCE, on the call's measured gas above the unpaid first MIN_REWARDED_GAS
     ///         (72fc06f6c). Enough distinct boxes are queued that the open measures past that million.
-    ///         The mirror of the unrewarded escape above: same drain, but mineFlip PAYS.
     function testMintFlipOpensHumanBoxAndPaysBounty() public {
         address[] memory owners = new address[](PAID_BOX_OWNERS);
 
@@ -375,7 +335,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
             vm.deal(owners[i], 100_000 ether);
             _buyBox(owners[i], LOOTBOX_WEI);
         }
-        // Finalize the boxes' index + land its word (the same setup as the escape test above).
+        // Finalize the boxes' index + land its word.
         _advanceLootboxRngIndexByOne();
         _parkBoxFrontier(index);
         _injectLootboxRngWord(index, FIXED_WORD);
@@ -424,21 +384,8 @@ contract KeeperRouterOneCategory is DeployProtocol {
         }
     }
 
-    /// @dev Count CoinflipStakeUpdated emissions whose indexed `player` topic == `who` (topics[1]).
-    ///      Isolates the router bounty (to the keeper) from a box-owner's winnings credit.
-    function _countCoinflipStakeUpdatedFor(address who) internal returns (uint256 count) {
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        for (uint256 i; i < logs.length; i++) {
-            if (
-                logs[i].emitter == address(coinflip) &&
-                logs[i].topics.length > 1 &&
-                logs[i].topics[0] == COINFLIP_STAKE_UPDATED_SIG &&
-                logs[i].topics[1] == bytes32(uint256(uint160(who)))
-            ) count++;
-        }
-    }
-
-    /// @dev Recipient-isolated creditFlip count over already-captured logs.
+    /// @dev Recipient-isolated creditFlip count over already-captured logs: isolates the router
+    ///      bounty (to the keeper) from a box-owner's winnings credit.
     function _countFor(Vm.Log[] memory logs, address who) internal view returns (uint256 count) {
         for (uint256 i; i < logs.length; i++) {
             if (
@@ -613,7 +560,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
     }
 
     /// @dev Drive the per-sub buy STAGE for a NEW day (Δ4 successor to afKing.autoBuy): warp +1 day,
-    ///      settle so processSubscriberStage(SUB_STAGE_BATCH) stamps the funded set + the day word lands.
+    ///      settle so mineFlip's subscription stage stamps the funded set + the day word lands.
     function _runStageNewDay(uint256 vrfWord) internal {
         _settleGame(vrfWord ^ 0xF00D);
         vm.warp(block.timestamp + 1 days);
@@ -671,7 +618,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         require(game.gameOver(), "_latchGameOver: gameOver did not flip (slot 0 byte 21)");
     }
 
-    // ---- human box helpers (the unrewarded human autoOpen escape) ----
+    // ---- human box helpers ----
 
     /// @dev Buy a real human lootbox-mode deposit via the public mint API. The first deposit for
     ///      (index, buyer) fires the `lootboxEthBase == 0` signal -> the inlined boxPlayers push.
@@ -693,15 +640,14 @@ contract KeeperRouterOneCategory is DeployProtocol {
         RecyclingState.seedWord(address(game), uint48(index), bytes32(rngWord));
     }
 
-    /// @dev Bump the active lootbox RNG index (low 48 bits of lootboxRngPacked, slot 34) by one,
-    ///      mirroring requestLootboxRng's pre-increment, so a box queued at the prior index sits at
-    ///      LR_INDEX-1 — the finalized index the relocated multi-index sweep reads.
+    /// @dev Fixture guard: a delivered word is present, so the box queued on the read buffer is
+    ///      the cohort the human-box stage reads.
     function _advanceLootboxRngIndexByOne() internal {
         assertGt(RecyclingState.currentWord(address(game)), 1, "fixture delivered word");
     }
 
     /// @dev Park the auto-open frontier (humanReadComplete byte 13 + boxCursor byte 7, both slot 56)
-    ///      at `index` so the relocated sweep begins exactly at this finalized index.
+    ///      at `index` so the human-box stage begins at this buffer's first entry.
     function _parkBoxFrontier(uint48 index) internal {
         bytes32 slot = bytes32(uint256(56));
         uint256 packed = uint256(vm.load(address(game), slot));

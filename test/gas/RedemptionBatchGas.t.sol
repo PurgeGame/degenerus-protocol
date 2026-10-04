@@ -202,16 +202,52 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }
 
-    function test_ColdLongManuallyClaimedCohortClearsInConstantTime() public {
+    /// @dev Beneficiaries still queued in the live cohort (`_redemptionPlayers.length` at slot 9
+    ///      minus the cursor); zero once the cohort is cleared.
+    function _left() private view returns (uint256) {
+        return uint256(vm.load(address(sdgnrs), bytes32(uint256(9)))) - _redemptionCursor();
+    }
+
+    /// @dev Settle the cohort through Redemption-stage steps until exactly one beneficiary is left:
+    ///      large steps while they keep one claim queued, then single-claim steps.
+    function _drainToLastClaim() private {
+        uint256 allowance = 9_000_000;
+        while (_left() > 1) {
+            uint256 before = _left();
+            uint256 snap = vm.snapshotState();
+            vm.prank(address(game));
+            _process(allowance);
+            if (sdgnrs.redemptionSettlementPending() && _left() >= 1 && _left() < before) continue;
+            assertTrue(vm.revertToState(snap));
+            if (allowance > 1_000_000) allowance /= 2;
+            else _settleOneClaim();
+        }
+        assertEq(_left(), 1, "harness: one beneficiary left");
+    }
+
+    /// @dev The call that settles a cohort's last beneficiary also clears the cohort. That clear
+    ///      must not rescan the beneficiaries already consumed: the finishing router call for a
+    ///      2,000-claim cohort costs what it costs for a 2-claim cohort.
+    function test_ColdLongCohortFinishClearsInConstantTime() public {
         uint24 day = game.currentDayView();
-        address[] memory players = _queueBurners(2000, 1 ether);
+        uint256 snap = vm.snapshotState();
+        _queueBurners(2, 1 ether);
         _resolve(day, 100, 99);
-        for (uint256 i; i < players.length; ++i) sdgnrs.claimRedemption(players[i], day);
-        assertTrue(sdgnrs.redemptionSettlementPending(), "metadata cleanup remains owed");
-        uint256 used = _coldRouterGas();
-        emit log_named_uint("cold_2000_manual_claim_cleanup_router_gas", used);
-        assertLe(used, 500_000, "cleanup must not rescan already-consumed beneficiaries");
+        _drainToLastClaim();
+        uint256 shortFinish = _coldRouterGas();
         assertFalse(sdgnrs.redemptionSettlementPending());
+        assertTrue(vm.revertToState(snap));
+
+        _queueBurners(2000, 1 ether);
+        _resolve(day, 100, 99);
+        _drainToLastClaim();
+        uint256 used = _coldRouterGas();
+        emit log_named_uint("cold_2_claim_cohort_finish_router_gas", shortFinish);
+        emit log_named_uint("cold_2000_claim_cohort_finish_router_gas", used);
+        assertLe(used, 500_000, "the finishing call stays small");
+        assertLe(used, shortFinish + 5_000, "cleanup must not rescan already-consumed beneficiaries");
+        assertFalse(sdgnrs.redemptionSettlementPending());
+        assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }
 
 }

@@ -8,7 +8,10 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {stdStorage, StdStorage} from "forge-std/StdStorage.sol";
 
-/// @notice Automatic work depends on committed game state, never on caller privileges or credits.
+/// @notice Engine work depends on committed game state, never on caller privileges or credits,
+///         with one intended exception: pending mid-day work below the threshold is requested
+///         only by a mineFlip whose caller holds donated credit covering the charge, and that
+///         caller alone is charged.
 contract MinerCallerIndependenceTest is DeployProtocol {
     using stdStorage for StdStorage;
     address private constant DONOR = address(0xD010);
@@ -43,8 +46,7 @@ contract MinerCallerIndependenceTest is DeployProtocol {
         charge = 201_000 * block.basefee * 6 * 1 ether / weiPerLink;
         assertGt(charge, 0);
         _grant(DONOR, charge * 3);
-        _grant(address(game), charge * 5);
-        _grant(address(0), charge * 7); // Automatic's sentinel must not act as a credit owner.
+        _grant(address(0), charge * 7); // The creditless views' sentinel must not act as a credit owner.
         vm.mockCall(address(vault), abi.encodeWithSignature("isVaultOwner(address)", OWNER), abi.encode(true));
     }
 
@@ -73,19 +75,25 @@ contract MinerCallerIndependenceTest is DeployProtocol {
         );
     }
 
+    /// @dev The engine action each caller's own mineFlip would take (`minerAction()` selects as
+    ///      msg.sender) matches the creditless view for every caller. Returns that action.
     function _selectionParity() private returns (uint8 action) {
-        vm.prank(DONOR);
         action = game.nextMinerAction();
-        vm.prank(OUTSIDER);
-        assertEq(game.nextMinerAction(), action, "donor credit cannot select a different action");
-        vm.prank(OWNER);
-        assertEq(game.nextMinerAction(), action, "vault ownership cannot select a different action");
+        assertEq(_actionFor(DONOR), action, "donor credit cannot select a different action");
+        assertEq(_actionFor(OUTSIDER), action, "an outsider selects the same action");
+        assertEq(_actionFor(OWNER), action, "vault ownership cannot select a different action");
         vm.prank(DONOR);
         bool due = game.advanceDue();
+        assertEq(due, action != 0 && action != 2, "public work discovery matches the selected action");
         vm.prank(OUTSIDER);
         assertEq(game.advanceDue(), due, "public work discovery is caller independent");
         vm.prank(OWNER);
         assertEq(game.advanceDue(), due, "owner observes the same public work");
+    }
+
+    function _actionFor(address caller) private returns (uint8) {
+        vm.prank(caller);
+        return game.minerAction();
     }
 
     function _creditDigest() private view returns (bytes32) {
@@ -115,39 +123,30 @@ contract MinerCallerIndependenceTest is DeployProtocol {
         assertEq(_commitmentDigest(), state);
     }
 
-    function test_ExplicitDonorRequestStillSupportsAnEmptyQueue() public pricedBlock {
-        uint256 prior = mockVRF.lastRequestId();
-        vm.prank(OUTSIDER);
-        vm.expectRevert(bytes4(keccak256("NoPendingLootbox()")));
-        game.requestLootboxRng();
-        vm.prank(DONOR);
-        game.requestLootboxRng();
-        assertGt(mockVRF.lastRequestId(), prior, "explicit donor request reaches the coordinator");
-        _assertOnlyDonorCharged();
-        assertFalse(game.rngLocked(), "explicit empty request remains a midday cohort");
-        assertFalse(game.rngComplete(), "even an empty cohort must publish and complete");
-    }
-
-    function test_AutomaticBelowThresholdNeverSpendsCallerOrSentinelCredit() public pricedBlock {
+    /// @notice The one intended caller dependence: below the threshold only the credited donor's
+    ///         own mineFlip selects and issues the request, and only the donor is charged. Every
+    ///         other caller, the creditless views and the sentinel see no work.
+    function test_BelowThresholdRequestIsTheOneCallerDependentAction() public pricedBlock {
         _buy(0.5 ether);
-        assertEq(_selectionParity(), 0, "below-threshold value is not automatic work");
+        assertEq(game.nextMinerAction(), 0, "below-threshold value is not creditless work");
+        assertFalse(game.advanceDue(), "creditless discovery sees no work");
+        assertEq(_actionFor(OUTSIDER), 0, "an outsider sees no work");
+        assertEq(_actionFor(OWNER), 0, "vault ownership sees no work");
+        assertEq(_actionFor(DONOR), 18, "the credited donor's mineFlip would request");
         bytes32 credits = _creditDigest();
         bytes32 state = _commitmentDigest();
-        vm.prank(DONOR);
-        vm.expectRevert(bytes4(keccak256("NoWork()")));
-        game.mineFlip{gas: 15_000_000}();
-        assertEq(_creditDigest(), credits, "automatic donor call cannot redeem credit");
-        assertEq(_commitmentDigest(), state, "automatic call cannot waive the value threshold");
         vm.prank(OUTSIDER);
         vm.expectRevert(bytes4(keccak256("NoWork()")));
         game.mineFlip{gas: 15_000_000}();
-        assertEq(_creditDigest(), credits, "automatic sentinel has no spending authority");
-        assertEq(_commitmentDigest(), state);
+        assertEq(_creditDigest(), credits, "an outsider's call spends no one's credit");
+        assertEq(_commitmentDigest(), state, "an outsider's call cannot waive the value threshold");
+        uint256 prior = mockVRF.lastRequestId();
         vm.prank(DONOR);
-        game.requestLootboxRng();
+        game.mineFlip{gas: 15_000_000}();
+        assertGt(mockVRF.lastRequestId(), prior, "the donor's mineFlip reaches the coordinator");
         _assertOnlyDonorCharged();
-        assertGt(mockVRF.lastRequestId(), 0);
-        assertNotEq(_commitmentDigest(), state, "explicit donation credit still waives the threshold");
+        assertFalse(game.rngLocked(), "the donor's request is a midday cohort");
+        assertNotEq(_commitmentDigest(), state, "donated credit pays the threshold");
     }
 
     function test_ThresholdRequestCommitsTheSameCohortForEveryCaller() public pricedBlock {
@@ -177,9 +176,12 @@ contract MinerCallerIndependenceTest is DeployProtocol {
     }
 
     function test_ExpiredTransportRequestDoesNotSelectOwnerSpecificMinerWork() public pricedBlock {
+        _buy(0.5 ether);
+        uint256 prior = mockVRF.lastRequestId();
         vm.prank(DONOR);
-        game.requestLootboxRng();
+        game.mineFlip{gas: 15_000_000}();
         uint256 id = mockVRF.lastRequestId();
+        assertGt(id, prior, "the donor's mineFlip requested a mid-day word");
         vm.warp(vm.getBlockTimestamp() + 20 hours + 2);
         assertTrue(vault.isVaultOwner(OWNER), "control: caller holds the retry role");
         assertEq(_selectionParity(), 2, "every miner waits for the same unanswered request");
@@ -194,9 +196,9 @@ contract MinerCallerIndependenceTest is DeployProtocol {
     }
 
     function _assertOnlyDonorCharged() private view {
-        assertEq(game.middayRngCredits(DONOR), charge * 2, "one explicit priced charge");
+        assertEq(game.middayRngCredits(DONOR), charge * 2, "one priced charge to the mineFlip caller");
         assertEq(game.middayRngCredits(OUTSIDER), 0);
-        assertEq(game.middayRngCredits(address(game)), charge * 5);
+        assertEq(game.middayRngCredits(address(game)), 0, "the Game holds no credit");
         assertEq(game.middayRngCredits(address(0)), charge * 7);
     }
 }

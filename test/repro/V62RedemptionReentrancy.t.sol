@@ -33,10 +33,11 @@ interface IFlipCoinflipPlayerMock {
 ///
 ///         TWO independent layers now close the class, pinned by one test each:
 ///
-///         1. test_V62_03_LiveClaim_RunsNoClaimantCode — the live-game claim routes BOTH halves
-///            to the GAME (direct half = game-claimable credit, lootbox half = lootbox funding)
-///            and pushes NOTHING at the claimant, so no claimant-controlled code runs at all:
-///            the re-entry surface is gone by construction mid-game.
+///         1. test_V62_03_LiveClaim_RunsNoClaimantCode — live settlement (mineFlip's Redemption
+///            stage; a live game has no self-claim) routes BOTH halves to the GAME (direct half =
+///            game-claimable credit, lootbox half = lootbox funding) and pushes NOTHING at the
+///            claimant, so no claimant-controlled code runs at all: the re-entry surface is gone
+///            by construction mid-game.
 ///
 ///         2. test_V62_03_GameOverClaim_PayEthCEIHoldsReserveIdentity — _payEth survives only on
 ///            the post-gameOver path (100% direct, self-claim). Its stETH-before-ETH order
@@ -140,7 +141,7 @@ contract V62RedemptionReentrancy is DeployProtocol {
 
     /// @dev Seed the Game's published, not-yet-complete read session for `word` with its ticket
     ///      stage done: the redemption consumer stage (stage 1), the only stage in which a live
-    ///      claim is accepted (the Game's resolve hook pins `word` for the cohort in the same step).
+    ///      claim settles (the Game's resolve hook pins `word` for the cohort in the same step).
     function _openSettlementStage(uint256 word) internal {
         RecyclingState.seedWord(address(game), RecyclingState.readBuffer(address(game)), bytes32(word));
         uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
@@ -159,10 +160,11 @@ contract V62RedemptionReentrancy is DeployProtocol {
     //                          THE REPRO
     // =====================================================================
 
-    /// @notice Layer 1 — the LIVE-GAME claim runs no claimant-controlled code at all. Both
-    ///         halves of the rolled ETH route to the GAME (direct half = game-claimable credit,
-    ///         lootbox half = lootbox funding); nothing is pushed at the claimant, so an armed
-    ///         attacker's receive() hook never fires and the re-entry surface does not exist.
+    /// @notice Layer 1 — LIVE-GAME settlement runs no claimant-controlled code at all. The
+    ///         claimant cannot claim directly (NotGameOver); the keeper drain routes both halves
+    ///         of the rolled ETH to the GAME (direct half = game-claimable credit, lootbox half =
+    ///         lootbox funding); nothing is pushed at the claimant, so an armed attacker's
+    ///         receive() hook never fires and the re-entry surface does not exist.
     function test_V62_03_LiveClaim_RunsNoClaimantCode() public {
         // ---- 1. Outer gambling burn on day D. Reserves 175% MAX into pendingRedemptionEthValue;
         //         the ETH leg of pullRedemptionReserve segregates that ETH into sDGNRS's balance. ----
@@ -195,7 +197,7 @@ contract V62RedemptionReentrancy is DeployProtocol {
         mockStETH.mint(address(sdgnrs), pendingNow - seedEth);
         assertTrue(_reserveIdentityHolds(), "precondition: reserve identity holds right before claim");
 
-        // Deplete the GAME's liquid ETH and claimable[SDGNRS]: the claim must succeed with the
+        // Deplete the GAME's liquid ETH and claimable[SDGNRS]: the claim must settle with the
         // value arriving from sDGNRS custody alone (stETH pulls), not from any game-side reserve.
         vm.deal(address(game), 0);
         _setGameClaimableSdgnrs(0);
@@ -204,21 +206,28 @@ contract V62RedemptionReentrancy is DeployProtocol {
         // Arm the attacker exactly as the pre-fix exploit would — the hook must never fire.
         attacker.arm(BURN_AMOUNT / 4, 64);
 
-        // ---- 4. Fire the claim (sets rngWordForDay(D+1), the word the lootbox leg keys to). ----
+        // ---- 4. Settle the claim (sets rngWordForDay(D+1) first). The attacker cannot claim
+        //         directly in a live game; the keeper drain (the Redemption-stage worker, called as
+        //         the Game the way mineFlip dispatches it) settles it. ----
         _primeCurrentDayRng();
         uint256 attackerEthBefore = address(attacker).balance;
         uint256 attackerStethBefore = mockStETH.balanceOf(address(attacker));
         uint256 gameValueBefore = address(game).balance + mockStETH.balanceOf(address(game));
+        vm.expectRevert(sDGNRS.NotGameOver.selector);
         attacker.claim(dayD);
+        vm.prank(address(game));
+        assertTrue(sdgnrs.runRedemptionWork(9_000_000).done, "V62-03 L1: keeper drained the cohort");
+        (uint96 owedAfter, , ) = sdgnrs.pendingRedemptions(address(attacker), uint24(dayD));
+        assertEq(uint256(owedAfter), 0, "V62-03 L1: the claim settled rather than parking");
 
         // ---- HEADLINE: no claimant code ran — the re-entry surface is gone by construction. ----
-        assertFalse(attacker.reentered(), "V62-03 L1: claimant hook fired during a live-game claim");
+        assertFalse(attacker.reentered(), "V62-03 L1: claimant hook fired during live settlement");
         assertEq(attacker.reentrantBurnCount(), 0, "V62-03 L1: reentrant burns landed in the hook");
-        assertEq(address(attacker).balance, attackerEthBefore, "V62-03 L1: live-game claim pushed ETH at the claimant");
+        assertEq(address(attacker).balance, attackerEthBefore, "V62-03 L1: live settlement pushed ETH at the claimant");
         assertEq(
             mockStETH.balanceOf(address(attacker)),
             attackerStethBefore,
-            "V62-03 L1: live-game claim pushed stETH at the claimant"
+            "V62-03 L1: live settlement pushed stETH at the claimant"
         );
 
         // The direct half landed as a game-claimable credit; the full rolled value moved to the
@@ -236,7 +245,7 @@ contract V62RedemptionReentrancy is DeployProtocol {
 
         // Reservation fully released and the reserve identity holds.
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0, "V62-03 L1: reservation not fully released");
-        assertTrue(_reserveIdentityHolds(), "V62-03 L1: SOLVENCY-01 holds after the claim");
+        assertTrue(_reserveIdentityHolds(), "V62-03 L1: SOLVENCY-01 holds after settlement");
     }
 
     /// @notice Layer 2 — the POST-GAMEOVER claim still pays via _payEth (100% direct, self-claim,
@@ -257,8 +266,8 @@ contract V62RedemptionReentrancy is DeployProtocol {
 
         // gameOver latches AFTER the resolve: the claim now pays 100% direct via _payEth.
         vm.mockCall(address(game), abi.encodeWithSelector(game.gameOver.selector), abi.encode(true));
-        // The redemption claim reads livenessTriggered, which gameOver implies on chain
-        // (_unlockRng leaves dailyIdx stale at game over). Mock it to match.
+        // gameOver implies livenessTriggered on chain (_unlockRng leaves dailyIdx stale at game
+        // over). Mock it to match.
         vm.mockCall(address(game), abi.encodeWithSelector(game.livenessTriggered.selector), abi.encode(true));
 
         uint256 totalRolledEth = (uint256(owedBase) * 175) / 100;
@@ -323,8 +332,8 @@ contract V62RedemptionReentrancy is DeployProtocol {
     }
 }
 
-/// @notice Attacker contract: holds sDGNRS, drives an outer gambling burn + claim, and re-enters
-///         burn() inside its receive() hook (fired by the mixed _payEth ETH .call).
+/// @notice Attacker contract: holds sDGNRS, drives an outer gambling burn + self-claim, and
+///         re-enters burn() inside its receive() hook (fired by the mixed _payEth ETH .call).
 contract Attacker {
     sDGNRS private immutable sdgnrs;
     IMockStETHReader private immutable steth;

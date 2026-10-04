@@ -6,7 +6,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title FinalSweepPayoutLegs — the game-over final sweep's three bare payout calls cannot revert.
 ///
-/// @notice Thirty days after game over the crank runs `handleFinalSweep`, which pays the vault,
+/// @notice Thirty days after game over the crank runs the final sweep, which pays the vault,
 ///         sDGNRS and GNRUS through `_sendStethFirst`: an stETH `transfer` for what the stETH
 ///         balance covers, then a raw ETH `call` for the rest. All three calls are bare on the
 ///         crank and hard-revert on failure by policy — the receivers are the protocol's own

@@ -6,6 +6,7 @@ import {CrapsViews} from "../craps/CrapsViews.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
 /// @dev Inject only two deterministic rare outcomes. The witness tests settlement
 /// ordering and pool accounting, not the probability of these engine outcomes.
@@ -23,8 +24,8 @@ contract UnpushedSidegameOutcomeEngine {
     }
 }
 
-/// @notice Residual payout-timing witness: public normal-cohort settlement and the Game's
-/// jackpot stage consume the same live progressive; the read-cohort gate now fixes the order.
+/// @notice Residual payout-timing witness: the read stage's normal-cohort settlement and the
+/// Game's jackpot stage consume the same live progressive; the read-cohort gate fixes the order.
 /// The Game/VRF stages use the existing pinned fixture; fields, admission, arming,
 /// and settlement use their production entrypoints. No award helper is called.
 contract UnpushedSidegameRngSafety is CrapsPins {
@@ -53,7 +54,7 @@ contract UnpushedSidegameRngSafety is CrapsPins {
         vm.warp(dayStart + 1 days);
         // The oldest closed scheduled field joins the next normal word before
         // its daily request; the daily jackpot is committed by that same request.
-        (bool armed,) = table.keepScheduled(WHOLE_FIELD);
+        (bool armed,) = _crank(table);
         assertTrue(armed);
         buffer = 0;
         assertEq(table.slotIndexOf(uint64(uint256(day) * 8 + 1)), buffer + 1);
@@ -72,24 +73,24 @@ contract UnpushedSidegameRngSafety is CrapsPins {
 
     function _settleScheduled() private returns (uint256 award) {
         uint256 before = table.progressivePool();
-        (bool moved, bool settled) = api.keepRngCohort(buffer, WHOLE_FIELD);
-        assertTrue(moved && settled);
+        MineFlipGas.Result memory step = _readWork(table, buffer);
+        assertTrue(step.progressed && step.rewardBasis != 0);
         return before - table.progressivePool();
     }
 
     function _settleJackpot() private {
         vm.prank(ContractAddresses.GAME);
-        assertTrue(table.advanceJackpotBattle(WHOLE_FIELD));
+        assertTrue(table.runDailyBattleWork(gasleft()).done);
     }
 
     /// @notice The witness no longer has two orders. Read-bound Craps cohorts are a gated read
     ///         consumer (stage 6), reachable only once the daily lock lifts, while the jackpot
     ///         battle advances inside the locked daily phase (6d0e64b09 / 60d31f775). So the
-    ///         public settlement of the scheduled field can never run ahead of the jackpot stage of
-    ///         the request that sealed it: the progressive is consumed jackpot-first, always.
-    function test_PublicSettlementWaitsForTheJackpotStageWithFrozenOutcomes() public {
-        (bool moved, bool settled) = api.keepRngCohort(buffer, WHOLE_FIELD);
-        assertFalse(moved || settled, "the scheduled cohort waits while the daily jackpot stage holds the lock");
+    ///         read stage's settlement of the scheduled field can never run ahead of the jackpot
+    ///         stage of the request that sealed it: the progressive is consumed jackpot-first, always.
+    function test_ReadStageSettlementWaitsForTheJackpotStageWithFrozenOutcomes() public {
+        MineFlipGas.Result memory step = _readWork(table, buffer);
+        assertFalse(step.progressed || step.rewardBasis != 0, "the scheduled cohort waits while the daily jackpot stage holds the lock");
         uint256 before = table.progressivePool();
         _settleJackpot();
         assertEq(before - table.progressivePool(), 100_000 ether, "the jackpot stage consumes the progressive first");

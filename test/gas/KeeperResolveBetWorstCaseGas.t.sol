@@ -39,8 +39,8 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
 
     /// @dev The Phase-319 GAS-01 reference spin count (the OLD MAX_SPINS_PER_BET). Kept so the
     ///      per-1-spin-item marginal and the 10-vs-25 absorption comparison both have a stable
-    ///      reference point. The sweep (`openBoxes`) that resolves these bets now pays NO reward
-    ///      at all (only `mineFlip` does); these numbers are pure gas-shape measurements.
+    ///      reference point. The sweep (`mineFlip`'s Degenerette stage) that resolves these bets
+    ///      is the only door; these numbers are pure gas-shape measurements.
     uint8 internal constant LEGACY_WORST_SPINS = 10;
 
     bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q' — first-spin salt
@@ -91,7 +91,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         RecyclingState.seedWriteBuffer(address(game), INDEX);
         vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(lrPacked));
 
-        // The sweep (openBoxes) is permissionless (any caller may settle any queued bet;
+        // The sweep (mineFlip) is permissionless (any caller may settle any queued bet;
         // payouts always credit the bet's owner), so no operator-approval dance is needed for
         // the cranker/keeper to resolve `player`'s bets.
 
@@ -163,9 +163,8 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     // =========================================================================
 
     /// @notice GAS-01: isolate the per-1-spin-item MARGINAL gas — the marginal cost of adding one
-    ///         typical (1-spin) resolve item to the sweep (`openBoxes`), which pays no reward at
-    ///         all (the old flat per-item CRANK_RESOLVE_BET_GAS_UNITS-calibrated reward is gone;
-    ///         this is a pure gas-shape measurement now). Measured by the loop-N-divide
+    ///         typical (1-spin) resolve item to the sweep (`mineFlip`'s Degenerette stage); this
+    ///         is a pure gas-shape measurement. Measured by the loop-N-divide
     ///         micro-bench idiom: crank N independent 1-spin items in one batch and divide the
     ///         delta by N. Asserts the per-1-spin marginal is materially BELOW the 10-spin worst
     ///         case, confirming per-item gas scales with spin work, not a flat charge.
@@ -324,7 +323,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     // =========================================================================
 
     /// @notice DSPIN-02 via the sweep: the same 25-spin all-match ETH worst case, resolved by
-    ///         `openBoxes` once the index's word lands and the active lootbox index moves past
+    ///         `mineFlip` once the index's word lands and the active lootbox index moves past
     ///         it (the sweep's own trigger condition — see DegeneretteSweep.t.sol `_landWord`).
     ///         Proves the automatic path absorbs the identical worst case, not just the manual one.
     function testWorstCaseResolveBet25SpinAllMatchViaSweepFitsBlockGasLimit() public {
@@ -361,7 +360,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     }
 
     /// @notice DSPIN-02 mixed-currency batch via the sweep: the same ETH-25 + FLIP-15 worst case
-    ///         as `testWorstCaseMixedCurrencyBatchGas`, but resolved automatically by `openBoxes`.
+    ///         as `testWorstCaseMixedCurrencyBatchGas`, but resolved automatically by `mineFlip`.
     function testWorstCaseMixedCurrencyBatchGasViaSweep() public {
         uint128 flipPerTicket = 200 ether; // >= MIN_BET_FLIP (100 ether)
         _fundFlip(player, uint256(flipPerTicket) * MAX_SPINS_FLIP + 1 ether);

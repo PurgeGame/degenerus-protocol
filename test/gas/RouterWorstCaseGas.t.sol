@@ -18,7 +18,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         required-path process STAGE and the open is the game-resident open leg:
 ///           - `afKing.doWork()`            -> `game.mineFlip()`                     (Δ3 rename)
 ///           - `afKing.autoBuy(total)`      -> a new-day `game.mineFlip()` STAGE     (Δ4 SEMANTIC REMAP:
-///                                             `processSubscriberStage(SUB_STAGE_BATCH)` runs PRE-RNG)
+///                                             the Afking stage (SUB_STAGE_BATCH) runs PRE-RNG)
 ///           - `afKing.autoOpen(N)`         -> `game.autoOpen(N)`  (the game-resident open leg)
 ///           - `afKing.subscriberCount()`   -> `_subscribers.length` via vm.load (Δ5 slot-read)
 ///         The OLD per-keeper-tx worst case (the `doWork()` router buy/open legs) reframes onto:
@@ -29,7 +29,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///
 ///         The 16.7M HARD per-tx ceiling (350-TST06-MEASUREMENT-SPEC §5): `SUB_STAGE_BATCH = 50`
 ///         (DegenerusGameAdvanceModule.sol:149) chunks the STAGE so a 50-chunk
-///         `processSubscriberStage(50)` stays well under the 16.7M advance-chain ceiling (a landed
+///         the 50-chunk Afking stage stays well under the 16.7M advance-chain ceiling (a landed
 ///         lootbox buy ≈ 262k → 50 ≈ 13.1M). The open leg is chunked by `OPEN_BATCH`, each afking box
 ///         uniform O(1). THIS suite asserts a 50-chunk STAGE (driven by `mineFlip()`) AND the open
 ///         leg each stay UNDER 16.7M on the worst-case funded-lootbox-sub mix — POST-349.2, i.e.

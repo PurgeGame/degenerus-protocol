@@ -14,8 +14,8 @@ import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlip
 import {TicketEntropy} from "../../contracts/libraries/TicketEntropy.sol";
 
 /// @dev Extends the production mint module so the ticket worker runs in THIS contract's
-///      storage, through the compatibility door or the metered `runTicketWork` entry the miner
-///      uses; adds queue seeders only.
+///      storage through the metered `runTicketWork` entry the miner uses; adds queue seeders
+///      only.
 contract ChunkHarness is MintBucketSeed {
     /// @dev The mint module answers the liveness tail through the Game's view; this harness is
     ///      not deployed at the Game's address, so it evaluates the tail in place.
@@ -94,7 +94,7 @@ contract ChunkHarness is MintBucketSeed {
     ///      `level` to lvl - 1, lastPurchaseDay is latched, so _mintCeiling() = level + 1 = lvl
     ///      and _frozenPoolDue() holds. The measured call passes anchor = level = lvl - 1 (the
     ///      purchase level while the last-purchase lock is held); the read window
-    ///      [lvl - 2 .. lvl] is empty, so the call reaches processTicketBatch's frozen-pool
+    ///      [lvl - 2 .. lvl] is empty, so the call reaches runTicketWork's frozen-pool
     ///      continuation. `warm` pins the FF marker and cursor 1 (logical index 0 drained) so the
     ///      chunk exercises continuation from a nonzero cursor. Requires lvl >= 2. Far-future
     ///      lanes hold whole entries only, so `entriesScaled` must be a multiple of QTY_SCALE.
@@ -371,7 +371,7 @@ abstract contract TicketChunkProbe is Test {
 }
 
 /// @title RoundDrainChunkGas — per-chunk gas of the ticket worker on each drain path
-/// @notice For every drain shape: the compatibility door given a realistic 10M and, separately,
+/// @notice For every drain shape: one ticket-worker chunk given a realistic 10M and, separately,
 ///         the 16.7M EIP-7825 cap does not run out of gas and makes progress, and the shape's
 ///         largest admitted step is admitted below the 10M chunk target and completes inside
 ///         its allowance. The worker spends whatever gas it is given, so call totals are logged,
@@ -394,19 +394,20 @@ contract RoundDrainChunkGas is TicketChunkProbe {
 
     function _measureAt(uint24 lvl, string memory tag, Step step) internal returns (uint256 g) {
         uint256 snap = vm.snapshotState();
-        g = _doorCall(lvl, GAS_TARGET, tag);
+        g = _chunkCall(lvl, GAS_TARGET, tag);
         assertTrue(vm.revertToState(snap));
-        _doorCall(lvl, EIP7825_TX_GAS_CAP, string.concat(tag, "_16p7m"));
+        _chunkCall(lvl, EIP7825_TX_GAS_CAP, string.concat(tag, "_16p7m"));
         assertTrue(vm.revertToStateAndDelete(snap));
         _oneChunk(lvl + 1, tag, step);
     }
 
-    /// @dev The caller-sized door with a bounded gas limit: it must not run out of gas and must
-    ///      make progress. Its total is whatever it was given, so it is logged only.
-    function _doorCall(uint24 lvl, uint256 gasLimit, string memory tag) internal returns (uint256 g) {
+    /// @dev One metered ticket-worker chunk on a bounded gas limit, the call given that limit as
+    ///      its allowance: it must not run out of gas and must make progress. Its total is
+    ///      whatever it was given, so it is logged only.
+    function _chunkCall(uint24 lvl, uint256 gasLimit, string memory tag) internal returns (uint256 g) {
         _cool();
         uint256 g0 = gasleft();
-        (, bool worked) = h.processTicketBatch{gas: gasLimit}(lvl + 1);
+        bool worked = h.runTicketWork{gas: gasLimit}(lvl + 1, gasLimit).progressed;
         g = g0 - gasleft();
         emit log_named_uint(tag, g);
         // Non-vacuity: the call must drain the seeded queue, not walk an empty window.
@@ -440,7 +441,7 @@ contract RoundDrainChunkGas is TicketChunkProbe {
         h.recycleBacking(LVL, 1);
         h.seed(LVL, 3, 50000, uint160(0x110000), true);
         for (uint256 i; i < 32; ++i) {
-            (, bool worked) = h.processTicketBatch{gas: GAS_TARGET}(LVL + 1);
+            bool worked = h.runTicketWork{gas: GAS_TARGET}(LVL + 1, GAS_TARGET).progressed;
             assertTrue(worked, "record prefix must still drain paid entries");
         }
         assertGt(h.grownTraits(LVL, 1), 96, "prefix must grow beyond old words across common traits");
@@ -451,7 +452,7 @@ contract RoundDrainChunkGas is TicketChunkProbe {
         h.recycleBacking(LVL, 1);
         h.seed(LVL, 8, 20000, uint160(0x120000), true);
         for (uint256 i; i < 32; ++i) {
-            (, bool worked) = h.processTicketBatch{gas: GAS_TARGET}(LVL + 1);
+            bool worked = h.runTicketWork{gas: GAS_TARGET}(LVL + 1, GAS_TARGET).progressed;
             assertTrue(worked, "record prefix must still drain paid entries");
         }
         assertGt(h.grownTraits(LVL, 1), 96, "prefix must grow beyond old words across common traits");
@@ -495,7 +496,7 @@ contract RoundDrainChunkGas is TicketChunkProbe {
         h.seedDust(LVL, 3000, uint160(0x80000), true);
         uint256 snap = vm.snapshotState();
         _cool();
-        (, bool worked) = h.processTicketBatch{gas: GAS_TARGET}(LVL + 1);
+        bool worked = h.runTicketWork{gas: GAS_TARGET}(LVL + 1, GAS_TARGET).progressed;
         assertTrue(worked, "dust walk makes progress");
         emit log_named_uint("chunk_dust_skips_cursor_after_10m", h.cursor());
         assertGt(h.cursor(), 1, "dust walk advances the cursor");

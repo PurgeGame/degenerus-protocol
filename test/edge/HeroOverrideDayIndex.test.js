@@ -31,7 +31,7 @@
 // `_topHeroSymbol(day)` at JackpotModule:1625-1653 consumed by
 // `_applyHeroOverride` at JackpotModule:1600-1604. Asserting against the view
 // with `day = dailyIdx` is algorithm-equivalent to asserting against what
-// `payDailyJackpot`'s CALL 1 + CALL 2 would consume.
+// `runDailyJackpot`'s CALL 1 + CALL 2 would consume.
 //
 // `dailyIdx` is `internal` (DegenerusGameStorage:236) — no external accessor.
 // Tests read it directly from storage slot 0 (per the layout doc at
@@ -262,7 +262,7 @@ describe("HeroOverrideDayIndex (TST-HOFIX) — Phase 288 D-288-FIX-SHAPE-01 regr
   //                Phase 288 mechanism)
   // -------------------------------------------------------------------------
   describe("TST-HOFIX-03 — 2-call ETH split read consistency under inter-call bet interleaving (dailyIdx-anchored)", function () {
-    it("snapshot1 (pre-bet) === snapshot2 (post-bet) for getDailyHeroWinner(dailyIdx) — CALL 1 and CALL 2 of payDailyJackpot consume identical algorithm output via the frozen dailyIdx slot anchor", async function () {
+    it("snapshot1 (pre-bet) === snapshot2 (post-bet) for getDailyHeroWinner(dailyIdx) — CALL 1 and CALL 2 of runDailyJackpot consume identical algorithm output via the frozen dailyIdx slot anchor", async function () {
       const { game, alice, bob } = await loadFixture(deployFullProtocol);
       const gameAddr = await game.getAddress();
       await seedLootboxRngIndex(gameAddr, 1);
@@ -288,7 +288,7 @@ describe("HeroOverrideDayIndex (TST-HOFIX) — Phase 288 D-288-FIX-SHAPE-01 regr
         "wall-clock must have advanced past dailyIdx"
       );
 
-      // Snapshot1: what CALL 1 of payDailyJackpot would consume (read against
+      // Snapshot1: what CALL 1 of runDailyJackpot would consume (read against
       // slot[dailyIdx]).
       const snapshot1 = await readWinner(game, dailyIdxFrozen);
       expect(snapshot1.winAmount).to.be.greaterThan(
@@ -301,7 +301,7 @@ describe("HeroOverrideDayIndex (TST-HOFIX) — Phase 288 D-288-FIX-SHAPE-01 regr
       // slot[dailyIdx] which CALL 2 of the jackpot would re-read.
       await placeEthBet(game, bob, 2, 7);
 
-      // Snapshot2: what CALL 2 of payDailyJackpot would consume after the
+      // Snapshot2: what CALL 2 of runDailyJackpot would consume after the
       // interleaved bet.
       const snapshot2 = await readWinner(game, dailyIdxFrozen);
 

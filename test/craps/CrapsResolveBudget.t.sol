@@ -27,8 +27,8 @@ contract BudgetHarness is CrapsViews {
 }
 
 /// @title The settle walk's gas budget
-/// @notice `resolveSlot`'s second argument stopped being a seat count and became a GAS ALLOWANCE.
-///         That changes only WHERE one transaction stops — so the whole of this suite is the same
+/// @notice The settle walk's second argument is a GAS ALLOWANCE, not a seat count.
+///         It changes only WHERE one transaction stops — so the whole of this suite is the same
 ///         assertion from different angles: chunking moves the boundary and nothing else.
 contract CrapsResolveBudgetTest is CrapsPins {
     BudgetHarness internal craps;

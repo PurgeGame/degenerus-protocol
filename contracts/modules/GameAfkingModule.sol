@@ -90,8 +90,7 @@ interface ISeatToken {
  * @custom:invariant No error-swallowing valve on the funded delivery path: the funded
  *                   process buy is revert-free by construction; a class-B solvency
  *                   underflow FAILS LOUD (the `claimablePool -=` propagates, it is never
- *                   swallowed). The craps leg calls the table bare: `keepScheduled`
- *                   is revert-free past running out of gas, so no failure is hidden.
+ *                   swallowed).
  */
 contract GameAfkingModule is DegenerusGameMintStreakUtils {
     uint256 private constant HUMAN_ENTRY_GAS = GasBounds.HUMAN_ENTRY_GAS;
@@ -1244,19 +1243,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         return _runSubscriberWork(processDay, gasAllowance);
     }
 
-    /// @notice Compatibility wrapper; its old budget parameter no longer controls batching.
-    function processSubscriberStage(uint24 processDay, uint256) external returns (uint256 processed) {
-        return _runSubscriberWork(processDay, MineFlipGas.available()).rewardBasis;
-    }
-
-    function processSubscriberStageBudgeted(uint24 processDay, uint256)
-        external returns (uint256 processed, uint256 gasUsed)
-    {
-        uint256 beforeGas = gasleft();
-        MineFlipGas.Result memory result = _runSubscriberWork(processDay, MineFlipGas.available());
-        return (result.rewardBasis, beforeGas - gasleft());
-    }
-
     function _runSubscriberWork(uint24 processDay, uint256 gasAllowance)
         private returns (MineFlipGas.Result memory result)
     {
@@ -1338,7 +1324,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // paid-for box (the player was debited at stamp, gets nothing). A sub with a
             // pending unopened box (`lastOpenedDay < lastAutoBoughtDay`) is therefore left
             // ENTIRELY untouched this cycle — no reclaim, no evict, no funding-kill, no
-            // re-stamp; it stays in-set (reachable), `_autoOpen` opens it, and a LATER
+            // re-stamp; it stays in-set (reachable), `_runAfkingWork` opens it, and a LATER
             // cycle processes it (now boxless, lastOpenedDay == lastAutoBoughtDay).
             // Positioned BEFORE the cancel-reclaim so it dominates ALL the orphan paths
             // (re-stamp / cancel-reclaim / funding-kill). SKIP, not
@@ -1693,22 +1679,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         _tryCompleteRng();
     }
 
-    /// @dev Legacy internal harness surface; external allowance selection remains disabled.
-    function _autoOpen(uint256)
-        internal returns (uint256 opened, uint256 gasUsed, bool exhausted)
-    {
-        uint256 beforeGas = gasleft();
-        MineFlipGas.Result memory result = _runAfkingWork(MineFlipGas.available());
-        return (result.rewardBasis, beforeGas - gasleft(), !result.done);
-    }
-
-    /// @notice Compatibility AFKing helper; the old count cannot select work or bypass order.
-    function drainAfkingBoxes(uint256) external returns (uint256 opened, uint256 gasUsed) {
-        uint256 beforeGas = gasleft();
-        MineFlipGas.Result memory result = _runAfkingWork(MineFlipGas.available());
-        return (result.rewardBasis, beforeGas - gasleft());
-    }
-
     /// @notice Open the active session's human orders in FIFO order, after AFKing.
     function runHumanBoxWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory) {
         return _runHumanBoxWork(gasAllowance);
@@ -1764,21 +1734,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             _tryCompleteRng();
         } else if (result.progressed) {
             boxCursor = uint48(cur);
-        }
-        MineFlipGas.finish(meter);
-    }
-
-    /// @notice Unpaid manual box helper, following the same stages and gas admission checks.
-    function openBoxes(uint256) external returns (uint256 opened) {
-        MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.available());
-        if (_rngConsumerStage() == 2) {
-            MineFlipGas.Result memory afk = _runAfkingWork(MineFlipGas.remaining(meter));
-            opened = afk.rewardBasis;
-            if (!afk.done) { MineFlipGas.finish(meter); return opened; }
-        }
-        if (_rngConsumerStage() == 3 && MineFlipGas.canRun(meter, 30_000, 30_000)) {
-            MineFlipGas.Result memory human = _runHumanBoxWork(MineFlipGas.remaining(meter) - 30_000);
-            opened += human.rewardBasis;
         }
         MineFlipGas.finish(meter);
     }

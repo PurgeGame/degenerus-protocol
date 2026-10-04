@@ -9,8 +9,7 @@ import {DegeneretteQueue as DQ} from "../helpers/DegeneretteQueue.sol";
 
 /// @title DegeneretteResolveRepeg -- sweep-budget invariance of queued-bet resolution.
 /// @notice Bets are queued per RNG index (`degeneretteQueue[index & 1]`, id = queue position + 1) and
-///         resolve ONLY through the permissionless human-box sweep (`game.openBoxes`, unrewarded,
-///         or `game.mineFlip`, rewarded to the CALLER based on the walk-unit work actually done --
+///         resolve ONLY through the permissionless in-order sweep (`game.mineFlip`, rewarded to the CALLER based on the walk-unit work actually done --
 ///         see KeeperFaucetResistance.t.sol and DegeneretteSweep.t.sol for that reward's own
 ///         faucet-safety and equivalence proofs), strictly in queue order. There is no per-id
 ///         door: the flat ~1-FLIP "loser" reward, the >=3-successful-resolutions gate,
@@ -194,8 +193,7 @@ contract DegeneretteResolveRepeg is DeployProtocol {
         vm.store(address(game), bytes32(0), bytes32(slot0));
     }
 
-    /// @dev Bets resolve only as the engine's Degenerette read consumer (mineFlip); openBoxes
-    ///      drives the AFK and human stages only. Returns the bets this call resolved.
+    /// @dev Bets resolve only as the engine's Degenerette read consumer (mineFlip). Returns the bets this call resolved.
     function _crank(uint256 allowance) internal returns (uint256 resolved) {
         vm.recordLogs();
         vm.prank(makeAddr("degen_resolve_crank"));

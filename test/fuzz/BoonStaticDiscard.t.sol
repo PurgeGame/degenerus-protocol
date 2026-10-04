@@ -24,7 +24,7 @@ contract BoonStaticDiscard is DeployProtocol {
     uint256 constant SLOT_LOOTBOX_WORD = 34; // mapping(uint48 => uint256)
     uint256 constant SLOT_LOOTBOX_RNG_IDX = 33; // lootboxRngPacked (low 48 bits = lootboxRngIndex)
     uint256 constant SLOT_BOX_PLAYERS = 57; // mapping(uint48 => address[]) boxPlayers (sweep's discovery queue)
-    uint256 constant SLOT_BOX_CURSORS = 56; // packed (boxCursor @ byte 7, boxCursorIndex @ byte 13)
+    uint256 constant SLOT_BOX_CURSORS = 56; // packed (boxCursor @ byte 7, humanReadComplete @ byte 13)
 
     uint256 constant LB_SCORE_SHIFT = 24;
     uint256 constant LB_CUSTOM_COUNT_SHIFT = 105;
@@ -84,9 +84,8 @@ contract BoonStaticDiscard is DeployProtocol {
         vm.store(address(game), _nestedMappingSlot(SLOT_LOOTBOX_ETH, index, player), bytes32(packed));
         RecyclingState.seedWord(address(game), index, bytes32(vrfWord));
 
-        // Box-order migration: enqueue + finalize + park (same pattern as
-        // LootboxBoonCoexistence._setupLootbox) so the sweep replacement for the removed
-        // per-(player,index) `openBox` can discover and reach this forged, sparse-index entry.
+        // Enqueue + park the frontier (same pattern as LootboxBoonCoexistence._setupLootbox) so
+        // mineFlip's in-order human-box stage discovers and reaches this forged entry.
         bytes32 lenSlot = keccak256(abi.encode(uint256(index), uint256(SLOT_BOX_PLAYERS)));
         uint256 len = 0; // one fixture entry; previous case was fully consumed
         bytes32 dataBase = keccak256(abi.encode(lenSlot));
@@ -99,7 +98,7 @@ contract BoonStaticDiscard is DeployProtocol {
         bytes32 cursorSlot = bytes32(SLOT_BOX_CURSORS);
         uint256 cur = uint256(vm.load(address(game), cursorSlot));
         cur &= ~(mask48 << (7 * 8));
-        cur &= ~(mask48 << (13 * 8));
+        cur &= ~(uint256(0xff) << (13 * 8)); // humanReadComplete = false
         vm.store(address(game), cursorSlot, bytes32(cur));
     }
 
@@ -133,7 +132,7 @@ contract BoonStaticDiscard is DeployProtocol {
 
             vm.recordLogs();
             vm.prank(player);
-            try game.openBoxes(type(uint256).max) {} catch { continue; }
+            try game.mineFlip() {} catch { continue; }
 
             Vm.Log[] memory logs = vm.getRecordedLogs();
             for (uint256 j = 0; j < logs.length; j++) {

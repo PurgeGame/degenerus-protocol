@@ -7,8 +7,9 @@ import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 /// @title RedemptionGasTest -- Gas benchmarks for all sDGNRS redemption functions
-/// @notice Exercises burn, burnWrapped, resolveRedemptionPeriod, claimRedemption,
-///         hasPendingRedemptions, and previewBurnValue in isolation for clean gas measurement.
+/// @notice Exercises burn, burnWrapped, resolveRedemptionPeriod, live claim settlement (the
+///         Redemption-stage worker mineFlip dispatches), hasPendingRedemptions, and previewBurnValue
+///         in isolation for clean gas measurement.
 /// @dev Inherits DeployProtocol for full 28-contract deployment. Gas snapshot baseline
 ///      captured via `forge snapshot --match-path "test/fuzz/RedemptionGas.t.sol"`.
 contract RedemptionGasTest is DeployProtocol {
@@ -39,7 +40,8 @@ contract RedemptionGasTest is DeployProtocol {
 
     /// @dev Claim-path assertion limit per ROADMAP §306 Success Criterion 5: 0% headroom (no regression).
     ///      Per-day keying is structurally simpler than v43's period-index lookup, so the
-    ///      claim path is expected to be at-or-under v43 baseline.
+    ///      claim path is expected to be at-or-under v43 baseline. A live claim settles through
+    ///      the Redemption-stage worker, so that worker's one-claim call is the measured path.
     uint256 internal constant CLAIM_LIMIT_V44 = GAS_BASELINE_V43_CLAIM;
 
     function setUp() public {
@@ -79,7 +81,7 @@ contract RedemptionGasTest is DeployProtocol {
     /// @dev Mirrors the Game's daily resolve hook (`_resolvePendingRedemption`): resolve the
     ///      pool AND pin the session word for the mandatory settlement cohort in one step, then
     ///      seed the Game's matching published, not-yet-complete read session with its ticket
-    ///      stage done. Live claims are accepted only in that redemption consumer stage (stage 1).
+    ///      stage done. Live claims settle only in that redemption consumer stage (stage 1).
     function _resolveAndOpenSettlement(uint24 day, uint16 roll) internal {
         vm.prank(address(game));
         sdgnrs.resolveRedemptionPeriod(roll, day);
@@ -96,7 +98,7 @@ contract RedemptionGasTest is DeployProtocol {
         assertEq(game.rngConsumerStage(), 1, "fixture: redemption consumer stage open");
     }
 
-    /// @dev The keeper drain that clears the settled cohort, as the Game's miner runs it.
+    /// @dev The keeper drain that settles the cohort, as the Game's miner runs it.
     function _drainSettlementCohort() internal {
         vm.prank(address(game));
         assertTrue(sdgnrs.runRedemptionWork(9_000_000).done, "fixture: settlement cohort drained");
@@ -147,11 +149,11 @@ contract RedemptionGasTest is DeployProtocol {
     }
 
     // =====================================================================
-    //                     CLAIM REDEMPTION (full lifecycle)
+    //                     LIVE CLAIM SETTLEMENT (full lifecycle)
     // =====================================================================
 
-    /// @notice Gas benchmark: claimRedemption() after full resolve lifecycle
-    function test_gas_claimRedemption() external {
+    /// @notice Gas benchmark: the keeper settlement of one claim after the full resolve lifecycle
+    function test_gas_settleRedemption() external {
         // Step 1: Player burns sDGNRS (creates gambling claim)
         _primeCurrentDayRng(); // satisfy the daily-RNG burn-admission gate
         vm.prank(player);
@@ -162,7 +164,7 @@ contract RedemptionGasTest is DeployProtocol {
         uint32 currentDay = game.currentDayView();
         _resolveAndOpenSettlement(uint24(currentDay), 100);
 
-        // Step 3: Mock the coinflip day result so claimRedemption doesn't revert
+        // Step 3: Mock the coinflip day result so the settlement doesn't revert
         // getCoinflipDayResult(currentDay) must return (rewardPercent != 0, flipWon)
         vm.mockCall(
             address(coinflip),
@@ -181,9 +183,10 @@ contract RedemptionGasTest is DeployProtocol {
             abi.encode()
         );
 
-        // Step 5: Player claims the day they burned + resolved against
-        vm.prank(player);
-        sdgnrs.claimRedemption(player, uint24(currentDay));
+        // Step 5: The keeper drain settles the day the player burned + resolved against
+        _drainSettlementCohort();
+        (uint96 owed,,) = sdgnrs.pendingRedemptions(player, uint24(currentDay));
+        assertEq(owed, 0, "claim settled");
     }
 
     // =====================================================================
@@ -255,7 +258,7 @@ contract RedemptionGasTest is DeployProtocol {
         assertLe(actualGas, BURN_LIMIT_V44, "TST-06: burn-path gas regression vs v43 baseline > +5%");
     }
 
-    /// @notice TST-06: claim-path gas regression assertion (claimRedemption call only).
+    /// @notice TST-06: claim-path gas regression assertion (the one-claim settlement call only).
     /// @dev v44 composite-keyed claim reads `pendingRedemptions[player][day]` + `redemptionPeriods[day]`
     ///      plus deletes the (player, day) slot on full-claim (storage refund). Per-day keying is
     ///      structurally simpler than v43's `period.index`-keyed lookup, so the claim call is
@@ -264,20 +267,20 @@ contract RedemptionGasTest is DeployProtocol {
     ///
     ///      The v43 baseline `GAS_BASELINE_V43_CLAIM = 364565` is the FULL-LIFECYCLE figure from
     ///      `test_gas_claimRedemption` at v43 (burn + resolve + mock + claim). To assert claim-path
-    ///      regression apples-to-apples, this test brackets ONLY the `claimRedemption(currentDay)`
-    ///      call with gasleft() — the bracketed portion is what the v43-vs-v44 claim-path
+    ///      regression apples-to-apples, this test brackets ONLY the Redemption-stage worker call
+    ///      that settles the claim with gasleft() — the bracketed portion is what the v43-vs-v44 claim-path
     ///      regression assertion targets, even though the v43 baseline number measures more than
     ///      just the claim call. The assertion is therefore conservative: a claim that fits under
     ///      the full v43 lifecycle's gas envelope is unambiguously a non-regression.
-    function test_gas_regression_claim() external {
-        // Setup: burn + resolve + coinflip mocks (matches test_gas_claimRedemption setUp pattern)
+    function test_gas_regression_settle() external {
+        // Setup: burn + resolve + coinflip mocks (matches test_gas_settleRedemption setUp pattern)
         _primeCurrentDayRng(); // satisfy the daily-RNG burn-admission gate (setup, outside claim bracket)
         vm.prank(player);
         sdgnrs.burn(PLAYER_SDGNRS / 10);
 
         uint32 currentDay = game.currentDayView();
-        // Resolve + open the settlement cohort outside the claim bracket (live claims are
-        // accepted only in the redemption consumer stage).
+        // Resolve + open the settlement cohort outside the claim bracket (live claims settle
+        // only in the redemption consumer stage).
         _resolveAndOpenSettlement(uint24(currentDay), 100);
 
         vm.mockCall(
@@ -293,11 +296,14 @@ contract RedemptionGasTest is DeployProtocol {
             abi.encode()
         );
 
-        // Bracket: measure ONLY the claimRedemption(uint32 day) call.
-        vm.prank(player);
+        // Bracket: measure ONLY the worker call that settles the claim (and clears its cohort).
+        vm.prank(address(game));
         uint256 gasBefore = gasleft();
-        sdgnrs.claimRedemption(player, uint24(currentDay));
+        bool done = sdgnrs.runRedemptionWork(9_000_000).done;
         uint256 actualGas = gasBefore - gasleft();
+        assertTrue(done, "the one-claim cohort settled");
+        (uint96 owed,,) = sdgnrs.pendingRedemptions(player, uint24(currentDay));
+        assertEq(owed, 0, "claim settled");
 
         emit log_named_uint("actual_claim_gas", actualGas);
         emit log_named_uint("claim_limit_v44", CLAIM_LIMIT_V44);

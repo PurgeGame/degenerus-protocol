@@ -153,7 +153,7 @@ contract DirectJackpotTicketsTest is Test {
         if (deity) { h.addDeities(); queued.addDeities(); }
         (bytes32 sourceBefore,) = h.digest(41);
         vm.recordLogs();
-        queued.payDailyJackpotCoinAndTickets(word);
+        queued.runDailyJackpotTickets(word, gasleft());
         Vm.Log[] memory referenceLogs = vm.getRecordedLogs();
         (bytes32 want, uint256 entries) = _wins(0, referenceLogs);
         vm.recordLogs();

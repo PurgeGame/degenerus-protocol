@@ -6,8 +6,24 @@ import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGameGameOverModule} from "../../contracts/modules/DegenerusGameGameOverModule.sol";
 
 /// @dev The independent reference below is the tally at 20a0e892, before gas changes.
-///      Compare the production entry against it from the same seeded storage snapshot.
+///      Compare the production terminal worker against it from the same seeded storage snapshot.
 contract DeadVrfTallyParityHarness is DegenerusGameGameOverModule {
+    /// @dev The deterministic ending is latched on the passed terminal level and its payout is
+    ///      marked settled, so each terminal call (`runGameOverAdvance`, mineFlip's Terminal stage)
+    ///      runs exactly the tally and stops at its boundary instead of continuing into the payout.
+    ///      The tally reads none of these fields. The dead latch is the one `_latchDeadEnding`
+    ///      writes (callback authority revoked, publication cleared, word waiting); past the
+    ///      14-day VRF-dead window it makes the ending live.
+    function latchDeadTally() external {
+        _lrWrite(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK, 1);
+        _lrWrite(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK, 1);
+        _setRngRequestActive(false);
+        _setRngSessionPublished(false);
+        rngWordCurrent = RNG_WORD_WAITING;
+        _goWrite(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK, 1);
+    }
+
+    function tallyStage() external view returns (uint8) { return deadTallyStage; }
     function seed(uint256 count, uint256 salt, uint8 shift, uint8 stage) external {
         snapShift = shift;
         for (uint256 i; i < count; ++i) {
@@ -161,12 +177,22 @@ contract DeadVrfTallyParityTest is Test {
     DeadVrfTallyParityHarness private h;
 
     function setUp() public {
+        // Past the 14-day VRF-dead window from a zero request time.
+        vm.warp(30 days);
         h = new DeadVrfTallyParityHarness();
+        h.latchDeadTally();
+    }
+
+    /// @dev One production terminal call (mineFlip's Terminal stage worker) with `callGas` as its
+    ///      gas and allowance; true once the tally is done.
+    function _tally(uint256 callGas) private returns (bool) {
+        h.runGameOverAdvance{gas: callGas}(0, 5, callGas);
+        return h.tallyStage() == 3;
     }
 
     function _observe(bool legacy) private returns (bool done, bytes32 writes) {
         vm.startStateDiffRecording();
-        done = legacy ? h.legacyTally(5) : h.tallyDeadVrf(5);
+        done = legacy ? h.legacyTally(5) : _tally(gasleft() - 50_000);
         Vm.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
         for (uint256 i; i < accesses.length; ++i) {
             for (uint256 j; j < accesses[i].storageAccesses.length; ++j) {
@@ -198,7 +224,7 @@ contract DeadVrfTallyParityTest is Test {
         uint256 calls;
         while (!done && calls < 64) {
             vm.cool(address(h));
-            done = h.tallyDeadVrf{gas: callGas}(5);
+            done = _tally(callGas);
             ++calls;
         }
         assertTrue(done, "gas-checkpointed tally completes");

@@ -117,7 +117,7 @@ interface IsDGNRS {
     /// @notice Total ETH value reserved in sDGNRS custody for in-flight gambling-burn redemptions.
     /// @dev Backed sDGNRS-side either way — the ETH leg of pullRedemptionReserve moves the ETH out
     ///      of the Game at submit, the custody leg pins sDGNRS's existing ETH + stETH — so it is
-    ///      never part of the Game's balance and handleGameOverDrain never subtracts it. Read by
+    ///      never part of the Game's balance and the game-over drain never subtracts it. Read by
     ///      the custody leg to enforce cumulative coverage.
     function pendingRedemptionEthValue() external view returns (uint256);
 
@@ -130,6 +130,4 @@ interface IsDGNRS {
     function redemptionSettlementPending() external view returns (bool);
     function beginRedemptionSettlement(uint24 day, uint256 word) external;
     function runRedemptionWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
-    function processRedemptionSettlement(uint256 budget)
-        external returns (bool done, uint256 gasUsed, uint256 rewardBasis);
 }

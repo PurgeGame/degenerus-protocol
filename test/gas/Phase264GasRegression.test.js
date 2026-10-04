@@ -65,7 +65,7 @@
 //
 // On first run, the test prints:
 //   [REF-CAPTURE] PAY_DAILY_COIN_JACKPOT_GAS_REF              = <gasNumber>
-//   [REF-CAPTURE] PAY_DAILY_JACKPOT_COIN_AND_TICKETS_GAS_REF  = <gasNumber>
+//   [REF-CAPTURE] RUN_DAILY_JACKPOT_TICKETS_GAS_REF           = <gasNumber>
 //   [REF-CAPTURE] BASELINE_NO_COIN_JACKPOT_GAS                = <gasNumber>
 // The executor pins each captured value into the matching constant — replacing
 // the placeholder `0` with a positive integer literal. Subsequent runs assert
@@ -80,8 +80,8 @@
 // BASELINE_NO_COIN_JACKPOT_GAS captures this floor.
 //
 // Helper-attribution delta interpretation (NOTE on the 120K bound):
-// The literal subtraction `stage6 - stage1` (or `stage9 - stage1`) overstates
-// the helper's cost because stage 6 / stage 9 also run substantial non-helper
+// The literal subtraction `stage6 - stage1` (or `stage8 - stage1`) overstates
+// the helper's cost because stage 6 / stage 8 also run substantial non-helper
 // work (`_awardFarFutureCoinJackpot` for SURF-02, `_rollWinningTraits`,
 // `_calcDailyCoinBudget`, ETH-distribution paths). At v35.0 HEAD this gross
 // delta lands in the multi-million-gas range. The plan's `delta ≤ 120_000`
@@ -96,7 +96,7 @@
 // step. The literal `measured - baseline` value is reported in the test
 // console for cross-cycle stability tracking and is bounded by an absolute
 // envelope `LITERAL_DELTA_HARD_BOUND` (= 8M, well above any realistic
-// stage-6/9 gross-difference vs stage-1 floor — flags structural regression).
+// stage-6/8 gross-difference vs stage-1 floor — flags structural regression).
 //
 // Phase 263 HEAD: cf564816 — feat(263): per-pull level resample for daily coin jackpot.
 // v34.0 baseline (audit anchor): 6b63f6d4daf346a53a1d463790f637308ea8d555.
@@ -104,12 +104,12 @@
 
 const PER_CALL_GAS_DELTA_BOUND        = 120_000;   // D-IMPL-05 absolute upper bound (10% headroom over 110K)
 const ENTRY_POINT_DELTA_TOLERANCE     = 2000;      // ±2000 gas per-site tolerance vs pinned REF (compiler-codegen variance)
-const LITERAL_DELTA_HARD_BOUND        = 8_000_000; // Outer envelope on `measured - baseline` (stage-6/9 vs stage-1 floor) — flags structural regression
+const LITERAL_DELTA_HARD_BOUND        = 8_000_000; // Outer envelope on `measured - baseline` (stage-6/8 vs stage-1 floor) — flags structural regression
 
 // Pinned reference values. Subsequent runs assert against the pinned literal.
-// Stage-9 surface remains 0 (soft-skip path — see test body for the
+// Stage-8 surface remains 0 (soft-skip path — see test body for the
 // non-turbo-fixture documentation): re-pin once a non-turbo split-mode
-// fixture is added AND stage 9 is reachable in the simulator lifecycle.
+// fixture is added AND stage 8 is reachable in the simulator lifecycle.
 // Capture-only (0): the stage-6 entry-point gas is order-sensitive between
 // isolated and full-suite runs (measured ~2.70M–2.77M), so an exact ±2K pin is
 // not stable. The drift/helper-growth assertions are intentionally disabled (the
@@ -117,7 +117,7 @@ const LITERAL_DELTA_HARD_BOUND        = 8_000_000; // Outer envelope on `measure
 // still run, and the worst-case ceiling is covered by the forge gas suites
 // (AdvanceGasCeilingFuzz / AdvanceStageWorstCaseGas) + the SURF-05 1.99× margin.
 const PAY_DAILY_COIN_JACKPOT_GAS_REF             = 0;
-const PAY_DAILY_JACKPOT_COIN_AND_TICKETS_GAS_REF = 0;
+const RUN_DAILY_JACKPOT_TICKETS_GAS_REF          = 0;
 const BASELINE_NO_COIN_JACKPOT_GAS               = 0;
 
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
@@ -186,12 +186,12 @@ async function buyOneTicket(game, buyer) {
 
 /** Section-16 SC-1 shape: 305 unique players + autorebuy + 5 buyers × 20 bundles
  *  whale-bundle pool funding. Drives the lifecycle through the maximally-loaded
- *  daily two-call split path. Stage 9 (STAGE_JACKPOT_COIN_TICKETS) fires only
+ *  daily two-call split path. Stage 8 (STAGE_JACKPOT_COIN_TICKETS) fires only
  *  when the daily-ETH jackpot winner count exceeds JACKPOT_MAX_WINNERS (160) on
  *  a non-final-physical-day; in mainnet-emulator practice this typically lands
  *  in turbo mode (purchase target hit on day 1), in which case the entire
- *  jackpot phase compresses to stages 7 → 11 → 10 and stage 9 is bypassed. The
- *  test soft-skips stage 9 measurement when not observed (matching the existing
+ *  jackpot phase compresses to stages 7 → 10 → 9 and stage 8 is bypassed. The
+ *  test soft-skips stage 8 measurement when not observed (matching the existing
  *  AdvanceGameGas section 8 `this.skip()` pattern at L555). */
 async function setupSplitTriggeringFixture(fixture, count) {
   const { game, alice, bob, carol, dan, eve, others } = fixture;
@@ -301,21 +301,20 @@ async function measurePayDailyCoinJackpotGas(fixture) {
 }
 
 /**
- * Measure the STAGE_JACKPOT_COIN_TICKETS chunk (stage 8 since the renumbering; the
- * describe name keeps its historical "stage 9" label) where
- * `payDailyJackpotCoinAndTickets` runs the helper in the jackpot phase. Pair
+ * Measure the STAGE_JACKPOT_COIN_TICKETS (8) chunk, where the jackpot module's
+ * `runDailyJackpotTickets` worker runs the jackpot-phase coin+tickets leg. Pair
  * with a stage-1 baseline from the same fixture run (captured pre-jackpot or
  * post-jackpot — stage-1 is per-cycle uniform).
  *
  * Fixture matches AdvanceGameGas section 8 — heavy purchases + drive into
- * jackpot phase, then pick the first stage-9 advance observed.
+ * jackpot phase, then pick the first stage-8 advance observed.
  */
 /** Returns { measured, baseline, stagesSeen }. `measured` may be `null` if
- *  STAGE_JACKPOT_COIN_TICKETS (9) is not reachable in the lifecycle (turbo-mode
- *  jackpot phase compresses 7 → 11 → 10 in one physical day, bypassing stage 9).
- *  The caller soft-skips when stage 9 is not observed (matches the existing
+ *  STAGE_JACKPOT_COIN_TICKETS (8) is not reachable in the lifecycle (turbo-mode
+ *  jackpot phase compresses 7 → 10 → 9 in one physical day, bypassing stage 8).
+ *  The caller soft-skips when stage 8 is not observed (matches the existing
  *  AdvanceGameGas section 8 `this.skip()` pattern at L555). */
-async function measurePayDailyJackpotCoinAndTicketsGas(fixture) {
+async function measureDailyJackpotTicketsGas(fixture) {
   const { game, deployer, advanceModule, mockVRF } = fixture;
 
   await setupSplitTriggeringFixture(fixture, 305);
@@ -407,25 +406,25 @@ describe("Phase 264 SURF-05 — per-pull-level resample entry-point gas regressi
     });
   });
 
-  describe("payDailyJackpotCoinAndTickets (jackpot-phase, stage 9) entry-point delta", function () {
-    it(`gasUsed at stage 9 within ENTRY_POINT_DELTA_TOLERANCE of pinned REF; helper-growth ≤ ${PER_CALL_GAS_DELTA_BOUND}`, async function () {
+  describe("runDailyJackpotTickets (jackpot-phase coin+tickets, stage 8) chunk delta", function () {
+    it(`gasUsed at stage 8 within ENTRY_POINT_DELTA_TOLERANCE of pinned REF; helper-growth ≤ ${PER_CALL_GAS_DELTA_BOUND}`, async function () {
       const fixture = await loadFixture(deployFullProtocol);
-      const { measured, baseline, stagesSeen } = await measurePayDailyJackpotCoinAndTicketsGas(fixture);
+      const { measured, baseline, stagesSeen } = await measureDailyJackpotTicketsGas(fixture);
 
-      // Soft-skip when stage 9 is unreachable in the simulator's lifecycle.
+      // Soft-skip when stage 8 is unreachable in the simulator's lifecycle.
       // Turbo-mode jackpot phase (purchase target met on day 1) compresses
-      // stages 7 → 11 → 10 into one physical day, bypassing stage 9. This
+      // stages 7 → 10 → 9 into one physical day, bypassing stage 8. This
       // matches the existing AdvanceGameGas section 8 `this.skip()` pattern
       // at test/gas/AdvanceGameGas.test.js L555 — soft-skip is REAL test
       // functionality (D-APPROVAL-04) when fixture state denies coverage.
       // The console diagnostic surfaces the observed stages so a regression
-      // that closes off any reachable stage 9 path is visible.
+      // that closes off any reachable stage 8 path is visible.
       if (measured === null) {
         console.warn(
-          `[Phase264 SURF-05] STAGE_JACKPOT_COIN_TICKETS (9) not observed in 305-player ` +
+          `[Phase264 SURF-05] STAGE_JACKPOT_COIN_TICKETS (8) not observed in 305-player ` +
           `section-16 SC-1 fixture (stages seen: ${[...stagesSeen].sort().join(', ')}). ` +
-          `Soft-skipping the stage-9 measurement — turbo-mode jackpot phase compresses 7→11→10 ` +
-          `bypassing stage 9. Manual stage-9 observation requires a non-turbo fixture (multi-day ` +
+          `Soft-skipping the stage-8 measurement — turbo-mode jackpot phase compresses 7→10→9 ` +
+          `bypassing stage 8. Manual stage-8 observation requires a non-turbo fixture (multi-day ` +
           `purchase phase) AND a split-mode jackpot day; the helper's per-call gas is ` +
           `analytically bounded by the file-header derivation independent of which jackpot-phase ` +
           `entry point fires it.`,
@@ -435,27 +434,27 @@ describe("Phase 264 SURF-05 — per-pull-level resample entry-point gas regressi
       }
 
       const literalDelta = measured - baseline;
-      console.log(`[REF-CAPTURE] PAY_DAILY_JACKPOT_COIN_AND_TICKETS_GAS_REF  = ${measured}`);
-      console.log(`[SURF-05] payDailyJackpotCoinAndTickets literal delta (stage${STAGE_JACKPOT_COIN_TICKETS} - stage1) = ${literalDelta} gas; helper-growth bound ${PER_CALL_GAS_DELTA_BOUND}; per-site tolerance ${ENTRY_POINT_DELTA_TOLERANCE}`);
+      console.log(`[REF-CAPTURE] RUN_DAILY_JACKPOT_TICKETS_GAS_REF  = ${measured}`);
+      console.log(`[SURF-05] runDailyJackpotTickets literal delta (stage${STAGE_JACKPOT_COIN_TICKETS} - stage1) = ${literalDelta} gas; helper-growth bound ${PER_CALL_GAS_DELTA_BOUND}; per-site tolerance ${ENTRY_POINT_DELTA_TOLERANCE}`);
 
       expect(
         literalDelta <= LITERAL_DELTA_HARD_BOUND,
-        `payDailyJackpotCoinAndTickets literal delta ${literalDelta} > ${LITERAL_DELTA_HARD_BOUND} — structural regression`,
+        `runDailyJackpotTickets literal delta ${literalDelta} > ${LITERAL_DELTA_HARD_BOUND} — structural regression`,
       ).to.equal(true);
       // No lower bound: both figures are whole advance calls whose size the per-chunk gas
-      // admission sets, so stage 9 may cost less than the stage-1 baseline.
+      // admission sets, so stage 8 may cost less than the stage-1 baseline.
 
-      if (PAY_DAILY_JACKPOT_COIN_AND_TICKETS_GAS_REF > 0) {
-        const drift = Math.abs(measured - PAY_DAILY_JACKPOT_COIN_AND_TICKETS_GAS_REF);
+      if (RUN_DAILY_JACKPOT_TICKETS_GAS_REF > 0) {
+        const drift = Math.abs(measured - RUN_DAILY_JACKPOT_TICKETS_GAS_REF);
         expect(
           drift <= ENTRY_POINT_DELTA_TOLERANCE,
-          `payDailyJackpotCoinAndTickets drift ${drift} > tolerance ${ENTRY_POINT_DELTA_TOLERANCE}; measured ${measured} vs REF ${PAY_DAILY_JACKPOT_COIN_AND_TICKETS_GAS_REF}`,
+          `runDailyJackpotTickets drift ${drift} > tolerance ${ENTRY_POINT_DELTA_TOLERANCE}; measured ${measured} vs REF ${RUN_DAILY_JACKPOT_TICKETS_GAS_REF}`,
         ).to.equal(true);
 
-        const helperGrowth = measured - PAY_DAILY_JACKPOT_COIN_AND_TICKETS_GAS_REF;
+        const helperGrowth = measured - RUN_DAILY_JACKPOT_TICKETS_GAS_REF;
         expect(
           helperGrowth <= PER_CALL_GAS_DELTA_BOUND,
-          `payDailyJackpotCoinAndTickets helper-growth ${helperGrowth} > ${PER_CALL_GAS_DELTA_BOUND} (D-IMPL-05 — re-derive worst case before re-pinning)`,
+          `runDailyJackpotTickets helper-growth ${helperGrowth} > ${PER_CALL_GAS_DELTA_BOUND} (D-IMPL-05 — re-derive worst case before re-pinning)`,
         ).to.equal(true);
       }
     });

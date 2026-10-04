@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
-import {IDegenerusGameLootboxModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
+import {IGameAfkingModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
@@ -16,16 +16,33 @@ contract ColdSubscriberSeeder is DegenerusGame {
         _subOf[ContractAddresses.VAULT].lastAutoBoughtDay = nextDay;
         _subOf[ContractAddresses.SDGNRS].lastAutoBoughtDay = nextDay;
     }
-    /// @dev Run the actual indexed worker without consuming independent stamped AFKING boxes.
+    /// @dev Run the engine's live human-box worker without consuming independent stamped AFKING boxes.
     function finishIndexedRead() external {
         require(!rngLockedFlag, "setup daily still locked");
         for (uint256 i; i < 100 && !humanReadComplete; ++i) {
-            (bool ok, bytes memory ret) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
-                abi.encodeWithSelector(IDegenerusGameLootboxModule.openHumanBoxes.selector, 10_000)
+            (bool ok, bytes memory ret) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
+                abi.encodeWithSelector(IGameAfkingModule.runHumanBoxWork.selector, gasleft())
             );
             if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
         }
         require(humanReadComplete, "indexed read did not complete");
+    }
+
+    /// @dev Run the engine's box stages (AFKing, then human boxes) through their live workers while
+    ///      either is the due read consumer, without the engine's later stages (a mid-day request
+    ///      would reshape the measured fixture).
+    function runDueBoxStages() external {
+        for (uint256 i; i < 100; ++i) {
+            uint8 stage = _rngConsumerStage();
+            bytes4 selector;
+            if (stage == 2) selector = IGameAfkingModule.runAfkingWork.selector;
+            else if (stage == 3) selector = IGameAfkingModule.runHumanBoxWork.selector;
+            else return;
+            (bool ok, bytes memory ret) =
+                ContractAddresses.GAME_AFKING_MODULE.delegatecall(abi.encodeWithSelector(selector, gasleft()));
+            if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+            if (!abi.decode(ret, (MineFlipGas.Result)).progressed) return;
+        }
     }
 
     function useMatureLevel() external {
@@ -103,7 +120,10 @@ abstract contract ColdSubscriberFixture is DeployProtocol {
             game.subscribe(address(0), _split(), mode == 1, 1, _split() ? source : address(0));
         }
         if (mode != 3) {
-            game.openBoxes(2000);
+            bytes memory live = address(game).code;
+            vm.etch(address(game), type(ColdSubscriberSeeder).runtimeCode);
+            ColdSubscriberSeeder(payable(address(game))).runDueBoxStages();
+            vm.etch(address(game), live);
         } else {
             vm.warp(vm.getBlockTimestamp() + 1 days);
             _settle();

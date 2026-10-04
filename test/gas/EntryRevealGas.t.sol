@@ -8,6 +8,9 @@ import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGame
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {TicketEntropy} from "../../contracts/libraries/TicketEntropy.sol";
+import {GoldSixLib} from "../../contracts/libraries/GoldSixLib.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 
 contract EntryRevealHarness is LegacyTicketOwnerReference {
     function seed(uint32[] memory amounts, uint8 rem, uint256 ownerStart) external {
@@ -72,22 +75,48 @@ contract EntryRevealHarness is LegacyTicketOwnerReference {
         }
     }
 
-    function run(uint32 room, uint256 entropy) external returns (uint256 frontier, uint32 used) {
+    /// @dev The pinned pre-reveal runtime (etched at the foil module address) exposes its round
+    ///      drain as drainRounds(rk, lvl, room, idx, total, entropy, shift).
+    function runLegacy(uint32 room, uint256 entropy) external returns (uint256 frontier, uint32 used) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_FOILPACK_MODULE.delegatecall(
-            abi.encodeWithSelector(DegenerusGameFoilPackModule.drainRounds.selector,
+            abi.encodeWithSelector(bytes4(keccak256("drainRounds(uint24,uint24,uint32,uint256,uint256,uint256,uint8)")),
                 uint24(7), uint24(7), room, uint256(0), _ticketQueueLength(7), entropy, uint8(0))
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         return abi.decode(data, (uint256, uint32));
     }
+
+    /// @dev The state in which the ticket worker drains key 7 from its start: level 7 puts it in
+    ///      the mint window, the write slot makes 7 the read key, and `entropy` is the published
+    ///      read word.
+    function primeCurrent(uint256 entropy) external {
+        level = 7;
+        ticketWriteSlot = true;
+        rngWordCurrent = entropy;
+        _setRngSessionPublished(true);
+    }
+
+    /// @dev The production ticket worker, delegatecalled as mineFlip's Tickets stage dispatches
+    ///      it at anchor level + 1; the gas the call is sent bounds it.
+    function runCurrent() external returns (MineFlipGas.Result memory) {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall(
+            abi.encodeWithSelector(DegenerusGameTicketModule.runTicketWork.selector, uint24(8), gasleft())
+        );
+        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
+        return abi.decode(data, (MineFlipGas.Result));
+    }
 }
 
 /// @notice Measures only drain execution, from identical state, against the pinned pre-reveal
 ///         runtime. The large room isolates event cost from deliberately changed chunk limits;
-///         production-budget gas is checked separately by RoundDrainChunkGas. The current drain
-///         door is caller-sized, so its bounded-allowance runs check progress, not a ceiling.
+///         production-budget gas is checked separately by RoundDrainChunkGas. The current ticket
+///         worker spends the gas it is given, so its bounded-allowance runs check progress, not a
+///         ceiling; it finishes a short queue's sub-round tail on the per-entry path in the same
+///         call, and those runs are revealed by TraitsGenerated, replayed here.
 contract EntryRevealGas is Test {
     bytes32 private constant OLD_EVENT = keccak256("RoundTraitsGenerated(uint24,uint32,uint256,uint32,uint256)");
+    bytes32 private constant TRAITS_GENERATED = keccak256("TraitsGenerated(address,uint256,uint32)");
+    uint64 private constant TICKET_LCG_MULT = 6364136223846793005;
     EntryRevealHarness private h;
     bytes private beforeCode;
     bytes private afterCode;
@@ -99,7 +128,7 @@ contract EntryRevealGas is Test {
         beforeCode = vm.parseBytes(vm.readFile("contracts/mocks/EntryRevealBaseline.hex"));
         assertEq(keccak256(beforeCode), 0xbc93ffbe68b1d942cd336e84ec4c3c1681d763bf33449383cf657189014e9ce5);
         afterCode = address(new DegenerusGameFoilPackModule()).code;
-        // The current foil module's drainRounds door delegates to the ticket module at its pinned address.
+        // The current drain is the ticket worker at its pinned address.
         vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
     }
 
@@ -107,8 +136,8 @@ contract EntryRevealGas is Test {
         return _observe(candidate, entropy, room, 0);
     }
 
-    /// @dev `supplied` != 0 bounds the call's gas. The current drain door is caller-sized: it ignores
-    ///      the legacy write room and admits checkpoints while the supplied gas covers the next one.
+    /// @dev `supplied` != 0 bounds the call's gas. The current ticket worker has no write room: it
+    ///      admits checkpoints while the supplied gas covers the next one.
     function _observe(bool candidate, uint256 entropy, uint32 room, uint256 supplied)
         private returns (Observation memory o)
     {
@@ -117,11 +146,13 @@ contract EntryRevealGas is Test {
             h.installLegacyQueue(7);
         }
         vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, candidate ? afterCode : beforeCode);
+        if (candidate) h.primeCurrent(entropy);
         vm.recordLogs();
         vm.startStateDiffRecording();
         uint256 start = gasleft();
-        if (supplied == 0) h.run(room, entropy);
-        else h.run{gas: supplied}(room, entropy);
+        if (!candidate) h.runLegacy(room, entropy);
+        else if (supplied == 0) h.runCurrent();
+        else h.runCurrent{gas: supplied}();
         o.gasUsed = start - gasleft();
         Vm.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -142,6 +173,13 @@ contract EntryRevealGas is Test {
             uint256 mask;
             uint256 owners;
             uint256 seats;
+            if (candidate && l.topics.length == 2 && l.topics[0] == TRAITS_GENERATED) {
+                // A per-entry run of the queue's tail: replay its traits from the event.
+                (uint256 keyed, uint32 take) = abi.decode(l.data, (uint256, uint32));
+                unchecked { o.inventory += this.soloInventory(address(uint160(uint256(l.topics[1]))), keyed, take, entropy); }
+                o.entries += take;
+                continue;
+            }
             if (candidate) {
                 assertEq(l.topics.length, 4);
                 assertEq(l.data.length, 32);
@@ -179,6 +217,34 @@ contract EntryRevealGas is Test {
         }
     }
 
+    /// @dev The (player, trait) multiset of one per-entry run, replayed off-chain from its
+    ///      TraitsGenerated fields: the stream identity carrying the run's start offset in its low
+    ///      32 bits and, in bit 255, whether the gold six was already taken before the run.
+    ///      External so the replay keeps its own stack frame outside `_observe`.
+    function soloInventory(address player, uint256 keyed, uint32 take, uint256 entropy)
+        external pure returns (uint256 inventory)
+    {
+        bool goldTaken = keyed & TicketEntropy.GOLD_SIX_TAKEN != 0;
+        uint256 stream = keyed & ~TicketEntropy.GOLD_SIX_TAKEN & ~uint256(type(uint32).max);
+        uint256 i = uint32(keyed);
+        uint256 end = i + take;
+        while (i < end) {
+            uint64 s = uint64(uint256(keccak256(abi.encode(stream, entropy, i >> 4)))) | 1;
+            uint64 offset = uint64(i & 15);
+            unchecked { s = s * (TICKET_LCG_MULT + offset) + offset; }
+            for (uint256 j = offset; j < 16 && i < end; ++j) {
+                unchecked { s = s * TICKET_LCG_MULT + 1; }
+                uint8 trait = DegenerusTraitUtils.traitFromWord(s) + uint8((i & 3) << 6);
+                if (trait == GoldSixLib.TRAIT) {
+                    if (goldTaken) trait = GoldSixLib.replacement(s);
+                    else goldTaken = true;
+                }
+                unchecked { inventory += uint256(keccak256(abi.encode(player, trait))); }
+                ++i;
+            }
+        }
+    }
+
     function _compare(uint32[] memory amounts, uint8 rem, uint256 entropy) private returns (Observation memory a, Observation memory b) {
         h.seed(amounts, rem, 1 << 24);
         uint256 snapshot = vm.snapshotState();
@@ -193,7 +259,7 @@ contract EntryRevealGas is Test {
         // entries, and every current reveal reports exactly what the drain stored.
         // Entry conservation, computed exactly. A fractional remainder now resolves under the V2
         // identity (docs/audit/RNG-DOMAINS.md: one extra entry on a win), and a round needs four
-        // seats, so a short queue's tail stays owed for the solo engine (outside this door).
+        // seats, so a short queue's tail is finished by the per-entry path in the same call.
         (uint256 owedLeft, uint256 consumed) = h.remainingOwed(amounts.length);
         uint256 expected;
         for (uint256 i; i < amounts.length; ++i) {
@@ -239,7 +305,7 @@ contract EntryRevealGas is Test {
                 uint32 room = cold == 0 ? 1000 : 650;
                 Observation memory a = _observe(false, uint256(keccak256("reveal-gas")), room);
                 assertTrue(vm.revertToStateAndDelete(snapshot));
-                // The current door spends the gas it is given (no write room): drive it with a
+                // The current worker spends the gas it is given (no write room): drive it with a
                 // realistic 10M allowance and require progress.
                 Observation memory b = _observe(true, uint256(keccak256("reveal-gas")), room, 10_000_000);
                 emit log_named_uint("chunk_entries_per_buyer", sizes[i]);
@@ -257,6 +323,8 @@ contract EntryRevealGas is Test {
     }
 
     function testFuzz_RevealParity_PartialsAndTrailingTopics(uint256 entropy, uint8 countSeed, uint8 remSeed) public {
+        // A published read word is never 0 or the waiting sentinel 1.
+        if (entropy < 2) entropy += 2;
         uint32[] memory amounts = new uint32[](4 + countSeed % 13);
         for (uint256 i; i < amounts.length; ++i) amounts[i] = uint32(1 + uint256(keccak256(abi.encode(entropy, i))) % 13);
         _compare(amounts, remSeed % 100, entropy);

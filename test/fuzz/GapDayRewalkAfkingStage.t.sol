@@ -240,10 +240,9 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
         revert("harness: lock never released");
     }
 
+    /// @dev Mine until the engine reports no work, so every stamped box has been opened in order.
     function _drainOpens() internal {
-        for (uint256 i; i < 16; i++) {
-            if (game.openBoxes(64) == 0) return;
-        }
+        _mineAll(16);
     }
 
     function _afkingResetDay() internal view returns (uint24) {

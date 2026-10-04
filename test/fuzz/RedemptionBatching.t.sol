@@ -167,12 +167,18 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         assertTrue(done); assertLe(charged, 9_000_000); assertEq(quote, 1);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }
-    function test_ManuallyClaimedCohortNeedsOnlyBoundedCleanupWithoutBounty() public {
+    /// @dev Burns against zero backing commit nothing (no ETH base, no FLIP escrow): the cohort's
+    ///      entries are empty, and the engine skips them in bounded steps that earn no reward basis.
+    function test_EmptyClaimCohortNeedsOnlyBoundedSkipsWithoutBounty() public {
         uint24 day = game.currentDayView();
+        vm.deal(address(sdgnrs), 0);
         address[] memory players = _newBurners(3, 1 ether);
+        for (uint256 i; i < players.length; ++i) {
+            (uint96 base,, uint96 escrow) = sdgnrs.pendingRedemptions(players[i], day);
+            assertEq(uint256(base) + uint256(escrow), 0, "harness: the entry is empty");
+        }
         _resolve(day, 100, 99);
-        for (uint256 i; i < players.length; ++i) sdgnrs.claimRedemption(players[i], day);
-        assertTrue(sdgnrs.redemptionSettlementPending(), "keeper cleanup is still owed");
+        assertTrue(sdgnrs.redemptionSettlementPending(), "the empty cohort still owes its pass");
         (bool done, uint256 charged, uint256 quote) = _batch(40_000);
         assertFalse(done); assertLt(charged, 100_000); assertEq(quote, 0);
         assertTrue(sdgnrs.redemptionSettlementPending());
@@ -196,24 +202,31 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         assertEq(base, 0); assertEq(escrow, 0);
     }
 
-    function test_ManualAndBatchPlayerEventsAndBalancesAreIdentical() public {
+    function test_PerClaimStepsAndOneCallPlayerEventsAndBalancesAreIdentical() public {
         uint24 day = game.currentDayView();
         _burn(alice, sdgnrs.totalSupply() / 1000);
         _burn(bob, 1 ether); // Dust-forfeit branch alongside a real chunk.
         _resolve(day, 175, 99);
         uint256 snap = vm.snapshotState();
+        // Probe both step allowances first, so the recording holds only the applied steps.
+        uint256 first = _oneClaimAllowance();
+        _settleClaimAt(first);
+        uint256 second = _oneClaimAllowance();
+        assertTrue(vm.revertToState(snap));
+        snap = vm.snapshotState();
         vm.recordLogs();
-        sdgnrs.claimRedemption(alice, day); sdgnrs.claimRedemption(bob, day);
-        bytes32 manualLogs = keccak256(abi.encode(vm.getRecordedLogs()));
-        bytes32 manualBalances = keccak256(abi.encode(game.claimableWinningsOf(alice), game.claimableWinningsOf(bob),
+        _settleClaimAt(first); _settleClaimAt(second);
+        assertFalse(sdgnrs.redemptionSettlementPending());
+        bytes32 stepLogs = keccak256(abi.encode(vm.getRecordedLogs()));
+        bytes32 stepBalances = keccak256(abi.encode(game.claimableWinningsOf(alice), game.claimableWinningsOf(bob),
             game.futurePrizePoolView(), address(sdgnrs).balance, sdgnrs.pendingRedemptionEthValue()));
         assertTrue(vm.revertToState(snap));
         vm.recordLogs();
         (bool done,,) = _batch(9_000_000);
         assertTrue(done);
-        assertEq(keccak256(abi.encode(vm.getRecordedLogs())), manualLogs, "ordered player settlement and queue events");
+        assertEq(keccak256(abi.encode(vm.getRecordedLogs())), stepLogs, "ordered player settlement and queue events");
         assertEq(keccak256(abi.encode(game.claimableWinningsOf(alice), game.claimableWinningsOf(bob),
-            game.futurePrizePoolView(), address(sdgnrs).balance, sdgnrs.pendingRedemptionEthValue())), manualBalances);
+            game.futurePrizePoolView(), address(sdgnrs).balance, sdgnrs.pendingRedemptionEthValue())), stepBalances);
     }
     // Pins coinflip.creditFlip in the router: external keeper gets the exact single credit.
     // The miner pays measured gas above each call's unpaid first 1M at the capped base fee, so the
@@ -273,8 +286,8 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         _buyHuman(buyer, 1);
         uint24 day = game.currentDayView();
         _burn(alice, sdgnrs.totalSupply() * 16 / 1000); _resolve(day, 175, 99); _commitWord(99);
-        // The keeper is paid the engine's measured-gas reward for the shared call (the per-box
-        // flat bounty no longer exists); the claim is sized so the call clears the unpaid first 1M.
+        // The keeper is paid only the engine's measured-gas reward for the shared call; the claim
+        // is sized so the call clears the unpaid first 1M.
         vm.fee(1 gwei);
         (uint256 reward, uint256 used) = _keeperMine(10_000_000);
         emit log_named_uint("redemption_plus_human_box_miner_execution_gas", used);
@@ -344,7 +357,11 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         uint24 day = game.currentDayView();
         address[] memory players = _newBurners(67, 1 ether);
         _resolve(day, 100, 99);
-        for (uint256 j; j < 22; ++j) sdgnrs.claimRedemption(players[j], day);
+        for (uint256 j; j < 22; ++j) _settleOneClaim();
+        (uint96 settled,,) = sdgnrs.pendingRedemptions(players[21], day);
+        (uint96 next,,) = sdgnrs.pendingRedemptions(players[22], day);
+        assertEq(settled, 0, "harness: the first 22 claims settled in FIFO order");
+        assertGt(next, 0, "harness: 45 dust claims remain");
         // A caller may fund a safe checkpoint. The remaining physical gas admits
         // the dust claims but cannot admit the next whole human order.
         _commitWord(99);

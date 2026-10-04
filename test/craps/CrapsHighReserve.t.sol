@@ -76,11 +76,15 @@ contract CrapsHighReserveTest is CrapsPins {
         vm.stopPrank();
     }
 
+    /// @dev Settle the jackpot field to completion: whole batches for `WHOLE_FIELD`, otherwise
+    ///      `budget` seats per call, so a chunked run really crosses seat boundaries. Both paths
+    ///      run the reserve draw.
     function _finish(uint64 budget) internal {
         for (uint256 i; i < 500; ++i) {
             (,,, bool complete) = api.jackpotProgress();
             if (complete) return;
-            table.settleSlot(slot, budget); // permissionless path must run the reserve too
+            if (budget == WHOLE_FIELD) table.settleSlot(slot, budget);
+            else table.resolveSeats(slot, budget);
         }
         revert("settlement stalled");
     }
@@ -256,7 +260,7 @@ contract CrapsHighReserveTest is CrapsPins {
         assertEq(coinflip.totalCredited(), credited); assertEq(cold.highRollerReserve(), reserve);
         vm.recordLogs();
         table.settleSlot(slot, WHOLE_FIELD);
-        vm.prank(ContractAddresses.GAME); api.advanceJackpotBattle(WHOLE_FIELD);
+        vm.prank(ContractAddresses.GAME); cold.runDailyBattleWork(gasleft());
         assertEq(vm.getRecordedLogs().length, 0, "retry attempted another draw");
         assertEq(coinflip.totalCredited(), credited); assertEq(cold.highRollerReserve(), reserve);
     }

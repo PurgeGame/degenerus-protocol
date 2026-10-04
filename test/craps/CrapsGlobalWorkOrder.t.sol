@@ -38,30 +38,35 @@ contract CrapsGlobalWorkOrderTest is CrapsPins {
         return cohort.runCrapsReadWork(index, allowance);
     }
 
-    function test_EarlierCategoriesBlockEveryManualReadSettlementDoor() public {
+    /// @dev An earlier RNG consumer stage blocks read settlement: neither the read worker nor the
+    ///      maintenance worker touches a committed field until the read cohort is the live stage.
+    function test_EarlierCategoriesBlockReadSettlement() public {
         for (uint8 stage; stage < 6; ++stage) {
             game.setRngConsumerStage(stage);
-            (bool moved, bool settled,) = cohort.keepRngCohortBudgeted(index, 1);
-            assertFalse(moved);
-            assertFalse(settled);
-            vm.expectRevert(LootboxCraps.RngNotReady.selector);
-            table.resolveSlot(first, 0);
-            table.keepScheduled(0);
+            MineFlipGas.Result memory result = _worker(gasleft());
+            assertFalse(result.progressed);
+            assertFalse(result.done);
+            _maintain(table);
             assertEq(table.bonusCursorOf(first), 0);
         }
         game.setRngConsumerStage(6);
-        table.resolveSlot(first, 0);
+        assertTrue(_worker(gasleft()).progressed);
         assertEq(table.bonusCursorOf(first), 1);
     }
 
-    function test_CustomCallerCannotChooseLaterCommittedField() public {
-        vm.expectRevert(LootboxCraps.RngNotReady.selector);
-        table.resolveSlot(second, 0);
-        table.resolveSlot(first, 0);
+    /// @dev The read worker takes the committed fields strictly in order: the later field cannot
+    ///      settle before the earlier one, and a drained cohort is a no-op.
+    function test_ReadWorkSettlesCommittedFieldsInOrder() public {
+        _worker(gasleft());
+        assertEq(table.bonusCursorOf(first), 1);
         assertEq(table.bonusCursorOf(second), 0);
-        table.resolveSlot(second, 0);
+        assertFalse(table.rngCohortComplete(index));
+        _worker(gasleft());
+        assertEq(table.bonusCursorOf(second), 1);
         assertTrue(table.rngCohortComplete(index));
-        table.resolveSlot(first, 0);
+        MineFlipGas.Result memory result = _worker(gasleft());
+        assertFalse(result.progressed);
+        assertTrue(result.done);
         assertTrue(table.rngCohortComplete(index));
     }
 
@@ -97,28 +102,14 @@ contract CrapsGlobalWorkOrderTest is CrapsPins {
         assertEq(table.bonusCursorOf(first), 0);
     }
 
-    function test_PublicCompatibilityBudgetsZeroOneMaxProduceSameReceipt() public {
-        uint64[3] memory budgets = [uint64(0), 1, type(uint64).max];
-        bytes32 expected;
-        for (uint256 i; i < budgets.length; ++i) {
-            uint256 snap = vm.snapshotState();
-            vm.recordLogs();
-            table.resolveSlot(first, budgets[i]);
-            bytes32 digest = keccak256(abi.encode(table.battleOf(table.keyOfSlot(first)),
-                table.bonusCursorOf(first), coinflip.totalCredited(), vm.getRecordedLogs()));
-            if (i == 0) expected = digest;
-            else assertEq(digest, expected);
-            vm.revertToState(snap);
-        }
-    }
-
     function test_FundedGasLimitsHaveIdenticalReceiptsAndLowGasLeavesSafeCheckpoint() public {
         bytes32 expected;
         uint256[3] memory limits = [uint256(10_000_000), 15_000_000, 25_000_000];
         for (uint256 i; i < limits.length; ++i) {
             uint256 snap = vm.snapshotState();
             vm.recordLogs();
-            (bool ok,) = address(table).call{gas: limits[i]}(abi.encodeCall(table.resolveSlot, (first, 0)));
+            vm.prank(ContractAddresses.GAME);
+            (bool ok,) = address(table).call{gas: limits[i]}(abi.encodeCall(cohort.runCrapsReadWork, (index, limits[i])));
             assertTrue(ok, "funded fixed batch failed");
             bytes32 digest = keccak256(abi.encode(table.battleOf(table.keyOfSlot(first)),
                 table.bonusCursorOf(first), coinflip.totalCredited(), vm.getRecordedLogs()));
@@ -127,16 +118,21 @@ contract CrapsGlobalWorkOrderTest is CrapsPins {
             vm.revertToState(snap);
         }
         bytes32 beforeBoard = keccak256(abi.encode(table.battleOf(table.keyOfSlot(first))));
-        (bool ok,) = address(table).call{gas: 300_000}(abi.encodeCall(table.resolveSlot, (first, 0)));
+        vm.prank(ContractAddresses.GAME);
+        (bool ok,) = address(table).call{gas: 300_000}(abi.encodeCall(cohort.runCrapsReadWork, (index, 300_000)));
         // A low-gas caller may return at an atomic checkpoint or revert; neither consumes a seat here.
         assertEq(table.bonusCursorOf(first), 0);
         assertEq(keccak256(abi.encode(table.battleOf(table.keyOfSlot(first)))), beforeBoard);
-        table.resolveSlot(first, 0);
+        _worker(gasleft());
         assertEq(table.bonusCursorOf(first), 1);
     }
+
+    /// @dev Settlement outcomes are a function of state alone: production-sized 10M chunks on warm
+    ///      state and whole-gas chunks on cold state settle the same deep field identically.
     function test_WarmnessAndChunkBoundariesPreserveFinalResults() public {
-        table.resolveSlot(first, 0);
-        table.resolveSlot(second, 0);
+        _worker(gasleft());
+        _worker(gasleft());
+        assertTrue(table.rngCohortComplete(index));
         uint64 deep = table.createBattle(300, 25, 1000, 75, uint40(block.timestamp + 60), true, 255);
         uint32 chips = 1 | uint32(1) << 3 | uint32(1) << 6 | uint32(1) << 9
             | uint32(1) << 12 | uint32(1) << 15 | uint32(1) << 18;
@@ -159,8 +155,9 @@ contract CrapsGlobalWorkOrderTest is CrapsPins {
                 vm.cool(ContractAddresses.JACKPOT_BATTLE);
                 vm.cool(ContractAddresses.COINFLIP);
             }
-            for (uint256 i; i < 30 && !table.battleOf(table.keyOfSlot(deep)).finalized; ++i) {
-                table.resolveSlot(deep, mode == 0 ? 0 : type(uint64).max);
+            for (uint256 i; i < 64 && !table.battleOf(table.keyOfSlot(deep)).finalized; ++i) {
+                vm.prank(ContractAddresses.GAME);
+                cohort.runCrapsReadWork(draw, mode == 0 ? 10_000_000 : gasleft());
             }
             assertTrue(table.battleOf(table.keyOfSlot(deep)).finalized);
             bytes32 digest = keccak256(abi.encode(table.battleOf(table.keyOfSlot(deep)),

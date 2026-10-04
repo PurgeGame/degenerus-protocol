@@ -628,7 +628,7 @@ contract CrapsCustomBoundaryTest is CrapsPins {
 
         uint64 slot = _copycat(20, 1, uint256(keccak256("custom-money")));
         vm.recordLogs();
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         assertTrue(craps.battleOf(craps.keyOfSlot(slot)).finalized, "the custom field did not finalize");

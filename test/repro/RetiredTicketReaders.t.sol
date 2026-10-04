@@ -45,11 +45,12 @@ contract RetiredTicketReadersTest is Test {
         RetiredJackpotHarness h = new RetiredJackpotHarness();
         h.seed(DEITY, true);
         vm.prank(ContractAddresses.GAME);
-        assertEq(h.runTerminalJackpot(10 ether, 1, 11), 0, "retired level: every quadrant settles unpaid");
+        (, uint256 paid) = h.runTerminalJackpotWork(10 ether, 1, 11, gasleft());
+        assertEq(paid, 0, "retired level: every quadrant settles unpaid");
         assertEq(h.credited(DEITY), 0, "no empty-bucket deity draw on a retired level");
         h.seed(DEITY, false);
         vm.prank(ContractAddresses.GAME);
-        h.runTerminalJackpot(10 ether, 1, 11);
+        h.runTerminalJackpotWork(10 ether, 1, 11, gasleft());
         assertGt(h.credited(DEITY), 0, "valid deity draw reaches the cached-length sampler");
     }
 }

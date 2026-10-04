@@ -197,8 +197,9 @@ contract V62GasBrickCompose is DeployProtocol {
         // Open the grounded subscribe's pending boxes first — the no-orphan guard (AfkingModule:1164)
         // would otherwise SKIP a pending-box sub (cheap, weight 1) instead of routing it to the heavy
         // EVICT branch. Opening clears them so the forced funding-kill routes every sub through EVICT.
-        vm.prank(makeAddr("v62_ev_open"));
-        game.openBoxes(evictCount * 2);
+        vm.startPrank(makeAddr("v62_ev_open"));
+        _mineAll(64);
+        vm.stopPrank();
 
         // Force the funding-kill on every sub: drain its afkingFunding bucket to 0 (after the grounded
         // day-0 cover-buy consumed its slice) so the STAGE's fresh-ETH resolve finds srcFunding(0) <

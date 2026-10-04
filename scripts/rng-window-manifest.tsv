@@ -44,7 +44,7 @@
 # FROZEN_SET: rngRequestDay dailyFoilDraw rngWordCurrent rngWordByDay rngDayTags lootboxRngPacked _nudgeCount
 #
 # WINDOW ASYMMETRY (a reviewer note the CLASS judgements rest on): a DAILY request sets both
-# rngLockedFlag and prizePoolFrozen; a MID-DAY requestLootboxRng sets NEITHER — it relies on
+# rngLockedFlag and prizePoolFrozen; a MID-DAY request (_requestLootboxRng) sets NEITHER — it relies on
 # the authenticated active-request bit and published-session/completion flags. So "a VRF request is outstanding" is NOT the same
 # as rngLocked() == true. Any future CONSUMER-SEALED/GATE/CURSOR row must be re-checked
 # against BOTH windows, not just the daily lock.

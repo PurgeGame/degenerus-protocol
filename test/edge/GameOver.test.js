@@ -23,7 +23,7 @@ const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
  * The game over flow is multi-step:
  *   1. mineFlip when liveness guard fires → issues VRF request (does NOT yet set gameOver)
  *   2. VRF fulfillment stores word in rngWordCurrent
- *   3. mineFlip again → processes the word → handleGameOverDrain → gameOver = true
+ *   3. mineFlip again → processes the word → terminal drain → gameOver = true
  *
  * Two liveness guards:
  *   - level==0 && currentDay - purchaseStartDay > DEPLOY_IDLE_TIMEOUT_DAYS  (pre-game 365-day idle timeout)

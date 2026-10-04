@@ -174,9 +174,8 @@ No ETH is pushed to winners during settlement; the existing claim flow applies.
 - Player entry is `FLIP.decimatorBurn(address,uint256,uint32 chips)`; the vault's is
   `coinDecimatorBurn(uint256,uint32 chips)`.
 - Internal Game record ABI is now `recordDecBurn(address,uint24,uint256,uint256,uint32) -> uint64`.
-- `Game.settleDecimatorWinners(uint256) -> (workItems,unitsUsed,moved)` is the public,
-  permissionless progress path. Direct calls earn no bounty; ordinary `mineFlip` uses the
-  same worker and its existing work-priced bounty.
+- Settlement progresses only through `mineFlip`'s Decimator stage (`runDecimatorWork`), in
+  the shared consumer order, paid by the engine's work-priced reward.
 - `DecimatorBurn` now emits a `uint64 entryId` instead of a bucket.
 - `DecBurnRecorded` reports event, entry, base amount (burn plus quest and boon bonuses),
   credited chips, cumulative stack and the board the burn set. Storage keeps one word per

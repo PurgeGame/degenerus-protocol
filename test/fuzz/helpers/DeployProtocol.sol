@@ -125,20 +125,39 @@ abstract contract DeployProtocol is Test {
     DegenerusAdmin public admin;
     GNRUS public gnrus;
 
+    /// @dev Run `mineFlip` until the engine refuses with `NoWork` (nothing to do) or `RngNotReady`
+    ///      (waiting on a word), or `maxCalls` calls have run. Any other revert is re-raised, so a
+    ///      real failure inside the engine still fails the test. mineFlip is the only door into
+    ///      the chain's work, in its fixed order; this is how a fixture "opens boxes", "settles
+    ///      the decimator", "drains tickets" and so on.
+    /// @return calls Successful mineFlip calls made.
+    function _mineAll(uint256 maxCalls) internal returns (uint256 calls) {
+        for (; calls < maxCalls; ++calls) {
+            try game.mineFlip() {} catch (bytes memory reason) {
+                bytes4 sel = bytes4(reason);
+                if (reason.length == 4 && (sel == bytes4(keccak256("NoWork()")) || sel == bytes4(keccak256("RngNotReady()")))) {
+                    return calls;
+                }
+                assembly ("memory-safe") { revert(add(reason, 32), mload(reason)) }
+            }
+        }
+    }
+
     /// @dev LEAVE THE CRAPS TABLE WITH NOTHING THE CRANK CAN FIND, so a `NoWork` probe is probing
     ///      the box legs rather than the table. `mineFlip` grew a craps arm, and a settled game
     ///      has opened craps days — so a fixture that means "no box work" has to say "and no
     ///      craps work" too, or it is asserting something it did not set up.
     ///
-    ///      The table owns a scheduled cursor now, so quieting it means DRIVING that cursor until
-    ///      it reports no progress: every spent slot crossed, every closed window armed, every
-    ///      lapsed day swept. What remains after that is only work the crank cannot do either —
-    ///      fields waiting on words, windows still taking bets — which is exactly the no-work
-    ///      state the probe wants to assert against.
+    ///      The table owns a scheduled cursor, so quieting it means DRIVING that cursor — through
+    ///      the maintenance worker mineFlip calls, invoked as the Game — until it reports no
+    ///      progress: every spent slot crossed, every closed window armed, every lapsed day swept.
+    ///      What remains after that is only work the crank cannot do either — fields waiting on
+    ///      words, windows still taking bets — which is exactly the no-work state the probe wants
+    ///      to assert against.
     function _quietCrapsTable() internal {
         for (uint256 i = 0; i < 64; ++i) {
-            (bool progressed,) = crapsBattle.keepScheduled(type(uint64).max);
-            if (!progressed) return;
+            vm.prank(address(game));
+            if (!crapsBattle.runCrapsMaintenance(gasleft() / 2).progressed) return;
         }
     }
 

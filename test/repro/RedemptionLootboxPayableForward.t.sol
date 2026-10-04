@@ -18,15 +18,17 @@ interface IFlipCoinflipPlayerMock {
 
 /// @title RedemptionLootboxPayableForward — regression for the live-game redemption ETH-forward.
 ///
-/// @notice A live-game `claimRedemption` forwards sDGNRS's liquid ETH into BOTH game legs:
+/// @notice Live redemption settlement (the Redemption-stage worker mineFlip dispatches) forwards
+///         sDGNRS's liquid ETH into BOTH game legs:
 ///         `game.resolveRedemptionLootbox{value: ethForLootbox}` and
 ///         `game.creditRedemptionDirect{value: ethForDirect}`. The Game-side stubs are payable
 ///         and DELEGATECALL their module bodies — delegatecall preserves msg.value, so every
 ///         module function on that path must be payable too. The pinned set:
 ///
 ///         1. LootboxModule.resolveRedemptionLootbox — the delegatecall target of the Game's
-///            5-ETH-chunk loop. Non-payable, its compiled callvalue guard reverts the whole
-///            claim whenever sDGNRS holds ANY liquid ETH (the normal funded state).
+///            5-ETH-chunk loop. Non-payable, its compiled callvalue guard refuses the whole
+///            claim (the keeper drain parks it unpaid) whenever sDGNRS holds ANY liquid ETH
+///            (the normal funded state).
 ///         2. BoonModule.checkAndClearExpiredBoon — a nested delegatecall dispatch inside
 ///            `_resolveLootboxCommon`, reached whenever the claimant has boon state. Same
 ///            guard, one frame deeper.
@@ -130,12 +132,20 @@ contract RedemptionLootboxPayableForward is DeployProtocol {
 
     /// @dev Seed the Game's published, not-yet-complete read session for `word` with its ticket
     ///      stage done: the redemption consumer stage (stage 1), the only stage in which a live
-    ///      claim is accepted (the Game's resolve hook pins `word` for the cohort in the same step).
+    ///      claim settles (the Game's resolve hook pins `word` for the cohort in the same step).
     function _openSettlementStage(uint256 word) internal {
         RecyclingState.seedWord(address(game), RecyclingState.readBuffer(address(game)), bytes32(word));
         uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
         vm.store(address(game), bytes32(0), bytes32(slot0 | (uint256(1) << 192))); // ticketsFullyProcessed
         assertEq(game.rngConsumerStage(), 1, "fixture: redemption consumer stage open");
+    }
+
+    /// @dev The Redemption-stage worker, called as the Game the way mineFlip dispatches it,
+    ///      settling the whole cohort. A refused claim would park instead of settling.
+    function _settleCohort() internal {
+        vm.prank(address(game));
+        assertTrue(sdgnrs.runRedemptionWork(9_000_000).done, "fixture: keeper drained the cohort");
+        assertFalse(sdgnrs.redemptionSettlementPending(), "fixture: cohort cleared");
     }
 
     /// @dev Give `who` live boon state: an unexpired coinflip boon (slot0). The claim-time
@@ -196,14 +206,15 @@ contract RedemptionLootboxPayableForward is DeployProtocol {
     /// @notice HEADLINE: a live-game claim with sDGNRS holding liquid ETH must settle. The
     ///         lootbox leg's `{value: seedEth}` rides the Game-side delegatecall chunk loop into
     ///         LootboxModule.resolveRedemptionLootbox — non-payable, the compiled callvalue
-    ///         guard reverts the entire claim (every mainnet claim, since a funded sDGNRS
+    ///         guard would refuse the entire claim (every mainnet claim, since a funded sDGNRS
     ///         always holds some liquid ETH).
     function test_LiveClaimSettlesWithForwardedEthLeg() public {
         (uint24 dayD, uint256 ethDirect, uint256 lootboxEth) = _burnResolveAndShapeCustody();
 
         uint256 gameValueBefore = address(game).balance + mockStETH.balanceOf(address(game));
-        vm.prank(player);
-        sdgnrs.claimRedemption(player, dayD);
+        _settleCohort();
+        (uint96 owed, , ) = sdgnrs.pendingRedemptions(player, dayD);
+        assertEq(uint256(owed), 0, "the claim settled rather than parking");
 
         // Direct half lands as a game-claimable credit; the full rolled value reaches the game
         // (seed ETH as msg.value across both legs, the remainder as stETH pulls).
@@ -222,15 +233,16 @@ contract RedemptionLootboxPayableForward is DeployProtocol {
 
     /// @notice Same claim with the claimant holding live boon state. The lootbox resolution then
     ///         delegatecalls BoonModule.checkAndClearExpiredBoon (any-boon-bits gate) while the
-    ///         claim's msg.value is still in flight — it must be payable or the claim reverts
+    ///         claim's msg.value is still in flight — it must be payable or the claim is refused
     ///         one frame deeper than the outer fix.
     function test_LiveClaimSettlesWithBoonStateAndForwardedEthLeg() public {
         (uint24 dayD, uint256 ethDirect, uint256 lootboxEth) = _burnResolveAndShapeCustody();
         _injectBoonState(player);
 
         uint256 gameValueBefore = address(game).balance + mockStETH.balanceOf(address(game));
-        vm.prank(player);
-        sdgnrs.claimRedemption(player, dayD);
+        _settleCohort();
+        (uint96 owed, , ) = sdgnrs.pendingRedemptions(player, dayD);
+        assertEq(uint256(owed), 0, "the claim settled rather than parking");
 
         assertEq(
             game.claimableWinningsOf(player),

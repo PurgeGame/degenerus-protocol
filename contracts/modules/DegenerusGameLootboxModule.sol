@@ -31,12 +31,11 @@ import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 import {IStETH} from "../interfaces/IStETH.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 
-import {IDegenerusGameBoonModule, IDegenerusGameDegeneretteModule, IGameAfkingModule} from "../interfaces/IDegenerusGameModules.sol";
+import {IDegenerusGameBoonModule, IDegenerusGameDegeneretteModule} from "../interfaces/IDegenerusGameModules.sol";
 import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {RECORD_KIND_LUCKBOX} from "../interfaces/ICoinflip.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
-import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {FlipRoundLib} from "../libraries/FlipRoundLib.sol";
@@ -73,7 +72,7 @@ interface ICrapsPassDelivery {
  *
  * ## Functions
  *
- * - Box opening (openHumanBoxes sweep, resolveLootboxDirect, resolveRedemptionLootbox)
+ * - Box opening (resolveHumanBoxOrder, resolveAfkingBox, resolveLootboxDirect, resolveRedemptionLootbox)
  * - Deity-boon event declarations shared with DegenerusGameBoonModule (issueDeityBoon lives there)
  */
 contract DegenerusGameLootboxModule is DegenerusGameStorage {
@@ -1251,26 +1250,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (!okBoon) revert EmptyRevert();
     }
 
-    /// @notice Open the active session's human orders in FIFO order, after AFKing.
-    function runHumanBoxWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory) {
-        return _runHumanBoxWork(gasAllowance);
-    }
-
-    /// @notice Compatibility entrypoint. The supplied budget cannot choose a shorter prefix.
-    function openHumanBoxes(uint256) external returns (uint256 opened, uint256 gasUsed) {
-        uint256 beforeGas = gasleft();
-        MineFlipGas.Result memory result = _runHumanBoxWork(MineFlipGas.available());
-        return (result.rewardBasis, beforeGas - gasleft());
-    }
-
-    function _runHumanBoxWork(uint256 gasAllowance) private returns (MineFlipGas.Result memory result) {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
-            abi.encodeWithSelector(IGameAfkingModule.runHumanBoxWork.selector, gasAllowance)
-        );
-        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
-        return abi.decode(data, (MineFlipGas.Result));
-    }
-
     /// @notice Resolve one fully admitted human order atomically; the AFKing
     ///         box worker owns queue ordering, cursor updates and completion.
     function resolveHumanBoxOrder(address player, uint48 idx, uint256 word, uint256 stored,
@@ -1715,7 +1694,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      stamp-only afking box never writes. Deliberately omitted as a mega-niche
     ///      end-game feature (active only the final day before game-over, by which point
     ///      afking subscribers are gone). No `RngNotReady` guard here — the caller (the
-    ///      GameAfkingModule open leg `_autoOpen`) gates on the active published word and a sealed stamp day,
+    ///      GameAfkingModule open leg `_runAfkingWork`) gates on the active published word and a sealed stamp day,
     ///      so a zero word never reaches this function. Sole caller: the GameAfkingModule open-leg, via the
     ///      GAME_LOOTBOX_MODULE delegatecall (the box materialization is private to this
     ///      module — `resolveAfkingBox` binds the caller-passed active session word;

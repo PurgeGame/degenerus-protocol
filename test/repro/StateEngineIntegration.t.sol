@@ -173,8 +173,13 @@ contract StateEngineIntegrationTest is DeployProtocol {
                 uint256 request = mockVRF.lastRequestId();
                 uint48 read = RecyclingState.readBuffer(address(game));
                 uint256 word = RecyclingState.word(address(game), read);
-                vm.expectRevert();
-                game.requestLootboxRng();
+                // mineFlip is the only door to a fresh request, and it selects one (daily 17 or
+                // mid-day 18) only after the read cohort completes: no caller can reach one here.
+                uint8 creditless = game.nextMinerAction();
+                assertTrue(creditless != 17 && creditless != 18, "no fresh request is selectable");
+                vm.prank(MINER);
+                uint8 asMiner = game.minerAction();
+                assertEq(asMiner, creditless, "the miner selects the same consumer stage");
                 assertEq(mockVRF.lastRequestId(), request);
                 assertEq(RecyclingState.word(address(game), read), word);
                 break;

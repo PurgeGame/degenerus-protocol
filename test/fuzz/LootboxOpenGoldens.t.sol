@@ -47,6 +47,17 @@ contract LootboxOpenGoldens is DeployProtocol {
         vm.etch(address(game), real);
     }
 
+    /// @dev The mid-day request, issued by `caller`'s mineFlip as the engine's next action (the
+    ///      only door to a mid-day word). Returns the fresh request's ID.
+    function _mineMiddayRequest(address caller) internal returns (uint256 reqId) {
+        uint256 prior = mockVRF.lastRequestId();
+        vm.prank(caller);
+        game.mineFlip();
+        reqId = mockVRF.lastRequestId();
+        assertGt(reqId, prior, "mineFlip issued the mid-day request");
+        assertFalse(game.rngLocked(), "a mid-day request, not the daily one");
+    }
+
     function _driveDailyCycleOnce() internal {
         (, , , , uint256 priceWei) = game.purchaseInfo();
         if (priceWei != 0 && priceWei <= actor.balance) {
@@ -96,8 +107,7 @@ contract LootboxOpenGoldens is DeployProtocol {
     }
 
     /// @dev Fulfil the pending mid-day request and run the engine once: it publishes the word and
-    ///      resolves the whole read cohort, the human orders included, as read consumers (openBoxes
-    ///      only drives an already-published cohort's AFK and human stages, never publication).
+    ///      resolves the whole read cohort, the human orders included, as read consumers.
     function _fulfilAndOpen(uint256 vrfWord) internal returns (Vm.Log[] memory logs) {
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), vrfWord);
         vm.recordLogs();
@@ -119,9 +129,7 @@ contract LootboxOpenGoldens is DeployProtocol {
         vm.prank(actor);
         game.purchase{value: nominal + 1 ether}(actor, 400, order, bytes32(0), MintPaymentKind.DirectEth, false);
 
-        vm.prank(actor);
-        game.requestLootboxRng();
-        uint256 reqId = mockVRF.lastRequestId();
+        uint256 reqId = _mineMiddayRequest(actor);
 
         // A box that draws the ETH or WWXRP spin reports through the spin contracts instead of
         // `LootBoxOpened`, so search the word for a draw where all four boxes open plainly. The
@@ -206,8 +214,7 @@ contract LootboxOpenGoldens is DeployProtocol {
         vm.prank(pre);
         game.buyPresaleBox{value: 0.5 ether}(pre, 0.5 ether);
 
-        vm.prank(actor);
-        game.requestLootboxRng();
+        _mineMiddayRequest(actor);
         Vm.Log[] memory logs = _fulfilAndOpen(uint256(keccak256("golden_word_1")) | 1);
         assertGt(_word(N), 0, "the word landed");
         assertTrue(game.boxIndexComplete(N), "opened");
@@ -298,8 +305,7 @@ contract LootboxOpenGoldens is DeployProtocol {
         _grantPresaleCredit(pre, 0.5 ether);
         vm.prank(pre);
         game.buyPresaleBox{value: 0.5 ether}(pre, 0.5 ether);
-        vm.prank(actor);
-        game.requestLootboxRng();
+        _mineMiddayRequest(actor);
         Vm.Log[] memory logs = _fulfilAndOpen(uint256(keccak256(abi.encode("golden_word", uint256(3)))) | 1);
         assertTrue(game.boxIndexComplete(N), "opened");
 
@@ -373,8 +379,7 @@ contract LootboxOpenGoldens is DeployProtocol {
         _grantPresaleCredit(pre, 0.5 ether);
         vm.prank(pre);
         game.buyPresaleBox{value: 0.5 ether}(pre, 0.5 ether);
-        vm.prank(actor);
-        game.requestLootboxRng();
+        _mineMiddayRequest(actor);
         Vm.Log[] memory logs = _fulfilAndOpen(uint256(keccak256(abi.encode("golden_word", w))) | 1);
         assertTrue(game.boxIndexComplete(N), "opened");
         uint256 n;

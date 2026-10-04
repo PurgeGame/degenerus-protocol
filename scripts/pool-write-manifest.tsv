@@ -81,7 +81,7 @@ POOL-TO-POOL	_setPrizePools	_consolidatePoolsAndRewardJackpots	modules/Degenerus
 VALUE-IN	_setPrizePools	_deliverWhalePass	modules/DegenerusGameWhaleModule.sol	READ	pass purchase revenue -> live pools (player route and the sDGNRS automatic purchase share the delivery)
 DRAIN-ZERO	_setPrizePools	_handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	READ	live pools (next|future) zeroed in one packed setter at the game-over drain; value re-credited as claimable or distributed
 POOL-TO-POOL	_setPrizePools	_payGoldenTicket	modules/DegenerusGameJackpotModule.sol	READ	golden-ticket ETH rung: future debited (next passed through), re-counted as claimable in tandem
-POOL-TO-POOL	_setPrizePools	_priceEarlyBirdTickets	modules/DegenerusGameJackpotModule.sol	READ	day-1 early-bird budget: future funds the 3% budget, next backs the queued tickets - single net move on the packed slot; the leg's tickets are queued from payEarlyBirdTickets
+POOL-TO-POOL	_setPrizePools	_priceEarlyBirdTickets	modules/DegenerusGameJackpotModule.sol	READ	day-1 early-bird budget: future funds the 3% budget, next backs the queued tickets - single net move on the packed slot; the leg's tickets are queued from runEarlyBirdTickets
 POOL-TO-POOL	_setPrizePools	_routeAfkingPoolEth	modules/GameAfkingModule.sol	READ	the afking buy's pool credit, live path
 MUTATOR-DEF	_setPrizePools	_setFuturePrizePool	storage/DegenerusGameStorage.sol	READ	helper body delegates to the packed-slot setter
 MUTATOR-DEF	_setPrizePools	_setPrizePools	storage/DegenerusGameStorage.sol	READ	canonical packed-slot setter definition
@@ -104,12 +104,12 @@ POOL-TO-POOL	claimablePool	_purchaseForWithCached	modules/DegenerusGameMintModul
 POOL-TO-POOL	claimablePool	_releaseToFuture	modules/DegenerusGameDecimatorModule.sol	WRITE	Releases an all-tails round, or at ranking the exact pass money (and the ETH split's dust), from the sealed reservation; paired with the future credit below
 POOL-TO-POOL	claimablePool	_releaseBafReserve	modules/DegenerusGameJackpotDrawModule.sol	WRITE	At BAF stage completion releases the reserved ETH term of awards no candidate took; paired with the pending future credit
 POOL-TO-POOL	_setPendingPools	_releaseBafReserve	modules/DegenerusGameJackpotDrawModule.sol	READ	The release credits pending future (the stage runs under the daily lock, pools frozen), paired with the claimablePool decrement
-PAIRED-CREDIT	claimablePool	_resumeEth	modules/DegenerusGameJackpotModule.sol	WRITE	winners' liabilityDelta aggregate; per-winner credits in _payEthQuadrant; funded by the current-pool debit in payDailyJackpot
+PAIRED-CREDIT	claimablePool	_resumeEth	modules/DegenerusGameJackpotModule.sol	WRITE	winners' liabilityDelta aggregate; per-winner credits in _payEthQuadrant; funded by the current-pool debit in runDailyJackpot
 POOL-TO-POOL	claimablePool	_settleShortfall	storage/DegenerusGameStorage.sol	WRITE	canonical spend waterfall (claimable then afking); the matching value destination is at each call site (D-01: pairing kept at call sites)
-POOL-TO-POOL	claimablePool	claimDeadVrf	modules/DegenerusGameGameOverModule.sol	WRITE	moves part of the fixed dead-ending pot (unallocated ETH left after handleGameOverDrain) into claimable; total bounded by deadPot (created share <= traits x perTrait, uncreated weight debited from the tally)
+POOL-TO-POOL	claimablePool	claimDeadVrf	modules/DegenerusGameGameOverModule.sol	WRITE	moves part of the fixed dead-ending pot (unallocated ETH left after _handleGameOverDrain) into claimable; total bounded by deadPot (created share <= traits x perTrait, uncreated weight debited from the tally)
 VALUE-IN	claimablePool	creditRedemptionDirect	modules/DegenerusGameLootboxModule.sol	WRITE	aggregate in tandem with the arriving value
 VALUE-IN	claimablePool	distributeYieldSurplus	modules/DegenerusGameJackpotModule.sol	WRITE	aggregate for the three sink credits (23% x3)
-DRAIN-ZERO	claimablePool	handleFinalSweep	modules/DegenerusGameGameOverModule.sol	WRITE	30-day final sweep: sinks paid their claimable, residual forfeited three-way, claims closed (GO_SWEPT)
+DRAIN-ZERO	claimablePool	_handleFinalSweep	modules/DegenerusGameGameOverModule.sol	WRITE	30-day final sweep: sinks paid their claimable, residual forfeited three-way, claims closed (GO_SWEPT)
 VALUE-OUT	claimablePool	pullRedemptionReserve	modules/DegenerusGameLootboxModule.sol	WRITE	redemption reserve segregated to sDGNRS: ETH transfers out; re-counted there as pendingRedemptionEthValue (boundary paired by RedemptionAccounting)
 VALUE-OUT	claimablePool	withdrawAfkingFunding	DegenerusGame.sol	WRITE	prepaid afking returned to funder; per-player afking half debited in tandem
 DECL	currentPrizePool	<file-scope>	storage/DegenerusGameStorage.sol	DECL	counted-term state variable declaration

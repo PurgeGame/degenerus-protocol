@@ -8,7 +8,6 @@ interface IJackpotBattle {
     function lockJackpotBattle(uint24 requestDay, uint256 pool, uint24 level) external;
     function prepareJackpotBattle(uint24 level, uint256 word) external returns (uint256 drawWord, uint256 cursor, uint256 remaining);
     function appendJackpotBattle(uint256[] calldata field, uint256 cursor, bool last) external;
-    function advanceJackpotBattle(uint64 budgetUnits) external returns (bool complete);
     function jackpotProgress() external view returns (uint64 slot, uint256 added, bool started, bool complete);
     function highRollerReserve() external view returns (uint256);
 }

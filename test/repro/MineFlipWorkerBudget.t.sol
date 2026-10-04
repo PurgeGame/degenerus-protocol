@@ -6,7 +6,7 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DecimatorBattleHarness} from "../fuzz/helpers/DecimatorBattleHarness.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {IDegenerusGameLootboxModule, IDegenerusGameDegeneretteModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
+import {IDegenerusGameDegeneretteModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
@@ -31,7 +31,7 @@ contract BudgetReadFixture is DegenerusGame {
     function cursor() external view returns (uint256) { return boxCursor; }
     function bet() external view returns (uint256) { return degeneretteQueue[_rngReadBuffer()][0]; }
     function workHuman(uint256 allowance) external returns (MineFlipGas.Result memory) {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
+        (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
             abi.encodeWithSignature("runHumanBoxWork(uint256)", allowance)
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
@@ -45,14 +45,6 @@ contract BudgetReadFixture is DegenerusGame {
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         return abi.decode(data, (MineFlipGas.Result));
     }
-    function sweep(uint256 allowance) external returns (uint256 opened, uint256 report) {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
-            abi.encodeWithSelector(IDegenerusGameLootboxModule.openHumanBoxes.selector, allowance)
-        );
-        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
-        return abi.decode(data, (uint256, uint256));
-    }
-
 }
 
 contract MineFlipHumanBudgetTest is DeployProtocol {

@@ -106,7 +106,7 @@ contract FoilGenerationCohortTest is Test {
         uint256 snapshot = vm.snapshotState();
         h.enqueue(A);
         h.commit(word);
-        h.processFoilDrain(900);
+        h.runFoilWork(gasleft());
         uint32[4] memory natural = h.lines(A);
         assertEq(uint8(natural[0] >> 24), 253);
         assertEq(h.entries(253), 1);
@@ -114,7 +114,7 @@ contract FoilGenerationCohortTest is Test {
         h.seedTaken(B);
         h.enqueue(A);
         h.commit(word);
-        h.processFoilDrain(900);
+        h.runFoilWork(gasleft());
         uint32[4] memory redirected = h.lines(A);
         uint256[256] memory counts;
         counts[253] = 1;
@@ -135,7 +135,7 @@ contract FoilGenerationCohortTest is Test {
         h.enqueue(A);
         h.commit(word);
         h.retire();
-        h.processFoilDrain(900);
+        h.runFoilWork(gasleft());
         uint32[4] memory lines = h.lines(A);
         for (uint256 i; i < 4; ++i) assertTrue(uint8(lines[i] >> 24) != 253);
         assertGe(uint8(lines[0] >> 24), 248);
@@ -174,21 +174,22 @@ contract FoilGenerationCohortTest is Test {
         assertEq(uint24(h.record(A)), 0, "purchase carries no day");
         h.commit(0xA11CE);
         h.enqueue(B);
-        (bool done, bool worked) = h.processFoilDrain(900);
+        MineFlipGas.Result memory r = h.runFoilWork(gasleft());
+        (bool done, bool worked) = (r.done, r.progressed);
         assertTrue(done && worked);
         assertTrue(h.record(A) & READY != 0);
         assertEq(h.record(B) & READY, 0, "later buy cannot use public word");
         assertEq(h.length(true), 0);
         assertEq(h.length(false), 1);
         h.commit(0xBEEF);
-        h.processFoilDrain(900);
+        h.runFoilWork(gasleft());
         assertTrue(h.record(B) & READY != 0);
     }
 
     function test_MaterializedLinesEqualAllSixteenEntryTraits() public {
         h.enqueue(A);
         h.commit(0xA11CE);
-        h.processFoilDrain(900);
+        h.runFoilWork(gasleft());
         uint32[4] memory lines = h.lines(A);
         uint256[256] memory counts;
         for (uint256 i; i < 4; ++i) {
@@ -218,7 +219,7 @@ contract FoilGenerationCohortTest is Test {
         assertTrue(first.progressed);
         vm.warp(vm.getBlockTimestamp() + 1 days);
         h.live();
-        h.processFoilDrain(900);
+        h.runFoilWork(gasleft());
         assertEq(uint24(h.record(A) >> 184), day);
         assertEq(uint24(h.record(B) >> 184), day + 1, "each pack gets its actual materialization day");
         assertFalse(h.pending());

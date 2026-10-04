@@ -19,7 +19,7 @@ import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
 ///         cohort larger than one write budget), each next call's `_prepareFutureTickets` probes the
 ///         empty future levels lvl+1..lvl+4; the empty-queue path of `processFutureTicketBatch`
 ///         (MintModule:325-328) does `ticketCursor = 0; ticketLevel = 0`, erasing the in-flight
-///         current-level cursor. `processTicketBatch(lvl)` then re-inits (MintModule:630-632) and
+///         current-level cursor. `runTicketWork(lvl)` then re-inits (MintModule:630-632) and
 ///         rescans from index 0, re-skipping the already-minted prefix at 1 budget unit each. New
 ///         progress per call decays 32, 29, 27, ... to zero once the skip prefix saturates the
 ///         358-unit cold budget: the mint cursor plateaus below the cohort size, the tail never
@@ -31,11 +31,10 @@ import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
 ///         in flight (`ticketLevel == lvl`), so the shared cursor is never reset mid-drain; future
 ///         levels are processed after the current drain clears the marker.
 ///
-///         SINCE SUPERSEDED (documented for history; no functional change to this test): a later
-///         revision folded `_prepareFutureTickets` and the near-window drain into one function,
-///         `processTicketBatch`. There is no standalone future-ticket prep step any more — the
-///         far-future continuation (now the private `_processFutureTicketBatch`, reachable only
-///         through `processTicketBatch`) is structurally unreachable until the near-window loop
+///         CURRENT: `_prepareFutureTickets` and the near-window drain are one function,
+///         `runTicketWork`. There is no standalone future-ticket prep step — the
+///         far-future continuation (the private `_processFutureTicketBatch`, reachable only
+///         through `runTicketWork`) is structurally unreachable until the near-window loop
 ///         has returned (idx >= total for every windowed level), so the shared cursor can never
 ///         be clobbered mid-drain by construction. This test still exercises that invariant end
 ///         to end via real `game.purchase`/`mineFlip` calls, so it needed no changes here.

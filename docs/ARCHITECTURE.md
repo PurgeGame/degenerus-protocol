@@ -157,7 +157,10 @@ Timed player claims retain their own required results independently.
 
 The VRF callback authenticates the active request, adds the frozen daily nudge
 count (0..255, stored in slot 0), and writes only the final word. Midday requests
-apply no daily nudge. Final values 0 and 1 are refused and remain retryable;
+apply no daily nudge. A mid-day request is issued only by `mineFlip`: an empty queue never
+requests; pending work at or above the ETH threshold requests at no charge; pending work
+below it (FLIP-only included) requests only when the `mineFlip` caller's donated LINK
+credit covers the charge, which it then spends. A closed craps window waives both gates. Final values 0 and 1 are refused and remain retryable;
 1 is the nonzero waiting sentinel. Mandatory keeper publication emits the applied
 word and performs nudge/request cleanup outside the LINK-funded callback. Request
 ID and timestamp retain nonzero idle values; the active flag controls authority.
@@ -500,8 +503,8 @@ freeze.
 
 The keeper leg receives at most 2,500 work units less prior box scanning, charges actual
 roll and heap work, and permits at most one bounded run to overshoot. Final ranking and
-credits use separate bounded calls. `settleDecimatorWinners` provides a permissionless,
-unrewarded progress path during RNG locks. Settlement stops at game over; the ending
+credits use separate bounded calls, all inside `mineFlip`'s Decimator stage. Settlement
+stops at game over; the ending
 does not wait for the battle queue. Uncredited reservations remain in `claimablePool`
 until the final sweep releases them.
 

@@ -28,7 +28,7 @@ import {RngWindowFreezeHandler} from "../handlers/RngWindowFreezeHandler.sol";
 ///                                                       not a seed — a non-VRF in-window read is its own
 ///                                                       bug class).
 ///
-///         THE MID-DAY LOOTBOX WINDOW (second window shape). requestLootboxRng opens a lootbox-only
+///         THE MID-DAY LOOTBOX WINDOW (second window shape). mineFlip's mid-day request opens a lootbox-only
 ///         VRF window that sets NEITHER rngLockedFlag NOR prizePoolFrozen — the in-flight marker is
 ///         rngRequestTime != 0 with rngLocked() == false. Its pending consumption (the mid-day
 ///         rawFulfillRandomWords branch + the next advance's frozen ticket batch) reads its own
@@ -66,7 +66,7 @@ contract RngWindowFreeze is DeployProtocol {
         handler = new RngWindowFreezeHandler(game, mockVRF, 5);
         targetContract(address(handler));
 
-        // requestLootboxRng gates on the VRF subscription holding >= 40 LINK; DeployProtocol does
+        // the mid-day request gates on the VRF subscription holding >= 40 LINK; DeployProtocol does
         // not fund the mock subscription (subId 1 — the Admin constructor's createSubscription).
         // Fund it here so the mid-day window driver can actually open the lootbox window.
         mockVRF.fundSubscription(1, 100e18);
@@ -223,7 +223,7 @@ contract RngWindowFreeze is DeployProtocol {
     // MID-DAY LOOTBOX WINDOW: focused non-vacuity + falsifiability
     // =========================================================================
 
-    /// @notice Directly drives the handler through one MID-DAY cycle — open (requestLootboxRng in
+    /// @notice Directly drives the handler through one MID-DAY cycle — open (mineFlip's mid-day request in
     ///         flight, daily lock NOT held) → the three in-window player actions → close (the
     ///         mid-day fulfillment lands the word directly) — and asserts the mid-day non-vacuity
     ///         counters move while the freeze property holds. Proves the mid-day window machinery

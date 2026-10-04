@@ -7,7 +7,7 @@ import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGame
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
-/// @dev Extends the production ticket module so the live `processTicketBatch` drains into THIS
+/// @dev Extends the production ticket module so the live `runTicketWork` drains into THIS
 ///      contract's packed buckets; adds lane-level seeders and decoders only.
 contract BucketLaneHarness is DegenerusGameTicketModule {
     /// @dev The ticket module answers the liveness tail through the Game's view; this harness is
@@ -76,7 +76,7 @@ contract BucketLaneHarness is DegenerusGameTicketModule {
     /// @dev One player owing `owed` entries in the read-slot queue for `lvl`, cursor reset.
     function seedQueue(uint24 lvl, address p, uint32 owed) external {
         // The live mint window ends at game level + 1. Put this queue at its
-        // edge so processTicketBatch(lvl + 1) exercises the real sweep.
+        // edge so runTicketWork(lvl + 1, ...) exercises the real sweep.
         level = lvl - 1;
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12);
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((uint48(0) + 1) & 1) << 12);
@@ -170,7 +170,7 @@ contract BucketLanePacking is Test {
         uint256 calls;
         bool finished;
         while (!finished) {
-            (finished, ) = h.processTicketBatch{gas: 2_000_000}(lvl + 1);
+            finished = h.runTicketWork{gas: 2_000_000}(lvl + 1, 2_000_000).done;
             ++calls;
             assertLt(calls, 64, "drain did not finish");
         }

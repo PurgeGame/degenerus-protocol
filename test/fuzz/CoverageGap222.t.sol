@@ -1428,7 +1428,7 @@ contract CoverageGap222 is DeployProtocol {
 
     // ====================================================================
     //  SECTION N: Jackpot-module delegation paths.
-    //             game.runTerminalJackpot / runDecimatorJackpot /
+    //             game.runTerminalJackpotWork / runDecimatorJackpot /
     //             runBafJackpot are self-call-guarded (msg.sender must be
     //             address(this) in delegatecall frame). An EOA call must
     //             revert — exercises the guard branch (D-14).
@@ -1454,18 +1454,20 @@ contract CoverageGap222 is DeployProtocol {
             )
         );
         vm.prank(buyer);
-        (bool o4, ) = address(game).call(
+        (bool o4, bytes memory e4) = address(game).call(
             abi.encodeWithSignature(
-                "runTerminalJackpot(uint256,uint24,uint256)",
+                "runTerminalJackpotWork(uint256,uint24,uint256,uint256)",
                 uint256(1 ether),
                 uint24(0),
-                uint256(1)
+                uint256(1),
+                uint256(1_000_000)
             )
         );
         // All EOA calls must revert (self-call guard: msg.sender != address(this)).
         assertFalse(o1, "game.runDecimatorJackpot rejected external caller");
         assertFalse(o2, "game.runBafJackpot rejected external caller");
-        assertFalse(o4, "game.runTerminalJackpot rejected external caller");
+        assertFalse(o4, "game.runTerminalJackpotWork rejected external caller");
+        assertEq(bytes4(e4), bytes4(keccak256("OnlySelf()")), "the terminal worker's own self-call guard refused it");
     }
 
     function test_gap_game_resolveRedemptionLootbox_guard() public {
@@ -1537,13 +1539,8 @@ contract CoverageGap222 is DeployProtocol {
                 kh
             )
         );
-        vm.prank(buyer);
-        (bool o3, ) = address(game).call(
-            abi.encodeWithSignature("requestLootboxRng()")
-        );
         assertFalse(o1, "game.wireVrf rejected non-admin caller");
         assertFalse(o2, "game.updateVrfCoordinatorAndSub rejected non-admin caller");
-        assertFalse(o3, "game.requestLootboxRng rejected non-authorized caller");
     }
 
     function test_gap_game_whalePurchases() public {

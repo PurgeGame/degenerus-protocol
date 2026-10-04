@@ -24,7 +24,7 @@ import sys
 
 EXEMPT_ADVANCE = {
     "applyDailyGap", "applyDailyWord", "runDailyPhase", "prepareRequestBoundary",
-    "publishRng", "requestDailyRng", "requestLootboxRng", "_requestLootboxRng", "retryRng",
+    "publishRng", "requestDailyRng", "_requestLootboxRng", "retryRng",
     "_applyDailyRng", "_finalizeLootboxRng", "_backfillGapDays",
     "_handleGameOverAdvance", "_handleGameOverPath", "_handleGameOverDrain",
     "_requestTerminalRng", "_applyTerminalRng", "_resumeTerminalPayout",

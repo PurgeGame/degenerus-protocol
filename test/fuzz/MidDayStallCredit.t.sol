@@ -8,6 +8,8 @@ import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
 // MidDayStallCredit — the deadline credit for a VRF stall on a MID-DAY request (audit A-1),
 // compared against the daily path, the coordinator-swap rescue, unattended gaps, the deadman,
@@ -170,24 +172,35 @@ abstract contract StallCreditBase is DeployProtocol {
         revert("harness: day never sealed");
     }
 
-    /// @dev A mid-day request from a funded donor: the credit waives the pending-value gates, so
-    ///      the request needs no lootbox queue and leaves no craps residue.
+    /// @dev A mid-day request from a funded donor: one minimum box keeps the queue far below the
+    ///      threshold and the pool target, and the donor's credit pays the threshold gate on the
+    ///      donor's own mineFlip, so the request leaves no craps residue.
     function _middayRequest() internal returns (uint256 id) {
         _finishReadConsumers();
+        uint256 prior = vrf.lastRequestId();
         _donorRequest();
         id = vrf.lastRequestId();
+        assertGt(id, prior, "harness: the donor's mineFlip issued the mid-day request");
         (uint48 t, uint256 live) = _stamps();
         assertEq(live, id, "harness: mid-day request in flight");
         assertTrue(t != 0, "harness: stamped");
     }
 
+    /// @dev Ends on the donor's mineFlip, so `vm.lastCallGas()` reads the request call.
     function _donorRequest() internal {
         address donor = makeAddr("midday-donor");
+        vm.deal(donor, 1 ether);
+        vm.prank(donor);
+        game.purchase{value: 0.01 ether}(
+            donor, 0, BoxOrderLib.boCustom(0.01 ether), bytes32(0), MintPaymentKind.DirectEth, false
+        );
         mockFeed.setUpdatedAt(block.timestamp); // the credit charge prices off a fresh feed
         vm.prank(ContractAddresses.ADMIN);
         game.creditMiddayRng(donor, 1 ether);
         vm.prank(donor);
-        game.requestLootboxRng();
+        assertEq(game.minerAction(), 18, "harness: the donor's next engine action is the mid-day request");
+        vm.prank(donor);
+        game.mineFlip();
     }
 
     function _warpDays(uint256 n) internal {
@@ -248,9 +261,12 @@ contract MidDayStallCreditTest is StallCreditBase {
 
         _answer();
         assertFalse(game.livenessTriggered(), "a recovered mid-day stall must not read as an unattended gap");
-        vm.expectRevert();
+        // Today holds no word yet: no second mid-day request can replace the stamp, for an
+        // ordinary caller or for the donor still holding credit.
         vm.prank(stranger);
-        game.requestLootboxRng(); // today holds no word yet: no second mid-day request can replace the stamp
+        assertTrue(game.minerAction() != 18, "no mid-day request is selectable for a stranger");
+        vm.prank(makeAddr("midday-donor"));
+        assertTrue(game.minerAction() != 18, "nor for a credited donor");
 
         _catchUp(w);
         (uint24 psd1, uint24 idx1) = _clock();
@@ -440,7 +456,8 @@ contract MidDayStallCreditTest is StallCreditBase {
         assertTrue(game.rngLocked(), "the day's fresh daily request went out");
         (uint48 t,) = _stamps();
         assertEq(game.currentDayView(), _dayOf(t), "stamped today");
-        assertEq(t & 1, 0, "its retry unspent");
+        // rngFlagsAndNudges bit 10 (slot-0 bit 250) is the request's retry-spent flag.
+        assertEq((uint256(vm.load(address(game), bytes32(0))) >> 250) & 1, 0, "its retry unspent");
         _catchUp(x + 1);
     }
 

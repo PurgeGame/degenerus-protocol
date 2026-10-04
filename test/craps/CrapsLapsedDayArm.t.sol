@@ -8,6 +8,8 @@ import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {CrapsViews} from "./CrapsViews.sol";
 import {CrapsPins} from "./CrapsPins.sol";
+import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
 contract LapseArmHarness is CrapsViews {
     function fieldOf(bytes32 key) external view returns (uint256 entrants, uint256 resolved) {
@@ -130,7 +132,7 @@ contract CrapsLapsedDayArmTest is CrapsPins {
         uint256 laneBefore = flip.compLane();
         vm.recordLogs();
         for (uint256 i = 0; i < 8 && craps.keeperSlot() < daySlotG + 8; ++i) {
-            craps.keepScheduled(type(uint64).max);
+            _crank(craps);
         }
         Vm.Log[] memory sweepLogs = vm.getRecordedLogs();
         assertGe(craps.keeperSlot(), daySlotG + 8, "the keeper did not cross G");
@@ -193,7 +195,7 @@ contract CrapsLapsedDayArmTest is CrapsPins {
 
         // Now the keeper sweeps G as lapsed and refunds the seat the refused arm never touched.
         for (uint256 i = 0; i < 8 && craps.keeperSlot() < daySlotG + 8; ++i) {
-            craps.keepScheduled(type(uint64).max);
+            _crank(craps);
         }
         (uint256 aN,) = craps.passCreditsOf(alice);
         assertEq(aN, 1, "alice's reservation was not refunded as a pass");
@@ -271,7 +273,7 @@ contract CrapsLapsedDayArmTest is CrapsPins {
         uint256 laneBefore = flip.compLane();
         uint256 daveBefore = coinflip.staked(dave);
         for (uint256 i = 0; i < 8 && craps.keeperSlot() < daySlotG + 8; ++i) {
-            craps.keepScheduled(type(uint64).max);
+            _crank(craps);
         }
         assertGe(craps.keeperSlot(), daySlotG + 8, "the keeper did not cross G");
         assertEq(coinflip.staked(dave), daveBefore, "the seat's winner was credited FLIP directly");
@@ -285,8 +287,8 @@ contract CrapsLapsedDayArmTest is CrapsPins {
     function test_lapsedWindowRefundsResumeAcrossCalls() public {
         uint24 dayG = craps.currentDayIndex() + 1;
         uint64 daySlotG = uint64(uint256(dayG) * craps.BONUS_SLOTS_PER_DAY());
-        // Enough real reservations to cross physical-gas checkpoints; the legacy
-        // keepScheduled argument intentionally no longer controls work quantity.
+        // Enough real reservations to cross physical-gas checkpoints: only the gas the
+        // maintenance worker is handed decides how much one call refunds.
         uint256 seatsPerWindow = 64;
         vm.startPrank(ContractAddresses.VAULT);
         for (uint256 i; i < seatsPerWindow; ++i) {
@@ -295,15 +297,16 @@ contract CrapsLapsedDayArmTest is CrapsPins {
         }
         vm.stopPrank();
         _lapse(dayG);
-        while (craps.keeperSlot() < daySlotG) craps.keepScheduled(type(uint64).max);
+        while (craps.keeperSlot() < daySlotG) _crank(craps);
         uint256 laneBefore = flip.compLane();
         uint256 expected = seatsPerWindow * (ROUTINE_WINDOW_PRICE + TAIL_WINDOW_PRICE * 21);
         uint256 calls;
         uint256 priorRefunds;
         while (craps.keeperSlot() < daySlotG + 8) {
             vm.cool(address(craps));
-            (bool progressed,) = craps.keepScheduled{gas: 400_000}(8);
-            assertTrue(progressed, "sufficient supplied gas must advance frozen refund frontier");
+            vm.prank(ContractAddresses.GAME);
+            MineFlipGas.Result memory step = JackpotBattle(address(craps)).runCrapsMaintenance{gas: 400_000}(400_000);
+            assertTrue(step.progressed, "sufficient supplied gas must advance frozen refund frontier");
             uint256 refunded = flip.compLane() - laneBefore;
             assertGe(refunded, priorRefunds, "refund checkpoints cannot debit earlier credits");
             assertLe(refunded, expected, "no checkpoint can double-refund");
@@ -314,7 +317,7 @@ contract CrapsLapsedDayArmTest is CrapsPins {
         assertEq(flip.compLane() - laneBefore, expected, "each comp refunded exactly once at its own price");
         assertEq(craps.bonusCursorOf(daySlotG + 2), seatsPerWindow);
         assertEq(craps.bonusCursorOf(daySlotG + 6), seatsPerWindow);
-        craps.keepScheduled(type(uint64).max);
+        _crank(craps);
         assertEq(flip.compLane() - laneBefore, expected, "later maintenance cannot replay lapsed refunds");
     }
 

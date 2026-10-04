@@ -173,7 +173,7 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
         if (delay) vm.warp(start + 2 days);
         uint8 battleStage = phase ? 16 : 17;
         vm.expectCall(ContractAddresses.CRAPS, abi.encodeWithSelector(IJackpotBattle.appendJackpotBattle.selector));
-        // Settlement runs through the metered daily battle worker (was advanceJackpotBattle).
+        // Settlement runs through the metered daily battle worker.
         vm.expectCall(ContractAddresses.CRAPS, abi.encodeWithSignature("runDailyBattleWork(uint256)"));
         uint256 maxGas;
         uint256 count;

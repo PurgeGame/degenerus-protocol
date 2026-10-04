@@ -178,16 +178,6 @@ contract AfKingSubscription is DeployProtocol {
         assertEq(credits, 1, "exactly one bounty creditFlip per mineFlip tx, never per item (REW-02)");
     }
 
-    /// @notice REW-02 tail: a standalone `autoOpen` is UNREWARDED — only mineFlip() credits. An
-    ///         autoOpen with no openable boxes is a NO-OP that emits no creditFlip.
-    function testAutoOpenIsUnrewardedNoOp() public {
-        address keeper = makeAddr("autoopen_keeper");
-        vm.recordLogs();
-        vm.prank(keeper);
-        game.openBoxes(0); // no openable boxes -> no-op; UNREWARDED regardless
-        assertEq(_countCreditFlipTo(keeper), 0, "standalone autoOpen pays no bounty (UNREWARDED)");
-    }
-
     // =========================================================================
     // Task 3d — OPEN-E cross-account subscribe-only auth (OPENE-04)
     // =========================================================================

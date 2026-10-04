@@ -50,7 +50,7 @@ contract VRFPathHandler is Test {
     uint256 public calls_advanceGame;
     uint256 public calls_fulfillVrf;
     uint256 public calls_coordinatorSwap;
-    uint256 public calls_requestLootboxRng;
+    uint256 public calls_requestMidday;
     uint256 public calls_warpTime;
 
     /// @dev Read lootboxRngIndex directly from storage slot 34 (low 48 bits of lootboxRngPacked)
@@ -265,17 +265,20 @@ contract VRFPathHandler is Test {
         }
     }
 
-    /// @notice Request mid-day lootbox RNG while tracking index lifecycle
-    function requestLootboxRng() external {
-        calls_requestLootboxRng++;
+    /// @notice Request mid-day lootbox RNG through mineFlip, its only door, while tracking the
+    ///         index lifecycle. Mines only when the request is the engine's next action, so the
+    ///         call is the request alone.
+    function requestMidday() external {
+        calls_requestMidday++;
 
         if (game.gameOver() || game.rngLocked()) return;
+        if (game.nextMinerAction() != 18) return;
 
         uint48 indexBefore = _lootboxRngIndex();
         uint256 reqBefore = vrf.lastRequestId();
         bool unansweredBefore = _unansweredRequest();
 
-        try game.requestLootboxRng() {} catch {
+        try game.mineFlip() {} catch {
             return;
         }
 

@@ -139,7 +139,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     uint256 internal constant _BOOST_ACTION_BPS = 1200;
     uint256 internal constant _BPS_DENOMINATOR = 10_000;
 
-    /// @notice THE ABSOLUTE SEAT CEILING for one `_resolveSlot` call, independent of whatever
+    /// @notice THE ABSOLUTE SEAT CEILING for one `resolveRngSlot` call, independent of whatever
     ///         budget the caller supplies. It bounds the two credit arrays and the loop counter,
     ///         so one call can never be made to allocate or iterate without limit — and it is the
     ///         only bound that does not depend on gas being measured correctly.
@@ -170,24 +170,13 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         return IGameCrapsWorkStage(_GAME).rngConsumerStage();
     }
 
-    /// @dev Both public custom settlement and scheduled settlement must take the
-    /// same oldest committed field. Already-paid historical slots are checked by
-    /// their callers before this live-cohort guard.
-    function _readCrapsFrontier(uint64 slot) internal view returns (bool) {
-        uint48 bound = _slotIndex[slot];
-        if (bound == 0 || bound > 2 || _readCrapsStage() != 6) return false;
-        uint48 index = bound - 1;
-        uint64 pos = _rngSlotCursor[index];
-        return _rngPending[index] != 0 && pos < _rngSlots[index].length && _rngSlots[index][pos] == slot;
-    }
-
     /// @notice How many days of action a budget is drawn from.
     uint256 internal constant _BOOST_ACTION_WINDOW_DAYS = 7;
 
-    /// @notice The most cheap cursor hops one `keepScheduled` call may take — finalized windows,
-    ///         empty armed fields and day separators crossed without doing real work. Two days'
-    ///         worth of slots, so a backlog of externally-settled days still clears at a bounded
-    ///         and predictable per-call cost.
+    /// @notice The most cheap cursor hops one maintenance or read-cohort batch may take —
+    ///         finalized windows, empty armed fields and day separators crossed without doing
+    ///         real work. Two days' worth of slots, so a backlog of windows the read-cohort stage
+    ///         already settled clears at a bounded and predictable per-call cost.
     uint256 internal constant _KEEP_MAX_HOPS = 16;
 
     /// @notice THE DAILY BASE SUBSIDY, ADDED and never a floor. Every opened day puts this up on

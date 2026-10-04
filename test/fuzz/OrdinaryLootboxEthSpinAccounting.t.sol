@@ -27,6 +27,7 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
     bytes32 private constant OPENED = keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
     bytes32 private constant DGNRS_BATCH = keccak256("LootBoxDgnrsBatch(address,uint256,uint256)");
     bytes32 private constant CAPPED = keccak256("PayoutCapped(address,uint256,uint256)");
+    bytes32 private constant MINER_WORK = keccak256("MinerWork(address,uint8,uint256,uint256)");
 
     struct Expected {
         uint256 spinSeed;
@@ -235,6 +236,26 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         }
     }
 
+    /// @dev The FLIP a single recorded mineFlip paid its caller (MinerWork.flipReward).
+    function _minerReward(Vm.Log[] memory logs) private view returns (uint256 reward) {
+        uint256 seen;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter == address(game) && logs[i].topics.length != 0 && logs[i].topics[0] == MINER_WORK) {
+                (,, reward) = abi.decode(logs[i].data, (uint8, uint256, uint256));
+                ++seen;
+            }
+        }
+        assertEq(seen, 1, "one MinerWork per mineFlip");
+    }
+
+    /// @dev Box results (spin or opened box) emitted by the game in a recorded window.
+    function _boxResults(Vm.Log[] memory logs) private view returns (uint256 n) {
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(game) || logs[i].topics.length == 0) continue;
+            if (logs[i].topics[0] == SPIN || logs[i].topics[0] == OPENED) ++n;
+        }
+    }
+
     function _assertEvents(Vm.Log[] memory logs, Expected memory e) private view {
         uint256 spins;
         uint256 children;
@@ -287,14 +308,15 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         _buy(1 ether);
         uint256 committed = 1 | (uint256(1) << 24) | (uint256(1) << 105) | (uint256(1_000_000) << 113);
         assertEq(_order(index), committed, "real purchase committed level one, score one, one unboosted box");
-        game.requestLootboxRng();
+        // The purchase's pending ETH clears the threshold: the engine's mid-day request.
+        game.mineFlip();
         uint256 request = mockVRF.lastRequestId();
         assertGt(request, 0);
         (,, bool fulfilled) = mockVRF.pendingRequests(request);
         assertFalse(fulfilled);
         mockVRF.fulfillRandomWords(request, WORD);
         // Publish the delivered midday word, in minimal checkpoints, up to the cohort's
-        // human-box stage: the committed order is then the next read consumer for openBoxes.
+        // human-box stage: the committed order is then mineFlip's next read consumer.
         for (uint256 i; i < 100 && game.nextMinerAction() != 10; ++i) _stepMinimal(); // HumanBoxes
         assertEq(game.nextMinerAction(), 10, "the committed order is the next read consumer");
         assertEq(_order(index), committed, "publication alone opens nothing");
@@ -313,10 +335,14 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         assertGt(e.cash, 0);
         assertGt(e.childDgnrs, 0);
         if (laterPurchase) assertGt(e.cash, initialFuture / 10, "live cap changed with successful second purchase");
+        uint256 keeperFlip = coinflip.coinflipAmount(KEEPER);
         vm.recordLogs();
         vm.prank(KEEPER);
-        assertEq(game.openBoxes(type(uint256).max), 1, "exactly one committed ordinary box consumed");
-        _assertEvents(vm.getRecordedLogs(), e);
+        game.mineFlip();
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        // One parent spin and its one recirculated child: exactly one committed ordinary box consumed.
+        _assertEvents(logs, e);
+        uint256 keeperReward = _minerReward(logs);
         Balances memory afterState = _balances();
         assertEq(afterState.future + e.cash, beforeState.future, "future pool cash debit");
         assertEq(afterState.liability, beforeState.liability + e.cash, "matching funded claimable liability");
@@ -347,10 +373,15 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         }
         assertEq(game.claimableWinningsOf(KEEPER), 0);
         assertEq(sdgnrs.balanceOf(KEEPER), 0);
-        assertEq(coinflip.coinflipAmount(KEEPER), 0);
+        assertEq(coinflip.coinflipAmount(KEEPER), keeperFlip + keeperReward, "the keeper's only FLIP is its measured miner reward");
         assertEq(_order(index), 0);
         assertEq(_order((index ^ 1)), nextOrder, "unrevealed second purchase survives child settlement");
-        assertEq(game.openBoxes(type(uint256).max), 0, "spent parent and child cannot replay");
+        // Replay probe: whatever the engine does next (or NoWork / a pending word), it opens nothing.
+        vm.recordLogs();
+        vm.prank(KEEPER);
+        (bool replayed,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+        replayed;
+        assertEq(_boxResults(vm.getRecordedLogs()), 0, "spent parent and child cannot replay");
         assertEq(keccak256(abi.encode(_balances())), keccak256(abi.encode(afterState)), "replay has no balance effects");
 
         uint256 withdrawable = afterState.claimable - 1;

@@ -11,53 +11,23 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title OpenWalkCompositionGas -- baseline gas measurements for the permissionless box-open
-///        path (`game.mineFlip()`'s box-open leg, `GameAfkingModule._autoOpen` + the human
-///        `openHumanBoxes` sweep), calibrating how the subscriber-RING SCAN cost composes with
-///        the human box sweep. These are neutral engineering measurements for a planned
-///        refactor's work-budget weights -- NOT a regression gate; loose assertions only.
+///        path: `game.mineFlip()`'s afking stage (`GameAfkingModule.runAfkingWork`) and human-box
+///        stage (`GameAfkingModule.runHumanBoxWork`). These are neutral engineering measurements
+///        -- NOT a regression gate; loose assertions only.
 ///
-/// @notice The subject under measurement (`GameAfkingModule._autoOpen`, GameAfkingModule.sol:1562):
-///         `mineFlip()`'s OPEN branch first calls `_autoOpen(OPEN_BATCH)` (the afking leg), which
-///         does a FULL-RING SCAN: `while (scanned < len && opened < maxCount)` visits up to `len`
-///         (the WHOLE `_subscribers` set) even when every box is already opened -- a 0-open result
-///         means the whole ring was walked, not just `[cursor, len)` (GameAfkingModule.sol:1583-1588
-///         "Full-ring scan" comment). Each visited-but-already-opened sub costs one skip: an
-///         `_subscribers[cursor]` SLOAD + the packed `Sub` slot's `lastOpenedDay`/`lastAutoBoughtDay`
-///         SLOAD + compare, `continue`. Post box-order-migration, the human sweep only runs when
-///         the afking leg opened NOTHING (`opened == 0` — a pure scan, no real afking open): it
-///         then gets the REMAINING shared walk budget (`OPEN_WEIGHT_BUDGET - unitsUsed`) directly,
-///         in the same walk-unit currency, consuming its own opens+skips+index-header steps
-///         (`openHumanBoxes`, delegatecalled into `DegenerusGameLootboxModule`). If the afking leg
-///         DID open a real box, the human sweep gets ZERO budget and does not run in that call at
-///         all — the two legs never stack a real afking open with a human sweep in one tx
-///         (a deliberate gas-safety change; see testWorstMixSkipWallPlusHumanSweepComposition's
-///         skip reason). If NEITHER leg does real work (no afking open, no human open, no
-///         human-frontier skip-advance) `mineFlip()` reverts `NoWork()` -- so a caller still PAYS
-///         for the whole ring scan even on a "nothing to do" call.
+/// @notice The subject under measurement is the caller-paid cost of a `mineFlip()` that finds
+///         nothing to do on a large, fully drained subscriber ring. The afking stage answers
+///         "any afking work?" from the `_pendingBoxCount` counter in O(1) rather than walking
+///         `_subscribers`, so the probe -- a `mineFlip()` that reverts `NoWork()` -- must cost
+///         the same at every ring size.
 ///
 /// @notice Measurements (loose asserts only -- this is a baseline RECORDER, not a tight gate):
-///         (1) per-skip marginal: the ring-scan cost per ALREADY-OPENED subscriber, derived from
-///             three independently-built fully-drained rings at N = 100 / 500 / 998 new subs
-///             (+2 permanent deploy subs [VAULT, sDGNRS] = ring sizes 102 / 502 / 1000) via
-///             (gas(N2) - gas(N1)) / (N2 - N1). Measured by a LOW-LEVEL call that reverts NoWork()
-///             (no human backlog exists in this fixture), bracketing gasleft before/after -- the
-///             call still pays the full ring-scan cost before reverting, so this isolates the pure
-///             scan-and-skip cost per subscriber (Approach chosen per the task brief's first option:
-///             "measure via ... a low-level call recording gasleft before/after").
-///         (2) drained-scan + human-sweep composition: a 1000-subscriber fully-drained ring PLUS
-///             a queue of 90 pending human lootboxes (>= the OPEN_BATCH=80 remaining budget once
-///             the afking leg opens 0), so the human sweep consumes its full 80-step budget in the
-///             SAME `mineFlip()` call as the drained-ring scan. Measures the total call gas
-///             (a SUCCESSFUL mineFlip(), not a revert).
-///         (3) NoWork probe cost: 1000 drained subscribers, ZERO human work -- the caller-paid cost
-///             to discover there is nothing to do (`mineFlip()` reverts `NoWork()`). Measured via a
-///             low-level call recording gasleft before/after (same technique as (1), and in fact the
-///             SAME fixture shape as (1)'s N=1000 case, rebuilt standalone here as its own labeled
-///             measurement per the task brief).
-///         (4) afking open marginal: gas per afking box actually materialized (a READY, un-opened,
-///             dense ring) -- reuses the `V56AfkingGasMarginal._measureOpenLegGas` N-vs-(N-1)
-///             snapshot/revert idiom verbatim (ported, not imported -- test contracts do not share
-///             state).
+///         (1) per-skip marginal: three independently built, fully drained rings at N = 100 /
+///             500 / 998 new subs (+2 permanent deploy subs [VAULT, sDGNRS] = ring sizes
+///             102 / 502 / 1000), each probed by a LOW-LEVEL `mineFlip()` call that reverts
+///             `NoWork()`, bracketing gasleft before/after; the spread across sizes must stay flat.
+///         (3) NoWork probe cost: the same shape at 1000 drained subscribers, as its own labeled
+///             measurement.
 ///
 /// @notice 21,064 intrinsic-gas context: Foundry's `gasBefore - gasleft()` delta EXCLUDES the
 ///         21,064 base intrinsic-transaction gas (21,000 base + ~64 for the 4-byte selector
@@ -241,18 +211,12 @@ contract OpenWalkCompositionGas is DeployProtocol {
         require(!game.advanceDue(), "fixture: clean before the drain");
 
         uint256 ringSize = _subscriberCount();
-        // maxCount = a generous multiple of ringSize + a flat pad. Each lootbox-mode sub carries
-        // BOTH an afking-cover box AND a real human lootbox box after the STAGE, so this drain
-        // must clear the afking leg AND fully open every one of those ~ringSize human boxes AND
-        // walk (and commit) past every EMPTY finalized lootbox index the day-advances accumulated
-        // — otherwise the probe below finds either an un-drained human box (real, non-reverting
-        // work) or an un-caught-up frontier (also non-reverting), and `mineFlip()` does not
-        // revert NoWork. openBoxes' human leg converts its remaining COUNT-like budget to WALK
-        // units at OPEN_HUMAN_ENTRY_WEIGHT(15), while each single-box human entry costs
-        // OPEN_HUMAN_ENTRY_WEIGHT+OPEN_HUMAN_BOX_WEIGHT(21) walk units — a >1x pad on ringSize
-        // alone is not enough headroom once the afking leg's own budget draw is netted out.
-        vm.prank(makeAddr(string(abi.encodePacked(prefix, "drain"))));
-        game.openBoxes(ringSize * 3 + 5_000);
+        // Each lootbox-mode sub carries BOTH an afking-cover box AND a real human lootbox box
+        // after the STAGE, so the drain must clear the afking stage AND open every one of those
+        // ~ringSize human boxes — otherwise the probe below finds real, non-reverting work and
+        // `mineFlip()` does not revert NoWork. mineFlip opens them in its own stage order until it
+        // reports no work (or waits on a word it requested).
+        _mineAll(ringSize + 256);
         require(_countPendingAfking() == 0, "fixture: ring fully drained pre-probe");
 
         _coolProtocol();
@@ -266,8 +230,9 @@ contract OpenWalkCompositionGas is DeployProtocol {
             _settleClean(uint256(keccak256(abi.encode(prefix, "quiet-clean", i))) | 1);
             _finishReadConsumers();
             if (!game.advanceDue() && !game.isRngFulfilled() && !game.rngLocked()) {
-                (bool moved,) = crapsBattle.keepScheduled(type(uint64).max);
-                if (!moved) break;
+                // Whatever the engine still finds (read-cohort settlement, maintenance, a mid-day
+                // request) runs here; a NoWork revert means the crank is quiet.
+                try game.mineFlip() {} catch { break; }
             }
         }
         _coolProtocol();

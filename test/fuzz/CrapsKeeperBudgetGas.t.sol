@@ -137,7 +137,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         assertEq(workEvents, 1);
         assertGe(measured, 1_000_000);
         uint256 rate = baseFee < 0.5 gwei ? baseFee : 0.5 gwei;
-        assertEq(reward, (measured - 1_000_000) * rate * 1000 ether * 3000 * lockFactor / (price * 10_000));
+        assertEq(reward, _wholeFlip((measured - 1_000_000) * rate * 1000 ether * 3000 * lockFactor / (price * 10_000)));
         assertEq(coinflip.coinflipAmount(MINER) - prior, reward);
         if (crapsBattle.bonusCursorOf(slot) < FIELD) _finish(14_000_000, true);
         assertEq(crapsBattle.bonusCursorOf(slot), FIELD);
@@ -227,8 +227,17 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         assertGt(request, prior);
     }
 
-    function _readyAt() private view returns (uint48) {
-        return uint48(uint256(vm.load(address(game), bytes32(uint256(33)))));
+    /// @dev Coinflip stakes are whole FLIP: a positive priced reward pays at least 1 FLIP and
+    ///      larger rewards floor to whole FLIP (DegenerusGameMinerModule.mineFlip).
+    function _wholeFlip(uint256 priced) private pure returns (uint256) {
+        if (priced == 0) return 0;
+        return priced < 1 ether ? 1 ether : (priced / 1 ether) * 1 ether;
+    }
+
+    /// @dev The miner reward clock's origin: `rngRequestTime`, slot 0 bits 48..95. The engine
+    ///      prices a call from the later of this and the current day reset.
+    function _requestedAt() private view returns (uint48) {
+        return uint48(uint256(vm.load(address(game), bytes32(0))) >> 48);
     }
 
     function test_VaultOwnerAndOrdinaryMinerBothWaitForAdministrativeRetry() public {
@@ -250,20 +259,23 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         assertEq(mockVRF.lastRequestId(), request, "neither caller can retry through mining");
     }
 
-    function test_CallbackAgeSurvivesNoopPartialWorkAndOnlyAcceptedReplacementResetsIt() public {
-        uint48 ready = _readyAt();
-        assertEq(ready, vm.getBlockTimestamp(), "accepted callback stamps the read cohort");
+    /// @dev The reward clock runs from the request: callbacks — duplicate, wrong-id, reserved or
+    ///      accepted — never move it, nor do no-op checkpoints or partial work; only the next
+    ///      request restarts it.
+    function test_RequestAgeSurvivesCallbacksNoopAndPartialWorkAndOnlyANewRequestResets() public {
+        uint48 requested = _requestedAt();
+        assertEq(requested, vm.getBlockTimestamp(), "the sealing request stamps the reward clock");
         uint256 request = mockVRF.lastRequestId();
         vm.warp(vm.getBlockTimestamp() + 31 minutes);
         mockVRF.fulfillRandomWordsRaw(request, address(game), 0xAABBCC);
-        assertEq(_readyAt(), ready, "duplicate callback cannot reset age");
+        assertEq(_requestedAt(), requested, "duplicate callback cannot reset age");
         // A call that cannot fit one whole seat makes no progress, and a zero-progress mineFlip
         // reverts instead of committing a no-op (be793ed7c).
         vm.prank(MINER);
         vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
         game.mineFlip{gas: 800_000}();
         assertEq(crapsBattle.bonusCursorOf(slot), 0);
-        assertEq(_readyAt(), ready, "no-op checkpoint cannot reset age");
+        assertEq(_requestedAt(), requested, "no-op checkpoint cannot reset age");
 
         vm.fee(50 gwei);
         uint256 price = game.mintPrice();
@@ -277,7 +289,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
             if (logs[i].emitter == address(game) && logs[i].topics[0] == MINER_WORK) {
                 (, uint256 measured, uint256 reward) = abi.decode(logs[i].data, (uint8, uint256, uint256));
                 assertGe(measured, 1_000_000);
-                assertEq(reward, (measured - 1_000_000) * 1 gwei * 1000 ether * 7_500 * lockFactor / (price * 10_000),
+                assertEq(reward, _wholeFlip((measured - 1_000_000) * 1 gwei * 1000 ether * 7_500 * lockFactor / (price * 10_000)),
                     "31-minute backlog uses the first raised cap and multiplier");
                 ++workEvents;
             }
@@ -285,26 +297,26 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         assertEq(workEvents, 1);
         assertGt(crapsBattle.bonusCursorOf(slot), 0);
         assertLt(crapsBattle.bonusCursorOf(slot), FIELD, "fixture must leave a real continuation");
-        assertEq(_readyAt(), ready, "partial work retains the original callback clock");
+        assertEq(_requestedAt(), requested, "partial work retains the original request clock");
         _finish(14_000_000, true);
         assertTrue(game.rngComplete());
-        assertEq(_readyAt(), ready, "retained history is inactive after completion");
+        assertEq(_requestedAt(), requested, "completion leaves the request clock where it was");
 
         (uint256 replacement,) = _requestSingleSeatField();
         assertGt(replacement, request);
-        assertEq(_readyAt(), ready, "a new request does not forge a ready callback timestamp");
+        uint48 restarted = _requestedAt();
+        assertEq(restarted, vm.getBlockTimestamp(), "a new request restarts the reward clock");
+        assertGt(restarted, requested);
         vm.warp(vm.getBlockTimestamp() + 15);
         mockVRF.fulfillRandomWordsRaw(request, address(game), 0x1234);
         mockVRF.fulfillRandomWordsRaw(replacement, address(game), 0);
         mockVRF.fulfillRandomWordsRaw(replacement, address(game), 1);
-        assertEq(_readyAt(), ready, "wrong IDs and reserved words cannot reset the clock");
+        assertEq(_requestedAt(), restarted, "wrong IDs and reserved words cannot reset the clock");
         mockVRF.fulfillRandomWords(replacement, 0xC002);
-        uint48 accepted = uint48(vm.getBlockTimestamp());
-        assertEq(_readyAt(), accepted);
-        assertGt(accepted, ready);
+        assertEq(_requestedAt(), restarted, "an accepted callback does not move the reward clock");
         vm.warp(vm.getBlockTimestamp() + 15);
         mockVRF.fulfillRandomWordsRaw(replacement, address(game), 0xC003);
-        assertEq(_readyAt(), accepted, "accepted callback age is immutable through publication");
+        assertEq(_requestedAt(), restarted, "the request clock is immutable through publication");
     }
 
     function _finish(uint256 allowance, bool cold) private returns (bytes32 digest) {

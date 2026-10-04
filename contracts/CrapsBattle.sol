@@ -98,7 +98,7 @@ interface ICoinflipStake {
 ///         chips and leaves the rest of the ten to the draw.
 ///
 /// @dev Entry burns the bankroll plus any battle stake. Closing a slot binds it to
-///      `_writeBuffer()`, the table whose word cannot exist yet, and asks for that word. `_resolveSlot`
+///      `_writeBuffer()`, the table whose word cannot exist yet, and asks for that word. `_resolveSlotRange`
 ///      walks the slot's dense, 1-based seats and credits each run's rounded return as coinflip
 ///      stake. A non-zero battle stake also records a single running leader, and the seat that
 ///      completes the field hands that leader the pot in the same call — there is no claim.
@@ -123,8 +123,6 @@ interface IReadCohortLifecycle {
     function resolveRngSlot(uint64 slot, uint256 allowance) external returns (MineFlipGas.Result memory);
     function finalizeBattle(CrapsBattleStorage.Window calldata w, uint256 board, uint256 word) external;
     function payProgressive(CrapsBattleStorage.Window calldata w, uint256 peak, uint256 score, uint256 winnerId, uint256 winnerWord, address winner) external;
-    function runCrapsReadWork(uint48 index, uint256 allowance) external returns (MineFlipGas.Result memory);
-    function runCrapsMaintenance(uint256 allowance) external returns (MineFlipGas.Result memory);
     function payBattlePot(uint64 slot, bytes32 key, uint256 winnerId, uint256 pot, uint256 boost, uint256 word) external;
 }
 
@@ -147,8 +145,6 @@ contract CrapsBattle is CrapsBattleStorage {
         if (msg.sender != address(this)) revert OnlyGame();
         return _resolveSlotRange(slot, allowance, _RESOLVE_MAX_SEATS);
     }
-
-    function advanceJackpotBattle(uint64) external returns (bool) { _delegateJackpot(); }
 
     function runDailyBattleWork(uint256) external returns (MineFlipGas.Result memory) { _delegateJackpot(); }
 
@@ -545,39 +541,6 @@ contract CrapsBattle is CrapsBattleStorage {
     // Settling
     // ---------------------------------------------------------------------------------------
 
-    /// @notice Settle a CUSTOM battle's entrants in id order, from wherever its cursor stands.
-    ///         Permissionless. Scheduled windows and the daily jackpot never settle here: the
-    ///         keeper and the advance settle those in order, so no caller picks which goes first.
-    /// @param slot The custom battle's slot.
-    /// @dev The legacy allowance is ignored; execution uses the fixed protocol budget.
-    /// @custom:reverts NoSuchBattle If `slot` is not a custom battle.
-    /// @custom:reverts RngNotReady If the battle has not closed, or its table has no word yet.
-    function resolveSlot(uint64 slot, uint64) external {
-        if (slot < _CUSTOM_SLOT_BASE) revert NoSuchBattle();
-        uint256 board = _battles[_slotWindow(slot).key];
-        if (board != 0 && uint32(board >> _BG_RESOLVED_SHIFT) == uint32(board)) return;
-        if (!_readCrapsFrontier(slot)) revert RngNotReady();
-        _resolveSlotWork(slot, MineFlipGas.available());
-    }
-
-    /// @dev One resolver for normal cohorts and the dedicated daily jackpot transaction.
-    /// The compatibility argument cannot select a stopping point. Only protocol gas consumed
-    /// controls the protocol cap. Limited caller gas may stop safely before another atomic seat.
-    function _resolveSlot(uint64 slot, uint64) internal {
-        _resolveSlotWork(slot, MineFlipGas.available());
-    }
-
-    /// @dev Normal read cohorts reserve each whole seat before running it. The
-    /// independent game-only jackpot transaction keeps its established meter.
-    function _resolveSlotWork(uint64 slot, uint256 allowance) internal returns (MineFlipGas.Result memory result) {
-        if (allowance == 0) return result;
-        MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
-        if (!MineFlipGas.canRun(meter, _SEAT_GAS_MAX, _SETTLE_TAIL_GAS + _CREDIT_GAS_MAX + _WORK_TAIL_GAS)) return result;
-        uint256 childAllowance = _resolverAllowance(MineFlipGas.remaining(meter));
-        result = IReadCohortLifecycle(address(this)).resolveRngSlot(slot, childAllowance);
-        MineFlipGas.finish(meter);
-    }
-
     function _resolveSlotRange(uint64 slot, uint256 allowance, uint64 seatLimit) internal returns (MineFlipGas.Result memory result) {
         if (allowance == 0) return result;
         MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
@@ -641,14 +604,6 @@ contract CrapsBattle is CrapsBattleStorage {
             ICoinflipStake(ContractAddresses.COINFLIP).creditFlipBatch(players, amounts);
         }
     }
-
-    /// @notice Progress the globally eligible Craps category within its available gas.
-    /// @dev The historical budget argument is retained only for ABI compatibility.
-    function keepScheduled(uint64) external returns (bool, uint64) { _delegateJackpot(); }
-
-    function keepScheduledBudgeted(uint64) external returns (bool, uint64, uint64) { _delegateJackpot(); }
-
-
 
     /// @notice Constant-time predicate for the next scheduled maintenance step.
     /// @dev Read settlement and the dedicated daily battle have their own earlier stages.
@@ -948,7 +903,7 @@ contract CrapsBattle is CrapsBattleStorage {
         return header & bit != 0;
     }
 
-    /// @dev Settle one loaded bet. The slot's terms and word are supplied by `_resolveSlot`, which
+    /// @dev Settle one loaded bet. The slot's terms and word are supplied by `_resolveSlotRange`, which
     ///      reads each once for the whole batch.
     function _resolve(uint256 betId, uint64 seat, uint256 header, Window memory w, uint256 word)
         private

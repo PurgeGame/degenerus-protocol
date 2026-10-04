@@ -29,7 +29,7 @@ contract CrapsRngSeal is DeployProtocol {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
         vm.deal(address(game), 5_000_000 ether);
-        // requestLootboxRng gates on the subscription's LINK; the craps caller needs >= 10.
+        // The mid-day request mineFlip makes gates on the subscription's LINK; craps work needs >= 10.
         mockVRF.fundSubscription(1, 100e18);
 
         handler = new CrapsRngSealHandler(game, mockVRF, coin, crapsBattle, 5);
@@ -69,10 +69,10 @@ contract CrapsRngSeal is DeployProtocol {
         assertEq(handler.ghost_settlesWithoutWord(), 0, "CRAPS-SEAL: the resolution cursor advanced on a zero word");
     }
 
-    /// @notice `keepScheduled` NEVER REVERTS. The game's keeper router calls it bare, so a revert in
-    ///         any reachable state would take the whole crank down with it.
+    /// @notice The Craps workers mineFlip calls NEVER REVERT. mineFlip re-raises a worker's
+    ///         revert, so a revert in any reachable state would take the whole crank down with it.
     function invariant_keeperNeverReverts() public view {
-        assertEq(handler.ghost_keepReverts(), 0, "CRAPS-KEEPER: keepScheduled reverted");
+        assertEq(handler.ghost_keepReverts(), 0, "CRAPS-KEEPER: a mineFlip Craps worker reverted");
     }
 
     function invariant_crapsDoorsFreezeTheGameSet() public view {
@@ -130,8 +130,8 @@ contract CrapsRngSeal is DeployProtocol {
     }
 
     /// @notice The arm binds the cursor's own leaf and makes no request: the cursor stays put, the
-    ///         leaf is unworded, and an ordinary request afterwards seals that leaf so the word it
-    ///         fetches lands there.
+    ///         leaf is unworded, and the ordinary request mineFlip makes afterwards seals that leaf
+    ///         so the word it fetches lands there.
     function test_armBindsTheCursorAndTheNextOrdinaryRequestSealsIt() public {
         (uint64 slot,,) = _openDayWithOneEntrant();
         uint48 cursorBefore = crapsBattle.currentIndex();
@@ -143,8 +143,12 @@ contract CrapsRngSeal is DeployProtocol {
         assertEq(crapsBattle.currentIndex(), cursorBefore, "the arm must not move the cursor");
         assertEq(mockVRF.lastRequestId(), reqBefore, "the arm must make no request of its own");
 
-        vm.prank(address(0x5ea1));
-        game.requestLootboxRng();
+        // mineFlip runs whatever it orders ahead of the request, then requests: the pending craps
+        // window makes the mid-day request free for any caller.
+        for (uint256 i; i < 8 && mockVRF.lastRequestId() == reqBefore; ++i) {
+            vm.prank(address(0x5ea1));
+            game.mineFlip();
+        }
         assertEq(crapsBattle.currentIndex(), cursorBefore ^ 1, "the ordinary request must seal the armed buffer");
 
         uint256 reqId = mockVRF.lastRequestId();
@@ -238,7 +242,7 @@ contract CrapsRngSeal is DeployProtocol {
         // (read consumers run in the keeper's order, 6d0e64b09/60d31f775); the handler counts it.
         assertEq(handler.ghost_settlesWithWord(), 1, "the first field settled on its word");
         assertEq(handler.ghost_settlesWithoutWord(), 0);
-        game.openBoxes(2000);
+        for (uint256 i; i < 64 && !game.boxIndexComplete(i0); ++i) game.mineFlip();
         assertTrue(game.boxIndexComplete(i0), "the human read must also finish before a fresh request");
         for (uint256 i; i < 128 && uint256(vm.load(address(game), bytes32(0))) & (uint256(1) << 248) == 0; ++i) {
             game.mineFlip();

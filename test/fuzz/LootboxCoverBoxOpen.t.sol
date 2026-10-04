@@ -43,6 +43,17 @@ contract LootboxCoverBoxOpen is DeployProtocol {
         vm.etch(address(game), real);
     }
 
+    /// @dev The mid-day request, issued by `caller`'s mineFlip as the engine's next action (the
+    ///      only door to a mid-day word). Returns the fresh request's ID.
+    function _mineMiddayRequest(address caller) internal returns (uint256 reqId) {
+        uint256 prior = mockVRF.lastRequestId();
+        vm.prank(caller);
+        game.mineFlip();
+        reqId = mockVRF.lastRequestId();
+        assertGt(reqId, prior, "mineFlip issued the mid-day request");
+        assertFalse(game.rngLocked(), "a mid-day request, not the daily one");
+    }
+
     function _driveDailyCycleOnce() internal {
         (, , , , uint256 priceWei) = game.purchaseInfo();
         if (priceWei != 0 && priceWei <= actor.balance) {
@@ -123,9 +134,7 @@ contract LootboxCoverBoxOpen is DeployProtocol {
         game.purchaseWhalePass{value: 12 ether}(whale, 5, bytes32(0));
         vm.prank(plain);
         game.purchase{value: 0.24 ether + 1 ether}(plain, 400, BoxOrderLib.boOrder(0, 0, 0, 1, 0.24 ether), bytes32(0), MintPaymentKind.DirectEth, false);
-        vm.prank(actor);
-        game.requestLootboxRng();
-        uint256 reqId = mockVRF.lastRequestId();
+        uint256 reqId = _mineMiddayRequest(actor);
 
         // A box that draws a spin reports through the spin contracts, so search the word for a
         // draw where both boxes open plainly; the word never changes what a box is WORTH.
@@ -136,8 +145,7 @@ contract LootboxCoverBoxOpen is DeployProtocol {
         for (uint256 w = 1; w <= 64 && !found; w++) {
             uint256 snap = vm.snapshotState();
             mockVRF.fulfillRandomWords(reqId, uint256(keccak256(abi.encode("cover_word", w))) | 1);
-            // The engine publishes the word and opens the read cohort's entries as read consumers
-            // (openBoxes never publishes a word).
+            // The engine publishes the word and opens the read cohort's entries as read consumers.
             vm.recordLogs();
             vm.prank(actor);
             game.mineFlip();

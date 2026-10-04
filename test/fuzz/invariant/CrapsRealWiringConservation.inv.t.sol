@@ -36,7 +36,8 @@ contract CrapsRealWiringConservation is DeployProtocol {
         handler = new CrapsRngSealHandler(game, mockVRF, coin, crapsBattle, 5);
         // The engine settles a delivered cohort's read-bound fields inside its own crank (60d31f775),
         // where the table's credits mix with the crank's other coinflip effects. This campaign has
-        // the handler settle that stage through the measured keeper door instead.
+        // the handler settle that stage through the measured Craps step (the read-cohort worker,
+        // called as the Game) instead.
         handler.setMeasureTableSettlement(true);
         targetContract(address(handler));
 
@@ -57,16 +58,16 @@ contract CrapsRealWiringConservation is DeployProtocol {
                     vm.toString(handler.ghost_lastOverBound()),
                     " slot=",
                     vm.toString(handler.ghost_lastOverSlot()),
-                    handler.ghost_lastOverWasKeep() ? " (keeper crank)" : " (resolveSlot)"
+                    handler.ghost_lastOverWasKeep() ? " (mineFlip Craps step)" : " (settle door)"
                 )
             );
         }
     }
 
-    /// @notice `keepScheduled` NEVER REVERTS on the real wiring. The game's keeper router calls it
-    ///         bare, so a revert in any reachable state would take the whole crank down with it.
+    /// @notice The Craps workers mineFlip calls NEVER REVERT on the real wiring. mineFlip re-raises
+    ///         a worker's revert, so a revert in any reachable state would take the whole crank down.
     function invariant_keeperNeverReverts() public view {
-        assertEq(handler.ghost_keepReverts(), 0, "CRAPS-KEEPER: keepScheduled reverted");
+        assertEq(handler.ghost_keepReverts(), 0, "CRAPS-KEEPER: a mineFlip Craps worker reverted");
     }
 
     /// @notice The comp lane opens on the converted two hundred passes, is charged exactly the

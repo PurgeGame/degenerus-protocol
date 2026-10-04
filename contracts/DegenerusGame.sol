@@ -315,11 +315,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  contract's context — delegatecall preserves msg.sender, so the consent  |
       |  gates and the mineFlip bounty payee read the real caller. These are the |
       |  canonical afking entrypoints. `subscribe` is the SINGLE subscription    |
-      |  mutator (create / replace / cancel). The afking box-open is reached via |
-      |  mineFlip's router (human boxes only on a call whose afking walk opened  |
-      |  nothing; openBoxes always runs both legs) and, unrewarded, via          |
-      |  openBoxes; the module's cursor walk is exposed as drainAfkingBoxes, not |
-      |  re-stubbed here.                                                        |
+      |  mutator (create / replace / cancel). Afking box opens run only as a     |
+      |  mineFlip stage.                                                         |
       +==========================================================================+*/
 
     /// @notice Start or extend a daily afking subscription for `player`.
@@ -365,12 +362,13 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice The next action of the ordered mining engine.
+    /// @notice The next action of the ordered mining engine for a caller holding no mid-day credit.
     function nextMinerAction() external view returns (uint8) {
         return IGameMinerView(address(this)).minerAction();
     }
 
-    /// @notice Read-only module dispatch for caller-independent work discovery.
+    /// @notice Read-only module dispatch for work discovery as msg.sender: a donor holding
+    ///         mid-day credit also sees a below-threshold request its mineFlip would pay for.
     function minerAction() external returns (uint8) {
         address target = ContractAddresses.GAME_MINER_MODULE;
         assembly ("memory-safe") {
@@ -1204,13 +1202,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return abi.decode(data, (uint64));
     }
 
-    /// @notice Progress sealed Decimator battles in the shared consumer order.
-    function settleDecimatorWinners(uint256) external returns (uint256, uint256, bool) {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_DECIMATOR_MODULE.delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
-        return abi.decode(data, (uint256, uint256, bool));
-    }
-
     /// @notice Seal a Decimator battle for bounded run and payout settlement.
     /// @dev Access: Game-only (self-call).
     ///      Signature: runDecimatorJackpot(uint256 poolWei, uint24 lvl, uint256 rngWord) — the
@@ -1253,29 +1244,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return abi.decode(data, (uint256));
     }
 
-    /// @notice Game-over terminal jackpot: Final-day bucket distribution to the final ticket cohort.
-    /// @dev Access: Game-only (self-call). Delegatecalls to JackpotModule.
-    ///      Updates claimablePool internally — callers must NOT double-count.
-    ///      Signature: runTerminalJackpot(uint256 poolWei, uint24 targetLvl, uint256 rngWord) —
-    ///      the total ETH to distribute, the level to sample winners from, and the VRF entropy
-    ///      seed. The signature matches the module function exactly (identical selector), so the
-    ///      calldata forwards as-is — re-encoding here would cost contract-size headroom for no
-    ///      behavior change.
-    /// @return paidWei Total ETH distributed.
-    function runTerminalJackpot(
-        uint256,
-        uint24,
-        uint256
-    ) external returns (uint256 paidWei) {
-        if (msg.sender != address(this)) revert OnlySelf();
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_JACKPOT_MODULE
-            .delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
-        return abi.decode(data, (uint256));
-    }
-
     /// @notice Continue the frozen terminal payout through the shared gas allowance.
+    /// @dev Access: Game-only (self-call). Delegatecalls to JackpotModule; updates claimablePool
+    ///      internally, so callers must not double-count.
     function runTerminalJackpotWork(uint256, uint24, uint256, uint256)
         external returns (MineFlipGas.Result memory result, uint256 paidDelta)
     {
@@ -1287,7 +1258,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Roll, record and emit level 1's purchase-day board via jackpot module.
     /// @dev Access: Game-only (self-call). Delegatecalls to JackpotModule.
-    ///      Used at purchaseLevel==1 where payDailyJackpot is skipped.
+    ///      Used at purchaseLevel==1 where runDailyJackpot is skipped.
     ///      Signature: emitDailyWinningTraits(uint256 randWord). The signature matches the
     ///      module function exactly (identical selector), so the calldata forwards as-is —
     ///      re-encoding here would cost contract-size headroom for no behavior change.
@@ -1504,7 +1475,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  storage directly, so it lives in-game by construction.              |
       +======================================================================+*/
 
-    /// @notice O(1) discovery: does mineFlip() have pending work?
+    /// @notice O(1) discovery: does mineFlip() have pending work for a creditless caller?
     /// @dev Queries the same derived action selector used by the miner engine.
     function advanceDue() external view returns (bool) {
         uint8 action = IGameMinerView(address(this)).minerAction();
@@ -1531,16 +1502,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function boxIndexComplete(uint48 index) external view returns (bool) {
         return index == _rngReadBuffer() && humanReadComplete
             && degeneretteCursor >= degeneretteQueue[index].length;
-    }
-
-    /// @notice Unpaid AFK and human-box progress in the same order as mineFlip.
-    /// @dev Stops at safe gas checkpoints. Earlier read consumers must finish first.
-    /// @param maxCount Reserved compatibility argument; does not select work or outcomes.
-    /// @return opened Number of boxes opened in this call.
-    function openBoxes(uint256 maxCount) external returns (uint256 opened) {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
-        return abi.decode(data, (uint256));
     }
 
     /*+======================================================================+
@@ -1819,23 +1780,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Request lootbox RNG when activity threshold and LINK conditions are met.
-    /// @dev Callable by anyone. Reverts if daily RNG has not been consumed, if request
-    ///      windows are locked, or if pending lootbox value is below threshold. A closed craps
-    ///      window waiting on the write buffer clears the pending-value gates and answers to a
-    ///      lower LINK floor — the word settles a table holding staked FLIP, where a lootbox
-    ///      queue can wait for the daily word instead.
-    ///      Once the purchase goal is met, the first fresh request also commits the next
-    ///      level's future tickets. All normal request gates and charges still apply.
-    ///      The signature matches the module function exactly (identical selector), so the calldata
-    ///      forwards as-is — re-encoding here would cost contract-size headroom for no behavior change.
-    function requestLootboxRng() external {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_RNG_MODULE
-            .delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
-    }
-
     /// @notice Mint mid-day RNG credit to a LINK donor.
     /// @dev Access: ADMIN only — called from the LINK donation hook once the donated LINK
     ///      has reached the VRF coordinator, so credit only ever trails LINK the
@@ -1844,9 +1788,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      access would cost more than the code it saves.
     ///      The donated LINK is banked verbatim, with no reward multiplier applied — a
     ///      request debits a multiple of what it actually bills, so the price lives at
-    ///      redemption rather than in a stored rate. Credit waives the pending-value gates
-    ///      on requestLootboxRng; the subscription LINK floor there still binds on every
-    ///      request, credited or not.
+    ///      redemption rather than in a stored rate. When the donor calls mineFlip with pending
+    ///      work below the mid-day threshold, credit pays that gate and the request issues; an
+    ///      empty queue is never requested, and the subscription LINK floor still binds on
+    ///      every request, credited or not.
     /// @param to Donor to credit.
     /// @param linkAmount LINK donated, in juels.
     /// @custom:reverts OnlyAdmin If caller is not ADMIN.

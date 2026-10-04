@@ -8,13 +8,15 @@ import {Craps} from "../../../contracts/Craps.sol";
 import {CrapsBattle} from "../../../contracts/CrapsBattle.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {CrapsPriceLib} from "../../../contracts/libraries/CrapsPriceLib.sol";
+import {JackpotBattle} from "../../../contracts/JackpotBattle.sol";
+import {MineFlipGas} from "../../../contracts/libraries/MineFlipGas.sol";
 
 /// @title CrapsFlowHandler — the action surface CrapsConservation.inv drives.
 ///
 /// @notice One handler, every money door the table sells, walked in random order by the invariant
 ///         campaign: window entries, day tickets, amendments, future-day purchases, banked-pass
 ///         redemptions, high-roller upgrades, custom battles, donations, closes, settles and the
-///         keeper — across real protocol days the handler itself advances. Every door runs
+///         Craps steps mineFlip makes — across real protocol days the handler itself advances. Every door runs
 ///         through the SHIPPED contract; the mocks record what crossed the boundary.
 ///
 /// @dev THE GHOST LEDGER. The invariants read figures the handler accumulates beside the mocks'
@@ -67,7 +69,7 @@ contract CrapsFlowHandler {
     uint256 public ghost_donations;
     uint256 public ghost_repeatSettleCreditDelta;
     uint256 public ghost_keeps;
-    /// @dev Keeper cranks that REVERTED — see `CrapsRngSealHandler.ghost_keepReverts`.
+    /// @dev Craps steps that REVERTED — see `CrapsRngSealHandler.ghost_keepReverts`.
     uint256 public ghost_keepReverts;
 
     constructor(CrapsViews craps_) {
@@ -138,7 +140,7 @@ contract CrapsFlowHandler {
         if (index != read) {
             // A pending read field owns the shared word until its actual settlement finishes.
             if (uint256(game.slots(bytes32(uint256(33)))) & (uint256(1) << (250 + read)) != 0) return;
-            game.requestLootboxRng();
+            game.requestRng();
             flags = uint256(game.slots(bytes32(0)));
             require(index == (uint48((flags >> 252) & 1) ^ 1), "mock seal did not swap");
         }
@@ -362,9 +364,9 @@ contract CrapsFlowHandler {
         } catch {}
     }
 
-    /// @dev Land a word on every armed-but-wordless window of the open day. The KEEPER arms
+    /// @dev Land a word on every armed-but-wordless window of the open day. Maintenance arms
     ///      windows on its own crank, and an armed field waits on its word — in production the
-    ///      lootbox lane's, here the handler's. Without this, a keeper-armed window is stranded
+    ///      one the next mineFlip RNG request draws, here the handler's. Without this, a keeper-armed window is stranded
     ///      and the scheduled surface silently stops settling.
     function _landWords(uint256 wordSeed) internal {
         uint24 d = craps.currentDayIndex();
@@ -409,8 +411,8 @@ contract CrapsFlowHandler {
     ///      credits nothing.
     function _settleBound(uint64 slot) internal {
         // `slot` may be a scheduled window's or a custom battle's — `ghost_slots` tracks both —
-        // so this settles through the unrestricted test door rather than the production
-        // `resolveSlot`, which now rejects a scheduled slot outright.
+        // so this settles through the unrestricted test door. Production settles every armed
+        // field only through mineFlip's read stage, in cohort order, which `keep` drives.
         try craps.settleSlot(slot, type(uint64).max) {} catch {
             return;
         }
@@ -421,14 +423,26 @@ contract CrapsFlowHandler {
         ghost_repeatSettleCreditDelta += coinflip.totalCredited() - before;
     }
 
-    /// @dev One keeper crank at a random budget.
-    function keep(uint64 budget) external {
-        try craps.keepScheduled(budget % 64) {
-            ++ghost_keeps;
-        } catch {
-            ++ghost_keepReverts;
+    /// @dev One Craps step the way mineFlip dispatches it, made as the Game with all the gas this
+    ///      frame has: the read-cohort worker while the read cohort is the live RNG consumer
+    ///      (stage 6), otherwise the maintenance worker. The seed picks the next words.
+    function keep(uint64 seed) external {
+        bool ok;
+        if (game.rngConsumerStage() == 6) {
+            uint48 read = craps.currentIndex() ^ 1;
+            vm.prank(ContractAddresses.GAME);
+            try JackpotBattle(address(craps)).runCrapsReadWork(read, gasleft()) returns (MineFlipGas.Result memory) {
+                ok = true;
+            } catch {}
+        } else {
+            vm.prank(ContractAddresses.GAME);
+            try JackpotBattle(address(craps)).runCrapsMaintenance(gasleft()) returns (MineFlipGas.Result memory) {
+                ok = true;
+            } catch {}
         }
-        _landWords(budget);
+        if (ok) ++ghost_keeps;
+        else ++ghost_keepReverts;
+        _landWords(seed);
     }
 
     // ── Shared helpers ──────────────────────────────────────────────────────

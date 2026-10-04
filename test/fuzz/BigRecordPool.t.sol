@@ -353,7 +353,7 @@ contract BigRecordPoolTest is DeployProtocol {
     /// @notice The leg pays the accrued share at 1/500 scale of the live reward pool
     ///         (zero on an empty pool), and never reverts the claim. Its sDGNRS `poolBalance`
     ///         read and `transferFromPool` payout are reached bare from the keeper's craps leg
-    ///         (keepScheduled → armDiceRunRecord → payRecordSdgnrs), so this is their pin.
+    ///         (mineFlip's Craps stages → armDiceRunRecord → payRecordSdgnrs), so this is their pin.
     function testPayRecordSdgnrsPaysScaledShare() public {
         uint256 rewardPool = IsDGNRS(ContractAddresses.SDGNRS).poolBalance(
             IsDGNRS.Pool.Reward

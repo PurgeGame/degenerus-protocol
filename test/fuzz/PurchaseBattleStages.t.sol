@@ -173,7 +173,7 @@ contract PurchaseBattleWithoutTicketsTest is PurchaseBattleStagesBase {
         _apply();
         uint256 word = game.rngWordForDay(game.currentDayView());
         // The engine reaches the battle through the metered entry (level, word, allowance); a
-        // prefix match pins the level and the day's word (was payPurchaseJackpotBattle).
+        // prefix match pins the level and the day's word.
         vm.expectCall(
             ContractAddresses.GAME_JACKPOT_MODULE,
             abi.encodeWithSignature("runPurchaseJackpotBattle(uint24,uint256,uint256)", uint24(1), word)

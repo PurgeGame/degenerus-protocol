@@ -198,7 +198,6 @@ contract DailyJackpotCommitmentFreezeTest is DeployProtocol {
         vm.expectRevert(RNG_LOCKED);
         game.purchaseWhalePass{value: 20 ether}(ATTACKER, 1, bytes32(0));
         vm.stopPrank();
-        assertEq(game.openBoxes(1000), 0, "public box settlement cannot bypass the daily lock");
         assertGt(game.entriesOwedView(4, ATTACKER), oldOwed, "late purchase must really add owed entries");
         assertGt(_hero(day), liveHero, "late wager must really write the rival hero");
         assertEq(_hero(day - 1), oldHero, "committed hero ledger unchanged");

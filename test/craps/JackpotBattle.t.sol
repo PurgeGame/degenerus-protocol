@@ -152,14 +152,24 @@ contract JackpotBattleTest is CrapsPins {
         api.appendJackpotBattle(field, 0, true);
         vm.stopPrank();
     }
-    function _finish(uint64 budget) internal returns (uint256 calls) {
+    /// @dev A tight per-call allowance: enough to admit one atomic seat and its tails, so a
+    ///      chunked run settles the field a seat or two per call.
+    uint256 internal constant TIGHT_CHUNK = 2_500_000;
+
+    /// @dev Drive the daily battle worker — mineFlip's jackpot-battle stage, called as the Game —
+    ///      until the field completes, `allowance` gas per call (zero means all available gas).
+    function _finish(uint256 allowance) internal returns (uint256 calls) {
         for (; calls < 200; ++calls) {
             (,,, bool done) = api.jackpotProgress();
             if (done) return calls;
             vm.prank(ContractAddresses.GAME);
-            api.advanceJackpotBattle(budget);
+            cold.runDailyBattleWork(allowance == 0 ? gasleft() : allowance);
         }
         revert("no progress");
+    }
+
+    function _finish() internal returns (uint256) {
+        return _finish(0);
     }
     function _round() internal view returns (CrapsBattleStorage.JackpotRound memory r) {
         (r,,) = cold.jackpotBattleOf(slot);
@@ -249,14 +259,14 @@ contract JackpotBattleTest is CrapsPins {
         assertEq(_round().word, 0);
         vm.prank(ContractAddresses.GAME);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        api.advanceJackpotBattle(300);
+        cold.runDailyBattleWork(gasleft());
         assertEq(table.bonusCursorOf(slot), 0);
         vm.prank(ContractAddresses.GAME);
         api.appendJackpotBattle(field, 100, true);
         assertEq(_round().drawnCount, 100);
         assertEq(_round().word, 123);
         assertGe(_round().bankroll, 1_800 ether);
-        _finish(300);
+        _finish();
     }
 
     function test_NewHighDrawAgreesWithJackpotPaidUnits() public {
@@ -284,7 +294,7 @@ contract JackpotBattleTest is CrapsPins {
         assertEq(n * (uint256(r.bankroll) + uint256(r.bountyUnits) * 100 ether) + r.potRemainder, r.totalPool);
         assertLe(uint256(r.bankroll) * n, r.totalPool / 2);
         assertLt(r.totalPool / 2 - uint256(r.bankroll) * n, n * 300 ether);
-        _finish(300);
+        _finish();
     }
 
     function test_AwardedEntryThrowsTheFieldDiceUnderItsOwnKey() public view {
@@ -350,14 +360,14 @@ contract JackpotBattleTest is CrapsPins {
         table.resolveSeats(detached, 1);
         assertEq(table.bonusCursorOf(detached), 1);
         uint64 daySlot = uint64(uint256(day) * 8);
-        table.keepScheduled(type(uint64).max);
+        _crank(table);
         assertEq(table.keeperSlot(), daySlot, "daily lock prevents maintenance interleaving");
         assertEq(table.bonusCursorOf(detached), 1);
-        _finish(300);
+        _finish();
         uint256 settledLane = flip.compLane();
         game.setRngLocked(false);
         game.setRngConsumerStage(7);
-        for (uint256 i; i < 20 && table.keeperSlot() <= daySlot; ++i) table.keepScheduled(type(uint64).max);
+        for (uint256 i; i < 20 && table.keeperSlot() <= daySlot; ++i) _crank(table);
         assertGt(table.keeperSlot(), daySlot, "the keeper never swept the lapsed day");
         assertEq(table.bonusCursorOf(detached), 40, "the sweep moved the completed battle cursor");
         assertEq(flip.compLane(), settledLane, "the sweep refunded awards as reservations");
@@ -377,7 +387,7 @@ contract JackpotBattleTest is CrapsPins {
         assertLe(staked, uint256(r.paidUnits) * 4_000 ether, "more than the fees' bankroll half");
         assertEq(table.dayStaked(day) - before, staked);
         assertEq(flip.compLane() - lane, staked / 50, "creditCrapsComps paid other than the fee share");
-        _finish(300);
+        _finish();
         assertEq(table.dayStaked(day) - before, staked, "settlement booked the jackpot again");
         assertEq(flip.compLane() - lane, staked / 50, "finalization comped the jackpot again");
     }
@@ -399,13 +409,13 @@ contract JackpotBattleTest is CrapsPins {
         api.appendJackpotBattle(f, 3, true);
         assertEq(_round().drawnCount, 1);
         assertEq(_round().word, 123);
-        _finish(300);
+        _finish();
     }
 
     function test_AwardOnlyFieldBooksNothing() public {
         uint256 before = table.dayStaked(day);
         uint256 lane = flip.compLane();
-        _lock(150_000 ether); _start(123, 15, alice); _finish(300);
+        _lock(150_000 ether); _start(123, 15, alice); _finish();
         assertEq(table.dayStaked(day), before);
         assertEq(flip.compLane(), lane);
     }
@@ -417,7 +427,7 @@ contract JackpotBattleTest is CrapsPins {
         assertFalse(table.battleOf(bytes32(uint256(slot))).finalized);
         assertEq(table.bonusCursorOf(slot), 1);
         vm.recordLogs();
-        vm.prank(ContractAddresses.GAME); assertTrue(api.advanceJackpotBattle(type(uint64).max));
+        vm.prank(ContractAddresses.GAME); assertTrue(cold.runDailyBattleWork(gasleft()).done);
         assertEq(table.bonusCursorOf(slot), 4, "the walk stopped at the paid boundary");
         assertEq(table.battleOf(bytes32(uint256(slot))).resolved, 4);
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -427,7 +437,7 @@ contract JackpotBattleTest is CrapsPins {
         }
         assertEq(finals, 1, "one finalization, at the last awarded seat");
         uint256 credited = coinflip.totalCredited();
-        vm.prank(ContractAddresses.GAME); assertTrue(api.advanceJackpotBattle(300));
+        vm.prank(ContractAddresses.GAME); assertTrue(cold.runDailyBattleWork(gasleft()).done);
         assertEq(coinflip.totalCredited(), credited, "paid twice");
     }
 
@@ -436,11 +446,11 @@ contract JackpotBattleTest is CrapsPins {
         for (uint160 i = 0x2000; i < 0x2008; ++i) _enter(address(i), false);
         _lock(1_000_000 ether); _start(578, 12, address(0x3000));
         uint256 snap = vm.snapshotState();
-        _finish(1);
+        assertGt(_finish(TIGHT_CHUNK), 1, "the tight allowance did not split the field");
         uint256 credited = coinflip.totalCredited();
         bytes32 digest = keccak256(abi.encode(table.battleOf(bytes32(uint256(slot)))));
         assertTrue(vm.revertToState(snap));
-        _finish(300);
+        _finish();
         assertEq(coinflip.totalCredited(), credited);
         assertEq(keccak256(abi.encode(table.battleOf(bytes32(uint256(slot))))), digest);
     }
@@ -451,7 +461,7 @@ contract JackpotBattleTest is CrapsPins {
         vm.prank(address(0x123)); vm.expectRevert(); table.enterBonusBattle(5, 0, 1);
         vm.prank(alice); vm.expectRevert(); table.amendSlip(id, 1);
         vm.prank(bob); vm.expectRevert(); table.upgradeDayWindows(day, 0x20);
-        _start(831, 1, alice); _finish(300);
+        _start(831, 1, alice); _finish();
     }
 
     function test_RetryCannotReplaceAllocationOrField() public {
@@ -467,12 +477,12 @@ contract JackpotBattleTest is CrapsPins {
         api.appendJackpotBattle(f, 0, true);
         vm.stopPrank();
         assertEq(_round().word, 99); assertEq(_round().drawnCount, 1);
-        _finish(300);
+        _finish();
     }
 
     function test_EmptyAwardFieldStillClosesPaidBattle() public {
         _enter(alice, false); _lock(123_000 ether); _start(44, 0, bob);
-        assertEq(_finish(300), 1);
+        assertEq(_finish(), 1);
         assertEq(table.battleOf(bytes32(uint256(slot))).winnerId, 1);
     }
     function test_NoEntrantsCompletesWithoutDivisionOrPayout() public {
@@ -485,7 +495,7 @@ contract JackpotBattleTest is CrapsPins {
         vm.warp(dayStart + 5 days);
         _setDailyWord(table.currentDayIndex(), 999);
         vm.prank(ContractAddresses.GAME); table.openBonusDay();
-        _start(987, 3, bob); _finish(300);
+        _start(987, 3, bob); _finish();
         assertEq(_round().paidCount, 1); assertEq(_round().added, 500_000 ether);
     }
     function test_HighCopiesAndRepeatedAwardsCountAsUnits() public {
@@ -501,7 +511,7 @@ contract JackpotBattleTest is CrapsPins {
         CrapsBattleStorage.JackpotRound memory r = _round();
         assertEq(r.paidUnits, h); assertEq(r.drawnUnits, 3); assertEq(r.drawnCount, 3);
         assertEq(r.totalPool, (uint256(h) * 8_000 ether + r.added - r.added / 20) * r.multiplierBps / 10_000);
-        _finish(300);
+        _finish();
     }
     function test_OnlyGameCanLockOrSupplyField() public {
         vm.expectRevert(); api.lockJackpotBattle(day + 1, 123 ether, 2);
@@ -680,8 +690,8 @@ contract JackpotBattleTest is CrapsPins {
             assertEq(found, 1);
             uint256 lane = flip.compLane();
             _mockRun(false);
-            _finish(1);
-            vm.prank(ContractAddresses.GAME); api.advanceJackpotBattle(1500);
+            _finish(TIGHT_CHUNK);
+            vm.prank(ContractAddresses.GAME); cold.runDailyBattleWork(gasleft());
             assertEq(flip.compLane(), lane, "settlement or retry credited comps twice");
             vm.clearMockedCalls();
         }
@@ -695,7 +705,7 @@ contract JackpotBattleTest is CrapsPins {
         uint256 extra = table.jackpotTerms(slot).highExtra;
         assertEq(extra, 1_188_000 ether);
         _mockRun(false);
-        _finish(1500);
+        _finish();
         assertEq(coinflip.totalCredited(), _mainPot(r) + 2 * extra, "contested high bounty was scaled by Added or lost on busts");
     }
 
@@ -711,7 +721,7 @@ contract JackpotBattleTest is CrapsPins {
         assertEq(extra, 18_000 ether);
         assertEq(flip.compLane() - before, baseAction / 50 + 6_912 ether, "sole bounty risk omitted or comped twice");
         _mockRun(true);
-        _finish(1500);
+        _finish();
         assertEq(coinflip.staked(alice), _mainPot(r) + 5 * (uint256(r.bankroll) + 2 * extra));
     }
 
@@ -723,7 +733,7 @@ contract JackpotBattleTest is CrapsPins {
         CrapsBattleStorage.JackpotRound memory r = _round();
         uint256 extra = table.jackpotTerms(slot).highExtra;
         _mockRun(true);
-        _finish(1500);
+        _finish();
         uint256 baseBoon = uint256(r.bankroll) * 5 * 15 / 100;
         assertLt(baseBoon, 9_000 ether, "fixture must distinguish base boon from the high cap");
         assertEq(coinflip.totalCredited(), _mainPot(r) + 2 * extra + 10 * (uint256(r.bankroll) + extra) + baseBoon);
@@ -735,6 +745,6 @@ contract JackpotBattleTest is CrapsPins {
         _lock(150_000 ether); _start(_wordForMultiplier(5000), 15, address(0x1000));
         assertEq(_round().paidUnits, 100);
         assertEq(table.jackpotTerms(slot).highExtra, 198_000 ether);
-        _finish(1500);
+        _finish();
     }
 }

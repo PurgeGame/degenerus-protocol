@@ -25,9 +25,8 @@ contract C1Viewer is DegenerusGame {
     }
 
     /// @notice The raw packed lootboxOrder word for [index][who] — the live "box still owed" signal
-    ///         that the auto-open sweep gates on (openHumanBoxes skips an entry whose box order AND
-    ///         presale leg are both zero) and that openLootBox marks processed
-    ///         on a successful open. The decisive "opened vs not" signal: != 0 => the box is still
+    ///         that mineFlip's human-box stage gates on (it skips an entry whose box order AND
+    ///         presale leg are both zero) and marks processed on a successful open. The decisive "opened vs not" signal: != 0 => the box is still
     ///         closed; 0 => it was opened/drained.
     function lootboxBaseFor(uint48 index, address who) external view returns (uint256) {
         return _boxOrder(index, who);
@@ -41,16 +40,15 @@ contract C1Viewer is DegenerusGame {
 
 /// @title C1BoxAutoOpen — REGRESSION TEST for finding V62-01 (lootbox auto-open off-by-one).
 ///
-/// @notice THE DEFECT (V62-01): a human lootbox is enqueued in boxPlayers[N & 1] at LR_INDEX==N.
-///         requestLootboxRng / the daily finalize advance LR_INDEX to N+1 BEFORE the word lands, and the
-///         word is written to _lootboxWord(LR_INDEX-1) == [N]. The permissionless
-///         openBoxes()/_openHumanBoxes() previously read the ACTIVE LR_INDEX (= N+1) and so never opened
-///         the just-finalized box at N — it degraded to manual-only openLootBox, returning open-timing
-///         control to the owner. The fix points the open/boxesPending reads at LR_INDEX-1.
+/// @notice THE DEFECT CLASS (V62-01): a human lootbox is enqueued in boxPlayers[N & 1] while N is the
+///         write buffer. The mid-day request (mineFlip's RequestMidday stage) or the daily request seals
+///         N — the write side flips to N ^ 1 — BEFORE the word lands, and the word is published for the
+///         read buffer N. The human-box stage and the boxesPending hint must read buffer N, not the
+///         active write side; reading the write side would never open the just-finalized box.
 ///
-///         These tests drive the REAL contract through both word-landing paths (mid-day rawFulfill and the
-///         daily finalize) and assert STRICTLY that the permissionless valve opens the finalized box.
-///         If the off-by-one is reintroduced, openBoxes() opens 0 and these tests FAIL.
+///         These tests drive the REAL contract through both word-landing paths (mid-day and the daily
+///         finalize) and assert STRICTLY that mineFlip's human-box stage opens the finalized box. If the
+///         off-by-one is reintroduced, the box stays closed and these tests FAIL.
 ///
 /// @dev Test-only. ZERO contracts/*.sol mutation by the test. The viewer is etched
 ///      (type().runtimeCode, no constructor); the real code is restored after every read.
@@ -98,14 +96,9 @@ contract C1BoxAutoOpen is DeployProtocol {
         vm.etch(address(game), real);
     }
 
-    /// @dev Park the auto-open frontier (boxCursorIndex @ byte 13, boxCursor @ byte 7, both slot 56)
-    ///      at `index` with a zero in-index cursor, so the O(1) boxesPending hint + the multi-index
-    ///      sweep begin exactly at this finalized index (the realistic state where the empty lower
-    ///      indices are already drained). No contract mutation — a field-isolated slot poke.
-
     // =========================================================================
     // Drive a genesis daily cycle so _recordedDailyWord(currentDay) != 0 and the lock clears
-    // (requestLootboxRng requires today's daily word recorded and rngLocked == false).
+    // (a mid-day request requires today's daily word recorded and rngLocked == false).
     // =========================================================================
 
     function _driveDailyCycleOnce() internal {
@@ -176,7 +169,7 @@ contract C1BoxAutoOpen is DeployProtocol {
 
     // =========================================================================
     // V62-01 regression — MID-DAY (rawFulfillRandomWords) word-landing path.
-    // The permissionless valve MUST open the just-finalized box at N (LR_INDEX-1).
+    // mineFlip's human-box stage MUST open the just-finalized box at read buffer N.
     // =========================================================================
 
     function test_V62_01_autoOpen_opens_finalized_box_midday() public {
@@ -187,10 +180,12 @@ contract C1BoxAutoOpen is DeployProtocol {
 
         (uint48 N, uint256 baseAtCreate) = _enqueueHumanBoxAtCurrentIndex();
 
-        // requestLootboxRng fires the VRF AND advances LR_INDEX N -> N+1 before the word lands.
+        // The box's pending ETH clears the mid-day threshold: the engine's mid-day request fires the
+        // VRF AND seals buffer N (the write side flips to N ^ 1) before the word lands.
+        assertEq(game.nextMinerAction(), 18, "the mid-day request is the engine's next work"); // RequestMidday
         vm.prank(actor);
-        game.requestLootboxRng();
-        assertEq(_idx(), N ^ 1, "requestLootboxRng advanced LR_INDEX N -> N+1 before the word lands");
+        game.mineFlip();
+        assertEq(_idx(), N ^ 1, "the mid-day request sealed buffer N before the word lands");
 
         // Fulfill the mid-day VRF (not locked) => the word is written at _lootboxWord(N).
         uint256 reqId = mockVRF.lastRequestId();
@@ -202,34 +197,24 @@ contract C1BoxAutoOpen is DeployProtocol {
         // Required keeper publication after the minimal callback, then the cohort's tickets:
         // the consumer order puts human boxes after ticket materialization (60d31f775). A 1.1M
         // allowance can never admit a human-box entry (HUMAN_ENTRY_GAS + tail), so these calls
-        // stop with the box still closed, leaving its open to the permissionless valve.
+        // stop with the box still closed, leaving its open to the human-box stage below.
         for (uint256 i; i < 20 && game.nextMinerAction() != 10; i++) game.mineFlip{gas: 1_100_000}();
         assertEq(game.nextMinerAction(), 10, "the human-box stage is next");
         assertGt(_word(N), 0, "the VRF word landed at _lootboxWord(N) (box at N IS ready)");
         assertEq(_idx(), N ^ 1, "LR_INDEX is N+1 while the ready word sits at N");
         assertEq(_base(N, actor), baseAtCreate, "pre-open: box at N still closed");
 
-        // The relocated sweep is a MULTI-INDEX frontier walk: boxesPending() is an O(1) hint that
-        // reports the FRONTIER index (boxCursorIndex), not every higher finalized index. The genesis
-        // indices below N carried no human box (their queues are empty = effectively drained), so park
-        // the frontier at N — the realistic post-drain state — before the O(1) check. (The sweep would
-        // advance the frontier through the empty lower indices on its first call anyway; this just
-        // positions the O(1) hint to report the box that IS waiting at N.)
-
-
-        // boxesPending() must now SEE the finalized box (it reads LR_INDEX-1 == N at the frontier).
+        // boxesPending() must now SEE the finalized box (it reads the read buffer N).
         assertTrue(game.boxesPending(), "boxesPending() reports the finalized box at N is openable");
 
-        // The PERMISSIONLESS valve (not the manual openLootBox) must open the box at N.
+        // The engine's human-box stage must open the box at N.
         vm.prank(actor);
-        uint256 openedAuto = game.openBoxes(50);
+        game.mineFlip();
 
-        emit log_named_uint("openBoxes() opened count", openedAuto);
-        emit log_named_uint("lootboxOrder word[N][actor] AFTER auto-open", _base(N, actor));
+        emit log_named_uint("lootboxOrder word[N][actor] AFTER the human-box stage", _base(N, actor));
         emit log_named_uint("N", N);
 
-        assertGt(openedAuto, 0, "FIX: openBoxes() opened at least one box");
-        assertEq(_base(N, actor), 0, "FIX: openBoxes() drained the finalized human box at N (auto valve works)");
+        assertEq(_base(N, actor), 0, "FIX: the human-box stage drained the finalized human box at N");
         // Consumer order (60d31f775): the cohort's tickets materialized BEFORE its boxes, so after
         // the open the human read of buffer N is complete rather than held open by tickets.
         assertTrue(game.boxIndexComplete(N), "the read cohort's human queue completed with its box open");
@@ -282,18 +267,18 @@ contract C1BoxAutoOpen is DeployProtocol {
         }
         assertTrue(landed, "the daily-finalized word landed at _lootboxWord(N)");
 
-        // Permissionless valve: nothing left to open, and it does not revert.
-        vm.prank(actor);
-        uint256 openedAuto = game.openBoxes(50);
+        // Mining on finds nothing left to open at N and stops without an unexpected revert.
+        vm.startPrank(actor);
+        _mineAll(16);
+        vm.stopPrank();
 
         uint256 raw = uint256(vm.load(address(game),
             keccak256(abi.encode(actor, keccak256(abi.encode(uint256(N & 1), uint256(15)))))));
-        emit log_named_uint("[daily] openBoxes() opened count after the keeper stage", openedAuto);
         emit log_named_uint("[daily] N", N);
         emit log_named_uint("[daily] LR_INDEX at request time", nowIdx);
         emit log_named_uint("[daily] base[N] after auto", _base(N, actor));
 
         assertTrue(raw >> 255 == 1, "FIX(daily): the permissionless keeper opened the finalized human box at N");
-        assertEq(_base(N, actor), 0, "FIX(daily): openBoxes() drained the finalized human box at N");
+        assertEq(_base(N, actor), 0, "FIX(daily): the human-box stage drained the finalized human box at N");
     }
 }

@@ -48,7 +48,7 @@ contract JackpotBattleHarness is DayShapeHarness {
 /// @notice A jackpot phase runs one or three physical daily draws. Day one (counter 0) is the EARLY-BIRD day: a
 ///         3% slice of the future pool is priced as a ticket jackpot on the day's main board and moved to
 ///         next by the ETH stage, which latches the entries for the early-bird stage that runs
-///         them on the next advance (payEarlyBirdTickets) ahead of the coin+tickets stage; the
+///         them on the next advance (runEarlyBirdTickets) ahead of the coin+tickets stage; the
 ///         day's own ticket budget is credited to next directly. Every OTHER jackpot day (ordinary
 ///         or final) credits only its own ticket budget to next, current -> next, with nothing
 ///         reserved and no move on the future pool beyond any whale-pass conversion booked back.
@@ -156,7 +156,7 @@ contract DailyJackpotDayShapes is Test {
         uint256 word = _board(0xEA51);
         (uint128 next0, uint128 fut0) = h.poolsView();
         vm.recordLogs();
-        h.payDailyJackpot(true, LVL, word);
+        h.runDailyJackpot(true, LVL, word, gasleft());
         uint256 passEth = _whalePassEth(vm.getRecordedLogs());
         (uint128 next1, uint128 fut1) = h.poolsView();
         uint256 dailyEntries = h.ticketBudgets();
@@ -179,7 +179,7 @@ contract DailyJackpotDayShapes is Test {
         assertTrue(h.coinTicketsPending(), "the coin+tickets stage still waits behind it");
         (uint128 next2, uint128 fut2) = h.poolsView();
         vm.recordLogs();
-        h.payEarlyBirdTickets(word);
+        h.runEarlyBirdTickets(word, gasleft());
         uint256 ticketWins = _ticketWins(vm.getRecordedLogs(), LVL + 1);
         assertGt(ticketWins, 0, "the early-bird stage drew ticket winners at the next level");
         assertFalse(h.earlyBirdPending(), "the early-bird stage cleared its latch");
@@ -203,7 +203,7 @@ contract DailyJackpotDayShapes is Test {
         h.setLocked(true);
         uint256 word = _board(0x7B0);
         vm.recordLogs();
-        h.payDailyJackpot(true, LVL, word);
+        h.runDailyJackpot(true, LVL, word, gasleft());
         Vm.Log[] memory logs1 = vm.getRecordedLogs();
         assertEq(_ticketWins(logs1, LVL + 1), 0, "the ETH stage drew no early-bird winner");
         assertEq(h.currentPoolView(), 0, "turbo day 1 is the final physical day: the whole current pool is spent");
@@ -212,12 +212,12 @@ contract DailyJackpotDayShapes is Test {
         assertEq(h.counter(), 0, "the counter has not moved before the leg stages");
 
         vm.recordLogs();
-        h.payEarlyBirdTickets(word);
+        h.runEarlyBirdTickets(word, gasleft());
         assertGt(_ticketWins(vm.getRecordedLogs(), LVL + 1), 0, "the early-bird stage drew its winners");
         assertFalse(h.earlyBirdPending());
         assertEq(h.counter(), 0, "the early-bird stage never touches the counter");
 
-        h.payDailyJackpotCoinAndTickets(word);
+        h.runDailyJackpotTickets(word, gasleft());
         assertEq(h.counter(), 1, "the coin+tickets stage completes the single turbo day");
         assertFalse(h.earlyBirdPending());
         assertFalse(h.coinTicketsPending());
@@ -231,8 +231,8 @@ contract DailyJackpotDayShapes is Test {
         h.setJackpotPhase(true);
         h.setLocked(true);
         uint256 word = _board(uint256(0x0DD1) + counterVal);
-        h.payDailyJackpot(true, LVL, word);
-        h.payDailyJackpotCoinAndTickets(word);
+        h.runDailyJackpot(true, LVL, word, gasleft());
+        h.runDailyJackpotTickets(word, gasleft());
         assertEq(h.counter(), counterVal + 1, "the coin+tickets stage advances the counter with its own seal");
         assertEq(h.ticketBudgets(), 0, "the packed budgets are zeroed after the stage runs");
         assertFalse(h.coinTicketsPending());
@@ -255,9 +255,9 @@ contract DailyJackpotDayShapes is Test {
         h.setJackpotPhase(true);
         h.setLocked(true);
         uint256 word = _board(0x0DD1);
-        h.payDailyJackpot(true, LVL, word);
+        h.runDailyJackpot(true, LVL, word, gasleft());
         assertEq(h.routedLevel(), LVL, "the day's ETH stage leaves buys at this level");
-        h.payDailyJackpotCoinAndTickets(word);
+        h.runDailyJackpotTickets(word, gasleft());
         assertEq(h.counter(), 2, "the coin+tickets stage advanced it with the seal");
         assertEq(h.routedLevel(), LVL + 1, "the counter's advance immediately marks the next request as the final daily's");
         h.setLocked(false);
@@ -290,7 +290,7 @@ contract DailyJackpotDayShapes is Test {
         uint256 expectedEarlyBird = counterVal == 0 ? (uint256(fut0) * 300) / 10_000 : 0;
 
         vm.recordLogs();
-        h.payDailyJackpot(true, LVL, word);
+        h.runDailyJackpot(true, LVL, word, gasleft());
         uint256 passEth = _whalePassEth(vm.getRecordedLogs());
         (uint128 next1, uint128 fut1) = h.poolsView();
 
@@ -371,12 +371,12 @@ contract DailyJackpotDayShapes is Test {
             g.seedFarFutureWallet(lv, address(uint160(0xF00000 + lv)));
         }
 
-        g.payDailyJackpot(true, LVL, word);
+        g.runDailyJackpot(true, LVL, word, gasleft());
         assertTrue(g.coinTicketsPending(), "fixture: the coin+tickets stage is queued");
         assertFalse(g.battlePending(), "the daily latched the jackpot battle");
 
         vm.recordLogs();
-        g.payDailyJackpotCoinAndTickets(word);
+        g.runDailyJackpotTickets(word, gasleft());
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] == FLIP_WIN) ++flipWins;
@@ -395,7 +395,7 @@ contract DailyJackpotDayShapes is Test {
     ///      stage queues the coin+tickets stage and leaves the battle latch alone, as it always does.
     function test_phase1DoesNotLatchBattleWhenCoinBudgetIsZero() public {
         uint256 word = _board(0xB0D9E7);
-        h.payDailyJackpot(true, LVL, word);
+        h.runDailyJackpot(true, LVL, word, gasleft());
         assertFalse(h.battlePending(), "the daily latched the jackpot battle");
         assertTrue(h.coinTicketsPending(), "the coin+tickets stage is still queued");
     }

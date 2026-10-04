@@ -19,8 +19,9 @@ interface ICoinflipPlayer {
 }
 
 /// @title RedemptionHandler -- v44 per-day-keyed gambling-burn lifecycle handler
-/// @notice Drives the burn/advance/claim/gameOver state machine for the Foundry invariant
-///         fuzzer. Maintains per-(player, day) ghost storage that mirrors what sDGNRS records
+/// @notice Drives the burn/advance/settle/gameOver state machine for the Foundry invariant
+///         fuzzer. Live claims settle only through mineFlip's Redemption stage; the self-claim
+///         is the terminal door. Maintains per-(player, day) ghost storage that mirrors what sDGNRS records
 ///         post-action, plus per-day pool aggregates and a first-write roll/flipDay record
 ///         (INV-01 anchor). Multi-actor (≥4 actors funded from the Reward pool) and supports
 ///         multi-day claims (claim selector picks a random resolved+unclaimed day from history).
@@ -458,9 +459,12 @@ contract RedemptionHandler is Test {
     //                          ACTION: CLAIM
     // =========================================================================
 
-    /// @notice Claim a resolved gambling burn for a random actor and a random resolved day.
+    /// @notice Settle resolved gambling burns. In a live game claims settle only through
+    ///         mineFlip's Redemption stage, in FIFO order: the action runs the engine, records what
+    ///         it settled, and probes that the actor's own live self-claim pays nothing. Once the
+    ///         game is over it is the actor's terminal self-claim for a random resolved day.
     /// @dev Picks a random day from `ghost_daysWritten` filtered by
-    ///      `ghost_dayResolved[D] && !ghost_claimDone[D][actor]`. Early-returns if no candidate.
+    ///      `ghost_dayResolved[D] && !ghost_claimDone[D][actor]`.
     function action_claim(uint256 actorSeed, uint256 daySeed) external useActor(actorSeed) {
         calls_claim++;
 
@@ -483,6 +487,16 @@ contract RedemptionHandler is Test {
                 }
             }
         }
+
+        if (!game.gameOver()) {
+            uint256 liveSupplyBefore = sdgnrs.totalSupply();
+            _advanceAndRecordClaims();
+            // The engine call may itself latch game over; the probe is for a live game only.
+            if (claimDay != type(uint32).max && !game.gameOver()) _probeLiveSelfClaim(claimDay);
+            _trackSupplyDelta(liveSupplyBefore);
+            _checkResolvedPeriods();
+            return;
+        }
         if (claimDay == type(uint32).max) return;
 
         uint256 supplyBefore = sdgnrs.totalSupply();
@@ -494,7 +508,7 @@ contract RedemptionHandler is Test {
         vm.prank(currentActor);
         try sdgnrs.claimRedemption(currentActor, uint24(claimDay)) {
             ghost_claimCount++;
-            // Live game credits the direct half into game claimable; gameOver pushes wallet ETH.
+            // The terminal self-claim pushes wallet ETH (the claimable term stays flat).
             ghost_totalEthClaimed += (currentActor.balance - ethBefore) +
                 (game.claimableWinningsOf(currentActor) - claimableBefore);
             ghost_totalFlipClaimed += coin.balanceOf(currentActor) - flipBefore;
@@ -528,7 +542,7 @@ contract RedemptionHandler is Test {
         } catch {}
 
         // No-double-claim probe — keeps legacy ghost_doubleClaim counter live. Watches both
-        // payout media: wallet ETH (gameOver push) and game claimable (live-game credit).
+        // payout media: wallet ETH (gameOver push) and game claimable.
         uint256 ethBeforeReClaim = currentActor.balance;
         uint256 claimableBeforeReClaim = game.claimableWinningsOf(currentActor);
         vm.prank(currentActor);
@@ -542,6 +556,23 @@ contract RedemptionHandler is Test {
         } catch {}
 
         _trackSupplyDelta(supplyBefore);
+    }
+
+    /// @dev A live game has no self-claim: the actor's own claim must be refused and pay nothing.
+    ///      A payout here would be a second payment path beside the engine's single settlement,
+    ///      so it counts toward the no-double-claim invariant.
+    function _probeLiveSelfClaim(uint32 claimDay) private {
+        uint256 ethBefore = currentActor.balance;
+        uint256 claimableBefore = game.claimableWinningsOf(currentActor);
+        vm.prank(currentActor);
+        try sdgnrs.claimRedemption(currentActor, uint24(claimDay)) {
+            if (
+                currentActor.balance > ethBefore ||
+                game.claimableWinningsOf(currentActor) > claimableBefore
+            ) {
+                ghost_doubleClaim++;
+            }
+        } catch {}
     }
 
     // =========================================================================

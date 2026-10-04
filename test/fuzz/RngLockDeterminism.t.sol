@@ -172,17 +172,14 @@ contract RngLockDeterminism is DeployProtocol {
     // Perturbation action library
     // ────────────────────────────────────────────────────────────────────
 
-    // 9 legacy v43 classes (0..8) + 2 v55 game-resident router classes (9..10) + 1 v50
-    // whale-pass-claim class (11). [v55 Δ3: doWork→mineFlip; the standalone autoBuy
-    // escape has no successor (the buy folded into mineFlip's STAGE), reframed to the
-    // box-open no-op.]
+    // 9 legacy v43 classes (0..8) + 2 engine classes (9..10) + 1 v50 whale-pass-claim
+    // class (11).
     // cls 9 = game.mineFlip() — the v55 unified router (the Δ3 doWork successor) fired
     //   same-tx inside the locked window (RD-1..5): the advance-consume `cw +=
     //   totalFlipReversals` (DegenerusGameAdvanceModule.sol:257) must read only FROZEN state.
-    // cls 10 = game.openBoxes(0) — the v55 box-open clear (the standalone afKing.autoBuy
-    //   escape's faithful permissionless-action-during-the-freeze successor; the per-sub buy
-    //   folded into the STAGE) fired during rngLock: a NON-REVERTING NO-OP (RD-5 entry-gate),
-    //   it must never abort the lock nor alter the consumed VRF-derived output.
+    // cls 10 = game.mineFlip{gas: 1.5M}() — a bounded-allowance engine step fired during
+    //   rngLock: it stops at its first checkpoint (or waits for the word), and must never
+    //   abort the lock nor alter the consumed VRF-derived output.
     // cls 11 = DegenerusGame.claimWhalePass(player) — the v50 WHALE-04 freeze leg:
     //   the deferred whale-pass materialization endpoint fired same-tx inside the
     //   locked window. Per 334-WHALE04-FREEZE-PROOF.md §2, the far-future band
@@ -191,9 +188,6 @@ contract RngLockDeterminism is DeployProtocol {
     //   absorbs the structurally-expected revert (the freeze proof's load-bearing
     //   property is byte-identity of the consumed word with vs. without the
     //   attempted perturbation, INCLUDING in the revert case).
-    // autoOpen during rngLock is a NO-OP (DegenerusGame.sol:1692 entry-gate returns
-    //   0, never reverts) so it cannot perturb the word — no autoOpen perturb class
-    //   is added that asserts a revert (Pitfall 3).
     uint256 constant N_PERTURB_ACTIONS = 12;
 
     function _perturb(uint256 seed) internal {
@@ -261,14 +255,12 @@ contract RngLockDeterminism is DeployProtocol {
             vm.prank(actor);
             try game.mineFlip() {} catch { return; }
         } else if (cls == 10) {
-            // v55 reframe (the standalone afKing.autoBuy escape has NO successor — the per-sub
-            // buy folded into mineFlip's required-path STAGE, 349-05). The faithful v55
-            // permissionless-action-during-the-freeze successor is the box open clear:
-            // game.openBoxes(0) (the human-box open) is a NON-REVERTING NO-OP during rngLock (the
-            // RD-5 entry-gate returns 0 at DegenerusGame.sol:1740/boxesPending false). It must
-            // never abort the lock nor alter the consumed VRF-derived output. count=0 = OPEN_BATCH.
+            // A bounded-allowance engine step inside the locked window: box stages are read
+            // consumers that never run under the daily lock, so the step can only wait for the
+            // word or take the lock's own next checkpoint. It must never abort the lock nor
+            // alter the consumed VRF-derived output.
             vm.prank(actor);
-            try game.openBoxes(0) {} catch { return; }
+            try game.mineFlip{gas: 1_500_000}() {} catch { return; }
         } else if (cls == 11) {
             // v50 WHALE-04 freeze leg: the deferred whale-pass materialization endpoint
             // fired same-tx inside the locked window. Per 334-WHALE04-FREEZE-PROOF.md §2,
@@ -367,13 +359,9 @@ contract RngLockDeterminism is DeployProtocol {
             return;
         }
         if (action == 9) {
-            // Box opening is permissionless; the removed per-(player,index) door read
-            // "anyone may open the vault's box" via game.openBox(vault, idx). The sweep
-            // replacing it (game.openBoxes) is equally permissionless and equally credits
-            // the box owner regardless of caller — it just has no per-index target anymore
-            // (an in-order, all-players sweep from the open frontier), so the perturbation
-            // now drains whatever is pending instead of aiming at one bounded random index.
-            try game.openBoxes(type(uint256).max) {} catch { return; }
+            // Box opening is permissionless: mineFlip's in-order box stages credit the box
+            // owner regardless of caller, so the perturbation drains whatever is pending.
+            try game.mineFlip() {} catch { return; }
             return;
         }
         if (action == 10) {
@@ -972,10 +960,10 @@ contract RngLockDeterminism is DeployProtocol {
         );
     }
 
-    /// @notice TST-01 — autoOpen during rngLock is a NO-OP (returns 0, opens nothing), never a revert.
-    /// @dev RD-3/RD-5: boxesPending() is rngLock-aware (DegenerusGame.sol:1656) and autoOpen has an
-    ///      entry-gate `if (rngLockedFlag || _livenessTriggered()) return 0;` (DegenerusGame.sol:1692).
-    ///      No expectRevert (Pitfall 3) — the open leg silently no-ops during the freeze.
+    /// @notice TST-01 — no box opens during rngLock: boxesPending() is false and a keeper mineFlip
+    ///         inside the locked window opens nothing and never aborts the lock.
+    /// @dev RD-3/RD-5: boxesPending() is rngLock-aware and the box stages are read consumers that
+    ///      the engine selects only once the daily lock has released.
     function testAutoOpenBlockedDuringRngLockNoOps() public {
         address buyer = makeAddr("tst01-autoopen-noop-buyer");
         vm.deal(buyer, 100 ether);
@@ -984,6 +972,7 @@ contract RngLockDeterminism is DeployProtocol {
         vm.warp(block.timestamp + 1 days); // roll the wall day so the next advance is due
 
         // Queue a lootbox, then engage rngLock via the daily advance boundary.
+        uint48 boxIndex = _readLootboxRngIndex();
         vm.prank(buyer);
         game.purchase{value: 1.01 ether}(
             buyer, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
@@ -997,18 +986,14 @@ contract RngLockDeterminism is DeployProtocol {
             "autoOpen-noop: boxesPending() must be false during rngLock (RD-3)"
         );
 
-        // autoOpen(N) NO-OPs: returns 0, opens nothing, NEVER reverts (RD-5 entry-gate).
-        uint256 opened = game.openBoxes(100);
-        assertEq(opened, 0, "autoOpen-noop: autoOpen must return 0 during rngLock");
-
-        // The v55 unified router mineFlip() (the ONLY afking-open entry — the standalone afking
-        // autoOpen selector collides with the human autoOpen(uint256) so it is NOT re-exposed on the
-        // Game) is likewise safe during lock: its open leg no-ops via the `rngLockedFlag` entry-gate
-        // (_autoOpen, GameAfkingModule.sol:941), and a NoWork() on an empty router is the expected
-        // clean signal — never a freeze-aborting revert.
+        // The engine (the ONLY box-open entry) is safe during lock: with the word pending it
+        // waits (RngNotReady), and no box stage runs under the lock.
         address keeperCaller = makeAddr("tst01-autoopen-keeper");
         vm.prank(keeperCaller);
         try game.mineFlip() {} catch {} // must not abort the lock
+        assertTrue(game.rngLocked(), "autoOpen-noop: the keeper call does not abort the lock");
+        assertEq(_lootboxEthBase(boxIndex, buyer) >> 255, 0, "autoOpen-noop: no box opens during rngLock");
+        assertGt(_lootboxEthBase(boxIndex, buyer), 0, "autoOpen-noop: the queued box is deferred, not dropped");
     }
 
     /// @dev Read the raw lootboxOrder word for [index][who] — the box-owed signal, zeroed on open
@@ -1021,17 +1006,16 @@ contract RngLockDeterminism is DeployProtocol {
         return uint256(vm.load(address(game), leaf));
     }
 
-    /// @notice TST-01 — no marooned boxes (locked autoOpen no-op + post-unlock cursor open).
+    /// @notice TST-01 — no marooned boxes (no open during the lock + post-unlock engine open).
     /// @dev Two faithful sub-proofs, NO storage forging of the lock state:
-    ///   (1) DURING a genuine daily rngLock: boxesPending()==false + autoOpen(N)==0 (RD-3/RD-5
-    ///       entry-gate no-op, never a revert) and the queued box is NOT consumed by the lock —
-    ///       it is preserved (openable) at its index, so nothing is stranded.
+    ///   (1) DURING a genuine daily rngLock: boxesPending()==false, a keeper mineFlip cannot open
+    ///       the box, and the queued box is NOT consumed by the lock — it is preserved (openable)
+    ///       at its index, so nothing is stranded.
     ///   (2) AFTER the lock clears: the box's per-index word landed (not orphaned), and the SAME
-    ///       box opens — the keeper open path materializes it (first-deposit signal zeroed). The
-    ///       autoOpen cursor + boxesPending are exercised on the active index via the word-inject
-    ///       idiom (CrankOpenBoxWorstCaseGas.t.sol) so the cursor walks a word-ready box.
-    /// The RD-5 entry-gate is what guarantees the loop body is non-reverting, so a tail can never be
-    /// marooned mid-walk; (1)+(2) prove the freeze defers — never drops — the queued box.
+    ///       box opens — the engine's human-box stage materializes it (order marked processed).
+    ///       The human-box frontier + boxesPending are exercised on a word-ready read buffer via
+    ///       the word-inject idiom so the stage walks a word-ready box.
+    /// (1)+(2) prove the freeze defers — never drops — the queued box.
     function testAutoOpenNoMaroonedBoxesAfterUnlock() public {
         address boxOwner = makeAddr("tst01-no-maroon-owner");
         address keeper = makeAddr("tst01-no-maroon-keeper");
@@ -1053,13 +1037,12 @@ contract RngLockDeterminism is DeployProtocol {
             "no-maroon: box queued + un-opened (first-deposit signal present)"
         );
 
-        // ---- (1) DURING a genuine daily rngLock: autoOpen NO-OPs, the box is not consumed ----
+        // ---- (1) DURING a genuine daily rngLock: no box opens, the box is not consumed ----
         uint256 reqId = _advanceToVrfRequestBoundary();
         assertTrue(game.rngLocked(), "no-maroon: rngLock engaged");
         assertFalse(game.boxesPending(), "no-maroon: boxesPending() false during lock (RD-3)");
-        assertEq(game.openBoxes(100), 0, "no-maroon: zero boxes open during lock (RD-5 no-op)");
         vm.prank(keeper);
-        try game.mineFlip() {} catch {} // v55 unified router: must not abort the lock (afking open no-ops via the entry-gate)
+        try game.mineFlip() {} catch {} // the engine: must not abort the lock (box stages never run under it)
         assertGt(
             _lootboxEthBase(boxIndex, boxOwner), 0,
             "no-maroon: the queued box is NOT consumed by the lock (deferred, not dropped)"
@@ -1075,19 +1058,20 @@ contract RngLockDeterminism is DeployProtocol {
         );
         // The box is openable at its index — it materializes post-unlock; none stranded. The
         // keeper's own human-box stage opens the read cohort before any later request may
-        // retire the buffer, and the manual valve must not revert on the drained cohort. An
-        // open marks the order word BOX_PROCESSED (bit 255) instead of zeroing it (6d0e64b09).
-        vm.prank(boxOwner);
-        game.openBoxes(type(uint256).max);
+        // retire the buffer, and further mining must not revert unexpectedly on the drained
+        // cohort. An open marks the order word BOX_PROCESSED (bit 255) instead of zeroing it.
+        vm.startPrank(boxOwner);
+        _mineAll(16);
+        vm.stopPrank();
         assertTrue(
             _lootboxEthBase(boxIndex, boxOwner) >> 255 == 1,
             "no-maroon: the deferred box materializes post-unlock (first-deposit signal zeroed)"
         );
         _settleMidday();
 
-        // ---- autoOpen cursor + boxesPending on a word-ready ACTIVE index (cursor-intact open) ----
-        // A fresh box at the now-active index with its word present: boxesPending() flips true
-        // (unlocked) and autoOpen walks the cursor and opens it — the SAME-boxes-open guarantee.
+        // ---- human-box frontier + boxesPending on a word-ready read buffer (cursor-intact open) ----
+        // A fresh box at the then-active index with its word present: boxesPending() flips true
+        // (unlocked) and the engine's human-box stage opens it — the SAME-boxes-open guarantee.
         address boxOwner2 = makeAddr("tst01-no-maroon-owner2");
         vm.deal(boxOwner2, 100 ether);
         uint48 queuedIndex = _readLootboxRngIndex();
@@ -1096,19 +1080,16 @@ contract RngLockDeterminism is DeployProtocol {
             boxOwner2, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         assertGt(_lootboxEthBase(queuedIndex, boxOwner2), 0, "no-maroon: 2nd box queued at the round's index");
-        // The relocated multi-index sweep opens FINALIZED indices (boxCursorIndex .. LR_INDEX-1) —
-        // words land at LR_INDEX-1. Advance LR_INDEX by one so the box at queuedIndex becomes the
-        // just-finalized index the sweep reads, then land its word there. (The old buggy read acted
-        // at the ACTIVE index; injecting at the active index is now an unreachable state.)
-        // Two physical buffers (6d0e64b09): the seeded session makes queuedIndex the read side.
+        // Two physical buffers: the seeded session makes queuedIndex the read side (the write
+        // side flips to queuedIndex ^ 1), with its word landed there.
         _injectActiveLootboxWord(queuedIndex, uint256(keccak256("tst01-no-maroon-word2")));
         _advanceLootboxRngIndexByOne();
         assertEq(_readLootboxRngIndex(), queuedIndex ^ 1, "no-maroon: LR_INDEX advanced past the queued box (now finalized)");
-        _parkBoxFrontier(queuedIndex); // start the sweep at the finalized index (lower indices drained)
+        _parkBoxFrontier(queuedIndex); // start the human-box stage at this buffer's first entry
         assertFalse(game.rngLocked(), "no-maroon: unlocked for the cursor-open");
         assertTrue(game.boxesPending(), "no-maroon: boxesPending() true once the finalized-index word lands");
-        uint256 openedViaCursor = game.openBoxes(100);
-        assertGt(openedViaCursor, 0, "no-maroon: autoOpen walks the cursor and opens the queued box");
+        vm.prank(keeper);
+        game.mineFlip();
         assertTrue(
             _lootboxEthBase(queuedIndex, boxOwner2) >> 255 == 1,
             "no-maroon: the cursor-opened box materialized (signal zeroed) - none marooned"
@@ -1122,19 +1103,15 @@ contract RngLockDeterminism is DeployProtocol {
         RecyclingState.seedWord(address(game), uint48(index), bytes32(rngWord));
     }
 
-    /// @dev Bump the active lootbox RNG index (low 48 bits of lootboxRngPacked, slot 35) by one,
-    ///      mirroring requestLootboxRng's pre-increment. This finalizes the prior index (a box at
-    ///      it now sits at LR_INDEX-1, the index the relocated sweep opens) without touching any
-    ///      other packed lootboxRng field.
+    /// @dev Fixture guard: the seeded session already selected the delivered read buffer and the
+    ///      opposite write tag.
     function _advanceLootboxRngIndexByOne() internal {
         // seedWord already selected the delivered read and opposite write tag.
         assertGt(RecyclingState.currentWord(address(game)), 1);
     }
 
-    /// @dev Park the auto-open frontier (boxCursorIndex byte 13, boxCursor byte 7 — both in slot
-    ///      56) at `index` with a zero in-index cursor, so the relocated multi-index sweep begins
-    ///      exactly at this finalized index (the realistic state where every lower index is already
-    ///      drained). Without this the sweep would orphan-break at the first un-worded lower index.
+    /// @dev Park the human-box frontier (humanReadComplete byte 13, boxCursor byte 7 — both in
+    ///      slot 56) at `index`'s first entry, as a fresh seal leaves it.
     uint256 constant SLOT_BOX_CURSORS = 56;
     function _parkBoxFrontier(uint48 index) internal {
         require(index == RecyclingState.readBuffer(address(game)), "fixture read tag");

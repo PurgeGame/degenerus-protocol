@@ -214,7 +214,7 @@ contract CrapsCompBudgetTest is CrapsPins {
         assertEq(highMult, 0, "the fixture opened a high lane");
         uint256 before = flip.compLane();
         _closeOn(craps, slot, 1, 0xBEEF);
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         assertEq(flip.compLane() - before, _expected(bank, 2, 0, 0), "a custom field earned other than 2% of its bankrolls");
     }
 

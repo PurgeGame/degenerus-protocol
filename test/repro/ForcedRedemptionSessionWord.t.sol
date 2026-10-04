@@ -3,11 +3,11 @@ pragma solidity 0.8.34;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 
-/// @dev Real burns and requests: a recovered session gives manual claims and the
-/// mandatory keeper drain identical entropy, then permits buffer reuse.
-/// The keeper settles live claims inside the same call that finishes the daily work, as far as
-/// its allowance admits, so a manual claim takes whichever claim heads the queue when the
-/// redemption stage opens; the cohort is sized so heads outlast that call's spare allowance.
+/// @dev Real burns and requests: every claim the mandatory keeper drain settles, in a normal or a
+/// recovered (stalled) session, resolves its box from the cohort's pinned session word, and the
+/// drained cohort then permits buffer reuse. The keeper settles live claims inside the same call
+/// that finishes the daily work, as far as its allowance admits; the cohort is sized so claims
+/// outlast that call's spare allowance and are settled by later engine calls.
 contract ForcedRedemptionSessionWordTest is DeployProtocol {
     address private constant ALICE = address(0xA11CE);
     address private constant BOB = address(0xB0B);
@@ -28,6 +28,24 @@ contract ForcedRedemptionSessionWordTest is DeployProtocol {
         // After a stall the call that completes the session also issues the overdue daily request;
         // that request proves completion, since a fresh request waits for every read consumer.
         assertTrue(game.rngComplete() || mockVRF.lastRequestId() > requestBefore, "bounded compulsory work finishes");
+    }
+
+    /// @dev One mineFlip at the smallest allowance (25k steps) that settles a claim, probed on
+    ///      snapshots and then applied. Every queued claim is the same size, so that call's spare
+    ///      allowance cannot admit a second one.
+    function _mineOneClaim() private {
+        uint256 reserved = sdgnrs.pendingRedemptionEthValue();
+        for (uint256 g = 800_000; g <= 9_000_000; g += 25_000) {
+            uint256 snap = vm.snapshotState();
+            (bool ok,) = address(game).call{gas: g}(abi.encodeWithSignature("mineFlip()"));
+            bool settled = ok && sdgnrs.pendingRedemptionEthValue() != reserved;
+            assertTrue(vm.revertToState(snap));
+            if (settled) {
+                game.mineFlip{gas: g}();
+                return;
+            }
+        }
+        revert("harness: no allowance settles a claim");
     }
 
     function _owner(uint256 i) private pure returns (address) {
@@ -55,7 +73,7 @@ contract ForcedRedemptionSessionWordTest is DeployProtocol {
             bool stepped;
             for (uint256 g = 9_000_000; g >= 400_000 && !stepped; g -= 100_000) {
                 try game.mineFlip{gas: g}() {
-                    // Stop with a manual head and at least one keeper claim still unsettled.
+                    // Stop with at least two claims still unsettled for later engine calls.
                     if (_unsettled(day) >= 2) stepped = true;
                     else assertTrue(vm.revertToState(snap));
                 } catch {
@@ -67,7 +85,7 @@ contract ForcedRedemptionSessionWordTest is DeployProtocol {
         assertEq(game.rngConsumerStage(), 1, "redemption stage reached after daily work");
     }
 
-    function _run(bool stalled, bool batch, bool terminal) private {
+    function _run(bool stalled, bool terminal) private {
         _deployProtocol();
         vm.warp(vm.getBlockTimestamp() + 1 days);
         _request();
@@ -100,18 +118,17 @@ contract ForcedRedemptionSessionWordTest is DeployProtocol {
         assertFalse(game.rngLocked(), "daily work released the lock");
         assertTrue(sdgnrs.redemptionSettlementPending(), "read cohort remains outstanding");
         assertFalse(game.rngComplete(), "reuse blocked before remaining claims settle");
-        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.requestLootboxRng();
+        assertEq(game.nextMinerAction(), 8, "no request can cut in ahead of MinerAction.Redemption");
 
-        // FIFO: the first unsettled owner heads the queue; at least one more stays for the keeper.
+        // FIFO: the first unsettled owner heads the queue; at least one more follows it.
         uint256 head = OWNERS;
         for (uint256 i; i < OWNERS && head == OWNERS; ++i) {
             (uint96 base,,) = sdgnrs.pendingRedemptions(_owner(i), burnDay);
             if (base != 0) head = i;
         }
-        assertLt(head + 1, OWNERS, "harness: a manual head and a keeper claim remain");
+        assertLt(head + 1, OWNERS, "harness: a head and a later claim remain");
         // Declared after the bounded probe, so replayed probe steps cannot satisfy them: each
-        // remaining paid claim, manual or keeper, resolves its box from the pinned session word.
+        // remaining paid claim the keeper settles resolves its box from the pinned session word.
         for (uint256 i = head; i < OWNERS; ++i) {
             if (!terminal || i == head) {
                 vm.expectCall(address(game), abi.encodeWithSelector(
@@ -120,10 +137,13 @@ contract ForcedRedemptionSessionWordTest is DeployProtocol {
                 ));
             }
         }
-        address manual = _owner(head);
-
         if (terminal) {
-            sdgnrs.claimRedemption(manual, burnDay); // Consume one; the other paid claims survive terminal cutover.
+            // The engine settles the head live; the other paid claims survive terminal cutover.
+            _mineOneClaim();
+            (uint96 settled,,) = sdgnrs.pendingRedemptions(_owner(head), burnDay);
+            assertEq(settled, 0, "the head settled live");
+            (uint96 waiting,,) = sdgnrs.pendingRedemptions(_owner(head + 1), burnDay);
+            assertGt(waiting, 0, "later claims wait for the ending");
             vm.warp(vm.getBlockTimestamp() + 1001 days);
             assertTrue(game.livenessTriggered(), "ending disables live settlement");
             // A terminal claim requires the irreversible ending latch; let the real
@@ -150,12 +170,6 @@ contract ForcedRedemptionSessionWordTest is DeployProtocol {
             assertGt(reserved, 0);
             assertEq(sdgnrs.pendingRedemptionEthValue(), 0, "no forfeiture or stranded reserve");
             return;
-        } else if (batch) {
-            address[] memory players = new address[](1);
-            players[0] = manual;
-            sdgnrs.claimRedemptionMany(players, burnDay);
-        } else {
-            sdgnrs.claimRedemption(manual, burnDay);
         }
         _complete();
         assertFalse(sdgnrs.redemptionSettlementPending(), "no retained obligation");
@@ -165,8 +179,7 @@ contract ForcedRedemptionSessionWordTest is DeployProtocol {
         }
     }
 
-    function test_NormalSessionManualClaimMatchesKeeper() public { _run(false, false, false); }
-    function test_StalledSessionManualClaimMatchesKeeper() public { _run(true, false, false); }
-    function test_StalledSessionBatchClaimMatchesKeeper() public { _run(true, true, false); }
-    function test_TerminalClaimsSurviveFormerExpiry() public { _run(false, false, true); }
+    function test_NormalSessionKeeperClaimsUsePinnedWord() public { _run(false, false); }
+    function test_StalledSessionKeeperClaimsUsePinnedWord() public { _run(true, false); }
+    function test_TerminalClaimsSurviveFormerExpiry() public { _run(false, true); }
 }

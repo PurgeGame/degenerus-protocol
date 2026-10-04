@@ -6,9 +6,6 @@ import {VRFRandomWordsRequest} from "../interfaces/IVRFCoordinator.sol";
 import {DegenerusGameRngUtils} from "./DegenerusGameRngUtils.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 
-interface IAdminLinkValue {
-    function linkAmountToEth(uint256 amount) external view returns (uint256);
-}
 /// @notice Commitment boundary, publication and transport-only recovery.
 /// @dev The miner engine selects when these actions run. A fresh request is last.
 contract DegenerusGameRngModule is DegenerusGameRngUtils {
@@ -70,17 +67,14 @@ contract DegenerusGameRngModule is DegenerusGameRngUtils {
         emit Advance(STAGE_RNG_REQUESTED, level);
     }
 
-    /// @notice Automatic request uses public pending work and never spends a miner's donation credit.
+    /// @notice The mid-day request, reached only through mineFlip (msg.sender is the miner).
+    ///         The caller's donated credit pays the threshold gate when pending work sits
+    ///         below it.
     function requestMinerRng() external {
-        _requestLootboxRng(address(0));
-    }
-
-    /// @notice Explicit donor requests may spend the caller's LINK credit to waive value gates.
-    function requestLootboxRng() external {
         _requestLootboxRng(msg.sender);
     }
 
-    function _requestLootboxRng(address creditOwner) private {
+    function _requestLootboxRng(address caller) private {
         if (address(this) != ContractAddresses.GAME || _simulatedDayIndex() != dailyIdx
             || _minerMaintenancePending() || _livenessTriggered()) revert RngNotReady();
         // Completion already requires no daily lock, active request or mid-day ticket latch.
@@ -115,29 +109,23 @@ contract DegenerusGameRngModule is DegenerusGameRngUtils {
             revert InsufficientLink();
         }
 
-        // Threshold check: pending ETH must clear the owner-tunable threshold. This gates
-        // only the mid-day fast path — the daily advance assigns the day's word to
-        // the current index regardless, so pending boxes never wait past one cycle.
-        uint256 pendingEth = _unpackMilliEthToWei(uint64(_lrRead(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK)));
-        // Pending FLIP counts as work outstanding but adds nothing to the threshold: only ETH
-        // pays for a mid-day word, so only ETH justifies buying one. A FLIP-denominated queue
-        // resolves on the daily word instead, and anyone wanting it sooner can donate LINK for
-        // the credit that waives this gate, or have an ETH buyer trigger it.
-        bool noPending = pendingEth == 0 && _lrRead(LR_PENDING_FLIP_SHIFT, LR_PENDING_FLIP_MASK) == 0;
-        uint256 totalEthEquivalent = pendingEth;
-        uint256 threshold = _unpackMilliEthToWei(uint64(_lrRead(LR_THRESHOLD_SHIFT, LR_THRESHOLD_MASK)));
-        // Donation credit waives both pending-value gates — an empty queue and a
-        // below-threshold one alike. Charged only where one actually binds, so a request
-        // that already clears them costs a holder nothing, and a caller holding no credit
-        // still gets the specific gate as the revert. Ordered after the LINK floor above
-        // so credit is never charged for a request the subscription cannot pay for.
-        if (noPending || (threshold != 0 && totalEthEquivalent < threshold)) {
-            // A pending craps window waives both: its word settles a table already holding
-            // staked FLIP, which a lootbox queue it has no stake in cannot price. Checked before
-            // the credit charge, so the caller pays no credit for it. Every other gate above
-            // still binds, and the LINK floor binds at its own level rather than not at all.
-            if (!crapsWork && (creditOwner == address(0) || !_tryChargeMiddayCredit(creditOwner))) {
-                if (noPending) revert NoPendingLootbox();
+        // Pending-value gates. They gate only the mid-day fast path — the daily advance
+        // assigns the day's word to the current index regardless, so pending boxes never wait
+        // past one cycle. A pending craps window waives both with no charge: its word settles a
+        // table already holding staked FLIP, which a lootbox queue cannot price. Every other
+        // gate above still binds, and the LINK floor binds at its own level.
+        if (!crapsWork) {
+            uint256 pendingEth = _unpackMilliEthToWei(uint64(_lrRead(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK)));
+            // An empty queue has nothing for a word to settle, credit or not.
+            if (pendingEth == 0 && _lrRead(LR_PENDING_FLIP_SHIFT, LR_PENDING_FLIP_MASK) == 0) {
+                revert NoPendingLootbox();
+            }
+            // Pending FLIP counts as work but adds nothing to the threshold: only ETH pays for a
+            // mid-day word. Below the threshold the caller's donated credit pays the gate,
+            // charged after the LINK floor so credit is never spent on a request the
+            // subscription cannot pay for.
+            uint256 threshold = _unpackMilliEthToWei(uint64(_lrRead(LR_THRESHOLD_SHIFT, LR_THRESHOLD_MASK)));
+            if (threshold != 0 && pendingEth < threshold && !_tryChargeMiddayCredit(caller)) {
                 revert BelowThreshold();
             }
         }
@@ -212,15 +200,8 @@ contract DegenerusGameRngModule is DegenerusGameRngUtils {
     }
 
     function _tryChargeMiddayCredit(address caller) private returns (bool charged) {
-        uint256 balance = middayRngCredit[caller];
-        // A zero balance never qualifies, even where basefee (and so the charge) is zero.
-        if (balance == 0) return false;
-
-        uint256 weiPerLink = IAdminLinkValue(ContractAddresses.ADMIN).linkAmountToEth(1 ether);
-        if (weiPerLink == 0) return false;
-
-        uint256 charge = (MIDDAY_RNG_BILLED_GAS * block.basefee * MIDDAY_RNG_CHARGE_MULT * 1 ether) / weiPerLink;
-        if (balance < charge) return false;
+        (bool covered, uint256 charge, uint256 balance) = _middayCreditCharge(caller);
+        if (!covered) return false;
         unchecked {
             balance -= charge;
         }

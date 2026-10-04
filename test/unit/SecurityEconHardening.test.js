@@ -611,25 +611,25 @@ describe("SecurityEconHardening", function () {
   });
 
   // =========================================================================
-  // ECON-03: Multi-level scatter targeting for BAF
+  // ECON-03: Multi-level scatter targeting (terminal jackpot)
   // =========================================================================
   describe("ECON-03: Multi-level scatter targeting", function () {
-    it("BAF jackpot uses runTerminalJackpot targeting next level", async function () {
-      // The BAF (Big-Ass-Flip) jackpot at x00 levels uses
-      // runTerminalJackpot(pool, lvl+1, rngWord) which targets the
-      // next-level ticketholders. This means scatter distribution
-      // across trait buckets for the target level.
+    it("terminal jackpot worker takes an explicit target level (runTerminalJackpotWork)", async function () {
+      // The game-over drain pays the final ticket cohort through
+      // runTerminalJackpotWork(poolWei, targetLvl, rngWord, allowance): the GameOver
+      // module passes the phase-correct terminal level, so the trait-bucket scatter
+      // samples that level's ticketholders rather than an implied current level.
       //
-      // The jackpot module's runTerminalJackpot accepts a targetLvl
-      // parameter, enabling multi-level scatter when called from
-      // different contexts (endgame, gameOver).
-      //
-      // Structural test: verify the function exists on the jackpot module
+      // Structural test: the live worker on the jackpot module exposes the target level.
       const { jackpotModule } = await loadFixture(deployFullProtocol);
-      const frag = jackpotModule.interface.getFunction("runTerminalJackpot");
+      const frag = jackpotModule.interface.getFunction("runTerminalJackpotWork");
       expect(frag).to.not.be.null;
-      // Parameters: poolWei, targetLvl, rngWord
-      expect(frag.inputs.length).to.equal(3);
+      expect(frag.inputs.map((i) => `${i.type} ${i.name}`)).to.deep.equal([
+        "uint256 poolWei",
+        "uint24 targetLvl",
+        "uint256 rngWord",
+        "uint256 allowance",
+      ]);
     });
   });
 

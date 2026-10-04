@@ -7,7 +7,7 @@ import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 
 /// @title PurchaseDripHarness -- drives the live purchase-phase daily drip
-/// @notice Extends the production DegenerusGameJackpotModule so `payDailyJackpot`
+/// @notice Extends the production DegenerusGameJackpotModule so `runDailyJackpot`
 ///         (guard-free by design; the Game parent controls access in production)
 ///         executes the real purchase-phase drip split in THIS contract's storage.
 ///         The harness only adds state seeders and read-only views; it overrides
@@ -98,7 +98,7 @@ contract PurchaseDripSplitTest is Test {
         uint128 future0 = 1_234_567_890_123_456_789_012; // ~1234.57 ether, deliberately non-round
         h.exposed_setPrizePools(0, future0);
 
-        h.payDailyJackpot(false, LVL, _word());
+        h.runDailyJackpot(false, LVL, _word(), gasleft());
 
         (uint256 slice, uint256 ticketLeg, uint256 insurance, ) = _expectedSplit(future0);
         (uint128 nextAfter, uint128 futureAfter) = h.exposed_getPrizePools();
@@ -122,7 +122,7 @@ contract PurchaseDripSplitTest is Test {
         future0 = uint128(bound(future0, 0, 1e30));
         h.exposed_setPrizePools(0, future0);
 
-        h.payDailyJackpot(false, LVL, _word());
+        h.runDailyJackpot(false, LVL, _word(), gasleft());
 
         (, uint256 ticketLeg, uint256 insurance, ) = _expectedSplit(future0);
         (uint128 nextAfter, uint128 futureAfter) = h.exposed_getPrizePools();
@@ -159,7 +159,7 @@ contract PurchaseDripSplitTest is Test {
         uint128 future0 = 1000 ether;
         h.exposed_setPrizePools(0, future0);
 
-        h.payDailyJackpot(false, LVL, _word());
+        h.runDailyJackpot(false, LVL, _word(), gasleft());
 
         (, uint256 ticketLeg, uint256 insurance, uint256 ethLeg) = _expectedSplit(future0);
         (uint128 nextAfter, uint128 futureAfter) = h.exposed_getPrizePools();

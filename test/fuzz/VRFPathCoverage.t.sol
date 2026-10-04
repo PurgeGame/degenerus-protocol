@@ -42,6 +42,15 @@ contract VRFPathCoverage is DeployProtocol {
     }
 
     /// @dev Read lootboxRngIndex from lootboxRngPacked (storage slot 33, low 48 bits = LR_INDEX).
+    /// @dev The mid-day request through mineFlip, its only door, as the engine's next action.
+    function _mineMiddayRequest() internal returns (uint256 reqId) {
+        uint256 prior = mockVRF.lastRequestId();
+        game.mineFlip();
+        reqId = mockVRF.lastRequestId();
+        assertGt(reqId, prior, "mineFlip issued the mid-day request");
+        assertFalse(game.rngLocked(), "a mid-day request, not the daily one");
+    }
+
     function _lootboxRngIndex() internal view returns (uint48) {
         return RecyclingState.writeBuffer(address(game));
     }
@@ -306,8 +315,8 @@ contract VRFPathCoverage is DeployProtocol {
         // Fund VRF subscription for mid-day request
         mockVRF.fundSubscription(1, 100e18);
 
-        // Request mid-day lootbox RNG (creates mid-day pending state)
-        game.requestLootboxRng();
+        // Request mid-day lootbox RNG through mineFlip (creates mid-day pending state)
+        _mineMiddayRequest();
         uint48 indexBeforeStall = _lootboxRngIndex();
         uint48 reservedIndex = (indexBeforeStall ^ 1);
 

@@ -6,7 +6,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 
 /// @title The lootbox's craps day-pass lane, end to end
-/// @notice Drives the REAL production path: a box is set up in Game storage, `openBox` resolves it
+/// @notice Drives the REAL production path: a box is set up in Game storage, `mineFlip` resolves it
 ///         through the shipped module, and everything asserted here is read back out of the live
 ///         craps table. Nothing about the conversion is mirrored or restated — a mirror could agree
 ///         with itself while the shipped arithmetic drifted underneath it.
@@ -53,14 +53,12 @@ contract LootboxCrapsPasses is DeployProtocol {
         return keccak256(abi.encode(uint256(index), baseSlot));
     }
 
-    /// @dev box-order migration: the removed per-(player,index) `openBox` read
-    ///      lootboxOrder[index][player] straight from the mapping (no discovery queue, no
-    ///      "finalized" notion). Its sweep replacement (`openBoxes`) only ever finds a box by
-    ///      walking `boxPlayers[index & 1]`, and only for indices at or below LR_INDEX-1, so this
-    ///      forged setup also enqueues `player` and finalizes+parks the sweep frontier on
-    ///      `index` -- every call is self-contained (LR_INDEX and the cursor are unconditionally
-    ///      overwritten each time), so the many non-monotonic index sequences the callers below
-    ///      use are each independently reachable regardless of call order.
+    /// @dev mineFlip's human-box stage only ever finds a box by walking `boxPlayers[index & 1]`
+    ///      on the delivered read buffer, so this forged setup also enqueues `player` and parks
+    ///      the stage's frontier on `index` -- every call is self-contained (the buffer selector
+    ///      and the cursor are unconditionally overwritten each time), so the many non-monotonic
+    ///      index sequences the callers below use are each independently reachable regardless of
+    ///      call order.
     function _setupLootbox(address player, uint48 index, uint256 ethAmount, uint256 vrfWord) internal {
         uint256 packed = uint256(game.level()) | (uint256(1) << LB_SCORE_SHIFT)
             | (uint256(1) << LB_CUSTOM_COUNT_SHIFT) | ((ethAmount / LB_CUSTOM_SCALE) << LB_CUSTOM_SIZE_SHIFT);
@@ -93,7 +91,7 @@ contract LootboxCrapsPasses is DeployProtocol {
         _setupLootbox(player, index, size, word);
         vm.recordLogs();
         vm.prank(player);
-        game.openBoxes(type(uint256).max);
+        game.mineFlip();
         return _passEventIn(vm.getRecordedLogs());
     }
 

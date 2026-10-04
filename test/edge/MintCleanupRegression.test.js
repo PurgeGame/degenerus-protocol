@@ -45,14 +45,14 @@ const TICKET_FAR_FUTURE_BIT = 0x400000n;
 // approach used here looks up each emission's entropy from the live storage
 // source the contract actually used at emit time — different per path:
 //
-//   Path B (lvl=1, current-level via processTicketBatch L686): entropy is
+//   Path B (lvl=1, current-level via runTicketWork): entropy is
 //     loaded from `lootboxRngWordByIndex[lrIndex - 1]` where `lrIndex` is
 //     bits 0..47 of `lootboxRngPacked` (storage slot 34). The index does
 //     not change while alice's ticket queue at lvl=1 drains, so a single
 //     post-drain read is sufficient for every Path B emission.
 //   Path A (lvl>=2, the whale-pass far-future span, drained only once its
 //     level's own last-purchase-day seal fires the private
-//     `_processFutureTicketBatch` continuation inside `processTicketBatch` —
+//     `_processFutureTicketBatch` continuation inside `runTicketWork` —
 //     not exercised by this fixture's single-day whale-bundle drain, so no
 //     Path A emissions are expected here; this entropy resolution is kept
 //     for whichever future scenario does progress far enough to reach it):
@@ -279,10 +279,9 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
       // far-future key space and is NOT minted by this single-day drain — it
       // only mints once its own level's last-purchase-day seal fires the
       // private _processFutureTicketBatch continuation inside
-      // processTicketBatch. This whale-bundle fixture never reaches that seal,
-      // so Path A must emit nothing here (the removed external
-      // processFutureTicketBatch entrypoint this test used to drive directly
-      // no longer exists; see TST-MINTCLN-04 for the frozen-queue-key proof).
+      // runTicketWork. This whale-bundle fixture never reaches that seal,
+      // so Path A must emit nothing here (see TST-MINTCLN-04 for the
+      // frozen-queue-key proof).
       expect(pathALevels.length).to.equal(
         0,
         "Path A (lvl>=2) must NOT emit within the whale-bundle's own drain — those entries are frozen in the far-future key space until their level's own last-purchase-day seal"

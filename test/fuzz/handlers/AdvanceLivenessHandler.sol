@@ -10,6 +10,17 @@ import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 import {MockLinkEthFeed} from "../../../contracts/mocks/MockLinkEthFeed.sol";
 import {TicketQueueStorage as TQ} from "../helpers/TicketQueueStorage.sol";
+import {IDegenerusGameRngModule} from "../../../contracts/interfaces/IDegenerusGameModules.sol";
+
+/// @dev The RNG module's mid-day request worker (the one mineFlip's RequestMidday stage
+///      dispatches), called alone in the Game's context so a check can read its own gates.
+contract LivenessRequestWorker is DegenerusGame {
+    function requestMidday() external {
+        (bool ok, bytes memory reason) = ContractAddresses.GAME_RNG_MODULE.delegatecall(
+            abi.encodeWithSelector(IDegenerusGameRngModule.requestMinerRng.selector));
+        if (!ok) assembly ("memory-safe") { revert(add(reason, 32), mload(reason)) }
+    }
+}
 
 /// @title AdvanceLivenessHandler — drives the advance chain and checks a LIVENESS post-condition.
 ///
@@ -17,8 +28,8 @@ import {TicketQueueStorage as TQ} from "../helpers/TicketQueueStorage.sol";
 ///         either a return path discards `finished`, or the caller only invokes the worker
 ///         while it can still FIND work — leaving "flag set, no work, every entry point
 ///         reverts" reachable. The handler drives random sequences (ticket/lootbox/foil/whale
-///         buys, mid-day lootbox requests as a player or as the CRAPS table, VRF fulfilment
-///         with delays and stalls, mineFlip / mineFlip cranks, intra-day and cross-day
+///         buys, mid-day lootbox requests through mineFlip as a player or as a credited LINK
+///         donor, VRF fulfilment with delays and stalls, mineFlip cranks, intra-day and cross-day
 ///         warps including the pre-reset minute, prize-pool seeding to force turbo and normal
 ///         last-purchase-day seals) and after EVERY action runs an isolated liveness check.
 ///
@@ -29,12 +40,15 @@ import {TicketQueueStorage as TQ} from "../helpers/TicketQueueStorage.sol";
 ///              NotTimeYet, today's word exists, rngLocked is false, LR_MID_DAY == 0,
 ///              ticketsFullyProcessed is true (nothing staged without a worker), and
 ///              advanceDue() agrees (false) with the reverting advance.
-///           3. requestLootboxRng from a fresh account must not revert MidDayActive /
-///              RngNotReady / RngLocked (only the legitimate economic/timing refusals).
-///           4. PROBE: requestLootboxRng as the CRAPS table (exempt from the pending-value
-///              gates, so it issues whenever the timing gates allow). On success, fulfil and
-///              crank to quiescence again and re-run step 2 — every mid-day cycle must
-///              return to idle.
+///           3. The mid-day request worker (RngModule requestMinerRng, the one mineFlip's
+///              RequestMidday stage dispatches), called alone for a fresh account, must not
+///              revert RngNotReady or any other liveness gate (only the legitimate
+///              economic/timing refusals).
+///           4. PROBE: a credited LINK donor buys a minimum box (pending work below the
+///              threshold, which the donor's credit pays) and mines when the engine selects
+///              the request for it, so it issues whenever the timing gates allow. On success,
+///              fulfil and crank to quiescence again and re-run step 2 — every mid-day cycle
+///              must return to idle.
 ///           Every Kth action additionally runs the same check after warping into the next
 ///           day: the next day must seal within N cranks.
 ///         A violation stores a decoded state snapshot; the invariant asserts none occurred.
@@ -68,7 +82,6 @@ contract AdvanceLivenessHandler is Test {
     bytes4 private constant E_INSUFFICIENT_LINK = bytes4(keccak256("InsufficientLink()"));
     bytes4 private constant E_NO_PENDING = bytes4(keccak256("NoPendingLootbox()"));
     bytes4 private constant E_BELOW_THRESHOLD = bytes4(keccak256("BelowThreshold()"));
-    bytes4 private constant E_RNG_IN_FLIGHT = bytes4(keccak256("RngInFlight()"));
     bytes4 private constant E_GAS_TOO_HIGH = bytes4(keccak256("GasTooHigh()"));
     // The engine's idle signal is NoWork() (MinerModule, 60d31f775); the old advance's
     // NotTimeYet() no longer exists. The constant keeps its role: the expected quiescence error.
@@ -84,7 +97,7 @@ contract AdvanceLivenessHandler is Test {
     uint8 public constant V_NOT_SEALED = 4; // today's word missing / rng still locked at quiescence
     uint8 public constant V_STAGED_NO_WORKER = 5; // !ticketsFullyProcessed while idle and sealed
     uint8 public constant V_ADVANCE_DUE_LIES = 6; // advanceDue() true but mineFlip reverts
-    uint8 public constant V_REQUEST_BLOCKED = 7; // requestLootboxRng blocked by a liveness gate
+    uint8 public constant V_REQUEST_BLOCKED = 7; // the mid-day request worker blocked by a liveness gate
 
     struct Violation {
         uint8 code;
@@ -121,7 +134,7 @@ contract AdvanceLivenessHandler is Test {
     uint256 public ghost_actions;
     uint256 public ghost_checks;
     uint256 public ghost_nextDayChecks;
-    uint256 public ghost_probeRequests; // CRAPS probe issued a mid-day request inside a check
+    uint256 public ghost_probeRequests; // the donor probe issued a mid-day request inside a check
     uint256 public ghost_probeOnLpd; // ... while lastPurchaseDay latched (non-turbo)
     uint256 public ghost_probeOnLpdFrozenPool; // ... with the frozen next-level pool non-empty
     uint256 public ghost_skippedGameOver;
@@ -133,11 +146,11 @@ contract AdvanceLivenessHandler is Test {
     uint256 public ghost_x9Levels;
     uint256 public ghost_x0Levels;
     uint256 public ghost_maxLevel;
-    uint256 public ghost_middayRequests; // real-run requestLootboxRng successes
+    uint256 public ghost_middayRequests; // real-run mid-day requests issued through mineFlip
     uint256 public ghost_middayLatchSet; // ... that set the latch
     uint256 public ghost_middayLatchOnLpd; // ... on a (non-turbo) last purchase day
     uint256 public ghost_middayLatchOnLpdFrozenPool; // ... with a non-empty frozen pool
-    uint256 public ghost_middayAsCraps;
+    uint256 public ghost_middayAsCraps; // ... by the credited donor
     uint256 public ghost_vrfStalls; // warped past a stall timeout with a request outstanding
     uint256 public ghost_vrfStallsDaily;
     uint256 public ghost_vrfStallsMidday;
@@ -209,22 +222,31 @@ contract AdvanceLivenessHandler is Test {
         _buyWhalePass(_actor(actorSeed));
     }
 
-    function actOpenBoxes(uint256 n) external action("openBoxes") {
+    /// Box opening runs only as mineFlip's read-consumer stages: when the next engine action is
+    /// the AFK (9) or human-box (10) stage, a random player mines once.
+    function actOpenBoxes(uint256 actorSeed) external action("openBoxes") {
         if (game.gameOver()) return;
-        try game.openBoxes(bound(n, 1, 20)) {} catch {}
+        address a = _actor(actorSeed);
+        vm.prank(a);
+        uint8 next = game.minerAction();
+        if (next != 9 && next != 10) return;
+        vm.prank(a);
+        (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+        ok;
     }
 
-    /// Mid-day lootbox request from a random player (after optionally topping up the pending
-    /// lootbox value) or from a funded LINK donor. Craps has no request path of its own any more
-    /// (6d0e64b09); the donor's credit waives the empty-queue gates the way the craps exemption did.
+    /// Mid-day lootbox request through mineFlip from a random player (after optionally topping
+    /// up the pending lootbox value) or from a funded LINK donor, whose credit pays the threshold
+    /// gate for pending work below it (mode 2 buys a box under the threshold first).
     function actMiddayRequest(uint256 actorSeed, uint256 mode) external action("middayRequest") {
         mode = mode % 3;
         address a = _actor(actorSeed);
         if (mode == 1) _buyLootbox(a, 2 ether);
+        if (mode == 2) _buyLootbox(a, 0.5 ether);
         _request(mode == 2 ? _donor() : a);
     }
 
-    /// A funded LINK donor whose credit waives the pending-value gates.
+    /// A funded LINK donor whose credit pays the threshold gate on the donor's own mineFlip.
     function _donor() internal returns (address donor) {
         donor = address(uint160(0xD0D0D0));
         MockLinkEthFeed(ContractAddresses.LINK_ETH_FEED).setUpdatedAt(block.timestamp);
@@ -387,29 +409,43 @@ contract AdvanceLivenessHandler is Test {
             if (!game.gameOver()) v = _judge(quiet, sel, cranks, nextDay ? 2 : 0);
         }
         if (v.code == V_NONE && !game.gameOver()) {
-            // (3) a fresh player's mid-day request must not hit a liveness gate
+            // (3) the mid-day request worker, for a fresh account, must not hit a liveness gate
             address fresh = address(uint160(0xF4E5400));
+            bytes memory production = address(game).code;
+            vm.etch(address(game), address(new LivenessRequestWorker()).code);
             vm.prank(fresh);
-            (bool ok, bytes memory ret) = address(game).call(abi.encodeWithSignature("requestLootboxRng()"));
+            (bool ok, bytes memory ret) = address(game).call(abi.encodeWithSignature("requestMidday()"));
+            vm.etch(address(game), production);
             if (ok) {
-                // a fresh account with no boxes can only pass via the pending/credit gates; fine.
+                // a fresh account holds no credit, so it can only pass the pending-value gates; fine.
             } else if (!_requestRevertAllowed(_sel(ret))) {
                 v = _snapshot(V_REQUEST_BLOCKED, _sel(ret), 0, nextDay ? 2 : 0);
             }
         }
         if (v.code == V_NONE && !game.gameOver()) {
-            // (4) CRAPS probe: a full mid-day cycle must return to idle
+            // (4) donor probe: a full mid-day cycle must return to idle
             (, bool inJp, bool lpd,,) = game.purchaseInfo();
             bool turbo = (uint8(uint256(vm.load(address(game), bytes32(SLOT0))) >> 184) & JACKPOT_TURBO) != 0;
             uint24 lvl = _level();
             bool ffNonEmpty = _queueLen(lvl + 2 | TICKET_FAR_FUTURE_BIT) != 0;
-            // A funded donor's credit waives the empty-queue gates, as the retired craps exemption did.
+            // A minimum box gives the request work below the threshold; the donor's credit pays it.
             address probe = address(uint160(0xC4A95));
+            vm.deal(probe, 1 ether);
+            vm.prank(probe);
+            try game.purchase{value: 0.01 ether}(
+                probe, 0, BoxOrderLib.boCustom(0.01 ether), bytes32(0), MintPaymentKind.DirectEth, false
+            ) {} catch {}
             MockLinkEthFeed(ContractAddresses.LINK_ETH_FEED).setUpdatedAt(block.timestamp);
             vm.prank(ContractAddresses.ADMIN);
             game.creditMiddayRng(probe, 1 ether);
+            bool ok;
             vm.prank(probe);
-            (bool ok,) = address(game).call(abi.encodeWithSignature("requestLootboxRng()"));
+            if (game.minerAction() == 18) {
+                uint256 prior = vrf.lastRequestId();
+                vm.prank(probe);
+                (ok,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+                ok = ok && vrf.lastRequestId() > prior;
+            }
             if (ok) {
                 probeFlags = 1;
                 if (lpd && !inJp && !turbo && _midDayLatch() != 0) {
@@ -463,7 +499,7 @@ contract AdvanceLivenessHandler is Test {
     }
 
     function _requestRevertAllowed(bytes4 s) internal pure returns (bool) {
-        return s == E_NO_PENDING || s == E_BELOW_THRESHOLD || s == E_RNG_IN_FLIGHT || s == E_PRE_RESET
+        return s == E_NO_PENDING || s == E_BELOW_THRESHOLD || s == E_PRE_RESET
             || s == E_INSUFFICIENT_LINK || s == E_GAS_TOO_HIGH;
     }
 
@@ -533,13 +569,18 @@ contract AdvanceLivenessHandler is Test {
     // Helpers
     // =====================================================================
 
+    /// The mid-day request through mineFlip, its only door: `who` mines only when the request is
+    /// the engine's next action for `who`, so the call is the request alone.
     function _request(address who) internal {
         bool latchBefore = _midDayLatch() != 0;
         (uint24 lvl, bool inJp, bool lpd,,) = game.purchaseInfo();
         bool ffNonEmpty = _queueLen(lvl + 2 | TICKET_FAR_FUTURE_BIT) != 0;
         vm.prank(who);
-        (bool ok,) = address(game).call(abi.encodeWithSignature("requestLootboxRng()"));
-        if (!ok) return;
+        if (game.minerAction() != 18) return;
+        uint256 prior = vrf.lastRequestId();
+        vm.prank(who);
+        (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+        if (!ok || vrf.lastRequestId() == prior) return;
         ghost_middayRequests++;
         if (who == address(uint160(0xD0D0D0))) ghost_middayAsCraps++;
         if (!latchBefore && _midDayLatch() != 0) {

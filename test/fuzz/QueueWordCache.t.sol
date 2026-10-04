@@ -8,6 +8,7 @@ import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTi
 import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {TicketEntropy} from "../../contracts/libraries/TicketEntropy.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
 /// @dev The round drain's queue-word cache: adjacent seats share one loaded queue word, so each
 ///      queue word is loaded at most once per call. The uncached differential reference
@@ -37,9 +38,24 @@ contract QueueWordCacheHarness is DegenerusGameStorage {
         }
     }
 
+    /// @dev Append `count` entries owing far more than any test's gas can drain after the seeded
+    ///      ones, so the walk never exhausts the queue and the worker never leaves the round phase.
+    function seedPadding(uint24 key, uint24 lvl, uint256 count) external {
+        for (uint256 i; i < count; ++i) {
+            uint80 bits = _registerEntryOwner(address(uint160(0x567800 + i)), lvl);
+            uint32 pos = uint32(bits >> OWNER_IDX_SHIFT);
+            _tqAppend(key, pos);
+            _setEntryOwed(key, pos, bits | (uint80(60_000) << 8));
+        }
+    }
+
     function resume(uint256 word) external { ticketSeats = word; }
 
     function seats() external view returns (uint256) { return ticketSeats; }
+
+    function cursor() external view returns (uint256) { return ticketCursor; }
+
+    function marker() external view returns (uint24) { return ticketLevel; }
 
     function round() external view returns (uint32) { return ticketRound; }
 
@@ -50,16 +66,38 @@ contract QueueWordCacheHarness is DegenerusGameStorage {
         return _ticketOwnerAt(_tqPositionAt(ticketQueue[_ticketQueueStorageKey(key)], physical));
     }
 
-    /// @dev The round phase as the legacy diagnostic selector exposes it; the retired unit
-    ///      budget `room` is ignored, the supplied gas bounds the call.
-    function run(uint24 key, uint24 lvl, uint32 room, uint256 idx, uint256 total, uint256 entropy, uint8 shift)
-        external returns (uint256 nextIdx, uint32 used)
-    {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_FOILPACK_MODULE.delegatecall(
-            abi.encodeWithSelector(DegenerusGameFoilPackModule.drainRounds.selector, key, lvl, room, idx, total, entropy, shift)
+    /// @dev Put the game in the state where the ticket worker drains `key` from logical `idx`:
+    ///      `key` is the read key the worker selects (a near read key inside the mint window, or
+    ///      the far-future key as the due frozen pool), `entropy` is the published read word,
+    ///      `shift` the snap shift, and the checkpoint marker is `key` so the persisted cursor and
+    ///      seats are resumed, not reset. Returns the anchor mineFlip passes in that state.
+    function prime(uint24 key, uint24 lvl, uint256 idx, uint256 entropy, uint8 shift) external returns (uint24 anchor) {
+        if (key & FAR_FUTURE_BIT != 0) {
+            // The last-purchase request holds the lock: the frozen pool of lvl is due.
+            level = lvl - 1;
+            lastPurchaseDay = true;
+            rngLockedFlag = true;
+            anchor = lvl - 1;
+        } else {
+            level = lvl;
+            ticketWriteSlot = key & TICKET_SLOT_BIT == 0;
+            anchor = lvl + 1;
+        }
+        rngWordCurrent = entropy;
+        _setRngSessionPublished(true);
+        snapShift = shift;
+        ticketLevel = key;
+        ticketCursor = uint32(idx);
+    }
+
+    /// @dev The production ticket worker, delegatecalled as mineFlip's Tickets stage dispatches
+    ///      it; the gas the call is sent bounds it.
+    function run(uint24 anchor) external returns (MineFlipGas.Result memory) {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall(
+            abi.encodeWithSelector(DegenerusGameTicketModule.runTicketWork.selector, anchor, gasleft())
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
-        return abi.decode(data, (uint256, uint32));
+        return abi.decode(data, (MineFlipGas.Result));
     }
 }
 
@@ -89,13 +127,19 @@ abstract contract QueueWordCacheBase is Test {
     {
         QueueWordCacheHarness hh = h;
         uint256 base = uint256(keccak256(abi.encode(keccak256(abi.encode(hh.physicalKey(key), uint256(12))))));
+        uint24 anchor = hh.prime(key, lvl, idx, entropy, shift);
         vm.recordLogs();
         vm.startStateDiffRecording();
         uint256 g0 = gasleft();
-        (o.nextIdx,) = hh.run{gas: gasLimit}(key, lvl, 0, idx, n, entropy, shift);
+        MineFlipGas.Result memory r = hh.run{gas: gasLimit}(anchor);
         o.gasUsed = g0 - gasleft();
         Vm.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
         o.logs = vm.getRecordedLogs();
+        // The call stopped inside the round phase on this queue: its checkpoint persists, so the
+        // walk's frontier is the stored cursor and no other phase read the queue.
+        assertFalse(r.done, "the queue is not exhausted");
+        assertEq(hh.marker(), key, "the call checkpoints on the drained queue");
+        o.nextIdx = hh.cursor();
         for (uint256 i; i < accesses.length; ++i) {
             for (uint256 j; j < accesses[i].storageAccesses.length; ++j) {
                 Vm.StorageAccess memory a = accesses[i].storageAccesses[j];
@@ -222,13 +266,18 @@ contract QueueWordCacheTest is QueueWordCacheBase {
         h.seed(3, 3, 8, 1 << 24, 99, 1);
         bytes32 base = keccak256(abi.encode(keccak256(abi.encode(h.physicalKey(3), uint256(12)))));
         vm.store(address(h), base, bytes32(0));
+        uint24 anchor = h.prime(3, 3, 0, 99, 0);
         vm.expectRevert(bytes4(keccak256("E()")));
-        h.run{gas: REALISTIC_GAS}(3, 3, 0, 0, 8, 99, 0);
+        h.run{gas: REALISTIC_GAS}(anchor);
     }
 
-    /// @dev Three consecutive checkpoints of the round phase at a fuzzed gas limit (the gas now
-    ///      selects the checkpoint the retired unit budget used to): every call keeps the cache
-    ///      invariants against the uncached oracle and the frontier never regresses.
+    /// @dev Three consecutive checkpoints of the round phase at a fuzzed gas limit (the gas
+    ///      selects the checkpoint): every call keeps the cache invariants against the uncached
+    ///      oracle and the frontier never regresses. Twelve never-exhausted entries follow the
+    ///      fuzzed ones; at least five of them lie past the starting frontier (below 8), so the
+    ///      walk never reaches the queue end with fewer than four seats and every chunk stays in
+    ///      the round phase the cache belongs to (an exhausted queue hands its last seats to the
+    ///      per-entry path in the same call).
     function testFuzz_EquivalentAcrossChunks(uint256 seed, uint8 shapeSeed, uint16 budgetSeed, uint8 shiftSeed, uint8 cohort)
         public
     {
@@ -239,11 +288,15 @@ contract QueueWordCacheTest is QueueWordCacheBase {
         uint32 ownerStart = uint32((seed >> 32) % 0xffffff00) + 1;
         uint256 gasLimit = bound(uint256(budgetSeed), 1_000_000, REALISTIC_GAS);
         uint8 shift = shiftSeed % 5;
+        // A published read word is never 0 or the waiting sentinel 1.
+        uint256 entropy = seed < 2 ? seed + 2 : seed;
         h.seed(key, lvl, n, ownerStart, seed, shapeSeed % 3);
+        h.seedPadding(key, lvl, 12);
+        n += 12;
         for (uint256 chunk; chunk < 3; ++chunk) {
             uint256 seatsBefore = h.seats();
-            Observation memory o = _observe(key, lvl, idx, n, seed, shift, gasLimit);
-            _assertCache(o, key, lvl, n, seed, seatsBefore, idx);
+            Observation memory o = _observe(key, lvl, idx, n, entropy, shift, gasLimit);
+            _assertCache(o, key, lvl, n, entropy, seatsBefore, idx);
             assertGe(o.nextIdx, idx, "frontier never regresses");
             assertLe(o.nextIdx, n, "frontier stays inside the queue");
             idx = o.nextIdx;

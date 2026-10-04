@@ -12,9 +12,9 @@ import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 
-/// @title GoldenTicketHarness -- drives the live payDailyJackpot arm/resolve surface
+/// @title GoldenTicketHarness -- drives the live runDailyJackpot arm/resolve surface
 /// @notice Extends the production DegenerusGameJackpotModule so the inherited external
-///         `payDailyJackpot` executes the live golden-ticket arm/resolve path in THIS
+///         `runDailyJackpot` executes the live golden-ticket arm/resolve path in THIS
 ///         contract's storage. Adds only storage seeders and read-only views; overrides
 ///         NO production logic.
 /// @dev Test-only. NO contracts/*.sol is mutated; this harness lives entirely under test/.
@@ -242,7 +242,7 @@ contract GoldenTicketArmResolve is Test {
     ) internal returns (address winner, uint8 quadrant, uint8 symbol, uint256 word) {
         word = allGoldWord(syms, 0xA11CE);
         seedBoardBuckets(word, 0x1000);
-        h.payDailyJackpot(true, LVL, word);
+        h.runDailyJackpot(true, LVL, word, gasleft());
 
         uint256 g = h.goldenTicketRaw();
         assertEq((g >> 189) & 1, 1, "armed flag set");
@@ -264,7 +264,7 @@ contract GoldenTicketArmResolve is Test {
     {
         h.setDailyIdx(idx);
         vm.recordLogs();
-        h.payDailyJackpot(true, LVL, word);
+        h.runDailyJackpot(true, LVL, word, gasleft());
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 topic = keccak256(
             "GoldenTicketWin(address,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)"
@@ -361,14 +361,14 @@ contract GoldenTicketArmResolve is Test {
     function testNoArmWithoutFourGolds() public {
         uint256 word = wordFor([7, 7, 7, 6], [1, 2, 3, 4], 0xA11CE);
         seedBoardBuckets(word, 0x1000);
-        h.payDailyJackpot(true, LVL, word);
+        h.runDailyJackpot(true, LVL, word, gasleft());
         assertEq(h.goldenTicketRaw(), 0, "3 golds never arms");
     }
 
     function testNoArmOnPurchasePhase() public {
         uint256 word = allGoldWord([1, 2, 3, 4], 0xA11CE);
         seedBoardBuckets(word, 0x1000);
-        h.payDailyJackpot(false, LVL, word);
+        h.runDailyJackpot(false, LVL, word, gasleft());
         assertEq(h.goldenTicketRaw(), 0, "purchase phase never arms (no solo bucket)");
     }
 
@@ -379,7 +379,7 @@ contract GoldenTicketArmResolve is Test {
         uint256 gBefore = h.goldenTicketRaw();
         // Same frozen idx (a re-run of the arm draw's index) must not resolve.
         vm.recordLogs();
-        h.payDailyJackpot(true, LVL, word);
+        h.runDailyJackpot(true, LVL, word, gasleft());
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 topic = keccak256(
             "GoldenTicketWin(address,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)"
@@ -400,7 +400,7 @@ contract GoldenTicketArmResolve is Test {
         bytes32 slot = keccak256(abi.encode(uint256((ARM_IDX + 1) & 1), uint256(60)));
         bytes32 sealedDraw = vm.load(address(h), slot);
         vm.recordLogs();
-        h.payDailyJackpot(true, LVL, allGoldWord([1, 2, 3, 4], 0xBEEF));
+        h.runDailyJackpot(true, LVL, allGoldWord([1, 2, 3, 4], 0xBEEF), gasleft());
         assertEq(vm.load(address(h), slot), sealedDraw, "first sealed board/level/seed stays intact");
         (, bool replacementEmitted) = officialDay(vm.getRecordedLogs());
         assertFalse(replacementEmitted, "no replacement board event");
@@ -408,7 +408,7 @@ contract GoldenTicketArmResolve is Test {
 
     function testResolveAfterIdxGap() public {
         (address winner, , , ) = armDay([1, 2, 3, 4]);
-        // Gap of 3 draws (stall / skipped payDailyJackpot day) still resolves.
+        // Gap of 3 draws (stall / skipped daily-jackpot day) still resolves.
         (uint8 golds, bool grand, , , , ) = resolveDay(
             ARM_IDX + 3,
             wordFor([0, 1, 2, 3], [5, 5, 5, 5], 0xD00D)
@@ -424,7 +424,7 @@ contract GoldenTicketArmResolve is Test {
         // Next draw: armed flag is gone, nothing fires.
         h.setDailyIdx(ARM_IDX + 2);
         vm.recordLogs();
-        h.payDailyJackpot(true, LVL, wordFor([0, 1, 2, 3], [5, 5, 5, 5], 0xFEED));
+        h.runDailyJackpot(true, LVL, wordFor([0, 1, 2, 3], [5, 5, 5, 5], 0xFEED), gasleft());
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 topic = keccak256(
             "GoldenTicketWin(address,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)"
@@ -568,7 +568,7 @@ contract GoldenTicketArmResolve is Test {
         uint256 word = wordFor([0, 1, 2, 3], [5, 5, 5, 5], 0xD00D);
         h.setDailyIdx(ARM_IDX + 1);
         vm.recordLogs();
-        h.payDailyJackpot(true, LVL, word);
+        h.runDailyJackpot(true, LVL, word, gasleft());
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint32 mainPacked = officialMainBoard(logs);
         uint8[4] memory official = JackpotBucketLib.unpackWinningTraits(mainPacked);
@@ -588,7 +588,7 @@ contract GoldenTicketArmResolve is Test {
         uint256 word = wordFor([0, 1, 2, 3], [5, 5, 5, 5], 0xD00D);
         h.setDailyIdx(ARM_IDX + 1);
         vm.recordLogs();
-        h.payDailyJackpot(true, LVL, word);
+        h.runDailyJackpot(true, LVL, word, gasleft());
         uint8[4] memory official = JackpotBucketLib.unpackWinningTraits(
             officialMainBoard(vm.getRecordedLogs())
         );
@@ -606,7 +606,7 @@ contract GoldenTicketArmResolve is Test {
         h.setHeroWager(idx, 2, 6, type(uint32).max);
         uint256 word = wordFor([0, 1, 2, 3], [5, 5, 5, 5], 0xD00D);
         vm.recordLogs();
-        h.payDailyJackpot(true, LVL, word);
+        h.runDailyJackpot(true, LVL, word, gasleft());
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 winTopic = keccak256(
             "GoldenTicketWin(address,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)"
@@ -629,7 +629,7 @@ contract GoldenTicketArmResolve is Test {
         h.setHeroWager(idx + 1, 2, 6, type(uint32).max);
         uint256 word = wordFor([0, 1, 2, 3], [5, 5, 5, 5], 0xD00D);
         vm.recordLogs();
-        h.payDailyJackpot(true, LVL, word);
+        h.runDailyJackpot(true, LVL, word, gasleft());
         uint8[4] memory official = JackpotBucketLib.unpackWinningTraits(
             officialMainBoard(vm.getRecordedLogs())
         );
@@ -657,7 +657,7 @@ contract GoldenTicketArmResolve is Test {
         seedBoardBuckets(word, 0x9000);
         h.setDailyIdx(ARM_IDX + 1);
         vm.recordLogs();
-        h.payDailyJackpot(true, LVL, word);
+        h.runDailyJackpot(true, LVL, word, gasleft());
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 winTopic = keccak256(
             "GoldenTicketWin(address,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)"
@@ -710,7 +710,7 @@ contract GoldenTicketArmResolve is Test {
         seedBoardBuckets(word, 0x1000);
         vm.warp(vm.getBlockTimestamp() + 40 days); // wall day diverges from the committed logical draw
         vm.recordLogs();
-        h.payDailyJackpot(true, LVL, word);
+        h.runDailyJackpot(true, LVL, word, gasleft());
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 topic = keccak256("DailyWinningTraits(uint24,uint32)");
         bool found;

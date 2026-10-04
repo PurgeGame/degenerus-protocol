@@ -15,8 +15,8 @@ interface IFlipCoinflipPlayerMock {
 }
 
 /// @notice Malicious recipient used by EDGE-10. Its receive() hook re-calls
-///         `claimRedemption` — under the live-game claim (game-claimable credit, no ETH
-///         push at the claimant) the hook must never fire at all (reentryCount stays 0).
+///         `claimRedemption` — under live settlement (game-claimable credit, no ETH push at
+///         the claimant) the hook must never fire at all (reentryCount stays 0).
 contract MaliciousReceiver {
     sDGNRS public immutable sdgnrs;
     uint32 public targetDay;
@@ -99,10 +99,6 @@ abstract contract RedemptionEdgeCasesBase is DeployProtocol {
     ///      self-contained). POST RT-PACKING-12: scalars packed into slot 0, mappings shifted down 10->7.
     uint256 internal constant SLOT_PENDING_BY_DAY = 7;
 
-    /// @dev keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)") — creditFlip emits this.
-    bytes32 internal constant COINFLIP_STAKE_UPDATED_SIG =
-        keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
-
     // =====================================================================
     //                          ACTORS
     // =====================================================================
@@ -179,8 +175,8 @@ abstract contract RedemptionEdgeCasesBase is DeployProtocol {
     ///      advance + VRF cycle for deterministic roll values. Mirrors the Game's resolve hook
     ///      (`_resolvePendingRedemption`): the resolve and the settlement-cohort word pin happen
     ///      together, and the Game is then in that session's published, not-yet-complete read
-    ///      stage with its ticket stage done. Live claims are accepted only in that redemption
-    ///      consumer stage (stage 1), in FIFO order.
+    ///      stage with its ticket stage done. Live claims settle only in that redemption consumer
+    ///      stage (stage 1), in FIFO order, through the Game's keeper drain.
     function _resolveDay(uint32 dayToResolve, uint16 roll) internal {
         vm.startPrank(address(game));
         sdgnrs.resolveRedemptionPeriod(roll, uint24(dayToResolve));
@@ -271,25 +267,6 @@ abstract contract RedemptionEdgeCasesBase is DeployProtocol {
         if (idx == 1) return playerB;
         if (idx == 2) return playerC;
         return playerD;
-    }
-
-    // =====================================================================
-    //                  EDGE-01: Pre-advance-gap burn safety
-    // =====================================================================
-
-
-    /// @dev Sum the `amount` of every CoinflipStakeUpdated event crediting `who` in `logs`.
-    function _sumKeeperBounty(Vm.Log[] memory logs, address who) internal pure returns (uint256 total) {
-        bytes32 whoTopic = bytes32(uint256(uint160(who)));
-        for (uint256 i; i < logs.length; ++i) {
-            if (
-                logs[i].topics[0] == COINFLIP_STAKE_UPDATED_SIG &&
-                logs[i].topics[1] == whoTopic
-            ) {
-                (uint256 amount, ) = abi.decode(logs[i].data, (uint256, uint256));
-                total += amount;
-            }
-        }
     }
 }
 
@@ -507,9 +484,8 @@ contract RedemptionEdgeCasesA is RedemptionEdgeCasesBase {
         (uint96 evD2_Pre, , ) = sdgnrs.pendingRedemptions(playerA, uint24(dayD2));
         assertGt(uint256(evD2_Pre), 0, "EDGE-03: day-D+2 claim slot must populate");
 
-        // Claim day D+2 first (out-of-order)
-        vm.prank(playerA);
-        sdgnrs.claimRedemption(playerA, uint24(dayD2));
+        // Settle day D+2 first (the live head) while the older days stay parked
+        _settleCohort();
 
         // Day D+2 slot now deleted per SPEC-04 (d)
         // v47: PendingRedemption.flipOwed removed (FLIP settled at submit); the "flipOwed
@@ -579,14 +555,11 @@ contract RedemptionEdgeCasesA is RedemptionEdgeCasesBase {
         (uint96 evA_PreClaim, , ) = sdgnrs.pendingRedemptions(playerA, uint24(dayD));
         (uint96 evB_PreClaim, , ) = sdgnrs.pendingRedemptions(playerB, uint24(dayD));
 
-        // Both claim — capture each player's game-claimable delta (live game credits the
-        // direct half into game claimable; nothing is pushed at the claimant's wallet).
+        // The keeper drain settles both — capture each player's game-claimable delta (live game
+        // credits the direct half into game claimable; nothing is pushed at the claimant's wallet).
         uint256 claimableABefore = game.claimableWinningsOf(playerA);
         uint256 claimableBBefore = game.claimableWinningsOf(playerB);
-        vm.prank(playerA);
-        sdgnrs.claimRedemption(playerA, uint24(dayD));
-        vm.prank(playerB);
-        sdgnrs.claimRedemption(playerB, uint24(dayD));
+        _settleCohort();
         uint256 deltaA = game.claimableWinningsOf(playerA) - claimableABefore;
         uint256 deltaB = game.claimableWinningsOf(playerB) - claimableBBefore;
 
@@ -685,9 +658,8 @@ contract RedemptionEdgeCasesA is RedemptionEdgeCasesBase {
         (uint16 rollPost) = sdgnrs.redemptionPeriods(uint24(dayD));
         assertEq(uint256(rollPost), uint256(roll), "EDGE-06: redemptionPeriods[D].roll != resolve arg");
 
-        // Player can claim — no revert
-        vm.prank(playerA);
-        sdgnrs.claimRedemption(playerA, uint24(dayD));
+        // The keeper drain settles the claim — no revert
+        _settleCohort();
 
         (uint96 evFinal, , ) = sdgnrs.pendingRedemptions(playerA, uint24(dayD));
         assertEq(uint256(evFinal), 0, "EDGE-06: claim slot cleared post-claim");
@@ -840,8 +812,8 @@ contract RedemptionEdgeCasesA is RedemptionEdgeCasesBase {
 
         // Mock game.gameOver() = true ahead of resolve (Variant 1)
         vm.mockCall(address(game), abi.encodeWithSelector(game.gameOver.selector), abi.encode(true));
-        // The redemption claim reads livenessTriggered, which gameOver implies on chain
-        // (_unlockRng leaves dailyIdx stale at game over). Mock it to match.
+        // gameOver implies livenessTriggered on chain (_unlockRng leaves dailyIdx stale at game
+        // over). Mock it to match.
         vm.mockCall(address(game), abi.encodeWithSelector(game.livenessTriggered.selector), abi.encode(true));
 
         _advanceWallDay();
@@ -894,8 +866,8 @@ contract RedemptionEdgeCasesA is RedemptionEdgeCasesBase {
 
         // NOW mock gameOver=true (post-resolve, pre-claim)
         vm.mockCall(address(game), abi.encodeWithSelector(game.gameOver.selector), abi.encode(true));
-        // The redemption claim reads livenessTriggered, which gameOver implies on chain
-        // (_unlockRng leaves dailyIdx stale at game over). Mock it to match.
+        // gameOver implies livenessTriggered on chain (_unlockRng leaves dailyIdx stale at game
+        // over). Mock it to match.
         vm.mockCall(address(game), abi.encodeWithSelector(game.livenessTriggered.selector), abi.encode(true));
 
         uint256 ethBeforeV2 = playerC.balance;
@@ -945,14 +917,11 @@ contract RedemptionEdgeCasesA is RedemptionEdgeCasesBase {
         _advanceWallDay();
         _resolveDay(dayD, roll);
 
+        uint256[] memory before = new uint256[](n);
+        for (uint256 i = 0; i < n; i++) before[i] = game.claimableWinningsOf(_pickActor(i));
+        _settleCohort();
         uint256 totalDirect;
-        for (uint256 i = 0; i < n; i++) {
-            address actor = _pickActor(i);
-            uint256 before = game.claimableWinningsOf(actor);
-            vm.prank(actor);
-            sdgnrs.claimRedemption(actor, uint24(dayD));
-            totalDirect += game.claimableWinningsOf(actor) - before;
-        }
+        for (uint256 i = 0; i < n; i++) totalDirect += game.claimableWinningsOf(_pickActor(i)) - before[i];
 
         // Expected: sum of (ev_i * roll / 100) / 2 — the 50/50 split applies per claim under
         // live game (the direct half lands as a game-claimable credit). Per D-305-GWEI-SNAP-01,
@@ -971,12 +940,12 @@ contract RedemptionEdgeCasesA is RedemptionEdgeCasesBase {
     //              EDGE-10: Re-entrancy on _payEth blocked
     // =====================================================================
 
-    /// @notice EDGE-10 — 304-SPEC §3 lines 533-545 (revised for the permissionless live-game
-    ///         claim). A live-game claimRedemption runs NO claimant-controlled code at all:
-    ///         the direct half is a game-claimable credit and the lootbox half forwards to
-    ///         the GAME, so a malicious recipient's receive() hook cannot fire, let alone
-    ///         re-enter. The slot still deletes before any external call (SPEC-04 (d)), and
-    ///         a repeat claim reverts NoClaim — no double-credit.
+    /// @notice EDGE-10 — 304-SPEC §3 lines 533-545 (revised for live keeper settlement). Live
+    ///         settlement runs NO claimant-controlled code at all: the direct half is a
+    ///         game-claimable credit and the lootbox half forwards to the GAME, so a malicious
+    ///         recipient's receive() hook cannot fire, let alone re-enter. The slot still deletes
+    ///         before any external call (SPEC-04 (d)); the claimant's own live claim is refused
+    ///         and a repeat drain pays nothing — no double-credit.
     /// @dev Tests INV-02 + INV-07. Depends on SPEC-04 (d) (delete-before-external-call).
     /// forge-config: default.fuzz.runs = 10000
     function testFuzz_EDGE_10_ReentrancyOnPayEthBlocked(uint256 amountSeed) public {
@@ -1003,7 +972,10 @@ contract RedemptionEdgeCasesA is RedemptionEdgeCasesBase {
         uint256 ethBefore = address(malicious).balance;
         uint256 claimableBefore = game.claimableWinningsOf(address(malicious));
 
+        // A live game has no self-claim: the claimant's own call is refused.
+        vm.expectRevert(sDGNRS.NotGameOver.selector);
         malicious.claim(dayD);
+        _settleCohort();
 
         // Live game: the claimant's code never runs — no ETH push, so no re-entry surface.
         assertEq(address(malicious).balance - ethBefore, 0, "EDGE-10: live-game claim pushed ETH at the claimant");
@@ -1017,13 +989,15 @@ contract RedemptionEdgeCasesA is RedemptionEdgeCasesBase {
             "EDGE-10: direct credit != the single expected payout"
         );
 
-        // Storage slot fully cleared; a repeat claim reverts (no double-credit). Live claims take the
-        // exact FIFO head, so the consumed head is RedemptionOutOfOrder (was NoClaim before the
-        // ordered settlement queue).
+        // Storage slot fully cleared; neither a repeat drain nor the claimant's own call pays again.
         (uint96 evPost, , ) = sdgnrs.pendingRedemptions(address(malicious), uint24(dayD));
         assertEq(uint256(evPost), 0, "EDGE-10: claim slot not cleared post-claim");
-        vm.expectRevert(sDGNRS.RedemptionOutOfOrder.selector);
+        uint256 credited = game.claimableWinningsOf(address(malicious));
+        vm.prank(address(game));
+        assertTrue(sdgnrs.runRedemptionWork(9_000_000).done, "EDGE-10: drained cohort has nothing left");
+        vm.expectRevert(sDGNRS.NotGameOver.selector);
         malicious.claim(dayD);
+        assertEq(game.claimableWinningsOf(address(malicious)), credited, "EDGE-10: no double-credit");
     }
 
     // =====================================================================
@@ -1031,7 +1005,7 @@ contract RedemptionEdgeCasesA is RedemptionEdgeCasesBase {
     // =====================================================================
 }
 
-/// @notice EDGE-11..EDGE-20, PERM-01..02 and BOUNTY-01 (see the file header).
+/// @notice EDGE-11..EDGE-20 and PERM-01..02 (see the file header).
 contract RedemptionEdgeCasesB is RedemptionEdgeCasesBase {
     /// @notice EDGE-11 — 304-SPEC §3 lines 547-559. While `game.rngLocked() == true`,
     ///         any burn must revert BurnsBlockedDuringRng with no state mutation. Mocked via
@@ -1170,15 +1144,21 @@ contract RedemptionEdgeCasesB is RedemptionEdgeCasesBase {
         assertEq(uint256(sdgnrs.redemptionPeriods(uint24(dayD))), uint256(roll), "EDGE-13: zero-base day resolves to the roll");
         assertEq(uint256(sdgnrs.pendingResolveDay()), 0, "EDGE-13: sentinel cleared after resolving a zero-base day");
 
-        // The claim has zero ethValueOwed and no FLIP escrow, so it is empty: NoClaim (not the pre-fix
-        // NotResolved, which was the symptom of the day never resolving).
+        // The claim has zero ethValueOwed and no FLIP escrow, so it is empty: the keeper drain
+        // skips it and credits nothing.
+        uint256 claimableBefore = game.claimableWinningsOf(playerA);
+        _settleCohort();
+        assertEq(game.claimableWinningsOf(playerA), claimableBefore, "EDGE-13: the empty claim credits nothing");
+
+        // Slot remains zero-ethValueOwed (nothing was claimable).
+        (uint96 evPost, , ) = sdgnrs.pendingRedemptions(playerA, uint24(dayD));
+        assertEq(uint256(evPost), 0, "EDGE-13: claim slot ethValueOwed stays zero (no claimable ETH)");
+
+        // Once the game is over the self-claim finds nothing either: NoClaim.
+        vm.mockCall(address(game), abi.encodeWithSelector(game.gameOver.selector), abi.encode(true));
         vm.prank(playerA);
         vm.expectRevert(sDGNRS.NoClaim.selector);
         sdgnrs.claimRedemption(playerA, uint24(dayD));
-
-        // Slot remains zero-ethValueOwed (nothing was claimable; the reverting claim mutates nothing).
-        (uint96 evPost, , ) = sdgnrs.pendingRedemptions(playerA, uint24(dayD));
-        assertEq(uint256(evPost), 0, "EDGE-13: claim slot ethValueOwed stays zero (no claimable ETH)");
     }
 
     // =====================================================================
@@ -1453,9 +1433,8 @@ contract RedemptionEdgeCasesB is RedemptionEdgeCasesBase {
         _advanceWallDay();
         _resolveDay(dayD, 100);
 
-        // Claim must succeed (no revert); the contingent FLIP leg cannot fail the claim.
-        vm.prank(actor);
-        sdgnrs.claimRedemption(actor, uint24(dayD));
+        // Settlement must succeed (no revert); the contingent FLIP leg cannot fail the claim.
+        _settleCohort();
 
         // Slot is fully cleared post-claim
         (uint96 evPost, , ) = sdgnrs.pendingRedemptions(actor, uint24(dayD));
@@ -1472,7 +1451,7 @@ contract RedemptionEdgeCasesB is RedemptionEdgeCasesBase {
     ///         stall (proving the sentinel correctly names the stuck day regardless of stall
     ///         duration). The eventual resolve targets dayToResolve = D (read from sentinel,
     ///         NOT derived as `currentDayView() - 1` which would mis-key under the stall);
-    ///         redemptionPeriods[D].roll set correctly; claimRedemption(D) succeeds.
+    ///         redemptionPeriods[D].roll set correctly; the day-D claim then settles.
     /// @dev Tests INV-09 + INV-13. Depends on D-305-SENTINEL-01 (D-305-DAYTORESOLVE-01).
     /// forge-config: default.fuzz.runs = 10000
     function testFuzz_EDGE_19_MultiDayRngStallStaleClaimRecovery(
@@ -1523,9 +1502,8 @@ contract RedemptionEdgeCasesB is RedemptionEdgeCasesBase {
         assertEq(uint256(rollPost), uint256(roll), "EDGE-19: redemptionPeriods[D].roll incorrect");
         assertEq(uint256(sdgnrs.pendingResolveDay()), 0, "EDGE-19: sentinel must be cleared post-resolve");
 
-        // Claim succeeds — burner gets paid; slot cleared
-        vm.prank(burner);
-        sdgnrs.claimRedemption(burner, uint24(dayD));
+        // Settlement succeeds — burner gets paid; slot cleared
+        _settleCohort();
 
         (uint96 evFinal, , ) = sdgnrs.pendingRedemptions(burner, uint24(dayD));
         assertEq(uint256(evFinal), 0, "EDGE-19: claim slot ethValueOwed not cleared post-claim");
@@ -1566,15 +1544,17 @@ contract RedemptionEdgeCasesB is RedemptionEdgeCasesBase {
     }
 
     // =====================================================================
-    //   PERM-01: live-game claimRedemption is permissionless (third-party trigger)
+    //   PERM-01: live settlement is the permissionless engine's, never a claim door
     // =====================================================================
 
-    /// @notice A live-game claimRedemption settled by an UNRELATED third party credits the
-    ///         winner's game claimable (the direct half), pushes nothing at either party, and
-    ///         clears the winner's slot. Removing the winner's exclusive control of claim timing
-    ///         is the point — it denies any single party the ability to time the lootbox round-up.
+    /// @notice In a live game no address — the winner or an UNRELATED third party — can claim a
+    ///         resolved redemption directly; the claim waits for the engine. An unrelated caller
+    ///         running mineFlip settles it: the winner's game claimable is credited the direct half,
+    ///         nothing is pushed at either party, and the caller is credited nothing. Removing the
+    ///         winner's exclusive control of settlement timing is the point — it denies any single
+    ///         party the ability to time the lootbox round-up.
     /// forge-config: default.fuzz.runs = 10000
-    function testFuzz_PERM_01_LiveClaimPermissionlessThirdParty(
+    function testFuzz_PERM_01_LiveSettlementOnlyThroughEngine(
         uint256 amountSeed,
         uint16 rollSeed
     ) public {
@@ -1592,14 +1572,23 @@ contract RedemptionEdgeCasesB is RedemptionEdgeCasesBase {
         (uint96 evPre, , ) = sdgnrs.pendingRedemptions(playerA, uint24(dayD));
         uint256 expectedDirect = ((uint256(evPre) * uint256(roll)) / 100) / 2;
 
+        // Neither the winner nor a third party can settle it directly in a live game.
+        vm.prank(playerA);
+        vm.expectRevert(sDGNRS.NotGameOver.selector);
+        sdgnrs.claimRedemption(playerA, uint24(dayD));
+        vm.prank(playerC);
+        vm.expectRevert(sDGNRS.NotGameOver.selector);
+        sdgnrs.claimRedemption(playerA, uint24(dayD));
+
         uint256 winnerClaimableBefore = game.claimableWinningsOf(playerA);
         uint256 winnerEthBefore = playerA.balance;
         uint256 callerEthBefore = playerC.balance;
         uint256 callerClaimableBefore = game.claimableWinningsOf(playerC);
 
-        // playerC has no claim of their own — they merely TRIGGER playerA's settlement.
+        // playerC has no claim of their own — they merely run the engine's Redemption stage.
+        assertEq(game.nextMinerAction(), 8, "PERM-01: the cohort is the engine's next work (MinerAction.Redemption)");
         vm.prank(playerC);
-        sdgnrs.claimRedemption(playerA, uint24(dayD));
+        game.mineFlip();
 
         // Value accrues to the winner's game claimable; nothing is pushed at anyone's wallet.
         assertEq(
@@ -1615,28 +1604,26 @@ contract RedemptionEdgeCasesB is RedemptionEdgeCasesBase {
             "PERM-01: the trigger caller must not be credited"
         );
 
-        // Slot cleared — a repeat trigger reverts (no double-credit): the consumed FIFO head is
-        // RedemptionOutOfOrder under the ordered settlement queue (was NoClaim).
+        // Slot cleared and the cohort drained — a repeat drain pays nothing (no double-credit).
         (uint96 evPost, , ) = sdgnrs.pendingRedemptions(playerA, uint24(dayD));
         assertEq(uint256(evPost), 0, "PERM-01: winner's claim slot must clear");
-        vm.prank(playerC);
-        vm.expectRevert(sDGNRS.RedemptionOutOfOrder.selector);
-        sdgnrs.claimRedemption(playerA, uint24(dayD));
+        assertFalse(sdgnrs.redemptionSettlementPending(), "PERM-01: cohort drained");
+        uint256 winnerAfter = game.claimableWinningsOf(playerA);
+        vm.prank(address(game));
+        assertTrue(sdgnrs.runRedemptionWork(9_000_000).done);
+        assertEq(game.claimableWinningsOf(playerA), winnerAfter, "PERM-01: no double-credit");
     }
 
     // =====================================================================
-    //   PERM-02: claimRedemptionMany settles a batch and skips empty entries
+    //   PERM-02: the keeper drain settles the cohort and skips empty entries
     // =====================================================================
 
-    /// @notice A single permissionless claimRedemptionMany call settles every claimant with a
-    ///         pending entry for the day and silently skips addresses with nothing pending — one
-    ///         stale address cannot poison the sweep. Each settled winner is credited the direct
-    ///         half into their game claimable; the no-claim address is untouched.
-    ///         Ordered settlement queue: the batch must be the next exact FIFO prefix, so the
-    ///         empty entry is a queue member whose dust burn rounded to nothing, and a
-    ///         non-member in the prefix reverts the whole batch atomically.
+    /// @notice One keeper drain settles every claimant with a pending entry for the day and
+    ///         silently skips a queue member whose dust burn rounded to nothing — one empty entry
+    ///         cannot poison the cohort. Each settled winner is credited the direct half into
+    ///         their game claimable; the empty entry's owner is untouched.
     /// forge-config: default.fuzz.runs = 10000
-    function testFuzz_PERM_02_ClaimRedemptionManyBatchSkipsEmpty(
+    function testFuzz_PERM_02_KeeperDrainSkipsEmptyEntry(
         uint256 amountSeedA,
         uint256 amountSeedB,
         uint16 rollSeed
@@ -1649,7 +1636,7 @@ contract RedemptionEdgeCasesB is RedemptionEdgeCasesBase {
         _primeCurrentDayRng();
         vm.prank(playerA);
         sdgnrs.burn(amountA);
-        // playerC's dust burn rounds to nothing — it is the empty entry in the batch.
+        // playerC's dust burn rounds to nothing — it is the empty entry between A and B.
         vm.prank(playerC);
         sdgnrs.burn(MIN_BURN_AMOUNT);
         vm.prank(playerB);
@@ -1660,14 +1647,6 @@ contract RedemptionEdgeCasesB is RedemptionEdgeCasesBase {
         _advanceWallDay();
         _resolveDay(dayD, roll);
 
-        // A prefix naming a non-member reverts atomically (nothing settles).
-        address[] memory stale = new address[](2);
-        stale[0] = playerA;
-        stale[1] = playerD;
-        vm.prank(playerD);
-        vm.expectRevert(sDGNRS.RedemptionOutOfOrder.selector);
-        sdgnrs.claimRedemptionMany(stale, uint24(dayD));
-
         (uint96 evA, , ) = sdgnrs.pendingRedemptions(playerA, uint24(dayD));
         (uint96 evB, , ) = sdgnrs.pendingRedemptions(playerB, uint24(dayD));
         uint256 expA = ((uint256(evA) * uint256(roll)) / 100) / 2;
@@ -1677,13 +1656,7 @@ contract RedemptionEdgeCasesB is RedemptionEdgeCasesBase {
         uint256 bBefore = game.claimableWinningsOf(playerB);
         uint256 cBefore = game.claimableWinningsOf(playerC);
 
-        // playerD (no stake in this day) sweeps all three — the empty playerC entry is skipped.
-        address[] memory players = new address[](3);
-        players[0] = playerA;
-        players[1] = playerC; // empty — must be skipped, not revert the batch
-        players[2] = playerB;
-        vm.prank(playerD);
-        sdgnrs.claimRedemptionMany(players, uint24(dayD));
+        _settleCohort();
 
         assertEq(game.claimableWinningsOf(playerA) - aBefore, expA, "PERM-02: A must be credited the direct half");
         assertEq(game.claimableWinningsOf(playerB) - bBefore, expB, "PERM-02: B must be credited the direct half");
@@ -1695,58 +1668,10 @@ contract RedemptionEdgeCasesB is RedemptionEdgeCasesBase {
         assertEq(uint256(evAPost), 0, "PERM-02: A slot must clear");
         assertEq(uint256(evBPost), 0, "PERM-02: B slot must clear");
 
-        // Re-sweeping the consumed prefix reverts RedemptionOutOfOrder (was a no-op before the
-        // ordered settlement queue) — no further credit either way.
+        // Re-running the drained cohort's worker credits nothing further.
         uint256 aAfter = game.claimableWinningsOf(playerA);
-        vm.prank(playerD);
-        vm.expectRevert(sDGNRS.RedemptionOutOfOrder.selector);
-        sdgnrs.claimRedemptionMany(players, uint24(dayD));
+        vm.prank(address(game));
+        assertTrue(sdgnrs.runRedemptionWork(9_000_000).done);
         assertEq(game.claimableWinningsOf(playerA), aAfter, "PERM-02: re-sweep must not double-credit");
-    }
-
-    /// @notice BOUNTY-01: claimRedemptionMany pays its caller nothing — mineFlip's engine reward is
-    ///         the paid path for the same cohort — whether boxes settle, entries are skipped, or the
-    ///         re-sweep reverts.
-    function test_BOUNTY01_RedemptionBatchPaysTheCallerNothing() public {
-        uint32 dayD = game.currentDayView();
-        _primeCurrentDayRng();
-        vm.prank(playerA);
-        sdgnrs.burn(ACTOR_FUNDING / 100);
-        // playerC's dust burn rounds to nothing — the empty FIFO entry the batch skips.
-        vm.prank(playerC);
-        sdgnrs.burn(MIN_BURN_AMOUNT);
-        vm.prank(playerB);
-        sdgnrs.burn(ACTOR_FUNDING / 100);
-        (uint96 evC, , uint96 escrowC) = sdgnrs.pendingRedemptions(playerC, uint24(dayD));
-        assertEq(uint256(evC) + uint256(escrowC), 0, "BOUNTY-01: fixture - playerC's entry is empty");
-
-        _advanceWallDay();
-        _resolveDay(dayD, 100);
-
-        address[] memory players = new address[](3);
-        players[0] = playerA;
-        players[1] = playerC; // empty — skipped
-        players[2] = playerB;
-
-        // Keeper (playerD, not a redeemer) sweeps: 2 boxes settle, 1 skipped, the keeper earns nothing.
-        vm.recordLogs();
-        vm.prank(playerD);
-        sdgnrs.claimRedemptionMany(players, uint24(dayD));
-        assertEq(_sumKeeperBounty(vm.getRecordedLogs(), playerD), 0, "BOUNTY-01: settling sweep pays no bounty");
-        (uint96 evA, , ) = sdgnrs.pendingRedemptions(playerA, uint24(dayD));
-        (uint96 evB, , ) = sdgnrs.pendingRedemptions(playerB, uint24(dayD));
-        assertEq(uint256(evA) + uint256(evB), 0, "BOUNTY-01: both real boxes settled");
-
-        // No-work re-sweep: the consumed prefix reverts RedemptionOutOfOrder (ordered settlement
-        // queue; was a successful no-op).
-        vm.recordLogs();
-        vm.prank(playerD);
-        vm.expectRevert(sDGNRS.RedemptionOutOfOrder.selector);
-        sdgnrs.claimRedemptionMany(players, uint24(dayD));
-        assertEq(
-            _sumKeeperBounty(vm.getRecordedLogs(), playerD),
-            0,
-            "BOUNTY-01: no-work sweep pays no bounty"
-        );
     }
 }

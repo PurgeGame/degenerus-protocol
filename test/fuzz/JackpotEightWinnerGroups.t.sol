@@ -41,8 +41,8 @@ contract JackpotEightWinnerGroupsTest is Test {
         EightWinnerHarness h = new EightWinnerHarness();
         h.seed(word, tickets, 15, kind);
         vm.recordLogs();
-        if (kind == 0) h.payEarlyBirdTickets(word);
-        else h.payDailyJackpotCoinAndTickets(word);
+        if (kind == 0) h.runEarlyBirdTickets(word, gasleft());
+        else h.runDailyJackpotTickets(word, gasleft());
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 count;
         for (uint256 i; i < logs.length; ++i) {
@@ -67,8 +67,8 @@ contract JackpotEightWinnerGroupsTest is Test {
         EightWinnerHarness h = new EightWinnerHarness();
         h.seed(word, tickets, mask, kind);
         vm.recordLogs();
-        if (kind == 0) h.payEarlyBirdTickets(word);
-        else h.payDailyJackpotCoinAndTickets(word);
+        if (kind == 0) h.runEarlyBirdTickets(word, gasleft());
+        else h.runDailyJackpotTickets(word, gasleft());
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 cap = _ticketCap(tickets * 0.08 ether);
         if (tickets < cap) cap = tickets;

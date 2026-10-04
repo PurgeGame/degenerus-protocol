@@ -109,11 +109,6 @@ contract FSMEmptyDependencies {
         gapStart = start;
         gapEnd = end;
     }
-
-    // Actual interface order is (finished, didWork).
-    function processTicketBatch(uint24) external pure returns (bool, bool) {
-        return (true, false);
-    }
 }
 
 /// @dev Empty battle/daily legs only, at the engine's current checkpointed selectors (60d31f775).
@@ -166,10 +161,14 @@ contract FSMAdvanceHarness is DegenerusGameMinerModule {
         rngWordCurrent = word < 2 ? RNG_WORD_WAITING : word;
     }
 
+    /// @dev An empty game whose deterministic ending is latched and whose (empty) tally is
+    ///      complete, ended by the production terminal worker mineFlip's Terminal stage runs.
     function drainEmptyDeadGame(uint24 day) external {
         _lrWrite(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK, 1);
-        (bool ok,) = ContractAddresses.GAME_GAMEOVER_MODULE
-            .delegatecall(abi.encodeCall(DegenerusGameGameOverModule.handleGameOverDrain, (day)));
+        deadTallyStage = 3;
+        (bool ok,) = ContractAddresses.GAME_GAMEOVER_MODULE.delegatecall(
+            abi.encodeCall(DegenerusGameGameOverModule.runGameOverAdvance, (day, level, gasleft()))
+        );
         require(ok, "empty terminal drain failed");
     }
 

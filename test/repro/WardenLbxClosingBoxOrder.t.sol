@@ -7,13 +7,10 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 
 /// @title WardenLbxClosingBoxOrder -- the closing presale box cannot front-run its cohort
-/// @notice Box-order migration: the removed permissionless per-(player,index) `openBox` let the
-///         closing buyer open before the same-index cohort, which is what the original version of
-///         this test set out to prove was harmless (order-independent DGNRS). That capability no
-///         longer exists: `openBoxes` is a strict in-order, oldest-first walk of `boxPlayers[index & 1]`,
-///         so the closer (bought last, the crossing buy) can never be opened ahead of its cohort
-///         (bought first) -- the title's claim now holds STRUCTURALLY rather than merely by
-///         observed invariant. This test instead proves: (1) the cohort drains before the closer is
+/// @notice mineFlip's human-box stage is a strict in-order, oldest-first walk of
+///         `boxPlayers[index & 1]`, so the closer (bought last, the crossing buy) can never be opened
+///         ahead of its cohort (bought first) -- the title's claim holds STRUCTURALLY rather than
+///         merely by observed invariant. This test proves: (1) the cohort drains before the closer is
 ///         even reachable, (2) the closer's own roll and the pool's residual "drain latch" sweep
 ///         (both credited to the closer) are the two components of the one call that finishes the
 ///         index, decomposed via the `PresaleBoxRemainderSwept` event, and (3) the closer's own roll
@@ -60,7 +57,7 @@ contract WardenLbxClosingBoxOrder is DeployProtocol {
         for (uint256 i; i < 4; ++i) if (_boxRecord(index, who[i]) == 0) ++n;
     }
 
-    /// @dev The smallest openBoxes allowance that opens one more entry (bisection over snapshots).
+    /// @dev The smallest mineFlip allowance that opens one more entry (bisection over snapshots).
     ///      Each entry is admitted only while the remaining allowance covers its declared bound,
     ///      and every presale-only entry carries the same bound, so this budget opens exactly one.
     function _oneEntryBudget(uint48 index, address[4] memory who) internal returns (uint256) {
@@ -70,7 +67,7 @@ contract WardenLbxClosingBoxOrder is DeployProtocol {
         while (hi - lo > 1_000) {
             uint256 mid = (lo + hi) / 2;
             uint256 snap = vm.snapshotState();
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("openBoxes(uint256)", uint256(2)));
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip()"));
             bool opened = ok && _openedEntries(index, who) > before;
             vm.revertToStateAndDelete(snap);
             if (opened) hi = mid;
@@ -137,16 +134,16 @@ contract WardenLbxClosingBoxOrder is DeployProtocol {
         }
         // Seal `index` with its word: boxPlayers[index & 1] queues v[0], v[1], v[2] (bought
         // first), then closer (bought last, the crossing buy) -- the ONLY order the in-order sweep
-        // can ever produce now.
+        // can produce.
         _setRngWord(index, word);
         address[4] memory all4 = [v[0], v[1], v[2], closer];
 
-        // The walk-unit budget became a gas allowance (60d31f775): each call gets the smallest
-        // allowance that opens an entry, which never fits a second -- three such calls open
-        // exactly the cohort, one at a time, and never reach the closer.
+        // Each engine call gets the smallest allowance that opens an entry, which never fits a
+        // second -- three such calls open exactly the cohort, one at a time, and never reach the
+        // closer.
         for (uint256 i; i < 3; ++i) {
             assertEq(sdgnrs.balanceOf(closer), 0, "closer cannot front-run -- still unopened while cohort drains");
-            game.openBoxes{gas: _oneEntryBudget(index, all4)}(2);
+            game.mineFlip{gas: _oneEntryBudget(index, all4)}();
             assertGt(sdgnrs.balanceOf(v[i]), 0, "cohort-first: DGNRS-branch victim is paid");
         }
         uint256 remainder = _poolBal();
@@ -155,15 +152,15 @@ contract WardenLbxClosingBoxOrder is DeployProtocol {
 
         // Opening the closer is the entry that completes the index, so its own roll AND the
         // pool's drain-latch sweep (both credited to `closer`) land in this one call -- there is
-        // no longer a call boundary between "the closing open" and "the later sweep past the
-        // close index" the way the removed per-(player,index) door allowed. The
-        // PresaleBoxRemainderSwept event still isolates the latch's contribution from the
-        // closer's own roll.
+        // no call boundary between "the closing open" and "the sweep past the close index". The
+        // PresaleBoxRemainderSwept event isolates the latch's contribution from the closer's own
+        // roll.
         uint256 closerBalBefore = sdgnrs.balanceOf(closer);
         uint256 closerBudget = _oneEntryBudget(index, all4);
+        uint256 openedBefore = _openedEntries(index, all4);
         vm.recordLogs();
-        uint256 opened = game.openBoxes{gas: closerBudget}(2);
-        assertEq(opened, 1, "exactly the closer's one entry opened");
+        game.mineFlip{gas: closerBudget}();
+        assertEq(_openedEntries(index, all4) - openedBefore, 1, "exactly the closer's one entry opened");
         uint256 sweptRemainder = _remainderSweptIn(vm.getRecordedLogs());
         uint256 closerOwnRoll = sdgnrs.balanceOf(closer) - closerBalBefore - sweptRemainder;
 

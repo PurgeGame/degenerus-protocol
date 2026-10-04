@@ -24,7 +24,7 @@ contract EarlyBirdWhaleHarness is DegenerusGameJackpotModule, BucketSeed {
         goldenTicket = 0;
         _setCurrentPrizePool(10 ether);
         _setPrizePools(20 ether, uint128((budget * 100 + 2) / 3));
-        this.payDailyJackpot(true, level, word);
+        this.runDailyJackpot(true, level, word, gasleft());
     }
 
     function seed(uint24 target, uint8 trait, address who, uint256 n) external {
@@ -97,7 +97,7 @@ contract EarlyBirdWhalePassTest is Test {
 
     function _draw(uint256 word, uint256 entriesEach) private returns (Awards memory a) {
         vm.recordLogs();
-        h.payEarlyBirdTickets(word);
+        h.runEarlyBirdTickets(word, gasleft());
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] == PASS) {
@@ -363,7 +363,7 @@ contract EarlyBirdWhalePassTest is Test {
     // -- solo-quadrant exclusion (main board) ----------------------------------
 
     /// @dev The ETH leg's own solo-quadrant pick, off the day's main board and the storage
-    ///      level (not lvl + 1): the same value payEarlyBirdTickets feeds both the ticket
+    ///      level (not lvl + 1): the same value runEarlyBirdTickets feeds both the ticket
     ///      draw's exclusion and the surplus whale pass.
     function _soloQuadrant(uint256 word) private view returns (uint8) {
         return h.pickSoloQuadrant(_traits(word), EntropyLib.hash2(word, uint256(TARGET - 1)));
@@ -375,7 +375,7 @@ contract EarlyBirdWhalePassTest is Test {
         _seed(word, 15, false);
         h.price(TARGET, 512 ether, word, false);
         vm.recordLogs();
-        h.payEarlyBirdTickets(word);
+        h.runEarlyBirdTickets(word, gasleft());
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 n;
         for (uint256 i; i < logs.length; ++i) {
@@ -393,7 +393,7 @@ contract EarlyBirdWhalePassTest is Test {
         _seed(word, uint8(1 << solo), false);
         h.price(TARGET, 512 ether, word, false);
         vm.recordLogs();
-        h.payEarlyBirdTickets(word);
+        h.runEarlyBirdTickets(word, gasleft());
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 n;
         for (uint256 i; i < logs.length; ++i) {

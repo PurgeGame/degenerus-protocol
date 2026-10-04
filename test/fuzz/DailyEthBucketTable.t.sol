@@ -81,9 +81,9 @@ contract DailyEthBucketTable is Test {
         (uint256 word, uint8[4] memory traits) = _board(LVL, 0xD1CE);
         h.setLevel(LVL - 1); // the purchase level LVL is level + 1, as the advance passes it
         vm.recordLogs();
-        h.payDailyJackpot(false, LVL, word);
+        h.runDailyJackpot(false, LVL, word, gasleft());
         // The priced ticket leg pays from the next advance stage on the same word.
-        h.payPurchaseDailyTickets(word);
+        h.runPurchaseDailyTickets(word, gasleft());
         uint256 unit = 0.1 ether;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         (uint256[4] memory count, uint256[4] memory total) = _tally(logs, traits, unit);
@@ -143,7 +143,7 @@ contract DailyEthBucketTable is Test {
         uint256 unit = PriceLookupLib.priceForLevel(target + 1) >> 2;
         vm.recordLogs();
         vm.prank(ContractAddresses.GAME);
-        uint256 paid = h.runTerminalJackpot(poolWei, target, word);
+        (, uint256 paid) = h.runTerminalJackpotWork(poolWei, target, word, gasleft());
         (uint256[4] memory count, uint256[4] memory total) = _tally(vm.getRecordedLogs(), traits, 0); // no per-winner floor here
 
         uint256 summed;

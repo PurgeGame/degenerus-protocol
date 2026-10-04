@@ -7,6 +7,10 @@ import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {IGameAfkingModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title TLKeyComputer -- Exposes internal key computation and queue inspection helpers
@@ -21,6 +25,18 @@ contract TLKeyComputer is DegenerusGameStorage {
 
     function tqFarFutureKey(uint24 lvl) external pure returns (uint24) {
         return _tqFarFutureKey(lvl);
+    }
+}
+
+/// @title TLHumanBoxWorker -- One call of the human-box worker mineFlip dispatches for its
+///        HumanBoxes stage, run alone in the Game's context (etched over the game, then back).
+contract TLHumanBoxWorker is DegenerusGame {
+    function runHumanBoxes() external returns (uint256 opened, bool progressed) {
+        (bool ok, bytes memory ret) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
+            abi.encodeWithSelector(IGameAfkingModule.runHumanBoxWork.selector, uint256(10_000_000)));
+        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        MineFlipGas.Result memory result = abi.decode(ret, (MineFlipGas.Result));
+        return (result.rewardBasis, result.progressed);
     }
 }
 
@@ -1476,22 +1492,19 @@ contract TicketLifecycleTest is DeployProtocol {
     // =========================================================================
 
     /// @notice Purchase lootboxes before locking, land their word, then set rngLocked and
-    ///         attempt to open. The sweep's entry gate must no-op every open while locked.
+    ///         attempt to open. The human-box worker's entry gate must no-op every open while locked.
     /// @dev RNG-03: rngLocked blocks FF key writes from lootbox open paths.
-    ///      Box-order migration: the removed openBox() reverted RngLocked() unconditionally at its
-    ///      OWN entry gate before ever reaching _queueEntriesScaled, so under the OLD door every
-    ///      open always hit the revert regardless of a near- or far-future roll -- the near-future
-    ///      "success" branch was already unreachable through that door. The sweep replacement's
-    ///      entry gate (the read-consumer stage, blocked by rngLockedFlag) is the same flag, but a
-    ///      locked call no-ops (returns 0) instead of reverting, so it can no longer distinguish or
-    ///      even reach the deep near/far-future write-buffer routing this test set out to
-    ///      integration-prove. What IS still provable, and is the honest replacement: the entry
-    ///      gate uniformly blocks every open while locked, with no work done and nothing reverted.
-    ///      Engine migration: boxes bind to one of two physical buffers (tag 0 or 1) and the
-    ///      per-index word map is gone, so all twelve buys form one order on one buffer and one
-    ///      word serves it. The word is fixture-published as the sealed read cohort (what a landed
-    ///      word plus the keeper's publish produce), after sealing the genesis day so the cohort is
-    ///      openable; an unlocked control proves the zero below is the gate, not an empty cohort.
+    ///      The worker mineFlip dispatches for its HumanBoxes stage (runHumanBoxWork) is gated on
+    ///      the read-consumer stage, which rngLockedFlag closes: a locked call opens nothing and
+    ///      reverts nothing, so it never reaches the deep near/far-future write-buffer routing.
+    ///      What is provable: the entry gate uniformly blocks every open while locked, with no
+    ///      work done and nothing reverted. The worker runs alone, in the Game's context, through
+    ///      the TLHumanBoxWorker fixture, so the gate is observed without the rest of the engine.
+    ///      Boxes bind to one of two physical buffers (tag 0 or 1), so all twelve buys form one
+    ///      order on one buffer and one word serves it. The word is fixture-published as the
+    ///      sealed read cohort (what a landed word plus the keeper's publish produce), after
+    ///      sealing the genesis day so the cohort is openable; an unlocked control proves the
+    ///      zero below is the gate, not an empty cohort.
     function testRngLockedBlocksFFLootbox() public {
         assertEq(game.level(), 0, "Should start at level 0");
         _settleToday();
@@ -1513,11 +1526,11 @@ contract TicketLifecycleTest is DeployProtocol {
         _storeLootboxRngWord(indices[0], uint256(0xDEADBEEF));
         assertEq(_lootboxRngWord(indices[0]), uint256(0xDEADBEEF), "the buffer's word is published");
 
-        // Control: with the lock clear, the same sweep call opens the order.
+        // Control: with the lock clear, the same worker call opens the order.
         uint256 snap = vm.snapshotState();
-        vm.prank(buyer3);
-        assertGt(game.openBoxes(type(uint256).max), 0, "control: the unlocked sweep opens the seeded order");
-        assertEq(_boxesOwed(indices[0], buyer3), 0, "control: the unlocked sweep resolved the whole order");
+        (uint256 controlOpened,) = _runHumanBoxWorker();
+        assertGt(controlOpened, 0, "control: the unlocked worker opens the seeded order");
+        assertEq(_boxesOwed(indices[0], buyer3), 0, "control: the unlocked worker resolved the whole order");
         vm.revertToState(snap);
 
         // Set rngLockedFlag=true
@@ -1530,14 +1543,15 @@ contract TicketLifecycleTest is DeployProtocol {
             uint256 rngWord = _lootboxRngWord(indices[i]);
             if (rngWord == 0) continue;
 
-            vm.prank(buyer3);
-            uint256 opened = game.openBoxes(type(uint256).max);
-            assertEq(opened, 0, "RNG-03b: the sweep's entry gate must no-op every open while rngLocked");
+            assertEq(game.rngConsumerStage(), 0, "RNG-03b: the lock closes the read-consumer stage");
+            (uint256 opened, bool progressed) = _runHumanBoxWorker();
+            assertEq(opened, 0, "RNG-03b: the worker's entry gate must no-op every open while rngLocked");
+            assertFalse(progressed, "RNG-03b: the locked worker reports no progress");
             checked++;
         }
 
         assertGt(checked, 0, "RNG-03b: at least one lootbox index must be checked");
-        assertEq(_boxesOwed(indices[0], buyer3), validCount, "RNG-03b: the locked sweep left every box unopened");
+        assertEq(_boxesOwed(indices[0], buyer3), validCount, "RNG-03b: the locked worker left every box unopened");
     }
 
     // =========================================================================
@@ -1916,8 +1930,8 @@ contract TicketLifecycleTest is DeployProtocol {
         // Purchase lootbox to create mid-day RNG demand + trigger potential swap
         _purchaseWithLootbox(buyer3, 0, 1 ether);
 
-        // Attempt to trigger lootbox RNG (may need requestLootboxRng)
-        try game.requestLootboxRng() {} catch {}
+        // Attempt to trigger lootbox RNG through mineFlip's mid-day request
+        _tryMiddayRequest();
 
         // BURST: immediately buy a large batch of tickets AFTER RNG request
         // If swap happened, these go to the new write slot
@@ -1972,7 +1986,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         // Trigger mid-day RNG via lootbox purchase
         _purchaseWithLootbox(buyer1, 0, 1 ether);
-        try game.requestLootboxRng() {} catch {}
+        _tryMiddayRequest();
 
         // Drive mid-day processing — may take multiple calls due to large queue
         for (uint256 i = 0; i < 100; i++) {
@@ -2017,7 +2031,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         // Try to trigger mid-day lootbox RNG
         _purchaseWithLootbox(buyer1, 0, 0.5 ether);
-        try game.requestLootboxRng() {} catch {}
+        _tryMiddayRequest();
 
         // If ticketsFullyProcessed is false, the swap condition (AM:735) is not met.
         // Write slot should NOT have changed from the mid-day path.
@@ -2063,7 +2077,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Mid-day cycle 1: buy tickets + trigger lootbox RNG
         _buyTickets(buyer1, 4000);
         _purchaseWithLootbox(buyer2, 0, 0.5 ether);
-        try game.requestLootboxRng() {} catch {}
+        _tryMiddayRequest();
         _fulfillVrfIfPending();
         for (uint256 i = 0; i < 50; i++) {
             (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
@@ -2075,7 +2089,7 @@ contract TicketLifecycleTest is DeployProtocol {
         _buyTickets(buyer2, 4000);
         _buyTickets(buyer3, 4000);
         _purchaseWithLootbox(buyer3, 0, 0.5 ether);
-        try game.requestLootboxRng() {} catch {}
+        _tryMiddayRequest();
         _fulfillVrfIfPending();
         for (uint256 i = 0; i < 50; i++) {
             (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
@@ -2086,7 +2100,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Mid-day cycle 3: burst
         _buyTickets(buyer1, 8000);
         _purchaseWithLootbox(buyer1, 0, 1 ether);
-        try game.requestLootboxRng() {} catch {}
+        _tryMiddayRequest();
         _fulfillVrfIfPending();
         for (uint256 i = 0; i < 50; i++) {
             (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
@@ -2148,10 +2162,10 @@ contract TicketLifecycleTest is DeployProtocol {
         _assertZeroStranding(1, uint24(game.level()));
     }
 
-    /// @notice Verify that mid-day lootbox RNG can fire even when read queue is not fully
-    ///         drained (ticketsFullyProcessed = false). The VRF request goes through for
-    ///         lootbox resolution, but the ticket swap is skipped. No ticket processing
-    ///         occurs from the mid-day path in this case — daily path continues draining.
+    /// @notice A mid-day lootbox demand raised while the read queue is not fully drained
+    ///         (ticketsFullyProcessed = false). mineFlip's mid-day request is its last stage, so
+    ///         a mineFlip here drains the pending read work first and requests only once the read
+    ///         cohort completes; the daily path continues draining either way, with zero stranding.
     function testMidDayRngFiresWithReadQueuePending() public {
         _driveToLevel(2);
         uint256 reached = game.level();
@@ -2178,18 +2192,12 @@ contract TicketLifecycleTest is DeployProtocol {
         // Purchase lootbox to create pending RNG demand
         _purchaseWithLootbox(buyer1, 0, 1 ether);
 
-        // Try requestLootboxRng — this should NOT revert even if read queue
-        // still has entries, because lootbox RNG is independent of ticket processing.
-        // It may revert for other reasons (threshold, LINK balance, etc.) which is fine.
-        try game.requestLootboxRng() {
-            // If it succeeded: the VRF was requested for lootbox resolution.
-            // Check whether swap happened (depends on ticketsFullyProcessed).
-            // We don't assert the swap decision here — that's tested in
-            // testMidDaySwapSkipped_ReadNotDrained. We just verify no revert.
-        } catch {
-            // May revert for threshold/LINK/timing reasons — that's acceptable.
-            // The important thing is it doesn't revert BECAUSE of read queue state.
-        }
+        // One mineFlip with the read queue possibly still pending: it works the read queue in
+        // stage order and reaches the mid-day request only if the cohort completes. It may also
+        // find nothing to do (threshold, LINK, timing); that is acceptable. The swap decision
+        // is tested in testMidDaySwapSkipped_ReadNotDrained.
+        (bool midOk, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+        midOk;
 
         // Regardless of mid-day outcome, continue daily processing
         for (uint256 i = 0; i < 100; i++) {
@@ -2386,16 +2394,18 @@ contract TicketLifecycleTest is DeployProtocol {
     }
 
     /// @dev Mid-day word for the write buffer's box orders: `requester` (an ETH box buyer whose
-    ///      pending value clears the request threshold) requests, the coordinator answers with
+    ///      pending value clears the request threshold) requests through mineFlip, the coordinator answers with
     ///      `word` (a mid-day word is stored verbatim: no nudge applies), and the engine publishes
     ///      it and opens the sealed cohort's orders as a read consumer until the session completes.
     ///      This replaces the removed per-index word map that tests used to poke.
     function _openWithMiddayWord(address requester, uint256 word) internal {
         uint256 subId = uint256(vm.load(address(game), bytes32(VRF_SUB_ID_SLOT)));
         mockVRF.fundSubscription(subId, 100e18); // the mid-day path keeps a LINK floor
+        uint256 priorReq = mockVRF.lastRequestId();
         vm.prank(requester);
-        game.requestLootboxRng();
+        game.mineFlip(); // the mid-day request: mineFlip is its only door
         uint256 reqId = mockVRF.lastRequestId();
+        assertGt(reqId, priorReq, "harness: mineFlip issued the mid-day request");
         mockVRF.fulfillRandomWords(reqId, word);
         for (uint256 i = 0; i < 50 && !game.rngComplete(); i++) {
             (bool ok, bytes memory err) = address(game).call(abi.encodeWithSignature("mineFlip()"));
@@ -2405,6 +2415,22 @@ contract TicketLifecycleTest is DeployProtocol {
             }
         }
         assertTrue(game.rngComplete(), "harness: the mid-day session's read consumers all completed");
+    }
+
+    /// @dev The mid-day request through mineFlip, its only door, when it is the engine's next
+    ///      action for a creditless caller; otherwise nothing (the request would be refused).
+    function _tryMiddayRequest() internal returns (bool requested) {
+        if (game.nextMinerAction() != 18) return false;
+        game.mineFlip();
+        return true;
+    }
+
+    /// @dev One call of the live human-box worker, alone, in the Game's context.
+    function _runHumanBoxWorker() internal returns (uint256 opened, bool progressed) {
+        bytes memory productionCode = address(game).code;
+        vm.etch(address(game), address(new TLHumanBoxWorker()).code);
+        (opened, progressed) = TLHumanBoxWorker(payable(address(game))).runHumanBoxes();
+        vm.etch(address(game), productionCode);
     }
 
     /// @dev The entry sweep's per-box seed: hash4(word, player, BOX_OPEN_TAG, nonce), where the

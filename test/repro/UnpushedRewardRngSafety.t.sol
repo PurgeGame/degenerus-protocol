@@ -115,8 +115,8 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
 
         uint256 requestId = mockVRF.lastRequestId();
         vm.warp(vm.getBlockTimestamp() + 2 days);
-        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.requestLootboxRng();
+        // The pending AFKing consumer, not a fresh request, is the engine's next work.
+        assertEq(game.nextMinerAction(), 9, "no next request while the stamp is pending"); // Afking
         assertEq(mockVRF.lastRequestId(), requestId, "no next request while the stamp is pending");
         assertEq(RecyclingState.currentWord(address(game)), SESSION_WORD, "old session remains available");
 
@@ -133,17 +133,20 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
     function test_PreRequestStampCannotUsePreviouslyPublishedWord() public {
         uint24 day = game.currentDayView();
         _seed(day - 1, day, 0, true);
-        game.openBoxes(100);
         assertEq(_pending(), 1, "pre-seal stamp remains pending");
-        assertEq(_openedDay(), day - 1, "prior published word cannot open a new STAGE stamp");
         assertTrue(game.rngComplete(), "cached prior completion still permits the daily seal");
+        // The completed session offers the new stamp no AFKing stage on the prior published word.
+        assertTrue(game.nextMinerAction() != 9, "prior published word cannot open a new STAGE stamp"); // Afking
 
         uint256 oldRequest = mockVRF.lastRequestId();
         for (uint256 i; i < 32 && mockVRF.lastRequestId() == oldRequest; ++i) game.mineFlip();
         assertGt(mockVRF.lastRequestId(), oldRequest, "new stamps do not deadlock their first request");
+        assertEq(_openedDay(), day - 1, "prior published word cannot open a new STAGE stamp");
         assertFalse(game.rngComplete());
         assertTrue(game.rngLocked());
-        game.openBoxes(100);
+        // Under the request lock the engine only waits for the word.
+        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
+        game.mineFlip();
         assertEq(_pending(), 1, "request lock also retains the stamp");
 
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), SESSION_WORD);
@@ -152,7 +155,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         _expectStampedResolve(day);
         for (uint256 i; i < 256 && game.rngLocked(); ++i) game.mineFlip();
         assertFalse(game.rngLocked(), "daily work reaches unlock");
-        game.openBoxes(100);
+        _mineAll(64);
         assertEq(_pending(), 0);
         assertEq(_openedDay(), day);
     }
@@ -166,7 +169,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         assertEq(RecyclingState.dailyWord(address(game), stampDay), 0, "old daily cache entry was recycled");
 
         _expectStampedResolve(stampDay);
-        game.openBoxes(100);
+        game.mineFlip();
         assertEq(_pending(), 0, "delayed fulfillment needs no retained stamp-day word");
         assertEq(_openedDay(), stampDay, "frozen day remains the reward domain input");
         assertTrue(game.rngComplete());
@@ -198,7 +201,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         for (uint256 i; i < 256 && _dailyIdx() < requestDay; ++i) game.mineFlip();
         assertEq(_dailyIdx(), requestDay, "delayed request applied and unlocked");
         assertEq(RecyclingState.dailyWord(address(game), stampDay), 0, "gap processing retained only recent daily words");
-        game.openBoxes(100);
+        _mineAll(64);
         assertEq(_pending(), 0, "request-day stamp survived the gap");
         // The same composed call may go on to prepare the next wall day's subscriptions, where
         // this unfunded fixture subscription expires (its record is deleted); otherwise the
@@ -244,15 +247,18 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         // the request below answer to the AFKing read session alone.
         _quietCrapsTable();
         _seed(day, day, 0, false);
-        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.requestLootboxRng();
-        game.openBoxes(100);
+        // The pending AFKing consumer, not a mid-day request, is the engine's next work.
+        assertEq(game.nextMinerAction(), 9, "no mid-day request while the AFKing stamp is pending"); // Afking
+        game.mineFlip();
         assertTrue(game.rngComplete());
         _buyWriteBox();
         vm.prank(address(admin));
         game.creditMiddayRng(PLAYER, 100 ether);
         vm.prank(PLAYER);
-        game.requestLootboxRng();
+        uint8 next = game.minerAction();
+        assertEq(next, 18, "the drained session admits the donor's mid-day request"); // RequestMidday
+        vm.prank(PLAYER);
+        game.mineFlip();
         assertFalse(game.rngComplete());
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0xF12345);
         for (uint256 i; i < 256 && !game.rngComplete(); ++i) game.mineFlip();

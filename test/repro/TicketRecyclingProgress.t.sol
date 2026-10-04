@@ -4,7 +4,8 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DeadVrfSeeder} from "../fuzz/helpers/DeadVrfSeeder.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {IDegenerusGameMintModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
+import {IDegenerusGameTicketModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {Vm} from "forge-std/Vm.sol";
 
 contract RecyclingProgressSeeder is DeadVrfSeeder {
@@ -52,12 +53,15 @@ contract RecyclingProgressSeeder is DeadVrfSeeder {
     }
     function foilRecordWord(uint24 lvl, address owner) external view returns (uint256) { return _foilRecordWord(owner, lvl); }
     function retireBeforeFoilWord() external { _setTicketBufferLevel(203); }
-    function runProductionMint(uint24 anchor) external returns (bool finished, bool worked) {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(
-            abi.encodeWithSelector(IDegenerusGameMintModule.processTicketBatch.selector, anchor)
+    /// @dev The production ticket worker, delegatecalled exactly as mineFlip's Tickets stage
+    ///      dispatches it, with all remaining gas as its allowance.
+    function runProductionTickets(uint24 anchor) external returns (bool finished, bool worked) {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall(
+            abi.encodeWithSelector(IDegenerusGameTicketModule.runTicketWork.selector, anchor, gasleft())
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
-        return abi.decode(data, (bool, bool));
+        MineFlipGas.Result memory r = abi.decode(data, (MineFlipGas.Result));
+        return (r.done, r.progressed);
     }
     function foilCount(uint24) external view returns (uint256) { return _foilDrainPending() ? 1 : 0; }
     function stamped(uint24 lvl) external view returns (uint24) { return _ticketBufferLevel(lvl); }
@@ -92,7 +96,7 @@ contract TicketRecyclingProgressTest is DeployProtocol {
         // ample-gas call both drains the blocking foil and then retires the buffer for 203.
         // The order is read from events.
         vm.recordLogs();
-        (bool done, bool worked) = s.runProductionMint(203);
+        (bool done, bool worked) = s.runProductionTickets(203);
         (uint256 foilAt, uint256 ticketAt) = _traitsOrder(vm.getRecordedLogs(), foilOwner, buyer);
         assertTrue(worked, "the deferral must still drain the blocking old foil");
         assertTrue(done);
@@ -135,7 +139,7 @@ contract TicketRecyclingProgressTest is DeployProtocol {
         uint256 record = s.foilRecordWord(201, foilOwner);
         // The pack was queued before takeover; its committed cohort resolves afterwards.
         s.retireBeforeFoilWord();
-        (bool done, bool worked) = s.runProductionMint(203);
+        (bool done, bool worked) = s.runProductionTickets(203);
         assertTrue(worked, "a retired foil record must not wedge the generation frontier");
         assertEq(s.foilCount(201), 0, "late foil queue consumed");
         assertEq(s.stamped(201), 203, "never restore retired inventory");
@@ -143,7 +147,7 @@ contract TicketRecyclingProgressTest is DeployProtocol {
         assertEq(uint32(generated >> 24), uint32(record >> 24), "frozen boost and activity retained");
         assertTrue(generated >> 255 != 0, "late pack still stores its generated lines");
         assertGt(uint128(generated >> 56), 0, "four lines retained for claims");
-        if (!done) (done, worked) = s.runProductionMint(203);
+        if (!done) (done, worked) = s.runProductionTickets(203);
         assertTrue(done);
         assertEq(s.bucketTotal(203), 100, "late old foil contributes no stale lanes to new tickets");
     }

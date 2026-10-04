@@ -11,7 +11,7 @@ import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js
  *
  * The post-Plan-01 `DegenerusGameJackpotModule.sol` substitutes `effectiveEntropy`
  * for `entropy` at four ETH-distribution sites — among them L349 (jackpot-phase main
- * path of `payDailyJackpot`) and L1147 (`_resumeDailyEth`, the SPLIT_CALL2 leg of
+ * path of the daily jackpot stage) and L1147 (`_resumeDailyEth`, the SPLIT_CALL2 leg of
  * the two-call ETH split).
  *
  * For the daily ETH split to settle correctly across the two calls,

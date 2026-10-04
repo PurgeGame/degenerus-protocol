@@ -591,9 +591,10 @@ contract V56SecUnmanipulable is DeployProtocol {
         uint256 w = uint256(keccak256(abi.encode("dlv", vrfWord, _deliverNonce++))) | 1;
         _runStageNewDay(w);
         _settleClean(uint256(keccak256(abi.encode("dlvc", w))) | 1);
-        // Open the pending boxes (afking-first valve) so lastOpenedDay catches lastAutoBoughtDay.
-        vm.prank(makeAddr("deliver_opener"));
-        game.openBoxes(400);
+        // Mine any remaining box stages so lastOpenedDay catches lastAutoBoughtDay.
+        vm.startPrank(makeAddr("deliver_opener"));
+        _mineAll(64);
+        vm.stopPrank();
         // Suppress the unused-param lint when callers pass a fixed set.
         who;
     }

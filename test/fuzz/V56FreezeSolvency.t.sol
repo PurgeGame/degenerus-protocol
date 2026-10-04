@@ -29,8 +29,8 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///   inline-resolves pre-RNG (no LootBoxOpened at subscribe time). The single-roll open seed is
 ///   `keccak256(abi.encode(_recordedDailyWord(stampDay), player, AFKING_BOX_TAG, stampDay))` — it carries NO block.*
 ///   entropy, so two opens of the SAME stamp at DIFFERENT blocks (vm.roll/warp + perturbed
-///   prevrandao/coinbase) materialize byte-identical boxes. The afking open is reached via mineFlip() (the
-///   autoOpen selector was dropped — not re-exposed on the Game).
+///   prevrandao/coinbase) materialize byte-identical boxes. The afking open is reached only through
+///   mineFlip().
 ///
 /// @dev Reuses the funded-sub + seated + new-day STAGE harness (the accumulating-`_t` warp +
 ///   fulfill-first `_settleGame`/`_settleClean`/`_fulfillPending` from V56AfkingGasMarginal / the 356-03
@@ -477,8 +477,9 @@ contract V56FreezeSolvency is DeployProtocol {
         uint256 w = uint256(keccak256(abi.encode("dlv", vrfWord, _deliverNonce++))) | 1;
         _runStageNewDay(w);
         _settleClean(uint256(keccak256(abi.encode("dlvc", w))) | 1);
-        vm.prank(makeAddr("deliver_opener"));
-        game.openBoxes(400);
+        vm.startPrank(makeAddr("deliver_opener"));
+        _mineAll(64);
+        vm.stopPrank();
     }
 
     /// @dev Drive the per-sub buy STAGE for a NEW day off the accumulating timestamp (the Foundry caching

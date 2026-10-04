@@ -162,21 +162,18 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
 
         // Early generation does not grant another request without ordinary request funding.
         _finishReadConsumers();
-        vm.expectRevert(bytes4(keccak256("NoPendingLootbox()")));
-        game.requestLootboxRng();
+        _mineRefused();
         assertEq(mockVRF.lastRequestId(), reqId, "ticket work grants no extra request");
     }
 
     function test_ffWorkDoesNotWaivePendingValueOrThresholdGates() public {
         _seed(8, false, false, true);
-        vm.expectRevert(bytes4(keccak256("NoPendingLootbox()")));
-        game.requestLootboxRng();
+        _mineRefused();
         assertEq(_midday(), 0);
         assertEq(_ceiling(), CURRENT, "an unfunded request cannot activate generation");
 
         _buyBox(0.01 ether);
-        vm.expectRevert(bytes4(keccak256("BelowThreshold()")));
-        game.requestLootboxRng();
+        _mineRefused();
         assertEq(_midday(), 0);
         assertEq(_ceiling(), CURRENT, "below-threshold work must wait for an eligible request");
         assertEq(_queueLen(NEXT | FF_BIT), 1, "rejected requests preserve the uncreated cohort");
@@ -188,8 +185,7 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
         vm.prank(ContractAddresses.CREATOR);
         game.setMiddayMaxBasefee(5);
         vm.fee(6 gwei);
-        vm.expectRevert(bytes4(keccak256("GasTooHigh()")));
-        game.requestLootboxRng();
+        _mineRefused();
         assertEq(_midday(), 0, "rejected request commits no early cohort");
         assertEq(_ceiling(), CURRENT, "rejected request does not raise the mint ceiling");
     }
@@ -212,7 +208,7 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
         _buyBox(2 ether);
         _overlay().setTargetMet(false);
         _restore();
-        game.requestLootboxRng();
+        _mineRequest(address(this));
         assertEq(_ceiling(), CURRENT, "the target has not been met at commitment");
         assertEq(_generationBound(), 0);
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0xF12345);
@@ -227,13 +223,12 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
         _buyBox(2 ether);
         _overlay().setTargetMet(false);
         _restore();
-        game.requestLootboxRng();
-        uint256 existingId = mockVRF.lastRequestId();
+        uint256 existingId = _mineRequest(address(this));
 
         _overlay().setTargetMet(true);
         _restore();
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.requestLootboxRng();
+        game.mineFlip();
         assertEq(_ceiling(), CURRENT, "an already requested word cannot open the generation window");
         assertEq(_midday(), 0, "no isolated cohort was bound retroactively");
         mockVRF.fulfillRandomWords(existingId, 0xF12345);
@@ -631,8 +626,28 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
     function _requestPaidMidday() private {
         _finishReadConsumers();
         _buyBox(2 ether);
-        vm.prank(keeper);
-        game.requestLootboxRng();
+        _mineRequest(keeper);
+    }
+
+    /// @dev `caller`'s mineFlip, the only door to the mid-day request, issues it as the engine's
+    ///      next action.
+    function _mineRequest(address caller) private returns (uint256 id) {
+        uint256 prior = mockVRF.lastRequestId();
+        vm.prank(caller);
+        game.mineFlip();
+        id = mockVRF.lastRequestId();
+        assertGt(id, prior, "mineFlip issued the mid-day request");
+        assertFalse(game.rngLocked(), "a mid-day request, not the daily one");
+    }
+
+    /// @dev The mid-day request is refused before it is ever selected, so a mineFlip with nothing
+    ///      else to do finds no work and requests nothing.
+    function _mineRefused() private {
+        uint256 prior = mockVRF.lastRequestId();
+        assertEq(game.nextMinerAction(), 0, "the refused request is not selected (Idle)");
+        vm.expectRevert(bytes4(keccak256("NoWork()")));
+        game.mineFlip();
+        assertEq(mockVRF.lastRequestId(), prior, "a refused request asked for no word");
     }
 
     function _drainIsolated() private {

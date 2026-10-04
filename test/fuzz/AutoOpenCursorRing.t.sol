@@ -5,15 +5,17 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
-import {IDegenerusGameAdvanceModule, IDegenerusGameRngModule, IDegenerusGameTicketModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
+import {IDegenerusGameAdvanceModule, IDegenerusGameRngModule, IDegenerusGameTicketModule, IGameAfkingModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
 /// @dev Test-only checkpoint driver: executes exactly the currently selected
-/// production worker before AFK. The composed miner ordinarily opens the boxes
-/// within the same transaction, so it cannot expose this intermediate checkpoint.
-/// Every production worker keeps its own guards; no obligation/word is fabricated.
+/// production worker before AFK, or the AFK open worker alone. The composed miner
+/// ordinarily opens the boxes within the same transaction, so it cannot expose these
+/// intermediate checkpoints. Every production worker keeps its own guards; no
+/// obligation/word is fabricated.
 contract RingSingleStepFixture is DegenerusGame {
     function stepBeforeAfk() external {
-        MinerAction action = _nextMinerAction();
+        MinerAction action = _nextMinerAction(address(0));
         address target;
         bytes memory input;
         if (action == MinerAction.Publish) {
@@ -44,19 +46,27 @@ contract RingSingleStepFixture is DegenerusGame {
             }
         }
     }
+
+    /// @dev One call of the AFK open worker mineFlip dispatches for the Afking stage, with the
+    ///      same allowance shape. Returns the boxes it opened (its reward basis).
+    function runAfkOnce() external returns (uint256 opened) {
+        (bool ok, bytes memory ret) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
+            abi.encodeWithSelector(IGameAfkingModule.runAfkingWork.selector, uint256(10_000_000)));
+        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        opened = abi.decode(ret, (MineFlipGas.Result)).rewardBasis;
+    }
 }
 
 /// @title AutoOpenCursorRing — pending AFK boxes drain across the whole subscriber ring.
 /// @notice Directed cursor cases retain openable members below a non-pending tail
-/// cursor and exercise the production openBoxes and mineFlip entrypoints.
+/// cursor and exercise the production AFK open worker and mineFlip.
 /// Subscription creation and box purchases use public protocol paths; the
-/// intermediate pre-open checkpoint uses RingSingleStepFixture to execute the
-/// currently selected, guarded production worker. That checkpoint instrumentation
-/// is necessary because one composed mineFlip can now finish and open in one call.
-/// It is a worker-order fixture, not proof that a public transaction stops there.
+/// intermediate pre-open checkpoint and the isolated open call use RingSingleStepFixture
+/// to execute the guarded production worker mineFlip would select. That checkpoint
+/// instrumentation is necessary because one composed mineFlip can finish and open in
+/// one call. It is a worker-order fixture, not proof that a public transaction stops there.
 /// @dev Cursor pokes are explicit for the two directed wrap cases. The growth
-/// case uses no cursor poke. Legacy openBoxes(count) ignores the count hint and
-/// observes physical gas admission. No contracts/*.sol source is changed.
+/// case uses no cursor poke. No contracts/*.sol source is changed.
 contract AutoOpenCursorRing is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots + the post-PACK Sub-slot offset block
@@ -76,8 +86,6 @@ contract AutoOpenCursorRing is DeployProtocol {
     uint256 private constant OFF_LASTOPENED = 10;     // uint24 lastOpenedDay     (bytes 10..12)
 
     uint256 private constant DEITY_SHIFT = 184;
-
-    uint256 private constant OPEN_BATCH = 80; // Retained compatibility hint; not a work bound.
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
     uint256 private _lastFulfilledReqId;
@@ -126,9 +134,9 @@ contract AutoOpenCursorRing is DeployProtocol {
             assertTrue(_isOpenable(subs[i]), "fixture: the sub below the cursor is openable (pending box + landed word)");
         }
 
-        // Drive the production open valve. The full-ring scan wraps from the wedge index past len back to 0,
-        // reaching the stranded openable boxes.
-        uint256 opened = _openViaValve(OPEN_BATCH);
+        // Drive the production AFK open worker. The full-ring scan wraps from the wedge index past len back
+        // to 0, reaching the stranded openable boxes.
+        uint256 opened = _openAfkRing();
         assertGt(opened, 0, "ring: the open leg did NOT return 0 with openable boxes still present");
 
         // Every stranded box was opened — its lastOpenedDay caught up to lastAutoBoughtDay.
@@ -194,11 +202,10 @@ contract AutoOpenCursorRing is DeployProtocol {
         for (uint256 i; i < subs.length; i++) {
             assertFalse(_isOpenable(subs[i]), "drain: no openable afking box remains after the ring scan");
         }
-        // Fully drain the liveness valve (afking + the incidental human boxes the STAGE buys created), then
-        // a final clean valve call returns 0 — the open path cleanly no-ops once every box is opened.
-        _drainValveToZero();
-        assertEq(_openViaValve(OPEN_BATCH), 0, "drained: a follow-up open valve returns 0 (whole set drained)");
+        // Finish the rest of the read cohort (the incidental human boxes the STAGE buys created), then a
+        // final clean AFK worker call opens nothing — the open path cleanly no-ops once every box is opened.
         _finishReadConsumers();
+        assertEq(_openAfkRing(), 0, "drained: a follow-up AFK open opens nothing (whole set drained)");
 
         // NOW (and only now) mineFlip cleanly signals no work: with no advance due and the afking ring
         // fully drained, both router categories are empty -> the clean NoWork no-op (not a suffix-strand
@@ -224,13 +231,13 @@ contract AutoOpenCursorRing is DeployProtocol {
     // =========================================================================
 
     /// @notice A public subscription grows the set without a cursor poke. After
-    /// a later guarded-worker checkpoint stamps fresh boxes, ordinary openBoxes
+    /// a later guarded-worker checkpoint stamps fresh boxes, the AFK open worker
     /// drains them. Directed wrap geometry is asserted by the separate wedge cases.
     function test_RealPathSubscribeGrowsSetThenDrains() public {
         // Stamp two openable subs, then drain the current ring.
         address[] memory first = _stampSealedOpenableSubs(2);
         // Open everything currently pending and record the resulting cursor.
-        _openViaValve(OPEN_BATCH);
+        _openAfkRing();
         for (uint256 i; i < first.length; i++) {
             assertFalse(_isOpenable(first[i]), "fixture: the first wave's boxes opened (cursor walked the set)");
         }
@@ -243,7 +250,7 @@ contract AutoOpenCursorRing is DeployProtocol {
         assertGt(_subscribersLength(), lenBeforeGrow, "real path: the subscribe grew _subscribers (push, no cursor reset)");
 
         // Stamp a new box on an original member through the guarded worker
-        // checkpoint and require nonempty work before invoking the public valve.
+        // checkpoint and require nonempty work before invoking the open worker.
         address stranded = first[0];
         _stampSealedBoxOn(stranded);
         assertTrue(_isOpenable(stranded), "fixture: a fresh openable box exists on the original member");
@@ -255,7 +262,7 @@ contract AutoOpenCursorRing is DeployProtocol {
         emit log_named_uint("grower index (cursor sub)", _subscriberIndexOf(grower) - 1);
 
         // The ring scan drains the stranded openable box no matter where the cursor parked.
-        uint256 opened = _openViaValve(OPEN_BATCH);
+        uint256 opened = _openAfkRing();
         assertGt(opened, 0, "real path: the ring scan opened the stranded box (no suffix-only strand)");
         assertEq(_lastOpenedDayOf(stranded), _lastBoughtDayOf(stranded), "real path: the stranded box opened (marker advanced)");
     }
@@ -301,18 +308,14 @@ contract AutoOpenCursorRing is DeployProtocol {
         require(_subscriberIndexOf(p) > 0, "fixture: the fresh sub joined the set");
     }
 
-    /// @dev Drive the production open valve: Game.openBoxes delegatecalls drainAfkingBoxes -> _autoOpen.
-    ///      Returns the boxes opened (afking + human; here only the afking ring boxes are pending).
-    function _openViaValve(uint256 maxCount) internal returns (uint256 opened) {
-        vm.prank(makeAddr("ring_opener"));
-        opened = game.openBoxes(maxCount);
-    }
-
-    /// @dev Drain the liveness valve (afking + human boxes) to empty so a follow-up call returns 0.
-    function _drainValveToZero() internal {
-        for (uint256 i; i < 64; i++) {
-            if (_openViaValve(OPEN_BATCH) == 0) return;
-        }
+    /// @dev One call of the production AFK open worker (GameAfkingModule.runAfkingWork, the worker
+    ///      mineFlip dispatches for the Afking stage), run in the Game's context through the checkpoint
+    ///      fixture. Returns the afking ring boxes it opened.
+    function _openAfkRing() internal returns (uint256 opened) {
+        bytes memory productionCode = address(game).code;
+        vm.etch(address(game), address(new RingSingleStepFixture()).code);
+        opened = RingSingleStepFixture(payable(address(game))).runAfkOnce();
+        vm.etch(address(game), productionCode);
     }
 
     /// @dev Drive the per-sub buy STAGE for a NEW day (the accumulating-timestamp warp).
@@ -431,7 +434,7 @@ contract AutoOpenCursorRing is DeployProtocol {
     }
 
     /// @dev Openable under the entry-gate: pending box (lastOpenedDay < lastAutoBoughtDay) AND the frozen
-    ///      stamp-day word has landed (_recordedDailyWord(lastAutoBoughtDay) != 0). Mirrors the _autoOpen predicate.
+    ///      stamp-day word has landed (_recordedDailyWord(lastAutoBoughtDay) != 0). Mirrors the _runAfkingWork predicate.
     function _isOpenable(address who) internal view returns (bool) {
         uint32 bought = _lastBoughtDayOf(who);
         if (_lastOpenedDayOf(who) >= bought) return false;

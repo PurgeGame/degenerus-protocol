@@ -27,7 +27,6 @@ pragma solidity 0.8.34;
 import {IDegenerusGame, MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {RECORD_KIND_BUY, RECORD_KIND_LUCKBOX} from "../interfaces/ICoinflip.sol";
 import {
-    IDegenerusGameTicketModule,
     IDegenerusGameBoonModule,
     IDegenerusGameFoilPackModule,
     IDegenerusGameLootboxModule
@@ -308,23 +307,6 @@ contract DegenerusGameMintModule is
     ///      predicate natively, so the answer is identical.
     function _pastDeadlineTriggered(uint24, uint24) internal view virtual override returns (bool) {
         return IDegenerusGame(address(this)).livenessTriggered();
-    }
-
-    /// @dev Compatibility bridge while callers migrate to the ticket module.
-    function processTicketBatch(uint24 anchor) external returns (bool finished, bool didWork) {
-        return abi.decode(_ticketWorkCall(abi.encodeWithSelector(IDegenerusGameTicketModule.processTicketBatch.selector, anchor)), (bool, bool));
-    }
-
-    /// @dev The obsolete units argument no longer selects a public stopping schedule.
-    function processTicketBatchBudgeted(uint24 anchor, uint256) external returns (bool finished, bool didWork, uint256 charged) {
-        (finished, didWork) = abi.decode(_ticketWorkCall(abi.encodeWithSelector(IDegenerusGameTicketModule.processTicketBatch.selector, anchor)), (bool, bool));
-        charged = 0;
-    }
-
-    function _ticketWorkCall(bytes memory callData) private returns (bytes memory data) {
-        bool ok;
-        (ok, data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall(callData);
-        if (!ok) _revertDelegate(data);
     }
 
     // -------------------------------------------------------------------------

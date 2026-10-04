@@ -8,9 +8,16 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {
+    IDegenerusGameDecimatorModule,
+    IDegenerusGameRngModule
+} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 
-/// @dev Setup only: the public game dispatch, seal, run/rank/pay and request gates
-/// are production. All unrelated consumers start complete, isolating Decimator.
+/// @dev Setup only: the seal, run/rank/pay and request gates are production. The two workers
+/// are the engine's own (mineFlip's Decimator and RequestMidday stages), delegatecalled here in
+/// the Game's storage as the engine dispatches them. All unrelated consumers start complete,
+/// isolating Decimator.
 contract UnpushedDecimatorSessionSeeder is DegenerusGameStorage {
     function prime(uint24 lvl, uint256 word, uint128 pool) external {
         level = lvl - 1;
@@ -33,6 +40,25 @@ contract UnpushedDecimatorSessionSeeder is DegenerusGameStorage {
     }
 
     function closeWindow() external { _setDecWindowOpen(false); }
+
+    /// @dev The Decimator stage worker; returns its result and the gas the delegatecall used.
+    function runDecimator(uint256 allowance) external returns (MineFlipGas.Result memory r, uint256 used) {
+        uint256 g0 = gasleft();
+        (bool ok, bytes memory data) = ContractAddresses.GAME_DECIMATOR_MODULE.delegatecall(
+            abi.encodeWithSelector(IDegenerusGameDecimatorModule.runDecimatorWork.selector, allowance)
+        );
+        used = g0 - gasleft();
+        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
+        r = abi.decode(data, (MineFlipGas.Result));
+    }
+
+    /// @dev The RequestMidday stage worker, the engine's only mid-day request path, for the caller.
+    function requestMidday() external {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_RNG_MODULE.delegatecall(
+            abi.encodeWithSelector(IDegenerusGameRngModule.requestMinerRng.selector)
+        );
+        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
+    }
 
     function terminalWord(uint256 word) external {
         _setRngTerminal();
@@ -96,10 +122,27 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
         vm.etch(address(game), gameCode);
     }
 
+    /// @dev One call into the seeder overlay at the game address, `callGas` bounding it (0 = all).
+    function _overlay(bytes memory data, uint256 callGas) private returns (bool ok, bytes memory result) {
+        vm.etch(address(game), seedCode);
+        (ok, result) = callGas == 0 ? address(game).call(data) : address(game).call{gas: callGas}(data);
+        vm.etch(address(game), gameCode);
+    }
+
+    /// @dev One Decimator stage call with `callGas` as its gas and allowance (0 = all gas).
+    function _runDecimator(uint256 callGas) private returns (MineFlipGas.Result memory r, uint256 used) {
+        (bool ok, bytes memory data) = _overlay(
+            abi.encodeCall(UnpushedDecimatorSessionSeeder.runDecimator, (callGas == 0 ? gasleft() : callGas)), callGas
+        );
+        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
+        (r, used) = abi.decode(data, (MineFlipGas.Result, uint256));
+    }
+
     function _requestBlocked() private {
         assertEq(RecyclingState.currentWord(address(game)), WORD);
-        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.requestLootboxRng();
+        (bool ok, bytes memory reason) = _overlay(abi.encodeCall(UnpushedDecimatorSessionSeeder.requestMidday, ()), 0);
+        assertFalse(ok, "the mid-day request is refused while the round reads the word");
+        assertEq(bytes4(reason), bytes4(keccak256("RngNotReady()")));
         assertEq(RecyclingState.currentWord(address(game)), WORD);
     }
 
@@ -107,9 +150,8 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
         return (uint256(keccak256(abi.encode(TIE, WORD, LVL, id))) & ~uint256(type(uint64).max)) | id;
     }
 
-    // The compatibility door ignores its count and runs the caller-sized work under the gas it
-    // is given, admitting each step by its declared bound (60d31f775). Allowances replace the
-    // old unit budgets: RUN_ALLOWANCE admits about one heads run, RANK_ALLOWANCE the ranking
+    // The Decimator worker runs under the allowance it is given, admitting each step by its
+    // declared bound: RUN_ALLOWANCE admits about one heads run, RANK_ALLOWANCE the ranking
     // step, PAY_ALLOWANCE a small prefix of ETH awards (at least one PAYMENT plus its tail).
     uint256 private constant RUN_ALLOWANCE = 1_000_000;
     uint256 private constant RANK_ALLOWANCE = 700_000;
@@ -120,8 +162,8 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
         DegenerusGameStorage.DecBattleRound memory r;
         uint64 previous;
         for (uint256 i; previous < COUNT && i < COUNT; ++i) {
-            (, uint256 charged,) = game.settleDecimatorWinners{gas: RUN_ALLOWANCE}(0);
-            assertLe(charged, RUN_ALLOWANCE, "partial call stays inside its allowance");
+            (, uint256 used) = _runDecimator(RUN_ALLOWANCE);
+            assertLe(used, RUN_ALLOWANCE, "partial call stays inside its allowance");
             r = lens.decBattleRoundOf(address(game), LVL);
             assertGt(r.cursor, previous);
             previous = r.cursor;
@@ -129,7 +171,7 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
             _requestBlocked();
         }
         assertEq(r.cursor, COUNT, "every entrant ran before ranking");
-        game.settleDecimatorWinners{gas: RANK_ALLOWANCE}(0); // Ranking is a separately reserved bounded step.
+        _runDecimator(RANK_ALLOWANCE); // Ranking is a separately reserved bounded step.
         r = lens.decBattleRoundOf(address(game), LVL);
         assertEq(r.phase, 2);
         assertEq(r.winners, 4);
@@ -146,7 +188,7 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
         uint256 payCalls;
         while (lens.decBattleRoundOf(address(game), LVL).phase == 2 && payCalls < 16) {
             uint256 paidBefore = lens.decBattleRoundOf(address(game), LVL).paid;
-            game.settleDecimatorWinners{gas: PAY_ALLOWANCE}(0);
+            _runDecimator(PAY_ALLOWANCE);
             ++payCalls;
             DegenerusGameStorage.DecBattleRound memory p = lens.decBattleRoundOf(address(game), LVL);
             if (p.phase == 2) {
@@ -160,25 +202,26 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
         uint256 sum;
         for (uint64 id = 1; id <= COUNT; ++id) sum += game.claimableWinningsOf(address(uint160(0xD000 + id)));
         assertEq(sum, POOL, "all payouts finish before the next request");
+        // With the round complete the engine issues the mid-day request itself.
         uint256 requestBefore = mockVRF.lastRequestId();
-        game.requestLootboxRng();
+        game.mineFlip();
         assertGt(mockVRF.lastRequestId(), requestBefore);
         assertEq(RecyclingState.currentWord(address(game)), 0, "only the completed round releases its word");
         vm.expectRevert(); lens.decWinnerAt(address(game), LVL, 0);
     }
 
     function test_TerminalReplacementWordCannotResumeOldNormalBattleBeforeGameOver() public {
-        game.settleDecimatorWinners{gas: RUN_ALLOWANCE}(0);
+        _runDecimator(RUN_ALLOWANCE);
         bytes memory beforeRound = abi.encode(lens.decBattleRoundOf(address(game), LVL));
         _seed(abi.encodeCall(UnpushedDecimatorSessionSeeder.terminalWord, (uint256(0xDEADCAFE))));
         assertFalse(game.gameOver());
         assertEq(RecyclingState.currentWord(address(game)), 0xDEADCAFE);
-        (uint256 settled, uint256 used, bool moved) = game.settleDecimatorWinners(2500);
-        assertEq(settled, 0);
-        // The door now reports raw gas, not work units: a refused resume admits no run at all,
-        // so it spends less than the smallest declared step (a tails run).
+        (MineFlipGas.Result memory r, uint256 used) = _runDecimator(0);
+        assertEq(r.rewardBasis, 0);
+        // A refused resume admits no run at all, so the worker call spends less than the
+        // smallest declared step (a tails run).
         assertLt(used, GasBounds.DECIMATOR_TAILS_GAS_MAX);
-        assertFalse(moved);
+        assertFalse(r.progressed);
         assertEq(abi.encode(lens.decBattleRoundOf(address(game), LVL)), beforeRound);
         vm.expectRevert(); lens.decWinnerAt(address(game), LVL, 0);
     }

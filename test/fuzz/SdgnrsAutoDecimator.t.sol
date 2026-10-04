@@ -241,7 +241,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         // level(4)+1 = 5, and level 5's far-future pool (2 owners) is exactly the "latched
         // last purchase day's frozen next-level pool" the daily drain gate now mints inside
         // the unified sweep BEFORE rngGate — one full budget per call, one thing per advance
-        // (see processTicketBatch's far-future continuation block). That first call resolves
+        // (see runTicketWork's far-future continuation block). That first call resolves
         // the pool and returns early (STAGE_TICKETS_WORKING); the second call finds the gate
         // clear and reaches rngGate, where the opening-day decimator burn fires.
         game.mineFlip();

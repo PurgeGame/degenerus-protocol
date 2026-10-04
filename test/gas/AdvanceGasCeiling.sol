@@ -48,7 +48,7 @@ contract GameSeeder is DegenerusGame, BucketSeed {
     /// @param rngWord      the word the winning buckets are seeded for; it answers the terminal request
     /// @param readOwed     traits owed by the committed read-slot player (one cold finishing batch)
     /// @param writeOwed    traits owed by the later write-slot player (excluded from terminal draw)
-    /// @param winTraits    the 4 winning trait ids `runTerminalJackpot` rolls for `rngWord`
+    /// @param winTraits    the 4 winning trait ids the terminal jackpot rolls for `rngWord`
     /// @param bucketCounts the bucket geometry for the seeded pool (305-winner geometry for the cap)
     /// @param base         disjoint address-space base for synthetic holders
     function seedAdvanceWorstCase(
@@ -96,7 +96,7 @@ contract GameSeeder is DegenerusGame, BucketSeed {
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((uint48(0) + 1) & 1) << 12);
         rngWordCurrent = rngWord | 1; _setRngSessionPublished(true); _setRngComplete(false);
 
-        uint24 pl = lvl + 1; // purchaseLevel the drain processes (drain calls processTicketBatch(lvl+1))
+        uint24 pl = lvl + 1; // purchaseLevel the drain processes (drain calls runTicketWork for lvl+1)
 
         // Historical two-slot fixture: the read slot is the committed heavy batch. The populated
         // write slot is later work that the terminal path must not promote into this entropy outcome.
@@ -105,7 +105,7 @@ contract GameSeeder is DegenerusGame, BucketSeed {
         ticketCursor = 0;
         ticketLevel = 0;
 
-        // Terminal jackpot buckets: seed the winning-trait buckets so runTerminalJackpot resolves the
+        // Terminal jackpot buckets: seed the winning-trait buckets so the terminal jackpot resolves the
         // full geometry (every selected winner is a real, non-zero holder).
         for (uint8 q; q < 4; ++q) {
             uint256 n = uint256(bucketCounts[q]) + 8; // a few extra so selection never hits address(0)
@@ -157,9 +157,9 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
     /// @dev Pool funded into the game for the terminal jackpot's fixed 305-winner geometry.
     uint256 internal constant GAME_FUNDS = 1000 ether;
 
-    /// @notice Derive the winning traits + bucket geometry runTerminalJackpot will actually roll for
+    /// @notice Derive the winning traits + bucket geometry the terminal jackpot will actually roll for
     ///         `rngWord` at `lvl` and `GAME_FUNDS`, so the seeded buckets match the live jackpot's roll.
-    /// @dev Mirrors runTerminalJackpot's getRandomTraits + terminalWinnerCounts derivation.
+    /// @dev Mirrors the terminal jackpot's getRandomTraits + terminalWinnerCounts derivation.
     function _deriveJackpot(uint24 lvl, uint256 rngWord)
         internal
         pure

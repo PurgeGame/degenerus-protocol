@@ -175,7 +175,7 @@ contract BigRecordArmingTest is DeployProtocol {
         assertEq(_lootboxIndex(), BET_INDEX ^ 1, "the fulfilled cohort is sealed");
         vm.recordLogs();
         // The canonical engine honors tickets/redemptions/boxes before Degenerette.
-        // openBoxes is now only the AFK/human helper, not a bet resolver.
+        // Bets resolve only in mineFlip's Degenerette stage.
         _finishReadConsumers();
 
         assertTrue(_sawRecordBoxSpin(), "the bounty spun as a type-3 BoxSpin");

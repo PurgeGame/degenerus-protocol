@@ -1178,7 +1178,7 @@ contract DegenerusAdmin {
     // =========================================================================
 
     /// @notice Cancel VRF subscription and sweep LINK to vault after GAME-over.
-    /// @dev Only callable by the GAME contract (during handleFinalSweep).
+    /// @dev Only callable by the GAME contract (during the game-over final sweep).
     function shutdownVrf() external {
         if (msg.sender != ContractAddresses.GAME) revert NotAuthorized();
         uint256 subId = subscriptionId;

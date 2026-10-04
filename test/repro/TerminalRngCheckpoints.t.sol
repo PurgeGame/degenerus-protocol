@@ -26,6 +26,17 @@ contract TerminalCoinflipFixture {
     function processCoinflipGap(uint256, uint24, uint24) external {}
 }
 
+/// @dev Answers the payout's game-over hooks and balance reads with nothing.
+contract TerminalSinkFixture {
+    uint256 public burns;
+    function burnAtGameOver() external { ++burns; }
+    function tombstoneAtGameOver() external { ++burns; }
+    function balanceOf(address) external pure returns (uint256) { return 0; }
+    function pendingResolveDay() external pure returns (uint24) { return 0; }
+}
+
+/// @dev Drives the live terminal worker (`runGameOverAdvance`, mineFlip's Terminal stage) on a
+///      latched normal ending whose prior day sealed with a word.
 contract TerminalRngCheckpointHarness is DegenerusGameGameOverModule {
     function seed(address coordinator) external returns (uint24 priorDay) {
         priorDay = _simulatedDayIndex();
@@ -65,8 +76,13 @@ contract TerminalRngCheckpointsTest is Test {
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("pendingResolveDay()"), abi.encode(uint24(0)));
     }
 
+    /// @dev One terminal call at level 10 on `day`, `callGas` as its gas and allowance.
+    function _advance(uint24 day, uint256 callGas) private returns (bool progressed) {
+        (,,, progressed) = h.runGameOverAdvance{gas: callGas}(day, 10, callGas);
+    }
+
     function test_LowGasAttemptDoesNotArmRefusalTimerOrReplacePriorWord() public {
-        assertFalse(h.requestTerminalRng{gas: 1_000_000}());
+        assertFalse(_advance(priorDay, 1_000_000), "a low-gas call admits no request");
         (uint24 day, uint48 at, bool active, bool published) = h.identity();
         assertEq(day, 0);
         assertEq(at, 0);
@@ -77,19 +93,25 @@ contract TerminalRngCheckpointsTest is Test {
     }
 
     function test_TerminalApplicationStaysPinnedAcrossMidnightAndDoesNotRepeat() public {
-        assertTrue(h.requestTerminalRng{gas: 4_000_000}());
+        assertTrue(_advance(priorDay, 4_000_000));
+        assertEq(vrf.calls(), 1, "the terminal request went out");
         (uint24 day, uint48 at,,) = h.identity();
         assertEq(day, priorDay + 1, "a sealed normal day cannot supply the terminal identity");
         h.deliver(0xC0FFEE);
         vm.warp(vm.getBlockTimestamp() + 2 days);
-        h.applyTerminalRng(uint48(vm.getBlockTimestamp()), priorDay + 2, 10);
+        _advance(priorDay + 2, gasleft());
         uint48 applied = h.appliedAt();
         TerminalCoinflipFixture cf = TerminalCoinflipFixture(ContractAddresses.COINFLIP);
         assertEq(cf.settlements(), 1);
         assertEq(cf.settledDay(), day);
         assertEq(h.dayWord(day), 0xC0FFEE);
+        // The next terminal call moves on to the (empty) payout and never re-applies the word.
+        vm.etch(ContractAddresses.STETH_TOKEN, type(TerminalSinkFixture).runtimeCode);
+        vm.etch(ContractAddresses.GNRUS, type(TerminalSinkFixture).runtimeCode);
+        vm.etch(ContractAddresses.COIN, type(TerminalSinkFixture).runtimeCode);
+        vm.etch(ContractAddresses.SDGNRS, type(TerminalSinkFixture).runtimeCode);
         vm.warp(vm.getBlockTimestamp() + 2 days);
-        h.applyTerminalRng(uint48(vm.getBlockTimestamp()), priorDay + 4, 10);
+        _advance(priorDay + 4, gasleft());
         assertEq(cf.settlements(), 1);
         assertEq(h.appliedAt(), applied);
         (uint24 retainedDay, uint48 retainedAt, bool active, bool published) = h.identity();
@@ -102,7 +124,8 @@ contract TerminalRngCheckpointsTest is Test {
     ///      starved by the caller: it is a refusal, so the one-shot dead timer arms.
     function test_CoordinatorGasFailureWithinFullStipendArmsTimerLikeARefusal() public {
         vrf.setMode(2);
-        assertFalse(h.requestTerminalRng{gas: 4_000_000}());
+        _advance(priorDay, 4_000_000);
+        assertEq(vrf.calls(), 0, "no request was accepted");
         (uint24 day, uint48 at, bool active,) = h.identity();
         assertEq(day, priorDay + 1);
         assertGt(at, 0);
@@ -113,11 +136,15 @@ contract TerminalRngCheckpointsTest is Test {
 
     function test_SemanticRefusalRetainsFirstTimerAndEventuallyExpires() public {
         vrf.setMode(1);
-        assertFalse(h.requestTerminalRng{gas: 4_000_000}());
+        // The first refused attempt still arms the request identity, so the call progresses.
+        assertTrue(_advance(priorDay, 4_000_000));
+        assertEq(vrf.calls(), 0, "no request was accepted");
         (uint24 day, uint48 at,,) = h.identity();
         assertEq(day, priorDay + 1);
         vm.warp(vm.getBlockTimestamp() + 1 days);
-        assertFalse(h.requestTerminalRng{gas: 4_000_000}());
+        // A repeated refusal with nothing else advanced bubbles the coordinator's error.
+        vm.expectRevert(TerminalCoordinatorFixture.Refused.selector);
+        _advance(priorDay + 1, 4_000_000);
         (uint24 againDay, uint48 againAt,,) = h.identity();
         assertEq(againDay, day);
         assertEq(againAt, at);

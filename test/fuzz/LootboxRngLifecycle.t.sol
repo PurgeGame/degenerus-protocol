@@ -8,6 +8,7 @@ import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
 /// @title LootboxRngLifecycle -- Audit tests for lootbox RNG index lifecycle
 /// @notice Covers LBOX-01 (index mutations), LBOX-02 (word writes), LBOX-03 (zero guards),
@@ -205,14 +206,15 @@ contract LootboxRngLifecycle is DeployProtocol {
         assertEq(indexAfter, indexBefore ^ 1, "Fresh daily request must toggle the physical tag");
     }
 
-    /// @notice Mid-day requestLootboxRng increments lootboxRngIndex by exactly 1.
+    /// @notice A mid-day request (mineFlip's RequestMidday stage) toggles the physical write tag.
     function test_indexIncrementsOnMidDay() public {
         _setupForMidDayRng();
 
         uint48 indexBefore = _readLootboxRngIndex();
 
-        // requestLootboxRng always increments
-        game.requestLootboxRng();
+        // Pending lootbox ETH at the threshold makes the mid-day request the engine's next work.
+        assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.RequestMidday), "mid-day request is due");
+        game.mineFlip();
 
         uint48 indexAfter = _readLootboxRngIndex();
         assertEq(indexAfter, indexBefore ^ 1, "Mid-day request must toggle the physical tag");
@@ -324,15 +326,16 @@ contract LootboxRngLifecycle is DeployProtocol {
 
         uint48 indexBefore = _readLootboxRngIndex();
 
-        // requestLootboxRng increments index
-        game.requestLootboxRng();
+        // The engine's mid-day request seals the write buffer
+        assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.RequestMidday), "mid-day request is due");
+        game.mineFlip();
 
         // Fulfill mid-day VRF
         uint256 reqId = mockVRF.lastRequestId();
         mockVRF.fulfillRandomWords(reqId, vrfWord);
         game.mineFlip(); // required publication; the callback stores only the final word
 
-        // Word stored at indexBefore (the slot reserved by requestLootboxRng)
+        // Word stored at indexBefore (the buffer the mid-day request sealed)
         uint256 storedWord = _readLootboxWord(indexBefore);
         assertEq(storedWord, vrfWord, "Mid-day word should be stored at correct index");
     }
@@ -515,7 +518,8 @@ contract LootboxRngLifecycle is DeployProtocol {
     function test_zeroGuardMidDay() public {
         _setupForMidDayRng();
         uint48 buffer = _readLootboxRngIndex();
-        game.requestLootboxRng();
+        assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.RequestMidday), "mid-day request is due");
+        game.mineFlip();
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0);
         assertEq(_readRngWordCurrent(), 0, "reserved zero remains waiting");
         assertEq(_readLootboxWord(buffer), 0, "midday zero is never published");
@@ -683,7 +687,7 @@ contract LootboxRngLifecycle is DeployProtocol {
     // LBOX-05: Full Purchase-to-Open Lifecycle
     // ──────────────────────────────────────────────────────────────────────
 
-    /// @notice Full daily lifecycle: purchase -> mineFlip -> VRF fulfill -> process -> openLootBox.
+    /// @notice Full daily lifecycle: purchase -> mineFlip -> VRF fulfill -> process -> the engine opens the box.
     function test_fullLifecycleDailyPath() public {
         address buyer = makeAddr("dailyBuyer");
 
@@ -712,12 +716,14 @@ contract LootboxRngLifecycle is DeployProtocol {
         uint256 storedWord = _readLootboxWord(purchaseIndex);
         assertTrue(storedWord != 0, "Word should be stored at purchase index before open");
 
-        // openLootBox should succeed (word available, no RngNotReady revert)
-        vm.prank(buyer);
-        game.openBoxes(type(uint256).max);
+        // The engine's human-box stage opens the box on that word.
+        vm.startPrank(buyer);
+        _mineAll(16);
+        vm.stopPrank();
+        assertEq(_lootboxAmount(purchaseIndex, buyer), 0, "the engine opened the box on its word");
     }
 
-    /// @notice Full mid-day lifecycle: purchase -> requestLootboxRng -> VRF fulfill -> openLootBox.
+    /// @notice Full mid-day lifecycle: purchase -> mid-day request -> VRF fulfill -> the engine opens the box.
     function test_fullLifecycleMidDayPath() public {
         // Setup: complete a day first so daily word exists for today. Closed Craps windows are
         // settled first so the publication below arms no further window and requests nothing.
@@ -728,11 +734,12 @@ contract LootboxRngLifecycle is DeployProtocol {
         // Record the index at purchase time
         uint48 purchaseIndex = _readLootboxRngIndex();
 
-        // Purchase lootbox (creates pending ETH for requestLootboxRng)
+        // Purchase lootbox (creates pending ETH for the mid-day request)
         _makePurchase(buyer, 1 ether);
 
-        // requestLootboxRng -> increments index
-        game.requestLootboxRng();
+        // The engine's mid-day request seals the write buffer
+        assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.RequestMidday), "mid-day request is due");
+        game.mineFlip();
 
         // VRF fulfills mid-day (writes directly to lootboxRngWordByIndex)
         uint256 reqId = mockVRF.lastRequestId();
@@ -743,18 +750,15 @@ contract LootboxRngLifecycle is DeployProtocol {
         uint256 storedWord = _readLootboxWord(purchaseIndex);
         assertTrue(storedWord != 0, "Mid-day word should be stored at purchase index");
 
-        // openLootBox should succeed
-        vm.prank(buyer);
-        game.openBoxes(type(uint256).max);
+        // The engine's human-box stage opens the box on that word.
+        vm.startPrank(buyer);
+        _mineAll(16);
+        vm.stopPrank();
+        assertEq(_lootboxAmount(purchaseIndex, buyer), 0, "the engine opened the box on its word");
     }
 
-    /// @notice Opening before VRF fulfillment no-ops instead of reverting, and the box is
-    ///         DEFERRED, not dropped. Box-order migration: the removed per-(player,index)
-    ///         `openBox` gated on `rngLockedFlag` FIRST and reverted `RngLocked()`. Its sweep
-    ///         replacement (`openBoxes`) instead entry-gates on the same flag and returns 0 — a
-    ///         non-reverting no-op (DegenerusGameLootboxModule.openHumanBoxes's rngLockedFlag /
-    ///         liveness entry-gate) — so this now asserts that no-op plus the box surviving
-    ///         untouched, rather than a revert the new entrypoint cannot throw for this reason.
+    /// @notice Before VRF fulfillment the engine waits (RngNotReady) and the box is DEFERRED,
+    ///         not dropped: it stays queued for the human-box stage of its word.
     function test_fullLifecycleRngNotReady() public {
         address buyer = makeAddr("notReadyBuyer");
 
@@ -771,12 +775,12 @@ contract LootboxRngLifecycle is DeployProtocol {
 
         // Do NOT fulfill VRF -- word at purchaseIndex is still 0
 
-        // openBoxes must NOT revert while the daily RNG lock is engaged -- it no-ops (opens
-        // nothing) before it would ever reach the deeper per-index RngNotReady check, and the
-        // box stays queued (deferred, not dropped) for a later call once the lock clears.
+        // The engine's only action is to wait for the word; the box stays queued (deferred,
+        // not dropped) for the human-box stage once the word lands.
         vm.prank(buyer);
-        assertEq(game.openBoxes(type(uint256).max), 0, "locked sweep opens nothing");
-        assertGt(_lootboxAmount(purchaseIndex, buyer), 0, "box still queued -- not consumed by the locked no-op");
+        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
+        game.mineFlip();
+        assertGt(_lootboxAmount(purchaseIndex, buyer), 0, "box still queued -- not consumed while the word is pending");
     }
 
     /// @notice Multiple indices: purchases at different indices each use their respective VRF word.
@@ -810,16 +814,11 @@ contract LootboxRngLifecycle is DeployProtocol {
         assertTrue(wordN1 != 0, "Word at indexN+1 should be nonzero");
         assertTrue(wordN != wordN1, "Different days should have different words");
 
-        // Open both lootboxes -- both should succeed. The sweep is an in-order, multi-index walk
-        // (no per-index target), but indexN and indexN1 are consecutive and buyer is the sole
-        // entry at each, so opening oldest-first naturally matches this order: budget 1 opens
-        // exactly indexN's one entry and stops (openHumanBoxes always runs the first entry of a
-        // call, then the `opened != 0` guard blocks a second), then the second call drains the
-        // rest (indexN1).
-        vm.prank(buyer);
-        game.openBoxes(1);
-
-        vm.prank(buyer);
-        game.openBoxes(type(uint256).max);
+        // Both boxes open in order: each day's human-box stage consumed its own cohort's entry.
+        vm.startPrank(buyer);
+        _mineAll(16);
+        vm.stopPrank();
+        assertEq(_lootboxAmount(indexN, buyer), 0, "the first day's box opened on its word");
+        assertEq(_lootboxAmount(indexN1, buyer), 0, "the second day's box opened on its word");
     }
 }

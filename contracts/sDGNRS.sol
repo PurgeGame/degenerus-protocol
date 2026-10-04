@@ -144,7 +144,7 @@ contract sDGNRS {
 
     /// @notice Thrown when burns are attempted after liveness fires but before gameOver latches.
     ///         Gambling-path redemptions submitted in this window would resolve but the
-    ///         reserved ETH is swept by handleGameOverDrain before claimRedemption can run.
+    ///         reserved ETH is swept by the game-over drain before claimRedemption can run.
     error BurnsBlockedDuringLiveness();
 
     /// @notice Thrown when a player tries to claim with no pending redemption
@@ -156,8 +156,9 @@ contract sDGNRS {
     /// @notice Earlier RNG consumers must finish before live redemptions can settle.
     error RedemptionStageBlocked();
 
-    /// @notice Live claims must consume the current beneficiary queue in FIFO order.
-    error RedemptionOutOfOrder();
+    /// @notice Live redemptions settle only through mineFlip, in order; a self-claim opens once the
+    ///         game is over.
+    error NotGameOver();
 
     /// @notice Thrown when a gambling burn would exceed 160 ETH daily EV cap per wallet
     error ExceedsDailyRedemptionCap();
@@ -352,9 +353,7 @@ contract sDGNRS {
 
     DayPending internal pendingAggregate;
 
-    /// @dev One live beneficiary cohort, consumed before another day can request RNG.
-    ///      Manual claims leave the empty cohort pending until the miner clears its
-    ///      queue metadata and retries the Game's session-completion check.
+    /// @dev One live beneficiary cohort, consumed by the miner before another day can request RNG.
     function redemptionSettlementPending() external view returns (bool) {
         return _redemptionWord != 1 && _redemptionPlayers.length != 0;
     }
@@ -375,17 +374,6 @@ contract sDGNRS {
     function runRedemptionWork(uint256 allowance) external returns (MineFlipGas.Result memory result) {
         if (msg.sender != ContractAddresses.GAME) revert Unauthorized();
         return _runRedemptionWork(allowance);
-    }
-
-    /// @dev Compatibility ABI. The supplied historical budget no longer chooses work extent.
-    /// This route never pays a second bounty; the Game rewards its measured engine work.
-    function processRedemptionSettlement(uint256)
-        external returns (bool done, uint256 gasUsed, uint256 rewardBasis)
-    {
-        if (msg.sender != ContractAddresses.GAME) revert Unauthorized();
-        uint256 start = gasleft();
-        MineFlipGas.Result memory result = _runRedemptionWork(MineFlipGas.available());
-        return (result.done, start - gasleft(), result.rewardBasis);
     }
 
     function _runRedemptionWork(uint256 allowance) private returns (MineFlipGas.Result memory result) {
@@ -416,7 +404,7 @@ contract sDGNRS {
             if (!MineFlipGas.canRun(meter, nextMax + nextMax / 63 + MineFlipGas.CALL_RESERVE,
                 REDEMPTION_TAIL_GAS)) break;
             ++cursor;
-            // Commit the frontier before any nested calls, matching manual FIFO settlement.
+            // Commit the frontier before any nested calls.
             _redemptionCursor = uint32(cursor);
             // A refusing dependency must not hold every later RNG request: park the claim with
             // its session word and move on. Gas failures still revert the whole transaction.
@@ -430,10 +418,7 @@ contract sDGNRS {
         }
         result.progressed = cursor != initialCursor;
         result.done = cursor == total;
-        if (result.done) {
-            _finishRedemptionSettlement();
-            result.progressed = true; // Clearing a manually drained cohort is real one-time work.
-        }
+        if (result.done) _finishRedemptionSettlement();
         MineFlipGas.finish(meter);
     }
 
@@ -462,17 +447,6 @@ contract sDGNRS {
         if (!isTerminal && game.livenessTriggered()) revert EndingPending();
         delete _parkedRedemptionWord[player][day];
         if (!_claimRedemptionFor(player, day, redemptionPeriods[day], isTerminal, word)) revert NoClaim();
-    }
-
-    /// @dev Advance before external payout calls. Keep the cohort pending through
-    ///      the last claim so its nested Game calls still execute in stage 1.
-    function _takeRedemptionHead(address player, uint24 day) private {
-        uint256 cursor = _redemptionCursor;
-        if (
-            day != _redemptionQueueDay || cursor >= _redemptionPlayers.length ||
-            _redemptionPlayers[cursor] != player
-        ) revert RedemptionOutOfOrder();
-        _redemptionCursor = uint32(cursor + 1);
     }
 
     /// @notice Supply immediately after the last century refill (initial supply before the first).
@@ -978,82 +952,24 @@ contract sDGNRS {
         _pendingResolveDay = 0;
     }
 
-    /// @notice Claim a resolved gambling-burn redemption for `player` on day `day`.
-    /// @dev Requires `redemptionPeriods[day] != 0` (period resolved). Reads composite-keyed
-    ///      `pendingRedemptions[player][day]`; deletes that slot on a full claim.
-    ///      The FLIP escrow removed at submit pays here only when the day+1 coinflip won:
-    ///      principal plus that day's win reward. A loss pays no FLIP; terminal mode skips it.
-    ///      Live game: PERMISSIONLESS — anyone may settle the next FIFO claim during
-    ///      the redemption consumer stage, with all value going to `player`.
-    ///      Both halves of the rolled ETH route to the Game (50% credits the player's claimable
-    ///      winnings, 50% funds lootbox rewards), so a third-party trigger pushes no ETH and the
-    ///      winner holds no exclusive timing control over the lootbox draw.
-    ///      Terminal mode (liveness triggered): only `player` or an operator `player` approved on
-    ///      the GAME may call, since the payout is pushed straight to `player` (ETH, with stETH
-    ///      covering any ETH shortfall) rather than credited to the Game. 100% direct with no
-    ///      lootbox leg — a game-claimable credit would forfeit in the post-gameover sweep.
+    /// @notice Claim a resolved gambling-burn redemption for `player` on day `day` once the game is over.
+    /// @dev In a live game mineFlip settles every redemption in FIFO order, so this is the
+    ///      post-gameover door only. Requires `redemptionPeriods[day] != 0` (period resolved) and
+    ///      deletes `pendingRedemptions[player][day]` on the claim. Only `player` or an operator
+    ///      `player` approved on the GAME may call, since the payout is pushed straight to `player`
+    ///      (ETH, with stETH covering any ETH shortfall) rather than credited to the Game: 100%
+    ///      direct with no lootbox leg — a game-claimable credit would forfeit in the post-gameover
+    ///      sweep — and the FLIP escrow is not paid.
     /// @param player Claimant whose redemption to settle.
     /// @param day Wall-clock day whose claim to settle.
     function claimRedemption(address player, uint24 day) external {
         uint16 roll = redemptionPeriods[day];
         if (roll == 0) revert NotResolved();
-
-        // Liveness is the terminal predicate for the whole claim. It is true across the
-        // multi-tx drain (where gameOver is still unlatched) and stays true past the
-        // latch, since _unlockRng deliberately leaves dailyIdx stale at game over — so it
-        // covers both halves of death in one read. Terminal mode pays the whole claim as
-        // ETH straight to the claimant because both halves of the live shape are wrong at
-        // death: the direct half credits the Game's claimable, which forfeits in the
-        // post-gameover sweep, and the lootbox half only mints ticket entries into a cohort
-        // already being drained. The redemption value was segregated to this contract at
-        // submit either way, so nothing is withheld — it simply stops minting game
-        // positions on the way out.
-        // Terminal shape (all ETH direct, FLIP escrow forfeited) only once the game is over, which
-        // is irreversible. While the game-over trigger reads true before that, wait: it can still
-        // read false again, and a terminal settlement taken then would stick.
-        bool isTerminal = game.gameOver();
-        if (!isTerminal && game.livenessTriggered()) revert EndingPending();
-        // In terminal mode the claim direct-pushes ETH to `player`, so it is restricted to `player` or
-        // an operator `player` approved on the GAME (the value still lands on `player`; an approved
-        // delegate is consensual). Live game stays permissionless (credit into the gated claimable).
-        if (
-            isTerminal &&
-            player != msg.sender &&
-            !game.isOperatorApproved(player, msg.sender)
-        ) revert Unauthorized();
-
-        if (!isTerminal) {
-            if (game.rngConsumerStage() != 1) revert RedemptionStageBlocked();
-            _takeRedemptionHead(player, day);
-        }
-        // Single live claims use the same pinned session word as the forced miner drain.
-        if (!_claimRedemptionFor(player, day, roll, isTerminal, isTerminal ? 0 : _redemptionWord)) revert NoClaim();
-    }
-
-    /// @notice Claim resolved gambling-burn redemptions for a batch of players on day `day`.
-    /// @dev `players` must be the next exact FIFO prefix in the redemption consumer stage.
-    ///      Empty claims in that prefix are skipped. The caller is paid nothing: mineFlip drains
-    ///      the same cohort and its engine reward is the paid path. LIVE-GAME ONLY: in terminal mode a batch could
-    ///      settle only entries the caller is the player or approved operator for (all others revert),
-    ///      which the single claimRedemption already does — so the batch reverts once game is over.
-    /// @param players Claimants whose redemptions to settle.
-    /// @param day Wall-clock day whose claims to settle.
-    function claimRedemptionMany(address[] calldata players, uint24 day) external {
-        uint16 roll = redemptionPeriods[day];
-        if (roll == 0) revert NotResolved();
-        // Batch settlement is live-game only (see above); from the liveness trigger on use
-        // the single self-claim, which switches to the direct-pay terminal shape. The batch
-        // hard-codes the live split, so leaving it open would queue lootbox-rolled entries
-        // against the already-public terminal word.
-        if (game.gameOver() || game.livenessTriggered()) revert Unauthorized();
-        if (game.rngConsumerStage() != 1) revert RedemptionStageBlocked();
-
-        // The forced cohort's session word is identical for every player in this batch.
-        uint256 rngWordNext = _redemptionQueueDay == day ? _redemptionWord : 0;
-        for (uint256 i; i < players.length; ++i) {
-            _takeRedemptionHead(players[i], day);
-            _claimRedemptionFor(players[i], day, roll, false, rngWordNext);
-        }
+        // Only once the game is over, which is irreversible: while the game-over trigger reads true
+        // before that, it can still read false again, and a terminal settlement taken then would stick.
+        if (!game.gameOver()) revert NotGameOver();
+        if (player != msg.sender && !game.isOperatorApproved(player, msg.sender)) revert Unauthorized();
+        if (!_claimRedemptionFor(player, day, roll, true, 0)) revert NoClaim();
     }
 
     /// @dev The estimator and execution use identical rounding and dust treatment.
@@ -1144,7 +1060,7 @@ contract sDGNRS {
             // Burns commit before their settlement session's word is known. The forced
             // cohort pins that word, including a session delivered after a multi-day stall.
             // Every live caller authenticates the queue day and passes its pinned
-            // word before nested payout calls; manual and forced settlement agree.
+            // word before nested payout calls.
             uint256 rngWord = rngWordNext;
             if (rngWord <= 1) revert NotResolved();
             uint256 entropy = EntropyLib.hash2(rngWord, uint256(uint160(player)));

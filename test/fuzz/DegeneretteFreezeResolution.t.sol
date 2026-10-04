@@ -36,20 +36,12 @@ import {DegeneretteMathHarness} from "../../contracts/mocks/DegeneretteMathHarne
 ///      inject freeze state and seed pending pools to a known value, then places
 ///      a real degenerette bet via the public API, injects a lootbox RNG word
 ///      pre-computed to produce a winning result, and resolves the bet.
-/// @dev DOORS-REMOVAL PORT NOTE: bets are one word in `degeneretteQueue[index & 1]` (id = queue
-///      position + 1), resolved ONLY through the permissionless in-order sweep
-///      `game.openBoxes(maxCount)` (delegates to `sweepDegeneretteBets`) — the manual
-///      `resolveDegeneretteBets(index, betIds)` door is gone, with it the per-call
-///      caller-composed betId list and its first-id fail-fast revert. A bet resolves once every
-///      box AND bet at every index <= its own is resolved. FIX-04 (resolving a bet through the
-///      pending pool while `prizePoolFrozen`) was behavior specific to that removed door:
-///      `sweepDegeneretteBets` already held the whole queue (`if (prizePoolFrozen) return (0,
-///      pos, 0, 0);`) rather than resolving it, so a bet now only ever resolves once the pool
-///      is unfrozen again, through the live (not pending) pool. The former freeze-routing tests
-///      (conservation + Insolvent-on-identical-spin) proved a path that no longer exists and were
-///      removed rather than adapted; the "pending bet is not settled post-game-over" invariant is
-///      kept (see testResolveBetsRevertsPostGameOver_InsolvencyReproClosed) since `openHumanBoxes`
-///      still no-ops (not reverts) once `_livenessTriggered()`.
+/// @dev Bets are one word in `degeneretteQueue[index & 1]` (id = queue position + 1), resolved
+///      only by mineFlip's in-order Degenerette read-consumer stage, which walks the queue in
+///      ascending position. A bet resolves once every box AND bet at every index <= its own is
+///      resolved. The "pending bet is not settled post-game-over" invariant is held by
+///      testResolveBetsRevertsPostGameOver_InsolvencyReproClosed: once `_livenessTriggered()`, no
+///      read stage is eligible and the engine's only work is the terminal path.
 ///      The per-spin `DegeneretteResult` event is gone, replaced by ONE `DegeneretteResolved`
 ///      per bet carrying every spin's (playerTraits, score, gold) as packed bytes
 ///      (see test/helpers/DegeneretteQueue.sol `spinAt`). Per-spin RAW payouts (before the ETH
@@ -139,19 +131,6 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
             bytes32(lrPacked)
         );
     }
-
-    // =========================================================================
-    // Tests 1-2 REMOVED (doors removal): both proved FIX-04's freeze-time ETH
-    // conservation / Insolvent-revert through the manual `resolveDegeneretteBets`
-    // door while `prizePoolFrozen`. That door is gone, and its only replacement,
-    // `sweepDegeneretteBets` (reached via `game.openBoxes`), already held the whole
-    // queue during a freeze rather than resolving it (`if (prizePoolFrozen) return
-    // (0, pos, 0, 0);`, unchanged by this port). So freeze-time resolution — and the
-    // pending-pool routing / per-spin Insolvent revert these tests proved — is no
-    // longer reachable through any live entry point; a queued bet simply waits until
-    // the pool unfreezes and then resolves through the LIVE pool. There is no
-    // successor behavior to port these two tests onto.
-    // =========================================================================
 
     // =========================================================================
     // Test 3: Unfrozen path regression (behavior unchanged)
@@ -535,12 +514,6 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         emit log_named_uint("tier2_spins_capped", predictedCapCount);
     }
 
-    // testFrozenSolvencyRevertsOnIdenticalSpin_Tier2 REMOVED (doors removal): proved the
-    // frozen-pool Insolvent() revert (pendingFuture < ethShare) firing mid-resolve through the
-    // manual door. That path is unreachable now — `sweepDegeneretteBets` holds the whole queue
-    // while `prizePoolFrozen` (see the Tests 1-2 removal note above) instead of ever reaching
-    // `_distributePayout`'s frozen branch, so there is no live call that can hit this revert.
-
     // =========================================================================
     // DGAS-05 Test 6: lootbox summed PER betId, never across bets
     // =========================================================================
@@ -715,8 +688,8 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     // 323 Task 2: post-game-over resolveBets liveness guard (insolvency repro closed)
     // =========================================================================
 
-    /// @notice Prove the v47 liveness guard (now `openHumanBoxes`'s entry-gate
-    ///         `if (rngLockedFlag || _livenessTriggered()) return (0, 0);`) CLOSES the §1
+    /// @notice Prove the liveness guard (the read-consumer stage selector returns 0 once
+    ///         `_livenessTriggered()`, so mineFlip selects only the terminal path) CLOSES the §1
     ///         post-game-over unbacked-credit path documented in 323-SOLVENCY-FINDING.md.
     ///
     ///         The §1 insolvency: a Degenerette ETH bet placed (and RNG-committed)
@@ -732,9 +705,9 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     ///              not RNG-readiness;
     ///           3. revert to the snapshot, drive the game into the terminal liveness
     ///              state (level-0 deploy-idle timeout > 365 days) so gameOver() == true;
-    ///           4. assert the sweep now NO-OPS (doors removal: `openHumanBoxes` returns
-    ///              early rather than reverting) — the bet stays queued and credits
-    ///              nothing, so the unbacked post-drain credit still cannot happen.
+    ///           4. assert no read stage is eligible and the engine's terminal step resolves
+    ///              nothing — the bet stays queued and credits nothing, so the unbacked
+    ///              post-drain credit cannot happen.
     function testResolveBetsRevertsPostGameOver_InsolvencyReproClosed() public {
         // --- Phase 1: place a winning ETH bet pre-game-over, commit its RNG word ---
         // Large unfrozen pool so the win resolves to a real ETH credit pre-GO.
@@ -786,26 +759,16 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
             "game-over liveness must now be triggered (the predicate the guard checks)"
         );
 
-        // --- Phase 4: the sweep must NOT settle the pending bet post-game-over ---
-        // Doors removal: `openHumanBoxes`'s entry-gate returns (0, 0) rather than reverting
-        // once `_livenessTriggered()`, so the call succeeds but does nothing — the bet stays
-        // queued and credits nothing, closing the same unbacked-credit path a revert would.
+        // --- Phase 4: the engine must NOT settle the pending bet post-game-over ---
         uint256 preClaimablePostGo = game.claimableWinningsOf(player);
         assertEq(preClaimablePostGo, 0, "precondition: no claimable yet post-revert");
-        game.openBoxes(type(uint256).max);
-
-        assertEq(
-            game.claimableWinningsOf(player),
-            0,
-            "post-game-over sweep must credit zero claimable (no-op, not a revert)"
-        );
         assertGt(
             game.degeneretteBetInfo(index, betId),
             0,
-            "post-game-over: the bet remains queued, unresolved (pending bets are not settled by the game-over no-op)"
+            "post-game-over: the bet remains queued, unresolved"
         );
 
-        // Bets now resolve only as an engine read consumer. Once liveness triggers, no read stage
+        // Bets resolve only as an engine read consumer. Once liveness triggers, no read stage
         // is eligible: the engine's only work is the terminal path, which resolves no pending bet.
         assertEq(game.rngConsumerStage(), 0, "no read consumer runs once liveness triggers");
         assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.Terminal), "only the terminal path remains");
@@ -1087,8 +1050,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     }
 
     /// @dev Bets resolve as the Degenerette read consumer of the published word, reached only by
-    ///      mineFlip (openBoxes drives the AFK and human stages only). One unbounded call runs the
-    ///      cohort's whole consumer chain.
+    ///      mineFlip. One unbounded call runs the cohort's whole consumer chain.
     function _resolveCohort() internal {
         vm.prank(makeAddr("degen_freeze_crank"));
         game.mineFlip();
@@ -1160,23 +1122,6 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
             if ((aQuad & 7) == (bQuad & 7)) matches++;                // symbol
         }
     }
-
-    // =========================================================================
-    // Batch-resolve tolerance (REMOVED — doors removal): all three tests that lived here
-    // (testResolveBatchRngNotReadyFirstRevertsTrailingSkips, already removed per the port
-    // note this replaces; testResolveBatchFirstBetAlreadyResolvedReverts; and
-    // testResolveBatchTrailingAlreadyResolvedSkipped) proved behavior of the manual
-    // `resolveDegeneretteBets(index, betIds)` door's caller-composed betId array: a strict
-    // first-id probe (fail-fast InvalidBet() on an already-resolved/unknown first id) and a
-    // tolerant tail (a stale id later in the array is silently skipped). That door — and with
-    // it the whole notion of a caller-composed betId array — is gone: `openBoxes` takes no id
-    // list and always walks the queue in ascending position, silently skipping a zeroed
-    // (already-resolved) slot it happens to resume on (`sweepDegeneretteBets`: `if (bet == 0)
-    // { ++pos; ++unitsSpent; continue; }`) rather than ever being handed one out of turn. There
-    // is no "duplicate clicker resends a caller-composed batch" scenario left to reproduce, and
-    // the remaining unset-index-word property is already covered by DegeneretteSweep.t.sol's
-    // testHandResolutionGuards, so none of the three is adapted.
-    // =========================================================================
 
     /// @dev Read the queued bet word at (index 1, betId); 0 == resolved/nonexistent.
     function _betPacked(uint64 betId) internal view returns (uint256) {

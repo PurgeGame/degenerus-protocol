@@ -179,8 +179,10 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
             crapsWindowBuffer = uint48(RecyclingState.writeBuffer(address(game)));
             vm.prank(ContractAddresses.CRAPS);
             game.setCrapsRngPending(crapsWindowBuffer, true);
+            uint256 priorReq = mockVRF.lastRequestId();
             vm.prank(crank);
-            game.requestLootboxRng();
+            game.mineFlip();
+            assertGt(mockVRF.lastRequestId(), priorReq, "mineFlip issued the mid-day request");
         } else {
             _middayRequest();
         }
@@ -210,12 +212,17 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
         // A second eligible mid-day request the same day is then accepted.
         vm.prank(buyer);
         game.purchase{value: 2 ether}(buyer, 0, BoxOrderLib.boCustom(2 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        // A stuck latch would hold the request back: it must be the engine's next action.
         vm.prank(crank);
-        (bool ok, bytes memory ret) = address(game).call(abi.encodeWithSignature("requestLootboxRng()"));
+        assertEq(game.minerAction(), 18, "a stuck latch refuses the next request");
+        uint256 priorReq = mockVRF.lastRequestId();
+        vm.prank(crank);
+        (bool ok, bytes memory ret) = address(game).call(abi.encodeWithSignature("mineFlip()"));
         if (!ok) {
             assertTrue(_selector(ret) != SEL_RNG_NOT_READY, "a stuck latch refuses the next request");
             revert("a second mid-day request must be accepted");
         }
+        assertGt(mockVRF.lastRequestId(), priorReq, "a second mid-day request must be accepted");
         _fulfillPending();
         assertEq(_crankAdvance(200), SEL_NOT_TIME_YET);
         assertFalse(game.jackpotPhase(), "the later commitment drains before the jackpot phase");
@@ -285,9 +292,10 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
     function _middayRequest() internal {
         vm.prank(buyer);
         game.purchase{value: 2 ether}(buyer, 0, BoxOrderLib.boCustom(2 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        uint256 priorReq = mockVRF.lastRequestId();
         vm.prank(crank);
-        (bool ok, ) = address(game).call(abi.encodeWithSignature("requestLootboxRng()"));
-        require(ok, "harness: requestLootboxRng must be callable");
+        (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+        require(ok && mockVRF.lastRequestId() > priorReq, "harness: mineFlip must issue the mid-day request");
     }
 
     /// @dev Seed the live next-pool half (slot 2, low 128 bits) up to targetNext.

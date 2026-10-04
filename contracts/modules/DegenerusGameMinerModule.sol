@@ -32,14 +32,16 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
 
     event MinerWork(address indexed caller, uint8 firstAction, uint256 executionGas, uint256 flipReward);
 
+    /// @notice The next action for a mineFlip by msg.sender: a donor holding credit sees a
+    ///         below-threshold mid-day request that a creditless caller does not.
     function minerAction() external view returns (uint8) {
-        return uint8(_nextMinerAction());
+        return uint8(_nextMinerAction(msg.sender));
     }
 
     function mineFlip() external {
         if (address(this) != ContractAddresses.GAME) revert E();
         uint256 rewardStart = gasleft();
-        MinerAction first = _nextMinerAction();
+        MinerAction first = _nextMinerAction(msg.sender);
         if (first == MinerAction.Idle) revert NoWork();
         if (first == MinerAction.Wait) revert RngNotReady();
         if (gasleft() < WORKER_BOUNDARY + RETURN_RESERVE + MineFlipGas.CHECK_RESERVE) {
@@ -58,7 +60,7 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
         for (uint256 transitions; transitions < 32; ++transitions) {
             // Only reads separate the initial selection from the first dispatch.
             // Every later iteration must reselect after the preceding worker's changes.
-            MinerAction action = transitions == 0 ? first : _nextMinerAction();
+            MinerAction action = transitions == 0 ? first : _nextMinerAction(msg.sender);
             if (action == MinerAction.Idle || action == MinerAction.Wait) break;
             if (!MineFlipGas.canRun(meter, WORKER_BOUNDARY, RETURN_RESERVE)) break;
 

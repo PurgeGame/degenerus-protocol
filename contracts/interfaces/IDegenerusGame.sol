@@ -210,10 +210,6 @@ interface IDegenerusGame {
         uint256 rngWord
     ) external returns (uint256 returnAmountWei);
 
-    /// @notice Progress sealed Decimator runs or ETH credits without a keeper bounty.
-    function settleDecimatorWinners(uint256 budgetUnits)
-        external returns (uint256 settled, uint256 unitsUsed, bool moved);
-
     /// @notice Execute BAF jackpot via JackpotModule delegatecall.
     /// @param poolWei Total ETH prize pool for BAF.
     /// @param lvl Level number being resolved.
@@ -225,22 +221,13 @@ interface IDegenerusGame {
         uint256 rngWord
     ) external returns (uint256 claimableDelta);
 
-    /// @notice Game-over terminal jackpot: Final-day bucket distribution to the final ticket cohort.
-    /// @param poolWei Total ETH to distribute.
-    /// @param targetLvl Level to sample winners from.
-    /// @param rngWord VRF entropy seed.
-    /// @return paidWei Total ETH distributed.
-    function runTerminalJackpot(
-        uint256 poolWei,
-        uint24 targetLvl,
-        uint256 rngWord
-    ) external returns (uint256 paidWei);
-
+    /// @notice Game-over terminal jackpot: final-day bucket distribution to the final ticket
+    ///         cohort, continued through the shared gas allowance.
     function runTerminalJackpotWork(uint256 poolWei, uint24 targetLvl, uint256 rngWord, uint256 allowance)
         external returns (MineFlipGas.Result memory result, uint256 paidDelta);
 
     /// @notice Roll, record and emit level 1's purchase-day board without running any
-    ///         distribution. Used at purchaseLevel==1 where payDailyJackpot is skipped.
+    ///         distribution. Used at purchaseLevel==1 where runDailyJackpot is skipped.
     /// @param randWord VRF entropy for the board.
     function emitDailyWinningTraits(uint256 randWord) external;
 
@@ -273,20 +260,12 @@ interface IDegenerusGame {
     /// @notice Current day index.
     function currentDayView() external view returns (uint24);
 
-    /// @notice Request lootbox RNG when activity threshold is met.
-    /// @dev Standalone function for mid-day lootbox RNG requests.
-    ///      Reverts if daily RNG locked, request pending, threshold not met, or VRF fails.
-    ///      The craps table clears the pending-value gates unconditionally and answers to a
-    ///      lower LINK floor — it requests to settle a bound window, not to drain the lootbox
-    ///      queue. Every timing gate still binds on it.
-    function requestLootboxRng() external;
-
     /// @notice Admin-only transport retry of an unanswered request after its 20-hour timeout.
     function retryRng() external;
 
     /// @notice Mint mid-day RNG credit to a LINK donor.
-    /// @dev Access: ADMIN only. Credits waive the pending-value gates on
-    ///      requestLootboxRng; the subscription LINK floor there still applies.
+    /// @dev Access: ADMIN only. A donor's mineFlip spends credit on the mid-day request when
+    ///      pending work sits below the threshold; the subscription LINK floor still applies.
     /// @param to Donor to credit.
     /// @param linkAmount LINK donated, in juels.
     function creditMiddayRng(address to, uint256 linkAmount) external;

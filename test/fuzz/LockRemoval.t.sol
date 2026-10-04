@@ -4,7 +4,7 @@ pragma solidity 0.8.34;
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
-/// @title LockRemovalHarness -- Reproduces post-removal guard logic for LOCK-01 through LOCK-06.
+/// @title LockRemovalHarness -- Reproduces post-removal guard logic for LOCK-01 through LOCK-05.
 /// @dev Extends DegenerusGameStorage to access internal state. Each guard function mirrors
 ///      the contract logic AFTER rngLockedFlag references are removed.
 contract LockRemovalHarness is DegenerusGameStorage {
@@ -23,14 +23,6 @@ contract LockRemovalHarness is DegenerusGameStorage {
 
     function setLevel(uint24 val) external {
         level = val;
-    }
-
-    function setRngRequestTime(uint48 val) external {
-        rngRequestTime = val;
-    }
-
-    function setRngWordByDay(uint256 day, uint256 word) external {
-        _recordDailyRng(uint24(uint32(day)), word);
     }
 
     // --- LOCK-01: _callTicketPurchase guard (MintModule:838-840 post-removal) ---
@@ -60,16 +52,9 @@ contract LockRemovalHarness is DegenerusGameStorage {
     function jackpotResolutionActive() external view returns (bool) {
         return lastPurchaseDay && ((level + 1) % 5 == 0);
     }
-
-    // --- LOCK-06: requestLootboxRng guard (AdvanceModule:641-644 post-removal, line 643 deleted) ---
-    function requestLootboxRngGuard(uint256 currentDay) external view {
-        if (_recordedDailyWord(uint24(uint32(currentDay))) == 0) revert E();
-        // rngLockedFlag check REMOVED (was line 643)
-        if (rngRequestTime != 0) revert E();
-    }
 }
 
-/// @title LockRemovalTest -- Unit and fuzz tests for all six LOCK requirements.
+/// @title LockRemovalTest -- Unit and fuzz tests for LOCK-01 through LOCK-05.
 contract LockRemovalTest is Test {
     LockRemovalHarness harness;
 
@@ -158,25 +143,6 @@ contract LockRemovalTest is Test {
         harness.setLastPurchaseDay(true);
         harness.setLevel(5); // (5+1)%5 != 0
         assertFalse(harness.jackpotResolutionActive(), "Should not be active on non-jackpot level");
-    }
-
-    // ========================================================================
-    // LOCK-06: requestLootboxRng guard without rngLockedFlag
-    // ========================================================================
-
-    function test_LOCK06_lootboxRngRequestGate() public {
-        harness.setRngLockedFlag(true);
-        harness.setRngRequestTime(0);
-        harness.setRngWordByDay(1, 12345); // _recordedDailyWord(1) != 0
-        // Must NOT revert -- rngLockedFlag is true but guard is removed
-        harness.requestLootboxRngGuard(1);
-    }
-
-    function test_LOCK06_lootboxRngStillBlocksOnActiveRequest() public {
-        harness.setRngRequestTime(1); // Active VRF request
-        harness.setRngWordByDay(1, 12345);
-        vm.expectRevert(DegenerusGameStorage.E.selector);
-        harness.requestLootboxRngGuard(1);
     }
 
     // ========================================================================

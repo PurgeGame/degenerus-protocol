@@ -427,7 +427,7 @@ contract GNRUS {
         emit GameOverFinalized(unallocated, 0, 0);
     }
 
-    /// @notice Record the final-sweep timestamp; the game calls this once from handleFinalSweep when
+    /// @notice Record the final-sweep timestamp; the game calls this once from its final sweep when
     ///         the terminal ETH/stETH has been distributed to sDGNRS, GNRUS, and the vault.
     /// @dev onlyGame. Anchors the post-sweep recovery gates (vaultRedeemFor availability and the
     ///      3-year sweepResidualToVault delay). The game's final sweep is one-shot (GO_SWEPT latch).

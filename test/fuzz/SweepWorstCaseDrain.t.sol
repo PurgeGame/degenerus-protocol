@@ -7,6 +7,8 @@ import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {MineFlipGasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {IGameAfkingModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @dev View/seed overlay etched onto the live game to inspect internal box-queue state.
@@ -67,6 +69,16 @@ contract SweepViewer is DegenerusGame {
         _setRngRequestActive(true);
     }
 
+    /// @dev Run only the engine's AFKing stage worker (the live delegatecall-only worker mineFlip
+    ///      dispatches for MinerAction.Afking), so a fixture can clear incidental AFKing boxes
+    ///      without starting the human-box stage it measures.
+    function runAfkingStage(uint256 allowance) external {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
+            abi.encodeWithSelector(IGameAfkingModule.runAfkingWork.selector, allowance)
+        );
+        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
+    }
+
     /// @dev Fixture seal of the write cohort, mirroring RngModule._sealRngWriteBuffer followed by
     ///      a published delivery: the pending-value counters clear, the buffers swap (which
     ///      reopens the read frontier), the new write buffer's queues reset, and the sealed
@@ -84,8 +96,8 @@ contract SweepViewer is DegenerusGame {
 
 /// @title SweepWorstCaseDrain — AUTO-03 worst-case, gas-checkpointed human-box sweep.
 ///
-/// @notice The human sweep (GameAfkingModule._runHumanBoxWork, reached from openBoxes and the
-///         mineFlip HumanBoxes action) walks the sealed read cohort boxPlayers[read] from
+/// @notice The human sweep (GameAfkingModule._runHumanBoxWork, reached only from the mineFlip
+///         HumanBoxes action) walks the sealed read cohort boxPlayers[read] from
 ///         boxCursor, opening every ready entry (lootbox order and presale leg). Lootbox RNG
 ///         uses two physical buffers (slot 0 bit 252, read = write ^ 1) and a fresh request
 ///         waits for every read consumer, so at most ONE sealed cohort is ever outstanding; its
@@ -96,7 +108,7 @@ contract SweepViewer is DegenerusGame {
 ///         calls and nothing is ever marooned.
 ///
 ///         This test seeds that shape and asserts:
-///           (1) every openBoxes() call given a realistic bounded allowance succeeds;
+///           (1) every mineFlip() call given a realistic bounded allowance succeeds;
 ///           (2) the read frontier advances MONOTONICALLY on every call (cursor, then completion);
 ///           (3) the drain COMPLETES: the cohort's frontier reaches humanReadComplete;
 ///           (4) the live lootbox box AND a presale box are auto-opened by the sweep.
@@ -112,8 +124,10 @@ contract SweepWorstCaseDrain is DeployProtocol {
     // A realistic keeper/door allowance: one call admits work only while the remaining gas covers
     // the next entry's declared bound.
     uint256 private constant TEN_M_TARGET = 10_000_000;
-    // openBoxes reserves 30k before and after the human leg; dispatch/delegatecall overhead slack.
-    uint256 private constant DOOR_OVERHEAD = 150_000;
+    // mineFlip retains its worker boundary and return reserve around the human worker, plus
+    // selection/dispatch slack ahead of the meter.
+    uint256 private constant ENGINE_OVERHEAD =
+        MineFlipGasBounds.ENGINE_BOUNDARY + MineFlipGasBounds.ENGINE_RETURN + 100_000;
     // A wall no realistic 10M call can cross by declared admission (HUMAN_SKIP_GAS each).
     uint256 private constant SKIP_WALL = 4_000;
     // The per-call budget is gas (a skip costs a few thousand gas actual, ~200 to ~1,500 fit in
@@ -186,6 +200,16 @@ contract SweepWorstCaseDrain is DeployProtocol {
         (bytes memory real, SweepViewer sv) = _viewer();
         sv.sealWriteCohortPending(requestId);
         vm.etch(address(game), real);
+    }
+
+    /// @dev Clear incidental AFKing boxes through the AFKing stage worker alone, so the human-box
+    ///      stage is the only leg a test then measures.
+    function _clearAfkingStage() internal {
+        for (uint256 i; i < 16 && game.nextMinerAction() == ACTION_AFKING; ++i) {
+            (bytes memory real, SweepViewer sv) = _viewer();
+            sv.runAfkingStage(gasleft() / 2);
+            vm.etch(address(game), real);
+        }
     }
 
     /// @dev Seal the current write cohort with `word` landed and published.
@@ -304,7 +328,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
     // =========================================================================
 
     /// @notice FUZZ: long skip walls before and after a live lootbox box and a presale box in the
-    ///         sealed read cohort all drain across openBoxes calls given a bounded realistic
+    ///         sealed read cohort all drain across mineFlip calls given a bounded realistic
     ///         allowance — every call succeeds, the frontier advances monotonically, the drain
     ///         completes and both real boxes open. (No assertion is weakened: the drain MUST
     ///         complete and both real boxes MUST open.)
@@ -350,10 +374,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
         _sealCohort(uint256(keccak256("liveWord")) | 1);
         assertEq(RecyclingState.readBuffer(address(game)), cohort, "seal: the cohort is the read buffer");
         // Clear incidental AFKing boxes so the human sweep is the only leg being measured.
-        for (uint256 i; i < 16 && game.nextMinerAction() == ACTION_AFKING; ++i) {
-            vm.prank(actor);
-            game.openBoxes(0);
-        }
+        _clearAfkingStage();
         assertEq(game.nextMinerAction(), ACTION_HUMAN_BOXES, "fixture: the human sweep is the next read consumer");
 
         // 6) Per-chunk property: the heaviest entry's declared bound fits a realistic 10M call.
@@ -361,7 +382,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
         uint256 presaleEntry = _entryDeclaredGas(cohort, presaleOwner);
         if (presaleEntry > heaviest) heaviest = presaleEntry;
         // The Game's delegatecall retains 1/64 of the forwarded gas.
-        uint256 minChunk = (heaviest + MineFlipGasBounds.HUMAN_TAIL_GAS + DOOR_OVERHEAD) * 64 / 63;
+        uint256 minChunk = (heaviest + MineFlipGasBounds.HUMAN_TAIL_GAS + ENGINE_OVERHEAD) * 64 / 63;
         emit log_named_uint("heaviest human entry declared gas", heaviest);
         assertLe(minChunk, TEN_M_TARGET, "BOUNDED: the heaviest entry is admitted by a realistic 10M call");
 
@@ -375,9 +396,9 @@ contract SweepWorstCaseDrain is DeployProtocol {
             ++calls;
             uint256 gasBefore = gasleft();
             vm.prank(actor);
-            game.openBoxes{gas: allowance}(0);
+            game.mineFlip{gas: allowance}();
             uint256 gasUsed = gasBefore - gasleft();
-            emit log_named_uint("openBoxes chunk gas", gasUsed);
+            emit log_named_uint("mineFlip chunk gas", gasUsed);
 
             (bool nowDone, uint48 nowCur) = _frontier();
             // (2) monotonic progress: the cursor strictly advances, or the cohort completes.
@@ -386,7 +407,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
             prevDone = nowDone;
             prevCur = nowCur;
         }
-        emit log_named_uint("openBoxes calls to drain", calls);
+        emit log_named_uint("mineFlip calls to drain", calls);
         assertTrue(prevDone, "DRAIN COMPLETE: the whole cohort drains in bounded chunks (no brick / infinite stall)");
         assertLe(calls, totalEntries + 1, "DRAIN COMPLETE: at least one entry per bounded call");
 
@@ -424,10 +445,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
         assertGt(_lootAmt(index, liveOwner), 0, "fixture: tail box is live");
 
         _sealCohort(uint256(keccak256("audit-word")) | 1);
-        for (uint256 i; i < 16 && game.nextMinerAction() == ACTION_AFKING; ++i) {
-            vm.prank(actor);
-            game.openBoxes(0);
-        }
+        _clearAfkingStage();
         assertTrue(game.boxesPending(), "fixture: router advertises human-box work");
         assertEq(game.nextMinerAction(), ACTION_HUMAN_BOXES, "fixture: mineFlip takes the human-box arm");
 

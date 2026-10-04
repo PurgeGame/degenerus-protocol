@@ -15,13 +15,12 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///     UNCONDITIONAL per-day reset (`_afkingResetDay != day -> _subCursor = 0; subsFullyProcessed =
 ///     false`) then a weight-budgeted walk of the FULL `[0, len)` set until `subsFullyProcessed`. So
 ///     every in-set sub is stamped each day — `lastAutoBoughtDay == activeDay`.
-///   - OPEN leg (GameAfkingModule `_autoOpen`, cursor `_subOpenCursor`): a FULL-RING scan that visits
-///     up to `len` subs from the cursor, wrapping mid-scan, opening up to OPEN_BATCH (80) boxes per
-///     call and resuming mid-ring across calls. A 0-open result means the WHOLE set is drained, never
-///     just the suffix `[cursor, len)`. The open category then drains HUMAN boxes with the leftover
-///     budget (the `openHumanBoxes` multi-index sweep) — the same afking-then-human order as `openBoxes`.
-///   - `mineFlip()` reverts `NoWork()` ONLY when the advance category has no work AND `_autoOpen`
-///     returns 0 AND the human-box sweep (`openHumanBoxes`) returns 0 — i.e. advance, afking, and
+///   - OPEN leg (mineFlip's Afking stage, GameAfkingModule `runAfkingWork`, cursor `_subOpenCursor`):
+///     a FULL-RING scan that visits up to `len` subs from the cursor, wrapping mid-scan, admitting
+///     each box against the call's gas allowance and resuming mid-ring across calls. The stage is
+///     complete only once the WHOLE set is drained, never just the suffix `[cursor, len)`. The
+///     HumanBoxes stage (`runHumanBoxWork`) follows it in the fixed engine order.
+///   - `mineFlip()` reverts `NoWork()` ONLY when no stage has work — i.e. advance, afking, and
 ///     human boxes all fully drained.
 ///
 /// @notice A box is openable iff the entry-gate is open (`!rngLockedFlag && !_livenessTriggered`) AND
@@ -32,7 +31,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///   `test_OpenLegSpansMultipleCalls`). Reuses the V56SecUnmanipulable / AutoOpenCursorRing afking
 ///   drive VERBATIM (deity-pass + funded-sub + new-day STAGE harness, the fulfill-first settle loop,
 ///   the accumulating-`t` warp, the post-PACK Sub-slot offset block, the packed-cursor slot reads).
-///   The full day cycle is driven through the production valves (mineFlip / openBoxes / mineFlip);
+///   The full day cycle is driven through the production engine (mineFlip only);
 ///   per-sub markers are read from `_subOf[player]`. Test-only: ZERO contracts/*.sol mutation.
 contract MintFlipLifecycleCoverage is DeployProtocol {
     // -------------------------------------------------------------------------
@@ -81,7 +80,7 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
     /// @notice The headline invariant. With N > OPEN_BATCH subs, drive ONE full day cycle:
     ///   (a) after the stamp phase, EVERY sub has `lastAutoBoughtDay == activeDay` (full STAMP coverage,
     ///       proving the buy-leg cursor walked the whole [0, len) set with no strand);
-    ///   (b) drain the boxes across MULTIPLE mineFlip/openBoxes calls (the open leg spans calls and
+    ///   (b) drain the boxes across MULTIPLE mineFlip calls (the open leg spans calls and
     ///       resumes mid-ring because N > OPEN_BATCH);
     ///   (c) after draining, EVERY sub has `lastOpenedDay == lastAutoBoughtDay` (full OPEN coverage,
     ///       proving the open-leg full-ring scan reached every sub with no strand);
@@ -131,7 +130,7 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
         game.mineFlip();
     }
 
-    /// @notice Load-bearing isolation: prove a SINGLE bounded open call (openBoxes(OPEN_BATCH)) does NOT
+    /// @notice Load-bearing isolation: prove a SINGLE bounded mineFlip call does NOT
     ///         drain all N>OPEN_BATCH boxes — so the multi-call resume in the headline test is genuinely
     ///         exercised, not vacuously satisfied by a one-shot drain.
     function test_OpenLegSpansMultipleCalls() public {
@@ -143,12 +142,12 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
         }
         _toAfkingStage(uint256(keccak256("span_stampc")) | 1);
 
-        // One bounded open call (the in-order valve with a realistic 2M allowance) cannot clear the
+        // One bounded engine call (a realistic 2M allowance) cannot clear the
         // AFKing backlog: each box is admitted only while the remaining allowance covers its
         // declared bound. (The per-call OPEN_BATCH count cap became this gas admission.)
         uint256 openableBefore = _countOpenable(subs);
         assertGt(openableBefore, 0, "fixture: an AFKing backlog is the next work");
-        uint256 openedOne = _openViaValveWith(BOUNDED_OPEN_ALLOWANCE);
+        uint256 openedOne = _openViaValveWith(subs, BOUNDED_OPEN_ALLOWANCE);
         assertGt(openedOne, 0, "non-vacuity: the bounded call opened boxes");
         uint256 myRemaining = _countOpenable(subs);
         assertGt(myRemaining, 0, "load-bearing: a single bounded call left some of my subs UN-opened (multi-call required)");
@@ -159,7 +158,7 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
         uint256 furtherCalls;
         for (uint256 i; i < 64; i++) {
             if (_countOpenable(subs) == 0) break;
-            _openViaValveWith(BOUNDED_OPEN_ALLOWANCE);
+            _openViaValveWith(subs, BOUNDED_OPEN_ALLOWANCE);
             furtherCalls++;
         }
         assertGe(furtherCalls, 1, "load-bearing: at least one more open call was needed to finish my subs");
@@ -168,9 +167,11 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
         }
         // Total distinct open calls used (first + further) exceeded one — the multi-call span is real.
         assertGt(1 + furtherCalls, 1, "load-bearing: draining the backlog spanned multiple open calls");
-        // A follow-up open on the drained ring returns 0 (whole set drained).
+        // After a full drain the engine finds no box work on the ring (whole set drained).
         _drainAllOpenable();
-        assertEq(_openViaValve(OPEN_BATCH), 0, "drained: a follow-up open returns 0 (whole set drained)");
+        assertEq(_countPending(subs), 0, "drained: no sub carries a pending box");
+        uint8 next = game.nextMinerAction();
+        assertTrue(next != 9 && next != 10, "drained: the engine selects no AFKing or human box work"); // Afking, HumanBoxes
     }
 
     // =========================================================================
@@ -418,10 +419,12 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
         game.mineFlip{gas: hi}();
     }
 
-    /// @dev Drive the in-order valve once with a bounded gas allowance.
-    function _openViaValveWith(uint256 allowance) internal returns (uint256 opened) {
+    /// @dev One engine call with a bounded gas allowance; returns how many of `subs` it opened.
+    function _openViaValveWith(address[] memory subs, uint256 allowance) internal returns (uint256 opened) {
+        uint256 before = _countPending(subs);
         vm.prank(makeAddr("life_opener"));
-        opened = game.openBoxes{gas: allowance}(OPEN_BATCH);
+        game.mineFlip{gas: allowance}();
+        opened = before - _countPending(subs);
     }
 
     /// @dev Count how many of `subs` currently carry an openable box.
@@ -429,18 +432,12 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
         for (uint256 i; i < subs.length; i++) if (_isOpenable(subs[i])) c++;
     }
 
-    /// @dev Drive the production open valve once: Game.openBoxes -> drainAfkingBoxes -> _autoOpen.
-    function _openViaValve(uint256 maxCount) internal returns (uint256 opened) {
-        vm.prank(makeAddr("life_opener"));
-        opened = game.openBoxes(maxCount);
-    }
-
-    /// @dev Drain the open valve to empty (a 0-open call means the whole afking ring is drained).
+    /// @dev Mine until the engine reports no work, so every stamped box has been opened in order.
     function _drainAllOpenable() internal {
-        for (uint256 i; i < 256; i++) {
-            if (_openViaValve(OPEN_BATCH) == 0) return;
-        }
-        revert("drain did not converge");
+        vm.startPrank(makeAddr("life_opener"));
+        uint256 calls = _mineAll(256);
+        vm.stopPrank();
+        require(calls < 256, "drain did not converge");
     }
 
     /// @dev Would `keeper`'s mineFlip be the clean NoWork no-op RIGHT NOW? Probes via a try/catch that
@@ -568,7 +565,7 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
     }
 
     /// @dev Openable under the entry-gate: pending box (lastOpenedDay < lastAutoBoughtDay) AND the frozen
-    ///      stamp-day word has landed (_recordedDailyWord(lastAutoBoughtDay) != 0). Mirrors the _autoOpen predicate.
+    ///      stamp-day word has landed (_recordedDailyWord(lastAutoBoughtDay) != 0).
     function _isOpenable(address who) internal view returns (bool) {
         uint32 bought = _lastBoughtDayOf(who);
         if (_lastOpenedDayOf(who) >= bought) return false;

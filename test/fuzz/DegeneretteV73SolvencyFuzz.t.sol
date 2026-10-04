@@ -72,8 +72,7 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
         uint256 bet = game.degeneretteBetInfo(1, betId);
         uint256 roiBps = _roiBps(DQ.activity(bet));
         _injectLootboxRngWord(1, word);
-        // Bets resolve only as the engine's Degenerette read consumer (mineFlip); openBoxes drives
-        // the AFK and human stages only.
+        // Bets resolve only as the engine's Degenerette read consumer (mineFlip).
         vm.recordLogs();
         vm.prank(player);
         game.mineFlip();

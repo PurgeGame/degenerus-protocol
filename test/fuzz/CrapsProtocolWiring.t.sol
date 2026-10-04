@@ -35,10 +35,6 @@ import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 ///         Each is asserted with a negative control, because "the call did not revert" proves
 ///         nothing if the gate admits everyone.
 contract CrapsProtocolWiringTest is DeployProtocol {
-    /// @dev SETTLE EVERYTHING. `resolveSlot`'s second argument is a gas allowance, not a seat
-    ///      count, so a budget no field can exhaust is what "the whole field" now means.
-    uint64 internal constant WIRING_WHOLE_FIELD = type(uint64).max;
-
     address internal constant PLAYER = address(0xBEEF);
     address internal constant STRANGER = address(0xDEAD);
     address internal constant KEEPER = address(0xC0FFEE);
@@ -121,7 +117,8 @@ contract CrapsProtocolWiringTest is DeployProtocol {
     }
 
     /// @dev The user flow against every shipped dependency: real mint-history read, real FLIP burn,
-    ///      real game-slot word lookup, permissionless settlement, and real coinflip credit. The word
+    ///      real game-slot word lookup, settlement by mineFlip's Craps read stage, and real coinflip
+    ///      credit. The word
     ///      is written directly only to stand in for the already-covered VRF lifecycle.
     function test_realProtocolPlaceRevealAndSettleFlow() public {
         Craps.Bets memory board;
@@ -165,17 +162,18 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         }
         assertGt(paid, 0, "failed to find a paying deterministic fixture");
 
-        // Public settlement takes only the frontier field of a read cohort whose earlier consumers
-        // (tickets, boxes, bets, Decimator) have finished: the read-cohort gate (6d0e64b09). Small
-        // engine calls run those stages and stop before the first whole seat, leaving the field to
-        // the permissionless door.
+        // The Craps read stage takes only the frontier field of a read cohort whose earlier
+        // consumers (tickets, boxes, bets, Decimator) have finished: the read-cohort gate
+        // (6d0e64b09). Small engine calls run those stages and stop before the first whole seat,
+        // leaving the field to the read stage itself.
         for (uint256 i; i < 32 && game.rngConsumerStage() != 6; ++i) game.mineFlip{gas: 800_000}();
         assertEq(game.rngConsumerStage(), 6, "the cohort reached its Craps read stage");
-        assertEq(crapsBattle.bonusCursorOf(slot), 0, "the field is still unsettled for the public door");
+        assertEq(crapsBattle.bonusCursorOf(slot), 0, "the field is still unsettled for the read stage");
 
+        // Any caller's mineFlip runs the read stage; the money goes to the slip's owner.
         uint256 stakeBefore = coinflip.coinflipAmount(PLAYER);
         vm.prank(STRANGER);
-        crapsBattle.resolveSlot(slot, WIRING_WHOLE_FIELD);
+        game.mineFlip();
 
         // The win ships as next-day coinflip stake, not liquid FLIP: `creditFlip` against the
         // REAL Coinflip is the payout lane now, so the balance must stay at zero and the stake
@@ -221,10 +219,11 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         }
     }
 
-    /// @dev THE CRANK REACHES THE TABLE. `keepScheduled` is permissionless on the table itself,
+    /// @dev THE CRANK REACHES THE TABLE. The table's scheduled work runs only inside `mineFlip`,
     ///      so the risk is not authority — it is that a window shuts on a clock nobody is
-    ///      watching. `mineFlip` runs it as its last leg (arming and settling in schedule order)
-    ///      and pays a flat FLIP for either, which is what puts a keeper on the schedule.
+    ///      watching. `mineFlip` arms in its Maintenance stage and settles in its Craps read stage,
+    ///      in schedule order, and pays for the measured work, which is what puts a keeper on the
+    ///      schedule.
     ///
     ///      Driven through the REAL Game, the REAL table and the REAL Coinflip credit lane,
     ///      because the wiring is the whole claim: the module reaches CRAPS by pin, and the

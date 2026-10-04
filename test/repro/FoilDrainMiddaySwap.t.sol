@@ -373,9 +373,13 @@ contract FoilDrainMiddaySwap is DeployProtocol {
             false
         );
         bool before = _ticketWriteSlot();
+        // mineFlip is the only door to the mid-day request; call it only when the request is
+        // the engine's next action, so the call does nothing but request.
+        vm.prank(crank);
+        if (game.minerAction() != 18) return false;
         vm.prank(crank);
         (bool ok, ) = address(game).call(
-            abi.encodeWithSignature("requestLootboxRng()")
+            abi.encodeWithSignature("mineFlip()")
         );
         if (!ok) return false;
         swapped = _ticketWriteSlot() != before;

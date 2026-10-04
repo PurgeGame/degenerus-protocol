@@ -342,7 +342,7 @@ contract FoilClaimBatch is DeployProtocol {
     }
 
     /// @dev Force dailyFoilDraw[day]'s main set to `sel`, preserving the level bits the REAL
-    ///      writer (emitDailyWinningTraits / payDailyJackpot) set. Every quadrant byte then
+    ///      writer (emitDailyWinningTraits / the daily jackpot stage) set. Every quadrant byte then
     ///      equals the claimant's own line byte-for-byte, so the match scores a guaranteed
     ///      tier 8 (symbol AND color both match every quadrant) regardless of what the day's
     ///      real board actually rolled — only the win set is forced, never the level.
@@ -491,7 +491,7 @@ contract FoilClaimBatch is DeployProtocol {
     ///         level >= 2 purchase day — pays a foil match at exactly the face table and
     ///         grants exactly one whale-pass credit on a T=8. All three dailyFoilDraw records
     ///         below are written by the real advance chain — emitDailyWinningTraits (level 1)
-    ///         and payDailyJackpot (the jackpot day and level 2) — never by the harness; only
+    ///         and the daily jackpot stage (the jackpot day and level 2) — never by the harness; only
     ///         the WIN SET is forced, to a guaranteed tier-8 line, so RNG luck cannot leave any
     ///         of the three shapes untested.
     function test_faceTablePaysFlatAcrossDayShapes() public {

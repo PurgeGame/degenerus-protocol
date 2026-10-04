@@ -19,13 +19,6 @@ REVIEWED = {
         "let ok := delegatecall(gas(), target, 0, calldatasize(), 0, 0)"],
     ("DegenerusGame.sol", "minerAction"): [
         "let ok := delegatecall(gas(), target, ptr, calldatasize(), 0, 0)"],
-    ("JackpotBattle.sol", "keepRngCohortBudgeted"): [
-        "uint256 start = gasleft();",
-        "return (result.progressed, result.rewardBasis != 0, uint64(start - gasleft()));"],
-    ("JackpotBattle.sol", "_scheduledWork"): [
-        "uint256 start = gasleft();", "used = start - gasleft();"],
-    ("sDGNRS.sol", "processRedemptionSettlement"): [
-        "uint256 start = gasleft();", "return (result.done, start - gasleft(), result.rewardBasis);"],
     ("libraries/MineFlipGas.sol", "available"): ["return gasleft();"],
     ("libraries/MineFlipGas.sol", "start"): [
         "meter = Meter({start: gasleft(), allowance: allowance});"],
@@ -36,10 +29,6 @@ REVIEWED = {
         "if (gasleft() < stipend + stipend / 63 + 2 * CALL_RESERVE) revert InsufficientExecutionGas();"],
     ("modules/DegenerusGameAdvanceModule.sol", "_runJackpotWork"): [
         "gas: MineFlipGas.forwardable(gasleft(), 150_000)"],
-    ("modules/DegenerusGameDecimatorModule.sol", "settleDecimatorWinners"): [
-        "uint256 beforeGas = gasleft();", "return (result.rewardBasis, beforeGas - gasleft(), result.progressed);"],
-    ("modules/DegenerusGameLootboxModule.sol", "openHumanBoxes"): [
-        "uint256 beforeGas = gasleft();", "return (result.rewardBasis, beforeGas - gasleft());"],
     ("modules/DegenerusGameMinerModule.sol", "mineFlip"): [
         "uint256 rewardStart = gasleft();",
         # Entry admission occurs before work or state writes; insufficient gas reverts.
@@ -50,19 +39,11 @@ REVIEWED = {
         "unpaidAttemptGas = beforeCall - gasleft();",
         "uint256 used = rewardStart - gasleft() - unpaidAttemptGas;"],
     ("modules/DegenerusGameTicketModule.sol", "_solo"): ["uint256 actual = gasleft();"],
-    ("modules/GameAfkingModule.sol", "processSubscriberStageBudgeted"): [
-        "uint256 beforeGas = gasleft();", "return (result.rewardBasis, beforeGas - gasleft());"],
-    ("modules/GameAfkingModule.sol", "_autoOpen"): [
-        "uint256 beforeGas = gasleft();", "return (result.rewardBasis, beforeGas - gasleft(), !result.done);"],
-    ("modules/GameAfkingModule.sol", "drainAfkingBoxes"): [
-        "uint256 beforeGas = gasleft();", "return (result.rewardBasis, beforeGas - gasleft());"],
 }
 GAS_READ = re.compile(r"\b(?:gasleft|gas)\s*\(")
 AMBIENT = re.compile(r"\b(?:msg\s*\.\s*sender|tx\s*\.|block\s*\.|blockhash\s*\()")
-DRAINS = set("""processTicketBatch processFutureTicketBatch _processOneTicketEntry
-_raritySymbolBatch _drainSeatedSurvivors _drainRounds drainRounds _fillSeats
-_seatEntry _runRound _processFoilDrain _resolveFoilBuyer _bucketAppendRun
-_bucketAppendLanes _resolveZeroOwedRemainder _rollRemainder""".split())
+DRAINS = set("""_seatEntry _runRound _resolveFoilBuyer _bucketAppendRun _bucketAppendLanes
+_rollRemainder""".split())
 
 
 def compact(code):

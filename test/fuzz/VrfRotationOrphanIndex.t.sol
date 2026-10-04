@@ -80,7 +80,15 @@ contract VrfRotationOrphanIndex is DeployProtocol {
         _finishReadConsumers();
     }
 
-    /// @dev Drive the game into a state where requestLootboxRng() succeeds AND its buffer
+    /// @dev The mid-day request through mineFlip, its only door, as the engine's next action.
+    function _mineMiddayRequest() internal {
+        uint256 prior = mockVRF.lastRequestId();
+        game.mineFlip();
+        assertGt(mockVRF.lastRequestId(), prior, "mineFlip issued the mid-day request");
+        assertFalse(game.rngLocked(), "a mid-day request, not the daily one");
+    }
+
+    /// @dev Drive the game into a state where the mid-day request succeeds AND its buffer
     ///      swap sets LR_MID_DAY=1: complete two days so today's daily RNG is recorded,
     ///      make a lootbox purchase (creates pending ETH + a ticket-queue entry), fund the
     ///      VRF subscription above MIN_LINK_FOR_LOOTBOX_RNG.
@@ -116,7 +124,7 @@ contract VrfRotationOrphanIndex is DeployProtocol {
     // Post-fix arm: a real mid-flight rotation lands a real VRF word in slot N
     // ──────────────────────────────────────────────────────────────────────
 
-    /// @notice After a mid-day requestLootboxRng + a real emergency rotation to a 2nd
+    /// @notice After a mid-day request (through mineFlip) + a real emergency rotation to a 2nd
     ///         MockVRFCoordinator while the request is in flight + fulfillRandomWords on the
     ///         NEW coordinator, _lootboxWord(reservedIndex) == vrfWord. The reserved
     ///         slot N (LR_INDEX-1 captured before the rotation) is preserved across the
@@ -130,12 +138,12 @@ contract VrfRotationOrphanIndex is DeployProtocol {
         _setupForMidDayRng();
 
         // Fire the mid-day request; capture the reserved slot N = LR_INDEX-1.
-        game.requestLootboxRng();
+        _mineMiddayRequest();
         uint48 reservedIndex = _readLootboxRngIndex() ^ 1;
 
         // The mid-day buffer swap set LR_MID_DAY=1, so the rotation's mid-day re-issue
         // branch will fire.
-        assertEq(_readMidDayFlag(), 1, "requestLootboxRng must set LR_MID_DAY=1");
+        assertEq(_readMidDayFlag(), 1, "the mid-day request must set LR_MID_DAY=1");
 
         // The reserved slot is orphaned-pending (empty) -- the assertion is not pre-satisfied.
         assertEq(_readLootboxWord(reservedIndex), 0, "reserved slot must be empty before fulfilment");
@@ -197,7 +205,7 @@ contract VrfRotationOrphanIndex is DeployProtocol {
         _setupForMidDayRng();
 
         // Fire the mid-day request; reserve slot N = LR_INDEX-1 (the MintModule:686 read target).
-        game.requestLootboxRng();
+        _mineMiddayRequest();
         uint48 reservedIndex = _readLootboxRngIndex() ^ 1;
         bytes32 wordSlot = keccak256(abi.encode(uint256(reservedIndex), SLOT_LOOTBOX_WORD_MAP));
 

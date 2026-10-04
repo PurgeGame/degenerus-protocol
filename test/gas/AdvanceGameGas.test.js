@@ -6,7 +6,7 @@ import {
   deployFullProtocol,
   restoreAddresses,
 } from "../helpers/deployFixture.js";
-import { readyDailyFixture } from "../helpers/readyDailyFixture.js";
+import { readyDailyFixture, requestMiddayRng } from "../helpers/readyDailyFixture.js";
 import { boSmalls } from "../helpers/boxOrder.js";
 import {
   CEILING_ALLOWANCE,
@@ -132,9 +132,9 @@ describe("AdvanceGame Gas Benchmarks", function () {
       await mockVRF.fulfillRandomWords(requestId, 42n);
     }
     await game.connect(deployer).mineFlip();
-    // Drain any queued tickets: with non-empty queues the game-over path
-    // returns STAGE_TICKETS_WORKING across multiple mineFlip calls before
-    // handleGameOverDrain fires and flips gameOver=true.
+    // Drain any queued tickets: with non-empty queues the terminal stage takes
+    // several mineFlip calls before the game-over drain runs and latches
+    // gameOver=true.
     for (let i = 0; i < 50; i++) {
       if (await game.gameOver()) return;
       try {
@@ -436,15 +436,14 @@ describe("AdvanceGame Gas Benchmarks", function () {
         await mockVRF.fulfillRandomWords(requestId, 42n);
       }
 
-      // Step 3: mineFlip -> handleGameOverDrain (the expensive one), realistic allowance
+      // Step 3: mineFlip -> terminal stage's game-over drain (the expensive one), realistic allowance
       const { tx: tx2, receipt: receipt2 } = await mine(game, deployer);
       const events2 = await getAdvanceEvents(tx2, advanceModule);
       const stage2 = events2.length > 0 ? events2[0].args.stage : "?";
       recordGas(`Game Over Drain (stage=${stage2})`, receipt2);
 
-      // Drain remaining tickets so gameOver latches. With queued tickets
-      // the drain dispatches STAGE_TICKETS_WORKING across multiple advance
-      // calls before handleGameOverDrain runs.
+      // Drain remaining tickets so gameOver latches. With queued tickets the
+      // terminal stage spans several mineFlip calls before the game-over drain runs.
       for (let i = 0; i < 50; i++) {
         if (await game.gameOver()) break;
         try {
@@ -677,23 +676,19 @@ describe("AdvanceGame Gas Benchmarks", function () {
       expect(vrfReceipt.gasUsed).to.be.lt(300_000n);
     });
 
-    it("lootbox RNG path (path 2): VRF callback after requestLootboxRng()", async function () {
+    it("lootbox RNG path (path 2): VRF callback after mineFlip's mid-day request", async function () {
       // A mid-day request needs today's daily word recorded and the previous read cohort
-      // complete (the read-cohort gate), so start from a settled first daily cycle. The old
-      // body swallowed both refusals and returned early, so it never measured anything.
+      // complete (the read-cohort gate), so start from a settled first daily cycle.
       const { game, deployer, mockVRF, alice } = await loadFixture(readyDailyFixture);
 
-      // A full 100-box order at the level-0 price (1 ETH): pending box value must clear the
-      // mid-day request threshold, or the request is refused with BelowThreshold().
+      // A full 100-box order at the level-0 price (1 ETH): pending box value must reach the
+      // mid-day threshold for mineFlip to select the request without donor credit.
       await game
         .connect(alice)
         .purchase(alice.address, 0n, boSmalls(100), ZERO_BYTES32, MintPaymentKind.DirectEth, false,
           { value: eth(1) });
 
-      const before = await getLastVRFRequestId(mockVRF);
-      await (await game.connect(deployer).requestLootboxRng()).wait();
-      const lbRequestId = await getLastVRFRequestId(mockVRF);
-      expect(lbRequestId, "mid-day request issued").to.be.gt(before);
+      const lbRequestId = await requestMiddayRng(game, deployer, mockVRF);
 
       // Fulfill the lootbox VRF request and capture gas.
       const vrfTx = await mockVRF.fulfillRandomWords(lbRequestId, 77n);

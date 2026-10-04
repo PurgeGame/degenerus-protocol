@@ -196,6 +196,14 @@ contract StakedStonkRedemption is DeployProtocol {
         assertEq(game.rngConsumerStage(), 1, "fixture: redemption is the live FIFO stage");
     }
 
+    /// @dev The Redemption-stage worker, called as the Game the way mineFlip dispatches it,
+    ///      settling the whole live cohort. Live claims settle only this way.
+    function _settleCohort() internal {
+        vm.prank(address(game));
+        assertTrue(sdgnrs.runRedemptionWork(9_000_000).done, "fixture: keeper drained the cohort");
+        assertFalse(sdgnrs.redemptionSettlementPending(), "fixture: cohort cleared");
+    }
+
     /// @dev Create the claim, queue entry, aggregate and MAX reserve through burn.
     ///      Only synthetic backing is adjusted; no redemption accounting is seeded.
     function _burnForExactBase(address actor, uint256 amount, uint256 base) internal {
@@ -443,10 +451,11 @@ contract StakedStonkRedemption is DeployProtocol {
     //         testFuzz_ClaimReadsCorrectDay (ROADMAP-canonical)
     // =====================================================================
 
-    /// @notice claimRedemption(player, day) reads the (player, day) composite-key slot — not
+    /// @notice Live settlement of (player, day) reads the (player, day) composite-key slot — not
     ///         (player, day ± 1) — credits the correct rolled amount, and clears the slot on
     ///         full-claim path. Adjacent days' claim slots are byte-identical pre/post.
-    /// @dev Tests `claimRedemption` in isolation. Anchors: SPEC-02 (composite key), SPEC-04 (d)
+    /// @dev Tests the keeper settlement (the Redemption-stage worker) in isolation. Anchors:
+    ///      SPEC-02 (composite key), SPEC-04 (d)
     ///      (delete-on-full-claim). The expected direct credit (into the player's game claimable;
     ///      live game pushes nothing at the claimant) is `(claim.ethValueOwed * roll / 100) / 2`
     ///      (50% direct, 50% routed to lootbox under live game). With gwei-aligned ethValueOwed
@@ -496,12 +505,11 @@ contract StakedStonkRedemption is DeployProtocol {
         uint256 expectedTotalRolledEth = (uint256(evBurnPre) * uint256(roll)) / 100;
         uint256 expectedEthDirect = expectedTotalRolledEth / 2;
 
-        // Step 3: claim — capture the player's game-claimable delta (live game routes the
+        // Step 3: settle — capture the player's game-claimable delta (live game routes the
         // direct half into game claimable; nothing is pushed at the claimant's wallet).
         uint256 ethBefore = actor.balance;
         uint256 claimableBefore = game.claimableWinningsOf(actor);
-        vm.prank(actor);
-        sdgnrs.claimRedemption(actor, uint24(dayBurn));
+        _settleCohort();
 
         // Positive: credit matches expected EXACTLY (D-305-GWEI-SNAP-01 zero-drift)
         assertEq(actor.balance - ethBefore, 0, "claim: live-game claim must not push ETH at the claimant");
@@ -796,8 +804,7 @@ contract StakedStonkRedemption is DeployProtocol {
         _advanceWallDay();
         _resolveDay(dayD, 100);
         vm.prank(address(game));
-        (bool done,,) = sdgnrs.processRedemptionSettlement(1856);
-        assertTrue(done, "previous cohort consumed before new burns");
+        assertTrue(sdgnrs.runRedemptionWork(9_000_000).done, "previous cohort consumed before new burns");
         assertEq(uint256(sdgnrs.pendingResolveDay()), 0, "sentinel: post-resolve must clear sentinel to 0");
 
         // First burn of a NEW day (dayD + 1, since we _advanceWallDay'd above) — sentinel
@@ -993,17 +1000,14 @@ contract StakedStonkRedemption is DeployProtocol {
             "REDEEM-08 full-flow: claimablePool diverged from claimableWinnings[SDGNRS]"
         );
 
-        // Resolve the shared day, then both claim. The REDEEM-08 safety property is that a claim never
+        // Resolve the shared day, then the keeper settles both. The REDEEM-08 safety property is that a claim never
         // DEBITS claimableWinnings[SDGNRS] (which could underflow/wrap). With this harness's 1-trillion
         // supply the redemption value is dust (well under the 0.02 ETH lootbox floor), so each claim
         // drops the lootbox half and forfeits it BACK to claimable[SDGNRS] — a credit, never a debit.
         _advanceWallDay();
         _resolveDay(dayBurn, 100);
 
-        vm.prank(playerA);
-        sdgnrs.claimRedemption(playerA, uint24(dayBurn));
-        vm.prank(playerB);
-        sdgnrs.claimRedemption(playerB, uint24(dayBurn));
+        _settleCohort();
 
         uint256 claimableAfterClaims = _claimableSdgnrs();
         assertGe(
@@ -1122,7 +1126,7 @@ contract StakedStonkRedemption is DeployProtocol {
         vm.deal(address(game), amount);
     }
 
-    /// @notice REDEEM-08 FLIP-can't-block-ETH: the ETH leg of claimRedemption pays in full from
+    /// @notice REDEEM-08 FLIP-can't-block-ETH: the ETH leg of a settled claim pays in full from
     ///         the segregated balance regardless of the redeemer's FLIP share. The redeemed FLIP
     ///         slice is removed from sDGNRS at submit and escrowed; the claim-time FLIP leg (a
     ///         contingent flip credit paid only on the resolving day's coinflip win) is independent of
@@ -1158,8 +1162,7 @@ contract StakedStonkRedemption is DeployProtocol {
         uint256 expectedEthDirect = expectedTotalRolled / 2; // live game: 50% direct, 50% lootbox
 
         uint256 claimableBefore = game.claimableWinningsOf(playerA);
-        vm.prank(playerA);
-        sdgnrs.claimRedemption(playerA, uint24(dayBurn));
+        _settleCohort();
         uint256 creditDelta = game.claimableWinningsOf(playerA) - claimableBefore;
 
         // ETH leg credits in full irrespective of FLIP — there is no FLIP leg to block it.
@@ -1254,8 +1257,7 @@ contract StakedStonkRedemption is DeployProtocol {
         _setRealDayResult(uint24(dayBurn) + 1, 100); // resolving-day coinflip WON (real storage)
 
         uint256 redeemerStakeBefore = coinflip.coinflipAmount(playerA);
-        vm.prank(playerA);
-        sdgnrs.claimRedemption(playerA, uint24(dayBurn));
+        _settleCohort();
 
         // On a win the escrow earns the day+1 win multiplier (principal + principal*rewardPercent%),
         // the same payout a held backing slice earns; rewardPercent=100 here -> 2x. The minted credit
@@ -1291,8 +1293,7 @@ contract StakedStonkRedemption is DeployProtocol {
         _setRealDayResult(uint24(dayBurn) + 1, 78); // resolving-day coinflip WON at rewardPercent 78
 
         uint256 redeemerStakeBefore = coinflip.coinflipAmount(playerA);
-        vm.prank(playerA);
-        sdgnrs.claimRedemption(playerA, uint24(dayBurn));
+        _settleCohort();
 
         // principal + principal*78/100 (computed the same way the contract does).
         uint256 expected = escrowWei + (escrowWei * 78) / 100;
@@ -1322,8 +1323,7 @@ contract StakedStonkRedemption is DeployProtocol {
         _setRealDayResult(uint24(dayBurn) + 1, 1); // resolving-day coinflip LOST (real storage)
 
         uint256 redeemerStakeBefore = coinflip.coinflipAmount(playerA);
-        vm.prank(playerA);
-        sdgnrs.claimRedemption(playerA, uint24(dayBurn));
+        _settleCohort();
 
         // Redeemer receives no FLIP flip credit on a losing resolving-day flip.
         assertEq(
@@ -1520,10 +1520,9 @@ contract StakedStonkRedemption is DeployProtocol {
             1
         );
 
-        vm.prank(playerA);
-        sdgnrs.claimRedemption(playerA, uint24(dayBurn));
+        _settleCohort();
 
-        // Claim consumed the burn-created slot, confirming the path ran end-to-end.
+        // Settlement consumed the burn-created slot, confirming the path ran end-to-end.
         (uint96 evAfter, , uint96 escAfter) = sdgnrs.pendingRedemptions(playerA, uint24(dayBurn));
         assertEq(uint256(evAfter), 0, "MECH-01: claim slot must clear after full claim");
         assertEq(uint256(escAfter), 0, "MECH-01: flipEscrow must remain zero");

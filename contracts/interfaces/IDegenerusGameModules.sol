@@ -32,13 +32,6 @@ interface IDegenerusGameTicketModule {
     function runJackpotTicketAwards(TicketWorkPlan calldata plan, uint256 allowance)
         external returns (MineFlipGas.Result memory);
     function runTicketWork(uint24 anchor, uint256 gasAllowance) external returns (MineFlipGas.Result memory);
-    function processTicketBatch(uint24 anchor) external returns (bool finished, bool didWork);
-    function processTicketBatchBudgeted(uint24 anchor, uint256 allowance)
-        external returns (bool finished, bool worked, uint256 charged);
-    function generateTraitRun(uint256 stream, uint32 offset, uint32 count, uint256 entropy, uint256 ownerIdx)
-        external returns (uint256 writes);
-    function drainRounds(uint24 rk, uint24 lvl, uint32 room, uint256 idx, uint256 total, uint256 entropy, uint8 shift)
-        external returns (uint256 nextIdx, uint32 used);
 }
 
 interface IDegenerusGameMinerModule {
@@ -56,7 +49,6 @@ interface IDegenerusGameRngModule {
     error GasTooHigh();
     function publishRng() external;
     function requestDailyRng(uint24 day) external;
-    function requestLootboxRng() external;
     function requestMinerRng() external;
     function retryRng() external;
 }
@@ -79,14 +71,6 @@ interface IDegenerusGameAdvanceModule {
 interface IDegenerusGameGameOverModule {
     function runGameOverAdvance(uint24 day, uint24 level, uint256 allowance)
         external returns (bool shouldReturn, uint8 stage, bool unlock, bool progressed);
-    /// @notice Best-effort terminal request, independent of normal read completion.
-    function requestTerminalRng() external returns (bool);
-
-    /// @notice Apply or request the ending's entropy, without a normal-cohort completion gate.
-    function applyTerminalRng(uint48 timestamp, uint24 day, uint24 level) external;
-
-    /// @notice Advance the terminal lifecycle; unlock is requested only after normal payout.
-    function handleGameOverAdvance(uint24 day, uint24 level) external returns (bool shouldReturn, uint8 stage, bool unlock);
 
     /// @notice Configures the Chainlink VRF coordinator and subscription
     /// @param coordinator_ Address of the VRF coordinator contract
@@ -107,18 +91,6 @@ interface IDegenerusGameGameOverModule {
         uint256 newSubId,
         bytes32 newKeyHash
     ) external;
-
-    /// @notice Handles draining funds during game over state
-    /// @param day The day identifier for the drain operation
-    function handleGameOverDrain(uint24 day) external;
-
-    /// @notice Performs the final sweep of remaining funds after game over
-    function handleFinalSweep() external;
-
-    /// @notice Count the terminal level's tickets for the deterministic (VRF-dead) ending.
-    /// @param lvl The latched terminal ticket level.
-    /// @return finished True once the count is complete.
-    function tallyDeadVrf(uint24 lvl) external returns (bool finished);
 
     /// @notice Claim deterministic-ending shares for `player`'s terminal-level tickets.
     /// @param player Owner of every referenced holding.
@@ -145,28 +117,6 @@ interface IDegenerusGameJackpotModule {
     function runEarlyBirdTickets(uint256 word, uint256 allowance) external returns (MineFlipGas.Result memory);
     function runDailyJackpotTickets(uint256 word, uint256 allowance) external returns (MineFlipGas.Result memory);
 
-    /// @notice Pays out the daily jackpot to winners
-    /// @param isJackpotPhase True for jackpot phase dailies, false for purchase phase jackpot.
-    /// @param lvl The current game level
-    /// @param randWord Random word for winner selection
-    function payDailyJackpot(
-        bool isJackpotPhase,
-        uint24 lvl,
-        uint256 randWord
-    ) external;
-
-    /// @notice Pays the day's own ticket leg and completes the daily
-    /// @param randWord Random word for distribution
-    function payDailyJackpotCoinAndTickets(uint256 randWord) external;
-
-    /// @notice Pay the purchase-phase daily's priced ticket leg from its own advance stage.
-    /// @param randWord The day's recorded VRF word.
-    function payPurchaseDailyTickets(uint256 randWord) external;
-
-    /// @notice Pays the pending early-bird tickets and any gold-preferred surplus whale-pass prize.
-    /// @param randWord Random word for distribution (the same day's word)
-    function payEarlyBirdTickets(uint256 randWord) external;
-
     /// @notice Pay the golden-ticket grand to a foil pack holding two all-gold tickets.
     /// @dev Delegatecall-only; pushed by the foil drain (_pushFoilGrand) when a pack
     ///      files with two or more all-gold tickets. Not reachable from claimGoldenTicket.
@@ -186,26 +136,9 @@ interface IDegenerusGameJackpotModule {
     /// @param maxLevel Maximum target level for the coin distribution (inclusive)
     function payDailyFlipJackpot(uint24 lvl, uint256 randWord, uint24 minLevel, uint24 maxLevel) external;
 
-    /// @notice Plays one step of the daily FLIP jackpot battle over unminted future levels as one
-    ///         closed craps battle (JackpotBattle), on purchase and jackpot days alike
-    /// @param lvl The mint ceiling: the draw's levels start above it
-    /// @param randWord Random word for level picks and walks
-    function payPurchaseJackpotBattle(uint24 lvl, uint256 randWord) external;
-
     /// @notice Roll, record and emit level 1's purchase-day board without running distribution.
     /// @param randWord VRF entropy for the board.
     function emitDailyWinningTraits(uint256 randWord) external;
-
-    /// @notice Game-over terminal jackpot: Final-day bucket distribution to the final ticket cohort.
-    /// @param poolWei Total ETH to distribute.
-    /// @param targetLvl Level to sample winners from.
-    /// @param rngWord VRF entropy seed.
-    /// @return paidWei Total ETH distributed.
-    function runTerminalJackpot(
-        uint256 poolWei,
-        uint24 targetLvl,
-        uint256 rngWord
-    ) external returns (uint256 paidWei);
 
     /// @notice Execute BAF jackpot distribution.
     /// @param poolWei Total ETH pool for BAF.
@@ -253,17 +186,6 @@ interface IDegenerusGameDecimatorModule {
         uint24 lvl,
         uint256 rngWord
     ) external returns (uint256 returnAmountWei);
-
-
-    /// @notice Bounded progress over sealed battle runs, ranking, and ETH credits.
-    /// @param budgetUnits Walk units the leg may spend.
-    /// @return settled Work items completed, including losing runs.
-    /// @return unitsUsed Walk units spent.
-    /// @return moved Whether the settle cursor advanced.
-    function settleDecimatorWinners(
-        uint256 budgetUnits
-    ) external returns (uint256 settled, uint256 unitsUsed, bool moved);
-
 }
 
 /// @title IDegenerusGameWhaleModule
@@ -311,7 +233,7 @@ interface IDegenerusGameWhaleModule {
     ) external returns (uint256 spent);
 
     /// @notice sDGNRS's once-per-level automatic whale purchase (afking process STAGE only).
-    /// @dev Delegatecall-only, nested from GameAfkingModule.processSubscriberStage; no facade
+    /// @dev Delegatecall-only, nested from GameAfkingModule.runSubscriberWork; no facade
     ///      stub forwards it. Buys the largest whole group of five paid passes whose quote fits
     ///      a quarter of sDGNRS's claimable, or nothing (RNG lock / committed word / terminal /
     ///      full lootbox entry / below one group — all a zero return, never a revert; the STAGE
@@ -324,8 +246,6 @@ interface IDegenerusGameWhaleModule {
 /// @title IDegenerusGameMintModule
 /// @notice Interface for minting operations and purchase processing
 interface IDegenerusGameMintModule {
-    function processTicketBatchBudgeted(uint24 anchor, uint256 allowance) external returns (bool finished, bool worked, uint256 charged);
-
     /// @notice Quote a far-future salvage swap WITHOUT executing (read-only -EV offer).
     function previewSellFarFutureEntries(
         address player,
@@ -413,17 +333,6 @@ interface IDegenerusGameMintModule {
         MintPaymentKind payKind,
         uint256 boxAmount
     ) external;
-
-    /// @notice The unified ticket sweep: drains the read window
-    ///         [anchor-1 .. mint ceiling], a latched last purchase day's frozen next-level
-    ///         pool, and the foil buckets on one writes budget
-    /// @param lvl The window anchor (purchaseLevel)
-    /// @return finished True when the whole window and the foil drain are caught up
-    /// @return didWork True if this call materialized at least one ticket or foil entry
-    function processTicketBatch(uint24 lvl)
-        external
-        returns (bool finished, bool didWork);
-
 }
 
 /// @title IDegenerusGameLootboxModule
@@ -431,7 +340,6 @@ interface IDegenerusGameMintModule {
 interface IDegenerusGameLootboxModule {
     function resolveHumanBoxOrder(address player, uint48 idx, uint256 word, uint256 stored,
         uint256 indexWord, uint24 currentLevel) external;
-    function runHumanBoxWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
     /// @notice Price a packed box order without touching state
     /// @param buyer Player the order is for
     /// @param boxOrder Packed order: [small:8][med:8][large:8][customCount:8][customSize:48]
@@ -485,16 +393,6 @@ interface IDegenerusGameLootboxModule {
         uint256 costWei,
         uint256 priorNominal
     ) external payable;
-
-    /// @notice Permissionless multi-index human-box auto-open sweep (the human leg of
-    ///         openBoxes AND of mineFlip's open category). Runs in the Game's storage via delegatecall.
-    /// @param budget Walk budget in open-weight units (~4.7k gas each); internal bit 255
-    ///        requests strict admission and a packed charge/credit result (upper/lower 128 bits).
-    /// @return opened Total boxes opened this call
-    /// @return unitsSpent Walk units consumed — the crank's work-based bounty basis
-    function openHumanBoxes(uint256 budget)
-        external
-        returns (uint256 opened, uint256 unitsSpent);
 
     /// @notice Resolves a lootbox directly with provided randomness
     /// @param player Address of the lootbox owner
@@ -745,7 +643,6 @@ interface IGameAfkingModule {
     function runSubscriberWork(uint24 processDay, uint256 gasAllowance) external returns (MineFlipGas.Result memory);
     function runAfkingWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
     function runHumanBoxWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
-    function processSubscriberStageBudgeted(uint24 processDay, uint256 allowance) external returns (uint256 processed, uint256 charged);
 
     /// @notice The SINGLE subscription entrypoint: create / replace (dailyQuantity >= 1)
     ///         or cancel (dailyQuantity == 0, tombstone) for `player`
@@ -762,15 +659,6 @@ interface IGameAfkingModule {
         uint8 dailyQuantity,
         address fundingSource
     ) external payable;
-
-    /// @notice Drain up to `count` ready afking boxes (walks _subOpenCursor under a weighted
-    ///         budget of count × open-weight units); returns the number opened AND the walk
-    ///         budget consumed in open-step currency (skips included, rounded up) so the
-    ///         caller can charge the scan against its remaining work budget. Unrewarded;
-    ///         reached via the Game's openBoxes() valve.
-    function drainAfkingBoxes(
-        uint256 count
-    ) external returns (uint256 opened, uint256 stepsUsed);
 
     /// @notice Permissionless FLIP claim — pays each sub its accrued pendingFlip (the
     ///         per-delivered-day slot-0 quest reward + ticket buyer-bonus) in one creditFlip
@@ -798,19 +686,6 @@ interface IGameAfkingModule {
     ///         settle step of the coin's reclaimSeat after it seizes an evicted
     ///         holder's forfeited seat to the vault.
     function clearSeatEncumbrance(address holder) external;
-
-    /// @notice For each funded sub it stamps the per-sub box fields (lootbox mode) or
-    ///         queues whole tickets (ticket mode), debits afkingFunding, and advances
-    ///         _subCursor until the accumulated gas-weight reaches weightBudget. Called by the
-    ///         AdvanceModule via delegatecall; it runs pre-RNG, so the day's word is uncommitted
-    ///         at stamp. A no-orphan guard skips any sub with a pending unopened box.
-    /// @param processDay The boundary-pinned process day (seeds the open).
-    /// @param weightBudget Per-chunk gas-weight budget: a same-day skip costs SUB_STAGE_SKIP_WEIGHT, a lootbox buy SUB_STAGE_LOOTBOX_WEIGHT, a ticket buy SUB_STAGE_TICKET_WEIGHT, a sub-ending finalize SUB_STAGE_EVICT_WEIGHT; the chunk ends when accumulated weight reaches the budget.
-    /// @return processed Number of set entries advanced/handled this chunk.
-    function processSubscriberStage(
-        uint24 processDay,
-        uint256 weightBudget
-    ) external returns (uint256 processed);
 }
 
 /// @title IDegenerusGameFoilPackModule
@@ -825,34 +700,6 @@ interface IDegenerusGameFoilPackModule {
     function prepareTicketLevel(uint24 lvl) external payable returns (bool);
     /// @notice Queue every deity owner's perpetual ticket for a phase-transition target level.
     function queuePerpetualTickets(uint24 targetLevel) external;
-
-    /// @notice Materialize a per-entry run using the existing RNG inputs, returning
-    ///         physical bucket-write units. Called by Mint through delegatecall.
-    function generateTraitRun(uint256 baseKey, uint32 startIndex, uint32 count,
-        uint256 entropyWord, uint256 ownerIdx) external returns (uint256 writes);
-
-    /// @notice Seated round drain for a ticket queue: eight entries share each trait roll
-    ///         and every quadrant is one packed lane word. Delegatecall target of the mint
-    ///         module's queue drains; hosted here for EIP-170 room.
-    /// @param rk Ticket queue key (read half or far-future key).
-    /// @param lvl Level whose buckets receive the lanes.
-    /// @param room Write budget for this call.
-    /// @param idx Queue index to start seating from.
-    /// @param total Queue length.
-    /// @param entropy The level's trait entropy word.
-    /// @param shift Snap exponent for the level.
-    /// @return nextIdx The scan frontier (the resume cursor); seats still holding entries
-    ///         below it are recorded in ticketSeats.
-    /// @return used Write units charged.
-    function drainRounds(
-        uint24 rk,
-        uint24 lvl,
-        uint32 room,
-        uint256 idx,
-        uint256 total,
-        uint256 entropy,
-        uint8 shift
-    ) external returns (uint256 nextIdx, uint32 used);
 
     /// @notice Deliver one foil pack (four tickets) for the active cycle. Delegatecall
     ///         target invoked by the mint module's purchase path (the foil leg of an
@@ -914,15 +761,4 @@ interface IDegenerusGameFoilPackModule {
         uint24[] calldata drawDays,
         uint8[] calldata ticketIndexes
     ) external;
-
-    /// @notice Materialize the frozen foil read cohort on the leftover write budget.
-    /// @dev Invoked by processTicketBatch after the normal queue drains. The committed
-    ///      normal cohort word generates each pack's boosted lines, which are stored
-    ///      in its record and filed into the jackpot trait buckets.
-    /// @param room The leftover write budget for this batch.
-    /// @return done True iff the frozen foil read cohort is fully consumed.
-    /// @return drained True if this call resolved at least one foil buyer.
-    function processFoilDrain(uint32 room)
-        external
-        returns (bool done, bool drained);
 }

@@ -26,7 +26,7 @@ contract InvHarness is CrapsViews {}
 ///             packed action book never exceeds the total half. The budget draw subtracts one
 ///             from the other unchecked; this is the bound that keeps it whole.
 ///         (4) invariant_fieldsResolveOnce — an immediate REPEAT settle of a settled field
-///             credits nothing. The handler re-runs `resolveSlot` after every successful walk
+///             credits nothing. The handler re-runs the settle after every successful walk
 ///             and accumulates any credit delta; a single non-zero wei fails the campaign.
 ///         (5) invariant_resolvedNeverExceedsEntrants — no touched field's resolution cursor
 ///             passes its head count.
@@ -87,10 +87,10 @@ contract CrapsConservationInv is CrapsPins {
 
     // ── The invariants ──────────────────────────────────────────────────────
 
-    /// @notice `keepScheduled` NEVER REVERTS. The game's keeper router calls it bare, so a revert in
-    ///         any reachable state would take the whole crank down with it.
+    /// @notice The Craps workers mineFlip calls NEVER REVERT. mineFlip re-raises a worker's
+    ///         revert, so a revert in any reachable state would take the whole crank down with it.
     function invariant_keeperNeverReverts() public view {
-        assertEq(handler.ghost_keepReverts(), 0, "CRAPS-KEEPER: keepScheduled reverted");
+        assertEq(handler.ghost_keepReverts(), 0, "CRAPS-KEEPER: a mineFlip Craps worker reverted");
     }
 
     function invariant_crapsNeverMints() public view {

@@ -210,8 +210,7 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
         vm.store(address(game), bytes32(0), bytes32(slot0));
     }
 
-    /// @dev Bets resolve only as the engine's Degenerette read consumer (mineFlip); openBoxes
-    ///      drives the AFK and human stages only.
+    /// @dev Bets resolve only as the engine's Degenerette read consumer (mineFlip).
     function _sweepAmounts() private returns (uint256[] memory amounts) {
         _land();
         vm.recordLogs();

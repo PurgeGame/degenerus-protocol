@@ -117,12 +117,12 @@ describe("CharityGameHooks", function () {
    *   1. Advance time past 912 days
    *   2. mineFlip -> issues VRF request
    *   3. Fulfill VRF
-   *   4. mineFlip -> processes word, calls handleGameOverDrain
+   *   4. mineFlip -> processes word, runs the terminal drain
    */
   async function triggerGameOver(game, deployer, mockVRF) {
     await advanceTime(SECONDS_912_DAYS + 86400);
     // The terminal drain is multi-tx (entropy round, ticket drain, then
-    // handleGameOverDrain), so loop mineFlip — fulfilling any VRF request —
+    // the terminal drain), so loop mineFlip — fulfilling any VRF request —
     // until gameOver latches.
     for (let i = 0; i < 12; i++) {
       const reqBefore = await getLastVRFRequestId(mockVRF);
@@ -392,7 +392,7 @@ describe("CharityGameHooks", function () {
 
       // Drive the multi-tx terminal drain until gameOver latches, capturing the
       // GameOverFinalized event from whichever mineFlip tx emits it
-      // (handleGameOverDrain -> burnAtGameOver runs in its own tx now).
+      // (the terminal drain -> burnAtGameOver runs in its own tx now).
       let events = [];
       for (let i = 0; i < 12; i++) {
         const reqBefore = await getLastVRFRequestId(mockVRF);

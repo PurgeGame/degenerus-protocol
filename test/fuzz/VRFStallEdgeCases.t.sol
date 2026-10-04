@@ -124,6 +124,15 @@ contract VRFStallEdgeCases is DeployProtocol {
 
     /// @dev Read lootboxRngIndex directly from storage slot 35 (lower 48 bits of lootboxRngPacked)
     ///      (Stage B packing: lootboxRngPacked = slot 34).
+    /// @dev The mid-day request through mineFlip, its only door, as the engine's next action.
+    function _mineMiddayRequest() internal returns (uint256 reqId) {
+        uint256 prior = mockVRF.lastRequestId();
+        game.mineFlip();
+        reqId = mockVRF.lastRequestId();
+        assertGt(reqId, prior, "mineFlip issued the mid-day request");
+        assertFalse(game.rngLocked(), "a mid-day request, not the daily one");
+    }
+
     function _lootboxRngIndex() internal view returns (uint48) {
         return RecyclingState.writeBuffer(address(game));
     }
@@ -549,8 +558,8 @@ contract VRFStallEdgeCases is DeployProtocol {
         // Fund VRF subscription
         mockVRF.fundSubscription(1, 100e18);
 
-        // Request mid-day lootbox RNG
-        game.requestLootboxRng();
+        // Request mid-day lootbox RNG through mineFlip
+        _mineMiddayRequest();
 
         // The reserved index this mid-day request is bound to (LR_INDEX - 1)
         uint48 reservedIndex = (_lootboxRngIndex() ^ 1);
@@ -560,7 +569,7 @@ contract VRFStallEdgeCases is DeployProtocol {
             vm.load(address(game), bytes32(uint256(SLOT_LOOTBOX_RNG_PACKED)))
         );
         uint256 midDayVal = (lrPacked >> 224) & 0xFF;
-        assertTrue(midDayVal != 0, "midDayTicketRngPending should be set after requestLootboxRng");
+        assertTrue(midDayVal != 0, "midDayTicketRngPending should be set after the mid-day request");
 
         // Coordinator swap (mid-day in flight -> preserve LR_MID_DAY + re-issue for the same index)
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
@@ -615,7 +624,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         _completeDay(0xDEAD0002);
 
         // Purchase enough to push pending ETH past threshold AND populate the
-        // write-slot ticket queue (so requestLootboxRng commits the swap)
+        // write-slot ticket queue (so the mid-day request commits the swap)
         address buyer = makeAddr("midDayBuyer");
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
@@ -627,9 +636,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         uint48 preIndex = _lootboxRngIndex();
 
         // Fire the mid-day request
-        game.requestLootboxRng();
-
-        uint256 stalledReqId = mockVRF.lastRequestId();
+        uint256 stalledReqId = _mineMiddayRequest();
         uint48 postRequestIndex = _lootboxRngIndex();
         uint48 reservedBucket = (postRequestIndex ^ 1);
 

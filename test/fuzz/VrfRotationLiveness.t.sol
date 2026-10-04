@@ -12,7 +12,7 @@ import {Vm} from "forge-std/Vm.sol";
 /// @title VrfRotationLiveness -- VTST-02 liveness-after-rotation (proves VRF-02)
 /// @notice Proves the protocol stays LIVE after an emergency VRF coordinator/subscription
 ///         rotation. The Phase 312 fix re-issues an in-flight request on the new coordinator
-///         (mid-day or daily) so the daily-drain advance gate, requestLootboxRng, and the
+///         (mid-day or daily) so the daily-drain advance gate, the mid-day request, and the
 ///         daily-takeover failsafe all stay reachable -- no permanent revert / ~120-day freeze /
 ///         forced premature game-over.
 ///
@@ -158,8 +158,8 @@ contract VrfRotationLiveness is DeployProtocol {
         assertTrue(game.rngWordForDay(today) != 0, "today is sealed on its own word");
     }
 
-    /// @dev Drive the game into a mid-day RNG state where requestLootboxRng() succeeds AND
-    ///      its buffer swap sets LR_MID_DAY=1: complete two days so today's daily RNG is
+    /// @dev Drive the game into a mid-day RNG state where the mid-day request (mineFlip's
+    ///      RequestMidday stage) succeeds AND its buffer swap sets LR_MID_DAY=1: complete two days so today's daily RNG is
     ///      recorded, make a lootbox purchase (pending ETH + a ticket-queue entry), fund the
     ///      VRF subscription above MIN_LINK_FOR_LOOTBOX_RNG.
     function _setupForMidDayRng() internal {
@@ -173,6 +173,15 @@ contract VrfRotationLiveness is DeployProtocol {
         game.purchase{value: 1.01 ether}(buyer, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
 
         mockVRF.fundSubscription(1, 100e18);
+    }
+
+    /// @dev The mid-day request through mineFlip, its only door, as the engine's next action,
+    ///      on whichever coordinator is wired.
+    function _mineMiddayRequest(MockVRFCoordinator vrf) internal {
+        uint256 prior = vrf.lastRequestId();
+        game.mineFlip();
+        assertGt(vrf.lastRequestId(), prior, "mineFlip issued the mid-day request");
+        assertFalse(game.rngLocked(), "a mid-day request, not the daily one");
     }
 
     /// @dev Deploy a freshly-funded 2nd MockVRFCoordinator and ADMIN-prank
@@ -220,11 +229,11 @@ contract VrfRotationLiveness is DeployProtocol {
         _setupForMidDayRng();
 
         // Fire the mid-day request; capture the reserved slot N = LR_INDEX-1.
-        game.requestLootboxRng();
+        _mineMiddayRequest(mockVRF);
         uint48 reservedIndex = (_readLootboxRngIndex() ^ 1);
 
         // The buffer swap set LR_MID_DAY=1, so the rotation's mid-day re-issue branch fires.
-        assertEq(_readMidDayFlag(), 1, "requestLootboxRng must set LR_MID_DAY=1");
+        assertEq(_readMidDayFlag(), 1, "the mid-day request must set LR_MID_DAY=1");
         // Reserved slot is orphaned-pending (empty) -- the liveness assertion is not pre-satisfied.
         assertEq(_readLootboxWord(reservedIndex), 0, "reserved slot must be empty before fulfilment");
 
@@ -373,7 +382,7 @@ contract VrfRotationLiveness is DeployProtocol {
     }
 
     // ══════════════════════════════════════════════════════════════════════
-    // Task 2: daily-takeover failsafe + requestLootboxRng reachability
+    // Task 2: daily-takeover failsafe + mid-day request reachability
     // ══════════════════════════════════════════════════════════════════════
 
     /// @notice Stalled re-issue failsafe after rotation: if the NEW coordinator also stalls the
@@ -391,10 +400,10 @@ contract VrfRotationLiveness is DeployProtocol {
         _setupForMidDayRng();
 
         // Fire the mid-day request; capture the reserved slot N = LR_INDEX-1.
-        game.requestLootboxRng();
+        _mineMiddayRequest(mockVRF);
         uint48 reservedIndex = (_readLootboxRngIndex() ^ 1);
         uint48 indexAfterRequest = _readLootboxRngIndex();
-        assertEq(_readMidDayFlag(), 1, "requestLootboxRng must set LR_MID_DAY=1");
+        assertEq(_readMidDayFlag(), 1, "the mid-day request must set LR_MID_DAY=1");
 
         // Rotate while in flight -- the mid-day re-issue fires on the new coordinator but the
         // NEW coordinator does NOT fulfil (simulating the new coordinator also stalling).
@@ -444,11 +453,11 @@ contract VrfRotationLiveness is DeployProtocol {
         assertFalse(game.rngLocked(), "drain reaches rngLocked()==false after the retry");
     }
 
-    /// @notice requestLootboxRng stays reachable after a completed rotation: after a
+    /// @notice The mid-day request stays reachable after a completed rotation: after a
     ///         daily-branch rotation (re-issue + fulfil + drain to unlocked), a fresh mid-day
-    ///         requestLootboxRng on the new coordinator succeeds -- advances the index and
+    ///         request through mineFlip on the new coordinator succeeds -- advances the index and
     ///         fires a request -- proving the request path is reachable post-rotation.
-    function test_requestLootboxRngReachableAfterRotation(uint256 vrfWord) public {
+    function test_middayRequestReachableAfterRotation(uint256 vrfWord) public {
         // Exclude {0,1}: 0 is zero-guarded to 1; rngWord==1 is the rngGate sentinel
         // (AdvanceModule:298). Also exclude the value whose ^0xBEEF next-day word would be 1.
         vm.assume(vrfWord != 0 && vrfWord != 1);
@@ -468,8 +477,8 @@ contract VrfRotationLiveness is DeployProtocol {
         assertFalse(game.rngLocked(), "rotation completed, game unlocked");
 
         // --- Set up a fresh mid-day condition on the new coordinator. ---
-        // Advance one more full day so today's daily RNG is recorded (requestLootboxRng's
-        // _recordedDailyWord(currentDay)!=0 gate at :1054), then create pending lootbox ETH + a
+        // Advance one more full day so today's daily RNG is recorded (the mid-day request's
+        // _recordedDailyWord(currentDay)!=0 gate), then create pending lootbox ETH + a
         // ticket-queue entry and fund the new subscription above MIN_LINK_FOR_LOOTBOX_RNG.
         vm.warp(block.timestamp + 1 days);
         uint256 nextDayWord = vrfWord ^ 0xBEEF;
@@ -489,10 +498,10 @@ contract VrfRotationLiveness is DeployProtocol {
         uint48 indexBefore = _readLootboxRngIndex();
         uint256 reqIdBefore = newVRF.lastRequestId();
 
-        // POSITIVE: requestLootboxRng succeeds on the new coordinator post-rotation.
-        game.requestLootboxRng();
+        // POSITIVE: the mid-day request succeeds on the new coordinator post-rotation.
+        _mineMiddayRequest(newVRF);
 
-        assertEq(_readLootboxRngIndex(), (indexBefore ^ 1), "requestLootboxRng advances the index post-rotation");
-        assertTrue(newVRF.lastRequestId() > reqIdBefore, "requestLootboxRng fired a request on the new coordinator");
+        assertEq(_readLootboxRngIndex(), (indexBefore ^ 1), "the mid-day request advances the index post-rotation");
+        assertTrue(newVRF.lastRequestId() > reqIdBefore, "the mid-day request fired on the new coordinator");
     }
 }

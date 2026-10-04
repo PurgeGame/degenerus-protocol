@@ -116,7 +116,7 @@ contract JackpotWordSamplingTest is Test {
         )));
         h.seed(expected.trait, len, expected.deity, awards);
         vm.recordLogs();
-        h.payEarlyBirdTickets(word);
+        h.runEarlyBirdTickets(word, gasleft());
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256[] memory wins = new uint256[](len + 1);
         uint256 paid;

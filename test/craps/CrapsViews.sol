@@ -587,8 +587,8 @@ contract CrapsViews is CrapsBattle {
         return _wonComponent(won);
     }
 
-    /// @dev How far a slot's field has settled. Production dropped this reader when the crank
-    ///      moved to `keepScheduled`'s own progress report; the suites still grade batches by it.
+    /// @dev How far a slot's field has settled. Production has no such reader (mineFlip's craps stages
+    ///      report their own progress); the suites grade batches by it.
     function bonusCursorOf(uint64 slot) external view returns (uint64) {
         return _bonusCursor[slot];
     }
@@ -604,32 +604,40 @@ contract CrapsViews is CrapsBattle {
         _progressive = amount;
     }
 
-    /// @dev EXACTLY `n` SEATS, whatever they cost. `resolveSlot` takes a GAS ALLOWANCE now, so a
-    ///      fixture that wants a chunk of a known size can no longer name one — but the meter is
-    ///      read after a seat rather than before, so the smallest nonzero budget always completes
-    ///      one and stops. One call per seat is therefore the exact count the old lane gave, and
-    ///      it is a statement about the budget rule rather than a way around it.
+    /// @dev EXACTLY `n` SEATS, whatever they cost. Settlement takes a GAS ALLOWANCE, so a fixture
+    ///      that wants a chunk of a known size cannot name one — but the meter is read after a seat
+    ///      rather than before, so the smallest nonzero budget always completes one and stops. One
+    ///      call per seat is therefore an exact count, and a statement about the budget rule rather
+    ///      than a way around it.
     function resolveSeats(uint64 slot, uint64 n) external {
         for (uint64 i = 0; i < n; ++i) {
             _resolveSlotRange(slot, MineFlipGas.available(), 1);
         }
     }
 
-    /// @dev Test-only settle door. Production settles a scheduled window or the daily jackpot
-    ///      only through `keepScheduled`'s in-order cursor; a custom battle still has its own
-    ///      external `resolveSlot`. Fixtures that need one specific window settled without
-    ///      walking the whole cursor call this instead.
+    /// @dev Test-only settle door. Production settles every armed slot only through mineFlip's
+    ///      craps read stage, which walks the read cohort in order and hands each field to
+    ///      `resolveRngSlot` under the same admission rule as below. Fixtures that need one
+    ///      specific field settled without walking the cohort call this instead.
     function settleGas(uint64 slot, uint256 allowance) external returns (MineFlipGas.Result memory) {
-        return _resolveSlotWork(slot, allowance);
+        return _settleField(slot, allowance);
     }
 
-    function settleSlot(uint64 slot, uint64 budget) external {
-        _resolveSlot(slot, budget);
+    function settleSlot(uint64 slot, uint64) external {
+        _settleField(slot, MineFlipGas.available());
     }
 
-    /// @dev Test-only arm door, restating the removed `armBonusWindow` under a new name so the
-    ///      suite can still shut and bind one chosen window directly. Production arms scheduled
-    ///      windows only in order, through `keepScheduled`'s cursor.
+    function _settleField(uint64 slot, uint256 allowance) private returns (MineFlipGas.Result memory result) {
+        if (allowance == 0) return result;
+        MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
+        if (!MineFlipGas.canRun(meter, _SEAT_GAS_MAX, _SETTLE_TAIL_GAS + _CREDIT_GAS_MAX + _WORK_TAIL_GAS)) return result;
+        result = this.resolveRngSlot(slot, _resolverAllowance(MineFlipGas.remaining(meter)));
+        MineFlipGas.finish(meter);
+    }
+
+    /// @dev Test-only arm door, so the suite can shut and bind one chosen window directly.
+    ///      Production arms scheduled windows only in order, through the maintenance cursor
+    ///      mineFlip drives.
     function armWindow(uint64 slot) external returns (uint48 index) {
         if (_isJackpotSlot(slot)) revert BonusStillRunning();
         (,, uint256 open) = _currentBonusSlot();

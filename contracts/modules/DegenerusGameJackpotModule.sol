@@ -65,7 +65,7 @@ interface IWwxrpMintPrize {
  *
  *      JACKPOT FLOW OVERVIEW:
  *      1. Pool consolidation at level transition (prize pool splits and merges).
- *      2. `payDailyJackpot` — Handles purchase phase jackpots and rolling dailies at EOL.
+ *      2. `runDailyJackpot` — Handles purchase phase jackpots and rolling dailies at EOL.
  *      3. The daily jackpot battle — the day's FLIP budget played as one closed craps battle among
  *         wallets drawn from unminted future levels; level 1's purchase days also run
  *         `payDailyFlipJackpot`, a trait-matched FLIP draw over level 1.
@@ -290,13 +290,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     /// @param poolWei Total ETH to distribute.
     /// @param targetLvl Level to sample winners from (typically lvl+1).
     /// @param rngWord VRF entropy seed.
-    /// @return paidWei Total ETH distributed (callers deduct from source pool).
-    function runTerminalJackpot(uint256 poolWei, uint24 targetLvl, uint256 rngWord)
-        external returns (uint256 paidWei)
-    {
-        (, paidWei) = _runTerminalJackpot(poolWei, targetLvl, rngWord, MineFlipGas.available());
-    }
-
+    /// @param allowance Gas the call may spend before checkpointing.
+    /// @return result Checkpoint progress for the shared meter.
+    /// @return paidDelta ETH distributed by this call (callers deduct from source pool).
     function runTerminalJackpotWork(uint256 poolWei, uint24 targetLvl, uint256 rngWord, uint256 allowance)
         external returns (MineFlipGas.Result memory result, uint256 paidDelta)
     {
@@ -339,7 +335,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     ///      - Final physical day (day 3, or day 1 for turbo): distributes the remaining currentPrizePool.
     ///      - Day 1 also runs the early-bird ticket jackpot (from futurePrizePool).
     ///      - The day's jackpot battle is latched at the daily request and plays in its own
-    ///        stage (payPurchaseJackpotBattle), not here.
+    ///        stage (runPurchaseJackpotBattle), not here.
     ///      - The coin+tickets stage increments jackpotCounter on completion.
     ///
     ///      PURCHASE PHASE PATH (isJackpotPhase=false):
@@ -354,10 +350,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     /// @param isJackpotPhase True for jackpot phase dailies, false for purchase phase jackpot.
     /// @param lvl Current game level.
     /// @param randWord VRF entropy for winner selection and trait derivation.
-    function payDailyJackpot(bool isJackpotPhase, uint24 lvl, uint256 randWord) external {
-        _runDailyJackpot(isJackpotPhase, lvl, randWord, MineFlipGas.available());
-    }
-
+    /// @param allowance Gas the call may spend before checkpointing.
     function runDailyJackpot(bool isJackpotPhase, uint24 lvl, uint256 randWord, uint256 allowance)
         external returns (MineFlipGas.Result memory result)
     {
@@ -568,11 +561,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     ///      the value the single-tx form used, so the draw is unchanged by the split. Tickets
     ///      queue at the purchase level, which the held lock keeps un-promoted between the two
     ///      stages. Clears the field it consumes; the caller seals the day.
-    /// @param randWord VRF entropy (the day's recorded word).
-    function payPurchaseDailyTickets(uint256 randWord) external {
-        _runTicketWork(4, randWord, MineFlipGas.available());
-    }
-
+    /// @param word VRF entropy (the day's recorded word).
+    /// @param allowance Gas the call may spend before checkpointing.
     function runPurchaseDailyTickets(uint256 word, uint256 allowance)
         external returns (MineFlipGas.Result memory)
     {
@@ -583,17 +573,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     /// @dev Called by advanceGame when dailyJackpotCoinTicketsPending is true. The daily is a
     ///      chain of advance txs so each stays under the per-tx gas cap: Phase 1 pays the ETH,
     ///      on day 1 the early-bird ticket leg runs from its own stage
-    ///      (payEarlyBirdTickets), the jackpot battle runs from its own stage (payPurchaseJackpotBattle), and
+    ///      (runEarlyBirdTickets), the jackpot battle runs from its own stage (runPurchaseJackpotBattle), and
     ///      this stage, the last, pays the main-board tickets. It advances the counter and the
     ///      caller seals the day (or ends the level) in the same tx.
     ///
     ///      The main board is re-rolled from the word exactly as Phase 1 rolled it (see
     ///      `_rollMainTraits`).
-    /// @param randWord VRF entropy (the day's recorded word, the one Phase 1 used).
-    function payDailyJackpotCoinAndTickets(uint256 randWord) external {
-        _runTicketWork(6, randWord, MineFlipGas.available());
-    }
-
+    /// @param word VRF entropy (the day's recorded word, the one Phase 1 used).
+    /// @param allowance Gas the call may spend before checkpointing.
     function runDailyJackpotTickets(uint256 word, uint256 allowance)
         external returns (MineFlipGas.Result memory)
     {
@@ -606,7 +593,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     ///      4-entries-per-ticket basis every other jackpot path uses (`_budgetToEntries`).
     ///      Its winners and any pass surplus are sized by the shared ticket plan.
     /// @param lvl The level the early-bird tickets are priced and queued at (outer level + 1).
-    /// @return entries The early-bird entry count payEarlyBirdTickets distributes.
+    /// @return entries The early-bird entry count runEarlyBirdTickets distributes.
     function _priceEarlyBirdTickets(uint24 lvl) private returns (uint256 entries) {
         (uint128 nextBal, uint128 futureBal) = _getPrizePools();
         uint256 totalBudget = (uint256(futureBal) * 300) / 10_000; // 3%
@@ -619,7 +606,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     }
 
     /// @notice The early-bird ticket leg of the day-1 daily jackpot, from its own advance stage.
-    /// @dev Called by advanceGame on the advance after payDailyJackpot priced it (the top field
+    /// @dev Called by advanceGame on the advance after runDailyJackpot priced it (the top field
     ///      of dailyTicketBudgetsPacked), with the same day's word from rngGate, ahead of the
     ///      coin+tickets stage. Phase 1 already moved the full 3% budget future -> next; this
     ///      distributes the latched entries through the shared ticket plan (`_ticketWorkPlan`).
@@ -630,11 +617,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     ///      level + 1. No pool moves in this stage.
     ///      Clears its own field and leaves the rest of the packed budgets for the battle and
     ///      coin+tickets stages. The lock held since the request keeps every input frozen.
-    /// @param randWord VRF entropy (the day's recorded word).
-    function payEarlyBirdTickets(uint256 randWord) external {
-        _runTicketWork(5, randWord, MineFlipGas.available());
-    }
-
+    /// @param word VRF entropy (the day's recorded word).
+    /// @param allowance Gas the call may spend before checkpointing.
     function runEarlyBirdTickets(uint256 word, uint256 allowance)
         external returns (MineFlipGas.Result memory)
     {
@@ -1422,14 +1406,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     /// @notice One step of the daily jackpot battle, in either phase (see _playJackpotBattle).
     /// @dev Awards are drawn from the far-future queues of [lvl + 1, lvl + 99]; the field and its
     ///      Added were locked at the daily request.
-    /// @param lvl The mint ceiling: the draw's levels start above it.
-    /// @param randWord The day's recorded VRF word.
-    function payPurchaseJackpotBattle(uint24 lvl, uint256 randWord) external {
-        _delegateJackpotDraw(abi.encodeWithSelector(
-            IDegenerusGameJackpotDrawModule.runPurchaseJackpotBattle.selector, lvl, randWord, MineFlipGas.available()
-        ));
-    }
-
+    ///      Signature: runPurchaseJackpotBattle(uint24 lvl, uint256 word, uint256 allowance) —
+    ///      the mint ceiling the draw's levels start above, the day's recorded VRF word, and the
+    ///      gas the call may spend; the calldata forwards as-is to the draw module.
     function runPurchaseJackpotBattle(uint24, uint256, uint256)
         external returns (MineFlipGas.Result memory)
     {
@@ -1444,13 +1423,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
 
     /// @notice Roll, record and emit level 1's purchase-day board without running any
     ///         distribution.
-    /// @dev Used at purchaseLevel == 1, where payDailyJackpot is skipped: the day's coin budget
+    /// @dev Used at purchaseLevel == 1, where runDailyJackpot is skipped: the day's coin budget
     ///      pays level 1's trait-matched FLIP draw and the jackpot battle instead. Records the board
     ///      for foil claims.
     /// @param randWord VRF entropy for the board.
     function emitDailyWinningTraits(uint256 randWord) external {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
-        // The sealed day, matching payDailyJackpot: dailyIdx + 1, never the wall clock.
+        // The sealed day, matching runDailyJackpot: dailyIdx + 1, never the wall clock.
         _emitDailyWinningTraits(dailyIdx + 1, _rollMainTraits(randWord), 1, randWord);
     }
 

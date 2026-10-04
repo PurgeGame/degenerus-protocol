@@ -121,6 +121,15 @@ contract VRFCore is DeployProtocol {
         fail("mid-day requests did not settle");
     }
 
+    /// @dev The mid-day request through mineFlip, its only door, as the engine's next action.
+    function _mineMiddayRequest() internal returns (uint256 reqId) {
+        uint256 prior = mockVRF.lastRequestId();
+        game.mineFlip();
+        reqId = mockVRF.lastRequestId();
+        assertGt(reqId, prior, "mineFlip issued the mid-day request");
+        assertFalse(game.rngLocked(), "a mid-day request, not the daily one");
+    }
+
     /// @dev Setup for mid-day lootbox RNG: complete a day, make a purchase on the
     ///      new day to create pending lootbox ETH, fund VRF subscription with LINK.
     ///      Returns the current timestamp for boundary checks.
@@ -260,8 +269,7 @@ contract VRFCore is DeployProtocol {
         _setupForMidDayRng();
 
         // Trigger mid-day lootbox RNG request
-        game.requestLootboxRng();
-        uint256 reqId = mockVRF.lastRequestId();
+        uint256 reqId = _mineMiddayRequest();
 
         // Measure gas for fulfillment
         uint256 gasBefore = gasleft();
@@ -329,11 +337,10 @@ contract VRFCore is DeployProtocol {
         assertEq(_readVrfRequestId(), mockVRF.lastRequestId(), "idle request ID is retained before midpoint");
 
         // Fire mid-day request
-        game.requestLootboxRng();
-        uint256 reqId = mockVRF.lastRequestId();
+        uint256 reqId = _mineMiddayRequest();
 
         // vrfRequestId should match
-        assertEq(_readVrfRequestId(), reqId, "vrfRequestId should match after requestLootboxRng");
+        assertEq(_readVrfRequestId(), reqId, "vrfRequestId should match after the mid-day request");
 
         // Fulfill mid-day
         mockVRF.fulfillRandomWords(reqId, 0xCAFE);
@@ -448,7 +455,8 @@ contract VRFCore is DeployProtocol {
     // VRFC-03: rngLockedFlag Mutual Exclusion
     // ──────────────────────────────────────────────────────────────────────
 
-    /// @notice During daily RNG (rngLockedFlag==true), requestLootboxRng must revert.
+    /// @notice During daily RNG (rngLockedFlag==true), no mid-day request can be selected: the
+    ///         engine waits for the daily word.
     function test_rngLocked_blocksMidDayRequest() public {
         // Complete day 1 so daily word exists
         _completeDay(0xDEAD0001);
@@ -460,9 +468,12 @@ contract VRFCore is DeployProtocol {
         game.mineFlip();
         assertTrue(game.rngLocked(), "Daily RNG should lock");
 
-        // Mid-day request must revert with RngLocked
-        vm.expectRevert();
-        game.requestLootboxRng();
+        // No mid-day request is reachable: the engine waits on the daily word.
+        uint256 dailyReqId = mockVRF.lastRequestId();
+        assertEq(game.nextMinerAction(), 2, "the locked engine waits (Wait), it does not request");
+        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
+        game.mineFlip();
+        assertEq(mockVRF.lastRequestId(), dailyReqId, "no mid-day request was issued under the lock");
     }
 
     /// @notice A stalled midday request can be retried only through Admin. Transport retry
@@ -470,9 +481,8 @@ contract VRFCore is DeployProtocol {
     function test_midDayTicketRequest_refiredByOwnerRetryAfterStall() public {
         _setupForMidDayRng();
 
-        game.requestLootboxRng();
+        uint256 stalledReqId = _mineMiddayRequest();
         assertFalse(game.rngLocked(), "mid-day request must not set the daily lock");
-        uint256 stalledReqId = mockVRF.lastRequestId();
 
         // Word does NOT arrive; cross the day boundary, past the 20h retry window.
         vm.warp(block.timestamp + 1 days + 13 hours);
@@ -513,8 +523,7 @@ contract VRFCore is DeployProtocol {
         _setupForMidDayRng(true);
 
         // Fire mid-day request
-        game.requestLootboxRng();
-        uint256 reqId = mockVRF.lastRequestId();
+        uint256 reqId = _mineMiddayRequest();
 
         // Verify state is set
         assertTrue(_readVrfRequestId() != 0, "vrfRequestId should be set");
@@ -535,13 +544,12 @@ contract VRFCore is DeployProtocol {
     ///         release the LR_MID_DAY latch. The same-day release runs only while day == dIdx,
     ///         so a batch whose drain crosses the day boundary completes on the daily-drain gate
     ///         instead; that gate must release the latch too, or the mid-day fast path
-    ///         (requestLootboxRng) stays permanently blocked for the rest of the game.
+    ///         (mineFlip's mid-day request) stays permanently blocked for the rest of the game.
     function test_midDayLatch_clearsOnCrossDayDrain() public {
         _setupForMidDayRng();
 
         // Mid-day request: swaps the non-empty ticket buffer -> LR_MID_DAY = 1, advances LR_INDEX.
-        game.requestLootboxRng();
-        uint256 reqId = mockVRF.lastRequestId();
+        uint256 reqId = _mineMiddayRequest();
         assertEq(_lrMidDay(), 1, "LR_MID_DAY set by the mid-day ticket request");
 
         // The mid-day word ARRIVES (no stall) — the failure mode is purely the cross-day drain.
@@ -567,7 +575,7 @@ contract VRFCore is DeployProtocol {
         assertEq(_lrMidDay(), 0, "LR_MID_DAY released after the batch drains on the new-day path");
     }
 
-    /// @notice requestLootboxRng remains open until the final minute before reset.
+    /// @notice The mid-day request remains open until the final minute before reset.
     function test_preResetWindow_isOneMinute() public {
         _setupForMidDayRng();
 
@@ -577,15 +585,18 @@ contract VRFCore is DeployProtocol {
 
         // One second outside the final-minute window remains available.
         vm.warp(nextDayBoundary - 1 minutes - 1);
-        game.requestLootboxRng();
-        assertGt(mockVRF.lastRequestId(), 0, "mid-day request should remain open outside final minute");
+        _mineMiddayRequest();
 
         assertTrue(vm.revertToState(snapshot), "restore pre-request state");
 
-        // The exact start of the final minute is blocked.
+        // The exact start of the final minute is blocked: the request is never selected, so a
+        // mineFlip with nothing else to do finds no work and requests nothing.
         vm.warp(nextDayBoundary - 1 minutes);
-        vm.expectRevert(bytes4(keccak256("PreResetWindow()")));
-        game.requestLootboxRng();
+        uint256 priorReq = mockVRF.lastRequestId();
+        assertEq(game.nextMinerAction(), 0, "the final minute selects no mid-day request");
+        vm.expectRevert(bytes4(keccak256("NoWork()")));
+        game.mineFlip();
+        assertEq(mockVRF.lastRequestId(), priorReq, "no request in the final minute");
     }
 
     /// @notice After updateVrfCoordinatorAndSub with a daily request in flight, rngLockedFlag

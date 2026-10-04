@@ -305,7 +305,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     // =========================================================================
 
     /// @notice The per-open marginal = (gas for N opens − gas for N−1 opens) / 1, snapshot/revert. The afking
-    ///         open leg is `_autoOpen(OPEN_BATCH)`, reached via `mineFlip()`; each afking box rolls boons
+    ///         open leg is mineFlip's AFKing stage (`runAfkingWork`); each afking box rolls boons
     ///         like a human box (~75k/box, uniform O(1) — a cheap stamp-derived resolve, no boxPlayers walk /
     ///         no lootboxEth read-zero, the anti-gas-DoS property the human openLootBox lacks). All numbers
     ///         are EMITTED first (the measured per-box marginal + the OPEN_BATCH chunk + the derived max-safe
@@ -570,7 +570,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
 
         // ---- Advance N+2: the deferred-distribution advance (re-entry is idempotent: _recordedDailyWord(idx+1) != 0
         // -> gapDays == 0; the daily jackpot distributes HERE, NOT on N+1). The D-06 per-tx ceiling for N+2 is
-        // the pre-existing payDailyJackpot bound (<= DAILY_ETH_MAX_WINNERS = 305, the proof's ~6M measured row +
+        // the pre-existing runDailyJackpot bound (<= DAILY_ETH_MAX_WINNERS = 305, the proof's ~6M measured row +
         // the dedicated jackpot suites) — the NEW fact the decouple establishes is that this distribution
         // executes in a SEPARATE tx from the gap backfill, so the two never compose into one tx. We bracket N+2
         // via a low-level call so the gas-to-completion (or to the synthetic-fixture jackpot boundary — the
@@ -666,14 +666,14 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     // =========================================================================
-    // (h) D-06 residual R2 — heaviest single processTicketBatch entry at a full write budget
+    // (h) D-06 residual R2 — heaviest single ticket entry at a full write budget
     // =========================================================================
 
     /// @notice Residual R2: the per-entry cap (writesBudget - used) stops one entry overrunning the budget, but
     ///         the heaviest single TICKET buy (the minimal-write _queueEntriesScaled primitive — the in-stage
     ///         per-sub ticket leg, the cold ticketQueue push that dominates the STAGE weight at
     ///         SUB_STAGE_TICKET_WEIGHT) is asserted bounded at the cap. The deferred trait-resolution
-    ///         processTicketBatch is write-budgeted (WRITES_BUDGET_SAFE=550) and O(1)-queued, so the heaviest
+    ///         ticket worker (runTicketWork) is write-budgeted and O(1)-queued, so the heaviest
     ///         in-stage ticket entry is the per-buy ticket marginal; assert it is bounded and weight-faithful
     ///         (<= SUB_STAGE_TICKET_WEIGHT buy-units).
     function testResidualR2HeaviestTicketEntry() public {
@@ -824,15 +824,14 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     // =========================================================================
-    // (k) LIVE-01 — the openBoxes valve: drain + bound + afking-first + cursor-independence + selector-isolation
+    // (k) LIVE-01 — the engine's box stages: drain + bound + afking-first + cursor-independence + selector-isolation
     // =========================================================================
 
-    /// @notice LIVE-01 (a) afking-first ordering: openBoxes(maxCount) drains the afking backlog FIRST
-    ///         (drainAfkingBoxes via delegatecall), then the human leg consumes ONLY maxCount - openedAfking
-    ///         (DegenerusGame:1815). With both backlogs populated and maxCount set so the afking leg does not
-    ///         exhaust it, the human cursor advances by EXACTLY the remainder.
+    /// @notice LIVE-01 (a) afking-first ordering: with both backlogs populated, mineFlip's first action is the
+    ///         AFKing stage, which drains the afking backlog before the human-box stage runs with the
+    ///         remaining allowance.
     function testLive01AfkingFirstOrdering() public {
-        // The valve serves the session's consumer stages (AFKing, then human boxes), so the fixture
+        // The engine serves the session's consumer stages (AFKing, then human boxes), so the fixture
         // stops at the AFKing stage with the subject still pending (padding subs ahead in the ring).
         _setupFundedSubs(AFKING_PADS, "v_pad_", 5 ether, false);
         // AFKING backlog: a funded lootbox sub gets a stamped box.
@@ -855,28 +854,29 @@ contract V56AfkingGasMarginal is DeployProtocol {
         address[] memory subject = new address[](1);
         subject[0] = afk;
         _toAfkingStageWithPending(subject, _lastBoughtDayOf(afk), 0xA0F2);
-        require(_lastOpenedDayOf(afk) < _lastBoughtDayOf(afk), "fixture: afking box pending pre-valve");
+        require(_lastOpenedDayOf(afk) < _lastBoughtDayOf(afk), "fixture: afking box pending pre-open");
         uint256 boxCursorBefore = _boxCursor();
         uint256 subOpenCursorBefore = _subOpenCursor();
 
-        // Drain via the valve with a budget large enough for BOTH the afking box AND the human box.
+        // One unbounded engine call: enough for BOTH the afking box AND the human box.
+        assertEq(game.nextMinerAction(), 9, "LIVE-01(a): the AFKing stage is the engine's next work"); // Afking
+        vm.recordLogs();
         vm.prank(makeAddr("v_opener"));
-        uint256 opened = game.openBoxes(50);
+        game.mineFlip();
+        assertEq(_minerFirstAction(vm.getRecordedLogs()), 9, "LIVE-01(a): afking-first -- the call opened with the AFKing stage");
 
         // Afking-first: the afking box opened (lastOpenedDay advanced to the stamp day).
-        assertEq(_lastOpenedDayOf(afk), _lastBoughtDayOf(afk), "LIVE-01(a): afking-first -- the afking box opened by the valve");
-        assertGt(opened, 0, "LIVE-01(a): the valve opened at least the afking box");
-        // The human leg ran with the REMAINING budget: its cursor advanced (the remainder, not the full maxCount).
-        assertGe(_boxCursor(), boxCursorBefore, "LIVE-01(a): the human cursor advanced with the remaining budget (maxCount - openedAfking)");
-        emit log_named_uint("live01a_opened_total", opened);
+        assertEq(_lastOpenedDayOf(afk), _lastBoughtDayOf(afk), "LIVE-01(a): afking-first -- the afking box opened by the engine");
+        // The human leg ran with the REMAINING allowance: its cursor did not regress.
+        assertGe(_boxCursor(), boxCursorBefore, "LIVE-01(a): the human cursor advanced with the remaining allowance");
         emit log_named_uint("live01a_sub_open_cursor_before", subOpenCursorBefore);
         emit log_named_uint("live01a_sub_open_cursor_after", _subOpenCursor());
         emit log_named_uint("live01a_box_cursor_before", boxCursorBefore);
         emit log_named_uint("live01a_box_cursor_after", _boxCursor());
     }
 
-    /// @notice LIVE-01 (b)+(c)+(d): repeated bounded openBoxes calls fully DRAIN a multi-box afking backlog with
-    ///         BOTH cursors monotone-advancing (no stuck box), EACH openBoxes chunk < the EIP cap (bounded), and
+    /// @notice LIVE-01 (b)+(c)+(d): repeated bounded mineFlip calls fully DRAIN a multi-box afking backlog with
+    ///         BOTH cursors monotone-advancing (no stuck box), EACH mineFlip chunk < the EIP cap (bounded), and
     ///         lastOpenedDay monotone no-double-open (the skip at GameAfkingModule:1154). Uses tiny per-call
     ///         budgets so the drain genuinely spans multiple bounded calls.
     function testLive01DrainBothCursorsBoundedNoDoubleOpen() public {
@@ -892,40 +892,36 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // Pre: every box pending.
         for (uint256 i; i < n; ++i) require(_lastOpenedDayOf(subs[i]) < stampDay, "fixture: each afking box pending");
 
-        // Drain in tiny bounded chunks until BOTH legs are empty (openBoxes returns 0). Each lootbox-mode
-        // sub carries two pending boxes after the STAGE: the afking-cover box (drained by the afking leg,
-        // drainAfkingBoxes) AND a human lootbox box at the next index (drained by the relocated multi-index
-        // human sweep, openHumanBoxes). openBoxes routes the per-call budget to the afking leg first, then
-        // the human sweep — so a full drain takes more chunks than just the afking count. Loop until a chunk
-        // opens nothing (the genuine fully-drained state the re-open no-op assertion below requires); each
-        // chunk must stay under the per-tx ceiling and the cursors must advance.
+        // Drain in tiny bounded engine chunks. The AFKing stage drains the afking backlog first, then the
+        // human-box stage the sealed cohort's human orders — a 1.5M allowance admits AFKing opens but can
+        // never admit a human entry, so the bounded phase ends after a few consecutive chunks open none of
+        // the subjects' boxes (a refused chunk opens nothing). Each chunk must stay under the per-tx
+        // ceiling.
         uint256 totalOpened;
         uint256 zeroStreak;
         for (uint256 c; c < 80; ++c) {
-            // The valve spends the gas it is given (its count argument no longer bounds it), so the
-            // tiny chunks are tiny allowances.
+            uint256 before = _openedCount(subs, stampDay);
             vm.prank(makeAddr(string(abi.encodePacked("vd_op_", _u(c)))));
             uint256 gb = gasleft();
-            uint256 op = game.openBoxes{gas: 1_500_000}(2);
+            (bool ok,) = address(game).call{gas: 1_500_000}(abi.encodeWithSignature("mineFlip()"));
             uint256 g = gb - gasleft();
-            // LIVE-01(c): each bounded openBoxes chunk stays under the EIP per-tx ceiling.
-            assertLt(g, EIP7825_TX_GAS_CAP, "LIVE-01(c): each bounded openBoxes chunk stays < 16,777,216");
+            // LIVE-01(c): each bounded engine chunk stays under the EIP per-tx ceiling.
+            assertLt(g, EIP7825_TX_GAS_CAP, "LIVE-01(c): each bounded mineFlip chunk stays < 16,777,216");
+            uint256 op = ok ? _openedCount(subs, stampDay) - before : 0;
             totalOpened += op;
-            // The weighted budget charges the afking ring scan and index headers/skip
-            // entries as steps, so a tiny chunk CAN open zero while committing real
-            // cursor/frontier progress mid-backlog; a few consecutive zeros end the
-            // bounded-chunk phase.
             if (op == 0) {
                 if (++zeroStreak >= 3) break;
             } else {
                 zeroStreak = 0;
             }
         }
-        // Finish whatever the step-bounded tiny chunks left (skip-entry runs can zero
-        // several 1-step chunks in a row while boxes remain) — the drained-state
-        // assertions below need the genuinely-dry state.
-        vm.prank(makeAddr("vd_finish"));
-        totalOpened += game.openBoxes(2000);
+        // Finish whatever the tiny chunks left — the drained-state assertions below need the
+        // genuinely-dry state.
+        uint256 beforeFinish = _openedCount(subs, stampDay);
+        vm.startPrank(makeAddr("vd_finish"));
+        _mineAll(64);
+        vm.stopPrank();
+        totalOpened += _openedCount(subs, stampDay) - beforeFinish;
 
         // LIVE-01(b): the whole afking backlog DRAINED — every sub's box opened (lastOpenedDay == stampDay),
         // no stuck box; the afking cursor advanced through the set.
@@ -935,21 +931,23 @@ contract V56AfkingGasMarginal is DeployProtocol {
             // LIVE-01(d): lastOpenedDay is monotone — never exceeds the stamp day (no double-open / over-advance).
             assertLe(_lastOpenedDayOf(subs[i]), stampDay, "LIVE-01(d): lastOpenedDay monotone, no double-open");
         }
-        assertEq(openedCount, n, "LIVE-01(b): repeated bounded openBoxes fully drained the afking backlog (no stuck box)");
+        assertEq(openedCount, n, "LIVE-01(b): repeated bounded mineFlip calls fully drained the afking backlog (no stuck box)");
 
-        // LIVE-01(d): a re-open call is a no-op (the lastOpenedDay >= stampDay skip at :1154) — no double-open.
+        // LIVE-01(d): a further engine call opens nothing on the drained backlog — no double-open.
         vm.prank(makeAddr("vd_reopen"));
-        uint256 reopened = game.openBoxes(n);
-        assertEq(reopened, 0, "LIVE-01(d): re-running openBoxes on an already-drained backlog opens nothing (no double-open)");
+        try game.mineFlip() {} catch {}
+        for (uint256 i; i < n; ++i) {
+            assertEq(_lastOpenedDayOf(subs[i]), stampDay, "LIVE-01(d): re-running the engine on an already-drained backlog opens nothing (no double-open)");
+        }
         emit log_named_uint("live01_total_opened", totalOpened);
     }
 
-    /// @notice LIVE-01 (e) selector isolation: drainAfkingBoxes is reached ONLY via the Game's openBoxes
-    ///         delegatecall (which runs in the Game's storage). Calling drainAfkingBoxes DIRECTLY on the
-    ///         GameAfkingModule contract address operates on the MODULE's OWN storage — which has an empty
-    ///         _subscribers set — so it returns 0 (opens nothing). The afking open is never a re-exposed
-    ///         standalone selector on a live subscriber set.
-    function testLive01DrainAfkingBoxesSelectorIsolation() public {
+    /// @notice LIVE-01 (e) selector isolation: the AFKing stage worker (runAfkingWork) runs on the Game's
+    ///         storage ONLY through mineFlip's delegatecall. Calling it DIRECTLY on the GameAfkingModule
+    ///         contract address operates on the MODULE's OWN storage — an empty _subscribers set — so it
+    ///         cannot touch the Game's subscribers. The afking open is never a re-exposed standalone selector
+    ///         on a live subscriber set.
+    function testLive01AfkingWorkerSelectorIsolation() public {
         // Populate a real afking backlog in the GAME's storage.
         // Stop at the session's AFKing stage with the subject pending (padding subs ahead in the ring).
         _setupFundedSubs(AFKING_PADS, "vsel_pad_", 5 ether, false);
@@ -964,58 +962,22 @@ contract V56AfkingGasMarginal is DeployProtocol {
         _toAfkingStageWithPending(subject, _lastBoughtDayOf(afk), 0xE0F2);
         require(_lastOpenedDayOf(afk) < _lastBoughtDayOf(afk), "fixture: afking box pending");
 
-        // Call drainAfkingBoxes DIRECTLY on the module address — it hits the MODULE's empty storage, not the
-        // Game's. It must open nothing (selector isolation: only reachable via the Game's openBoxes delegatecall).
-        (uint256 openedDirect, ) = IGameAfkingModule(ContractAddresses.GAME_AFKING_MODULE).drainAfkingBoxes(50);
-        assertEq(openedDirect, 0, "LIVE-01(e): direct drainAfkingBoxes on the module hits empty storage (selector-isolated)");
-        // The Game's afking box is UNTOUCHED by the direct module call (still pending).
+        // Call runAfkingWork DIRECTLY on the module address — it hits the MODULE's empty storage, not the
+        // Game's (selector isolation: it reaches the Game only through mineFlip's delegatecall). Whether the
+        // module-local call returns or refuses, it must open no Game box.
+        bytes32 subSlot = keccak256(abi.encode(afk, uint256(SUBOF_SLOT)));
+        bytes32 subBefore = vm.load(address(game), subSlot);
+        try IGameAfkingModule(ContractAddresses.GAME_AFKING_MODULE).runAfkingWork(1_000_000) returns (MineFlipGas.Result memory direct) {
+            assertEq(direct.rewardBasis, 0, "LIVE-01(e): direct runAfkingWork on the module opens nothing (selector-isolated)");
+        } catch {}
+        // The Game's afking box is UNTOUCHED by the direct module call (still pending, Sub word unchanged).
+        assertEq(vm.load(address(game), subSlot), subBefore, "LIVE-01(e): the Game's Sub record untouched by the direct module call");
         assertTrue(_lastOpenedDayOf(afk) < _lastBoughtDayOf(afk), "LIVE-01(e): the Game's afking box untouched by the direct module call");
 
-        // And the canonical path (the Game's valve) DOES open it — the non-vacuity control.
+        // And the canonical path (the engine) DOES open it — the non-vacuity control.
         vm.prank(makeAddr("vsel_op"));
-        game.openBoxes(50);
-        assertEq(_lastOpenedDayOf(afk), _lastBoughtDayOf(afk), "LIVE-01(e) control: the Game's openBoxes valve DOES open the afking box");
-    }
-
-    /// @notice LIVE-01 (f) individual-open byte-unchanged: the box a sub gets via the unified valve (openBoxes
-    ///         -> drainAfkingBoxes -> _openAfkingBox) is the SAME materialized box as via the rewarded mineFlip
-    ///         open leg — both route through _autoOpen with the same frozen stamp-day word, so the open path is
-    ///         byte-unchanged across the two reachable afking-open entrypoints (the valve and the bounty router).
-    function testLive01IndividualOpenPathByteUnchanged() public {
-        // Two identical funded subs stamped on the same day with the same word; open one via the valve, one via
-        // mineFlip. Each opens to the SAME stamp-day marker (lastOpenedDay == lastAutoBoughtDay) — the open
-        // outcome is identical (same _autoOpen path, same _recordedDailyWord(stampDay) seed).
-        address viaValve = makeAddr("vbu_valve");
-        address viaBounty = makeAddr("vbu_bounty");
-        _grantSeat(viaValve);
-        _grantSeat(viaBounty);
-        // Fund BEFORE subscribe so each grounded NEW-run cover-buy is funded (D-12).
-        _fundPool(viaValve, 5 ether);
-        _fundPool(viaBounty, 5 ether);
-        vm.prank(viaValve);
-        game.subscribe(address(0), false, false, 1, address(0));
-        vm.prank(viaBounty);
-        game.subscribe(address(0), false, false, 1, address(0));
-        _runStageNewDay(0xF0F1);
-
-        uint32 stampValve = _lastBoughtDayOf(viaValve);
-        uint32 stampBounty = _lastBoughtDayOf(viaBounty);
-        require(stampValve == stampBounty && stampValve > 0, "fixture: both subs stamped the same day");
-        require(rngWordByDay(stampValve) != 0, "fixture: the shared stamp-day word landed");
-
-        _settleClean(0xF0F2);
-        // Open one via the unified valve.
-        vm.prank(makeAddr("vbu_op1"));
-        game.openBoxes(SUBSCRIBER_CAP);
-        // Open the rest via the rewarded bounty router (mineFlip).
-        vm.prank(makeAddr("vbu_op2"));
-        try game.mineFlip() {} catch {}
-
-        // Both materialized to the SAME open marker (lastOpenedDay == the shared stamp day) — byte-unchanged
-        // open outcome across the valve path and the bounty path.
-        assertEq(_lastOpenedDayOf(viaValve), stampValve, "LIVE-01(f): valve-opened box materialized at the stamp day");
-        assertEq(_lastOpenedDayOf(viaBounty), stampBounty, "LIVE-01(f): bounty(mineFlip)-opened box materialized at the same stamp day");
-        assertEq(_lastOpenedDayOf(viaValve), _lastOpenedDayOf(viaBounty), "LIVE-01(f): the two open entrypoints produce the identical open marker (byte-unchanged path)");
+        game.mineFlip();
+        assertEq(_lastOpenedDayOf(afk), _lastBoughtDayOf(afk), "LIVE-01(e) control: the engine's AFKing stage DOES open the afking box");
     }
 
     // =========================================================================
@@ -1067,70 +1029,6 @@ contract V56AfkingGasMarginal is DeployProtocol {
     // Internal helpers (new-design driving harness)
     // =========================================================================
 
-    /// @dev Measure the afking open-leg gas over N boxes stamped on DISTINCT days (the cache-defeating R3 case).
-    ///      Each in-set funded sub re-stamps to the SAME day every STAGE, so to model the proof's mixed-day
-    ///      worst case (the open leg fell behind OPEN_BATCH / a keeper skipped days, so the no-orphan rule
-    ///      preserved older-day boxes) we inject DISTINCT stamp days + words directly (test-only Sub-slot poke,
-    ///      the same direct-storage technique the harness uses for the header-field pokes). Each box then carries
-    ///      a distinct lastAutoBoughtDay, so the open walk re-reads rngWordByDay PER box (defeating the
-    ///      cachedDay/cachedWord short-circuit at GameAfkingModule:1157-1163). Returns the bracketed openBoxes
-    ///      open-leg gas; the 2 deploy subs add a constant offset that cancels in the (gasN - gasNm1) marginal.
-    function _measureMixedDayOpenLegGas(uint256 n, string memory prefix) internal returns (uint256 openGas) {
-        // Subscribe + fund n subs in one set, run ONE new-day STAGE so they enter as real funded subs.
-        address[] memory subs = _setupFundedSubs(n, prefix, 5 ether, false);
-        _runStageNewDay(uint256(keccak256(abi.encodePacked(prefix, "w"))) | 1);
-        _settleClean(uint256(keccak256(abi.encodePacked(prefix, "clean"))) | 1);
-        require(!game.advanceDue(), "fixture: clean so the open leg runs");
-
-        // Anchor on a high base day so the descending distinct-day assignment can never underflow. The current
-        // stamp day is small (fixture day index); use it + n as the high anchor so d = anchor - i stays >= 1.
-        uint32 anchor = _lastBoughtDayOf(subs[0]) + uint32(n) + 1;
-        for (uint256 i; i < n; ++i) {
-            uint32 d = anchor - uint32(i); // distinct descending stamp days, all >= 2
-            _pokeLastBoughtDay(subs[i], d);
-            // Re-open marker strictly behind the stamp day so the box is pending; land that day's word.
-            _pokeLastOpenedDay(subs[i], d - 1);
-            _injectRngWordByDay(d, uint256(keccak256(abi.encodePacked(prefix, "wd", _u(i)))) | 1);
-            require(_lastOpenedDayOf(subs[i]) < d, "fixture: mixed-day box pending");
-        }
-
-        vm.prank(makeAddr(string(abi.encodePacked(prefix, "opener"))));
-        uint256 gasBefore = gasleft();
-        game.openBoxes(SUBSCRIBER_CAP);
-        openGas = gasBefore - gasleft();
-
-        // Non-vacuity: each mixed-day box opened (lastOpenedDay advanced to its distinct stamp day).
-        for (uint256 i; i < n; ++i) {
-            uint32 d = anchor - uint32(i);
-            require(_lastOpenedDayOf(subs[i]) == d, "marginal non-vacuity: each mixed-day box opened");
-        }
-    }
-
-    /// @dev Measure the SINGLE openBoxes chunk over OPEN_BATCH boxes each stamped on a DISTINCT day (the binding
-    ///      mixed-day worst-case chunk — every box a cold rngWordByDay SLOAD, defeating the day-cache). Builds a
-    ///      full OPEN_BATCH-sized set of funded subs, injects distinct stamp days + words, then brackets one
-    ///      openBoxes(OPEN_BATCH) call. This is the real measured chunk (not a marginal extrapolation).
-    function _measureMixedDayOpenChunkAtBatch(string memory prefix) internal returns (uint256 chunkGas) {
-        uint256 m = OPEN_BATCH; // 80 distinct-day boxes — the full open chunk
-        address[] memory subs = _setupFundedSubs(m, prefix, 5 ether, false);
-        _runStageNewDay(uint256(keccak256(abi.encodePacked(prefix, "w"))) | 1);
-        _settleClean(uint256(keccak256(abi.encodePacked(prefix, "clean"))) | 1);
-        require(!game.advanceDue(), "fixture: clean so the open chunk runs");
-
-        uint32 anchor = _lastBoughtDayOf(subs[0]) + uint32(m) + 1;
-        for (uint256 i; i < m; ++i) {
-            uint32 d = anchor - uint32(i);
-            _pokeLastBoughtDay(subs[i], d);
-            _pokeLastOpenedDay(subs[i], d - 1);
-            _injectRngWordByDay(d, uint256(keccak256(abi.encodePacked(prefix, "wd", _u(i)))) | 1);
-        }
-
-        vm.prank(makeAddr(string(abi.encodePacked(prefix, "op"))));
-        uint256 gasBefore = gasleft();
-        game.openBoxes(OPEN_BATCH);
-        chunkGas = gasBefore - gasleft();
-    }
-
     /// @dev Test-only poke of a Sub's lastAutoBoughtDay (uint24 @ byte 11) — preserves all other Sub fields.
     function _pokeLastBoughtDay(address who, uint32 day) internal {
         bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
@@ -1172,8 +1070,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // OPEN the grounded subscribe's pending boxes first — the no-orphan guard dominates the funding-kill
         // branch, so a pending-box sub would be skipped, not killed. Then drain each sub's remaining
         // afkingFunding bucket to 0 -> the next STAGE cycle's cover-buy is unfunded (funding-kill fires).
-        vm.prank(makeAddr(string(abi.encodePacked(prefix, "ev_open"))));
-        game.openBoxes(400);
+        vm.startPrank(makeAddr(string(abi.encodePacked(prefix, "ev_open"))));
+        _mineAll(64);
+        vm.stopPrank();
         for (uint256 i; i < n; ++i) {
             uint256 bal = game.afkingFundingOf(subs[i]);
             if (bal > 0) {
@@ -1226,8 +1125,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
         address[] memory subs = _setupFundedSubs(n, prefix, 5 ether, isTicket);
         // The grounded subscribe (D-12) stamps a box at subscribe time; OPEN those pending boxes so the
         // no-orphan guard does not skip the measured STAGE buy (a pending-box sub is left untouched).
-        vm.prank(makeAddr(string(abi.encodePacked(prefix, "setup_open"))));
-        game.openBoxes(400);
+        vm.startPrank(makeAddr(string(abi.encodePacked(prefix, "setup_open"))));
+        _mineAll(64);
+        vm.stopPrank();
         uint32[] memory pre = new uint32[](n);
         for (uint256 i; i < n; ++i) pre[i] = _lastBoughtDayOf(subs[i]);
 
@@ -1519,14 +1419,33 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     /// @dev Read the afking-open cursor `_subOpenCursor` (slot 56, byte 2, uint16) — the afking-side open
-    ///      walk (drainAfkingBoxes -> _autoOpen). Distinct from the human boxCursor (byte 7) — LIVE-01
-    ///      cursor independence.
+    ///      walk (mineFlip's AFKing stage, runAfkingWork). Distinct from the human boxCursor (byte 7) —
+    ///      LIVE-01 cursor independence.
     function _subOpenCursor() internal view returns (uint256) {
         return (uint256(vm.load(address(game), bytes32(uint256(SUBCURSOR_SLOT)))) >> 16) & 0xFFFF;
     }
 
+    /// @dev How many of `subs` have opened their box for `stampDay`.
+    function _openedCount(address[] memory subs, uint32 stampDay) internal view returns (uint256 c) {
+        for (uint256 i; i < subs.length; ++i) if (_lastOpenedDayOf(subs[i]) == stampDay) ++c;
+    }
+
+    /// @dev The first action of the single mineFlip recorded in `logs` (MinerWork.firstAction).
+    function _minerFirstAction(Vm.Log[] memory logs) internal view returns (uint8 first) {
+        bytes32 sig = keccak256("MinerWork(address,uint8,uint256,uint256)");
+        uint256 seen;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter == address(game) && logs[i].topics.length != 0 && logs[i].topics[0] == sig) {
+                (first,,) = abi.decode(logs[i].data, (uint8, uint256, uint256));
+                ++seen;
+            }
+        }
+        assertEq(seen, 1, "one MinerWork per mineFlip");
+    }
+
     /// @dev Read the human-box cursor `boxCursor` (slot 56, byte 7, uint48) — the human open walk
-    ///      (openHumanBoxes over boxPlayers[index & 1]). Distinct from _subOpenCursor (byte 2).
+    ///      (mineFlip's HumanBoxes stage, runHumanBoxWork over boxPlayers[index & 1]). Distinct from
+    ///      _subOpenCursor (byte 2).
     function _boxCursor() internal view returns (uint256) {
         return (uint256(vm.load(address(game), bytes32(uint256(SUBCURSOR_SLOT)))) >> 56) & 0xFFFFFFFFFFFF;
     }
@@ -1660,8 +1579,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
     {
         _settleClean(uint256(keccak256(abi.encodePacked(prefix, "base"))) | 1);
         address[] memory subs = _setupFundedSubs(n, prefix, 5 ether, isTicket);
-        vm.prank(makeAddr(string(abi.encodePacked(prefix, "setup_open"))));
-        game.openBoxes(400);
+        vm.startPrank(makeAddr(string(abi.encodePacked(prefix, "setup_open"))));
+        _mineAll(64);
+        vm.stopPrank();
         uint32[] memory pre = new uint32[](n);
         for (uint256 i; i < n; ++i) pre[i] = _lastBoughtDayOf(subs[i]);
 
@@ -1691,8 +1611,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
             vm.prank(who);
             game.subscribe(address(0), false, false, 1, address(0));
         }
-        vm.prank(makeAddr(string(abi.encodePacked(prefix, "ev_open"))));
-        game.openBoxes(400);
+        vm.startPrank(makeAddr(string(abi.encodePacked(prefix, "ev_open"))));
+        _mineAll(64);
+        vm.stopPrank();
         for (uint256 i; i < n; ++i) {
             uint256 bal = game.afkingFundingOf(subs[i]);
             if (bal > 0) {
@@ -1793,8 +1714,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
     {
         _settleClean(uint256(keccak256(abi.encodePacked(prefix, "base"))) | 1);
         players = _setupFundedSubs(count, prefix, 5 ether, false);
-        vm.prank(makeAddr(string(abi.encodePacked(prefix, "ev_open"))));
-        game.openBoxes(400);
+        vm.startPrank(makeAddr(string(abi.encodePacked(prefix, "ev_open"))));
+        _mineAll(64);
+        vm.stopPrank();
         for (uint256 i; i < count; ++i) {
             uint256 funding = game.afkingFundingOf(players[i]);
             if (funding != 0) {
@@ -1905,8 +1827,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
     function test_BufferedClampReopen_GateSkipsStageUnderLock() public {
         address[] memory old = _setupFundedSubs(1, "frzbuf_old_", 50 ether, false);
         _settleClean(uint256(keccak256("frzbuf_base")) | 1);
-        vm.prank(makeAddr("frzbuf_open"));
-        game.openBoxes(400);
+        vm.startPrank(makeAddr("frzbuf_open"));
+        _mineAll(64);
+        vm.stopPrank();
         require(!game.advanceDue() && !game.rngLocked(), "fixture: clean idle baseline");
 
         uint32 dIdx0 = _dailyIdx();
@@ -1982,8 +1905,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
         address[] memory subs = _setupFundedSubs(n, prefix, 5 ether, false);
         // Open the grounded cover boxes so lastOpenedDay == the stamp day (not behind it) -> the no-orphan guard
         // (:1287, lastOpenedDay < lastAutoBoughtDay) does NOT fire; the skip routes through :1324 instead.
-        vm.prank(makeAddr(string(abi.encodePacked(prefix, "open"))));
-        game.openBoxes(400);
+        vm.startPrank(makeAddr(string(abi.encodePacked(prefix, "open"))));
+        _mineAll(64);
+        vm.stopPrank();
 
         _warpToBoundary(false);
         uint32 processDay = _simulatedDayIndex();

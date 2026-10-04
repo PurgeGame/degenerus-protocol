@@ -23,7 +23,7 @@
 //     fix shifts emitted VALUES onto the entries basis, not the signature.
 //
 //   TST-CROSS-01 — cross-surface `rem`-byte regression:
-//     The 3 RNG-driven ticket-award surfaces (manual lootbox open, auto-resolve
+//     The 3 RNG-driven ticket-award surfaces (human lootbox open, auto-resolve
 //     lootbox open, jackpot ticket-roll award) all route through `_queueEntries`
 //     — the whole-ticket helper, which carries the `rem` byte of
 //     `entriesOwedPacked[wk][buyer]` UNTOUCHED. Only `_queueEntriesScaled`
@@ -56,10 +56,9 @@ import {
 } from "../helpers/deployFixture.js";
 import {
   eth,
-  getLastVRFRequestId,
   ZERO_BYTES32,
 } from "../helpers/testUtils.js";
-import { readyDailyFixture } from "../helpers/readyDailyFixture.js";
+import { readyDailyFixture, mineAll, requestMiddayRng } from "../helpers/readyDailyFixture.js";
 import { boCustom } from "../helpers/boxOrder.js";
 
 const MINT_MODULE_SOURCE_PATH = path.resolve(
@@ -336,9 +335,9 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
     // -----------------------------------------------------------------------
     // PRIMARY ASSERTION (D-278-TST-CROSS-DEPTH-01): a live-state raw
     // `provider.getStorage` read of the genuinely-shared
-    // `entriesOwedPacked[wk][buyer]` slot, driven through the REAL
-    // `openBox` entry point full-stack (purchase -> requestLootboxRng ->
-    // VRF fulfill -> openBox). The lootbox ticket path routes through
+    // `entriesOwedPacked[wk][buyer]` slot, driven full-stack through mineFlip, the
+    // only box-opening door (purchase -> mid-day request stage -> VRF fulfill ->
+    // human-box stage). The lootbox ticket path routes through
     // `_queueEntries` (entries, via `wholeTicketsToEntries(whole)`), which carries
     // the `rem` byte of the packed slot UNTOUCHED — so `rem` must stay 0 across
     // every open. Only `_queueEntriesScaled` (the mint-boost path) ever writes a
@@ -352,8 +351,8 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
       const flags = BigInt(await hre.ethers.provider.getStorage(await game.getAddress(), root.slot)) >> (BigInt(root.offset) * 8n);
       const index = (flags >> 12n) & 1n;
       await game.connect(alice).purchase(alice.address, 0n, boCustom(eth(1)), ZERO_BYTES32, 0, false, { value: eth(1) });
-      await game.connect(deployer).requestLootboxRng();
-      const request = await getLastVRFRequestId(mockVRF);
+      // 1 ETH of pending box value meets the mid-day threshold: an ordinary mineFlip requests.
+      const request = await requestMiddayRng(game, deployer, mockVRF);
       const artifact = await hre.artifacts.readArtifact("DegenerusGameLootboxModule");
       const iface = new hre.ethers.Interface(artifact.abi);
       // Choose a ticket-paying outcome, reverting each trial. The regression must
@@ -364,8 +363,8 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
         // Publication is a keeper step; the callback only stores the final word.
         await game.connect(deployer).mineFlip({ gasLimit: 1_000_000 });
         expect(await game.rngConsumerStage(), "publication checkpoint leaves human boxes ready").to.equal(3n);
-        const receipt = await (await game.openBoxes(hre.ethers.MaxUint256)).wait();
-        const ticketAward = receipt.logs.some((log) => {
+        const receipts = await mineAll(game, deployer);
+        const ticketAward = receipts.flatMap((receipt) => receipt.logs).some((log) => {
           try {
             const ev = iface.parseLog(log);
             return ev?.name === "LootBoxOpened" && ev.args.player === alice.address && ev.args.futureTickets > 0n;
@@ -445,7 +444,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
       ).to.equal(0n);
     });
 
-    it("[CROSS-01b] live-state: driving the REAL `openBox` entry point full-stack leaves the shared `entriesOwedPacked` `rem` byte at 0 (whole-ticket path never writes rem)", async function () {
+    it("[CROSS-01b] live-state: opening the box full-stack through mineFlip leaves the shared `entriesOwedPacked` `rem` byte at 0 (whole-ticket path never writes rem)", async function () {
       const fixture = await loadFixture(readyDailyFixture);
       const { game, alice } = fixture;
       const gameAddress = await game.getAddress();
@@ -471,11 +470,11 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
         ).to.equal(0);
       }
 
-      // Drive the REAL lootbox-open path full-stack. The removed per-(player,index)
-      // `openBox` entry point is gone; `openBoxes(MaxUint256)` is its permissionless
-      // sweep replacement — alice is the fixture's sole queued entry, so draining
-      // everything ready opens exactly her box and then finds nothing else to do.
-      await game.connect(alice).openBoxes(hre.ethers.MaxUint256);
+      // Drive the lootbox-open path full-stack: mineFlip's human-box stage opens the
+      // ready entries. Alice is the fixture's sole queued entry, so running the engine
+      // to rest opens exactly her box.
+      const opened = await mineAll(game, alice);
+      expect(opened.length, "mineFlip opened the ready box").to.be.gt(0);
 
       // Re-snapshot every watched level: the whole-ticket `_queueEntries` path
       // carries the rem byte untouched, so rem must STILL be 0 everywhere —
@@ -491,7 +490,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
         expect(
           after.rem,
           `post-open: entriesOwedPacked rem byte for level ${lvl} must STILL be 0 ` +
-            `— the manual lootbox open routes through _queueEntries (whole), which ` +
+            `— the human lootbox open routes through _queueEntries (whole), which ` +
             `never writes the rem byte`
         ).to.equal(0);
         if (after.owed > 0n) sawWholeTicketAward = true;
@@ -577,7 +576,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
         "_queueEntriesScaled must have a `newRem` local (the rem-byte writer)"
       ).to.equal(true);
 
-      // (3) Manual + auto-resolve lootbox surfaces: both settle through the
+      // (3) Human + auto-resolve lootbox surfaces: both settle through the
       //     shared per-entry `_flushBoxAcc` (box-order rework: one box = one
       //     roll, rewards settle once per entry), which routes each tier's
       //     ticket award through `_queueEntries` at `currentLevel + uint24(offset)`,
@@ -626,7 +625,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
       ).to.be.gte(1);
     });
 
-    it("[CROSS-01e] live-state: driving the REAL `openBox` full-stack delivers owed-entries == the entries basis (~4x the pre-fix whole count) at the roll level", async function () {
+    it("[CROSS-01e] live-state: opening the box full-stack through mineFlip delivers owed-entries == the entries basis (~4x the pre-fix whole count) at the roll level", async function () {
       const fixture = await loadFixture(readyDailyFixture);
       const { game, alice } = fixture;
       const gameAddress = await game.getAddress();
@@ -644,19 +643,17 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
         ).to.equal(0n);
       }
 
-      // Drive the REAL lootbox-open path full-stack and capture LootBoxOpened. The
-      // removed per-(player,index) `openBox` entry point is gone; `openBoxes(MaxUint256)`
-      // is its permissionless sweep replacement — alice is the fixture's sole queued
-      // entry, so draining everything ready opens exactly her box.
-      const tx = await game.connect(alice).openBoxes(hre.ethers.MaxUint256);
-      const receipt = await tx.wait();
+      // Drive the lootbox-open path full-stack and capture LootBoxOpened: mineFlip's
+      // human-box stage opens the ready entries, and alice is the fixture's sole queued
+      // entry, so running the engine to rest opens exactly her box.
+      const receipts = await mineAll(game, alice);
 
       const lbArtifact = await hre.artifacts.readArtifact(
         "DegenerusGameLootboxModule"
       );
       const lbIface = new hre.ethers.Interface(lbArtifact.abi);
       let opened = null;
-      for (const log of receipt.logs) {
+      for (const log of receipts.flatMap((receipt) => receipt.logs)) {
         try {
           const parsed = lbIface.parseLog(log);
           if (parsed && parsed.name === "LootBoxOpened" && parsed.args.player === alice.address) {

@@ -72,8 +72,6 @@ is_dead_constant() {
 declare -A ORPHAN_JUSTIFIED=(
   [DegenerusGameFoilPackModule.sol:IDegenerusGameDegeneretteModule]="_foilSpin owns the delegatecall -> GAME_DEGENERETTE_MODULE"
   [DegenerusGameMintModule.sol:IDegenerusGameLootboxModule]="_lootboxLeg owns the delegatecall -> GAME_LOOTBOX_MODULE"
-  [DegenerusGameMintModule.sol:IDegenerusGameTicketModule]="_ticketWorkCall owns the delegatecall -> GAME_TICKET_MODULE"
-  [DegenerusGameFoilPackModule.sol:IDegenerusGameTicketModule]="_ticketWorkerCall owns the delegatecall -> GAME_TICKET_MODULE"
   [DegenerusGameAdvanceModule.sol:IDegenerusGameJackpotModule]="_runJackpotWork owns the delegatecall -> GAME_JACKPOT_MODULE"
   [DegenerusGameJackpotModule.sol:IDegenerusGameJackpotDrawModule]="_delegateJackpotDraw owns the delegatecall -> GAME_JACKPOT_DRAW_MODULE"
 )

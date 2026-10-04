@@ -10,6 +10,7 @@ import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
 
 contract DeityTransitionQueueSeeder is DegenerusGameStorage {
@@ -38,7 +39,7 @@ contract DeityTransitionQueueSeeder is DegenerusGameStorage {
 /// @dev The transition close used to carry the 32 cold deity perpetual grants AND the first chunk
 ///      of the far-future level crossing into the +5 mint window, resuming the drain on later
 ///      advances. That drain is gone: the transition closes in one advance and mints nothing; a
-///      level's unminted queue mints once, as the frozen pool, in processTicketBatch's continuation
+///      level's unminted queue mints once, as the frozen pool, in runTicketWork's continuation
 ///      after the previous level's last purchase day. The two halves of the old worst case are now
 ///      separate transactions and are measured separately: the grants here, the drain chunk (same
 ///      eight deep survivors) in DeityFrozenPoolDrainGasTest below.
@@ -101,7 +102,7 @@ contract DeityTransitionDrainGasTest is BoundaryGasFixture {
 }
 
 /// @dev The drain half of the old test on the path that now exists: the same eight survivors
-///      owing 1,000,000 entries each, minted as a frozen pool through processTicketBatch's
+///      owing 1,000,000 entries each, minted as a frozen pool through runTicketWork's
 ///      continuation. setUp is a separate transaction, so the first chunk is cold; the chunk
 ///      resumes on the next call without re-minting what the first one consumed.
 contract DeityFrozenPoolDrainGasTest is Test {
@@ -112,7 +113,7 @@ contract DeityFrozenPoolDrainGasTest is Test {
     function setUp() public {
         h = new ChunkHarness();
         vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, address(new DegenerusGameFoilPackModule()).code);
-        // The ticket drain door now delegates to the ticket module at its pinned address.
+        // The harness delegates runTicketWork to the ticket module at its pinned address.
         vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
         // 1,000,000 entries each = 100,000,000 scaled. Cold start: no marker, cursor 0.
         h.seedFrozenPool(POOL_LVL, 8, 100_000_000, BASE, false);
@@ -126,10 +127,11 @@ contract DeityFrozenPoolDrainGasTest is Test {
         uint256 owed0 = _owedSum();
         assertEq(owed0, 8_000_000, "fixture: eight deep survivors");
 
-        // processTicketBatch is a caller-sized in-order door (it spends the gas it is given), so it
-        // is driven with a realistic bounded allowance and checked for progress, not bounded.
+        // runTicketWork spends the allowance it is given, so each chunk is driven with a realistic
+        // bounded allowance and checked for progress, not bounded.
         uint256 g0 = gasleft();
-        (bool finished1, bool worked1) = h.processTicketBatch{gas: 10_000_000}(POOL_LVL - 1);
+        MineFlipGas.Result memory r = h.runTicketWork{gas: 10_000_000}(POOL_LVL - 1, 10_000_000);
+        (bool finished1, bool worked1) = (r.done, r.progressed);
         uint256 cold = g0 - gasleft();
         uint256 owed1 = _owedSum();
         emit log_named_uint("cold frozen-pool call at a 10M allowance (excl. intrinsic)", cold);
@@ -138,7 +140,8 @@ contract DeityFrozenPoolDrainGasTest is Test {
         assertLt(owed1, owed0, "cold chunk consumes owed entries");
 
         g0 = gasleft();
-        (bool finished2, bool worked2) = h.processTicketBatch{gas: 10_000_000}(POOL_LVL - 1);
+        r = h.runTicketWork{gas: 10_000_000}(POOL_LVL - 1, 10_000_000);
+        (bool finished2, bool worked2) = (r.done, r.progressed);
         uint256 warm = g0 - gasleft();
         uint256 owed2 = _owedSum();
         emit log_named_uint("resumed frozen-pool call at a 10M allowance (excl. intrinsic)", warm);

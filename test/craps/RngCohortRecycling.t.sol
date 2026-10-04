@@ -8,10 +8,10 @@ import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
 interface ICohortTableFixture {
     function rngCohortComplete(uint48 index) external view returns (bool);
-    function keepRngCohort(uint48 index, uint64 budget) external returns (bool moved, bool settled);
 }
 
 contract CustomCohortRecyclingTest is CrapsPins {
@@ -43,8 +43,8 @@ contract CustomCohortRecyclingTest is CrapsPins {
         vm.warp(latest);
         uint48 index = table.closeBattle(slot);
         _setWord(index, 0xB0B5);
-        cohort.keepRngCohort(index, 20_000);
-        assertTrue(cohort.rngCohortComplete(index), "permissionless completion releases the admitted field");
+        _readWork(table, index);
+        assertTrue(cohort.rngCohortComplete(index), "read-stage completion releases the admitted field");
     }
     function test_CustomArmRegistersHashedFieldAndKeeperFinishesIt() public {
         uint64 slot = _create();
@@ -55,12 +55,17 @@ contract CustomCohortRecyclingTest is CrapsPins {
         assertTrue(key != bytes32(uint256(slot)), "fixture must use the custom hash key");
         assertFalse(cohort.rngCohortComplete(index), "custom field is a read consumer");
         _setWord(index, uint256(keccak256("custom read word")) | 1);
-        (bool moved, bool settled) = cohort.keepRngCohort(index, 20_000);
-        assertTrue(moved);
-        assertTrue(settled);
+        MineFlipGas.Result memory step = _readWork(table, index);
+        assertTrue(step.progressed);
+        assertTrue(step.rewardBasis != 0);
         assertTrue(table.battleOf(key).finalized, "all payout effects finished");
         assertTrue(cohort.rngCohortComplete(index));
-        table.resolveSlot(slot, 20_000); // spent check succeeds without discharging twice
+        // A drained cohort is a no-op, and the resolver's spent check succeeds without
+        // discharging the field twice.
+        step = _readWork(table, index);
+        assertFalse(step.progressed);
+        assertTrue(step.done);
+        table.settleSlot(slot, WHOLE_FIELD);
         assertTrue(cohort.rngCohortComplete(index));
     }
     function _pendingBit(uint48 index) private view returns (bool) {
@@ -77,10 +82,11 @@ contract CustomCohortRecyclingTest is CrapsPins {
         _setIndex(index);
         assertEq(table.closeBattle(b), index);
         _setWord(index, 0xB0B5);
-        table.resolveSlot(a, 20_000);
+        _readWork(table, index);
+        assertTrue(table.battleOf(table.keyOfSlot(a)).finalized, "the read stage did not take the older field first");
         assertFalse(cohort.rngCohortComplete(index));
         assertTrue(_pendingBit(index), "first completed field cannot release the shared Game gate");
-        table.resolveSlot(b, 20_000);
+        _readWork(table, index);
         assertTrue(cohort.rngCohortComplete(index));
         assertFalse(_pendingBit(index));
     }
@@ -92,13 +98,13 @@ contract CustomCohortRecyclingTest is CrapsPins {
         Craps.SlipResult memory win; win.bankrollIn = 1 ether; win.bankrollOut = 1 ether;
         vm.mockCall(ContractAddresses.CRAPS_ENGINE, abi.encodeWithSelector(CrapsEngine.settleBattle.selector), abi.encode(win));
         vm.mockCallRevert(ContractAddresses.COINFLIP, abi.encodeWithSelector(MockCoinflip.creditFlipBatch.selector), "payout failure");
-        vm.expectRevert(); cohort.keepRngCohort(index, 20_000);
+        vm.expectRevert(); _readWork(table, index);
         assertFalse(cohort.rngCohortComplete(index));
         assertTrue(_pendingBit(index));
         (bytes32 key,,) = table.customBattleOf(slot);
         assertFalse(table.battleOf(key).finalized);
         vm.clearMockedCalls();
-        cohort.keepRngCohort(index, 20_000);
+        _readWork(table, index);
         assertTrue(cohort.rngCohortComplete(index));
         assertFalse(_pendingBit(index));
     }
@@ -111,19 +117,19 @@ contract CustomCohortRecyclingTest is CrapsPins {
         // A delivered old read cannot settle once the terminal latch is set.
         uint256 state = uint256(game.slots(bytes32(0)));
         game.set(bytes32(0), bytes32(state | (uint256(1) << 253)));
-        (bool moved, bool settled) = cohort.keepRngCohort(index, 20_000);
-        assertFalse(moved || settled);
+        MineFlipGas.Result memory step = _readWork(table, index);
+        assertFalse(step.progressed || step.rewardBasis != 0);
         vm.expectRevert(LootboxCraps.RngNotReady.selector);
-        table.resolveSlot(slot, 20_000);
+        table.settleSlot(slot, WHOLE_FIELD);
         // Neither the retained payload nor a new terminal fulfillment resurrects it.
         _setIndex(index ^ 1);
         assertFalse(cohort.rngCohortComplete(index));
-        (moved, settled) = cohort.keepRngCohort(index, 20_000);
-        assertFalse(moved || settled);
+        step = _readWork(table, index);
+        assertFalse(step.progressed || step.rewardBasis != 0);
         game.set(bytes32(uint256(3)), bytes32(uint256(0xCAFE)));
         _setWord(index ^ 1, 0xCAFE);
-        (moved, settled) = cohort.keepRngCohort(index, 20_000);
-        assertFalse(moved || settled);
+        step = _readWork(table, index);
+        assertFalse(step.progressed || step.rewardBasis != 0);
         (bytes32 key,,) = table.customBattleOf(slot);
         assertFalse(table.battleOf(key).finalized);
     }
@@ -139,11 +145,11 @@ contract CustomCohortRecyclingTest is CrapsPins {
             if (cycle == 0) { old = slot; first = buffer; }
             if (cycle == 2) {
                 assertEq(buffer, first, "fixture has reused the old physical buffer");
-                table.resolveSlot(old, 20_000);
+                table.settleSlot(old, WHOLE_FIELD);
                 assertTrue(_pendingBit(buffer), "spent battle cannot clear the new field's pending bit");
                 assertFalse(cohort.rngCohortComplete(buffer));
             }
-            cohort.keepRngCohort(buffer, 20_000);
+            _readWork(table, buffer);
             assertTrue(cohort.rngCohortComplete(buffer));
             assertFalse(_pendingBit(buffer));
         }
@@ -159,7 +165,8 @@ contract CustomCohortRecyclingTest is CrapsPins {
         vm.warp(block.timestamp + 60);
         uint48 index = table.closeBattle(slots[0]);
         _setWord(index, uint256(keccak256("release capacity")) | 1);
-        table.resolveSlot(slots[0], 20_000);
+        _readWork(table, index);
+        assertTrue(cohort.rngCohortComplete(index));
         // New admission is a future write field, so use a newly-created open battle.
         uint64 next = _create();
         _enter(next);
@@ -173,7 +180,7 @@ contract CustomCohortRecyclingTest is CrapsPins {
         _setWord(index, uint256(keccak256("large custom field")) | 1);
         table.resolveSeats(slot, 1);
         assertFalse(cohort.rngCohortComplete(index), "one settled seat cannot complete the field");
-        for (uint256 i; i < 65 && !cohort.rngCohortComplete(index); ++i) cohort.keepRngCohort(index, 20_000);
+        for (uint256 i; i < 65 && !cohort.rngCohortComplete(index); ++i) _readWork(table, index);
         assertTrue(cohort.rngCohortComplete(index));
     }
 }

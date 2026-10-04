@@ -151,13 +151,10 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     // =========================================================================
 
 
-    /// @notice SAFE-04 (boxes): a crank-driven box open BEFORE the word lands is skipped at the
-    ///         autoOpen cursor orphan gate (`_lootboxWord(idx) == 0 -> break`,
-    ///         DegenerusGameLootboxModule.openHumanBoxes) AND the LootboxModule openLootBox
-    ///         RngNotReady guard — no pre-word open. After the word lands the SAME crank opens the
-    ///         box (signal cleared). The box is queued at the round's index, then the index is
-    ///         advanced by one so it sits at LR_INDEX-1 — the finalized index the relocated
-    ///         multi-index sweep reads (the sweep opens boxCursorIndex .. LR_INDEX-1).
+    /// @notice SAFE-04 (boxes): a crank BEFORE the word lands cannot open the box — mineFlip's
+    ///         human-box stage runs only on a published read-cohort word. After the word lands the
+    ///         SAME crank opens the box (order marked processed). The box is queued on the write
+    ///         buffer, which is then sealed as the read buffer the human-box stage walks.
     function testCrankBoxOpenStaysPostUnlock() public {
         address boxOwner = makeAddr("box_owner");
         uint48 idx = _activeLootboxIndex();
@@ -175,18 +172,19 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         assertEq(_activeLootboxIndex(), idx ^ 1, "LR_INDEX advanced; box index idx is now finalized");
         _parkBoxFrontier(idx);
 
-        // PRE-WORD: word at idx is 0 -> the sweep orphan-breaks at idx + openLootBox RngNotReady. No open.
+        // PRE-WORD: word at idx is 0 -> the engine's human-box stage is not eligible. A 2M allowance
+        // cannot admit a fresh request, so this crank does its preparation work and stops. No open.
         assertEq(
             _injectedWord(idx),
             0,
             "pre-condition: box index word not yet landed (frozen window)"
         );
         vm.prank(cranker);
-        game.openBoxes(100);
+        game.mineFlip{gas: 2_000_000}();
         assertGt(
             _lootboxEthBase(idx, boxOwner),
             0,
-            "pre-word: box NOT opened (sweep orphan-break + openLootBox RngNotReady)"
+            "pre-word: box NOT opened (no published word for its cohort)"
         );
         assertEq(_lootboxEthBase(idx, boxOwner) >> 255, 0, "pre-word: box order not marked processed");
 
@@ -194,7 +192,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         // open marks the order word BOX_PROCESSED (bit 255) instead of zeroing it (6d0e64b09).
         _injectLootboxRngWord(idx, FIXED_WORD);
         vm.prank(cranker);
-        game.openBoxes(100);
+        game.mineFlip();
         assertEq(
             _lootboxEthBase(idx, boxOwner) >> 255,
             1,
@@ -940,10 +938,8 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         }
     }
 
-    /// @dev Park the auto-open frontier (boxCursorIndex byte 13 + boxCursor byte 7, both slot 56)
-    ///      at `index` with a zero in-index cursor, so the relocated sweep begins exactly at this
-    ///      finalized index (the realistic state where lower indices are drained). Without this the
-    ///      sweep would orphan-break at the first un-worded lower index.
+    /// @dev Park the human-box frontier (humanReadComplete byte 13 + boxCursor byte 7, both slot 56)
+    ///      at `index`'s first entry, as a fresh seal leaves it.
     function _parkBoxFrontier(uint48 index) internal {
         bytes32 slot = bytes32(uint256(56));
         uint256 packed = uint256(vm.load(address(game), slot));

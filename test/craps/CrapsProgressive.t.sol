@@ -295,7 +295,7 @@ contract CrapsProgressiveTest is CrapsPins {
     }
 
     /// @dev A DAY FUNDS THE POOL ONCE. `openBonusDay` is permissionless in effect — the advance
-    ///      calls it every crank — and arming is permissionless outright, so the guard is what
+    ///      calls it every crank — and arming runs from any caller's mineFlip, so the guard is what
     ///      stops the pool being topped up by whoever calls the most.
     function test_aDayFundsTheProgressiveExactlyOnce() public {
         uint24 today = craps.currentDayIndex();
@@ -488,7 +488,7 @@ contract CrapsProgressiveTest is CrapsPins {
         vm.prank(bob);
         craps.enterBattle(slot, 3 | (uint32(3) << 12) | (uint32(1) << 15), 1);
         _closeOn(craps, slot, 1, uint256(keccak256("custom-word")));
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         assertEq(craps.progressivePool(), pool, "settling a custom battle moved the pool");
     }
 
@@ -1819,7 +1819,7 @@ contract CrapsProgressiveTest is CrapsPins {
         craps.enterBattle(slot, 3 | (uint32(3) << 12) | (uint32(1) << 15), 1);
         _closeOn(craps, slot, 1, uint256(keccak256("custom-split-word")));
         vm.recordLogs();
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i = 0; i < logs.length; ++i) {
             assertTrue(logs[i].topics[0] != _SPLIT_SIG, "a custom battle announced a split");

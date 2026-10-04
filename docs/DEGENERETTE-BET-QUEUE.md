@@ -53,7 +53,7 @@ to the stake unit — the player never spins on an un-funded fractional unit.
 
 ## Sweep integration
 
-The human-box sweep, `DegenerusGameLootboxModule.openHumanBoxes`, walks a
+The human-box sweep, `GameAfkingModule.runHumanBoxWork`, walks a
 monotonic cursor `(boxCursorIndex, boxCursor)` across finalized RNG indices.
 At each index it opens every ready box in `boxPlayers[index]` first, then —
 once that index's box entries are exhausted (`cur - qlen`, where `qlen =
@@ -66,14 +66,10 @@ word), so the combined position stays stable across calls. The sweep only
 advances past an index once both its boxes and its bets are drained; an
 un-worded index halts the whole walk so nothing downstream is orphaned.
 
-Two entry points reach this sweep:
-
-- `mineFlip()` — the permissionless keeper crank (`DegenerusGame.sol`, routed
-  through `GameAfkingModule`), which pays the caller a bounty for the work it
-  runs.
-- `openBoxes(maxCount)` — a permissionless, **unrewarded** liveness valve that
-  opens AFKing boxes first, then spends any remaining budget on the same
-  human-box sweep. Only `mineFlip()` pays a bounty.
+One entry point reaches this sweep: `mineFlip()`, the permissionless keeper
+crank (`DegenerusGame.sol`, routed through `GameAfkingModule`), which opens
+AFKing boxes first and then runs the human-box sweep, and pays the caller a
+bounty for the work it runs.
 
 `sweepDegeneretteBets` is resumable mid-queue: it resolves bets from `pos`
 while `unitsSpent < budget`, and the first bet of a call always runs

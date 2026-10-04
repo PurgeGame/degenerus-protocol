@@ -464,9 +464,9 @@ contract V56SubHardening is DeployProtocol {
     function testVaultGameAdvanceRoutesThroughMintFlip() public {
         // Idle arm first: settle clean, do NOT roll the day -> nothing due -> NoWork().
         _settleClean(uint256(keccak256("vault_idle")) | 1);
-        // Commit bounded human-frontier housekeeping across finalized empty indices first;
-        // the wrapper's idle assertion is about a genuinely stationary router.
-        game.openBoxes(1_000);
+        // Mine any remaining read-cohort housekeeping first; the wrapper's idle assertion is
+        // about a genuinely stationary router.
+        _mineAll(64);
         require(!game.advanceDue(), "fixture: clean so the idle arm is genuine");
         // The crank has a craps arm now, so a NoWork probe has to quiet the table too or it is
         // asserting an idleness it never set up.
@@ -491,9 +491,9 @@ contract V56SubHardening is DeployProtocol {
     function testSdgnrsGameAdvanceRoutesThroughMintFlip() public {
         // Idle arm: clean, no day-roll -> NoWork().
         _settleClean(uint256(keccak256("sdgnrs_idle")) | 1);
-        // Commit bounded human-frontier housekeeping across finalized empty indices first;
-        // the wrapper's idle assertion is about a genuinely stationary router.
-        game.openBoxes(1_000);
+        // Mine any remaining read-cohort housekeeping first; the wrapper's idle assertion is
+        // about a genuinely stationary router.
+        _mineAll(64);
         require(!game.advanceDue(), "fixture: clean so the idle arm is genuine");
         // The crank has a craps arm now, so a NoWork probe has to quiet the table too or it is
         // asserting an idleness it never set up.
@@ -554,8 +554,9 @@ contract V56SubHardening is DeployProtocol {
         uint256 w = uint256(keccak256(abi.encode("dlv", vrfWord, _deliverNonce++))) | 1;
         _runStageNewDay(w);
         _settleClean(uint256(keccak256(abi.encode("dlvc", w))) | 1);
-        vm.prank(makeAddr("deliver_opener"));
-        game.openBoxes(400);
+        vm.startPrank(makeAddr("deliver_opener"));
+        _mineAll(64);
+        vm.stopPrank();
         who;
     }
 

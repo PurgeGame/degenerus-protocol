@@ -7,11 +7,6 @@ import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
-import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
-
-interface IFreezeCohortKeeper {
-    function keepRngCohort(uint48 index, uint64 budget) external returns (bool, bool);
-}
 
 /// @dev _currentRngWord() decodes rngWordCurrent in slot3; no extra readiness slot.
 /// @title RngWindowFreezeHandler — the FUZZ-02 RNG-FREEZE durable-invariant action handler.
@@ -295,22 +290,28 @@ contract RngWindowFreezeHandler is Test {
     }
 
     // =========================================================================
-    // In-window action: openBoxes (the lootbox-resolve freeze surface)
+    // In-window action: a box-open attempt (the lootbox-resolve freeze surface)
     // =========================================================================
 
-    /// @notice Attempt openBoxes WHILE the window is open. Pre-word the autoOpen cursor orphan gate
-    ///         + the openLootBox RngNotReady guard skip the open (SAFE-04). The isolation check
-    ///         asserts the call did not move the frozen word/cursor set.
-    function tryInWindowOpenBoxes(uint256 actorSeed, uint256 maxSeed) external useActor(actorSeed) {
+    /// @notice Attempt to open boxes WHILE the window is open. Boxes open only inside mineFlip's
+    ///         afking and human-box stages, so the attempt is a player's mineFlip; with the word
+    ///         still pending the engine can only wait. The isolation check asserts the call did not
+    ///         move the frozen word/cursor set.
+    function tryInWindowOpenBoxes(uint256 actorSeed, uint256) external useActor(actorSeed) {
         calls_inWindowOpenBoxes++;
-        // Self-prime the window so openBoxes always runs inside an open window (non-vacuity).
+        // Self-prime the window so the attempt always runs inside an open window (non-vacuity).
         if (!_driveWindowOpen(actorSeed)) return;
+        // Once the word has landed, mineFlip is the exempt heartbeat consuming it, not a player
+        // action on a pending outcome: finish that window and take a fresh one.
+        if (game.isRngFulfilled()) {
+            _closeDailyWindow(actorSeed);
+            if (!_driveWindowOpen(actorSeed) || game.isRngFulfilled()) return;
+        }
         ghost_inWindowActions++;
 
         _snapshotEnumeratedSet();
-        uint256 maxCount = bound(maxSeed, 1, 200);
         vm.prank(currentActor);
-        try game.openBoxes(maxCount) {} catch {}
+        try game.mineFlip() {} catch {}
         _checkFrozenAfterIsolatedAction();
     }
 
@@ -330,8 +331,8 @@ contract RngWindowFreezeHandler is Test {
     }
 
     /// @dev Internal body of closeWindow, factored out so the mid-day driver can clear a daily
-    ///      window that stands in the way of opening a mid-day one (requestLootboxRng reverts
-    ///      RngLocked while the daily window is open).
+    ///      window that stands in the way of opening a mid-day one (mineFlip makes no mid-day
+    ///      request while the daily window is open).
     function _closeDailyWindow(uint256 wordSeed) internal {
         if (!game.rngLocked()) return;
         uint256 reqId = vrf.lastRequestId();
@@ -350,7 +351,8 @@ contract RngWindowFreezeHandler is Test {
     }
 
     /// @dev Real permissionless work, outside the measured freeze window. A fresh request
-    ///      now requires the preceding cohort's boxes, bets, tickets and Craps to finish.
+    ///      requires the preceding cohort's boxes, bets, tickets and Craps to finish, and mineFlip
+    ///      runs every one of those stages in order.
     ///      Never seed a completion cursor: failed progress must remain visible to the test.
     function _drainReadConsumers() internal {
         if (game.rngLocked()) return;
@@ -360,24 +362,21 @@ contract RngWindowFreezeHandler is Test {
         }
         uint48 read = RecyclingState.readBuffer(address(game));
         if (RecyclingState.word(address(game), read) == 0) return;
-        IFreezeCohortKeeper craps = IFreezeCohortKeeper(ContractAddresses.CRAPS);
         for (uint256 i; i < 32; ++i) {
+            // A request the drain itself made is the next window's, not this cohort's work.
+            if (_requestActive() && !game.isRngFulfilled()) return;
             uint256 packed = uint256(vm.load(address(game), bytes32(LOOTBOX_RNG_PACKED_SLOT)));
             bool ticketsDone = (uint256(vm.load(address(game), bytes32(0))) >> (24 * 8)) & 0xff != 0;
             bool midDayDone = (packed >> LR_MID_DAY_SHIFT) & LR_MID_DAY_MASK == 0;
             if (ticketsDone && midDayDone && game.boxIndexComplete(read) && packed & (uint256(1) << (250 + (read & 1))) == 0) return;
-            try game.openBoxes(512) {} catch {}
-            if (!ticketsDone || !midDayDone) {
-                try game.mineFlip() {} catch {}
-            }
-            try craps.keepRngCohort(read, 64) {} catch {}
+            try game.mineFlip() {} catch {}
         }
     }
 
     // =========================================================================
     // MID-DAY LOOTBOX WINDOW — the second freeze window shape.
     //
-    // requestLootboxRng (AdvanceModule) opens a lootbox-only VRF window that sets NEITHER
+    // mineFlip's mid-day request (RngModule `requestMinerRng`) opens a lootbox-only VRF window that sets NEITHER
     // rngLockedFlag NOR prizePoolFrozen: the in-flight marker is rngRequestTime != 0 with
     // rngLocked() == false. The pending consumption is the mid-day rawFulfillRandomWords branch —
     // it reads the LR_INDEX cursor (landing index = LR_INDEX - 1), writes the reserved
@@ -396,17 +395,19 @@ contract RngWindowFreezeHandler is Test {
     //   (11) rngLockedFlag              — slot 0 byte 19 : the fulfillment branch selector (flip
     //                                                      would reroute the word to the daily buffer).
     // Same isolation discipline as the daily set: snapshot immediately before the player action,
-    // re-read immediately after it alone; mineFlip / requestLootboxRng / the VRF callback are
-    // the exempt machinery and are never measured.
+    // re-read immediately after it alone; mineFlip (with the mid-day request it makes) and the VRF
+    // callback are the exempt machinery and are never measured.
     // =========================================================================
 
     /// @dev The mid-day window predicate: a VRF request is in flight (rngRequestTime stamped) but
-    ///      the daily lock is NOT held — exactly the requestLootboxRng in-flight state.
+    ///      the daily lock is NOT held — exactly the mid-day request's in-flight state.
     function _requestActive() private view returns (bool) {
         return uint256(vm.load(address(game), bytes32(0))) & (uint256(1) << 254) != 0;
     }
+    /// @dev Open means still pending: a delivered word waiting for mineFlip to publish it is the
+    ///      exempt heartbeat's to consume, not a window a player action can be measured in.
     function _midDayWindowOpen() internal view returns (bool) {
-        return _requestActive() && !game.rngLocked();
+        return _requestActive() && !game.rngLocked() && !game.isRngFulfilled();
     }
 
     /// @notice Drive a mid-day lootbox VRF window open so the fuzzer can act inside it.
@@ -416,10 +417,11 @@ contract RngWindowFreezeHandler is Test {
     }
 
     /// @dev Drive the MID-DAY window open with the current actor; returns whether it latched.
-    ///      Preconditions of requestLootboxRng, satisfied in order: no daily lock (close it),
+    ///      Preconditions of the mid-day request, satisfied in order: no daily lock (close it),
     ///      today's daily word recorded (drive a full daily cycle), pending lootbox ETH above the
-    ///      packed threshold (a box purchase), then the request itself. Capped ladder — every
-    ///      sub-step is the exempt machinery, never measured against the property.
+    ///      packed threshold (a box purchase), then mineFlip, which makes the request once nothing
+    ///      it orders earlier is due. Capped ladder — every sub-step is the exempt machinery, never
+    ///      measured against the property.
     function _driveMidDayOpen(uint256 actorSeed) internal returns (bool open) {
         for (uint256 i; i < 3; i++) {
             if (game.gameOver()) return false;
@@ -430,13 +432,13 @@ contract RngWindowFreezeHandler is Test {
                 return true;
             }
 
-            // A daily window blocks requestLootboxRng (RngLocked) — complete it first.
+            // A daily window blocks the mid-day request — complete it first.
             if (game.rngLocked()) {
                 _closeDailyWindow(actorSeed + i);
                 if (game.rngLocked()) return false; // could not complete the heartbeat
             }
 
-            // requestLootboxRng needs TODAY's daily word consumed and recorded.
+            // The mid-day request needs TODAY's daily word consumed and recorded.
             if (_rngWordByDay(game.currentDayView()) == 0) {
                 if (!_driveWindowOpen(actorSeed + i)) return false;
                 _closeDailyWindow(actorSeed + i);
@@ -456,8 +458,10 @@ contract RngWindowFreezeHandler is Test {
             vm.prank(currentActor);
             try game.purchase{value: cost}(currentActor, 400, BoxOrderLib.boCustomFloor(boxAmt), bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
 
-            vm.prank(currentActor);
-            try game.requestLootboxRng() {} catch {}
+            for (uint256 j; j < 4 && !_midDayWindowOpen(); j++) {
+                vm.prank(currentActor);
+                try game.mineFlip() {} catch { break; }
+            }
 
             if (_midDayWindowOpen()) {
                 ghost_midDayWindowsOpened++;
@@ -508,18 +512,17 @@ contract RngWindowFreezeHandler is Test {
         _checkMidDayFrozenAfterIsolatedAction();
     }
 
-    /// @notice Attempt openBoxes WHILE the mid-day window is open. Boxes at the reserved (word-less)
-    ///         index are skipped by the contract's RngNotReady guard; either way the call must not
-    ///         move the enumerated mid-day set. Isolation-checked.
-    function tryMidDayOpenBoxes(uint256 actorSeed, uint256 maxSeed) external useActor(actorSeed) {
+    /// @notice Attempt to open boxes WHILE the mid-day window is open: a player's mineFlip, the
+    ///         only box door. With the reserved index still word-less the engine can only wait;
+    ///         either way the call must not move the enumerated mid-day set. Isolation-checked.
+    function tryMidDayOpenBoxes(uint256 actorSeed, uint256) external useActor(actorSeed) {
         calls_midDayOpenBoxes++;
         if (!_driveMidDayOpen(actorSeed)) return;
         ghost_midDayInWindowActions++;
 
         _snapshotMidDaySet();
-        uint256 maxCount = bound(maxSeed, 1, 200);
         vm.prank(currentActor);
-        try game.openBoxes(maxCount) {} catch {}
+        try game.mineFlip() {} catch {}
         _checkMidDayFrozenAfterIsolatedAction();
     }
 

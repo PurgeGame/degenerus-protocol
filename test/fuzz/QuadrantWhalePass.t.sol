@@ -168,7 +168,7 @@ contract QuadrantWhalePassTest is Test {
             _geometry(word, ethBudget, finalDay);
         uint256 priorLiability = h.claimablePoolView();
         vm.recordLogs();
-        h.payDailyJackpot(true, LVL, word);
+        h.runDailyJackpot(true, LVL, word, gasleft());
         d = _read(vm.getRecordedLogs());
         uint256 spent;
         uint8 solo = JackpotBucketLib.soloBucketIndex(entropy);
@@ -303,7 +303,7 @@ contract QuadrantWhalePassTest is Test {
         for (uint8 q; q < 4; ++q) h.seedRepeated(traits[q], player);
         h.prepare(1250 ether, 0, true);
         vm.recordLogs();
-        h.payDailyJackpot(true, LVL, word);
+        h.runDailyJackpot(true, LVL, word, gasleft());
         Draw memory d = _read(vm.getRecordedLogs());
         assertEq(d.passEvents[0], 4, "four awards without wallet deduplication");
         assertEq(h.whalePassOf(player), d.passTotal);

@@ -33,7 +33,7 @@ contract BattleHarness is CrapsViews {
 
     /// @dev The same settlement, for a slip whose id does NOT name the window it plays. A day
     ///      ticket sits in all seven, so the terms and the word are the WINDOW's, not the id's —
-    ///      the very pair `resolveSlot` hands `_resolve` for a seat in the day tail.
+    ///      the very pair settlement hands `_resolve` for a seat in the day tail.
     function settlementIn(uint256 betId, uint64 slot) external view returns (Settlement memory) {
         return _settlementOf(betId, _bets[betId], _slotWindow(slot), _wordAt(_indexOf(slot)));
     }
@@ -315,7 +315,7 @@ contract CrapsBattleTest is CrapsPins {
     function _runSlot(uint128 bank, uint128 goal, uint24 su, uint48 index, uint256 word) internal returns (uint64) {
         uint64 slot = _slotFor(bank, goal, su);
         _closeOn(craps, slot, index, word);
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         // A shut battle takes no more entries, so a sweeping fixture must open a fresh one next
         // time it names these terms.
         delete _fixtureSlot[_slotKey(bank, goal, su)];
@@ -357,7 +357,7 @@ contract CrapsBattleTest is CrapsPins {
         assertEq(craps.battleOf(craps.battleKeyOf(a)).battleStake, 0, "a friendly battle grew a bounty");
 
         _closeOn(craps, slot, 0, uint256(keccak256("plain")));
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
 
         // It RANKS. A zero bounty used to skip the scoreboard entirely, so `resolved` never caught
         // `entrants` and the battle could never finalize.
@@ -414,7 +414,7 @@ contract CrapsBattleTest is CrapsPins {
             assertEq(craps.stakeFor(craps.drawnBoardOf(ids[placed])), round, "a custom board missed ten chips");
         }
 
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         assertTrue(craps.battleOf(key).finalized, "the eight-shape custom field did not finalize");
     }
 
@@ -785,7 +785,7 @@ contract CrapsBattleTest is CrapsPins {
         assertGt(busts, 0, "no friendly seat busted: the test proves nothing");
         assertGt(deleted, 0, "the friendly busts were holding nothing: the test proves nothing");
 
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
 
         CrapsBattle.Battle memory info = craps.battleOf(craps.battleKeyOf(ids[0]));
         address winner = craps.betOf(_idAt(slot, info.winnerId)).player;
@@ -1098,7 +1098,7 @@ contract CrapsBattleTest is CrapsPins {
         vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);
         craps.amendSlip(betId, _boardA());
 
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         assertTrue(craps.betOf(betId).settled, "amended slip did not settle");
     }
 
@@ -1231,7 +1231,7 @@ contract CrapsBattleTest is CrapsPins {
 
             _closeOn(craps, slot, uint48(i & 1), uint256(keccak256(abi.encode("rank", i))));
             (uint256 wonOne,) = craps.previewSettlement(plain);
-            craps.resolveSlot(slot, WHOLE_FIELD);
+            craps.settleSlot(slot, WHOLE_FIELD);
 
             // A pair that BUSTS comes home with nothing, and nothing times ten is still nothing —
             // those passes are level whether the multiplier leaks into the score or not, so they
@@ -2181,8 +2181,8 @@ contract CrapsBattleTest is CrapsPins {
     /// @dev THE LEAD HAS TO CLEAR THE GAME'S PRE-RESET BLACKOUT, and this is the only place the
     ///      two constants are ever compared.
     ///
-    ///      `requestLootboxRng` refuses outright in the final minute before the day resets, so it
-    ///      does not compete with the daily jackpot's own RNG flow. The event's whole purpose is to
+    ///      The mid-day RNG request mineFlip makes refuses outright in the final minute before the
+    ///      day resets, so it does not compete with the daily jackpot's own RNG flow. The event's whole purpose is to
     ///      shut early enough to get a draw, so a lead inside that blackout would arm the day's
     ///      biggest window into a request that can never be granted — and it would fail SILENTLY,
     ///      because the arm swallows the refusal on purpose. Read out of the module's own source
@@ -2199,9 +2199,9 @@ contract CrapsBattleTest is CrapsPins {
     }
 
     /// @dev THE EVENT SETTLES BEFORE THE JACKPOT IT PRECEDES. Shutting it binds it to the table
-    ///      the next ordinary lootbox request seals, and that request carries both the table's
-    ///      dice and the day's pending boxes — so a quarter-hour of lead is the whole window in
-    ///      which the day's biggest race resolves, in front of an audience, before the jackpots
+    ///      the next ordinary RNG request mineFlip makes seals, and that request carries both the
+    ///      table's dice and the day's pending boxes — so a quarter-hour of lead is the whole window
+    ///      in which the day's biggest race resolves, in front of an audience, before the jackpots
     ///      go out.
     function test_theEventShutsIntoTheRunUpAndBindsTheNextDraw() public {
         _openDay();
@@ -2214,13 +2214,14 @@ contract CrapsBattleTest is CrapsPins {
         assertEq(day, craps.currentDayIndex(), "the event shut after its own day had turned over");
 
         // Arming binds the live table and asks for nothing; the next ordinary request is the draw.
-        uint256 before_ = game.lootboxRngCalls();
+        uint256 before_ = game.rngRequests();
         uint48 live = craps.currentIndex();
         uint48 bound = craps.armWindow(eventSlot);
         assertEq(bound, live, "the event did not bind the live table");
-        assertEq(game.lootboxRngCalls(), before_, "shutting the event made a request of its own");
-        game.requestLootboxRng();
-        assertEq(game.lootboxRngCalls(), before_ + 1, "the ordinary request did not draw the event's table");
+        assertEq(game.rngRequests(), before_, "shutting the event made a request of its own");
+        assertEq(craps.currentIndex(), live, "shutting the event moved the cursor");
+        game.requestRng();
+        assertEq(game.rngRequests(), before_ + 1, "the ordinary request did not draw the event's table");
         assertEq(craps.currentIndex(), live ^ 1, "the draw did not seal the event's table");
 
         // And nothing of the day is left taking bets once it has gone.
@@ -2326,17 +2327,17 @@ contract CrapsBattleTest is CrapsPins {
         uint48 live = craps.currentIndex();
         _warpPastClose(PER);
 
-        uint256 calls = game.lootboxRngCalls();
+        uint256 calls = game.rngRequests();
         uint48 first = craps.armWindow(_slotAt(PER - 1));
         assertEq(first, live, "shut onto a table other than the live one");
         uint48 index = craps.armWindow(_slotAt(PER));
         assertEq(index, live, "a second shut before any request must share the live table");
         assertEq(craps.currentIndex(), live, "a shut must not move the cursor");
-        assertEq(game.lootboxRngCalls(), calls, "a shut made a request of its own");
+        assertEq(game.rngRequests(), calls, "a shut made a request of its own");
         assertEq(craps.wordAt(index), 0, "shut onto a table that had already rolled");
 
-        game.requestLootboxRng(); // any ordinary request seals the shut windows' table
-        assertEq(game.lootboxRngCalls(), calls + 1, "the ordinary request was not made");
+        game.requestRng(); // any ordinary request seals the shut windows' table
+        assertEq(game.rngRequests(), calls + 1, "the ordinary request was not made");
         assertEq(craps.currentIndex(), live ^ 1, "the request must seal the live table");
 
         _warpPastClose(2);
@@ -2846,7 +2847,7 @@ contract CrapsBattleTest is CrapsPins {
 
         // The pair sits in every ORDINARY window of the day off the one pair of tickets. Shut
         // each and the fold has to put them back at the head of that window's field — the same
-        // own-then-day mapping the `resolveSlot` walk uses. If it ever did not, the entrant count
+        // own-then-day mapping the settlement walk uses. If it ever did not, the entrant count
         // could never be matched by the resolved count and every pot in the day would be
         // unclaimable. The jackpot window is not armed through this door at all, so the walk
         // stops short of it.

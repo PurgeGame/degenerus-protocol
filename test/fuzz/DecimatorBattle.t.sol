@@ -89,9 +89,11 @@ contract DecimatorBattleTest is Test {
         return uint256(keccak256(abi.encode(COIN, word, lvl, id))) & 1 != 0;
     }
 
-    function _drain(DecimatorBattleHarness target, uint256 budget) internal {
+    /// @dev Drive the live decimator worker (mineFlip's Decimator stage) with all remaining gas
+    ///      per call until the queue empties.
+    function _drain(DecimatorBattleHarness target) internal {
         for (uint256 i; uint24(target.queue()) != 0 && i < 4000; ++i) {
-            target.settleDecimatorWinners(budget);
+            target.runDecimatorWork(gasleft());
         }
         assertEq(uint24(target.queue()), 0, "settlement terminated");
     }
@@ -108,12 +110,9 @@ contract DecimatorBattleTest is Test {
 
     function _assertLockedSettlementIsIdle(DecimatorBattleHarness target) internal {
         DegenerusGameStorage.DecBattleRound memory beforeRound = target.roundOf(LVL);
-        uint256 beforeGas = gasleft();
-        (uint256 work, uint256 gasUsed, bool moved) = target.settleDecimatorWinners(1500);
-        uint256 callGas = beforeGas - gasleft();
-        assertEq(work, 0);
-        assertFalse(moved);
-        assertLe(gasUsed, callGas, "blocked work still reports actual check gas");
+        MineFlipGas.Result memory r = target.runDecimatorWork(gasleft());
+        assertEq(r.rewardBasis, 0);
+        assertFalse(r.progressed);
         DegenerusGameStorage.DecBattleRound memory afterRound = target.roundOf(LVL);
         assertEq(afterRound.cursor, beforeRound.cursor, "daily lock preserves the run cursor");
         assertEq(afterRound.phase, beforeRound.phase, "daily lock preserves the phase");
@@ -196,16 +195,16 @@ contract DecimatorBattleTest is Test {
         _assertLockedSettlementIsIdle(h);
         assertEq(h.reserved(), 13 ether + 17, "daily lock retains the full reservation");
         h.freeze(false);
-        _drain(h, 122);
+        _drain(h);
         // The champion: half in whole half passes (6.5 ETH buys two), the rest ETH.
         assertEq(h.passesOf(address(1)), 2);
         assertEq(h.balanceOf(address(1)), 13 ether + 17 - 2 * 2.25 ether);
         assertEq(h.reserved(), 13 ether + 17 - 2 * 2.25 ether);
         assertEq(h.future(), 2 * 2.25 ether, "pass money recycles after daily work unlocks");
         assertEq(h.pendingFuture(), 0);
-        (uint256 worked,, bool moved) = h.settleDecimatorWinners(1500);
-        assertEq(worked, 0);
-        assertFalse(moved);
+        MineFlipGas.Result memory r = h.runDecimatorWork(gasleft());
+        assertEq(r.rewardBasis, 0);
+        assertFalse(r.progressed);
     }
 
     function test_DailyLockDefersAllTailsReserveRelease() public {
@@ -217,7 +216,7 @@ contract DecimatorBattleTest is Test {
         _assertLockedSettlementIsIdle(h);
         assertEq(h.reserved(), 7 ether, "locked stage retains the reservation");
         h.freeze(false);
-        _drain(h, 1500);
+        _drain(h);
         assertEq(h.balanceOf(address(1)), 0);
         assertEq(h.roundOf(LVL).winners, 0);
         assertEq(h.reserved(), 0);
@@ -232,13 +231,9 @@ contract DecimatorBattleTest is Test {
         uint256 word = 2;
         while (_heads(word, LVL, 1)) ++word;
         h.seal(LVL, 5 ether, word);
-        uint256 beforeGas = gasleft();
-        (uint256 worked, uint256 gasUsed,) = h.settleDecimatorWinners(1500);
-        uint256 callGas = beforeGas - gasleft();
-        assertEq(worked, 1);
-        assertGt(gasUsed, 0, "compatibility return reports measured execution gas");
-        assertLe(gasUsed, callGas, "worker gas excludes the caller's call overhead");
-        _drain(h, 1500);
+        MineFlipGas.Result memory r = h.runDecimatorWork(gasleft());
+        assertEq(r.rewardBasis, 1);
+        _drain(h);
         assertEq(h.roundOf(LVL).winners, 0);
         assertEq(h.future(), 5 ether, "all-tails pool returns to future");
     }
@@ -249,12 +244,9 @@ contract DecimatorBattleTest is Test {
         _populate(h, LVL, 4);
         h.seal(LVL, 3 ether, 11);
         h.terminal();
-        uint256 beforeGas = gasleft();
-        (uint256 worked, uint256 gasUsed, bool moved) = h.settleDecimatorWinners(1500);
-        uint256 callGas = beforeGas - gasleft();
-        assertEq(worked, 0);
-        assertLe(gasUsed, callGas, "even an idle worker reports actual check gas");
-        assertFalse(moved);
+        MineFlipGas.Result memory r = h.runDecimatorWork(gasleft());
+        assertEq(r.rewardBasis, 0);
+        assertFalse(r.progressed);
         assertEq(uint24(h.queue()), LVL);
         assertEq(h.roundOf(LVL).cursor, 0);
         assertEq(h.reserved(), 3 ether);
@@ -272,10 +264,10 @@ contract DecimatorBattleTest is Test {
         assertEq(uint24(h.queue() >> 24), LVL);
         assertEq(h.roundOf(LVL).next, 0);
         assertEq(h.activeWord(), 11);
-        _drain(h, 122);
+        _drain(h);
         assertEq(h.roundOf(LVL).phase, 3);
         h.seal(15, 4 ether, 22);
-        _drain(h, 122);
+        _drain(h);
         assertEq(h.roundOf(15).phase, 3);
         assertEq(h.entryOf(LVL, 1).stack, 2000 ether);
         assertEq(h.entryOf(15, 1).stack, 2000 ether);
@@ -289,8 +281,9 @@ contract DecimatorBattleTest is Test {
         uint256 word = type(uint256).max - 77;
         h.seal(LVL, 13 ether + 77, word);
         other.seal(LVL, 13 ether + 77, word);
-        _drain(h, 122);
-        _drain(other, type(uint256).max);
+        // Bounded-gas chunks against one all-gas pass: the supplied gas never moves the outcome.
+        _drainWithGas(h, 1_000_000);
+        _drain(other);
         assertEq(abi.encode(h.roundOf(LVL)), abi.encode(other.roundOf(LVL)));
         for (uint8 i; i < h.roundOf(LVL).winners; ++i) {
             assertEq(abi.encode(h.nodeOf(LVL, i)), abi.encode(other.nodeOf(LVL, i)));
@@ -346,7 +339,7 @@ contract DecimatorBattleTest is Test {
         _populate(h, LVL, 16);
         uint256 word = uint256(keccak256("decimator replay"));
         h.seal(LVL, 10 ether, word);
-        _drain(h, 1500);
+        _drain(h);
         DegenerusGameStorage.DecBattleRound memory round = h.roundOf(LVL);
         bytes32 seed = keccak256(abi.encode(DICE, word, LVL));
         for (uint8 i; i < round.winners; ++i) {
@@ -374,7 +367,7 @@ contract DecimatorBattleTest is Test {
         _probe();
         _populate(h, LVL, 1001);
         h.seal(LVL, 100 ether + 3, 777);
-        _drain(h, 1500);
+        _drain(h);
         DegenerusGameStorage.DecBattleRound memory round = h.roundOf(LVL);
         assertEq(round.capacity, 100);
         assertEq(round.winners, 100);
@@ -417,7 +410,7 @@ contract DecimatorBattleTest is Test {
         _burn(h, address(1), LVL, type(uint160).max, 10_000);
         _burn(h, address(2), LVL, 1000 ether, 10_000);
         h.seal(LVL, 1 ether, word);
-        _drain(h, 1500);
+        _drain(h);
         assertEq(h.roundOf(LVL).champion, 2);
         assertEq(h.balanceOf(address(1)), 0);
         assertEq(h.balanceOf(address(2)), 1 ether);
@@ -455,7 +448,7 @@ contract DecimatorBattleTest is Test {
         vm.prank(ContractAddresses.COIN);
         h.recordDecBurn(address(1), LVL, 1000 ether, 10_000, 2 | 3 << 12 | 1 << 21);
         h.seal(LVL, 1 ether, word);
-        _drain(h, 1500); // the probe reverts unless chips, scatter count and boost all match
+        _drain(h); // the probe reverts unless chips, scatter count and boost all match
         assertEq(h.balanceOf(address(1)), 1 ether);
     }
 
@@ -479,8 +472,9 @@ contract DecimatorBattleTest is Test {
         }
         h.seal(LVL, 4 ether, word);
         other.seal(LVL, 4 ether, word);
-        _drain(h, 122);
-        _drain(other, type(uint256).max);
+        // Bounded-gas chunks against one all-gas pass: the supplied gas never moves the outcome.
+        _drainWithGas(h, 1_000_000);
+        _drain(other);
         assertEq(h.roundOf(LVL).capacity, 4);
         assertEq(h.roundOf(LVL).winners, 4);
         // First place: the two top stacks tie, so the larger tiebreak key wins.
@@ -514,8 +508,9 @@ contract DecimatorBattleTest is Test {
 
     function _runPhaseUnits(DecimatorBattleHarness target, uint24 lvl) internal returns (uint256 units) {
         while (target.roundOf(lvl).phase == 1 && target.roundOf(lvl).cursor < target.roundOf(lvl).count) {
-            (, uint256 used,) = target.settleDecimatorWinners(1500);
-            units += used;
+            uint256 g0 = gasleft();
+            target.runDecimatorWork(gasleft());
+            units += g0 - gasleft();
         }
     }
 
@@ -525,7 +520,7 @@ contract DecimatorBattleTest is Test {
         _probe();
         _populate(h, LVL, 40); // four places
         h.seal(LVL, 4 ether, 11);
-        _drain(h, 1500);
+        _drain(h);
         DecimatorBattleHarness fresh = new DecimatorBattleHarness();
         h.open(15);
         fresh.open(15);
@@ -537,8 +532,8 @@ contract DecimatorBattleTest is Test {
         fresh.seal(15, 3 ether + 1, 22);
         uint256 reusedUnits = _runPhaseUnits(h, 15);
         uint256 freshUnits = _runPhaseUnits(fresh, 15);
-        _drain(h, 1500);
-        _drain(fresh, 1500);
+        _drain(h);
+        _drain(fresh);
         uint8 winners = h.roundOf(15).winners;
         assertGt(winners, 0);
         assertEq(winners, fresh.roundOf(15).winners);
@@ -594,7 +589,7 @@ contract DecimatorBattleTest is Test {
                 assertEq(t.reserved(), pool, "locked round keeps its full reservation");
                 t.freeze(false);
             }
-            _drain(t, 1500);
+            _drain(t);
             this.assertBigSharePayouts(t, pool);
         }
     }
@@ -639,7 +634,7 @@ contract DecimatorBattleTest is Test {
         _probe();
         _populate(h, LVL, 60);
         h.seal(LVL, 4 ether, 5); // two or more places share < 2.25 ether; a lone winner takes ETH
-        _drain(h, 1500);
+        _drain(h);
         for (uint160 i = 1; i <= 60; ++i) assertEq(h.passesOf(address(i)), 0);
         assertEq(h.reserved(), 4 ether);
     }
@@ -678,7 +673,7 @@ contract DecimatorBattleTest is Test {
         _burn(h, address(1), LVL, type(uint160).max, 10_000);
         _burn(h, address(2), LVL, 1000 ether, 10_000);
         h.seal(LVL, 1 ether, word);
-        _drain(h, 1500);
+        _drain(h);
         assertEq(h.roundOf(LVL).winners, 1);
         uint64 champion = _tieKey(word, LVL, 1) > _tieKey(word, LVL, 2) ? 1 : 2;
         assertEq(h.roundOf(LVL).champion, champion);
@@ -692,7 +687,7 @@ contract DecimatorBattleTest is Test {
         uint64 n = uint64(bound(population, 1, 35));
         _populate(h, LVL, n);
         h.seal(LVL, pool, word);
-        _drain(h, 1500);
+        _drain(h);
         uint8 cap = uint8((n + 9) / 10);
         uint8 heads;
         uint256 sum;

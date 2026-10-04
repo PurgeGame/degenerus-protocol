@@ -19,7 +19,7 @@ contract FFKeyComputer is DegenerusGameStorage {
 /// @notice Deploys the full 23-contract protocol via DeployProtocol, drives the game through
 ///         level transitions past level 8 (where constructor-deposited FF entries exist), and
 ///         verifies that mineFlip's internal (private) `_processFutureTicketBatch` drains FF
-///         queues via `processTicketBatch`'s lastPurchaseDay continuation.
+///         queues via `runTicketWork`'s lastPurchaseDay continuation.
 ///
 ///         The constructor pre-queues 16 sDGNRS + 16 vault tickets for levels 1-100.
 ///         At construction time (level=0), `_mintCeiling()` = level+1 = 1, so only level 1 is

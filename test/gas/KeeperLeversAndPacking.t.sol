@@ -159,7 +159,7 @@ contract KeeperLeversAndPacking is DeployProtocol {
         // The one-category early-return is replaced by one action per dispatch iteration, reselected
         // from storage, with the bounty credited once for the whole call.
         assertEq(
-            _countOccurrences(mineFlipBody, "MinerAction action = transitions == 0 ? first : _nextMinerAction();"),
+            _countOccurrences(mineFlipBody, "MinerAction action = transitions == 0 ? first : _nextMinerAction(msg.sender);"),
             1,
             "GAS-02: the engine dispatches one storage-selected action per iteration"
         );
@@ -332,7 +332,7 @@ contract KeeperLeversAndPacking is DeployProtocol {
         assertGt(bytes(afking).length, 1000, "stripped GameAfkingModule source is non-empty (repoint live)");
         assertGt(bytes(storage_).length, 1000, "stripped DegenerusGameStorage source is non-empty (repoint live)");
         // Known code identifiers that unquestionably exist post-strip in each repointed source.
-        assertGt(_countOccurrences(game_, "function openBoxes(uint256 maxCount)"), 0, "harness live: a known Game code symbol is found");
+        assertGt(_countOccurrences(game_, "function boxesPending() external view returns (bool)"), 0, "harness live: a known Game code symbol is found");
         assertGt(_countOccurrences(afking, "function runHumanBoxWork(uint256 gasAllowance)"), 0, "harness live: a known GameAfkingModule code symbol is found");
         string memory miner = _stripComments(vm.readFile(MINER_SRC));
         assertGt(bytes(miner).length, 1000, "stripped DegenerusGameMinerModule source is non-empty");

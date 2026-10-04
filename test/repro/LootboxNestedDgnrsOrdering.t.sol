@@ -4,7 +4,6 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
-import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IsDGNRS} from "../../contracts/interfaces/IsDGNRS.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {SigFigLib} from "../../contracts/libraries/SigFigLib.sol";
@@ -42,14 +41,18 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
         _settleClean(0xB00757);
         _settleIdle(0xB00757);
         // A trailing cohort (e.g. a shut craps window riding its own mid-day word) can leave the
-        // other physical tag open for writes; one empty donor-funded cohort restores tag 1.
+        // other physical tag open for writes; one filler cohort restores tag 1. A mid-day request
+        // needs pending work, so a filler buyer queues one box at the mid-day threshold and the
+        // engine requests that cohort's word.
         if (RecyclingState.writeBuffer(address(game)) != PARENT_BUFFER) {
-            address donor = makeAddr("nested-donor");
-            mockFeed.setUpdatedAt(block.timestamp);
-            vm.prank(ContractAddresses.ADMIN);
-            game.creditMiddayRng(donor, 1 ether);
-            vm.prank(donor);
-            game.requestLootboxRng();
+            address filler = makeAddr("nested-filler");
+            vm.deal(filler, 1 ether);
+            vm.prank(filler);
+            game.purchase{value: 1 ether}(
+                filler, 0, (uint256(1) << 24) | ((1 ether / 1e12) << 32), bytes32(0), MintPaymentKind.DirectEth, false
+            );
+            vm.prank(filler);
+            game.mineFlip();
             _settleIdle(0xB00758);
         }
         assertEq(RecyclingState.writeBuffer(address(game)), PARENT_BUFFER);
@@ -99,13 +102,11 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
 
         uint256 snapshot = vm.snapshotState();
         uint256 balanceBefore = sdgnrs.balanceOf(PLAYER);
-        // Box-order migration: the removed per-(player,index) `openBox` let a third party settle
-        // PLAYER's box; its sweep replacement, `openBoxes`, is equally permissionless and equally
-        // credits the box owner regardless of caller. PARENT_BUFFER is PLAYER's only queued box
-        // (a real purchase through the production path, so boxPlayers[PARENT_BUFFER] already
-        // holds it) with nothing else pending, so this ports as a clean rename.
+        // Any third party's mineFlip settles PLAYER's box: the engine's human-box stage credits the
+        // box owner regardless of caller. PARENT_BUFFER holds PLAYER's only queued box (a real
+        // purchase through the production path, so boxPlayers[PARENT_BUFFER] already holds it).
         vm.prank(address(0xCA11));
-        game.openBoxes(type(uint256).max);
+        game.mineFlip();
         uint256 beforeRefillAward = sdgnrs.balanceOf(PLAYER) - balanceBefore;
         assertGt(beforeRefillAward, 0, "known winner was actually settled by another address");
 
@@ -114,13 +115,13 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
         sdgnrs.recycleCentury(100, RNG_WORD);
         uint256 poolBefore = _lootboxPool();
         vm.prank(address(0xCA11));
-        game.openBoxes(type(uint256).max);
+        game.mineFlip();
         uint256 afterRefillAward = sdgnrs.balanceOf(PLAYER) - balanceBefore;
         assertGt(afterRefillAward, beforeRefillAward, "unresolved award retains live-pool pricing");
         assertEq(poolBefore - _lootboxPool(), afterRefillAward, "nested awards debit funded inventory");
         uint256 balanceAfter = sdgnrs.balanceOf(PLAYER);
-        // Either the existing spent-box no-op or its revert is acceptable; no second payout.
-        try game.openBoxes(type(uint256).max) {} catch {}
+        // Whatever the engine does next (or NoWork / a pending word) is acceptable; no second payout.
+        try game.mineFlip() {} catch {}
         assertEq(sdgnrs.balanceOf(PLAYER), balanceAfter);
     }
 
@@ -141,7 +142,7 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
         r.balanceBefore = sdgnrs.balanceOf(PLAYER);
         vm.recordLogs();
         uint256 gasBefore = gasleft();
-        game.openBoxes(type(uint256).max);
+        game.mineFlip();
         r.gasUsed = gasBefore - gasleft();
         VmSafe.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
@@ -254,12 +255,12 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
 
     /// @dev Commit the purchased entry with a mid-day request (its 30 ETH clears the pending-value
     ///      gate), deliver `vrfWord`, and publish it in minimal checkpoints up to the cohort's
-    ///      human-box stage. The entry is then the next read consumer: openBoxes opens it. (The
-    ///      engine opens a published cohort's entries in the same call that finishes the earlier
-    ///      stages, so publication is stepped rather than run with unbounded gas.)
+    ///      human-box stage. The entry is then mineFlip's next read consumer. (The engine opens a
+    ///      published cohort's entries in the same call that finishes the earlier stages, so
+    ///      publication is stepped rather than run with unbounded gas.)
     function _landWord(uint256 vrfWord) private {
         vm.prank(PLAYER);
-        game.requestLootboxRng();
+        game.mineFlip();
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), vrfWord);
         for (uint256 i; i < 50 && game.nextMinerAction() != 10; ++i) _stepMinimal(); // HumanBoxes
         assertEq(game.nextMinerAction(), 10, "the entry is the next read consumer");

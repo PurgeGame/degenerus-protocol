@@ -11,8 +11,8 @@ import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 
 /// @title BoxCreationHandler — drives every box-creating entrypoint for the FUZZ-04 ENQUEUE invariant
 /// @notice The box-creating family the ASYM-02 sweep enumerates has FOUR enqueue sites, each guarded by a
-///         first-deposit check that pushes the (index, owner) into boxPlayers[index & 1] for the permissionless
-///         openBoxes() auto-opener:
+///         first-deposit check that pushes the (index, owner) into boxPlayers[index & 1] for mineFlip()'s
+///         in-order human-box stage:
 ///           - mint-with-lootbox purchase           (MintModule first-deposit -> boxPlayers push)
 ///           - whale / lazy / deity pass bundle      (WhaleModule._recordLootboxEntry -> boxPlayers push)
 ///           - presale box                           (MintModule._buyPresaleBoxFor -> boxPlayers push)
@@ -22,7 +22,7 @@ import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 ///         vm.store of a box record — the box is created by the contract so the enqueue site actually fires),
 ///         records every successfully-created (index, owner) pair into a tracked list the BoxEnqueue invariant
 ///         iterates, and bumps a per-path ghost counter so the invariant can prove non-vacuity (boxes were
-///         actually created across multiple paths). It also drives openBoxes()/mineFlip()+VRF-fulfill so
+///         actually created across multiple paths). It also drives mineFlip()+VRF-fulfill so
 ///         boxes drain to base==0 over the campaign — exercising BOTH the still-enqueued and the resolved
 ///         transitions the invariant distinguishes.
 ///
@@ -270,16 +270,16 @@ contract BoxCreationHandler is Test {
     // Action 4: open + advance (drain boxes to base==0; land per-index words so opens resolve)
     // =========================================================================
 
-    /// @notice Run the permissionless openBoxes() auto-opener, then advance the state machine a few steps and
-    ///         fulfill any pending VRF so per-index words land and ready boxes resolve (base -> 0). This is what
-    ///         drives the still-enqueued -> resolved transition the invariant distinguishes (opened boxes are
-    ///         correctly excluded). A small actor buy first satisfies the daily purchase gate for advance.
-    function openSome(uint256 actorSeed, uint256 maxSeed, uint256 wordSeed) external useActor(actorSeed) {
+    /// @notice Crank the permissionless engine (mineFlip's in-order box stages open whatever cohort is
+    ///         ready), then advance the state machine a few steps and fulfill any pending VRF so per-index
+    ///         words land and ready boxes resolve (base -> 0). This is what drives the still-enqueued ->
+    ///         resolved transition the invariant distinguishes (opened boxes are correctly excluded). A
+    ///         small actor buy first satisfies the daily purchase gate for advance.
+    function openSome(uint256 actorSeed, uint256 crankSeed, uint256 wordSeed) external useActor(actorSeed) {
         calls_openSome++;
 
-        uint256 maxCount = bound(maxSeed, 1, 50);
-        vm.prank(currentActor);
-        try game.openBoxes(maxCount) {} catch {}
+        uint256 cranks = bound(crankSeed, 1, 3);
+        _crank(cranks);
 
         if (game.gameOver()) return;
 
@@ -302,10 +302,18 @@ contract BoxCreationHandler is Test {
             }
         }
 
-        // After resolution some boxes drained to base==0; open the box queue once more so the resolved
+        // After resolution some boxes drained to base==0; crank the engine once more so the resolved
         // transition is realized for the invariant to observe both states across the campaign.
-        vm.prank(currentActor);
-        try game.openBoxes(maxCount) {} catch {}
+        _crank(cranks);
+    }
+
+    /// @dev Up to `cranks` engine calls by the current actor. NoWork / RngNotReady (or any refusal)
+    ///      ends the run; the engine owns the order, the handler only supplies calls.
+    function _crank(uint256 cranks) internal {
+        for (uint256 i; i < cranks; i++) {
+            vm.prank(currentActor);
+            try game.mineFlip() {} catch { return; }
+        }
     }
 
     // =========================================================================

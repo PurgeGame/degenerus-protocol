@@ -465,12 +465,19 @@ contract DeadVrfEndingTest is DeployProtocol {
         _restore();
     }
 
-    /// @dev A sealed daily day can leave its box/bet cohort pending under serialization.
-    ///      Finish it through the production sweeper before deliberately issuing a new request.
-    function _finishDeliveredRead() private {
+    /// @dev A sealed daily day can leave its box/bet cohort pending under serialization. Finish it
+    ///      with calls too small to admit a request (RNG_REQUEST plus the engine reserves), then
+    ///      `caller`'s mineFlip issues the mid-day request, the engine's last stage.
+    function _mineMiddayRequest(address caller) private returns (uint256 id) {
         uint48 read = RecyclingState.readBuffer(address(game));
-        for (uint256 i; i < 50 && !game.boxIndexComplete(read); ++i) game.openBoxes(512);
+        for (uint256 i; i < 50 && !game.boxIndexComplete(read); ++i) game.mineFlip{gas: 2_000_000}();
         assertTrue(game.boxIndexComplete(read), "the test's prior delivered read cohort must finish");
+        uint256 before = mockVRF.lastRequestId();
+        vm.prank(caller);
+        game.mineFlip();
+        id = mockVRF.lastRequestId();
+        assertGt(id, before, "mineFlip issued the mid-day request");
+        assertFalse(game.rngLocked(), "the request is a mid-day one");
     }
 
     /// @dev The deadline path runs before the normal new-day promotion of a stalled mid-day
@@ -502,8 +509,7 @@ contract DeadVrfEndingTest is DeployProtocol {
             buyer, 0, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         assertFalse(game.livenessTriggered(), "small box buy did not meet the pool target");
-        _finishDeliveredRead();
-        game.requestLootboxRng();
+        _mineMiddayRequest(buyer);
         assertGt(mockVRF.lastRequestId(), dailyId, "a real mid-day request is outstanding");
         uint256 sent = block.timestamp;
 
@@ -611,14 +617,21 @@ contract DeadVrfEndingTest is DeployProtocol {
         _restore();
         _runDay(mockVRF);
         assertFalse(game.rngLocked(), "deadline day sealed");
-        _finishDeliveredRead();
-        // lootbox-only: nothing queued to swap. A funded donor's credit waives the empty-queue gate.
+        // lootbox-only: a box with no ticket leg, so nothing is queued to swap. Its value sits
+        // under the mid-day threshold, so only a funded donor's mineFlip requests the word.
         address donor = makeAddr("midday-donor");
+        vm.deal(donor, 1 ether);
+        vm.prank(donor);
+        game.purchase{value: 0.5 ether}(
+            donor, 0, BoxOrderLib.boCustom(0.5 ether), bytes32(0), MintPaymentKind.DirectEth, false
+        );
+        assertFalse(game.advanceDue(), "a creditless caller has no mid-day request below the threshold");
         mockFeed.setUpdatedAt(block.timestamp); // the credit charge prices off a fresh feed
+        vm.fee(1 gwei); // a priced block, so the charge is nonzero
         vm.prank(ContractAddresses.ADMIN);
         game.creditMiddayRng(donor, 1 ether);
-        vm.prank(donor);
-        game.requestLootboxRng();
+        _mineMiddayRequest(donor);
+        assertLt(game.middayRngCredits(donor), 1 ether, "the donor's credit paid the threshold gate");
 
         vm.warp(block.timestamp + 1 days);
         game.mineFlip();

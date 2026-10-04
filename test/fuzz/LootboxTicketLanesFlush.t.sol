@@ -43,6 +43,17 @@ contract LootboxTicketLanesFlush is DeployProtocol {
         vm.etch(address(game), real);
     }
 
+    /// @dev The mid-day request, issued by `caller`'s mineFlip as the engine's next action (the
+    ///      only door to a mid-day word). Returns the fresh request's ID.
+    function _mineMiddayRequest(address caller) internal returns (uint256 reqId) {
+        uint256 prior = mockVRF.lastRequestId();
+        vm.prank(caller);
+        game.mineFlip();
+        reqId = mockVRF.lastRequestId();
+        assertGt(reqId, prior, "mineFlip issued the mid-day request");
+        assertFalse(game.rngLocked(), "a mid-day request, not the daily one");
+    }
+
     function _driveDailyCycleOnce() internal {
         (, , , , uint256 priceWei) = game.purchaseInfo();
         if (priceWei != 0 && priceWei <= actor.balance) {
@@ -136,9 +147,7 @@ contract LootboxTicketLanesFlush is DeployProtocol {
         // clears the mid-day request threshold.
         vm.prank(actor);
         game.purchase{value: 30 * priceWei + 2 ether}(actor, 400, BoxOrderLib.boOrder(30, 0, 0, 1, 1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
-        vm.prank(actor);
-        game.requestLootboxRng();
-        uint256 reqId = mockVRF.lastRequestId();
+        uint256 reqId = _mineMiddayRequest(actor);
         uint256 base = game.level();
 
         // Search the word for a draw whose lanes include an isolated high-nibble offset, so every
@@ -150,8 +159,7 @@ contract LootboxTicketLanesFlush is DeployProtocol {
         for (uint256 w = 1; w <= 96 && !found; w++) {
             uint256 snap = vm.snapshotState();
             mockVRF.fulfillRandomWords(reqId, uint256(keccak256(abi.encode("lane_word", w))) | 1);
-            // The engine publishes the word and opens the read cohort's order as a read consumer
-            // (openBoxes never publishes a word).
+            // The engine publishes the word and opens the read cohort's order as a read consumer.
             vm.recordLogs();
             vm.prank(actor);
             game.mineFlip();

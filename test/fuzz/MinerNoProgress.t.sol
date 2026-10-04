@@ -64,7 +64,11 @@ contract MinerProgressHarness is DegenerusGameMinerModule {
     function rngComplete() external view returns (bool) { return _rngComplete(); }
     function rngConsumerStage() external view returns (uint8) { return _rngConsumerStage(); }
     function rngLocked() external view returns (bool) { return rngLockedFlag; }
-    function advanceDue() external view returns (bool) { return _advanceDue(); }
+    /// @dev The Game's creditless `advanceDue()` view: any selected action but Idle or Wait.
+    function advanceDue() external view returns (bool) {
+        MinerAction action = _nextMinerAction(address(0));
+        return action != MinerAction.Idle && action != MinerAction.Wait;
+    }
     function extsload(bytes32 slot) external view returns (bytes32 value) {
         assembly ("memory-safe") { value := sload(slot) }
     }

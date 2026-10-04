@@ -12,6 +12,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 import {MintBucketSeed} from "../helpers/MintBucketSeed.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
 /// @title AdvanceStageWorstCaseGas — Phase 367 (GASCEIL) measured per-stage mineFlip ceiling
 /// @notice Phase 367 REDO. The prior pass reported the standalone 305-winner daily jackpot stage
@@ -28,8 +29,8 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 ///
 ///         This file measures (A) the 305-winner ETH jackpot and the 50-winner coin leg directly by
 ///         extending the production module (seeding lvlTraitEntry, then driving the live external
-///         entry with the msg.sender==GAME prank), and (B) the worst-case full processTicketBatch
-///         write-budget chunk. The subscriber STAGE (2), the gap-backfill (4) and the OPEN_BATCH
+///         entry with the msg.sender==GAME prank), and (B) the worst-case ticket-worker
+///         (`runTicketWork`) chunk. The subscriber STAGE (2), the gap-backfill (4) and the OPEN_BATCH
 ///         router are measured by the sibling harness V56AfkingGasMarginal (referenced, not re-run).
 /// @dev Test-only. NO contracts/*.sol is mutated. The two harness subclasses add only seeders +
 ///      read-only views; they override NO production logic.
@@ -38,12 +39,12 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 // Harness A — live 305-winner daily-ETH jackpot (stages 8 / 11 / 12 ETH leg)
 // =============================================================================
 
-/// @dev Extends the production jackpot module so the inherited external `runTerminalJackpot`
-///      executes the live `_processDailyEth -> _processBucket -> _addClaimableEth` 305-winner loop
-///      in THIS contract's storage. That is the IDENTICAL distribution path used by:
-///        - stage 8  payDailyJackpot(false) purchase-phase  (JackpotModule.sol:450 _processDailyEth)
-///        - stage 11 payDailyJackpot(true)  jackpot-phase    (JackpotModule.sol:450 _processDailyEth)
-///        - stage 12 runTerminalJackpot     game-over        (JackpotModule.sol:280 _processDailyEth)
+/// @dev Extends the production jackpot module so the inherited external `runTerminalJackpotWork`
+///      executes the live ETH-award loop in THIS contract's storage. That is the IDENTICAL
+///      distribution path (`_resumeEth`) used by:
+///        - stage 8  runDailyJackpot(false)  purchase-phase
+///        - stage 11 runDailyJackpot(true)   jackpot-phase
+///        - stage 12 runTerminalJackpotWork  game-over
 ///      The terminal jackpot pays the fixed 152/104/48/1 = 305 geometry measured here.
 contract JackpotStageHarness is DegenerusGameJackpotModule, BucketSeed {
     function seedBucket(uint24 lvl, uint8 traitId, uint256 count, uint160 base) external {
@@ -52,11 +53,11 @@ contract JackpotStageHarness is DegenerusGameJackpotModule, BucketSeed {
 }
 
 // =============================================================================
-// Harness B — live processTicketBatch worst-case write-budget chunk (stages 0/1/5/6/7)
+// Harness B — live ticket-worker worst-case chunk (stages 0/1/5/6/7)
 // =============================================================================
 
-/// @dev Extends the production mint module so the inherited external `processTicketBatch`
-///      executes the live write-budgeted per-entry trait-mint loop in THIS contract's storage.
+/// @dev Extends the production mint module and delegatecalls the production ticket worker
+///      (`runTicketWork`) so the live per-entry trait-mint loop runs in THIS contract's storage.
 ///      The seeder pushes N players into the read-slot ticketQueue with `owed` traits each and
 ///      sets the lootbox RNG entropy word the batch reads at index 1. A worst-case batch mints up
 ///      to WRITES_BUDGET_SAFE write-units of cold lvlTraitEntry SSTOREs in one call.
@@ -113,7 +114,7 @@ contract TicketBatchStageHarness is MintBucketSeed {
         external
     {
         _seedQueue(lvl, n, owedEach, base);
-        // Pin level == lvl so processTicketBatch does NOT reset the cursor, and start at a non-zero cursor
+        // Pin level == lvl so runTicketWork does NOT reset the cursor, and start at a non-zero cursor
         // so idx != 0 -> the full (non-cold-scaled) 550 write budget is used.
         ticketLevel = lvl;
         ticketCursor = startCursor;
@@ -121,6 +122,16 @@ contract TicketBatchStageHarness is MintBucketSeed {
 
     function queueLen(uint24 lvl) external view returns (uint256) {
         return _ticketQueueLength(_tqReadKey(lvl));
+    }
+
+    /// @dev The metered ticket worker exactly as the miner dispatches it: a delegatecall into the
+    ///      production ticket module (etched at its pinned address) in THIS contract's storage.
+    function runTicketWork(uint24 anchor, uint256 allowance) external returns (MineFlipGas.Result memory) {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall(
+            abi.encodeWithSelector(DegenerusGameTicketModule.runTicketWork.selector, anchor, allowance)
+        );
+        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
+        return abi.decode(data, (MineFlipGas.Result));
     }
 
     function cursor() external view returns (uint256) {
@@ -161,20 +172,20 @@ contract AdvanceStageWorstCaseGas is Test {
             ContractAddresses.GAME_FOILPACK_MODULE,
             address(new DegenerusGameFoilPackModule()).code
         );
-        // The mint module's processTicketBatch door delegates to the ticket module at its pinned address.
+        // The ticket harness delegates runTicketWork to the ticket module at its pinned address.
         vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
     }
 
-    /// @dev processTicketBatch is a caller-sized in-order door: it admits ticket checkpoints while
-    ///      the gas it is given covers the next declared bound, so it is driven with a realistic
-    ///      bounded allowance and checked for progress, never bounded by a ceiling.
-    uint256 internal constant DOOR_GAS = 10_000_000;
+    /// @dev runTicketWork admits ticket checkpoints while its allowance covers the next declared
+    ///      bound, so each chunk is driven with a realistic bounded allowance and checked for
+    ///      progress, never bounded by a ceiling.
+    uint256 internal constant CHUNK_GAS = 10_000_000;
 
     function _word() internal pure returns (uint256) {
         return uint256(keccak256("367_gasceil_word")) | 1;
     }
 
-    /// @dev Produce the 4 winning trait ids `runTerminalJackpot` will roll for THIS rngWord, plus the
+    /// @dev Produce the 4 winning trait ids `runTerminalJackpotWork` will roll for THIS rngWord, plus the
     ///      effective entropy `terminalWinnerCounts` keys off. We mirror the module's derivation exactly:
     ///      `_rollBoard(rngWord, _NO_QUADRANT_BAN)` packs 4 traits (no hero wagers are seeded here, so
     ///      the roll is the unmodified base board); we unpack them and seed those 4 buckets so every
@@ -204,8 +215,8 @@ contract AdvanceStageWorstCaseGas is Test {
 
     /// @notice MEASURED worst-case for the daily-ETH jackpot distribution at the DAILY_ETH_MAX_WINNERS=305
     ///         hard cap (buckets 152/104/48/1 at max scale). This is the IDENTICAL `_processDailyEth` loop
-    ///         that stages 8 (purchase-phase payDailyJackpot), 11 (jackpot-phase fresh daily) and 12
-    ///         (game-over runTerminalJackpot) all execute. Drives the live external entry with the
+    ///         that stages 8 (purchase-phase runDailyJackpot), 11 (jackpot-phase fresh daily) and 12
+    ///         (game-over runTerminalJackpotWork) all execute. Drives the live external entry with the
     ///         msg.sender==GAME guard satisfied via prank and brackets the call with gasleft().
     ///
     ///         CORRECTION vs the prior 367 pass: the standalone 305-winner jackpot is NOT ~15.08M. The
@@ -226,7 +237,7 @@ contract AdvanceStageWorstCaseGas is Test {
 
         vm.prank(ContractAddresses.GAME);
         uint256 gasBefore = gasleft();
-        uint256 paidWei = jp.runTerminalJackpot(POOL_WEI, TARGET_LVL, _word());
+        (, uint256 paidWei) = jp.runTerminalJackpotWork(POOL_WEI, TARGET_LVL, _word(), gasleft());
         uint256 gasUsed = gasBefore - gasleft();
 
         assertGt(paidWei, 0, "the measured worst-case jackpot actually paid out");
@@ -268,7 +279,7 @@ contract AdvanceStageWorstCaseGas is Test {
         _seedAllBuckets(traitIds);
         vm.prank(ContractAddresses.GAME);
         uint256 gHi0 = gasleft();
-        jp.runTerminalJackpot(POOL_WEI, TARGET_LVL, _word());
+        jp.runTerminalJackpotWork(POOL_WEI, TARGET_LVL, _word(), gasleft());
         uint256 gasHi = gHi0 - gasleft();
         vm.revertToState(snap);
 
@@ -286,7 +297,7 @@ contract AdvanceStageWorstCaseGas is Test {
         jp.seedBucket(TARGET_LVL, traitIds[qLo], 260, uint160(uint256(0x1000) + uint256(qLo) * 0x10000));
         vm.prank(ContractAddresses.GAME);
         uint256 gLo0 = gasleft();
-        jp.runTerminalJackpot(POOL_WEI, TARGET_LVL, _word());
+        jp.runTerminalJackpotWork(POOL_WEI, TARGET_LVL, _word(), gasleft());
         uint256 gasLo = gLo0 - gasleft();
 
         emit log_named_uint("eth_jackpot_gas_at_305_winners", gasHi);
@@ -312,12 +323,12 @@ contract AdvanceStageWorstCaseGas is Test {
     // STAGE 0 / 1 / 5 / 6 / 7 — the write-budgeted ticket batch (chunked)
     // =========================================================================
 
-    /// @notice MEASURED worst-case for ONE full processTicketBatch write-budget chunk — the loop shared by
+    /// @notice MEASURED worst-case for ONE ticket-worker chunk — the loop shared by
     ///         every chunked ticket stage (0 mid-day drain, 1 daily drain gate, 5 FF drain, 6 prepare
     ///         future tickets, 7 current-level batch). Each chunk mints up to WRITES_BUDGET_SAFE=1000 write
     ///         units of cold lvlTraitEntry SSTOREs (the first batch is cold-scaled to ~357). We seed a
     ///         deep queue (1 player owing a large trait count) so one batch saturates the budget, and
-    ///         measure the live external processTicketBatch.
+    ///         measure the live ticket worker `runTicketWork`.
     function test_Stage0_1_5_6_7_TicketBatch_WriteBudget_Measured() public {
         // ONE player owing a large trait count: the batch mints up to the (cold-scaled) write budget of
         // traits in one call, then breaks at the budget — the maximal single-tx ticket-batch chunk.
@@ -326,7 +337,8 @@ contract AdvanceStageWorstCaseGas is Test {
         assertEq(tb.queueLen(TARGET_LVL), 1, "fixture: one deep-owed player queued");
 
         uint256 g0 = gasleft();
-        (bool finished, bool worked) = tb.processTicketBatch{gas: DOOR_GAS}(TARGET_LVL);
+        MineFlipGas.Result memory r = tb.runTicketWork{gas: CHUNK_GAS}(TARGET_LVL, CHUNK_GAS);
+        (bool finished, bool worked) = (r.done, r.progressed);
         uint256 gasUsed = g0 - gasleft();
         assertTrue(worked, "non-vacuity: a realistic allowance must mint the seeded queue");
 
@@ -350,7 +362,8 @@ contract AdvanceStageWorstCaseGas is Test {
         assertEq(tb.cursor(), 1, "fixture: cursor starts at index 1 (warm, no cold-scale)");
 
         uint256 g0 = gasleft();
-        (bool finished, bool worked) = tb.processTicketBatch{gas: DOOR_GAS}(TARGET_LVL);
+        MineFlipGas.Result memory r = tb.runTicketWork{gas: CHUNK_GAS}(TARGET_LVL, CHUNK_GAS);
+        (bool finished, bool worked) = (r.done, r.progressed);
         uint256 gasUsed = g0 - gasleft();
         assertTrue(worked, "non-vacuity: a realistic allowance must mint the seeded queue");
 
@@ -373,14 +386,14 @@ contract AdvanceStageWorstCaseGas is Test {
         uint256 snap = vm.snapshotState();
         tb.seedTicketQueue(TARGET_LVL, 1, mHi, uint160(0x30000));
         uint256 gHi0 = gasleft();
-        (bool finishedHi,) = tb.processTicketBatch{gas: 16_700_000}(TARGET_LVL);
+        bool finishedHi = tb.runTicketWork{gas: 16_700_000}(TARGET_LVL, 16_700_000).done;
         uint256 gasHi = gHi0 - gasleft();
         assertTrue(finishedHi, "non-vacuity: the 200-owed drain completed in the call");
         vm.revertToState(snap);
 
         tb.seedTicketQueue(TARGET_LVL, 1, mLo, uint160(0x30000));
         uint256 gLo0 = gasleft();
-        (bool finishedLo,) = tb.processTicketBatch{gas: 16_700_000}(TARGET_LVL);
+        bool finishedLo = tb.runTicketWork{gas: 16_700_000}(TARGET_LVL, 16_700_000).done;
         uint256 gasLo = gLo0 - gasleft();
         assertTrue(finishedLo, "non-vacuity: the 100-owed drain completed in the call");
 

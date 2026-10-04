@@ -363,11 +363,12 @@ contract TurboBafTicketFloor is DeployProtocol {
             false
         );
         before = _ticketWriteSlot();
+        uint256 priorReq = mockVRF.lastRequestId();
         vm.prank(crank);
         (bool ok, ) = address(game).call(
-            abi.encodeWithSignature("requestLootboxRng()")
+            abi.encodeWithSignature("mineFlip()")
         );
-        require(ok, "harness: requestLootboxRng must be callable");
+        require(ok && mockVRF.lastRequestId() > priorReq, "harness: mineFlip must issue the mid-day request");
         swapped = _ticketWriteSlot() != before;
     }
 

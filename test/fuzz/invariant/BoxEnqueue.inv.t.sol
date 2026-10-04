@@ -18,7 +18,7 @@ contract BoxQueueViewer is DegenerusGame {
     }
 
     /// @notice Walk boxPlayers[index & 1] for `who`. TRUE iff the box is enqueued for the permissionless
-    ///         openBoxes() auto-opener (the WHALE-01 property: a persisted box must be present here).
+    ///         mineFlip HumanBoxes stage (the WHALE-01 property: a persisted box must be present here).
     function boxPlayersContains(uint48 index, address who) external view returns (bool) {
         address[] storage q = boxPlayers[index & 1];
         for (uint256 i; i < q.length; ++i) {

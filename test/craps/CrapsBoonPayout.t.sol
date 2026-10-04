@@ -27,10 +27,10 @@ contract BoonPayoutHarness is CrapsViews {}
 ///            the trusted writer and must pay nothing if they ever reach storage another way,
 ///            where a two-bit index would silently mean something.
 ///         4. EVERY WINDOW. A day ticket's burn paid for seven windows, so its boon lifts all
-///            seven bankroll payments. Settlement order still cannot reach it -- settlement is
-///            permissionless once the words are public, and each window's lift is a function of
-///            that window's run and the mask alone, so every answer is fixed before any window is
-///            cranked.
+///            seven bankroll payments. Settlement order still cannot reach it -- settlement runs
+///            from any caller's mineFlip once the words are public, and each window's lift is a
+///            function of that window's run and the mask alone, so every answer is fixed before
+///            any window is cranked.
 contract CrapsBoonPayoutTest is CrapsPins {
     BoonPayoutHarness internal craps;
 
@@ -283,7 +283,7 @@ contract CrapsBoonPayoutTest is CrapsPins {
             (, uint256 quotedHigh) = craps.previewSettlement(high);
 
             vm.recordLogs();
-            craps.resolveSlot(slot, WHOLE_FIELD);
+            craps.settleSlot(slot, WHOLE_FIELD);
             Vm.Log[] memory logs = vm.getRecordedLogs();
 
             assertEq(_settledPaidOf(logs, ordinary), quotedOrdinary, "the quote missed an ordinary settlement");

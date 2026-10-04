@@ -15,6 +15,7 @@ contract GoldSixHarness is DegenerusGameTicketModule {
         owner = uint256(_registerEntryOwner(who, lvl) >> OWNER_IDX_SHIFT) - 1;
     }
     function taken(uint24 lvl) external view returns (bool) { return _goldSixTaken(lvl); }
+    function writeKey(uint24 lvl) external view returns (uint24) { return _tqWriteKey(lvl); }
     function count(uint24 lvl, uint8 trait) external view returns (uint256) { return _bucketLength(lvl, trait); }
     function first(uint24 lvl, uint8 trait) external view returns (address) { return _bucketOwnerAtUnchecked(lvl, trait, 0); }
     function seedGold(uint24 lvl, uint256 owner) external { _bucketAppendRun(_traitBufferBase(lvl), 253, owner, 1, lvl); }
@@ -53,43 +54,59 @@ contract GoldSixRulesTest is Test {
             for (uint256 i; i < 16; ++i) if (traits[i] == 253) return word;
         }
     }
+    /// @dev Commit `word` as the cohort's entropy and drain it through the live ticket worker.
+    function drain(uint256 word, uint24 anchor) private {
+        h.commit(word);
+        MineFlipGas.Result memory r = h.runTicketWork(anchor, 9_000_000);
+        assertTrue(r.done, "the queued solo run drains in one call");
+    }
+    /// @dev One owner queued alone at `lvl` owing 16 whole entries drains as a single solo trait
+    ///      run on identity(read key, lvl, 0, owner). Returns that stream; the caller commits.
+    function queueSolo(uint24 lvl, address who) private returns (uint256 stream) {
+        h.queue(who, 1600);
+        stream = TicketEntropy.identity(h.writeKey(lvl), lvl, 0, who);
+    }
     function testSoloCapAcrossOwnersAndRecycledLevelPreservesEveryOtherTrait() public {
-        uint256 owner = h.prepare(1, A);
+        h.prepare(1, A);
         assertFalse(h.taken(1));
-        uint256 stream = TicketEntropy.identity(1, 1, 0, A);
+        uint256 stream = queueSolo(1, A);
         uint256 word = wordWithGold(stream);
         uint8[16] memory natural = naturalRun(stream, word);
         uint256[256] memory raw;
         for (uint256 i; i < 16; ++i) ++raw[natural[i]];
-        h.generateTraitRun(stream, 0, 16, word, owner);
+        drain(word, 2);
         assertEq(h.count(1, 253), 1);
         assertTrue(h.taken(1));
         assertFalse(h.taken(2));
         assertFalse(h.taken(3), "new level ignores older parity before preparation");
         assertEq(h.first(1, 253), A);
-        uint256 ownerB = h.prepare(1, B);
-        // Replay the same candidate pattern under another owner's registry position.
-        h.generateTraitRun(stream, 0, 16, word, ownerB);
+        h.prepare(1, B);
+        // Another owner's run at the same level whose natural pattern also rolls the gold six.
+        stream = queueSolo(1, B);
+        word = wordWithGold(stream);
+        natural = naturalRun(stream, word);
+        for (uint256 i; i < 16; ++i) ++raw[natural[i]];
+        drain(word, 2);
         uint256 total;
         uint256 gold;
         for (uint256 t; t < 256; ++t) {
             uint256 n = h.count(1, uint8(t));
             total += n;
             if (t >= 248) gold += n;
-            else assertEq(n, 2 * raw[t], "non-gold-dice traits unchanged");
+            else assertEq(n, raw[t], "non-gold-dice traits unchanged");
         }
         uint256 rawGold;
         for (uint256 t = 248; t < 256; ++t) rawGold += raw[t];
         assertEq(total, 32);
-        assertEq(gold, 2 * rawGold);
+        assertEq(gold, rawGold);
         assertEq(h.count(1, 253), 1);
         assertEq(h.first(1, 253), A);
         h.prepare(3, B);
         assertFalse(h.taken(3));
         vm.expectRevert();
         h.taken(1);
-        stream = TicketEntropy.identity(3, 3, 0, B);
-        h.generateTraitRun(stream, 0, 16, wordWithGold(stream), ownerB);
+        stream = queueSolo(3, B);
+        drain(wordWithGold(stream), 4);
         assertEq(h.count(3, 253), 1, "new full level resets the cap despite parity reuse");
         assertTrue(h.taken(3));
         assertEq(h.first(3, 253), B);

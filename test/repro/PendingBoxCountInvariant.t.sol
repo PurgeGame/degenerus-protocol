@@ -5,17 +5,16 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 
 /// @title PendingBoxCountInvariant — `_pendingBoxCount` == Σ pending day-markers, everywhere
-/// @notice The `_pendingBoxCount` counter (DegenerusGameStorage slot 56, bits [224,240)) gates
-///         the rewarded open crank's afking ring walk: it MUST equal the number of subscribers
-///         whose `lastOpenedDay < lastAutoBoughtDay` (a stamped-but-unopened box) after EVERY
-///         lifecycle transition, or the gate under-counts (walk skipped with real work pending —
-///         boxes then wait for the counter-blind openBoxes valve) or over-counts (walks that
-///         find nothing — gas only). Exactness rests on the no-orphan rule: a pending sub is
+/// @notice The `_pendingBoxCount` counter (DegenerusGameStorage slot 56, bits [184,200)) gates
+///         mineFlip's AFKing stage: it MUST equal the number of subscribers whose
+///         `lastOpenedDay < lastAutoBoughtDay` (a stamped-but-unopened box) after EVERY lifecycle
+///         transition, or the gate under-counts (the engine moves past the AFKing stage with
+///         stamped boxes still unopened) or over-counts (walks that find nothing — gas only). Exactness rests on the no-orphan rule: a pending sub is
 ///         never re-stamped, evicted, reclaimed, or funding-killed, so the daily STAGE lootbox
 ///         stamp is the ONLY increment and the box open the ONLY decrement.
 /// @dev Walks the full live `_subscribers` ring via vm.load after each step and compares.
 ///      Covers: grounded subscribe (lootbox + ticket mode), the daily STAGE stamp, partial and
-///      full drains (valve + rewarded crank), cancel-to-tombstone WHILE PENDING (markers
+///      full drains (bounded and unbounded mineFlip calls), cancel-to-tombstone WHILE PENDING (markers
 ///      retained, box still opened in-set), tombstone reclaim, and re-subscribe. Pass-expiry
 ///      eviction is not driven here: the no-orphan guard makes it unreachable while pending,
 ///      and a box-clean evict never touches the counter (see GameAfkingModule stage loop).
@@ -55,8 +54,8 @@ contract PendingBoxCountInvariant is DeployProtocol {
 
         // The day's cohort opens the stamped boxes as its AFKing read consumer. The engine is
         // stepped in minimal checkpoints with the invariant checked after every one; when the
-        // AFKing stage is the next work, partial drains run through the in-order valve
-        // (openBoxes with a starved, then a moderate, gas allowance) and the rewarded crank.
+        // AFKing stage is the next work, partial drains run through bounded mineFlip calls (a
+        // starved, then a moderate, then a 2M gas allowance).
         _drainDay(uint256(keccak256("pb_c1")) | 1, true);
         _assertInvariant("after the full drain");
         assertEq(_pendingBoxCount(), 0, "fully drained ring has zero pending boxes");
@@ -120,25 +119,26 @@ contract PendingBoxCountInvariant is DeployProtocol {
     }
 
     /// @dev Step the engine in minimal checkpoints, answering requests, until it is idle with the
-    ///      read cohort complete; the invariant is checked after every checkpoint. With `valve`,
+    ///      read cohort complete; the invariant is checked after every checkpoint. With `partialDrain`,
     ///      the first time the AFKing stage is the next work it is partially drained through
-    ///      openBoxes and the rewarded crank before the stepping continues.
-    function _drainDay(uint256 vrfWord, bool valve) internal {
-        bool valveUsed = !valve;
+    ///      bounded mineFlip calls before the stepping continues.
+    function _drainDay(uint256 vrfWord, bool partialDrain) internal {
+        bool partialUsed = !partialDrain;
         for (uint256 i; i < 800; ++i) {
             _assertInvariant("engine checkpoint");
             if (!game.advanceDue() && game.rngComplete()) return;
             _fulfillPending(vrfWord + i);
-            if (!valveUsed && game.nextMinerAction() == 9) { // MinerAction.Afking
-                valveUsed = true;
+            if (!partialUsed && game.nextMinerAction() == 9) { // MinerAction.Afking
+                partialUsed = true;
                 uint256 before = _pendingBoxCount();
+                uint256 starved = _oneBoxBudget();
                 vm.prank(makeAddr("pb_drain_a"));
-                game.openBoxes{gas: _oneBoxBudget()}(1);
-                _assertInvariant("after a starved valve drain");
-                assertEq(_pendingBoxCount(), before - 1, "the starved valve opened exactly one box");
+                game.mineFlip{gas: starved}();
+                _assertInvariant("after a starved engine drain");
+                assertEq(_pendingBoxCount(), before - 1, "the starved engine call opened exactly one box");
                 vm.prank(makeAddr("pb_drain_b"));
-                game.openBoxes{gas: 1_500_000}(3);
-                _assertInvariant("after a moderate valve drain");
+                game.mineFlip{gas: 1_500_000}();
+                _assertInvariant("after a moderate engine drain");
                 if (game.nextMinerAction() == 9) {
                     vm.prank(makeAddr("pb_crank"));
                     game.mineFlip{gas: 2_000_000}();
@@ -151,7 +151,7 @@ contract PendingBoxCountInvariant is DeployProtocol {
         revert("harness: the day never settled");
     }
 
-    /// @dev The smallest openBoxes allowance that opens an AFKing box (bisection over snapshots).
+    /// @dev The smallest mineFlip allowance that opens an AFKing box (bisection over snapshots).
     function _oneBoxBudget() internal returns (uint256) {
         uint256 before = _pendingBoxCount();
         uint256 lo = 100_000;
@@ -159,7 +159,7 @@ contract PendingBoxCountInvariant is DeployProtocol {
         while (hi - lo > 1_000) {
             uint256 mid = (lo + hi) / 2;
             uint256 snap = vm.snapshotState();
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("openBoxes(uint256)", uint256(1)));
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip()"));
             bool opened = ok && _pendingBoxCount() < before;
             vm.revertToStateAndDelete(snap);
             if (opened) hi = mid;

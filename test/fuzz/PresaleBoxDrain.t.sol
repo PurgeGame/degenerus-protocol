@@ -6,7 +6,7 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 
-/// @notice Presale payout regression: real buys and FIFO manual opens, with one immutable
+/// @notice Presale payout regression: real buys and FIFO engine opens, with one immutable
 ///         word per session. Only earned credit, completed ticket prerequisites and entropy
 ///         are seeded. Tests preserve the tier ratio, live-pool clamp and closing-dust bounds.
 contract PresaleBoxDrain is DeployProtocol {
@@ -66,8 +66,8 @@ contract PresaleBoxDrain is DeployProtocol {
         return sold < 10 ether ? 30 : sold < 20 ether ? 25 : sold < 30 ether ? 20 : sold < 40 ether ? 15 : 10;
     }
 
-    /// @dev The worker owns the checkpoint. Its old count argument no longer selects work.
-    ///      Bound each call's gas and verify the emitted FIFO transcript across all checkpoints.
+    /// @dev The worker owns the checkpoint: bound each mineFlip's gas and verify the emitted FIFO
+    ///      transcript across all checkpoints.
     function _openAll(uint48 index, uint256 word, address[] memory buyers, uint256 amount)
         private returns (uint256[] memory paid, uint256 swept)
     {
@@ -79,9 +79,10 @@ contract PresaleBoxDrain is DeployProtocol {
         vm.recordLogs();
         uint256 opened;
         for (uint256 calls; opened < buyers.length && calls < 100; ++calls) {
-            uint256 count = game.openBoxes{gas: 8_000_000}(2);
-            assertGt(count, 0, "ready FIFO sweep advances");
-            opened += count;
+            game.mineFlip{gas: 8_000_000}();
+            uint256 consumed = _consumed(index, buyers);
+            assertGt(consumed, opened, "ready FIFO sweep advances");
+            opened = consumed;
         }
         assertEq(opened, buyers.length, "every queued buyer opened exactly once");
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -113,7 +114,19 @@ contract PresaleBoxDrain is DeployProtocol {
             assertEq(_boxRecord(index, buyers[i]), 0, "record consumed");
             assertEq(sdgnrs.balanceOf(buyers[i]), paid[i] + (i == buyers.length - 1 ? swept : 0), "credits match result");
         }
-        assertEq(game.openBoxes(2), 0, "completed records cannot pay twice");
+        // Replay probe: whatever the engine does next (or NoWork / a pending word), it pays no record twice.
+        vm.recordLogs();
+        (bool replayed,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+        replayed;
+        Vm.Log[] memory replay = vm.getRecordedLogs();
+        for (uint256 i; i < replay.length; ++i) {
+            assertFalse(replay[i].emitter == address(game) && replay[i].topics.length != 0
+                && replay[i].topics[0] == OPENED, "completed records cannot pay twice");
+        }
+    }
+
+    function _consumed(uint48 index, address[] memory buyers) private view returns (uint256 n) {
+        for (uint256 i; i < buyers.length; ++i) if (_boxRecord(index, buyers[i]) == 0) ++n;
     }
 
     function test_PFIX03_TierShapePreserved() public {

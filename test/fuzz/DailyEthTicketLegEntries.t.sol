@@ -70,9 +70,9 @@ contract DailyEthTicketLegEntries is Test {
     function test_ticketLegDeliversItsEntries() public {
         uint256 word = _board();
         vm.recordLogs();
-        h.payDailyJackpot(false, LVL, word);
+        h.runDailyJackpot(false, LVL, word, gasleft());
         // The priced ticket leg pays from the next advance stage on the same word.
-        h.payPurchaseDailyTickets(word);
+        h.runPurchaseDailyTickets(word, gasleft());
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         // The arithmetic the leg is meant to deliver.

@@ -8,17 +8,23 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 /// @title MiddayRngCredit — coverage for the LINK-donor mid-day RNG credit path.
-/// @notice A LINK donation banks per-donor credit that waives ONLY the pending-value gates
-///         on requestLootboxRng. The timing gates and the 40-LINK subscription floor are
-///         untouched by credit. A redemption debits MIDDAY_RNG_CHARGE_MULT times what the
-///         request itself bills, priced at redemption off block.basefee and the Admin's
-///         guarded LINK/ETH feed.
+/// @notice mineFlip is the only door to a mid-day request; its RequestMidday stage runs last,
+///         once every other stage is idle. A LINK donation banks per-donor credit that pays ONLY
+///         the threshold gate, and only on the donor's own mineFlip: pending work below the
+///         threshold (ETH or FLIP) is requested when the mineFlip caller's credit covers the
+///         charge, and charged once. An empty queue is never requested, credit or not; work at or
+///         above the threshold and a pending craps window are requested with no charge. The
+///         timing gates and the subscription LINK floors bind every request. A redemption debits
+///         MIDDAY_RNG_CHARGE_MULT times what the request itself bills, priced at redemption off
+///         block.basefee and the Admin's guarded LINK/ETH feed (`linkAmountToEth`).
 ///
-/// @dev Pins, in order: access control on the two new entrypoints, the donation hook banking
-///      credit verbatim, the basefee ceiling, both waived gates, the exact charge arithmetic,
-///      every path that must REFUSE the waiver without consuming credit, and the economic
-///      property the design targets (the subscription's real spend lands at 20% of the
-///      donation, i.e. the charge is 5x the premium-inclusive cost of the request).
+/// @dev Pins, in order: access control on the two entrypoints, the donation hook banking credit
+///      verbatim, the basefee ceiling, the empty-queue and threshold gates, the exact charge
+///      arithmetic, the caller-dependent engine view, every path that must REFUSE the credit
+///      without consuming it, and the economic property the design targets (the subscription's
+///      real spend lands at 20% of the donation, i.e. the charge is 5x the premium-inclusive cost
+///      of the request). A refused mid-day request is never selected, so mineFlip reports it as
+///      `NoWork()`.
 contract MiddayRngCreditTest is DeployProtocol {
     /// @dev Mirrors of the contract-side constants under test. Deliberately restated rather
     ///      than imported: a silent edit to either constant must FAIL these tests, not be
@@ -125,16 +131,58 @@ contract MiddayRngCreditTest is DeployProtocol {
         assertFalse(game.advanceDue(), "no automatic request work");
     }
 
-    function test_ExplicitRequestChargesOriginalDonorCredit() public pricedBlock {
+    /// @dev The engine's next action as `who` would see it on their own mineFlip.
+    function _actionFor(address who) internal returns (uint8) {
+        vm.prank(who);
+        return game.minerAction();
+    }
+
+    /// @dev `who`'s mineFlip, which must issue the mid-day request. Returns the request ID.
+    function _mineRequest(address who) internal returns (uint256 id) {
+        uint256 prior = mockVRF.lastRequestId();
+        vm.prank(who);
+        game.mineFlip();
+        id = mockVRF.lastRequestId();
+        assertGt(id, prior, "mineFlip issued the mid-day request");
+        assertFalse(game.rngLocked(), "a mid-day request, not the daily one");
+    }
+
+    /// @dev `who`'s mineFlip, which must find no work: the mid-day request is refused before it
+    ///      is ever selected, so nothing is requested.
+    function _mineRefused(address who) internal {
+        uint256 prior = mockVRF.lastRequestId();
+        assertEq(_actionFor(who), 0, "the refused request is not selected (Idle)");
+        vm.prank(who);
+        vm.expectRevert(bytes4(keccak256("NoWork()")));
+        game.mineFlip();
+        assertEq(mockVRF.lastRequestId(), prior, "a refused request asked for no word");
+    }
+
+    /// @dev Create pending lootbox ETH strictly below the 1-ether default threshold. Pure
+    ///      lootbox leg (entryQuantityScaled = 0) so `value` covers only the lootbox amount.
+    function _purchaseBelowThreshold() internal {
+        vm.prank(outsider);
+        game.purchase{value: 0.5 ether}(
+            outsider, 0, BoxOrderLib.boCustomFloor(0.5 ether), bytes32(0), MintPaymentKind.DirectEth, false
+        );
+    }
+
+    /// @dev Create pending lootbox ETH that clears the threshold on its own.
+    function _purchaseAboveThreshold() internal {
+        vm.prank(outsider);
+        game.purchase{value: 1.01 ether}(
+            outsider, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
+        );
+    }
+
+    function test_DonorRequestChargesOnlyTheMineFlipCaller() public pricedBlock {
         _idleRequestRouter();
+        _purchaseBelowThreshold();
         uint256 charge = _expectedCharge();
         _grantCredit(donor, charge * 3);
         _grantCredit(address(game), charge * 5);
         _grantCredit(outsider, charge * 7);
-        uint256 request = mockVRF.lastRequestId();
-        vm.prank(donor);
-        game.requestLootboxRng();
-        assertGt(mockVRF.lastRequestId(), request, "explicit donor requested a fresh word");
+        _mineRequest(donor);
         assertEq(game.middayRngCredits(donor), charge * 2);
         assertEq(game.middayRngCredits(address(game)), charge * 5, "Game identity was never charged");
         assertEq(game.middayRngCredits(outsider), charge * 7, "another player's credit was never charged");
@@ -142,9 +190,9 @@ contract MiddayRngCreditTest is DeployProtocol {
 
     function test_MiddayCallbackStoresSharedWordWithoutApplyingDailyNudges() public pricedBlock {
         RecyclingState.seedNudges(address(game), 5);
+        _purchaseBelowThreshold();
         _grantCredit(donor, _expectedCharge() * 3);
-        vm.prank(donor);
-        game.requestLootboxRng();
+        _mineRequest(donor);
         assertFalse(game.rngLocked());
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 42);
         assertEq(RecyclingState.currentWord(address(game)), 42, "midday word is unchanged");
@@ -152,7 +200,10 @@ contract MiddayRngCreditTest is DeployProtocol {
         assertEq(uint256(game.extsload(bytes32(uint256(3)))), 42, "shared unchanged payload");
     }
 
-    function test_EmptyBoxMiddaySessionRequiresKeeperPublicationAndRetainsMetadata() public pricedBlock {
+    /// @notice A delivered mid-day word is published only by the keeper, exactly once, with the
+    ///         request ID and timestamp retained; neither the retained ID nor a stale one can
+    ///         fill the session again.
+    function test_MiddaySessionRequiresKeeperPublicationAndRetainsMetadata() public pricedBlock {
         // Finish the fixture's primed day through production stages, including the
         // empty ticket frontier; marking only dailyIdx would leave genesis tickets pending.
         uint24 day = game.currentDayView();
@@ -161,10 +212,9 @@ contract MiddayRngCreditTest is DeployProtocol {
         }
         assertEq(uint24(uint256(game.extsload(bytes32(0))) >> 24), day, "real daily stage completed");
         _idleRequestRouter();
+        _purchaseBelowThreshold();
         _grantCredit(donor, _expectedCharge() * 5);
-        vm.prank(donor);
-        game.requestLootboxRng();
-        uint256 id = mockVRF.lastRequestId();
+        uint256 id = _mineRequest(donor);
         bytes32 requestSlot = game.extsload(bytes32(uint256(4)));
         uint256 requestTime = (uint256(game.extsload(bytes32(0))) >> 48) & type(uint48).max;
         bytes32 packed = game.extsload(bytes32(uint256(33)));
@@ -180,7 +230,7 @@ contract MiddayRngCreditTest is DeployProtocol {
             "callback writes no lootbox RNG state");
         assertEq(game.extsload(bytes32(uint256(4))), requestSlot, "callback retains request ID");
         assertFalse(game.rngComplete(), "delivery alone cannot complete the session");
-        assertTrue(game.advanceDue(), "empty cohort still owes a keeper publication");
+        assertTrue(game.advanceDue(), "the delivered cohort owes a keeper publication");
         assertTrue(game.isRngFulfilled());
         vm.recordLogs();
         game.mineFlip();
@@ -200,48 +250,27 @@ contract MiddayRngCreditTest is DeployProtocol {
         mockVRF.fulfillRandomWordsRaw(id, address(game), 99);
         assertEq(RecyclingState.currentWord(address(game)), 42, "retained ID cannot authorize a duplicate");
         // The real daily stage also awards tickets. Drain those through the required
-        // production advance category before completing the empty box frontier.
+        // production advance category before completing the box frontier.
         for (uint256 i; i < 100 && game.advanceDue(); ++i) game.mineFlip();
         assertEq(mockVRF.lastRequestId(), id, "drain does not create another request");
         _finishReadConsumers();
-        assertTrue(game.rngComplete(), "empty queue still traverses the production completion frontier");
-        vm.prank(donor);
-        game.requestLootboxRng();
-        assertGt(mockVRF.lastRequestId(), id, "next request remains possible");
+        assertTrue(game.rngComplete(), "the session traverses the production completion frontier");
+        _purchaseBelowThreshold();
+        assertGt(_mineRequest(donor), id, "next request remains possible");
         mockVRF.fulfillRandomWordsRaw(id, address(game), 77);
         assertEq(RecyclingState.currentWord(address(game)), 0, "old ID cannot fill the new session");
     }
 
-    function test_ExplicitIneligibleRequestRollsBackWithoutChargingCredit() public pricedBlock {
+    function test_IneligibleDonorRequestIsRefusedWithoutChargingCredit() public pricedBlock {
         _idleRequestRouter();
+        _purchaseBelowThreshold();
         uint256 charge = _expectedCharge();
         _grantCredit(donor, charge * 3);
         _mockSubscriptionLink(LOOTBOX_LINK_FLOOR - 1);
-        uint256 request = mockVRF.lastRequestId();
         bytes32 packed = vm.load(address(game), bytes32(uint256(33)));
-        vm.prank(donor);
-        vm.expectRevert(bytes4(keccak256("InsufficientLink()")));
-        game.requestLootboxRng();
+        _mineRefused(donor);
         assertEq(game.middayRngCredits(donor), charge * 3);
-        assertEq(mockVRF.lastRequestId(), request);
-        assertEq(vm.load(address(game), bytes32(uint256(33))), packed, "failed request changed the cohort");
-    }
-
-    /// @dev Create pending lootbox ETH strictly below the 1-ether default threshold. Pure
-    ///      lootbox leg (entryQuantityScaled = 0) so `value` covers only the lootbox amount.
-    function _purchaseBelowThreshold() internal {
-        vm.prank(outsider);
-        game.purchase{value: 0.5 ether}(
-            outsider, 0, BoxOrderLib.boCustomFloor(0.5 ether), bytes32(0), MintPaymentKind.DirectEth, false
-        );
-    }
-
-    /// @dev Create pending lootbox ETH that clears the threshold on its own.
-    function _purchaseAboveThreshold() internal {
-        vm.prank(outsider);
-        game.purchase{value: 1.01 ether}(
-            outsider, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
-        );
+        assertEq(vm.load(address(game), bytes32(uint256(33))), packed, "refused request changed the cohort");
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -346,12 +375,11 @@ contract MiddayRngCreditTest is DeployProtocol {
     // ──────────────────────────────────────────────────────────────────────
 
     /// @notice Above the ceiling the request is refused outright, before any other gate.
-    function test_requestRevertsAboveBasefeeCeiling() public pricedBlock {
+    function test_requestRefusedAboveBasefeeCeiling() public pricedBlock {
         _purchaseAboveThreshold(); // would otherwise sail through
         vm.fee(6 gwei); // default ceiling is 5 gwei
 
-        vm.expectRevert(bytes4(keccak256("GasTooHigh()")));
-        game.requestLootboxRng();
+        _mineRefused(outsider);
     }
 
     /// @notice Exactly at the ceiling is permitted — the gate is strictly greater-than.
@@ -359,7 +387,7 @@ contract MiddayRngCreditTest is DeployProtocol {
         _purchaseAboveThreshold();
         vm.fee(5 gwei);
 
-        game.requestLootboxRng(); // must not revert
+        _mineRequest(outsider);
     }
 
     /// @notice A zero ceiling disables the gate entirely.
@@ -369,54 +397,97 @@ contract MiddayRngCreditTest is DeployProtocol {
         game.setMiddayMaxBasefee(0);
 
         vm.fee(9_000 gwei);
-        game.requestLootboxRng(); // must not revert
+        _mineRequest(outsider);
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // The two waived gates
+    // The empty-queue and threshold gates
     // ──────────────────────────────────────────────────────────────────────
 
-    /// @notice Without credit, an empty queue still reports the specific gate.
-    function test_emptyQueueWithoutCreditReverts() public pricedBlock {
-        vm.expectRevert(bytes4(keccak256("NoPendingLootbox()")));
-        game.requestLootboxRng();
+    /// @notice Without credit, an empty queue is no work.
+    function test_emptyQueueWithoutCreditIsNoWork() public pricedBlock {
+        _mineRefused(outsider);
     }
 
-    /// @notice Without credit, a below-threshold queue still reports the specific gate.
-    function test_belowThresholdWithoutCreditReverts() public pricedBlock {
+    /// @notice An empty queue is never requested, even for a donor whose credit covers the charge
+    ///         many times over: nothing is charged and nothing is requested.
+    function test_emptyQueueWithCreditIsNoWorkAndUncharged() public pricedBlock {
+        _idleRequestRouter();
+        uint256 charge = _expectedCharge();
+        _grantCredit(donor, charge * 3);
+
+        _mineRefused(donor);
+
+        assertEq(game.middayRngCredits(donor), charge * 3, "an empty queue charged credit");
+    }
+
+    /// @notice Without credit, a below-threshold queue is no work.
+    function test_belowThresholdWithoutCreditIsNoWork() public pricedBlock {
         _purchaseBelowThreshold();
-        vm.expectRevert(bytes4(keccak256("BelowThreshold()")));
-        game.requestLootboxRng();
+        _mineRefused(outsider);
     }
 
-    /// @notice Credit waives an entirely empty queue, debiting exactly the priced charge.
-    function test_creditWaivesEmptyQueueAndDebitsExactly() public pricedBlock {
+    /// @notice Below the threshold, the donor's own mineFlip requests and is debited exactly the
+    ///         priced charge, once: the next call waits on the word and charges nothing more.
+    function test_creditPaysBelowThresholdOnceAndDebitsExactly() public pricedBlock {
+        _purchaseBelowThreshold();
         uint256 charge = _expectedCharge();
         _grantCredit(donor, charge * 3);
 
         vm.expectEmit(true, false, false, true, address(game));
         emit MiddayRngCreditSpent(donor, charge, charge * 2);
+        _mineRequest(donor);
+
+        assertEq(game.middayRngCredits(donor), charge * 2, "debit did not match the priced charge");
 
         vm.prank(donor);
-        game.requestLootboxRng();
-
-        assertEq(
-            game.middayRngCredits(donor),
-            charge * 2,
-            "debit did not match the priced charge"
-        );
+        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
+        game.mineFlip();
+        assertEq(game.middayRngCredits(donor), charge * 2, "the request was charged more than once");
     }
 
-    /// @notice Credit waives a below-threshold queue on the same terms.
-    function test_creditWaivesBelowThreshold() public pricedBlock {
-        _purchaseBelowThreshold();
+    /// @notice Pending FLIP alone counts as below-threshold work: the donor's credit pays for it,
+    ///         and a creditless caller finds no work.
+    function test_creditPaysForAFlipOnlyQueue() public pricedBlock {
+        // A FLIP Degenerette bet is pending FLIP work with no pending ETH.
+        vm.prank(address(game));
+        coin.mintForGame(outsider, 1_000 ether);
+        vm.prank(outsider);
+        game.placeDegeneretteBet(address(0), 1, 200 ether, 1, 0);
+        // lootboxRngPacked (slot 33): bits 48..111 pending ETH, bits 184..223 pending FLIP.
+        uint256 packed = uint256(vm.load(address(game), bytes32(uint256(33))));
+        assertEq((packed >> 48) & type(uint64).max, 0, "harness: no pending ETH");
+        assertGt((packed >> 184) & type(uint40).max, 0, "harness: pending FLIP");
         uint256 charge = _expectedCharge();
         _grantCredit(donor, charge * 2);
 
-        vm.prank(donor);
-        game.requestLootboxRng();
+        _mineRefused(outsider);
+        _mineRequest(donor);
+        assertEq(game.middayRngCredits(donor), charge, "FLIP-only work charged the donor once");
+    }
 
-        assertEq(game.middayRngCredits(donor), charge, "below-threshold waiver mispriced");
+    /// @notice The engine's next action depends on the caller only here: a donor whose credit
+    ///         covers a below-threshold request sees RequestMidday (18) through `minerAction()`,
+    ///         an outsider sees Idle, and the creditless views (`nextMinerAction`, `advanceDue`)
+    ///         see no work.
+    function test_minerActionShowsTheDonorItsRequest() public pricedBlock {
+        _purchaseBelowThreshold();
+        _grantCredit(donor, _expectedCharge() * 2);
+
+        assertEq(_actionFor(donor), 18, "the donor sees the request its mineFlip would pay for");
+        assertEq(_actionFor(outsider), 0, "an outsider sees Idle");
+        assertEq(game.nextMinerAction(), 0, "the creditless view sees Idle");
+        assertFalse(game.advanceDue(), "the creditless discovery view sees no work");
+
+        // A second buyer's box lifts the queue over the threshold (one order per buyer per buffer).
+        address topUp = makeAddr("midday_topup");
+        vm.deal(topUp, 2 ether);
+        vm.prank(topUp);
+        game.purchase{value: 1 ether}(
+            topUp, 0, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
+        );
+        assertEq(_actionFor(outsider), 18, "at the threshold every caller sees the request");
+        assertEq(game.nextMinerAction(), 18, "and so does the creditless view");
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -435,34 +506,35 @@ contract MiddayRngCreditTest is DeployProtocol {
     function test_pendingCrapsWindowClearsAnEmptyQueueWithoutCredit() public pricedBlock {
         _pendCrapsWindow();
         assertEq(game.middayRngCredits(outsider), 0, "harness: caller starts with credit");
-        uint256 request = mockVRF.lastRequestId();
 
-        vm.prank(outsider);
-        game.requestLootboxRng();
+        _mineRequest(outsider);
 
-        assertGt(mockVRF.lastRequestId(), request, "a pending craps window was refused an empty-queue request");
         assertEq(game.middayRngCredits(outsider), 0, "the waiver charged credit");
     }
 
     /// @notice Negative: with no window pending the same caller is refused the same request.
     function test_noPendingCrapsWindowRefusesTheSameCaller() public pricedBlock {
-        uint256 request = mockVRF.lastRequestId();
-        vm.prank(outsider);
-        vm.expectRevert(bytes4(keccak256("NoPendingLootbox()")));
-        game.requestLootboxRng();
-        assertEq(mockVRF.lastRequestId(), request, "refused request still asked for a word");
+        _mineRefused(outsider);
     }
 
     /// @notice The same for a queue that exists but sits under the threshold.
     function test_pendingCrapsWindowClearsABelowThresholdQueue() public pricedBlock {
         _purchaseBelowThreshold();
         _pendCrapsWindow();
-        uint256 request = mockVRF.lastRequestId();
 
-        vm.prank(outsider);
-        game.requestLootboxRng();
+        _mineRequest(outsider);
+    }
 
-        assertGt(mockVRF.lastRequestId(), request, "a pending craps window was refused a below-threshold request");
+    /// @notice Craps work never charges credit: a donor holding credit requests a below-threshold
+    ///         queue with a pending window and keeps every unit of it.
+    function test_pendingCrapsWindowChargesNoCredit() public pricedBlock {
+        _purchaseBelowThreshold();
+        _pendCrapsWindow();
+        _grantCredit(donor, 100 ether);
+
+        _mineRequest(donor);
+
+        assertEq(game.middayRngCredits(donor), 100 ether, "craps work charged the donor's credit");
     }
 
     /// @notice A pending window carries the lower LINK floor for whoever requests: a balance
@@ -471,15 +543,10 @@ contract MiddayRngCreditTest is DeployProtocol {
         _purchaseAboveThreshold(); // so only the LINK floor can refuse either request
         _mockSubscriptionLink(CRAPS_LINK_FLOOR + 1 ether);
 
-        vm.prank(outsider);
-        vm.expectRevert(bytes4(keccak256("InsufficientLink()")));
-        game.requestLootboxRng();
+        _mineRefused(outsider);
 
         _pendCrapsWindow();
-        uint256 request = mockVRF.lastRequestId();
-        vm.prank(outsider);
-        game.requestLootboxRng();
-        assertGt(mockVRF.lastRequestId(), request, "a pending window was refused above its own floor");
+        _mineRequest(outsider);
     }
 
     /// @notice The floor is lowered, not removed: a pending window is still refused below it, so
@@ -489,26 +556,21 @@ contract MiddayRngCreditTest is DeployProtocol {
         _pendCrapsWindow();
         _mockSubscriptionLink(CRAPS_LINK_FLOOR - 1);
 
-        vm.prank(outsider);
-        vm.expectRevert(bytes4(keccak256("InsufficientLink()")));
-        game.requestLootboxRng();
+        _mineRefused(outsider);
     }
 
-    /// @notice A pending window rides the write buffer only: pranking as the craps table grants
+    /// @notice A pending window rides the write buffer only: mining as the craps table grants
     ///         nothing, and a credit holder gets no lower floor without a pending window.
     function test_creditHolderDoesNotInheritTheCrapsLinkFloor() public pricedBlock {
+        _purchaseAboveThreshold(); // so only the LINK floor can refuse
         _grantCredit(donor, 500 ether);
         _mockSubscriptionLink(CRAPS_LINK_FLOOR + 1 ether);
 
-        vm.prank(donor);
-        vm.expectRevert(bytes4(keccak256("InsufficientLink()")));
-        game.requestLootboxRng();
+        _mineRefused(donor);
 
         assertEq(game.middayRngCredits(donor), 500 ether, "credit charged below the LINK floor");
 
-        vm.prank(address(crapsBattle));
-        vm.expectRevert(bytes4(keccak256("InsufficientLink()")));
-        game.requestLootboxRng(); // the craps address itself is an ordinary caller now: no lower floor
+        _mineRefused(address(crapsBattle)); // the craps address itself is an ordinary caller: no lower floor
     }
 
     /// @notice Nor the basefee ceiling: an expensive block holds a pending window's request back
@@ -517,9 +579,7 @@ contract MiddayRngCreditTest is DeployProtocol {
         _pendCrapsWindow();
         vm.fee(6 gwei); // default ceiling is 5 gwei
 
-        vm.prank(outsider);
-        vm.expectRevert(bytes4(keccak256("GasTooHigh()")));
-        game.requestLootboxRng();
+        _mineRefused(outsider);
     }
 
     /// @notice A request that already clears the gates costs a credit holder nothing.
@@ -527,8 +587,7 @@ contract MiddayRngCreditTest is DeployProtocol {
         _purchaseAboveThreshold();
         _grantCredit(donor, 100 ether);
 
-        vm.prank(donor);
-        game.requestLootboxRng();
+        _mineRequest(donor);
 
         assertEq(
             game.middayRngCredits(donor),
@@ -538,17 +597,16 @@ contract MiddayRngCreditTest is DeployProtocol {
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // Paths that must REFUSE the waiver without consuming credit
+    // Paths that must REFUSE the credit without consuming it
     // ──────────────────────────────────────────────────────────────────────
 
     /// @notice A balance short of the charge buys nothing and is left untouched.
     function test_insufficientCreditRefusesAndPreservesBalance() public pricedBlock {
+        _purchaseBelowThreshold();
         uint256 charge = _expectedCharge();
         _grantCredit(donor, charge - 1);
 
-        vm.prank(donor);
-        vm.expectRevert(bytes4(keccak256("NoPendingLootbox()")));
-        game.requestLootboxRng();
+        _mineRefused(donor);
 
         assertEq(
             game.middayRngCredits(donor),
@@ -557,15 +615,15 @@ contract MiddayRngCreditTest is DeployProtocol {
         );
     }
 
-    /// @notice A feed that cannot price right now refuses the waiver rather than granting
-    ///         it free, and leaves the balance intact.
-    function test_staleFeedRefusesWaiverAndPreservesBalance() public pricedBlock {
+    /// @notice A feed that cannot price right now refuses the credit rather than granting the
+    ///         request free, and leaves the balance intact.
+    function test_staleFeedRefusesCreditAndPreservesBalance() public pricedBlock {
+        _purchaseBelowThreshold();
         _grantCredit(donor, 500 ether);
         mockFeed.setUpdatedAt(block.timestamp - 2 days);
+        assertEq(admin.linkAmountToEth(1 ether), 0, "harness: the stale feed prices nothing");
 
-        vm.prank(donor);
-        vm.expectRevert(bytes4(keccak256("NoPendingLootbox()")));
-        game.requestLootboxRng();
+        _mineRefused(donor);
 
         assertEq(
             game.middayRngCredits(donor),
@@ -575,29 +633,27 @@ contract MiddayRngCreditTest is DeployProtocol {
     }
 
     /// @notice A zero balance never qualifies, even where basefee — and so the charge — is
-    ///         zero. Documented behaviour: the balance check, not the charge, is what makes
-    ///         a non-donor's request fail on a hypothetical zero-basefee chain.
+    ///         zero. Documented behaviour: the balance check, not the charge, is what keeps a
+    ///         non-donor's below-threshold request out on a hypothetical zero-basefee chain.
     function test_zeroBalanceNeverQualifiesAtZeroBasefee() public pricedBlock {
+        _purchaseBelowThreshold();
         vm.fee(0);
 
-        vm.prank(outsider);
-        vm.expectRevert(bytes4(keccak256("NoPendingLootbox()")));
-        game.requestLootboxRng();
+        _mineRefused(outsider);
     }
 
     /// @notice Credit does NOT waive the subscription LINK floor — that gate binds on every
-    ///         request, credited or not, and is ordered ahead of the charge so credit is
-    ///         never spent on a request the subscription cannot pay for.
+    ///         request, credited or not, and is checked ahead of the charge so credit is never
+    ///         spent on a request the subscription cannot pay for.
     function test_creditDoesNotWaiveLinkFloorAndIsNotConsumed() public pricedBlock {
+        _purchaseBelowThreshold();
         uint256 granted = 500 ether;
         _grantCredit(donor, granted);
 
         // Force the subscription one juel under the floor this caller answers to.
         _mockSubscriptionLink(LOOTBOX_LINK_FLOOR - 1);
 
-        vm.prank(donor);
-        vm.expectRevert(bytes4(keccak256("InsufficientLink()")));
-        game.requestLootboxRng();
+        _mineRefused(donor);
 
         assertEq(
             game.middayRngCredits(donor),
@@ -635,9 +691,9 @@ contract MiddayRngCreditTest is DeployProtocol {
         );
 
         // And the observed on-chain debit must equal that charge.
+        _purchaseBelowThreshold();
         _grantCredit(donor, charge * 2);
-        vm.prank(donor);
-        game.requestLootboxRng();
+        _mineRequest(donor);
         assertEq(
             game.middayRngCredits(donor),
             charge,

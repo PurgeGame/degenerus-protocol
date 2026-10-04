@@ -20,7 +20,7 @@ import {
  *
  * Covers three functions added to contracts/GNRUS.sol:
  *   1. onFinalSweep()          — onlyGame; stamps sweptAt = block.timestamp.
- *                                Called by the game from handleFinalSweep once
+ *                                Called by the game's final sweep once
  *                                GO_SWEPT latches (30 days after gameover).
  *   2. vaultRedeemFor(holder)  — vault-owner-only, post-sweep; burns holder's
  *                                ENTIRE GNRUS and pays the holder its full
@@ -29,8 +29,8 @@ import {
  *                                moves ALL GNRUS ETH+stETH to ContractAddresses.VAULT.
  *
  * The final sweep is reached through mineFlip: once gameOver is latched and
- * 30 days have elapsed, mineFlip's post-gameover path delegatecalls
- * handleFinalSweep, which sets GO_SWEPT and calls gnrus.onFinalSweep().
+ * 30 days have elapsed, mineFlip's Terminal stage runs the GameOver module's
+ * private _handleFinalSweep, which sets GO_SWEPT and calls gnrus.onFinalSweep().
  */
 describe("GnrusRecovery", function () {
   after(function () {
@@ -38,7 +38,7 @@ describe("GnrusRecovery", function () {
   });
 
   const SECONDS_912_DAYS = 912 * 86400;
-  const SWEEP_DELAY = 30 * 86400; // handleFinalSweep gate: goTime + 30 days
+  const SWEEP_DELAY = 30 * 86400; // final sweep gate: goTime + 30 days
   const RESIDUAL_RECOVERY_DELAY = 3 * 365 * 86400; // GNRUS RESIDUAL_RECOVERY_DELAY
   const provider = hre.ethers.provider;
 
@@ -135,7 +135,7 @@ describe("GnrusRecovery", function () {
 
       await triggerFinalSweep(game, gnrus, deployer, mockVRF);
       expect(await gnrus.sweptAt()).to.not.equal(0n,
-        "sweptAt must be stamped once handleFinalSweep runs onFinalSweep()");
+        "sweptAt must be stamped once the final sweep runs onFinalSweep()");
     });
 
     it("a direct onFinalSweep() from a non-game signer reverts Unauthorized", async function () {

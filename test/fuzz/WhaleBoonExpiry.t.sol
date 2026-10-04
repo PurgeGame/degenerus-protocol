@@ -41,7 +41,7 @@ contract WhaleBoonExpiry is DeployProtocol {
     uint256 constant SLOT_LOOTBOX_WORD = 34;   // mapping(uint48 => uint256) lootboxRngWordByIndex
     uint256 constant SLOT_LOOTBOX_RNG_IDX = 33; // lootboxRngPacked (low 48 bits = lootboxRngIndex)
     uint256 constant SLOT_BOX_PLAYERS = 57;     // mapping(uint48 => address[]) boxPlayers (sweep's discovery queue)
-    uint256 constant SLOT_BOX_CURSORS = 56;     // packed (boxCursor @ byte 7, boxCursorIndex @ byte 13)
+    uint256 constant SLOT_BOX_CURSORS = 56;     // packed (boxCursor @ byte 7, humanReadComplete @ byte 13)
 
     // Packed lootboxOrder bit layout (mirrors DegenerusGameStorage lootboxOrder -- see LB_* there).
     uint256 constant LB_SCORE_SHIFT        = 24;  // score        [24:39]
@@ -131,11 +131,9 @@ contract WhaleBoonExpiry is DeployProtocol {
         uint256 vrfWord = uint256(keccak256(abi.encode("whaleBoonExpiry", player, index)));
         RecyclingState.seedWord(address(game), index, bytes32(vrfWord));
 
-        // Box-order migration: the removed per-(player,index) `openBox` read lootboxOrder
-        // straight from the mapping; its sweep replacement only ever finds a box by walking
-        // boxPlayers[index & 1] (never populated by this forged setup) at or below LR_INDEX-1
-        // (never advanced past `index` here either). Enqueue + finalize + park so a
-        // full-budget openBoxes() call reaches exactly this one entry.
+        // mineFlip's human-box stage only ever finds a box by walking boxPlayers[index & 1] on the
+        // delivered read buffer. Enqueue + park the frontier so the stage reaches exactly this
+        // one entry.
         bytes32 lenSlot = keccak256(abi.encode(uint256(index), uint256(SLOT_BOX_PLAYERS)));
         uint256 len = 0; // one fixture entry; previous case was fully consumed
         bytes32 dataBase = keccak256(abi.encode(lenSlot));
@@ -148,12 +146,12 @@ contract WhaleBoonExpiry is DeployProtocol {
         bytes32 cursorSlot = bytes32(SLOT_BOX_CURSORS);
         uint256 cur = uint256(vm.load(address(game), cursorSlot));
         cur &= ~(mask48 << (7 * 8));
-        cur &= ~(mask48 << (13 * 8));
+        cur &= ~(uint256(0xff) << (13 * 8)); // humanReadComplete = false
         vm.store(address(game), cursorSlot, bytes32(cur));
 
         // The day itself is sealed (dailyIdx = today, tickets drained), as after a mid-day request:
-        // the delivered cohort's human entry is then an eligible read-consumer stage for openBoxes
-        // (which drives only the published cohort's AFK and human stages).
+        // the delivered cohort's human entry is then mineFlip's next read-consumer stage, and the
+        // engine stops when the cohort completes instead of preparing the next day.
         uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
         slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192);
         vm.store(address(game), bytes32(0), bytes32(slot0));
@@ -166,7 +164,7 @@ contract WhaleBoonExpiry is DeployProtocol {
     function _triggerSweep(address player, uint48 index) internal {
         _setupLootbox(player, index, 10 ether);
         vm.prank(player);
-        game.openBoxes(type(uint256).max);
+        game.mineFlip();
         assertTrue(game.boxIndexComplete(index), "the sweep opened the forged entry");
     }
 

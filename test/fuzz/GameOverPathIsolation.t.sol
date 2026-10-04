@@ -16,11 +16,11 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///               zero TraitsGenerated emits (vacuous / nothing to drain).
 ///         The path-isolation claim (original D-05) that game-over NEVER
 ///         runs the daily-drain body is superseded: game-over now opportunistically
-///         invokes processTicketBatch via delegatecall to maximise terminal
+///         runs the ticket work (`runTicketWork`) via delegatecall to maximise terminal
 ///         jackpot eligibility. Catastrophic drain reverts (e.g., queue that
 ///         exceeds the block gas limit) are swallowed by the low-level
 ///         delegatecall in _handleGameOverPath so game-over continues to
-///         handleGameOverDrain regardless -- funds are never locked.
+///         the terminal drain regardless -- funds are never locked.
 ///
 /// @dev Instrumentation: vm.recordLogs() + topic filter on TraitsGenerated
 ///      captures the entropy arguments fed to _raritySymbolBatch. A positive
@@ -113,7 +113,7 @@ contract GameOverBestEffortDrainTest is DeployProtocol {
         //   The first game-over advance requests VRF; subsequent advance after
         //   VRF fulfills runs _gameOverEntropy -> best-effort drain round 1
         //   (empty read slot) -> swap write->read -> round 2 drains purchased
-        //   tickets -> handleGameOverDrain.
+        //   tickets -> terminal drain.
         vm.warp(block.timestamp + 370 days);
 
         (uint256 totalTraits, uint256 totalAdvances) = _driveToGameOver();

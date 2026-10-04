@@ -9,7 +9,7 @@ import {C1Viewer} from "../repro/C1BoxAutoOpen.t.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 /// @title LootboxBudgetResume -- a budget-bounded sweep resumes mid-index and maroons nothing
-/// @notice The permissionless open walk charges each entry against its gas budget (the caller's
+/// @notice mineFlip's human-box stage charges each entry against its gas budget (the caller's
 ///         allowance; each entry is admitted only while the remaining allowance covers its declared
 ///         bound), BREAKS when the next entry would not fit, and leaves the cursor on it so the next
 ///         call resumes at the same index. Mutation v78 rewrote both halves of that — never breaking on the
@@ -111,7 +111,7 @@ contract LootboxBudgetResume is DeployProtocol {
         for (uint256 k; k < 5; k++) if (_base(index, who[k]) == 0) n++;
     }
 
-    /// @dev The smallest openBoxes allowance that opens any entry (bisection over snapshots).
+    /// @dev The smallest mineFlip allowance that opens any entry (bisection over snapshots).
     function _minimalOpenAllowance(uint48 index, address[5] memory who) internal returns (uint256) {
         uint256 before = _drainedCount(index, who);
         uint256 lo = 100_000;
@@ -120,7 +120,7 @@ contract LootboxBudgetResume is DeployProtocol {
             uint256 mid = (lo + hi) / 2;
             uint256 snap = vm.snapshotState();
             vm.prank(actor);
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("openBoxes(uint256)", uint256(2)));
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip()"));
             bool opened = ok && _drainedCount(index, who) > before;
             vm.revertToStateAndDelete(snap);
             if (opened) hi = mid;
@@ -155,10 +155,9 @@ contract LootboxBudgetResume is DeployProtocol {
 
         // The smallest allowance that opens anything: the first entry runs, the second never fits.
         uint256 budget = _minimalOpenAllowance(N, who);
-        emit log_named_uint("one-entry openBoxes allowance", budget);
+        emit log_named_uint("one-entry mineFlip allowance", budget);
         vm.prank(actor);
-        uint256 first = game.openBoxes{gas: budget}(2);
-        assertGt(first, 0, "a one-entry budget opens something");
+        game.mineFlip{gas: budget}();
         uint256 drained;
         for (uint256 k; k < 5; k++) if (_base(N, who[k]) == 0) drained++;
         assertEq(drained, 1, "one order drained, four still owed");
@@ -168,7 +167,7 @@ contract LootboxBudgetResume is DeployProtocol {
         uint256 calls = 1;
         while (game.boxesPending() && calls < 12) {
             vm.prank(actor);
-            game.openBoxes{gas: budget}(2);
+            game.mineFlip{gas: budget}();
             calls++;
         }
         assertFalse(game.boxesPending(), "the index drains within a bounded number of calls");
@@ -202,7 +201,7 @@ contract LootboxBudgetResume is DeployProtocol {
             uint256 before;
             for (uint256 k; k < 5; k++) if (_base(N, who[k]) == 0) before++;
             vm.prank(actor);
-            game.openBoxes{gas: budget}(3);
+            game.mineFlip{gas: budget}();
             uint256 after_;
             for (uint256 k; k < 5; k++) if (_base(N, who[k]) == 0) after_++;
             assertEq(after_ - before, 1, "one entry per call: the second never fits the budget");

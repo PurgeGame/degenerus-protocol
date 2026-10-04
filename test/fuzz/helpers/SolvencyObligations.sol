@@ -22,7 +22,7 @@ import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 ///            `pNext + pFuture`, JackpotModule:710-711), so the harness must too. Reads 0 when not
 ///            frozen (the buffer is cleared by `_unfreezePool`).
 ///
-///         2. DEAD POST-GAME-OVER LIVE POOLS (must be EXCLUDED). After `handleGameOverDrain`
+///         2. DEAD POST-GAME-OVER LIVE POOLS (must be EXCLUDED). After the terminal drain
 ///            (DegenerusGameGameOverModule.sol:78) the live pools are zeroed and `available =
 ///            totalFunds - claimablePool` is distributed to claimants; the only remaining ETH
 ///            obligation is `claimablePool`. Any `futurePrizePool` residual after the drain is

@@ -320,19 +320,6 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
         return _runTicketWork(anchor, allowance);
     }
 
-    /// @dev Transitional callers receive the same available gas.
-    function processTicketBatch(uint24 anchor) external returns (bool finished, bool didWork) {
-        MineFlipGas.Result memory result = _runTicketWork(anchor, MineFlipGas.available());
-        return (result.done, result.progressed);
-    }
-
-    function processTicketBatchBudgeted(uint24 anchor, uint256)
-        external returns (bool finished, bool didWork, uint256 charged)
-    {
-        MineFlipGas.Result memory result = _runTicketWork(anchor, MineFlipGas.available());
-        return (result.done, result.progressed, 0);
-    }
-
     function _runTicketWork(uint24 anchor, uint256 allowance) private returns (MineFlipGas.Result memory result) {
         MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
         uint256 entropy = _lootboxWord(_rngReadBuffer());
@@ -571,19 +558,12 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
         uint256 queueTotal;
     }
 
-    /// @notice Per-entry trait generation in the Game's storage context, called by Mint.
-    /// @dev A versioned immutable identity seeds each aligned group of sixteen.
-    ///      Caller reserves generation plus the complete bucket flush, prepares the
-    ///      full level and validates ownerIdx. This writer makes no external calls.
     uint64 private constant TICKET_LCG_MULT = 6364136223846793005;
 
-    function generateTraitRun(uint256 stream, uint32 offset, uint32 count, uint256 entropy, uint256 ownerIdx)
-        external returns (uint256 writes)
-    {
-        return _generateTraitRun(stream, offset, count, entropy, ownerIdx,
-            _goldSixTaken(uint24(stream >> 224)));
-    }
-
+    /// @dev Per-entry trait generation in the Game's storage context, called by the ticket worker.
+    ///      A versioned immutable identity seeds each aligned group of sixteen. The caller
+    ///      reserves generation plus the complete bucket flush, prepares the full level and
+    ///      validates ownerIdx. This writer makes no external calls.
     function _generateTraitRun(
         uint256 baseKey,
         uint32 startIndex,
@@ -659,16 +639,6 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
                 ++u;
             }
         }
-    }
-
-    /// @dev Legacy diagnostic selector; public unit selection is retired.
-    function drainRounds(uint24 rk, uint24 lvl, uint32, uint256 idx, uint256 total, uint256 entropy, uint8 shift)
-        external returns (uint256 nextIdx, uint32 used)
-    {
-        MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.available());
-        (nextIdx,,) = _roundPhase(rk, lvl, idx, total, entropy, shift, meter);
-        MineFlipGas.finish(meter);
-        used = 0;
     }
 
     function _roundPhase(uint24 rk, uint24 lvl, uint256 idx, uint256 total, uint256 entropy, uint8 shift,

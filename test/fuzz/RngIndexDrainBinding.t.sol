@@ -178,7 +178,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
 
     /// @notice A box purchased AFTER a mid-day VRF request binds to the LIVE LR_INDEX,
     ///         NOT to the in-flight LR_INDEX-1 word being delivered. The mid-day request
-    ///         (`requestLootboxRng`) advances the lootbox index by exactly 1
+    ///         (mineFlip's RequestMidday stage) advances the lootbox index by exactly 1
     ///         (DegenerusGameAdvanceModule._lrAdvanceIndexClearPending at :1140) and reserves
     ///         the in-flight word at the just-vacated index (LR_INDEX-1). A subsequent box buy
     ///         records itself at the NEW LR_INDEX (DegenerusGameMintModule:1949/1960 — and the
@@ -191,7 +191,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
     ///      purchase must remain unresolved when the earlier in-flight word arrives.
     function testBindingConsistencyMidDayCrossDay() public {
         // ── Mid-day prerequisite: today's daily RNG must already be consumed
-        //    (requestLootboxRng reverts while _recordedDailyWord(today) == 0). Complete a
+        //    (the mid-day request is refused while _recordedDailyWord(today) == 0). Complete a
         //    day, then sit on the new day so today's word is committed.
         _completeDayWithLogs(uint256(keccak256("midday-binding-setup-word")));
         _settleMidday();
@@ -210,8 +210,11 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         assertEq(_lootboxWord(idxN), 0, "live index already worded before request");
 
         // ── Mid-day VRF request: bumps LR_INDEX N -> N+1 and reserves the in-flight
-        //    word at index N (= the new LR_INDEX - 1). The word is NOT yet delivered.
-        game.requestLootboxRng();
+        //    word at index N (= the new LR_INDEX - 1). The word is NOT yet delivered. mineFlip
+        //    is the only door to the request; with the read cohort finished it is the next action.
+        uint256 priorReq = mockVRF.lastRequestId();
+        game.mineFlip();
+        assertGt(mockVRF.lastRequestId(), priorReq, "mineFlip issued the mid-day request");
         uint48 idxLive = _lrIndex();
         // Two physical buffers (6d0e64b09): the request seals N and the write side flips to N ^ 1.
         assertEq(idxLive, idxN ^ 1, "mid-day request did not advance LR_INDEX by exactly 1");

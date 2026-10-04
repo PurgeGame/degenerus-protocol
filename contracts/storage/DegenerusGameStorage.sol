@@ -46,6 +46,10 @@ interface IGameMinerMaintenance {
     function minerMaintenancePending() external view returns (bool);
 }
 
+interface IAdminLinkValue {
+    function linkAmountToEth(uint256 amount) external view returns (uint256);
+}
+
 /**
  * @title DegenerusGameStorage
  * @author Burnie Degenerus
@@ -725,7 +729,7 @@ abstract contract DegenerusGameStorage {
     ///
     ///      PROCESSING SCHEDULE:
     ///      - Minted window [purchaseLevel-1 .. purchaseLevel]: the read cohort of each key
-    ///        is drained on each advance (processTicketBatch); the daily slot swap commits
+    ///        is drained by the ticket worker (TicketModule runTicketWork); the daily slot swap commits
     ///        the write cohort.
     ///      - Unminted future levels (above _mintCeiling()): held in the far-future key space
     ///        with no traits. A fresh mid-day request after level L meets its goal can
@@ -923,9 +927,9 @@ abstract contract DegenerusGameStorage {
         uint256 balance
     );
 
-    /// @dev Emitted when credit is charged to waive a mid-day request's pending-value
-    ///      gates. `balance` is the post-charge balance. Emitted from the AdvanceModule,
-    ///      paired with MiddayRngCredited from the Game, so both live in the shared base.
+    /// @dev Emitted when credit is charged to pay a mid-day request's threshold gate.
+    ///      `balance` is the post-charge balance. Emitted from the RNG module, paired with
+    ///      MiddayRngCredited from the Game, so both live in the shared base.
     event MiddayRngCreditSpent(
         address indexed spender,
         uint256 charged,
@@ -1007,7 +1011,7 @@ abstract contract DegenerusGameStorage {
     ///      `level`, it is level + 2: that seal freezes the next level's far-future pool (later
     ///      entries take its write buffer). The pool mints inside the unified sweep with the first
     ///      cohort committed after the seal — the first RNG request after it, mid-day or daily
-    ///      (MintModule processTicketBatch). The last-purchase request takes the lock and bumps
+    ///      (TicketModule runTicketWork). The last-purchase request takes the lock and bumps
     ///      `level`, returning the ceiling to level + 1 = the same level. A target-met
     ///      request may activate that same level earlier; retain its ceiling after
     ///      draining so later purchases never reopen the frozen queue.
@@ -1029,19 +1033,6 @@ abstract contract DegenerusGameStorage {
             && (rngLockedFlag || _lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0);
     }
 
-    /// @dev O(1) advance-work discovery, shared by the external keeper view
-    ///      (DegenerusGame.advanceDue) and the afking router's in-context predicate.
-    ///      TRUE for a new-day advance (regardless of rngLock — advance is
-    ///      liveness-critical) OR a mid-day partial-drain whose read window still holds
-    ///      queued tickets (a latched last purchase day's frozen next-level pool counts) or
-    ///      whose sealed foil bucket awaits its drain. The probe
-    ///      mirrors the unified sweep's window [purchaseLevel-1 .. _mintCeiling()]; a
-    ///      fixed scan of at most three read keys plus the frozen pool's key, not unbounded.
-    function _advanceDue() internal view returns (bool) {
-        MinerAction action = _nextMinerAction();
-        return action != MinerAction.Idle && action != MinerAction.Wait;
-    }
-
     /// @dev Derived actions only: no independently stored engine stage can become stale.
     enum MinerAction {
         Idle, Terminal, Wait, Publish, Tickets, DailyGap, DailyApply, DailyPhase,
@@ -1053,7 +1044,9 @@ abstract contract DegenerusGameStorage {
         return IGameMinerMaintenance(ContractAddresses.CRAPS).minerMaintenancePending();
     }
 
-    function _nextMinerAction() internal view returns (MinerAction) {
+    /// @dev `caller` is the account whose donated credit may pay the mid-day threshold gate;
+    ///      address(0) selects as a creditless caller.
+    function _nextMinerAction(address caller) internal view returns (MinerAction) {
         if (gameOver) {
             if (_goRead(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK) == 0) return MinerAction.Terminal;
             uint256 ended = _goRead(GO_TIME_SHIFT, GO_TIME_MASK);
@@ -1093,23 +1086,30 @@ abstract contract DegenerusGameStorage {
         if (dailyDue && (_afkingResetDay <= dailyIdx || !subsFullyProcessed)) return MinerAction.PrepareSubscriptions;
         if (_minerMaintenancePending()) return MinerAction.Maintenance;
         if (dailyDue) return MinerAction.RequestDaily;
-        return _minerMiddayEligible() ? MinerAction.RequestMidday : MinerAction.Idle;
+        return _minerMiddayEligible(caller) ? MinerAction.RequestMidday : MinerAction.Idle;
     }
 
     uint96 internal constant MIN_LINK_FOR_LOOTBOX_RNG = 40 ether;
     uint96 internal constant MIN_LINK_FOR_CRAPS_RNG = 10 ether;
 
-    /// @dev The creditless mid-day request's own refusal gates, read before selecting it:
-    ///      an optional request that would certainly be refused is not work. Daily, read,
-    ///      maintenance and liveness gates already hold on the path that reaches this check.
-    ///      A pending write-side Craps window waives both pending-value gates.
-    function _minerMiddayEligible() internal view returns (bool) {
+    /// @dev The mid-day request's own refusal gates, read before selecting it: an optional
+    ///      request that would certainly be refused is not work. Daily, read, maintenance and
+    ///      liveness gates already hold on the path that reaches this check. A pending
+    ///      write-side Craps window waives both pending-value gates. Otherwise an empty queue
+    ///      is never eligible, and a queue below the threshold is eligible only when `caller`'s
+    ///      donated credit covers the charge, priced last so the Admin feed is read only when
+    ///      every other gate passes.
+    function _minerMiddayEligible(address caller) internal view returns (bool) {
         bool crapsWork = (lootboxRngPacked >> (LR_CRAPS_PENDING_SHIFT + _rngWriteBuffer())) & 1 != 0;
-        uint256 pendingEth = _unpackMilliEthToWei(uint64(_lrRead(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK)));
+        bool needsCredit;
         if (!crapsWork) {
+            uint256 pendingEth = _unpackMilliEthToWei(uint64(_lrRead(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK)));
             if (pendingEth == 0 && _lrRead(LR_PENDING_FLIP_SHIFT, LR_PENDING_FLIP_MASK) == 0) return false;
             uint256 threshold = _unpackMilliEthToWei(uint64(_lrRead(LR_THRESHOLD_SHIFT, LR_THRESHOLD_MASK)));
-            if (threshold != 0 && pendingEth < threshold) return false;
+            if (threshold != 0 && pendingEth < threshold) {
+                if (caller == address(0)) return false;
+                needsCredit = true;
+            }
         }
         if (_simulatedDayIndex() != dailyIdx) return false;
         uint256 maxBasefee = _lrRead(LR_MAX_BASEFEE_SHIFT, LR_MAX_BASEFEE_MASK);
@@ -1119,7 +1119,26 @@ abstract contract DegenerusGameStorage {
         // No coordinator is wired before VRF setup, so nothing can be requested yet.
         if (address(vrfCoordinator) == address(0)) return false;
         (uint96 linkBal,,,,) = vrfCoordinator.getSubscription(vrfSubscriptionId);
-        return linkBal >= (crapsWork ? MIN_LINK_FOR_CRAPS_RNG : MIN_LINK_FOR_LOOTBOX_RNG);
+        if (linkBal < (crapsWork ? MIN_LINK_FOR_CRAPS_RNG : MIN_LINK_FOR_LOOTBOX_RNG)) return false;
+        if (!needsCredit) return true;
+        (bool covered,,) = _middayCreditCharge(caller);
+        return covered;
+    }
+
+    /// @dev The donated-credit charge for one mid-day request at this block's basefee:
+    ///      MIDDAY_RNG_CHARGE_MULT times the billed gas, converted to juels at the Admin's
+    ///      LINK/ETH price. `covered` is false for a zero balance or an unpriced feed, so the
+    ///      selector and the RNG module's charge always agree within a transaction.
+    function _middayCreditCharge(address caller)
+        internal view returns (bool covered, uint256 charge, uint256 balance)
+    {
+        balance = middayRngCredit[caller];
+        // A zero balance never qualifies, even where basefee (and so the charge) is zero.
+        if (balance == 0) return (false, 0, 0);
+        uint256 weiPerLink = IAdminLinkValue(ContractAddresses.ADMIN).linkAmountToEth(1 ether);
+        if (weiPerLink == 0) return (false, 0, balance);
+        charge = (MIDDAY_RNG_BILLED_GAS * block.basefee * MIDDAY_RNG_CHARGE_MULT * 1 ether) / weiPerLink;
+        covered = balance >= charge;
     }
 
     /// @dev True while the early-bird ticket leg of a jackpot-phase day-1 daily waits for its
@@ -1141,7 +1160,7 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev True while the ticket leg of a purchase-phase daily waits for its own advance
-    ///      stage: payDailyJackpot(false) priced it into the top field of
+    ///      stage: runDailyJackpot(false) priced it into the top field of
     ///      dailyTicketBudgetsPacked. The day stays locked until that stage seals it.
     function _purchaseTicketLegPending() internal view returns (bool) {
         return dailyTicketBudgetsPacked >> 208 != 0;
@@ -2022,7 +2041,7 @@ abstract contract DegenerusGameStorage {
     /// @dev Compute the ticket queue key for the far-future key space.
     ///      Always sets bit 22, independent of ticketWriteSlot.
     ///      Far-future tickets are not double-buffered; they persist until
-    ///      minted as a latched last purchase day's frozen pool (MintModule processTicketBatch).
+    ///      minted as a latched last purchase day's frozen pool (TicketModule runTicketWork).
     function _tqFarFutureKey(uint24 lvl) internal pure returns (uint24) {
         return lvl | TICKET_FAR_FUTURE_BIT;
     }
@@ -3977,12 +3996,11 @@ abstract contract DegenerusGameStorage {
     /// @dev Count of stamped-but-unopened afking boxes (at most one per subscriber — the
     ///      no-orphan rule blocks re-stamping, eviction, reclaim, and funding-kill while a
     ///      box is pending, so the daily STAGE box stamps are the ONLY increment — batched
-    ///      one add per STAGE chunk — and the box open the ONLY decrement). The rewarded open
-    ///      crank early-outs on zero, making a drained-ring "any work?" check O(1) instead of
-    ///      a full ring scan; the unrewarded
-    ///      openBoxes valve never consults it, so a counter fault can only cost gas (a walk
-    ///      that finds nothing), never box liveness. Packs into the cursor slot (warm for
-    ///      both writers); uint16 covers the 2005-subscriber cap (GameAfkingModule.SUBSCRIBER_CAP).
+    ///      one add per STAGE chunk — and the box open the ONLY per-box decrement). The open worker
+    ///      early-outs on zero, making a drained-ring "any work?" check O(1) instead of a full
+    ///      ring scan; a full scan that finds no openable stamp clears the count. Packs into the
+    ///      cursor slot (warm for both writers); uint16 covers the 2005-subscriber cap
+    ///      (GameAfkingModule.SUBSCRIBER_CAP).
     uint16 internal _pendingBoxCount;
 
     /// @dev Afking opens already knee-credited in the CURRENT forced-split bounty batch.
@@ -4268,7 +4286,7 @@ abstract contract DegenerusGameStorage {
 
     /// @dev The terminal level's leading affiliate, latched with the terminal cohort level in
     ///      _handleGameOverPath before any terminal word can exist, so no later claim can
-    ///      change the pool the terminal draw receives. Read once by handleGameOverDrain.
+    ///      change the pool the terminal draw receives. Read once by _handleGameOverDrain.
     address internal terminalAffiliate;
 
     /// @dev Inclusive lower block bound for a level's first generation window. Level 1
@@ -4287,7 +4305,7 @@ abstract contract DegenerusGameStorage {
     mapping(uint256 => uint256) internal ticketGenerationStartBlock;
 
     // =========================================================================
-    // Deterministic (VRF-dead) ending — GameOverModule tallyDeadVrf / claimDeadVrf
+    // Deterministic (VRF-dead) ending — GameOverModule _tallyDeadVrf / claimDeadVrf
     // =========================================================================
     // One slot of tally state, then one slot of payout state, then the claimed bitmap.
     // All zero for the life of the game; written only once the dead ending latches.

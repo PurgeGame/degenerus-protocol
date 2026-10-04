@@ -10,7 +10,8 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title MiddaySwapJackpotCohort — the mid-day lootbox freeze against a jackpot-phase cohort.
 ///
-/// @notice `requestLootboxRng` freezes the ticket buffer with `_swapTicketSlot()`, the SAME
+/// @notice The mid-day request (mineFlip's RequestMidday stage) freezes the ticket buffer with
+///         `_swapTicketSlot()`, the SAME
 ///         single global toggle the daily request uses. In the JACKPOT phase player buys
 ///         route to `level`, not `level + 1` (`_activeTicketLevel`), while the daily jackpot
 ///         queues its ticket AWARDS at `level + 1`. The global swap therefore re-points BOTH
@@ -818,7 +819,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
     }
 
     /// @dev Buy a 2-ETH lootbox (clears the 1-ETH mid-day threshold) then fire the
-    ///      permissionless mid-day request from an unrelated account. True iff the
+    ///      mid-day request through an unrelated account's mineFlip. True iff the
     ///      global ticket buffer toggled.
     function _middayRequest() internal returns (bool swapped) {
         // The miner sends its own mid-day request whenever one is eligible (a shut Craps window
@@ -836,11 +837,12 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             false
         );
         bool before = _ticketWriteSlot();
+        uint256 priorReq = mockVRF.lastRequestId();
         vm.prank(crank);
         (bool ok, ) = address(game).call(
-            abi.encodeWithSignature("requestLootboxRng()")
+            abi.encodeWithSignature("mineFlip()")
         );
-        require(ok, "harness: requestLootboxRng must be callable");
+        require(ok && mockVRF.lastRequestId() > priorReq, "harness: mineFlip must issue the mid-day request");
         swapped = _ticketWriteSlot() != before;
     }
 

@@ -25,7 +25,7 @@ contract BoxQueueViewer is DegenerusGame {
 
 /// @title PassBoxAutoOpenEnqueue — WHALE-01: pass-bundled lootboxes must enqueue for auto-open
 /// @notice Mint, presale, and afking-cover lootboxes are enqueued into boxPlayers[index & 1] so the
-///         permissionless openBoxes() auto-opener resolves them. Pass-bundled lootboxes
+///         mineFlip's HumanBoxes stage resolves them. Pass-bundled lootboxes
 ///         (whale/lazy/deity, created in WhaleModule._recordLootboxEntry) were NOT enqueued, so
 ///         their owner — the only party who can open them (manual openLootBox is operator-gated) —
 ///         could hold the box closed and time the open to a favorable live level/boon state. That

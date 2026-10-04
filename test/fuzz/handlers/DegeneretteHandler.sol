@@ -136,14 +136,14 @@ contract DegeneretteHandler is Test {
         uint256 claimableBefore = game.claimableWinningsOf(currentActor);
 
         // Bets resolve only as the engine's Degenerette read consumer of the published word
-        // (mineFlip); openBoxes drives the AFK and human stages only.
+        // (mineFlip).
         vm.prank(currentActor);
         try game.mineFlip() {
             uint256 claimableAfter = game.claimableWinningsOf(currentActor);
             if (claimableAfter > claimableBefore) {
                 ghost_totalEthPayout += (claimableAfter - claimableBefore);
             }
-            // A successful openBoxes call may do no work or stop before this bet.
+            // A successful mineFlip call may do no work or stop before this bet.
             // Count an observed nonzero -> zero transition, not merely a call.
             if (game.degeneretteBetInfo(bet.index, bet.betId) == 0) {
                 ghost_betsResolved++;

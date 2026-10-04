@@ -12,7 +12,7 @@ import {FlipRoundLib} from "../../contracts/libraries/FlipRoundLib.sol";
 ///        not at settle time, however many bets a sweep call happens to flush together.
 ///
 /// @notice Bets queued at an index resolve only through the permissionless FIFO sweep
-///         (`openBoxes`/`mineFlip`), which drains the queue in order and groups however many
+///         (`mineFlip`'s Degenerette stage), which drains the queue in order and groups however many
 ///         bets fit one call's walk-unit budget into a single `acc.flipMint` flush. That
 ///         grouping is the one real grind this design has to defend against:
 ///

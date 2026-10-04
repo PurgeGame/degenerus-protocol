@@ -323,9 +323,8 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
 
   describe("Anti-grind: the caller-composed aggregate is NEVER rounded (§4)", function () {
     it("[04a] `sweepDegeneretteBets` flushes through the shared `_flushOwner`, which mints `acc.flipMint` raw — no collapse at the flush", function () {
-      // Doors removal: the manual `resolveDegeneretteBets(index, betIds)` entry point this
-      // test used to pin is gone — bets now resolve ONLY through the permissionless in-order
-      // sweep `sweepDegeneretteBets` (reached via `game.openBoxes`), which loops queued bets
+      // Bets resolve ONLY through the permissionless in-order sweep `sweepDegeneretteBets`
+      // (reached via `game.mineFlip`'s Degenerette stage), which loops queued bets
       // into a shared ResolveAcc and delegates the per-owner payout to `_flushOwner` (called
       // once per owner-run and once at the end of the call). The entry-point body itself
       // does not inline the mint — pin it to the shared flush instead, which it routes through.

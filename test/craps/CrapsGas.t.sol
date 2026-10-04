@@ -217,7 +217,7 @@ contract CrapsGasTest is CrapsPins {
         _closeOn(craps, slot, 0, uint256(keccak256("maxslip")));
 
         uint256 g = gasleft();
-        craps.resolveSlot(slot, WHOLE_FIELD);
+        craps.settleSlot(slot, WHOLE_FIELD);
         uint256 used = g - gasleft();
 
         emit log_named_uint("max-legal slip settle gas", used);
@@ -260,9 +260,9 @@ contract CrapsGasTest is CrapsPins {
         vm.stopPrank();
         _closeOn(craps, slot, 0, uint256(keccak256("batch")));
         _coolSettlement();
-        uint256 intrinsic = _intrinsic(abi.encodeWithSelector(craps.resolveSlot.selector, slot, WHOLE_FIELD));
+        uint256 intrinsic = _intrinsic(abi.encodeWithSelector(craps.settleSlot.selector, slot, WHOLE_FIELD));
         uint256 g = gasleft();
-        craps.resolveSlot{gas: 10_000_000 - intrinsic}(slot, WHOLE_FIELD);
+        craps.settleSlot{gas: 10_000_000 - intrinsic}(slot, WHOLE_FIELD);
         used = g - gasleft();
         assertEq(craps.bonusCursorOf(slot), n, "every seat must settle");
         assertTrue(craps.betOf(first).settled && craps.betOf(last).settled, "both ends of field settled");
@@ -335,9 +335,9 @@ contract CrapsGasTest is CrapsPins {
             _coolSettlement();
             vm.record();
         }
-        uint256 intrinsic = _intrinsic(abi.encodeWithSelector(craps.resolveSlot.selector, slot, WHOLE_FIELD));
+        uint256 intrinsic = _intrinsic(abi.encodeWithSelector(craps.settleSlot.selector, slot, WHOLE_FIELD));
         g = gasleft();
-        craps.resolveSlot{gas: 10_000_000 - intrinsic}(slot, WHOLE_FIELD);
+        craps.settleSlot{gas: 10_000_000 - intrinsic}(slot, WHOLE_FIELD);
         settle = g - gasleft();
         if (cold) {
             assertLt(settle, 280_000 + _fieldColdAllowance(), "cold field exceeds warm budget plus storage allowance");
@@ -349,7 +349,7 @@ contract CrapsGasTest is CrapsPins {
         emit log_named_uint("enterBattle, first seat   ", firstSeat);
         emit log_named_uint("enterBattle, later seat   ", nextSeat);
         emit log_named_uint("closeBattle               ", close);
-        emit log_named_uint("resolveSlot, field of 2   ", settle); // pays, too
+        emit log_named_uint("settle, field of 2        ", settle); // pays, too
     }
 
     /// @dev The measured 280k warm ceiling remains a separate regression. This

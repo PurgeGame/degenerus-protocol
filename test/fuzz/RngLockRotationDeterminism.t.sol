@@ -278,12 +278,23 @@ contract RngLockRotationDeterminism is DeployProtocol {
         return (packed >> LR_MID_DAY_BIT) & 0xFF;
     }
 
-    /// @dev Drive the game into a mid-day RNG-eligible state where
-    ///      requestLootboxRng() succeeds AND its buffer swap sets LR_MID_DAY=1:
+    /// @dev Drive the game into a mid-day RNG-eligible state where the mid-day
+    ///      request (mineFlip's RequestMidday stage) succeeds AND its buffer swap sets LR_MID_DAY=1:
     ///      complete two days so today's daily RNG is recorded, make a lootbox
     ///      purchase (pending ETH + a ticket-queue entry), fund the VRF
     ///      subscription. Mirrors VrfRotationLiveness.t.sol (313-02) +
     ///      LootboxRngLifecycle.t.sol _setupForMidDayRng.
+    /// @dev The mid-day request through mineFlip, its only door. False (and no call) when the
+    ///      request is not the engine's next action, so a run can be filtered.
+    function _mineMiddayRequest() internal returns (bool) {
+        if (game.nextMinerAction() != 18) return false;
+        uint256 prior = mockVRF.lastRequestId();
+        try game.mineFlip() {} catch {
+            return false;
+        }
+        return mockVRF.lastRequestId() > prior;
+    }
+
     function _setupForMidDayRng() internal {
         _completeDay(0xDEAD0001);
         _settleMidday();
@@ -417,10 +428,10 @@ contract RngLockRotationDeterminism is DeployProtocol {
     ///         between a mid-day lootbox-RNG request and its fulfilment must not
     ///         change the VRF-derived per-index output, AND must preserve the
     ///         reserved index N (LR_INDEX frozen across the window). Run A fires
-    ///         requestLootboxRng, rotates mid-flight, and delivers vrfWord on the
+    ///         the mid-day request via mineFlip, rotates mid-flight, and delivers vrfWord on the
     ///         NEW coordinator (the re-issued mid-day request lands in the
     ///         preserved slot N via the :1804 mid-day write); Run B fires
-    ///         requestLootboxRng and delivers the SAME vrfWord on the ORIGINAL
+    ///         the same request and delivers the SAME vrfWord on the ORIGINAL
     ///         coordinator with no rotation. The reserved index N is identical
     ///         across runs and _lootboxWord(N) (== vrfWord) is
     ///         byte-identical across runs.
@@ -440,11 +451,11 @@ contract RngLockRotationDeterminism is DeployProtocol {
         // ---- Run A: perturbed (rotation mid-flight) ----
         // Fire the mid-day request; the buffer swap sets LR_MID_DAY=1 and reserves
         // slot N = LR_INDEX-1.
-        try game.requestLootboxRng() {} catch {
+        if (!_mineMiddayRequest()) {
             vm.assume(false);
         }
         if (_readMidDayFlag() != 1) {
-            // requestLootboxRng did not set the mid-day flag (preconditions not
+            // The request did not set the mid-day flag (preconditions not
             // met for this iteration) -- filter, mirroring the v43 harness filters.
             vm.assume(false);
         }
@@ -488,7 +499,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
         // ---- Run B: baseline (no rotation) ----
         _revertToPreLock(preLockSnap);
 
-        try game.requestLootboxRng() {} catch {
+        if (!_mineMiddayRequest()) {
             vm.assume(false);
         }
         if (_readMidDayFlag() != 1) {

@@ -14,10 +14,11 @@ import {
 } from "../../contracts/storage/DegenerusGameStorage.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
 /// @title GoldenTicketFoilHarness -- drives the live drain and claim in the Game's context
 /// @notice Extends the production DegenerusGameFoilPackModule so the inherited externals
-///         `processFoilDrain` and `claimGoldenTicket` execute live in THIS contract's
+///         `runFoilWork` and `claimGoldenTicket` execute live in THIS contract's
 ///         storage. The harness is etched at ContractAddresses.GAME so the module's
 ///         delegatecall-only guard and the jackpot delegatecall both see
 ///         address(this) == GAME. Adds only storage seeders, read-only views, and two
@@ -284,15 +285,15 @@ contract GoldenTicketFoilPack is Test {
         h.pushFoilBuyer(RESOLVE_DAY, LVL, BUYER);
         h.setRngWord(RESOLVE_DAY, word);
         h.setDrainWindow(RESOLVE_DAY, RESOLVE_DAY);
-        h.processFoilDrain(1000);
+        h.runFoilWork(gasleft());
     }
 
-    // -- gas: a full write budget of foil packs on the leftover -----------------
+    // -- gas: foil packs drained across gas-bounded checkpoints -----------------
 
-    /// @dev The foil drain runs on the ticket batch's leftover budget, so with an empty
-    ///      queue it can take the whole WRITES_BUDGET_SAFE (900). Each unregistered pack
-    ///      is sixteen single-lane appends plus a registry slot; the per-pack charge must
-    ///      keep a full budget of packs under the 10M soft target.
+    /// @dev The foil drain (`runFoilWork`, run by the ticket worker) spends the gas it is
+    ///      handed. Each unregistered pack is sixteen single-lane appends plus a registry
+    ///      slot; a small call must checkpoint between packs and resume to the same ordered
+    ///      entries a single large call writes.
     function test_gas_FoilChunk_LowGasCheckpointsPreserveOrderedEntries() public {
         for (uint256 i; i < 60; ++i) {
             address b = address(uint160(0xF01100 + i));
@@ -303,17 +304,20 @@ contract GoldenTicketFoilPack is Test {
         h.setDrainWindow(RESOLVE_DAY, RESOLVE_DAY);
         uint256 snapshot = vm.snapshotState();
         uint256 g0 = gasleft();
-        (bool done, bool drained) = h.processFoilDrain{gas: 4_000_000}(900);
+        MineFlipGas.Result memory r = h.runFoilWork{gas: 4_000_000}(4_000_000);
+        (bool done, bool drained) = (r.done, r.progressed);
         uint256 g = g0 - gasleft();
         emit log_named_uint("foil_small_call_checkpoint_gas", g);
         assertTrue(drained, "drained at least one pack");
         assertFalse(done, "small call must preserve a real continuation");
         assertLt(g, 4_000_000, "small call must return before exhausting supplied gas");
-        (done, drained) = h.processFoilDrain{gas: 15_000_000}(900);
+        r = h.runFoilWork{gas: 15_000_000}(15_000_000);
+        (done, drained) = (r.done, r.progressed);
         assertTrue(done && drained, "remaining packs complete with more available gas");
         bytes32 split = _foilBucketDigest();
         vm.revertToState(snapshot);
-        (done, drained) = h.processFoilDrain{gas: 15_000_000}(900);
+        r = h.runFoilWork{gas: 15_000_000}(15_000_000);
+        (done, drained) = (r.done, r.progressed);
         assertTrue(done && drained, "large call may complete the entire cohort");
         assertEq(_foilBucketDigest(), split, "checkpoint partitions preserve exact ordered entries");
     }
@@ -617,7 +621,7 @@ contract GoldenTicketFoilPack is Test {
     ///      before the draw it feeds, since the readiness gate holds rngGate until the
     ///      foil drain catches up. So the futurePrizePool debit always lands ahead of
     ///      any pool math that reads it, exactly as the armed board route's own grand
-    ///      does from payDailyJackpot, and the RNG lock is deliberately NOT consulted.
+    ///      does from runDailyJackpot, and the RNG lock is deliberately NOT consulted.
     ///      This pins that: the identical push under a held lock pays the identical
     ///      grand. A future sweep re-adding a lock guard here fails loudly.
     function testGrandPaysUnderTheRngLock() public {

@@ -301,7 +301,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
     /**
      * @notice sDGNRS's once-per-level automatic whale purchase, driven from the afking process
-     *         STAGE (GameAfkingModule.processSubscriberStage) — never a player entry.
+     *         STAGE (GameAfkingModule.runSubscriberWork) — never a player entry.
      * @dev Delegatecall-only inside the Game (the STAGE nests into this module from its own
      *      delegatecall context); no facade stub forwards this selector, so nothing outside the
      *      daily crank can trigger reserve spending. Sizes the buy at the largest whole group of

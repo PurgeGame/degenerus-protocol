@@ -9,6 +9,7 @@ import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
 /// @dev The two things craps reads out of the live game: the raw lootbox-RNG slots and the
 ///      player's mint history. One double serves both because production reads both from the
@@ -64,17 +65,18 @@ contract MockGame {
         return score[player];
     }
 
-    /// @dev The lootbox draw the table asks for when a window shuts. Counted, and the packed index
-    ///      advances the way the protocol's does — the request fulfils into the index it was sent
-    ///      at and new commitments queue above it — so a fixture that arms twice binds two tables.
-    ///      The word itself is still landed by hand.
-    uint256 public lootboxRngCalls;
+    /// @dev Stands in for the ordinary RNG request mineFlip makes (daily or mid-day): it seals the
+    ///      write buffer the shut windows bound to. Counted, and the packed index advances the way
+    ///      the protocol's does — the request fulfils into the buffer it was sent at and new
+    ///      commitments queue in the other — so a fixture that arms twice binds two tables. The
+    ///      table itself never calls this; the word is still landed by hand.
+    uint256 public rngRequests;
 
-    function requestLootboxRng() external {
+    function requestRng() external {
         uint256 state = uint256(slots[bytes32(0)]);
         uint256 read = ((state >> 252) & 1) ^ 1;
         if (uint256(slots[bytes32(uint256(33))]) & (uint256(1) << (250 + read)) != 0) return;
-        ++lootboxRngCalls;
+        ++rngRequests;
         state ^= uint256(1) << 252;
         state &= ~(uint256(1) << 255);
         slots[bytes32(0)] = bytes32(state);
@@ -288,10 +290,34 @@ abstract contract CrapsPins is Test {
         vm.stopPrank();
     }
 
-    /// @dev SETTLE EVERYTHING. `resolveSlot`'s second argument is a GAS ALLOWANCE, not a seat
-    ///      count, so "the whole field" is now a budget no field can exhaust rather than a head
-    ///      count above the biggest fixture. The internal seat ceiling still bounds one call.
+    /// @dev SETTLE EVERYTHING. Settlement takes a GAS ALLOWANCE, not a seat count, so "the whole
+    ///      field" is a budget no field can exhaust rather than a head count above the biggest
+    ///      fixture. The internal seat ceiling still bounds one call.
     uint64 internal constant WHOLE_FIELD = type(uint64).max;
+
+    /// @dev mineFlip's Craps read stage, isolated: the read-cohort worker, called as the Game (it is
+    ///      Game-only), on the cohort `index`, with all the gas this frame has.
+    function _readWork(CrapsViews c, uint48 index) internal returns (MineFlipGas.Result memory) {
+        vm.prank(ContractAddresses.GAME);
+        return JackpotBattle(address(c)).runCrapsReadWork(index, gasleft());
+    }
+
+    /// @dev mineFlip's Maintenance stage, isolated: the scheduled-cursor worker, called as the Game.
+    function _maintain(CrapsViews c) internal returns (MineFlipGas.Result memory) {
+        vm.prank(ContractAddresses.GAME);
+        return JackpotBattle(address(c)).runCrapsMaintenance(gasleft());
+    }
+
+    /// @dev ONE CRAPS STEP, dispatched the way mineFlip selects it: while the read cohort is the
+    ///      live RNG consumer (stage 6) its worker settles that cohort's next field; otherwise the
+    ///      maintenance worker steps the scheduled cursor. Returns whether the worker moved and the
+    ///      maintenance cursor after the step.
+    function _crank(CrapsViews c) internal returns (bool progressed, uint64 cursor) {
+        MineFlipGas.Result memory r = game.rngConsumerStage() == 6
+            ? _readWork(c, c.currentIndex() ^ 1)
+            : _maintain(c);
+        return (r.progressed, c.keeperSlot());
+    }
 
     MockGame internal game;
     MockFlip internal flip;
@@ -428,7 +454,7 @@ abstract contract CrapsPins is Test {
     /// @dev Settle a field and report the POT it paid, separately from everything else that call
     ///      credited.
     ///
-    ///      A battle pays the instant its last seat scores, inside `resolveSlot`, so a BALANCE
+    ///      A battle pays the instant its last seat scores, inside the settling call, so a BALANCE
     ///      taken across that call holds the winner's own run credit and the pot added together.
     ///      Any fixture that subtracts one balance from another is therefore measuring the sum,
     ///      and a pot assertion written that way is asserting against the wrong number. The log is

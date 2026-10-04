@@ -6,6 +6,22 @@ import {DegenerusGameGameOverModule} from "../../contracts/modules/DegenerusGame
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 
 contract DeadTallyCheckpointHarness is DegenerusGameGameOverModule, BucketSeed {
+    /// @dev The deterministic ending is latched on the passed terminal level and its payout is
+    ///      marked settled, so each terminal call (`runGameOverAdvance`, mineFlip's Terminal stage)
+    ///      runs exactly the tally and stops at its boundary instead of continuing into the payout.
+    ///      The tally reads none of these fields. The dead latch is the one `_latchDeadEnding`
+    ///      writes (callback authority revoked, publication cleared, word waiting); past the
+    ///      14-day VRF-dead window it makes the ending live.
+    function latchDeadTally() external {
+        _lrWrite(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK, 1);
+        _lrWrite(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK, 1);
+        _setRngRequestActive(false);
+        _setRngSessionPublished(false);
+        rngWordCurrent = RNG_WORD_WAITING;
+        _goWrite(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK, 1);
+    }
+
+    function tallyStage() external view returns (uint8) { return deadTallyStage; }
     function seed(uint24 lvl, uint256 count) external {
         level = lvl;
         uint24 key = _tqReadKey(lvl);
@@ -41,6 +57,22 @@ contract DeadTallyCheckpointHarness is DegenerusGameGameOverModule, BucketSeed {
 }
 
 contract DeadTallyGasCheckpointsTest is Test {
+    /// @dev Past the 14-day VRF-dead window from a zero request time.
+    function setUp() public {
+        vm.warp(30 days);
+    }
+
+    function _harness() private returns (DeadTallyCheckpointHarness h) {
+        h = new DeadTallyCheckpointHarness();
+        h.latchDeadTally();
+    }
+
+    /// @dev One terminal call with `callGas` as its gas and allowance; true once the tally is done.
+    function _tally(DeadTallyCheckpointHarness h, uint24 lvl, uint256 callGas) private returns (bool) {
+        h.runGameOverAdvance{gas: callGas}(0, lvl, callGas);
+        return h.tallyStage() == 3;
+    }
+
     function testFuzz_CreatedTallyUsesOnlyLiveCounts(uint256 live, uint256 salt) public {
         _checkCreated(live, salt);
     }
@@ -51,11 +83,11 @@ contract DeadTallyGasCheckpointsTest is Test {
     }
 
     function _checkCreated(uint256 live, uint256 salt) private {
-        DeadTallyCheckpointHarness h = new DeadTallyCheckpointHarness();
+        DeadTallyCheckpointHarness h = _harness();
         (uint256 expectedCreated, uint256 expectedTraits) = h.seedCreated(110, live, salt);
         vm.cool(address(h));
         uint256 start = gasleft();
-        assertTrue(h.tallyDeadVrf{gas: 1_100_000}(110));
+        assertTrue(_tally(h, 110, 1_100_000));
         assertLt(start - gasleft(), 1_100_000, "full scan fits existing admission bound and tail");
         (uint64 created, uint16 traits) = h.createdState();
         assertEq(created, expectedCreated, "counts ignore dead backing words and upper header bits");
@@ -63,21 +95,21 @@ contract DeadTallyGasCheckpointsTest is Test {
     }
 
     function test_CreatedTallyCountsNothingForRetiredLevelAndIgnoresFutureAlias() public {
-        DeadTallyCheckpointHarness h = new DeadTallyCheckpointHarness();
+        DeadTallyCheckpointHarness h = _harness();
         h.seedCreated(110, type(uint256).max, 3);
-        assertTrue(h.tallyDeadVrf(108), "retired level finishes the tally");
+        assertTrue(_tally(h, 108, gasleft()), "retired level finishes the tally");
         (uint64 retiredCreated, uint16 retiredTraits) = h.createdState();
         assertEq(retiredCreated, 0, "retired level must not read the retained level's counts");
         assertEq(retiredTraits, 0);
         h.seedCreated(110, type(uint256).max, 3);
-        assertTrue(h.tallyDeadVrf(112));
+        assertTrue(_tally(h, 112, gasleft()));
         (uint64 created, uint16 traits) = h.createdState();
         assertEq(created, 0, "future level must not read the retained level's counts");
         assertEq(traits, 0);
     }
 
     function test_ColdTallyCheckpointsBelow10MAndLowGasHasSameWeight() public {
-        DeadTallyCheckpointHarness h = new DeadTallyCheckpointHarness();
+        DeadTallyCheckpointHarness h = _harness();
         h.seed(110, 3000);
         uint256 snap = vm.snapshotState();
         bool done;
@@ -85,7 +117,7 @@ contract DeadTallyGasCheckpointsTest is Test {
         while (!done && calls++ < 20) {
             vm.cool(address(h));
             uint256 start = gasleft();
-            done = h.tallyDeadVrf{gas: 10_000_000}(110);
+            done = _tally(h, 110, 10_000_000);
             uint256 used = start - gasleft() + 21_000;
             emit log_named_uint("cold deterministic tally including intrinsic", used);
             assertLt(used, 10_000_000);
@@ -100,7 +132,7 @@ contract DeadTallyGasCheckpointsTest is Test {
         calls = 0;
         while (!done && calls++ < 30) {
             vm.cool(address(h));
-            done = h.tallyDeadVrf{gas: 2_000_000}(110);
+            done = _tally(h, 110, 2_000_000);
         }
         assertTrue(done);
         uint64 splitWeight;

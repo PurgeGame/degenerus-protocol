@@ -125,9 +125,9 @@ contract CrapsAliasedSlotTest is CrapsPins {
 
     /// @dev The same field, settled once and then walked a second time through the real slot. With
     ///      the alias door shut, nothing outside the finalized field's own cursor can ever hand it
-    ///      a fresh seat, so a repeat `resolveSlot` finds nothing left owing and pays nobody. The
-    ///      scheduled keeper, which walks the same slot lane, is unaffected by the fix and still
-    ///      crosses the finalized window.
+    ///      a fresh seat, so a repeat settle finds nothing left owing and pays nobody. The scheduled
+    ///      keeper mineFlip drives, which walks the same slot lane, is unaffected by the fix and
+    ///      still crosses the finalized window.
     function test_settledWindowPaysOnce() public {
         vm.prank(ContractAddresses.GAME);
         craps.openBonusDay();
@@ -178,7 +178,7 @@ contract CrapsAliasedSlotTest is CrapsPins {
         assertEq(craps.progressiveOf(), progressiveBefore, "the progressive pool moved on the second settle");
 
         // ---- the scheduled keeper is unaffected: it still crosses the finalized window ----------
-        (bool progressed,) = craps.keepScheduled(WHOLE_FIELD);
+        (bool progressed,) = _crank(craps);
         assertTrue(progressed, "the keeper did not progress past a finalized window");
     }
 

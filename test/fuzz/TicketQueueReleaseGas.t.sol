@@ -20,22 +20,20 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 // This test commits a 3,000-entry queue (vm.store = committed, original-nonzero
 // storage — the state under which the old `delete` cost its full ~5k/slot) and
 // asserts the finishing call on BOTH production release sites stays far below
-// the ceiling: the far-future release inside the private `_processFutureTicketBatch`
-// (reachable only through `processTicketBatch`'s lastPurchaseDay continuation, since
-// the standalone external `processFutureTicketBatch` entry point was removed — it is
-// now `_processFutureTicketBatch`, private, always targeting the far-future key, no
-// near/read-key mode) and the read-window release inside `processTicketBatch` itself.
+// the ceiling: the far-future frozen-pool release (reached through the ticket
+// worker's lastPurchaseDay continuation) and the read-window release.
 //
-// Execution mechanic (same as MintModuleDivergenceAcrossSplit.t.sol): the
-// batch functions run via delegatecall from DegenerusGame in production; here
-// they are invoked directly on the deployed MintModule, whose own storage is a
-// valid host because every module inherits the identical DegenerusGameStorage
-// layout.
+// Execution mechanic (same as MintModuleDivergenceAcrossSplit.t.sol): the ticket
+// worker `runTicketWork` runs via delegatecall from DegenerusGame's mineFlip in
+// production; here it is invoked directly on the deployed TicketModule, whose own
+// storage is a valid host because every module inherits the identical
+// DegenerusGameStorage layout.
 // =============================================================================
 
 import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
 contract TicketQueueReleaseGasTest is DeployProtocol {
     // ---- DegenerusGameStorage slot constants (see MintModuleDivergenceAcrossSplit) ----
@@ -85,20 +83,19 @@ contract TicketQueueReleaseGasTest is DeployProtocol {
     }
 
     function _armEntropy(address host) private {
-        // Entropy word for processTicketBatch's _lootboxWord(lrIndex-1)
+        // Entropy word for runTicketWork's _lootboxWord(lrIndex-1)
         // read (lrIndex defaults to 1 → index 0).
         RecyclingState.seedWord(host, uint48(0), bytes32(uint256(keccak256("ticket-queue-release-gas-entropy"))));
     }
 
-    /// @dev Finishing call of the private `_processFutureTicketBatch` on a fully-processed
-    ///      3,000-entry far-future queue, reached only through `processTicketBatch`'s
-    ///      lastPurchaseDay continuation (the standalone external entry point is gone).
+    /// @dev Finishing call of the frozen-pool drain on a fully-processed 3,000-entry
+    ///      far-future queue, reached through `runTicketWork`'s lastPurchaseDay continuation.
     ///      Pins level=49 with lastPurchaseDay latched and RNG locked, so
     ///      `_mintCeiling()` (= level + 1) lands on far-future target level 50 — a level far
     ///      outside any protocol constructor pre-seeding, so the committed 3,000-entry count
     ///      is exact. Must release in O(1), far under the ceiling.
     function test_futureBatchFinishingCall_releasesLongQueueBounded() public {
-        address host = address(mintModule);
+        address host = address(ticketModule);
         uint24 ffTargetLvl = 50;
         uint24 ffk = ffTargetLvl | TICKET_FAR_FUTURE_BIT;
 
@@ -117,9 +114,9 @@ contract TicketQueueReleaseGasTest is DeployProtocol {
         vm.store(host, bytes32(SLOT_0), bytes32(slot0));
 
         // Cursor already at end-of-queue (all entries processed on prior calls); ticketLevel
-        // already carries the FF marker so processTicketBatch's FF continuation does not
-        // reset the cursor before dispatching. This puts the very next call on the
-        // finishing path — the release site inside `_processFutureTicketBatch`.
+        // already carries the FF marker so the worker's FF continuation does not reset the
+        // cursor before dispatching. This puts the very next call on the finishing path — the
+        // frozen-pool release site.
         vm.store(
             host,
             bytes32(SLOT_TICKET_CURSOR_LEVEL),
@@ -131,7 +128,8 @@ contract TicketQueueReleaseGasTest is DeployProtocol {
         // anchor = level + 1; the read window [anchor-1..ceiling] = [49..50] scans only
         // empty read-side queues, so the FF continuation is reached with no near-side work.
         // A bounded, realistic call (see the read-window test below).
-        (bool finished, bool didWork) = mintModule.processTicketBatch{gas: REALISTIC_GAS}(50);
+        MineFlipGas.Result memory r = ticketModule.runTicketWork{gas: REALISTIC_GAS}(50, REALISTIC_GAS);
+        (bool finished, bool didWork) = (r.done, r.progressed);
         uint256 gasUsed = g0 - gasleft();
         emit log_named_uint("future_batch_finishing_call_gas", gasUsed);
 
@@ -149,10 +147,10 @@ contract TicketQueueReleaseGasTest is DeployProtocol {
         assertLt(gasUsed, GAS_CEILING, "release is O(1), not O(len)");
     }
 
-    /// @dev Same property through processTicketBatch (the current-level entry point, the
-    ///      idx>=total and drained-window release sites).
+    /// @dev Same property for the read-window queue (the idx>=total and drained-window
+    ///      release sites).
     function test_ticketBatchFinishingCall_releasesLongQueueBounded() public {
-        address host = address(mintModule);
+        address host = address(ticketModule);
         uint24 rk = LVL | TICKET_SLOT_BIT; // _tqReadKey(LVL) with the default ticketWriteSlot=false
 
         // Commit 3,000 registered owners as packed lanes before measuring O(1) release.
@@ -177,7 +175,7 @@ contract TicketQueueReleaseGasTest is DeployProtocol {
         // A bounded, realistic call: an O(len) release of 3,000 committed slots (~15M) could
         // not fit in it, and the O(1) release must cost far less than the ceiling.
         uint256 g0 = gasleft();
-        (bool finished, ) = mintModule.processTicketBatch{gas: REALISTIC_GAS}(LVL);
+        bool finished = ticketModule.runTicketWork{gas: REALISTIC_GAS}(LVL, REALISTIC_GAS).done;
         uint256 gasUsed = g0 - gasleft();
         emit log_named_uint("ticket_batch_finishing_call_gas", gasUsed);
 

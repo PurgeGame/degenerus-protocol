@@ -21,7 +21,7 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 //
 //   T1  a VRF stall that recovers past the purchase deadline does not fire liveness before the
 //       next advance's backfill credits the skipped days (unit + integration).
-//   T2  terminal routing is irreversible: sDGNRS redemption waits (EndingPending) while liveness
+//   T2  terminal routing is irreversible: the sDGNRS self-claim waits (NotGameOver) while liveness
 //       reads true before game over; sealed Decimator battles remain settleable through the ending
 //       and receive a full claim window after their last completion; the foil drain's terminal
 //       flag keys on the ending latch, not the liveness predicate.
@@ -31,7 +31,7 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 // Error selectors are spelled as literals so this file also compiles against the
 //      pre-fix sources (red/green proof).
 
-bytes4 constant ENDING_PENDING = bytes4(keccak256("EndingPending()"));
+bytes4 constant NOT_GAME_OVER = bytes4(keccak256("NotGameOver()"));
 
 // =====================================================================================
 // T1 — stall recovered past the deadline
@@ -259,26 +259,20 @@ contract ReviewClaimSeeder is DegenerusGame {
 
     function swept() external view returns (bool) { return _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0; }
 
-    /// @dev Mirrors GameAfkingModule._decimatorSettle's delegatecall, isolated from mineFlip's
-    ///      other legs so the leg's own liveness/game-over gate is exercised directly.
-    function settleDecOne(uint256 budgetUnits)
-        external
-        returns (uint256 settled, uint256 unitsUsed, bool moved)
-    {
+    /// @dev The Decimator stage worker mineFlip dispatches (runDecimatorWork), delegatecalled in
+    ///      isolation from mineFlip's other stages so the worker's own stage gate is exercised.
+    function runDecOne(uint256 allowance) external returns (MineFlipGas.Result memory result) {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_DECIMATOR_MODULE
             .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameDecimatorModule.settleDecimatorWinners.selector,
-                    budgetUnits
-                )
+                abi.encodeWithSelector(IDegenerusGameDecimatorModule.runDecimatorWork.selector, allowance)
             );
         if (!ok) {
             assembly ("memory-safe") {
                 revert(add(data, 32), mload(data))
             }
         }
-        (settled, unitsUsed, moved) = abi.decode(data, (uint256, uint256, bool));
+        result = abi.decode(data, (MineFlipGas.Result));
     }
 }
 
@@ -303,6 +297,15 @@ contract DecimatorLegEndingIdleTest is DeployProtocol {
     function _over() private {
         vm.etch(address(game), type(ReviewClaimSeeder).runtimeCode);
         ReviewClaimSeeder(payable(address(game))).setGameOver();
+        vm.etch(address(game), realCode);
+    }
+
+    /// @dev The Decimator worker run directly with `allowance`, returning its result and gas.
+    function _runDecWorker(uint256 allowance) private returns (MineFlipGas.Result memory result, uint256 gasUsed) {
+        vm.etch(address(game), type(ReviewClaimSeeder).runtimeCode);
+        uint256 start = gasleft();
+        result = ReviewClaimSeeder(payable(address(game))).runDecOne(allowance);
+        gasUsed = start - gasleft();
         vm.etch(address(game), realCode);
     }
 
@@ -345,8 +348,9 @@ contract DecimatorLegEndingIdleTest is DeployProtocol {
         assertTrue(game.livenessTriggered(), "fixture: liveness triggered");
         uint256 before = game.claimableWinningsOf(winner);
         uint256 poolBefore = game.claimablePoolView();
-        (uint256 settled, , bool moved) = game.settleDecimatorWinners(1000);
-        assertEq(settled, 0); assertFalse(moved);
+        assertEq(game.nextMinerAction(), 1, "the ending owns the engine (MinerAction.Terminal), not the Decimator");
+        (MineFlipGas.Result memory result,) = _runDecWorker(5_000_000);
+        assertFalse(result.progressed); assertFalse(result.done); assertEq(result.rewardBasis, 0);
         assertEq(game.claimableWinningsOf(winner), before, "no credit once liveness triggers");
         assertEq(game.claimablePoolView(), poolBefore, "the reservation stays reserved for the sweep");
     }
@@ -354,10 +358,10 @@ contract DecimatorLegEndingIdleTest is DeployProtocol {
     function test_legIdlesAfterGameOver() public {
         _over();
         uint256 before = game.claimableWinningsOf(winner);
-        // The compatibility door's second value is now the gas its worker call used (60d31f775),
-        // not work units; an idle leg settles nothing and moves nothing.
-        (uint256 settled, uint256 gasUsed, bool moved) = game.settleDecimatorWinners(1500);
-        assertEq(settled, 0); assertFalse(moved);
+        assertTrue(game.nextMinerAction() != 12, "the engine never selects the Decimator after game over");
+        // An idle worker settles nothing and moves nothing.
+        (MineFlipGas.Result memory result, uint256 gasUsed) = _runDecWorker(5_000_000);
+        assertFalse(result.progressed); assertFalse(result.done); assertEq(result.rewardBasis, 0);
         emit log_named_uint("idle decimator leg gas", gasUsed);
         assertEq(game.claimableWinningsOf(winner), before, "no credit after game over");
     }
@@ -449,7 +453,7 @@ contract RedemptionEndingPendingTest is DeployProtocol {
 
         _mockEnding(false);
         vm.prank(playerA);
-        vm.expectRevert(ENDING_PENDING);
+        vm.expectRevert(NOT_GAME_OVER);
         sdgnrs.claimRedemption(playerA, burnDay);
         (uint96 still,,) = sdgnrs.pendingRedemptions(playerA, burnDay);
         assertEq(still, owed, "nothing settled while pending");
@@ -501,9 +505,10 @@ contract ReviewFoilHarness is DegenerusGameFoilPackModule {
         return _livenessTriggered();
     }
 
+    /// @dev The foil stage worker mineFlip dispatches (runFoilWork), given all available gas.
     function drainGas() external returns (uint256 used) {
         uint256 g0 = gasleft();
-        (bool done,) = this.processFoilDrain(1000);
+        bool done = this.runFoilWork(gasleft()).done;
         used = g0 - gasleft();
         require(done, "harness: the drain finished in one call");
     }
@@ -679,14 +684,17 @@ contract TerminalExactSharesTest is Test {
         uint256 k = (1000 ether * uint256(shareBps[edge]) / 10_000) / unitBucket;
         uint256 pot = (k * unitBucket * 10_000 + shareBps[edge] - 1) / shareBps[edge];
 
+        // The terminal jackpot worker the ending dispatches, given all available gas: one call.
         uint256 snap = vm.snapshotState();
         vm.prank(ContractAddresses.GAME);
-        uint256 paidLo = h.runTerminalJackpot(pot - 1, TLVL, word);
+        (MineFlipGas.Result memory rLo, uint256 paidLo) = h.runTerminalJackpotWork(pot - 1, TLVL, word, gasleft());
+        assertTrue(rLo.done, "harness: the payout finished in one call");
         uint256[] memory lo = _credits();
 
         vm.revertToState(snap);
         vm.prank(ContractAddresses.GAME);
-        uint256 paidHi = h.runTerminalJackpot(pot, TLVL, word);
+        (MineFlipGas.Result memory rHi, uint256 paidHi) = h.runTerminalJackpotWork(pot, TLVL, word, gasleft());
+        assertTrue(rHi.done, "harness: the payout finished in one call");
         uint256[] memory hi = _credits();
 
         uint256 paidMove = paidHi > paidLo ? paidHi - paidLo : paidLo - paidHi;

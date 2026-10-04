@@ -32,7 +32,6 @@ import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 import {TicketEntropy} from "../libraries/TicketEntropy.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {
-    IDegenerusGameTicketModule,
     IDegenerusGameDegeneretteModule,
     IDegenerusGameJackpotModule
 } from "../interfaces/IDegenerusGameModules.sol";
@@ -813,40 +812,6 @@ contract DegenerusGameFoilPackModule is
         }
     }
 
-    // =========================================================================
-    // Queue drain (lives here so the mint module keeps only the normal-ticket path
-    // under the EIP-170 limit)
-    // =========================================================================
-
-    // -------------------------------------------------------------------------
-    // Seated Round Drain (hosted here for the mint module)
-    // -------------------------------------------------------------------------
-
-
-
-    /// @dev Compatibility selectors; all ordinary ticket generation lives in Ticket.
-    function generateTraitRun(uint256 identity, uint32 startIndex, uint32 count, uint256 entropy, uint256 ownerIdx)
-        external returns (uint256 writes)
-    {
-        return abi.decode(_ticketWorkerCall(abi.encodeWithSelector(
-            IDegenerusGameTicketModule.generateTraitRun.selector, identity, startIndex, count, entropy, ownerIdx
-        )), (uint256));
-    }
-
-    function drainRounds(uint24 rk, uint24 lvl, uint32 room, uint256 idx, uint256 total, uint256 entropy, uint8 shift)
-        external returns (uint256 nextIdx, uint32 used)
-    {
-        return abi.decode(_ticketWorkerCall(abi.encodeWithSelector(
-            IDegenerusGameTicketModule.drainRounds.selector, rk, lvl, room, idx, total, entropy, shift
-        )), (uint256, uint32));
-    }
-
-    function _ticketWorkerCall(bytes memory callData) private returns (bytes memory data) {
-        bool ok;
-        (ok, data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall(callData);
-        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
-    }
-
     /// @dev Payable delegate worker: records the presale leg in the reusable cohort.
     function recordPresaleBox(address buyer, uint48 index, uint256 word) external payable {
         if (presaleBoxEth[index & 1][buyer] != 0) revert E();
@@ -857,19 +822,6 @@ contract DegenerusGameFoilPackModule is
     /// @notice Prepare a ticket level with constant work, deferring unsafe buffer takeover.
     function prepareTicketLevel(uint24 lvl) external payable returns (bool) {
         return _prepareTicketLevel(lvl);
-    }
-
-    /// @notice Drain the frozen foil read cohort on the leftover write budget.
-    /// @dev Delegatecall-only entry, invoked by the mint module's processTicketBatch
-    ///      once the normal queue is drained (and only when _foilDrainPending). Runs in
-    ///      the Game's storage context, so it reads/writes the same
-    ///      foilQueue/foilGenerationDay/foilCursor/foilRecord and the lvlTraitEntry
-    ///      buckets the jackpot samples.
-    /// @return done True iff the committed foil read cohort is exhausted.
-    /// @return drained True if this call resolved at least one foil buyer.
-    function processFoilDrain(uint32) external returns (bool done, bool drained) {
-        MineFlipGas.Result memory result = _runFoilWork(MineFlipGas.available());
-        return (result.done, result.progressed);
     }
 
     function runFoilWork(uint256 allowance) external returns (MineFlipGas.Result memory) {
@@ -1106,7 +1058,7 @@ contract DegenerusGameFoilPackModule is
     ///      strictly precedes the draw it feeds — the readiness gate holds rngGate until
     ///      _foilDrainPending clears, so the futurePrizePool debit always lands before
     ///      any pool math that reads it. That is exactly how the armed board route's own
-    ///      grand already settles from payDailyJackpot. Nothing is double-committed: the
+    ///      grand already settles from runDailyJackpot. Nothing is double-committed: the
     ///      later draw simply reads the pool this call left behind.
     ///
     ///      Internal, not private, only so a test exposer can drive it: a pack reaches

@@ -21,7 +21,7 @@ import {MineFlipGasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol
 //      single engine (DegenerusGameMinerModule); it pays once per call, CEI-last, in FLIP coinflip
 //      credit: (measured gas - unpaid first MIN_REWARDED_GAS) x min(basefee, cap) x (0.3x + 0.45x per
 //      30 minutes, x2 pass, x2 lock) at the ticket price. Bets resolve as the Degenerette read
-//      consumer, never through `openBoxes`. The guards read the measured gas and the pay from each
+//      consumer of mineFlip. The guards read the measured gas and the pay from each
 //      call's MinerWork event and pin them to that formula; the self-keeper round trip is checked at
 //      the fixture's sub-1x multiplier, where it must stay net negative. The history below is kept for
 //      the requirement IDs.
@@ -53,9 +53,8 @@ import {MineFlipGasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol
 ///   Δ4 autoBuy: the per-sub buy folded into `mineFlip()`'s STAGE; the standalone autoBuy has NO
 ///      successor. The faucet BUY-leg round-trip reframes onto the ADVANCE-leg bounty (the buy reward rides
 ///      `unit * ADVANCE_RATIO_NUM * mult`; there is NO separate flat-1.5x buy bounty in v55). The faucet
-///      OPEN-leg round-trip reframes onto the AFKING open leg (a STAGE-stamped afking box, opened via
-///      `mineFlip`'s open branch — the afking-module standalone autoOpen selector collides with the human
-///      autoOpen(uint256) so it is reachable ONLY via mineFlip). The reward is OBSERVED off the credit
+///      OPEN-leg round-trip reframes onto the AFKING open leg (a STAGE-stamped afking box, opened only
+///      by `mineFlip`'s afking stage). The reward is OBSERVED off the credit
 ///      delta (not modeled), so the guard holds for whatever the contract pegs.
 ///   Δ5 funding: `afKing.depositFor` -> `game.depositAfkingFunding`; `afKing.subscribe` -> `game.subscribe`;
 ///      `afKing.BOUNTY_ETH_TARGET()` -> the module's hardcoded `BOUNTY_ETH_TARGET` constant (no game getter;
@@ -81,11 +80,6 @@ contract KeeperFaucetResistance is DeployProtocol {
 
     /// @dev FLIP per-ETH conversion unit (DegenerusGameStorage / Coinflip).
     uint256 private constant PRICE_COIN_UNIT = 1000 ether;
-
-    /// @dev keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)") — the event creditFlip
-    ///      emits once per credit; used to count creditFlip emissions.
-    bytes32 private constant COINFLIP_STAKE_UPDATED_SIG =
-        keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
 
     bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q' — first-spin salt
 
@@ -165,19 +159,14 @@ contract KeeperFaucetResistance is DeployProtocol {
 
     /// @notice One-reward-per-item: a bet is marked processed in its queue once the engine's
     ///         Degenerette stage resolves it, so a second crank over the same drained queue finds no
-    ///         work (NoWork) and pays nothing; no path pays for it twice. The unrewarded `openBoxes`
-    ///         valve drives only the AFK and human box stages (60d31f775), never bets, and pays no
-    ///         keeper reward at all.
+    ///         work (NoWork) and pays nothing; no path pays for it twice.
     function testReResolveResolvedBetRevertsNoSecondReward() public {
         uint64 betId = _placeLosingBet(player);
         _injectLootboxRngWord(INDEX, FIXED_WORD);
         _openSweepFor(INDEX);
 
         uint256 stakeBefore = coinflip.coinflipAmount(player);
-        vm.prank(player);
-        game.openBoxes(type(uint256).max);
-        assertGt(game.degeneretteBetInfo(INDEX, betId), 0, "the box valve does not resolve bets");
-        assertEq(coinflip.coinflipAmount(player), stakeBefore, "the box valve pays no keeper reward");
+        assertGt(game.degeneretteBetInfo(INDEX, betId), 0, "the bet is queued before the crank");
 
         vm.fee(1 gwei);
         vm.recordLogs();
@@ -192,23 +181,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         vm.prank(sybil);
         vm.expectRevert(bytes4(keccak256("NoWork()")));
         game.mineFlip();
-        vm.prank(sybil);
-        uint256 openedAgain = game.openBoxes(type(uint256).max);
-        assertEq(openedAgain, 0, "an already-drained queue offers a second sweep nothing to resolve");
         assertEq(coinflip.coinflipAmount(sybil), stakeBeforeSecond, "re-sweeping a resolved queue yields nothing");
-    }
-
-    /// @notice Pre-RNG-word block (boxes / orphan-index gate): autoOpen on an index whose
-    ///         word is zero returns early without rewarding (the orphan-index re-issue coupling).
-    function testAutoOpenBoxesBeforeRngWordEmitsNoReward() public {
-        // INDEX word is zero (we never inject it here). autoOpen must early-return at the
-        // _lootboxWord(index) == 0 guard, emitting no creditFlip.
-        uint256 preStake = coinflip.coinflipAmount(sybil);
-        vm.recordLogs();
-        vm.prank(sybil);
-        game.openBoxes(100);
-        assertEq(_countCoinflipStakeUpdated(), 0, "autoOpen on a wordless index emits no creditFlip");
-        assertEq(coinflip.coinflipAmount(sybil), preStake, "no reward from a not-ready box index");
     }
 
 
@@ -495,21 +468,6 @@ contract KeeperFaucetResistance is DeployProtocol {
             uint8 newQuad = (newColor << 3) | newSymbol; // tag bits 7-6 = 0 (irrelevant to matching)
             ticket |= (uint32(newQuad) << (q * 8));
         }
-    }
-
-    /// @dev Count CoinflipStakeUpdated emissions in the recorded logs from the coinflip contract.
-    function _countCoinflipStakeUpdated() internal returns (uint256 count) {
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        for (uint256 i; i < logs.length; i++) {
-            if (_isCoinflipStakeUpdated(logs[i])) count++;
-        }
-    }
-
-    function _isCoinflipStakeUpdated(Vm.Log memory entry) internal view returns (bool) {
-        return
-            entry.emitter == address(coinflip) &&
-            entry.topics.length > 0 &&
-            entry.topics[0] == COINFLIP_STAKE_UPDATED_SIG;
     }
 
     // -------------------------------------------------------------------------

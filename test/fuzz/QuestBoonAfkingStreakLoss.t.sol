@@ -238,8 +238,9 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
         uint256 w = uint256(keccak256(abi.encode("dlv", vrfWord, _deliverNonce++))) | 1;
         _runStageNewDay(w);
         _settleClean(uint256(keccak256(abi.encode("dlvc", w))) | 1);
-        vm.prank(makeAddr("deliver_opener"));
-        game.openBoxes(400);
+        vm.startPrank(makeAddr("deliver_opener"));
+        _mineAll(64);
+        vm.stopPrank();
     }
 
     function _runStageNewDay(uint256 vrfWord) internal {

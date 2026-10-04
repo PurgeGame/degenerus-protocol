@@ -13,6 +13,7 @@ import {Craps} from "../../../contracts/Craps.sol";
 import {CrapsBattle} from "../../../contracts/CrapsBattle.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {JackpotBattle} from "../../../contracts/JackpotBattle.sol";
+import {MineFlipGas} from "../../../contracts/libraries/MineFlipGas.sol";
 import {CrapsViews} from "../../craps/CrapsViews.sol";
 
 /// @title CrapsRngSealHandler — the craps lane of the RNG-freeze net, driven against the REAL
@@ -48,8 +49,8 @@ import {CrapsViews} from "../../craps/CrapsViews.sol";
 ///                                             either window, so no craps door may touch the set.
 ///
 ///      ISOLATION. Every craps action snapshots the game's enumerated set immediately before and
-///      re-reads it immediately after the call alone; the exempt machinery (mineFlip, the VRF
-///      callback, and the arm's request when NO window is open) is never measured.
+///      re-reads it immediately after the call alone; the exempt machinery (mineFlip, including
+///      the ordinary request it makes, and the VRF callback) is never measured.
 ///
 ///      NON-VACUITY. The invariant's afterInvariant gates on days opened, arms, arms taken while a
 ///      window was open, post-arm amendment attempts, and settlements on real words — a run in
@@ -115,9 +116,10 @@ contract CrapsRngSealHandler is Test {
     uint24 internal boundFirstDay;
 
     /// @notice Test-only knob (CrapsRealWiringConservation): settle each delivered cohort's
-    ///         read-bound Craps fields through the measured keeper door instead of inside an engine
-    ///         crank, where the table's credits cannot be isolated from the crank's other coinflip
-    ///         effects. Off by default, so the RNG seal campaign's crank is unchanged.
+    ///         read-bound Craps fields through the measured Craps step (the read-cohort worker,
+    ///         called as the Game) instead of inside an engine crank, where the table's credits
+    ///         cannot be isolated from the crank's other coinflip effects. Off by default, so the
+    ///         RNG seal campaign's crank is unchanged.
     bool public measureTableSettlement;
 
     // -------------------------------------------------------------------------
@@ -149,8 +151,8 @@ contract CrapsRngSealHandler is Test {
     uint256 public ghost_midDayInWindowCrapsActions;
     uint256 public ghost_fulfilments;
     uint256 public ghost_keeps;
-    /// @dev Keeper cranks that REVERTED. The game's craps leg calls `keepScheduled` bare, so a
-    ///      revert here at unbounded gas is a revert the crank would take down with it.
+    /// @dev Craps steps that REVERTED. mineFlip re-raises a Craps worker's revert, so a revert
+    ///      here at unbounded gas is a revert the crank would take down with it.
     uint256 public ghost_keepReverts;
     uint256 public ghost_wordsLandedOnArmedIndices;
 
@@ -423,8 +425,8 @@ contract CrapsRngSealHandler is Test {
         }
     }
 
-    /// @dev The table's own `keepScheduled` settles the read cohort's frontier fields at the Craps
-    ///      read stage (the same walk the engine runs). Count a field it settled on a worded leaf
+    /// @dev The measured Craps step settles the read cohort's frontier fields at the Craps read
+    ///      stage (the same worker the engine calls). Count a field it settled on a worded leaf
     ///      once, exactly as `_crank` does for the engine's own settlement (non-vacuity only).
     function _countWordedKeeperSettles() internal {
         uint256 n = keepResolvedBefore.length;
@@ -447,11 +449,11 @@ contract CrapsRngSealHandler is Test {
     /// @dev Under `measureTableSettlement`: step the engine through the delivered cohort's earlier
     ///      checkpoints with the smallest allowance each admits (one mineFlip composes every
     ///      checkpoint its allowance admits, 60d31f775), and settle its Craps read stage (stage 6)
-    ///      through the measured keeper door, `keepScheduled`, which runs the same read-cohort walk.
+    ///      through the measured Craps step, the read-cohort worker mineFlip calls.
     function _settleReadCrapsMeasured() internal {
         for (uint256 i; i < 96; i++) {
             if (game.rngConsumerStage() == 6) {
-                if (!_keep(0)) return;
+                if (!_keep()) return;
                 continue;
             }
             uint8 next = game.nextMinerAction();
@@ -499,7 +501,7 @@ contract CrapsRngSealHandler is Test {
     /// @notice SELF-PRIMING: shut a field while the DAILY window is held. Seats one entrant on
     ///         today's opener if no shut-able field exists, opens the next day's window (so that
     ///         field is now yesterday's and closed), and arms it under the lock — the permissionless
-    ///         arm is good for any past window, and its own request is refused while the lock holds.
+    ///         arm is good for any past window and makes no request of its own.
     function primeLockedArm(uint256 actorSeed, uint256 boardSeed) external useActor(actorSeed) {
         if (game.gameOver()) return;
         if (!game.rngLocked()) {
@@ -523,8 +525,8 @@ contract CrapsRngSealHandler is Test {
         _armAndMeasure(slot);
     }
 
-    /// @notice SELF-PRIMING: two fields shut back to back, so the second arm runs while the first
-    ///         arm's own lootbox request is in flight (the mid-day window shape).
+    /// @notice SELF-PRIMING: two fields shut back to back, so the second arm runs while the
+    ///         request that sealed the first arm's buffer is in flight (the mid-day window shape).
     function primeInFlightArms(uint256 actorSeed, uint256 boardSeed) external useActor(actorSeed) {
         _primeInFlightArms(actorSeed, boardSeed);
     }
@@ -723,43 +725,35 @@ contract CrapsRngSealHandler is Test {
         if (pickSeed % 4 != 0) _sealRequest();
     }
 
-    /// @notice An ordinary mid-day request from a non-craps caller: with a craps window pending on
-    ///         the write buffer it seals that buffer and its word settles the window.
+    /// @notice An ordinary mid-day request, made through mineFlip by a non-craps caller: with a
+    ///         craps window pending on the write buffer it seals that buffer and its word settles
+    ///         the window.
     function sealRequest(uint256 seed) external {
         _sealRequest();
     }
 
     function _sealRequest() internal returns (bool ok) {
         if (game.gameOver()) return false;
-        _finishHumanRead();
         ok = _tryRequest();
-        if (ok) return true;
-        // The read cohort may still owe the craps lane: drain it, then ask again.
-        if (_drainReadCrapsCohort()) ok = _tryRequest();
     }
 
+    /// @dev Only mineFlip requests mid-day RNG, after everything it orders ahead of the request
+    ///      (the read cohort's consumers, maintenance) is done; a craps window pending on the write
+    ///      buffer makes the request free. Crank it until a new request goes out or the engine has
+    ///      nothing it would do.
     function _tryRequest() internal returns (bool ok) {
         uint256 packed = uint256(vm.load(address(game), bytes32(LOOTBOX_RNG_PACKED_SLOT)));
         bool pending = packed & (uint256(1) << (250 + _cursor())) != 0;
-        vm.prank(address(uint160(0x5ea1)));
-        try game.requestLootboxRng() {
-            ok = true;
-            if (pending) ghost_sealRequests++;
-        } catch {}
-    }
-
-    function _drainReadCrapsCohort() internal returns (bool drained) {
-        uint48 read = RecyclingState.readBuffer(address(game));
-        if (RecyclingState.word(address(game), read) == 0) return false;
-        uint256 flag = uint256(1) << (250 + read);
-        for (uint256 i; i < 64; i++) {
-            if (uint256(vm.load(address(game), bytes32(LOOTBOX_RNG_PACKED_SLOT))) & flag == 0) return drained;
-            try JackpotBattle(address(craps)).keepRngCohort(read, 1_888) {
-                drained = true;
-            } catch {
-                return drained;
-            }
+        uint256 before = vrf.lastRequestId();
+        for (uint256 i; i < 16; i++) {
+            if (game.rngLocked() || _requestActive()) break;
+            uint8 next = game.nextMinerAction();
+            if (next == 0 || next == 2) break; // Idle or Wait: nothing to do and nothing to request
+            _crank(false);
+            if (vrf.lastRequestId() != before) break;
         }
+        ok = vrf.lastRequestId() != before;
+        if (ok && pending) ghost_sealRequests++;
     }
 
     function _armAndMeasure(uint64 slot) internal {
@@ -916,8 +910,8 @@ contract CrapsRngSealHandler is Test {
         (bool open, bool midDay, bytes32 h0) = _before();
         vm.prank(currentActor);
         // `slot` may be a scheduled window's or a custom battle's — `armedSlots` tracks both —
-        // so this settles through the unrestricted test door rather than the production
-        // `resolveSlot`, which now rejects a scheduled slot outright.
+        // so this settles through the unrestricted test door. Production settles every armed
+        // field only through mineFlip's read stage, in cohort order, which `keep` drives.
         try craps.settleSlot(slot, type(uint64).max) {} catch {}
         _after(open, midDay, h0);
         uint256 credited = _stakeLedger() - stake0;
@@ -960,16 +954,17 @@ contract CrapsRngSealHandler is Test {
         return 0;
     }
 
-    /// @notice One keeper crank at a random budget: the scheduled cursor's own arm path. Any field
-    ///         it shuts is measured exactly like a permissionless arm.
-    function keep(uint64 budget) external useActor(budget) {
+    /// @notice One Craps step the way mineFlip dispatches it: the read cohort's settlement, or the
+    ///         scheduled cursor's own arm path. Any field it shuts is measured exactly like a
+    ///         permissionless arm.
+    function keep(uint64 seed) external useActor(seed) {
         _noteOpenedDay();
-        _keep(budget);
+        _keep();
     }
 
-    /// @dev The measured keeper crank. Does not touch the opened-day labels (first/lastOpenedDay),
+    /// @dev The measured Craps step. Does not touch the opened-day labels (first/lastOpenedDay),
     ///      which drive the subsidy ghosts; the bound reads its own range.
-    function _keep(uint64 budget) internal returns (bool progressed) {
+    function _keep() internal returns (bool progressed) {
         uint256 cursorBefore = _cursor();
         uint256 reqBefore = _unfulfilledRequestId();
         _noteBoundDay();
@@ -982,7 +977,7 @@ contract CrapsRngSealHandler is Test {
             if (armedSeen[shut] || rawShut == 0) continue;
             _recordArm(shut, rawShut - 1, 0, 0, false, false, false);
         }
-        progressed = _keepScheduledCounted(budget);
+        progressed = _crapsStepCounted();
         _after(open, midDay, h0);
         _checkKeeperCredit(stake0, bound);
         // Anything newly armed among the tracked windows was armed by this crank.
@@ -997,21 +992,34 @@ contract CrapsRngSealHandler is Test {
         _checkSealedHeaders();
     }
 
-    /// @dev The table's own keeper door, with the fields it settles on worded leaves counted.
-    function _keepScheduledCounted(uint64 budget) internal returns (bool progressed) {
+    /// @dev The Craps step, with the fields it settles on worded leaves counted.
+    function _crapsStepCounted() internal returns (bool progressed) {
         _armedSettleSnapshot();
-        progressed = _callKeepScheduled(budget);
+        progressed = _callCrapsStep();
         _countWordedKeeperSettles();
     }
 
-    function _callKeepScheduled(uint64 budget) internal returns (bool progressed) {
-        vm.prank(currentActor);
-        try craps.keepScheduled(budget % 64) returns (bool moved, uint64) {
-            ghost_keeps++;
-            progressed = moved;
-        } catch {
-            ghost_keepReverts++;
+    /// @dev mineFlip's Craps dispatch, isolated and made as the Game (both workers are Game-only)
+    ///      with all the gas this frame has: the read-cohort worker while the read cohort is the
+    ///      live RNG consumer (stage 6), otherwise the maintenance worker.
+    function _callCrapsStep() internal returns (bool progressed) {
+        bool ok;
+        if (game.rngConsumerStage() == 6) {
+            uint48 read = RecyclingState.readBuffer(address(game));
+            vm.prank(address(game));
+            try JackpotBattle(address(craps)).runCrapsReadWork(read, gasleft()) returns (MineFlipGas.Result memory r) {
+                ok = true;
+                progressed = r.progressed;
+            } catch {}
+        } else {
+            vm.prank(address(game));
+            try JackpotBattle(address(craps)).runCrapsMaintenance(gasleft()) returns (MineFlipGas.Result memory r) {
+                ok = true;
+                progressed = r.progressed;
+            } catch {}
         }
+        if (ok) ghost_keeps++;
+        else ghost_keepReverts++;
     }
 
     function _checkKeeperCredit(uint256 stake0, uint256 bound) internal {
@@ -1396,12 +1404,17 @@ contract CrapsRngSealHandler is Test {
         return RecyclingState.writeBuffer(address(game));
     }
 
+    /// @dev Let mineFlip finish the delivered read cohort's human boxes: crank while the engine's
+    ///      next step is at or before its HumanBoxes stage and the read index still owes boxes.
     function _finishHumanRead() internal {
-        if (game.rngLocked() || _requestActive()) return;
-        uint48 read = RecyclingState.readBuffer(address(game));
-        if (RecyclingState.word(address(game), read) == 0) return;
-        for (uint256 i; i < 100 && !game.boxIndexComplete(read); i++) {
-            try game.openBoxes(512) {} catch { return; }
+        for (uint256 i; i < 100; i++) {
+            if (game.rngLocked() || _requestActive()) return;
+            uint48 read = RecyclingState.readBuffer(address(game));
+            if (RecyclingState.word(address(game), read) == 0 || game.boxIndexComplete(read)) return;
+            uint8 next = game.nextMinerAction();
+            // Publish (3) through HumanBoxes (10).
+            if (next < 3 || next > 10) return;
+            _crank(false);
         }
     }
 

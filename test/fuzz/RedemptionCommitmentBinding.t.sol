@@ -5,7 +5,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 
-/// @notice Current public burn/request/fulfill/resolve/permissionless-claim proof.
+/// @notice Current public burn/request/fulfill/resolve/keeper-settlement proof.
 /// Initial soulbound balances come from the creator's real unwrap, and mock stETH
 /// is transferred as backing. No protocol storage/runtime writes or mocked claims.
 /// Two different burn sizes freeze independent bases, scores and FLIP escrows.
@@ -13,10 +13,11 @@ import {sDGNRS} from "../../contracts/sDGNRS.sol";
 /// Claims delayed past another real daily draw must retain their original day+1
 /// word; later-day burns and donated backing must not rewrite old claims.
 ///
-/// The keeper settles live claims in the call that finishes the daily work, as far as its
-/// allowance admits, and a later-day burn or a fresh draw waits for the live cohort; so earlier
-/// one-chunk padding claims head the FIFO queue, the probed keeper allowance stops at the
-/// redemption stage with both owners unsettled, and the perturbations run inside that stage.
+/// Live claims settle only through mineFlip's Redemption stage, in FIFO order. The keeper settles
+/// claims in the call that finishes the daily work, as far as its allowance admits, and a later-day
+/// burn or a fresh draw waits for the live cohort; so earlier one-chunk padding claims head the
+/// queue, the probed keeper allowance stops at the redemption stage with both owners unsettled,
+/// and the perturbations run inside that stage.
 ///
 /// Scope: level zero, score-zero unboosted one-chunk redemptions with stETH custody,
 /// ticket/sDGNRS reward branches. Boon formulas, other reward branches, 5-ETH chunk
@@ -136,14 +137,39 @@ contract RedemptionCommitmentBindingTest is DeployProtocol {
         assertFalse(game.rngLocked());
     }
 
-    /// @dev Settle the padding claims still ahead of the owners, in FIFO order.
+    /// @dev One mineFlip by `caller` at the smallest allowance (25k steps) after which every claim
+    ///      in `owners` has settled, probed on snapshots and then applied. The minimal allowance
+    ///      leaves the call no spare gas to admit a further claim.
+    function _mineSettling(address caller, address[] memory owners, uint24 day) private {
+        for (uint256 g = 800_000; g <= 10_000_000; g += 25_000) {
+            uint256 snap = vm.snapshotState();
+            vm.prank(caller);
+            (bool ok,) = address(game).call{gas: g}(abi.encodeWithSignature("mineFlip()"));
+            bool settled = ok;
+            for (uint256 i; settled && i < owners.length; ++i) settled = _claimState(owners[i], day).base == 0;
+            assertTrue(vm.revertToState(snap));
+            if (settled) {
+                vm.prank(caller);
+                game.mineFlip{gas: g}();
+                return;
+            }
+        }
+        revert("harness: no allowance settles the claims");
+    }
+
+    function _one(address owner) private pure returns (address[] memory owners) {
+        owners = new address[](1);
+        owners[0] = owner;
+    }
+
+    /// @dev Settle the padding claims still ahead of the owners, one keeper call per claim.
     function _settlePads(uint24 day) private {
         for (uint256 i; i < PADS; ++i) {
-            if (_claimState(_pad(i), day).base != 0) sdgnrs.claimRedemption(_pad(i), day);
+            if (_claimState(_pad(i), day).base != 0) _mineSettling(KEEPER, _one(_pad(i)), day);
         }
     }
 
-    /// @dev The keeper's cleanup of the drained cohort, then the rest of the session.
+    /// @dev The rest of the session after the cohort cleared.
     function _finishSession() private {
         for (uint256 i; i < 100 && !game.rngComplete(); ++i) game.mineFlip();
         assertTrue(game.rngComplete(), "bounded public session completion");
@@ -294,7 +320,7 @@ contract RedemptionCommitmentBindingTest is DeployProtocol {
         assertEq(afterState.flip, beforeState.flip + expected.flip, "actual original-day contingent FLIP");
         assertEq(afterState.claimable, beforeState.claimable + expected.direct, "actual owner direct ETH credit");
         assertEq(afterState.liquid, beforeState.liquid);
-        assertEq(afterState.eth, beforeState.eth, "permissionless claim cannot push claimant ETH");
+        assertEq(afterState.eth, beforeState.eth, "live settlement cannot push claimant ETH");
         assertEq(afterState.steth, beforeState.steth);
         assertEq(afterState.wwxrp, beforeState.wwxrp);
     }
@@ -313,37 +339,24 @@ contract RedemptionCommitmentBindingTest is DeployProtocol {
         l.keeperFlip = coinflip.coinflipAmount(KEEPER);
     }
 
-    function _claimPair(uint24 day, Award memory a, Award memory b, bool batch) private {
+    function _claimPair(uint24 day, Award memory a, Award memory b, bool oneCall) private {
         Balance memory beforeA = _balance(ALICE);
         Balance memory beforeB = _balance(BOB);
         Ledger memory l = _ledger();
-        if (batch) {
-            // The batch must be the exact FIFO prefix: a stale or duplicate entry reverts the whole
-            // batch atomically (it no longer skips), so nothing pays.
-            address[] memory owners = new address[](4);
-            owners[0] = ALICE;
-            owners[1] = address(0xBAD);
-            owners[2] = ALICE;
-            owners[3] = BOB;
-            vm.expectRevert(sDGNRS.RedemptionOutOfOrder.selector);
-            vm.prank(KEEPER);
-            sdgnrs.claimRedemptionMany(owners, day);
-            assertEq(keccak256(abi.encode(_ledger())), keccak256(abi.encode(l)), "rejected batch pays nothing");
-            owners = new address[](2);
+        if (oneCall) {
+            // One keeper call settles both owners, in FIFO order.
+            address[] memory owners = new address[](2);
             owners[0] = ALICE;
             owners[1] = BOB;
-            vm.prank(KEEPER);
-            sdgnrs.claimRedemptionMany(owners, day);
+            _mineSettling(KEEPER, owners, day);
         } else {
-            vm.prank(KEEPER);
-            sdgnrs.claimRedemption(ALICE, day);
+            _mineSettling(KEEPER, _one(ALICE), day);
             _assertAward(ALICE, beforeA, a);
             Award memory zero;
             _assertAward(BOB, beforeB, zero);
             vm.roll(block.number + 1);
             vm.warp(block.timestamp + 1);
-            vm.prank(DONOR);
-            sdgnrs.claimRedemption(BOB, day);
+            _mineSettling(DONOR, _one(BOB), day);
         }
         _assertAward(ALICE, beforeA, a);
         _assertAward(BOB, beforeB, b);
@@ -363,29 +376,30 @@ contract RedemptionCommitmentBindingTest is DeployProtocol {
         assertEq(
             sdgnrs.poolBalance(sDGNRS.Pool.Lootbox), l.inventory - a.dgnrs - b.dgnrs, "actual token inventory debit"
         );
-        assertEq(coinflip.coinflipAmount(KEEPER), l.keeperFlip, "the claim batch pays its caller nothing");
+        // The engine pays its caller only the measured-gas reward, which is zero at a zero base fee.
+        assertEq(block.basefee, 0);
+        assertEq(coinflip.coinflipAmount(KEEPER), l.keeperFlip, "settling claims pays the keeper nothing");
         assertEq(game.claimableWinningsOf(KEEPER), 0);
         assertEq(sdgnrs.balanceOf(KEEPER), 0);
-        // Consumed heads cannot be re-taken (exact FIFO head; was NoClaim / a no-op batch).
-        vm.expectRevert(sDGNRS.RedemptionOutOfOrder.selector);
+        // The cleared cohort leaves no engine work, and no door re-takes a consumed claim.
+        assertFalse(sdgnrs.redemptionSettlementPending(), "cohort cleared with its last claim");
+        assertTrue(game.nextMinerAction() != 8, "the engine has no redemption work left");
+        vm.expectRevert(sDGNRS.NotGameOver.selector);
         vm.prank(KEEPER);
         sdgnrs.claimRedemption(ALICE, day);
         beforeA = _balance(ALICE);
         beforeB = _balance(BOB);
         l = _ledger();
-        address[] memory replay = new address[](2);
-        replay[0] = ALICE;
-        replay[1] = BOB;
-        vm.expectRevert(sDGNRS.RedemptionOutOfOrder.selector);
-        vm.prank(KEEPER);
-        sdgnrs.claimRedemptionMany(replay, day);
+        // A re-run of the Redemption stage's worker (as mineFlip would dispatch it) is a no-op.
+        vm.prank(address(game));
+        assertTrue(sdgnrs.runRedemptionWork(9_000_000).done, "a drained cohort has nothing to settle");
         Award memory none;
         _assertAward(ALICE, beforeA, none);
         _assertAward(BOB, beforeB, none);
         assertEq(keccak256(abi.encode(_ledger())), keccak256(abi.encode(l)), "replay cannot pay or release anything");
     }
 
-    function _run(uint24 day, Claim memory a, Claim memory b, uint256 word, bool batch, bool perturb)
+    function _run(uint24 day, Claim memory a, Claim memory b, uint256 word, bool oneCall, bool perturb)
         private
         returns (bytes32)
     {
@@ -410,8 +424,7 @@ contract RedemptionCommitmentBindingTest is DeployProtocol {
             vm.expectRevert(sDGNRS.PriorDayUnresolved.selector);
             vm.prank(ALICE);
             sdgnrs.burn(100_000_000 ether);
-            vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-            game.requestLootboxRng();
+            assertEq(game.nextMinerAction(), 8, "no draw is requested ahead of MinerAction.Redemption");
         }
         _assertClaim(ALICE, day, a);
         _assertClaim(BOB, day, b);
@@ -428,7 +441,7 @@ contract RedemptionCommitmentBindingTest is DeployProtocol {
         assertGt(awardB.dgnrs, 0, "actual token branch witness");
         assertGt(awardA.direct, 0);
         assertGt(awardB.direct, awardA.direct);
-        _claimPair(day, awardA, awardB, batch);
+        _claimPair(day, awardA, awardB, oneCall);
         if (perturb) {
             // After the cohort clears, later-day burns and another real draw leave the settled
             // claims and their original resolution untouched.
@@ -455,7 +468,7 @@ contract RedemptionCommitmentBindingTest is DeployProtocol {
         return keccak256(abi.encode(awardA, awardB));
     }
 
-    function _compare(uint256 word, bool batch) private {
+    function _compare(uint256 word, bool oneCall) private {
         uint24 day = uint24(game.currentDayView());
         for (uint256 i; i < PADS; ++i) {
             vm.prank(_pad(i));
@@ -468,25 +481,25 @@ contract RedemptionCommitmentBindingTest is DeployProtocol {
         assertNotEq(a.base, b.base);
         assertNotEq(a.escrow, b.escrow);
         uint256 snap = vm.snapshotState();
-        bytes32 baseline = _run(day, a, b, word, batch, false);
+        bytes32 baseline = _run(day, a, b, word, oneCall, false);
         assertTrue(vm.revertToState(snap));
-        bytes32 delayed = _run(day, a, b, word, batch, true);
+        bytes32 delayed = _run(day, a, b, word, oneCall, true);
         assertEq(delayed, baseline, "old claim rewards retain original commitment after later burns/draws");
     }
 
-    function testWinningDaySingleClaimsRemainBound() public {
+    function testWinningDayPerClaimCallsRemainBound() public {
         _compare(WIN_WORD, false);
     }
 
-    function testWinningDayBatchClaimsRemainBound() public {
+    function testWinningDayOneCallClaimsRemainBound() public {
         _compare(WIN_WORD, true);
     }
 
-    function testLosingDaySingleClaimsRemainBound() public {
+    function testLosingDayPerClaimCallsRemainBound() public {
         _compare(LOSS_WORD, false);
     }
 
-    function testLosingDayBatchClaimsRemainBound() public {
+    function testLosingDayOneCallClaimsRemainBound() public {
         _compare(LOSS_WORD, true);
     }
 }

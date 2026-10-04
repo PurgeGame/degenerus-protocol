@@ -7,26 +7,13 @@ import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
-import {IDegenerusGameLootboxModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
-import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
-
-/// @dev Etched at the game address to read openHumanBoxes' raw return (the router's input).
-contract HumanSweepProbe is DegenerusGameStorage {
-    function sweep(address module, uint256 budget) external returns (uint256 opened, uint256 units) {
-        (bool ok, bytes memory data) = module.delegatecall(
-            abi.encodeWithSelector(IDegenerusGameLootboxModule.openHumanBoxes.selector, budget)
-        );
-        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
-        (opened, units) = abi.decode(data, (uint256, uint256));
-    }
-}
 
 /// @title DegeneretteSweep -- queued Degenerette bets resolve inside the box-open sweep.
 /// @notice A bet is one word appended to degeneretteQueue[index & 1]; its id is the queue
-///         position + 1. The human-box sweep (openHumanBoxes, reached by mineFlip and
-///         openBoxes) resolves every bet queued at an index after that index's box entries,
-///         priced per bet in walk units and resumable mid-queue. This suite owns:
+///         position + 1. mineFlip's Degenerette read-consumer stage resolves every bet queued
+///         at an index after that index's box entries, admitted per bet against its gas bound
+///         and resumable mid-queue. This suite owns:
 ///
 ///         1. PLACEMENT: one word per bet with the documented layout; whole stake units only.
 ///         2. EQUIVALENCE: a queue swept in one call resolves every bet in order, and sweeping
@@ -98,8 +85,7 @@ contract DegeneretteSweep is DeployProtocol {
     }
 
     /// @dev Bets resolve as the Degenerette read consumer of the published word, reached only by
-    ///      mineFlip (openBoxes drives the AFK and human stages only). One unbounded call runs the
-    ///      cohort's whole consumer chain.
+    ///      mineFlip. One unbounded call runs the cohort's whole consumer chain.
     function _resolveCohort() private {
         vm.prank(makeAddr("sweepCrank"));
         game.mineFlip();
@@ -521,25 +507,23 @@ contract DegeneretteSweep is DeployProtocol {
         assertGt(bounty, 0, "the measured excess earns the bounty");
     }
 
-    /// @notice A sweep that opens nothing reports every unit it consumed (here ten zeroed bet
-    ///         slots plus the index header), not their zero credit, so the mineFlip router sizes
-    ///         its craps leg from what the walk really spent.
-    function testSweepThatOpensNothingReportsConsumedUnits() public {
+    /// @notice A Degenerette walk that resolves nothing still reports the slots it stepped past
+    ///         (here ten zeroed bet slots) as progress, so mineFlip commits the walk and finishes
+    ///         the cohort instead of refusing the call as workless.
+    function testSweepThatOpensNothingStillProgresses() public {
         for (uint256 i; i < 10; ++i) _place(alice, FLIP, 100 ether, 1);
         _landWord(IDX, uint256(keccak256("hole_word")));
-        // Holes ahead of the cursor: zero the ten queued words in place, leaving the sweep
-        // cursor where it stands. This is exactly the queue state the removed by-id door left
-        // behind; the sweep itself zeroes a bet only as it steps past it, so a hole ahead of
-        // the cursor is now forged here to reach the sweep's zeroed-bet skip.
+        // Holes ahead of the cursor: zero the ten queued words in place, leaving the cursor
+        // where it stands, to reach the walk's zeroed-bet skip.
         uint256 base = uint256(keccak256(abi.encode(keccak256(abi.encode(uint256(IDX), QUEUE_SLOT)))));
         for (uint256 i; i < 10; ++i) vm.store(address(game), bytes32(base + i), bytes32(0));
         for (uint64 id = 1; id <= 10; ++id) assertEq(game.degeneretteBetInfo(IDX, id), 0, "hole forged");
-        bytes memory original = address(game).code;
-        vm.etch(address(game), type(HumanSweepProbe).runtimeCode);
-        (uint256 opened, uint256 units) =
-            HumanSweepProbe(address(game)).sweep(ContractAddresses.GAME_LOOTBOX_MODULE, 1000);
-        vm.etch(address(game), original);
-        assertEq(opened, 0, "holes open nothing");
-        assertGe(units, 10, "every zeroed slot counted as consumed");
+        assertFalse(game.boxIndexComplete(IDX), "the holes sit ahead of the cursor");
+        vm.recordLogs();
+        vm.prank(makeAddr("sweepCrank"));
+        game.mineFlip();
+        assertEq(_countResolved(vm.getRecordedLogs()), 0, "holes open nothing");
+        assertTrue(game.boxIndexComplete(IDX), "the walk stepped past every zeroed slot");
+        assertTrue(game.rngComplete(), "the cohort completed behind the walk");
     }
 }

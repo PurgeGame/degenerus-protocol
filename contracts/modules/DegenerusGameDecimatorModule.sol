@@ -189,18 +189,6 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         return _runDecimatorWork(gasAllowance);
     }
 
-    /// @notice Compatibility entrypoint; caller budgets do not select the execution prefix.
-    /// @return settled Number of completed runs, rankings and winner payments.
-    /// @return gasUsed Actual execution gas used by the compatibility worker call.
-    /// @return moved Whether an obligation or cursor changed.
-    function settleDecimatorWinners(uint256)
-        external returns (uint256 settled, uint256 gasUsed, bool moved)
-    {
-        uint256 beforeGas = gasleft();
-        MineFlipGas.Result memory result = _runDecimatorWork(MineFlipGas.available());
-        return (result.rewardBasis, beforeGas - gasleft(), result.progressed);
-    }
-
     function _runDecimatorWork(uint256 gasAllowance) private returns (MineFlipGas.Result memory result) {
         MineFlipGas.Meter memory meter = MineFlipGas.start(gasAllowance);
         uint24 lvl = uint24(decBattleQueue);
