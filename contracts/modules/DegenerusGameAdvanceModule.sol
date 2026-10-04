@@ -239,6 +239,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         bool lastPurchase = !inJackpot && lastPurchaseDay;
         uint24 purchaseLevel = lastPurchase ? lvl : lvl + 1;
         uint8 stage;
+        // An x0 purchase day's seal arms the BAF draw and settles the vault's flips, so the
+        // legs that can seal the day leave that settlement whole in their tail.
+        uint256 sealTail = GasBounds.DAILY_PHASE_TAIL;
+        if (!inJackpot && purchaseLevel % 10 == 0) {
+            sealTail += GasBounds.BAF_VAULT_SETTLE;
+            if (!MineFlipGas.canRun(meter, 100_000, sealTail)) return result;
+        }
 
         if (_jackpotBattlePending()) {
             result = _runJackpotWork(abi.encodeWithSelector(
@@ -269,7 +276,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
             // Pricing can set ticket-leg flags before the ETH quadrants have finished.
             result = _runJackpotWork(abi.encodeWithSelector(
                 IDegenerusGameJackpotModule.runDailyJackpot.selector,
-                inJackpot, inJackpot ? lvl : purchaseLevel, word, _phaseAllowance(meter)
+                inJackpot, inJackpot ? lvl : purchaseLevel, word, MineFlipGas.remaining(meter) - sealTail
             ));
             if (result.done && !inJackpot && !_purchaseTicketLegPending()) {
                 _sealPurchaseDay(purchaseLevel, day, _simulatedDayIndex(), purchaseStartDay);
@@ -278,7 +285,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         } else if (!inJackpot) {
             if (_purchaseTicketLegPending()) {
                 result = _runJackpotWork(abi.encodeWithSelector(
-                    IDegenerusGameJackpotModule.runPurchaseDailyTickets.selector, word, _phaseAllowance(meter)
+                    IDegenerusGameJackpotModule.runPurchaseDailyTickets.selector, word, MineFlipGas.remaining(meter) - sealTail
                 ));
                 if (result.done) _sealPurchaseDay(purchaseLevel, day, _simulatedDayIndex(), purchaseStartDay);
                 stage = STAGE_PURCHASE_DAILY_TICKETS;
@@ -292,7 +299,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
                 } else {
                     result = _runJackpotWork(abi.encodeWithSelector(
                         IDegenerusGameJackpotModule.runDailyJackpot.selector,
-                        false, purchaseLevel, word, _phaseAllowance(meter)
+                        false, purchaseLevel, word, MineFlipGas.remaining(meter) - sealTail
                     ));
                 }
                 if (result.done && !_purchaseTicketLegPending()) {
@@ -782,6 +789,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
             bool bafLevel_ = purchaseLevel % 10 == 0;
             if (bafLevel_) {
                 coinflip.armBafDraw(day + 1);
+                // Today's result is applied: settling the vault's flips here gives its score
+                // every win this bracket counts. The BAF day's own flip settles after
+                // tomorrow's request and scores the next bracket, as for any player.
+                coinflip.depositCoinflip(ContractAddresses.VAULT, 0);
             }
             if (bafLevel_ && day - psd <= 1) {
                 jackpotFlags = JACKPOT_TURBO;

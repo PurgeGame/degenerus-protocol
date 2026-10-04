@@ -25,6 +25,9 @@ library MineFlipGasBounds {
     // The x00 winning flip (BAF reservation) measures 0.42M.
     uint256 internal constant POOL_CONSOLIDATION = 580_000;
     uint256 internal constant DAILY_PHASE_TAIL = 150_000;
+    // Vault flip settlement at an x0 seal over the full 365-day claim window, auto-rebuy
+    // carry and loss mint included. Cold: 1.28M measured.
+    uint256 internal constant BAF_VAULT_SETTLE = 1_550_000;
     uint256 internal constant FOIL_PACK = 1_400_000;
 
     // One 50-entry field checkpoint, including cold initialization or final sealing.
