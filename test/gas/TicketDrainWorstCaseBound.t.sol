@@ -24,27 +24,34 @@ contract DrainPrices is DegenerusGameTicketModule {
 ///      gas, and the 10M target below is the per-chunk ceiling for every admitted step.
 contract TicketDrainWorstCaseBound is Test {
     uint256 private constant COLD_SLOAD = 2_100;
-    uint256 private constant FRESH_SSTORE = 22_100;
-    uint256 private constant DIRTY_SSTORE = 5_000;
+    // Stores on a slot already read in the same call (warm).
+    uint256 private constant ZERO_TO_NONZERO = 20_000;
+    uint256 private constant WARM_RESET = 2_900;
     uint256 private constant STEP_GAS_TARGET = 10_000_000;
     DrainPrices private p;
     function setUp() public { p = new DrainPrices(); }
-    function singleton() private pure returns (uint256) { return 2 * COLD_SLOAD + 2 * FRESH_SSTORE; }
+    /// @dev The heaviest single-occurrence append: a seven-lane header completes a fresh
+    ///      word (cold header and word reads, fresh word store, header rewrite).
+    function flushAppend() private pure returns (uint256) { return 2 * COLD_SLOAD + ZERO_TO_NONZERO + WARM_RESET; }
 
     function test_RoundReserveCoversAllRareSplitsAndDebtWrites() public view {
-        uint256 bound = 32 * singleton() + 8 * (COLD_SLOAD + DIRTY_SSTORE) + 40_000;
+        // 32 split appends with their loop work, eight seat exits, seed, reveals and compaction.
+        uint256 bound = 32 * (flushAppend() + 1_000) + 8 * (WARM_RESET + 500) + 60_000;
         assertGe(p.roundMax(), bound);
     }
     function test_EntryReserveCoversColdBucketAndGenerator() public view {
-        assertGe(p.entryMax(), singleton() + 1_000);
+        assertGe(p.entryMax(), flushAppend() + 2_000);
     }
     function test_SeatAndReloadReservesCoverColdRegistryAndRemainder() public view {
-        uint256 seat = 4 * COLD_SLOAD + FRESH_SSTORE + 12_000;
+        // Queue word, registry element and length, pending word; a skip or win writes it.
+        uint256 seat = 4 * COLD_SLOAD + WARM_RESET + 5_000;
         assertGe(p.seatMax(), seat);
-        assertGe(p.reloadMax(), 8 * (4 * COLD_SLOAD + DIRTY_SSTORE + 12_000));
+        // Reloaded seats owe entries, so they read but never write.
+        assertGe(p.reloadMax(), 8 * (3 * COLD_SLOAD + 3_000) + 2 * COLD_SLOAD + 10_000);
     }
     function test_FlushTailCoversEightDebtsAndAllControlWrites() public view {
-        uint256 flush = 8 * DIRTY_SSTORE + 3 * FRESH_SSTORE + 2 * DIRTY_SSTORE + 25_000;
+        // Eight changed seat words, a fresh seat word, the control slot, queue release, return.
+        uint256 flush = 8 * (WARM_RESET + 500) + ZERO_TO_NONZERO + 2 * WARM_RESET + COLD_SLOAD + 10_000;
         assertGe(p.tail(), flush);
     }
     function test_CanonicalTicketStepsFitSizingTargetIncludingCheckpoint() public pure {

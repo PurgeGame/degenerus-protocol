@@ -166,7 +166,7 @@ contract MineFlipDecimatorBudgetTest is Test {
         result = host.runDecimatorWork(1_000_000);
         assertEq(result.rewardBasis, 1);
         assertEq(host.roundOf(LVL).cursor, 1);
-        result = host.runDecimatorWork(400_000);
+        result = host.runDecimatorWork(300_000);
         assertFalse(result.progressed);
         assertEq(host.roundOf(LVL).phase, 1);
         result = host.runDecimatorWork(700_000);

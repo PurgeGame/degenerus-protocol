@@ -53,7 +53,12 @@ contract RedemptionConsumerOrderingTest is DeployProtocol {
 
     function _ready() private {
         _publish();
+        // Hold the cohort's worker while earlier work drains: the call that reaches the
+        // redemption stage stops there, whatever its remaining allowance would admit.
+        vm.mockCall(address(sdgnrs), abi.encodeWithSignature("runRedemptionWork(uint256)"),
+            abi.encode(false, false, uint256(0)));
         for (uint256 i; i < 100 && game.rngConsumerStage() != 1; ++i) game.mineFlip{gas: 3_100_000}();
+        vm.clearMockedCalls();
         assertEq(game.rngConsumerStage(), 1, "redemption is next after daily work");
     }
 

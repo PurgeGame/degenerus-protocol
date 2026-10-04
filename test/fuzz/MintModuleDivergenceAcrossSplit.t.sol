@@ -77,7 +77,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
     uint24 private constant ANCHOR_LVL = 1;
 
     /// @dev Bounded per-call gas for the split path. The base admits one 16-entry aligned
-    ///      run (TICKET_SOLO_BASE + 16 * TICKET_ENTRY_MAX + TICKET_TAIL ~= 1.24M after the
+    ///      run (TICKET_SOLO_BASE + 16 * TICKET_ENTRY_MAX + TICKET_TAIL ~= 0.68M plus the
     ///      bridge's call overhead); larger steps admit longer first runs, and the shrinking
     ///      remainder of each call admits shorter aligned runs after it.
     uint256 private constant SPLIT_GAS_BASE = 1_600_000;

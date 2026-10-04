@@ -250,8 +250,11 @@ contract VRFPathCoverage is DeployProtocol {
         newVRF.fulfillRandomWords(newVRF.lastRequestId(), vrfWord);
 
         // Owner rule: no bound on a whole mineFlip transaction; the per-chunk cost matters.
-        // A 1.5M allowance can never admit DAILY_GAP plus its tail: these calls stop before it.
-        for (uint256 i; i < 8 && game.nextMinerAction() != ACTION_DAILY_GAP; ++i) game.mineFlip{gas: 1_500_000}();
+        // An allowance of DAILY_GAP plus the engine reserves can never admit DAILY_GAP plus its
+        // check reserve: these calls stop before it.
+        for (uint256 i; i < 8 && game.nextMinerAction() != ACTION_DAILY_GAP; ++i) {
+            game.mineFlip{gas: GasBounds.DAILY_GAP + GasBounds.ENGINE_BOUNDARY + GasBounds.ENGINE_RETURN}();
+        }
         assertEq(game.nextMinerAction(), ACTION_DAILY_GAP, "next chunk is the 29-day gap");
         // (a) a realistic allowance succeeds and progresses through the gap
         snap = vm.snapshotState();

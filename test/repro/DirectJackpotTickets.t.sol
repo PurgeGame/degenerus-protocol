@@ -11,6 +11,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {GoldSixLib} from "../../contracts/libraries/GoldSixLib.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 
 abstract contract DirectTicketFixture is BucketSeed {
     function seed(uint256 word, uint256 tickets, uint256 holders, bool repeated, bool prepared) external {
@@ -304,4 +305,79 @@ contract DirectJackpotTicketsTest is Test {
     function test_Gas_9600TicketsDistinct() public { _benchmark(9600, false, false); }
     function test_Gas_96TicketsSameOwner() public { _benchmark(96, true, false); }
     function test_Gas_480TicketsSameOwner() public { _benchmark(480, true, false); }
+}
+
+/// @dev Exposes one direct round over a target level whose common-colour headers are empty
+///      (an eight-lane append writes a fresh header and a fresh word) and whose rare-colour
+///      headers hold seven lanes with a zero next word (every split append completes a word).
+contract DirectRoundGasHarness is DegenerusGameTicketModule {
+    function prepare(uint24 lvl, uint256 owners) external {
+        _setTicketBufferLevel(lvl);
+        traitBucketLive[lvl & 1] = type(uint256).max;
+        _registerEntryOwner(address(1), lvl);
+        for (uint256 i; i < owners; ++i) _registerEntryOwner(address(uint160(0x10000 + i + 1)), lvl);
+        uint256 base = _traitBufferBase(lvl);
+        uint256 head = 7 | (uint256(0x00000001000000010000000100000001000000010000000100000001) << 32);
+        for (uint256 t; t < 256; ++t) {
+            if (((t >> 3) & 7) < ROUND_SPLIT_COLOR) continue;
+            uint256 elem = base + t;
+            assembly ("memory-safe") { sstore(elem, head) }
+        }
+    }
+    function materialize(uint24 lvl, uint256[4] calldata lanes, uint256 count, uint256 seed) external {
+        _materializeJackpotRound(lvl, lanes, count, seed);
+    }
+    function roundMax() external pure returns (uint256) { return DIRECT_ROUND_GAS_MAX; }
+    function groupGas() external pure returns (uint256) { return DIRECT_GROUP_GAS; }
+}
+
+/// @dev Cold cost of one full direct round (32 winners, 16 eight-lane groups).
+///      Common seed: all sixteen groups common with distinct traits per quadrant, each a fresh
+///      header plus a fresh word. Rare seed: five rare groups, two quadrants with both rare
+///      colours (sixteen split appends each) and one with one rare group.
+///      The theoretical round has two rare groups of distinct colours in every quadrant:
+///      common + 8 x (rare group - common group), extrapolated from the two measurements.
+contract DirectRoundGasTest is Test {
+    DirectRoundGasHarness private h;
+    uint24 private constant TARGET = 42;
+    uint256 private constant COMMON_SEED = 1;
+    uint256 private constant RARE_SEED = 35607;
+    uint256 private constant RARE_GROUPS = 5;
+    uint256 private constant MAX_RARE_GROUPS = 8;
+
+    function setUp() public {
+        h = new DirectRoundGasHarness();
+        h.prepare(TARGET, 32);
+    }
+
+    function _lanes() private pure returns (uint256[4] memory lanes) {
+        for (uint256 j; j < 32; ++j) lanes[j >> 3] |= (j + 1) << (32 * (j & 7));
+    }
+
+    function _round(uint256 seed) private returns (uint256 used) {
+        uint256 snap = vm.snapshotState();
+        uint256[4] memory lanes = _lanes();
+        vm.cool(address(h));
+        uint256 g0 = gasleft();
+        h.materialize(TARGET, lanes, 32, seed);
+        used = g0 - gasleft();
+        assertTrue(vm.revertToStateAndDelete(snap));
+    }
+
+    function test_DirectRoundColdWorstFitsItsBound() public {
+        uint256 common = _round(COMMON_SEED);
+        uint256 rare = _round(RARE_SEED);
+        uint256 perRareGroup = (rare - common) / RARE_GROUPS;
+        uint256 worst = common + MAX_RARE_GROUPS * perRareGroup;
+        emit log_named_uint("direct round, 16 fresh common groups (realistic heavy)", common);
+        emit log_named_uint("direct round, 5 rare groups over cold split buckets", rare);
+        emit log_named_uint("  extra per rare group", perRareGroup);
+        emit log_named_uint("direct round, theoretical 8 rare groups", worst);
+        uint256 declared = h.roundMax();
+        emit log_named_uint("DIRECT_ROUND_GAS_MAX", declared);
+        assertLe(worst, declared, "the theoretical cold round fits its admission");
+        assertLe(declared, 2 * worst, "round admission stays within 2x of its cold worst");
+        assertLe(declared + 4 * h.groupGas() + GasBounds.TICKET_TAIL + MineFlipGas.CHECK_RESERVE,
+            10_000_000, "a full direct round and its tail stay within 10M");
+    }
 }

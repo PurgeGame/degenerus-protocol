@@ -152,6 +152,25 @@ contract ChunkHarness is MintBucketSeed {
         }
     }
 
+    /// @dev Pin the global round counter so a fixture rolls a chosen round seed.
+    function setRound(uint32 r) external {
+        ticketRound = r;
+    }
+
+    /// @dev Buckets whose length differs from `baseLen` (seeded header tails hold seven lanes).
+    function bucketsTouched(uint24 lvl, uint256 baseLen) external view returns (uint256 n) {
+        for (uint256 trait; trait < 256; ++trait)
+            if (_bucketLengthUnchecked(lvl, trait) != baseLen) ++n;
+    }
+
+    function seats() external view returns (uint256) {
+        return ticketSeats;
+    }
+
+    function marker() external view returns (uint24) {
+        return ticketLevel;
+    }
+
     function grownTraits(uint24 lvl, uint256 oldWords) external view returns (uint256 n) {
         for (uint256 trait; trait < 256; ++trait)
             if (_bucketLengthUnchecked(lvl, trait) > oldWords * 8) ++n;
@@ -299,6 +318,55 @@ abstract contract TicketChunkProbe is Test {
         assertLt(allowance, GAS_TARGET, string.concat(tag, ": the step is admitted only above 10M"));
         assertLt(used, GAS_TARGET, string.concat(tag, ": one chunk over the 10M ceiling"));
         assertLe(used, allowance + UNMETERED_OVERHEAD, string.concat(tag, ": chunk overran its declared reservation"));
+    }
+
+    /// @dev Cold call gas at exactly `allowance`, state restored afterwards.
+    function _usedAt(uint24 anchor, uint256 allowance, Step step) internal returns (uint256 used) {
+        uint256 snap = vm.snapshotState();
+        (, , used) = _probe(anchor, allowance, step, bytes32(0));
+        assertTrue(vm.revertToStateAndDelete(snap));
+    }
+
+    /// @dev Cold gas of one admitted step in isolation: the call at the smallest admitting
+    ///      allowance minus the call 100 gas below it, which runs the same prefix and stops.
+    ///      The difference also carries the tail writes the admitted step adds.
+    function _stepGas(uint24 anchor, Step step) internal returns (uint256 item, uint256 lo) {
+        uint256 snap = vm.snapshotState();
+        (bool refHit, bytes32 first,) = _probe(anchor, EIP7825_TX_GAS_CAP, step, bytes32(0));
+        assertTrue(refHit, "fixture never reaches the probed step");
+        assertTrue(vm.revertToState(snap));
+        lo = GasBounds.TICKET_SELECT_MAX + GasBounds.TICKET_TAIL + MineFlipGas.CHECK_RESERVE;
+        uint256 hi = EIP7825_TX_GAS_CAP;
+        while (hi - lo > 100) {
+            uint256 mid = (lo + hi) / 2;
+            (bool ok,,) = _probe(anchor, mid, step, first);
+            assertTrue(vm.revertToState(snap));
+            if (ok) hi = mid;
+            else lo = mid;
+        }
+        (, , item) = _probe(anchor, hi, step, first);
+        assertTrue(vm.revertToState(snap));
+        (, , uint256 below) = _probe(anchor, lo, step, first);
+        assertTrue(vm.revertToStateAndDelete(snap));
+        item -= below;
+    }
+
+    /// @dev One cold call with ample gas; returns its gas and the entries it generated.
+    function _whole(uint24 anchor) internal returns (uint256 used, uint256 take) {
+        uint256 snap = vm.snapshotState();
+        _cool();
+        vm.recordLogs();
+        uint256 g0 = gasleft();
+        MineFlipGas.Result memory r = h.runTicketWork(anchor, EIP7825_TX_GAS_CAP);
+        used = g0 - gasleft();
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length == 0 || logs[i].topics[0] != TRAITS_GENERATED) continue;
+            (, uint32 t) = abi.decode(logs[i].data, (uint256, uint32));
+            take += t;
+        }
+        assertTrue(r.done, "the fixture drains in one call");
+        assertTrue(vm.revertToStateAndDelete(snap));
     }
 }
 
@@ -505,5 +573,149 @@ contract RoundDrainChunkGas is TicketChunkProbe {
         // The measured call is the selection step plus that one run, release and tail.
         assertLe(used, GasBounds.TICKET_SELECT_MAX + declared, "measured full-size solo chunk exceeds its declared bound");
         assertEq(uint32(h.owedOf(LVL, address(uint160(0x51001))) >> 8), entries, "probe left the fixture untouched");
+    }
+
+    /// @dev Round index whose seed (level 11, the fixture entropy) rolls colour 6 in all four
+    ///      quadrants: every seat splits into its own symbol bucket, 32 single appends.
+    uint32 internal constant ALL_RARE_ROUND = 8_244_874;
+
+    function _assertAllRareRound() internal pure {
+        uint256 entropy = uint256(keccak256("chunk-gas-entropy")) | 1;
+        uint256 seed = uint256(keccak256(abi.encode(LVL, ALL_RARE_ROUND, entropy)));
+        for (uint256 q; q < 4; ++q) {
+            uint256 scaled = (uint64(seed >> (64 * q)) & 0xffffffff) >> 24;
+            assertTrue(scaled >= 248 && scaled < 254, "fixture: colour 6 in every quadrant");
+        }
+    }
+
+    /// @dev The solo cold worst: one owner owing the full 160-entry run, every bucket header
+    ///      holding seven lanes over a zero next word, so each distinct trait completes a fresh
+    ///      word (cold header read, cold word read, fresh word store, header rewrite).
+    function test_Chunk_PerEntry_MaxSoloRun_HeaderTails_Cold() public {
+        uint256 entries = GasBounds.TICKET_SOLO_MAX_ENTRIES;
+        h.seed(LVL, 1, uint32(entries), uint160(0x52000), false);
+        h.seedHeaderTails(LVL);
+        (uint256 item,) = _stepGas(LVL + 1, Step.Solo);
+        (, uint256 used) = _oneChunk(LVL + 1, "chunk_per_entry_max_solo_run_header_tails_cold", Step.Solo);
+        uint256 declared = GasBounds.TICKET_SOLO_BASE + entries * GasBounds.TICKET_ENTRY_MAX;
+        emit log_named_uint("solo_160_header_tails_step_gas", item);
+        emit log_named_uint("solo_160_declared_step_bound", declared);
+        assertLe(item, declared, "the cold 160-entry run exceeds SOLO_BASE + 160 x ENTRY_MAX");
+        assertLe(used, GasBounds.TICKET_SELECT_MAX + declared + GasBounds.TICKET_TAIL, "call overran its declared steps");
+        assertLe(declared + GasBounds.TICKET_TAIL + MineFlipGas.CHECK_RESERVE, GAS_TARGET);
+    }
+
+    /// @dev Per-entry and fixed solo costs. With header tails, an owner whose sixteen entries
+    ///      land on sixteen distinct traits pays one completed fresh word per entry: the marginal
+    ///      entry is the per-entry cold worst. A fresh level's first run also initializes the
+    ///      live bitmap, the heaviest fixed part of a run.
+    function test_Solo_EntryAndBaseCoverColdWorst() public {
+        uint256 snap = vm.snapshotState();
+        h.seed(LVL, 1, 1, uint160(0x51000), false);
+        h.seedHeaderTails(LVL);
+        (uint256 one,) = _whole(LVL + 1);
+        assertTrue(vm.revertToState(snap));
+        h.seed(LVL, 1, 16, uint160(0x51000), false);
+        h.seedHeaderTails(LVL);
+        (uint256 sixteen, uint256 take) = _whole(LVL + 1);
+        h.runTicketWork(LVL + 1, EIP7825_TX_GAS_CAP);
+        assertEq(h.bucketsTouched(LVL, 7), 16, "fixture: sixteen distinct traits");
+        assertEq(take, 16);
+        assertTrue(vm.revertToState(snap));
+        h.seed(LVL, 1, 1, uint160(0x51000), false);
+        (uint256 freshRun,) = _stepGas(LVL + 1, Step.Solo);
+        assertTrue(vm.revertToStateAndDelete(snap));
+        uint256 perEntry = (sixteen - one) / 15;
+        emit log_named_uint("solo_per_entry_cold_worst", perEntry);
+        emit log_named_uint("solo_one_entry_fresh_level_step_gas", freshRun);
+        assertLe(perEntry, GasBounds.TICKET_ENTRY_MAX, "per-entry cold worst exceeds ENTRY_MAX");
+        assertLe(GasBounds.TICKET_ENTRY_MAX, 2 * perEntry, "ENTRY_MAX is padded beyond 2x");
+        assertLe(freshRun, GasBounds.TICKET_SOLO_BASE + GasBounds.TICKET_ENTRY_MAX, "one-entry run exceeds its bound");
+    }
+
+    /// @dev The round cold worst: eight seats, all four quadrants split across their colour's
+    ///      eight symbols, each of the 32 single appends completing a fresh word. The whale
+    ///      variant keeps every seat (its owed rewrites land in the tail, priced into the
+    ///      difference); the exit variant writes eight seat exits inside the round.
+    function test_Round_AllRareQuadrantsColdWorst() public {
+        _assertAllRareRound();
+        uint256 snap = vm.snapshotState();
+        h.seed(LVL, 8, 20000, uint160(0xC0000), false);
+        h.seedHeaderTails(LVL);
+        h.setRound(ALL_RARE_ROUND);
+        (uint256 whales,) = _stepGas(LVL + 1, Step.Round);
+        assertTrue(vm.revertToState(snap));
+        h.seed(LVL, 8, 4, uint160(0xC0000), false);
+        h.seedHeaderTails(LVL);
+        h.setRound(ALL_RARE_ROUND);
+        (uint256 exits,) = _stepGas(LVL + 1, Step.Round);
+        assertTrue(vm.revertToState(snap));
+        h.seed(LVL, 8, 4, uint160(0xC0000), false);
+        h.setRound(ALL_RARE_ROUND);
+        (uint256 freshRare,) = _stepGas(LVL + 1, Step.Round);
+        assertTrue(vm.revertToStateAndDelete(snap));
+        emit log_named_uint("round_all_rare_header_tails_whales_step_gas", whales);
+        emit log_named_uint("round_all_rare_header_tails_exits_step_gas", exits);
+        emit log_named_uint("round_all_rare_fresh_headers_exits_step_gas", freshRare);
+        uint256 worst = whales > exits ? whales : exits;
+        assertLe(worst, GasBounds.TICKET_ROUND_MAX, "cold worst round exceeds ROUND_MAX");
+        assertLe(GasBounds.TICKET_ROUND_MAX, 2 * worst, "ROUND_MAX is padded beyond 2x");
+        h.seed(LVL, 8, 4, uint160(0xC0000), false);
+        h.seedHeaderTails(LVL);
+        h.setRound(ALL_RARE_ROUND);
+        _oneChunk(LVL + 1, "chunk_round_all_rare_header_tails", Step.Round);
+    }
+
+    /// @dev Seats that skip with an owed write, the heaviest seat: queue lane, owner registry
+    ///      and pending word reads plus the write. The worst single seat also opens a cold
+    ///      queue word and the registry length.
+    function test_Seat_ColdWorstFitsSeatMax() public {
+        uint256 snap = vm.snapshotState();
+        h.seed(LVL, 8, 0, uint160(0xC0000), false);
+        (uint256 eight,) = _whole(LVL + 1);
+        assertTrue(vm.revertToState(snap));
+        h.seed(LVL, 16, 0, uint160(0xC0000), false);
+        (uint256 sixteen,) = _whole(LVL + 1);
+        assertTrue(vm.revertToStateAndDelete(snap));
+        uint256 perSeat = (sixteen - eight) / 8;
+        uint256 worst = perSeat + 2 * 2_100;
+        emit log_named_uint("seat_skip_with_write_average", perSeat);
+        emit log_named_uint("seat_cold_worst", worst);
+        assertLe(worst, GasBounds.TICKET_SEAT_MAX, "cold worst seat exceeds SEAT_MAX");
+    }
+
+    /// @dev Admits the selection step (SELECT_MAX + TAIL plus the entry reads) but neither a
+    ///      reload nor a solo run after it.
+    function _selectOnlyAllowance() internal pure returns (uint256) {
+        return GasBounds.TICKET_SELECT_MAX + GasBounds.TICKET_TAIL + MineFlipGas.CHECK_RESERVE + 10_000;
+    }
+
+    /// @dev Reload of eight persisted seats on a cold resumed call, against the same call
+    ///      stopped before the round phase admits.
+    function test_Reload_EightSeatsColdFitsReloadMax() public {
+        h.seed(LVL, 8, 20000, uint160(0xC0000), false);
+        h.seedHeaderTails(LVL);
+        h.setRound(ALL_RARE_ROUND);
+        h.runTicketWork(LVL + 1, 1_000_000);
+        assertTrue(h.seats() != 0, "fixture: eight seats persisted");
+        (, uint256 lo) = _stepGas(LVL + 1, Step.Round);
+        uint256 withReload = _usedAt(LVL + 1, lo, Step.Round);
+        uint256 selectOnly = _usedAt(LVL + 1, _selectOnlyAllowance(), Step.Round);
+        emit log_named_uint("reload_eight_seats_cold", withReload - selectOnly);
+        assertLe(withReload - selectOnly, GasBounds.TICKET_RELOAD_MAX, "cold reload exceeds RELOAD_MAX");
+    }
+
+    /// @dev Selection on a fresh level: a first buffer preparation and a fresh control-slot
+    ///      marker, against an admitted-nothing call.
+    function test_Select_ColdFitsSelectMax() public {
+        h.seed(LVL, 1, 1, uint160(0x51000), false);
+        uint256 snap = vm.snapshotState();
+        (bool generated,, uint256 selected) = _probe(LVL + 1, _selectOnlyAllowance(), Step.Solo, bytes32(0));
+        assertFalse(generated, "the probe admits the selection step only");
+        assertTrue(h.marker() != 0, "fixture: the selection step ran and wrote its marker");
+        assertTrue(vm.revertToStateAndDelete(snap));
+        uint256 empty = _usedAt(LVL + 1, 60_000, Step.Solo);
+        emit log_named_uint("select_fresh_level_cold", selected - empty);
+        assertLe(selected - empty, GasBounds.TICKET_SELECT_MAX, "cold selection exceeds SELECT_MAX");
     }
 }

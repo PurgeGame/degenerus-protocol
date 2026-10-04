@@ -19,13 +19,13 @@ import { eth, getLastVRFRequestId, ZERO_BYTES32 } from "../helpers/testUtils.js"
 // Realistic caller allowance for the player-facing door (owner rule: per-chunk <= 10M).
 const OPEN_GAS_ALLOWANCE = 10_000_000n;
 // MineFlipGasBounds: HUMAN_ENTRY_GAS, HUMAN_BOX_GAS, HUMAN_TAIL_GAS (one entry's admission bound).
-const HUMAN_ENTRY_GAS = 550_000n;
-const HUMAN_BOX_GAS = 70_000n;
-const HUMAN_TAIL_GAS = 250_000n;
-// One maximum entry's declared bound is 7.8M; the door admits the next entry only while the
-// remaining allowance covers that bound, so 8.5M admits exactly one 100-box entry and the
+const HUMAN_ENTRY_GAS = 1_300_000n;
+const HUMAN_BOX_GAS = 27_500n;
+const HUMAN_TAIL_GAS = 80_000n;
+// One maximum entry's declared bound is 4.13M; the door admits the next entry only while the
+// remaining allowance covers that bound, so 4.85M admits exactly one 100-box entry and the
 // break must leave the next owner whole for its own transaction.
-const ONE_MAX_ENTRY_ALLOWANCE = 8_500_000n;
+const ONE_MAX_ENTRY_ALLOWANCE = 4_850_000n;
 // Intrinsic gas, calldata, Game -> AFK module dispatch and the empty AFK-stage probe.
 const DOOR_OVERHEAD_GAS = 100_000n;
 const MINER_TICKETS = 4n; // DegenerusGameStorage.MinerAction.Tickets
@@ -81,7 +81,7 @@ async function prepare(f, buyers, count, singleCustom) {
   await f.game.mineFlip({ gasLimit: 1_000_000 });
   // The buyers' real tickets were frozen into the read cohort by the mid-day request. Their
   // drain is a keeper-only checkpoint that precedes every box stage; a bounded allowance
-  // admits a ticket round but not a 100-box entry (declared ~7.8M), so it stays unopened.
+  // admits a ticket round but not a 100-box entry (declared ~4.13M), so it stays unopened.
   for (let i = 0; i < 10 && (await f.game.rngConsumerStage()) === 0n; i++) {
     expect(await f.game.nextMinerAction(), "only the ticket checkpoint precedes the boxes").to.equal(MINER_TICKETS);
     await f.game.mineFlip({ gasLimit: TICKET_CHECKPOINT_GAS });

@@ -386,8 +386,11 @@ contract VRFStallEdgeCases is DeployProtocol {
 
         // Owner rule: no bound on a whole mineFlip transaction; the per-chunk cost matters.
         // Bring the engine to the gap chunk (publication and the ticket certificate first). A
-        // 1.5M allowance can never admit DAILY_GAP plus its tail, so these calls stop before it.
-        for (uint256 i; i < 8 && game.nextMinerAction() != ACTION_DAILY_GAP; ++i) game.mineFlip{gas: 1_500_000}();
+        // An allowance of DAILY_GAP plus the engine reserves can never admit DAILY_GAP plus its
+        // check reserve, so these calls stop before it.
+        for (uint256 i; i < 8 && game.nextMinerAction() != ACTION_DAILY_GAP; ++i) {
+            game.mineFlip{gas: GasBounds.DAILY_GAP + GasBounds.ENGINE_BOUNDARY + GasBounds.ENGINE_RETURN}();
+        }
         assertEq(game.nextMinerAction(), ACTION_DAILY_GAP, "next chunk is the 29-day gap");
 
         // (a) A realistic allowance succeeds and progresses through the gap.
@@ -407,6 +410,8 @@ contract VRFStallEdgeCases is DeployProtocol {
         emit log_named_uint("29-day gap chunk: mineFlip gas (engine overhead included)", gasUsed);
         emit log_named_uint("29-day gap chunk: declared DAILY_GAP bound", GasBounds.DAILY_GAP);
         assertLt(gasUsed, 10_000_000, "29-day gap chunk stays under the 10M per-chunk ceiling");
+        assertLe(gasUsed, GasBounds.DAILY_GAP + GasBounds.ENGINE_BOUNDARY + GasBounds.ENGINE_RETURN,
+            "cold widest gap chunk exceeds its declared bound plus engine reserves");
     }
 
     // ══════════════════════════════════════════════════════════════════════

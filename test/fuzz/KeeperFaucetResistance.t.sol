@@ -392,7 +392,7 @@ contract KeeperFaucetResistance is DeployProtocol {
     /// @notice The credit is work-based: a queue of cheap losing bets earns far less than the
     ///         worst-case budget price the sweep charged for them.
     function testBetSweepCreditsWorkNotBudget() public {
-        for (uint256 i; i < 4; ++i) {
+        for (uint256 i; i < 8; ++i) {
             vm.prank(player);
             game.placeDegeneretteBet{value: 0.005 ether}(address(0), 0, 0.005 ether, 1, 9);
         }
@@ -411,10 +411,10 @@ contract KeeperFaucetResistance is DeployProtocol {
         game.mineFlip();
         uint256 bounty = coinflip.coinflipAmount(player) - preStake;
         (, uint256 measured,) = _minerWork(vm.getRecordedLogs());
-        for (uint64 id = 1; id <= 4; ++id) assertEq(game.degeneretteBetInfo(INDEX, id), 0, "the crank resolved every bet");
-        // Four ETH 1-spin bets are admitted at their declared worst-case bounds (base + one spin
+        for (uint64 id = 1; id <= 8; ++id) assertEq(game.degeneretteBetInfo(INDEX, id), 0, "the crank resolved every bet");
+        // Eight ETH 1-spin bets are admitted at their declared worst-case bounds (base + one spin
         // each), but the bounty is priced on the gas the crank actually measured (72fc06f6c).
-        uint256 budget = 4 * (MineFlipGasBounds.DEGENERETTE_ETH_BASE_GAS + MineFlipGasBounds.DEGENERETTE_ETH_SPIN_GAS);
+        uint256 budget = 8 * (MineFlipGasBounds.DEGENERETTE_ETH_BASE_GAS + MineFlipGasBounds.DEGENERETTE_ETH_SPIN_GAS);
         emit log_named_uint("measured crank gas", measured);
         emit log_named_uint("declared admission budget", budget);
         assertLt(measured, budget, "the crank measured less than the declared budget it admitted");

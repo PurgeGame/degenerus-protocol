@@ -150,8 +150,9 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         address[] memory players = _newBurners(3, sdgnrs.totalSupply() * 16 / 1000);
         _resolve(day, 175, 99);
         (uint96 thirdExpected,,) = sdgnrs.pendingRedemptions(players[2], day);
-        (bool done, uint256 charged, uint256 quote) = _batch(9_000_000);
-        assertFalse(done); assertLe(charged, 9_000_000);
+        // Two maximum beneficiaries fit 4M; the third's whole admission then does not.
+        (bool done, uint256 charged, uint256 quote) = _batch(4_000_000);
+        assertFalse(done); assertLe(charged, 4_000_000);
         (uint96 first,,) = sdgnrs.pendingRedemptions(players[0], day);
         (uint96 second,,) = sdgnrs.pendingRedemptions(players[1], day);
         (uint96 third,,) = sdgnrs.pendingRedemptions(players[2], day);
@@ -313,7 +314,7 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         vm.cool(ContractAddresses.GAME_MINT_MODULE); vm.cool(ContractAddresses.GAME_FOILPACK_MODULE);
         vm.cool(ContractAddresses.GAME_BOON_MODULE); vm.cool(ContractAddresses.GAME_DEGENERETTE_MODULE);
         // At the measured boundary (the smallest allowance admitting the maximum claim, declared
-        // 350k + 28 x 250k) the call succeeds and settles the claim, and its remaining allowance
+        // 500k + 28 x 60k) the call succeeds and settles the claim, and its remaining allowance
         // cannot admit the next whole 100-box order. The boundary is a realistic allowance (<= 10M).
         uint256 boundary = _boundaryAllowance(10_000_000);
         emit log_named_uint("maximum_redemption_admission_boundary_allowance", boundary);
@@ -359,7 +360,18 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         game.placeDegeneretteBet{value: 0.125 ether}(bob, 0, 0.005 ether, 25, 0);
         _resolve(day, 100, 99); _commitWord(99);
         uint48 index = RecyclingState.readBuffer(address(game));
-        vm.prank(keeper); game.mineFlip{gas: 3_500_000}();
+        // The smallest allowance that completes the redemption cohort leaves less than the last
+        // claim's admission, which is below the whole 25-spin bet's.
+        uint256 allowance = 2_000_000;
+        for (; allowance < 10_000_000; allowance += 25_000) {
+            uint256 snap = vm.snapshotState();
+            vm.prank(keeper);
+            try game.mineFlip{gas: allowance}() {} catch {}
+            bool settled = !sdgnrs.redemptionSettlementPending();
+            assertTrue(vm.revertToState(snap));
+            if (settled) break;
+        }
+        vm.prank(keeper); game.mineFlip{gas: allowance}();
         assertFalse(sdgnrs.redemptionSettlementPending());
         assertGt(game.degeneretteBetInfo(index, 1), 0, "remainder cannot fund first whole bet");
         vm.prank(keeper); game.mineFlip();

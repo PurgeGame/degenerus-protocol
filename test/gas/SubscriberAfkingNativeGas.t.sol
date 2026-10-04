@@ -142,6 +142,13 @@ contract SubscriberAfkingNativeGasTest is DeployProtocol {
         host = SubscriberNativeGasHost(payable(address(game)));
         vm.deal(address(game), 50_000 ether);
     }
+    function _cool() private {
+        vm.cool(address(game)); vm.cool(address(coin)); vm.cool(address(coinflip));
+        vm.cool(address(sdgnrs)); vm.cool(address(wwxrp)); vm.cool(address(crapsBattle));
+        vm.cool(address(quests)); vm.cool(address(affiliate)); vm.cool(address(dgnrs));
+        vm.cool(ContractAddresses.GAME_AFKING_MODULE); vm.cool(ContractAddresses.GAME_LOOTBOX_MODULE);
+        vm.cool(ContractAddresses.GAME_BOON_MODULE); vm.cool(ContractAddresses.GAME_DEGENERETTE_MODULE);
+    }
     function _lastGas() private returns (uint256 used) {
         used = vm.lastCallGas().gasTotalUsed;
         if (!vm.envOr("FOUNDRY_ISOLATE", false)) used += 21_064;
@@ -202,6 +209,30 @@ contract SubscriberAfkingNativeGasTest is DeployProtocol {
         }
         emit log_named_uint("native_subscriber_branch_peak", peak);
     }
+    /// @dev The saturated AFKing grant over many committed words, every run from the same cold
+    ///      fixture: the peak includes a winning ETH spin whose share recirculates into a nested box.
+    function test_ColdSaturatedAfkingGrantSweep() public {
+        uint256 base = vm.snapshotState();
+        uint256 peak;
+        uint256 total;
+        for (uint256 i; i < 256; ++i) {
+            address player = i & 1 == 0 ? PLAYER : ContractAddresses.SDGNRS;
+            host.openFixture(player, uint256(keccak256(abi.encode("afking grant", i))));
+            _cool();
+            MineFlipGas.Result memory result = host.openWork{gas: 12_000_000}(12_000_000);
+            uint256 used = _lastGas();
+            assertTrue(result.progressed && result.done);
+            total += used;
+            if (used > peak) peak = used;
+            assertTrue(vm.revertToState(base));
+        }
+        emit log_named_uint("saturated AFKing grant worker incl. intrinsic, mean", total / 256);
+        emit log_named_uint("saturated AFKing grant worker incl. intrinsic, peak", peak);
+        emit log_named_uint("declared AFKING_OPEN_GAS + AFKING_TAIL_GAS", GasBounds.AFKING_OPEN_GAS + GasBounds.AFKING_TAIL_GAS);
+        assertLe(peak, GasBounds.AFKING_OPEN_GAS + GasBounds.AFKING_TAIL_GAS, "cold AFKing grant exceeds its envelope");
+        assertLe(GasBounds.AFKING_OPEN_GAS + GasBounds.AFKING_TAIL_GAS + MineFlipGas.CHECK_RESERVE, STEP_GAS_TARGET);
+    }
+
     function testFuzz_ColdSaturatedAfkingGrantFitsSavedBound(uint256 word, bool protocolPlayer) public {
         address player = protocolPlayer ? ContractAddresses.SDGNRS : PLAYER;
         host.openFixture(player, word);

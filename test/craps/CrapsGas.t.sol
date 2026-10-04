@@ -8,6 +8,7 @@ import {LootboxCraps} from "../../contracts/LootboxCraps.sol";
 import {CrapsPins} from "./CrapsPins.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {CrapsBattle, IFlipCoin, ICoinflipStake} from "../../contracts/CrapsBattle.sol";
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 
 contract GasHarness is CrapsViews {
     /// @dev Engine tap, in exactly the flat-slip configuration a settlement runs (lean books,
@@ -32,6 +33,15 @@ contract GasHarness is CrapsViews {
         return _settleSlip(
             b, _seedFor(index), bankroll, 0, MAX_SLIP_HANDS, SLIP_ROLL_BUDGET, address(0), _shooterBoostTerms(0)
         );
+    }
+
+    /// @dev The boosted worst case under a caller-chosen between-shooters roll budget.
+    function engineRunBudget(Craps.Bets calldata b, uint48 index, uint256 bankroll, uint256 budget)
+        external
+        view
+        returns (Craps.SlipResult memory)
+    {
+        return _settleSlip(b, _seedFor(index), bankroll, 0, MAX_SLIP_HANDS, budget, address(0), _shooterBoostTerms(0));
     }
 
     /// @dev The scheduled engine with the high-water lifecycle actually ON — a live goal, so the
@@ -160,6 +170,35 @@ contract CrapsGasTest is CrapsPins {
             "the stated ceiling is not budget - 1 + one whole hand"
         );
         assertEq(craps.SLIP_ROLL_CEILING(), 1111, "the roll ceiling moved");
+    }
+
+    /// @dev THE SEAT BOUND'S ENGINE TERM, from above. The real ceiling shape is a 599-roll budget
+    ///      followed by one whole 512-roll hand (1,111 rolls); a 512-roll hand is unreachable by
+    ///      search, so the run is instead held to a 1,111-roll between-shooters budget: at least
+    ///      1,111 rolls over more shooters than the ceiling shape, so at least its cost (per-roll
+    ///      work is outcome-independent; every extra shooter only adds). Cold engine frame.
+    function test_engineRollCeilingUpperBound() public {
+        Craps.Bets memory b = _fullBoard();
+        uint256 bankroll = craps.stakeFor(b) * CAP_ROUNDS_TO_SHOOTER_CAP;
+        uint256 worst;
+        uint256 worstRolls;
+        for (uint256 i; i < 8; ++i) {
+            _setWord(0, uint256(keccak256(abi.encode("ceiling", i))));
+            vm.cool(address(craps));
+            uint256 g = gasleft();
+            Craps.SlipResult memory r = craps.engineRunBudget(b, 0, bankroll, craps.SLIP_ROLL_CEILING());
+            uint256 used = g - gasleft();
+            assertGe(r.totalRolls, craps.SLIP_ROLL_CEILING(), "the run reached the ceiling roll count");
+            // Normalize the overshoot past 1,111 rolls back to the ceiling.
+            used = used * craps.SLIP_ROLL_CEILING() / r.totalRolls;
+            if (used > worst) { worst = used; worstRolls = r.totalRolls; }
+        }
+        emit log_named_uint("SEAT engine 1,111-roll upper bound (cold, normalized)", worst);
+        emit log_named_uint("  rolls of that run", worstRolls);
+        // The rest of a seat is bounded by the cold one-seat field rail (window, word, cursor,
+        // finalization and credit flush), asserted below 240k in test_batchSettleMarginalCost.
+        emit log_named_uint("SEAT cold worst estimate (engine ceiling + one-seat field rail)", worst + 240_000);
+        assertLe((worst + 240_000) * 12 / 10, GasBounds.CRAPS_SEAT_GAS_MAX, "seat bound keeps a 20% margin");
     }
 
     /// @dev And the real surface: a max-legal slip (ten rounds of the board) placed and settled

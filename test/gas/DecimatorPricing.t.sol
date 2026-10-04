@@ -7,6 +7,22 @@ import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
+
+/// @dev A cold external frame around one engine run, as the module's run calls it.
+contract DecimatorEngineMeter {
+    function run(uint256 chips, bytes32 seed, uint256 bankroll, uint256 boost)
+        external view returns (uint256 used, uint256 rolls)
+    {
+        uint256 beforeGas = gasleft();
+        Craps.SlipResult memory r = CrapsEngine(ContractAddresses.CRAPS_ENGINE).settleSlipBounded(
+            chips, 60, uint256(keccak256(abi.encode("board", seed))), 3, seed, bankroll, address(0xD1CE), boost,
+            (511 << 16) | 48
+        );
+        used = beforeGas - gasleft();
+        rolls = r.totalRolls;
+    }
+}
 
 /// @dev Every run peaks at its starting bankroll after thirty rolls, so ranking follows the
 ///      stacks alone and the heap shape is chosen by the test.
@@ -103,6 +119,79 @@ contract DecimatorPricingTest is Test {
             if (used > maxCallGas) maxCallGas = used;
         }
         assertEq(uint24(h.queue()), 0, "settled");
+    }
+
+    uint256 private maxOneRun;
+    uint256 private maxOnePay;
+
+    /// @dev Settle with allowances that admit exactly one heads run or one payment per call, so
+    ///      each measured call is a single indivisible item plus the worker's fixed frame.
+    function _settleOneByOne() private {
+        // The worker's frame before its first admission check, but less than one more item.
+        uint256 runAllowance = GasBounds.DECIMATOR_RUN_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + 40_000;
+        uint256 payAllowance = GasBounds.DECIMATOR_PAYMENT_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + 30_000;
+        for (uint256 guard; uint24(h.queue()) != 0 && guard < 20_000; ++guard) {
+            uint24 lvl = uint24(h.queue());
+            uint8 phase = h.roundOf(lvl).phase;
+            bool ranking = phase == 1 && h.roundOf(lvl).cursor == h.roundOf(lvl).count;
+            uint256 allowance = ranking ? 14_000_000 : phase == 2 ? payAllowance : runAllowance;
+            vm.cool(address(h));
+            vm.cool(ContractAddresses.CRAPS_ENGINE);
+            (uint256 used, MineFlipGas.Result memory result) = meter.settle{gas: 15_000_000}(h, allowance);
+            assertTrue(result.progressed, "one-item allowance admits its item");
+            if (ranking) {
+                if (used > maxRankGas) maxRankGas = used;
+            } else if (phase == 2) {
+                if (used > maxOnePay) maxOnePay = used;
+            } else if (used > maxOneRun) maxOneRun = used;
+        }
+        assertEq(uint24(h.queue()), 0, "settled");
+    }
+
+    /// @dev Per-item cold maxima against their declared bounds: one heads run (heaviest heap
+    ///      shapes, flat engine), the 511-roll engine ceiling on the heaviest board, one ranking,
+    ///      and one payment (whale-pass and ETH shapes, fresh recipients).
+    function test_SingleItemColdMaximaAgainstDeclaredBounds() public {
+        vm.etch(ContractAddresses.CRAPS_ENGINE, type(DecimatorPricingFlatProbe).runtimeCode);
+        for (uint8 shape = 1; shape <= 3; ++shape) {
+            _field(1000, 400 + shape, false, shape);
+            _settleOneByOne();
+        }
+        uint256 flatRun = maxOneRun;
+        fieldPool = 2000 ether;
+        _field(1000, 410, false, 0);
+        _settleOneByOne();
+        fieldPool = 100 ether;
+        _field(1000, 411, false, 0);
+        _settleOneByOne();
+
+        // The engine's ceiling: 511 rolls before 48 shooters, the heaviest named board, a
+        // bankroll no run can bust. Seeds are searched for runs that reach the roll bound.
+        vm.etch(ContractAddresses.CRAPS_ENGINE, type(CrapsEngine).runtimeCode);
+        DecimatorEngineMeter em = new DecimatorEngineMeter();
+        uint256 chips = 3 | 3 << 9 | 1 << 24; // seven named chips
+        uint256 boost = (0x050c070c0a0c0e0c120c140c190c1e0c >> (7 << 4)) & 0xFFFF;
+        uint256 ceilingRuns;
+        uint256 engineMax;
+        for (uint256 i; i < 400 && ceilingRuns < 4; ++i) {
+            vm.cool(ContractAddresses.CRAPS_ENGINE);
+            (uint256 used, uint256 rolls) = em.run(chips, keccak256(abi.encode("ceiling", i)), 1e45, boost);
+            if (rolls == 511) {
+                ++ceilingRuns;
+                if (used > engineMax) engineMax = used;
+            }
+        }
+        assertGt(ceilingRuns, 0, "a run reached the 511-roll ceiling");
+        uint256 runWorst = flatRun + engineMax;
+        emit log_named_uint("DEC one heads run, flat engine, worst heap (cold)", flatRun);
+        emit log_named_uint("DEC engine 511-roll ceiling run (cold)", engineMax);
+        emit log_named_uint("DEC run worst = flat run + engine ceiling", runWorst);
+        emit log_named_uint("DEC RANK cold max", maxRankGas);
+        emit log_named_uint("DEC one payment cold max", maxOnePay);
+        assertLe(runWorst, GasBounds.DECIMATOR_RUN_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS, "run fits its bound");
+        assertLe(maxRankGas, GasBounds.DECIMATOR_RANK_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS, "rank fits its bound");
+        assertLe(maxOnePay, GasBounds.DECIMATOR_PAYMENT_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS, "payment fits its bound");
+        assertLe(GasBounds.DECIMATOR_RUN_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + 2_000, 10_000_000);
     }
 
     function _report(string memory label) private {

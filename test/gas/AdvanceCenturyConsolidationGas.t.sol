@@ -563,6 +563,8 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         assertEq(quest, 1, "new level quest must roll");
         if (expectHousePass) assertGt(highPasses, 0, "house pass credit must execute");
         assertLt(used, GasBounds.POOL_CONSOLIDATION, "native century phase exceeds saved admission bound");
+        assertLe(GasBounds.POOL_CONSOLIDATION + GasBounds.DAILY_PHASE_TAIL + MineFlipGas.CHECK_RESERVE, CAP,
+            "declared consolidation plus tail exceeds the 10M chunk limit");
     }
 }
 

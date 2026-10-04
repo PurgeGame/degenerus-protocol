@@ -7,6 +7,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IDegenerusGameAdvanceModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
 
@@ -79,6 +80,64 @@ abstract contract SdgnrsRecycleGasFixture is BoundaryGasFixture {
         assertLe(chunk, 10_000_000, "century close checkpoint inside the realistic chunk limit");
     }
 
+    /// @dev Every account the close can touch, re-colded between snapshot measurements.
+    function _coolProtocol() private {
+        address[23] memory accounts = [
+            address(game), address(sdgnrs), address(dgnrs), address(coinflip), address(coin), address(wwxrp),
+            address(quests), address(jackpots), address(affiliate), address(vault), address(deityPass),
+            address(crapsBattle), address(crapsEngine), address(jackpotBattle), address(parimutuel),
+            address(recordBounty), address(mockStETH), address(afkingSubToken), address(gnrus),
+            ContractAddresses.GAME_ADVANCE_MODULE, ContractAddresses.GAME_JACKPOT_MODULE,
+            ContractAddresses.GAME_TICKET_MODULE, ContractAddresses.GAME_WHALE_MODULE
+        ];
+        for (uint256 i; i < accounts.length; ++i) vm.cool(accounts[i]);
+    }
+
+    /// @dev The century-close branch alone: the cold checkpoint admitted to the branch, minus the
+    ///      same cold checkpoint declined at the branch's admission check (delegatecall frame,
+    ///      entry reads and return). The branch must fit TRANSITION_CLOSE, and the smallest
+    ///      allowance that admits the close must complete it inside its own meter.
+    function _checkColdCloseBranch() internal {
+        bytes memory realCode = address(game).code;
+        vm.etch(address(game), type(RecycleSessionSeeder).runtimeCode);
+        RecycleSessionSeeder host = RecycleSessionSeeder(payable(address(game)));
+        uint256 base = vm.snapshotState();
+        _coolProtocol();
+        (bool admittedLow, uint256 declined) = host.measuredDailyPhase(1_000_000);
+        assertFalse(admittedLow, "a 1M allowance cannot admit the close");
+        assertTrue(vm.revertToState(base));
+        _coolProtocol();
+        (bool done, uint256 full) = host.measuredDailyPhase(10_000_000);
+        assertTrue(done, "the close completed in one checkpoint");
+        uint256 branch = full - declined;
+
+        uint256 lo = 1_000_000;
+        uint256 hi = 10_000_000;
+        while (lo + 1 < hi) {
+            uint256 mid = (lo + hi) / 2;
+            assertTrue(vm.revertToState(base));
+            _coolProtocol();
+            try host.measuredDailyPhase(mid) returns (bool closed, uint256) {
+                if (closed) hi = mid;
+                else lo = mid;
+            } catch {
+                hi = mid;
+            }
+        }
+        assertTrue(vm.revertToState(base));
+        _coolProtocol();
+        (bool closedAtMinimum,) = host.measuredDailyPhase(hi);
+        vm.etch(address(game), realCode);
+        emit log_named_uint("century close branch alone, cold", branch);
+        emit log_named_uint("declined checkpoint (frame, entry reads, return), cold", declined);
+        emit log_named_uint("smallest admitting allowance", hi);
+        emit log_named_uint("declared TRANSITION_CLOSE", GasBounds.TRANSITION_CLOSE);
+        assertTrue(closedAtMinimum, "the smallest admitting allowance completes the close");
+        assertLe(branch, GasBounds.TRANSITION_CLOSE, "century close branch exceeds TRANSITION_CLOSE");
+        assertLe(GasBounds.TRANSITION_CLOSE + GasBounds.DAILY_PHASE_TAIL + MineFlipGas.CHECK_RESERVE, 10_000_000,
+            "declared close plus tail exceeds the 10M chunk limit");
+    }
+
     function _checkColdClose() internal {
         // setUp was a separate transaction. No production storage is read before measurement.
         // A realistic 10M allowance must succeed and complete the close; the engine keeps admitting
@@ -124,10 +183,12 @@ contract SdgnrsRecycleNonemptyPoolsGasTest is SdgnrsRecycleGasFixture {
     function setUp() public { _setupRecycle(false); }
     function testColdCloseWithNonemptyPools() public { _checkColdClose(); }
     function testColdCloseChunkWithNonemptyPools() public { _checkColdCloseChunk(); }
+    function testColdCloseBranchWithNonemptyPools() public { _checkColdCloseBranch(); }
 }
 
 contract SdgnrsRecycleEmptyPoolsGasTest is SdgnrsRecycleGasFixture {
     function setUp() public { _setupRecycle(true); }
     function testColdCloseWithEmptyPoolsAndInventory() public { _checkColdClose(); }
     function testColdCloseChunkWithEmptyPoolsAndInventory() public { _checkColdCloseChunk(); }
+    function testColdCloseBranchWithEmptyPoolsAndInventory() public { _checkColdCloseBranch(); }
 }

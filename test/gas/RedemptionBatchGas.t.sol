@@ -39,7 +39,84 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         assertTrue(done);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
         uint256 chunks = ((uint256(160 ether) * uint256(roll) / 100) / 2 + 5 ether - 1) / 5 ether;
-        assertLe(used, 350_000 + chunks * 250_000 + 80_000, "whole beneficiary fits admission bound");
+        assertLe(used, _declared(chunks), "whole beneficiary fits admission bound");
+    }
+
+    /// @dev The admission a beneficiary with `chunks` lootbox chunks is charged, plus the tail.
+    function _declared(uint256 chunks) private pure returns (uint256) {
+        return GasBounds.REDEMPTION_BASE_GAS + chunks * GasBounds.REDEMPTION_CHUNK_GAS + GasBounds.REDEMPTION_TAIL_GAS;
+    }
+
+    /// @dev One cold beneficiary of `base` ETH at `roll`, settled alone. `fundingMode` 1 funds the
+    ///      reserve all in stETH, 2 mixes 1/7 ETH; `escrowWin` gives the claim a won FLIP escrow.
+    function _coldSingleClaim(uint256 base, uint16 roll, uint256 word, uint8 fundingMode, bool escrowWin)
+        private returns (uint256 used, uint256 chunks)
+    {
+        uint24 day = game.currentDayView();
+        uint256 supply = sdgnrs.totalSupply();
+        (uint256 freeBacking,) = sdgnrs.previewBurnValue(supply);
+        if (escrowWin) {
+            vm.mockCall(address(coinflip), abi.encodeWithSignature("redeemableFlipBacking()"), abi.encode(uint256(1e33)));
+            vm.mockCall(address(coinflip), abi.encodeWithSignature("withdrawRedeemedFlip(uint256)"), "");
+        }
+        _burn(alice, (base * supply + freeBacking - 1) / freeBacking);
+        vm.clearMockedCalls();
+        if (escrowWin) {
+            (,, uint96 escrow) = sdgnrs.pendingRedemptions(alice, day);
+            assertGt(escrow, 0, "escrow variant carries FLIP escrow");
+            vm.mockCall(address(coinflip), abi.encodeWithSignature("getCoinflipDayResult(uint24)", day + 1),
+                abi.encode(uint16(150), true));
+        }
+        (uint96 owed,,) = sdgnrs.pendingRedemptions(alice, day);
+        uint256 rolled = uint256(owed) * roll / 100;
+        uint256 lootbox = rolled - rolled / 2;
+        chunks = lootbox < 0.01 ether ? 0 : (lootbox - 1) / 5 ether + 1;
+        _resolve(day, roll, word);
+        if (fundingMode != 0) {
+            uint256 reserve = sdgnrs.pendingRedemptionEthValue();
+            uint256 ethPart = fundingMode == 1 ? 0 : reserve / 7;
+            vm.deal(address(sdgnrs), ethPart);
+            mockStETH.mint(address(sdgnrs), reserve - ethPart);
+        }
+        _coolSettlementState();
+        vm.prank(address(game));
+        uint256 beforeGas = gasleft();
+        assertTrue(sdgnrs.runRedemptionWork(9_000_000).done);
+        used = beforeGas - gasleft() + 21_000;
+        vm.clearMockedCalls();
+        assertEq(sdgnrs.pendingRedemptionEthValue(), 0, "claim settled");
+    }
+
+    /// @dev Per-chunk calibration: the cold maximum over words, funding modes and the won-escrow
+    ///      leg for beneficiaries with 0, 1, 2 and 28 lootbox chunks. Each stays inside its
+    ///      admission, and the largest beneficiary's admission stays inside one 10M chunk.
+    function test_ColdSingleBeneficiaryChunkShapes() public {
+        uint256[5] memory bases = [uint256(0.01 ether), 5.7 ether, 11.4 ether, 28.5 ether, 160 ether];
+        uint256[5] memory expect = [uint256(0), 1, 2, 5, 28];
+        for (uint256 s; s < 5; ++s) {
+            uint256 worst;
+            uint256 words = s == 4 ? 12 : s == 3 ? 24 : 48;
+            for (uint256 w; w < words; ++w) {
+                for (uint8 mode; mode < 3; ++mode) {
+                    for (uint256 e; e < 2; ++e) {
+                        uint256 snap = vm.snapshotState();
+                        (uint256 used, uint256 chunks) = _coldSingleClaim(
+                            bases[s], 175, uint256(keccak256(abi.encode("chunk shape", s, w))), mode, e == 1
+                        );
+                        assertEq(chunks, expect[s], "shape chunk count");
+                        assertLe(used, _declared(chunks), "cold beneficiary fits its admission");
+                        if (used > worst) worst = used;
+                        vm.revertToState(snap);
+                    }
+                }
+            }
+            emit log_named_uint(string.concat("REDEEM cold max, chunks=", vm.toString(expect[s])), worst);
+            emit log_named_uint(string.concat("REDEEM declared, chunks=", vm.toString(expect[s])), _declared(expect[s]));
+        }
+        // The admitted self-call keeps its whole bound after EIP-150 retention.
+        uint256 head = GasBounds.REDEMPTION_BASE_GAS + 28 * GasBounds.REDEMPTION_CHUNK_GAS;
+        assertLe(head + head / 63 + 12_000 + GasBounds.REDEMPTION_TAIL_GAS + 2_000, 10_000_000,
+            "maximum beneficiary admission is one realistic chunk");
     }
 
     function test_ColdMaxBeneficiaryThroughRouter() public {
@@ -74,9 +151,13 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
     ///      The engine keeps admitting chunks while the allowance covers the next declared bound, so
     ///      the whole call's gas is reported, not bounded; per-chunk bounds are asserted separately.
     function _coldRouterGas() private returns (uint256 used) {
+        used = _coldRouterGasWith(10_000_000);
+    }
+
+    function _coldRouterGasWith(uint256 allowance) private returns (uint256 used) {
         _coolSettlementState();
         uint256 beforeGas = gasleft();
-        game.mineFlip{gas: 10_000_000}();
+        game.mineFlip{gas: allowance}();
         used = beforeGas - gasleft() + 21_000;
     }
 
@@ -84,7 +165,8 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         uint24 day = game.currentDayView();
         address[] memory players = _queueBurners(3, sdgnrs.totalSupply() * 16 / 1000);
         _resolve(day, 175, 99);
-        emit log_named_uint("cold_two_maximum_router_gas", _coldRouterGas());
+        // A 4M allowance admits two maximum beneficiaries; the third's admission no longer fits.
+        emit log_named_uint("cold_two_maximum_router_gas", _coldRouterGasWith(4_000_000));
         (uint96 base,,) = sdgnrs.pendingRedemptions(players[2], day);
         assertGt(base, 0, "next beneficiary remains whole");
         assertTrue(sdgnrs.redemptionSettlementPending());

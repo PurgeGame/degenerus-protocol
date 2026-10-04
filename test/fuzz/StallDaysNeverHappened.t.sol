@@ -57,8 +57,11 @@ contract StallDaysNeverHappened is DeployProtocol {
         assertTrue(mockVRF.lastRequestId() != reqR, "W's request is a new one");
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), WORD_FRESH);
         // The gap is its own checkpoint now (DailyGap, then DailyApply): run exactly the gap
-        // chunk (a 1.5M allowance never admits DAILY_GAP, so the lead-in calls stop before it).
-        for (uint256 i; i < 8 && game.nextMinerAction() != 5; ++i) game.mineFlip{gas: 1_500_000}();
+        // chunk (DAILY_GAP plus the engine reserves never admits DAILY_GAP plus its check reserve,
+        // so the lead-in calls stop before it).
+        for (uint256 i; i < 8 && game.nextMinerAction() != 5; ++i) {
+            game.mineFlip{gas: GasBounds.DAILY_GAP + GasBounds.ENGINE_BOUNDARY + GasBounds.ENGINE_RETURN}();
+        }
         assertEq(game.nextMinerAction(), 5, "next chunk is the gap backfill");
         game.mineFlip{gas: GasBounds.DAILY_GAP + GasBounds.ENGINE_BOUNDARY + GasBounds.ENGINE_RETURN + 200_000}(); // backfill tx
         assertTrue(game.rngLocked(), "lock still held after the backfill");

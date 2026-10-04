@@ -38,14 +38,12 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
     uint256 internal constant CALL_OVERHEAD = GasBounds.TICKET_CALL_OVERHEAD;
 
     uint256 private constant DIRECT_TICKET_DOMAIN = uint256(keccak256("DEGENERUS_DIRECT_JACKPOT_TICKETS_V1"));
-    // Eight packed draws (including padding redraws), cached deity ID, batch
-    // award event and loop work. Trait writes have their separate round bound.
-    uint256 private constant DIRECT_GROUP_GAS = 250_000;
-    // Bucket writes dominate a round: the worst quadrant mix is two rare groups
-    // (sixteen appends into distinct buckets) plus two common words, about 0.57M
-    // per quadrant and 2.3M per round with every slot cold; the shuffle and the
-    // packed reveal event add under 0.2M. A realistic round measures about 0.6M.
-    uint256 internal constant DIRECT_ROUND_GAS_MAX = 3_000_000;
+    // Eight packed draws (3.4k each cold) with seven padding redraws (2.5k each), cached
+    // deity ID, batch award event and loop work: 52k. Trait writes have the round bound.
+    uint256 internal constant DIRECT_GROUP_GAS = 65_000;
+    // Bucket writes dominate a round. Sixteen fresh common groups: 0.80M measured. Each
+    // rare group adds 0.19M; two rare colours in every quadrant (eight groups): 2.30M.
+    uint256 internal constant DIRECT_ROUND_GAS_MAX = 2_800_000;
 
     event JackpotTicketWin(
         address indexed winner, uint24 indexed lvl, uint16 indexed trait,

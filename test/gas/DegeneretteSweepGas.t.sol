@@ -42,6 +42,7 @@ contract DegeneretteSweepGas is DeployProtocol {
     }
 
     bool private distinctOwners;
+    bool private smallPool;
 
     function _bettor(uint256 i) private returns (address who) {
         if (!distinctOwners) return bettor;
@@ -61,6 +62,16 @@ contract DegeneretteSweepGas is DeployProtocol {
             game.placeDegeneretteBet{value: currency == 0 ? uint256(perSpin) * spins : 0}(
                 address(0), currency, perSpin, spins, SYMBOL
             );
+        }
+        if (smallPool) {
+            // A small future pool caps every winning ETH spin, flipping its excess into the bet's box.
+            uint256 pools = uint256(vm.load(address(game), bytes32(PRIZE_POOLS_SLOT)));
+            vm.store(address(game), bytes32(PRIZE_POOLS_SLOT),
+                bytes32((pools & ((uint256(1) << 128) - 1)) | (uint256(0.5 ether) << 128)));
+        }
+        if (n != 0) {
+            lastRecordFlag = (game.degeneretteBetInfo(IDX, 1) >> 171) & 1;
+            emit log_named_uint("  first bet record flag", lastRecordFlag);
         }
         RecyclingState.seedWord(address(game), IDX, bytes32(word));
         // The day is sealed, as after a mid-day request: the delivered cohort's consumers are the
@@ -167,6 +178,80 @@ contract DegeneretteSweepGas is DeployProtocol {
 
     function testGasEth25() public {
         _marginal("eth_25spin", 0, 0.005 ether, 25, uint256(keccak256("sweep_gas_25")));
+    }
+
+    /// @dev Spin scores of one bet's spins for SYMBOL at IDX: wins (s >= 2) and highs (s >= 7).
+    function _spinScores(uint256 word, uint8 spins) private pure returns (uint256 wins, uint256 highs) {
+        for (uint8 i; i < spins; ++i) {
+            (uint8 s,) = Ref.score(
+                Ref.player(word, uint32(IDX), SYMBOL, i, false), Ref.house(word, uint32(IDX), i, false), SYMBOL >> 3
+            );
+            if (s >= 2) ++wins;
+            if (s >= 7) ++highs;
+        }
+    }
+
+    /// @dev The most winning spins found over a bounded search, optionally requiring a high spin.
+    function _maxWinWord(uint8 spins, bool needHigh, uint256 budget) private returns (uint256 best) {
+        uint256 bestWins;
+        for (uint256 k; k < budget; ++k) {
+            uint256 word = uint256(keccak256(abi.encodePacked("sweep_gas_maxwin", k)));
+            (uint256 wins, uint256 highs) = _spinScores(word, spins);
+            if (needHigh && highs == 0) continue;
+            if (wins > bestWins) { bestWins = wins; best = word; }
+        }
+        require(bestWins != 0, "no stress word");
+        (uint256 w, uint256 h) = _spinScores(best, spins);
+        emit log_named_uint("  stress word winning spins", w);
+        emit log_named_uint("  stress word high spins", h);
+    }
+
+    /// @dev The heaviest realistic 25-spin ETH bet: the most winning spins found, every win capped
+    ///      into the bet's box, at 1 ETH a spin.
+    function testGasEth25MaxWinCapped() public {
+        smallPool = true;
+        _marginal("eth_25spin_maxwin_capped", 0, 1 ether, 25, _maxWinWord(25, false, 400));
+    }
+
+    /// @dev As above, with at least one high-score spin (sDGNRS award) among the wins.
+    function testGasEth25MaxWinHighCapped() public {
+        smallPool = true;
+        _marginal("eth_25spin_maxwin_high_capped", 0, 1 ether, 25, _maxWinWord(25, true, 6000));
+    }
+
+    /// @dev The record claim's resolution spin chain: one cold 1-ETH bet that armed the claim
+    ///      against the same bet whose record mark was already out of reach.
+    function testGasRecordClaimSpin() public {
+        uint256 worstDelta;
+        uint256 worstArmed;
+        for (uint256 k; k < 24; ++k) {
+            uint256 word = uint256(keccak256(abi.encodePacked("sweep_gas_record", k)));
+            uint256 snap = vm.snapshotState();
+            (uint256 zero,) = _sweep(0, 0, 1 ether, 1, word);
+            vm.revertToState(snap);
+            (uint256 armed,) = _sweep(1, 0, 1 ether, 1, word);
+            assertEq(_recordFlagOfLastPlaced(), 1, "the first bet armed a record claim");
+            vm.revertToState(snap);
+            vm.prank(address(game));
+            coinflip.armRecord(1, address(0xDEAD), 1e30);
+            (uint256 plain,) = _sweep(1, 0, 1 ether, 1, word);
+            assertEq(_recordFlagOfLastPlaced(), 0, "an out-of-reach mark arms nothing");
+            vm.revertToState(snap);
+            uint256 delta = armed > plain ? armed - plain : 0;
+            if (delta > worstDelta) worstDelta = delta;
+            if (armed - zero > worstArmed) worstArmed = armed - zero;
+        }
+        emit log_named_uint("RECORD cold claim spin delta, worst", worstDelta);
+        emit log_named_uint("RECORD cold first bet with claim, worst", worstArmed);
+        assertLe(worstArmed, _declared(0, 1) + GasBounds.DEGENERETTE_RECORD_GAS + GasBounds.DEGENERETTE_TAIL_GAS
+            + GasBounds.ENGINE_BOUNDARY, "a record bet fits its admission");
+        assertLe(worstDelta, GasBounds.DEGENERETTE_RECORD_GAS, "record spin fits its bound");
+    }
+
+    uint256 private lastRecordFlag;
+
+    function _recordFlagOfLastPlaced() private view returns (uint256) {
+        return lastRecordFlag;
     }
 
     function testGasFlip1Losing() public {
