@@ -41,14 +41,8 @@ async function giveSDGNRS(sdgnrs, game, recipient, amount) {
   await seedDailyWord(game, await game.currentDayView(), BigInt("0x" + "de".repeat(32)));
 }
 
-// Helper: credit `amount` (wei) to sDGNRS's claimableWinnings entry in the Game
-// contract and bump claimablePool to match. v47: the gambling-burn path physically
-// segregates the MAX (175%) payout out of `claimableWinnings[SDGNRS]` via the new
-// CHECKED `pullRedemptionReserve` (R3, fail-closed). A burn with proportional ETH
-// backing therefore requires this segregation source to be funded — otherwise the
-// checked debit reverts (panic 0x11) by design. Mirrors the foundry repair in
-// test/fuzz/StakedStonkRedemption.t.sol:97-105 (slot 7 = claimableWinnings mapping,
-// slot 1 upper-128 = claimablePool — authoritative v47 slots per Phase 323-01).
+// Seed Game claimable and its matching pool liability, both included in the live
+// estimate and in the eventual request-close price. Burns do not move this backing.
 async function fundGameClaimableForSdgnrs(gameAddr, sdgnrsAddr, amount) {
   const CLAIMABLE_WINNINGS_SLOT = 7n;
   const CLAIMABLE_POOL_SLOT = 1n;
@@ -490,7 +484,7 @@ describe("DGNRS", function () {
       expect(ev.args.sdgnrsAmount).to.equal(amount);
     });
 
-    it("burn with ETH backing pays ETH proportionally", async function () {
+    it("burn with ETH backing records unpriced batch tokens", async function () {
       const { sdgnrs, game, alice } = await loadFixture(deployFullProtocol);
       const sdgnrsAmount = eth("100000"); // 100k sDGNRS
       await giveSDGNRS(sdgnrs, game, alice.address, sdgnrsAmount);
@@ -513,24 +507,24 @@ describe("DGNRS", function () {
         params: [gameAddr],
       });
 
-      // v47: fund the segregation source. The gambling-burn path pulls the MAX
-      // (175%) payout out of claimableWinnings[SDGNRS] via the CHECKED
-      // pullRedemptionReserve (R3, fail-closed) — unfunded, that checked debit
-      // reverts by design. Credit 100 ETH so the proportional segregation succeeds.
+      // Include Game claimable in the estimated backing; burning does not pull it.
       await fundGameClaimableForSdgnrs(gameAddr, sdgnrsAddr, eth("100"));
 
       // Preview before burn
       const [ethOut, flipOut] = await sdgnrs.previewBurnValue(sdgnrsAmount);
 
       // Burn — during active game this enters the gambling path (RedemptionSubmitted).
-      // ETH is segregated but not immediately paid; payout is deferred until redemption is claimed.
+      // Tokens burn immediately; the next request fixes their proportional payout base.
       const tx = await sdgnrs.connect(alice).burn(sdgnrsAmount);
 
       const ev = await getEvent(tx, sdgnrs, "RedemptionSubmitted");
       expect(ev.args.player).to.equal(alice.address);
       expect(ev.args.sdgnrsAmount).to.equal(sdgnrsAmount);
-      // ETH value is segregated proportionally and held pending RNG resolution
-      expect(ev.args.ethValueOwed).to.be.gt(0n);
+      // Pricing and reservation happen when the next live request closes this batch.
+      expect(ev.args.batchId).to.equal((await sdgnrs.redemptionBatchState()).openBatch);
+      const pending = await sdgnrs.pendingRedemptions(alice.address, ev.args.batchId);
+      expect(pending.tokens).to.equal(sdgnrsAmount);
+      expect(await sdgnrs.pendingRedemptionEthValue()).to.equal(0n);
     });
 
     it("RedemptionSubmitted event emitted with correct fields during active game", async function () {
@@ -556,7 +550,7 @@ describe("DGNRS", function () {
       expect(await sdgnrs.totalSupply()).to.equal(supplyBefore - amount);
     });
 
-    it("burn with stETH backing pays stETH proportionally", async function () {
+    it("burn with stETH backing records unpriced batch tokens", async function () {
       const { sdgnrs, game, mockStETH, deployer, alice } = await loadFixture(deployFullProtocol);
       const sdgnrsAmount = eth("100000");
       await giveSDGNRS(sdgnrs, game, alice.address, sdgnrsAmount);
@@ -587,24 +581,19 @@ describe("DGNRS", function () {
       const [valuePreview] = await sdgnrs.previewBurnValue(sdgnrsAmount);
       expect(valuePreview).to.be.gt(0n);
 
-      // v47: now fund the segregation source (claimableWinnings[SDGNRS]) so the
-      // CHECKED pullRedemptionReserve in the gambling-burn path succeeds. See the
-      // ETH-backing test above for the full rationale (R3 fail-closed segregation).
-      // (The gambling burn defers payout — RedemptionSubmitted, no immediate
-      // transfer — so funding claimable here does not retroactively change the
-      // preview taken above.)
       await fundGameClaimableForSdgnrs(gameAddr, sdgnrsAddr, eth("100"));
 
-      // Burn — during active game this enters the gambling path (RedemptionSubmitted).
-      // stETH is counted in ethValueOwed (combined ETH+stETH backing) and held pending RNG
-      // resolution; stETH is not immediately transferred to alice.
+      // A live burn records raw tokens; stETH stays in custody until settlement.
       const stethBefore = await mockStETH.balanceOf(alice.address);
       const tx = await sdgnrs.connect(alice).burn(sdgnrsAmount);
       const ev = await getEvent(tx, sdgnrs, "RedemptionSubmitted");
       expect(ev.args.player).to.equal(alice.address);
       expect(ev.args.sdgnrsAmount).to.equal(sdgnrsAmount);
-      // Combined ETH+stETH value is segregated proportionally
-      expect(ev.args.ethValueOwed).to.be.gt(0n);
+      // The burn retains its holder share until request close.
+      expect(ev.args.batchId).to.equal((await sdgnrs.redemptionBatchState()).openBatch);
+      const pending = await sdgnrs.pendingRedemptions(alice.address, ev.args.batchId);
+      expect(pending.tokens).to.equal(sdgnrsAmount);
+      expect(await sdgnrs.pendingRedemptionEthValue()).to.equal(0n);
       // No immediate stETH transfer on the gambling path
       const stethAfter = await mockStETH.balanceOf(alice.address);
       expect(stethAfter).to.equal(stethBefore);

@@ -417,28 +417,25 @@ interface IDegenerusGameLootboxModule {
     ) external payable;
 
     /// @notice Resolves an sDGNRS redemption's full lootbox leg (auth, funding-mix pull, pool
-    ///         credit, 5-ETH chunked resolution) — delegatecall target of the Game's thin stub.
+    ///         credit, one box order of up to 20 equal boxes) — delegatecall target of the
+    ///         Game's thin stub.
     /// @param player Player receiving lootbox rewards
     /// @param amount Total lootbox value (msg.value ETH + the stETH remainder pulled inside)
     /// @param rngWord RNG word for entropy
     /// @param activityScore Raw activity score (whole points) snapshotted at burn submission
+    /// @param batchId Redemption batch of the claim (tags the order's seeds and events)
     function resolveRedemptionLootbox(
         address player,
         uint256 amount,
         uint256 rngWord,
-        uint16 activityScore
+        uint16 activityScore,
+        uint32 batchId
     ) external payable;
 
     /// @notice Credit the direct half of an sDGNRS redemption claim to `player`'s claimable winnings.
     /// @param player Claimant credited.
     /// @param amount Total direct-half value (msg.value ETH + the stETH remainder pulled here).
     function creditRedemptionDirect(address player, uint256 amount) external payable;
-
-    /// @notice Back an sDGNRS redemption reservation — segregate game-side ETH (ETH leg) or verify
-    ///         sDGNRS's cumulative ETH + stETH custody (custody leg); delegatecall target of the
-    ///         Game's thin stub. Fail-closed when neither leg covers.
-    /// @param amount The MAX 175% reservation for the burn.
-    function pullRedemptionReserve(uint256 amount) external;
 
     /// @notice Resolve an AfKing-subscription box at the LIVE level from a caller-passed
     ///         frozen-day word.

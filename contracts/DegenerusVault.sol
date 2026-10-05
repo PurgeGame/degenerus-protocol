@@ -148,8 +148,8 @@ interface IERC721Sweep {
 interface IsDGNRSBurn {
     /// @notice Burn sDGNRS to claim proportional backing assets.
     function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut);
-    /// @notice Claim a resolved gambling-burn redemption for `player` on day `day` (per-(player, day) composite key).
-    function claimRedemption(address player, uint24 day) external;
+    /// @notice Claim a resolved gambling-burn redemption for `player` in batch `batchId` after game over.
+    function claimRedemption(address player, uint32 batchId) external;
 }
 
 /// @notice Interface for WWXRP vault-minting used by DegenerusVault.
@@ -980,14 +980,13 @@ contract DegenerusVault {
         return sdgnrsToken.burn(amount);
     }
 
-    /// @notice Claim a resolved sDGNRS gambling-burn redemption for day `day` on behalf of the vault.
-    /// @dev Caller must pass the wall-clock day for which the vault holds an unresolved+resolved
-    ///      gambling-burn entry (per-(player, day) composite key). Reverts if no such entry exists or the
-    ///      day has not been resolved.
-    /// @param day Wall-clock day whose redemption to claim.
+    /// @notice Claim a resolved sDGNRS gambling-burn redemption in batch `batchId` on behalf of the
+    ///         vault once the game is over (live redemptions settle automatically).
+    /// @dev Reverts if the vault holds no claim in that batch or the batch has no roll.
+    /// @param batchId Redemption batch whose claim to settle.
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
-    function sdgnrsClaimRedemption(uint24 day) external onlyVaultOwner {
-        sdgnrsToken.claimRedemption(address(this), day);
+    function sdgnrsClaimRedemption(uint32 batchId) external onlyVaultOwner {
+        sdgnrsToken.claimRedemption(address(this), batchId);
     }
 
     /// @notice Sweep a foreign ERC20 out of the vault.

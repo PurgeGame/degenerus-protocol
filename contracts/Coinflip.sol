@@ -51,6 +51,7 @@ import {IDegenerusQuests} from "./interfaces/IDegenerusQuests.sol";
 import {IDegenerusJackpots} from "./interfaces/IDegenerusJackpots.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 import {GameTimeLib} from "./libraries/GameTimeLib.sol";
+import {FlipRoundLib} from "./libraries/FlipRoundLib.sol";
 
 /// @notice Interface for FLIP contract methods used by Coinflip.
 interface IFLIP {
@@ -224,9 +225,6 @@ contract Coinflip {
     error TakeProfitTooLarge();
     /// @notice Thrown when an auto-rebuy action is attempted while today's flip is frozen for RNG.
     error RngLocked();
-    /// @notice Thrown when sDGNRS's redemption submit (withdrawRedeemedFlip) asks for more FLIP
-    ///         backing than its settled claimable plus auto-rebuy carry hold.
-    error Insufficient();
     /// @notice Thrown when the caller acts on behalf of a player without that player's
     ///         operator approval.
     error NotApproved();
@@ -251,8 +249,6 @@ contract Coinflip {
     ///      player per day. Eight 32-bit lanes pack one storage word.
     uint256 private constant STAKE_LANE_MAX = type(uint32).max;
     uint256 private constant COINFLIP_LOSS_WWXRP_REWARD = 1;
-    uint16 private constant COINFLIP_EXTRA_MIN_PERCENT = 78;
-    uint16 private constant COINFLIP_EXTRA_RANGE = 38;
     uint16 private constant BPS_DENOMINATOR = 10_000;
     uint16 private constant RECYCLE_BONUS_BPS = 75;
     /// @dev Daily drip into the shared record pool, applied at settlement. Adding the
@@ -283,7 +279,6 @@ contract Coinflip {
     uint256 private constant BIGGEST_DICE_RUN_MIN = 1_000_000;
     /// @dev Domain tag for the BAF weighted-draw winner roll.
     bytes32 private constant BAF_DRAW_TAG = "COINFLIP_BAF_DRAW_WINNER";
-    bytes32 private constant REWARD_PERCENT_TAG = keccak256("degenerus.coinflip.reward-percent");
     uint16 private constant COIN_CLAIM_DAYS = 365;
     uint16 private constant COIN_CLAIM_FIRST_DAYS = 180;
     uint16 private constant AUTO_REBUY_OFF_CLAIM_DAYS_MAX = 1460;
@@ -438,9 +433,9 @@ contract Coinflip {
     /// @notice Restricts access to authorized flip creditors.
     /// @dev Allowed callers: GAME (delegatecall modules — incl. the afking router's
     ///      in-context creditFlip bounty, which pays AS the GAME, not a separate keeper contract),
-    ///      QUESTS (level quest rewards), AFFILIATE, ADMIN, SDGNRS (redemption win-credit at claim:
-    ///      the escrowed slice was already removed from sDGNRS's backing at submit via
-    ///      withdrawRedeemedFlip, so the claim-time mint to the redeemer is FLIP-neutral),
+    ///      QUESTS (level quest rewards), AFFILIATE, ADMIN, SDGNRS (redemption win-credit at settlement:
+    ///      the escrowed slice was already removed from sDGNRS's backing at batch close via
+    ///      withdrawRedeemedFlip, so the settlement mint to the redeemer is FLIP-neutral),
     ///      WWXRP (daily-draw prizes: a fixed, RNG-verified stake credited to the
     ///      recorded winner), PARIMUTUEL (growth-market payouts — re-mints of stakes the
     ///      market burned at placement — plus the gas-pegged settlement bounty),
@@ -1496,35 +1491,13 @@ contract Coinflip {
         _settleCoinflipDay(epoch, rewardPercent, win);
     }
 
-    /// @dev Tagged reward derivation for normally resolved days.
-    function _coinflipReward(uint8 bonus, uint256 rngWord, uint24 epoch) private pure returns (uint16 rewardPercent) {
-        // Separate reward size from every other draw using the daily word.
-        uint256 seedWord = uint256(keccak256(abi.encodePacked(REWARD_PERCENT_TAG, rngWord, epoch)));
-
-        // Determine payout bonus percent:
-        // ~5% each for extreme bonus outcomes (50% or 150%), rest is [78%, 115%]
-        // Bonus days add +2 (or +6 on x0 levels), so max is 156% on an x0 bonus day
-        uint256 roll = seedWord % 20;
-
-        if (roll == 0) {
-            rewardPercent = 50; // Unlucky: 50% bonus (1.5x total)
-        } else if (roll == 1) {
-            rewardPercent = 150; // Lucky: 150% bonus (2.5x total)
-        } else {
-            // Normal bonus range: [78%, 115%]
-            rewardPercent = uint16(
-                (seedWord % COINFLIP_EXTRA_RANGE) + COINFLIP_EXTRA_MIN_PERCENT
-            );
-        }
-        // Apply the day's coinflip bonus, precomputed by the caller from frozen protocol state
-        // (not a player-flippable flag): 0 on a normal day, +2 on a bonus day (a level-0 day,
-        // the second day of a level's jackpot phase, or the first purchase day after a turbo
-        // collapse), +6 on an x0 BAF-level bonus day. Sized so a recycling player nets
-        // ~99.9% / ~101.9% RTP after the recycle bonus compounds. Adding 0 is a no-op.
-        unchecked {
-            rewardPercent += bonus;
-        }
-
+    /// @dev Tagged reward derivation for normally resolved days. `bonus` is precomputed by the
+    ///      caller from frozen protocol state (not a player-flippable flag): 0 on a normal day,
+    ///      +2 on a bonus day (a level-0 day, the second day of a level's jackpot phase, or the
+    ///      first purchase day after a turbo collapse), +6 on an x0 BAF-level bonus day. Sized so
+    ///      a recycling player nets ~99.9% / ~101.9% RTP after the recycle bonus compounds.
+    function _coinflipReward(uint8 bonus, uint256 rngWord, uint24 epoch) private pure returns (uint16) {
+        return FlipRoundLib.coinflipRewardPercent(bonus, rngWord, epoch);
     }
 
     /// @notice Resolve at most 31 skipped days at double-or-nothing payouts.
@@ -1697,32 +1670,34 @@ contract Coinflip {
         return uint256(state.claimableStored) + uint256(state.autoRebuyCarry);
     }
 
-    /// @notice Remove `base` whole FLIP of sDGNRS's own FLIP backing at redemption submit (sDGNRS only).
+    /// @notice Remove up to `base` whole FLIP of sDGNRS's own FLIP backing as a redemption batch
+    ///         closes (sDGNRS only). Never reverts on the amount.
     /// @dev Waterfall: settled claimable (consumed, no mint) → auto-rebuy carry (decremented) —
     ///      sDGNRS holds no wallet balance, so its backing lives entirely in these two. Credits
-    ///      NOTHING — the redeemer's escrowed slice is paid later, only on the resolving day's
-    ///      coinflip win, via creditFlip, so the win path is a pure deferred mint of an amount
-    ///      already removed from sDGNRS's backing here. Fail-closed if the backing falls short
-    ///      (cannot happen: sDGNRS sizes base from the same settled backing read via
-    ///      redeemableFlipBacking earlier in the same submit).
+    ///      NOTHING — the batch escrow is paid later, only on the batch's synthetic flip win, via
+    ///      creditFlip, so the win path is a pure deferred mint of an amount already removed from
+    ///      sDGNRS's backing here. sDGNRS sizes `base` from redeemableFlipBacking in the same
+    ///      close, so the clamp to the carry only keeps the batch close total.
     /// @param base The whole-FLIP backing to remove from sDGNRS.
-    function withdrawRedeemedFlip(uint256 base) external {
+    /// @return removed Whole FLIP actually removed (equals `base` unless the clamp binds).
+    function withdrawRedeemedFlip(uint256 base) external returns (uint256 removed) {
         if (msg.sender != ContractAddresses.SDGNRS) revert OnlysDGNRS();
-        if (base == 0) return;
+        if (base == 0) return 0;
         address s = ContractAddresses.SDGNRS;
 
         // Consume the settled genesis seed reserve first (no token mint — removes a
-        // future mint of `consumed`).
-        uint256 consumed = _claimCoinflipsAmount(s, base, false);
-        uint256 remainder = base - consumed;
-        if (remainder == 0) return;
+        // future mint of `removed`).
+        removed = _claimCoinflipsAmount(s, base, false);
+        uint256 remainder = base - removed;
+        if (remainder == 0) return removed;
 
         // Decrement the rolling auto-rebuy carry for the rest (post-day-20 steady state).
         PlayerCoinflipState storage state = playerState[s];
         uint256 carry = state.autoRebuyCarry;
-        if (remainder > carry) revert Insufficient();
+        if (remainder > carry) remainder = carry;
         unchecked {
             state.autoRebuyCarry = uint128(carry - remainder);
+            removed += remainder;
         }
         _emitClaimState(s);
     }

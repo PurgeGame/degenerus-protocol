@@ -206,7 +206,7 @@ contract MinerNoProgressTest is Test {
     function _worker(DegenerusGameStorage.MinerAction action) private pure returns (address, bytes memory) {
         if (action == DegenerusGameStorage.MinerAction.Terminal) return (ContractAddresses.GAME_ADVANCE_MODULE, abi.encodeWithSignature("runTerminalPhase(uint256)"));
         if (action == DegenerusGameStorage.MinerAction.DailyPhase) return (ContractAddresses.GAME_ADVANCE_MODULE, abi.encodeWithSignature("runDailyPhase(uint256)"));
-        if (action == DegenerusGameStorage.MinerAction.Redemption) return (ContractAddresses.SDGNRS, abi.encodeWithSignature("runRedemptionWork(uint256)"));
+        if (action == DegenerusGameStorage.MinerAction.Redemption) return (ContractAddresses.SDGNRS, abi.encodeWithSignature("runRedemptionWork(uint256,uint256)"));
         if (action == DegenerusGameStorage.MinerAction.Afking) return (ContractAddresses.GAME_AFKING_MODULE, abi.encodeWithSignature("runAfkingWork(uint256)"));
         if (action == DegenerusGameStorage.MinerAction.HumanBoxes) return (ContractAddresses.GAME_AFKING_MODULE, abi.encodeWithSignature("runHumanBoxWork(uint256)"));
         if (action == DegenerusGameStorage.MinerAction.Degenerette) return (ContractAddresses.GAME_DEGENERETTE_MODULE, abi.encodeWithSignature("runDegeneretteWork(uint256)"));

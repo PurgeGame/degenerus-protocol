@@ -237,17 +237,6 @@ interface IDegenerusGame {
     /// @param randWord VRF entropy for the board.
     function emitDailyWinningTraits(uint256 randWord) external;
 
-
-    /// @notice Back an sDGNRS redemption reservation: segregate game-side ETH, or verify custody.
-    /// @dev Access: sDGNRS only. Called at gambling-burn submit, fail-closed. Two legs: when
-    ///      claimableWinnings[SDGNRS] AND the game's liquid ETH both cover `amount`, a CHECKED
-    ///      debit of claimableWinnings[SDGNRS] + claimablePool moves that ETH out to sDGNRS (ETH
-    ///      leg); otherwise sDGNRS's own ETH + stETH custody must cover every outstanding
-    ///      reservation plus this one, with no game-side move or ledger debit (custody leg). Either
-    ///      way the reservation is backed sDGNRS-side, so it is never part of the game's balance.
-    /// @param amount ETH value to reserve (the MAX 175% payout for the burn).
-    function pullRedemptionReserve(uint256 amount) external;
-
     /// @notice Pay the sDGNRS leg of an all-time record claim.
     /// @dev COINFLIP only. Pays the claim's accrued record-pool share at 1/500 scale
     ///      from the sDGNRS reward pool.

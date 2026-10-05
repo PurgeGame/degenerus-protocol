@@ -4,7 +4,7 @@ pragma solidity 0.8.34;
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {RedemptionCloseTools} from "./helpers/RedemptionCloseTools.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
@@ -103,7 +103,7 @@ contract ReviewDeadlineSeeder is DegenerusGame {
     }
 }
 
-contract RecoveredStallIntegrationTest is DeployProtocol {
+contract RecoveredStallIntegrationTest is RedemptionCloseTools {
     bytes private realCode;
 
     function setUp() public {
@@ -276,7 +276,7 @@ contract ReviewClaimSeeder is DegenerusGame {
     }
 }
 
-contract DecimatorLegEndingIdleTest is DeployProtocol {
+contract DecimatorLegEndingIdleTest is RedemptionCloseTools {
     bytes private realCode;
     address private winner = makeAddr("dec-winner");
     uint24 private constant DLVL = 1;
@@ -403,9 +403,9 @@ interface IReviewCoinflipMock {
     function claimCoinflipsForRedemption(address player, uint256 amount) external returns (uint256 claimed);
 }
 
-contract RedemptionEndingPendingTest is DeployProtocol {
+contract RedemptionEndingPendingTest is RedemptionCloseTools {
     address private playerA = makeAddr("redeemer");
-    uint24 private burnDay;
+    uint32 private burnDay;
 
     function setUp() public {
         _deployProtocol();
@@ -433,13 +433,14 @@ contract RedemptionEndingPendingTest is DeployProtocol {
         vm.store(address(game), bytes32(uint256(1)), bytes32((s1 & type(uint128).max) | (uint256(100 ether) << 128)));
 
         _primeCurrentDayRng();
-        burnDay = game.currentDayView();
+        burnDay = _openBatch();
         vm.prank(playerA);
         sdgnrs.burn(1_000_000 ether);
         vm.warp(vm.getBlockTimestamp() + 1 days);
         _primeCurrentDayRng();
+        _closeFunded();
         vm.prank(address(game));
-        sdgnrs.resolveRedemptionPeriod(100, burnDay);
+        sdgnrs.resolveTerminalRedemptions();
     }
 
     function _mockEnding(bool over) private {
@@ -448,24 +449,25 @@ contract RedemptionEndingPendingTest is DeployProtocol {
     }
 
     function test_claimWaitsWhileLivenessReadsTrueThenSettlesTerminal() public {
-        (uint96 owed,,) = sdgnrs.pendingRedemptions(playerA, burnDay);
+        (uint128 owed,) = sdgnrs.pendingRedemptions(playerA, burnDay);
         assertGt(owed, 0, "harness: a claim is pending");
 
         _mockEnding(false);
         vm.prank(playerA);
         vm.expectRevert(NOT_GAME_OVER);
         sdgnrs.claimRedemption(playerA, burnDay);
-        (uint96 still,,) = sdgnrs.pendingRedemptions(playerA, burnDay);
+        (uint128 still,) = sdgnrs.pendingRedemptions(playerA, burnDay);
         assertEq(still, owed, "nothing settled while pending");
 
         _mockEnding(true);
+        uint256 expected = _batchBase(playerA, burnDay);
         uint256 eth0 = playerA.balance;
         uint256 st0 = mockStETH.balanceOf(playerA);
         vm.prank(playerA);
         sdgnrs.claimRedemption(playerA, burnDay);
         uint256 got = (playerA.balance - eth0) + (mockStETH.balanceOf(playerA) - st0);
-        assertApproxEqAbs(got, owed, 2, "terminal after game over: the whole rolled value paid direct");
-        (uint96 cleared,,) = sdgnrs.pendingRedemptions(playerA, burnDay);
+        assertApproxEqAbs(got, expected, 2, "terminal after game over: the whole flat-roll value paid direct");
+        (uint128 cleared,) = sdgnrs.pendingRedemptions(playerA, burnDay);
         assertEq(cleared, 0, "claim consumed");
     }
 }
@@ -567,7 +569,7 @@ contract FoilDrainTerminalFlagTest is Test {
 // T3 — vault burn with the game holding mostly stETH
 // =====================================================================================
 
-contract VaultBurnStethFallbackTest is DeployProtocol {
+contract VaultBurnStethFallbackTest is RedemptionCloseTools {
     address private owner;
 
     function setUp() public {

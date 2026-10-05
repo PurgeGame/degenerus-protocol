@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
+import {RedemptionCloseTools} from "../fuzz/helpers/RedemptionCloseTools.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -39,7 +39,7 @@ interface IFlipCoinflipPlayerMock {
 ///         This file runs the REAL module chain with sDGNRS holding liquid ETH.
 ///
 /// @dev TEST-ONLY. Run: forge test --match-path test/repro/RedemptionLootboxPayableForward.t.sol -vv
-contract RedemptionLootboxPayableForward is DeployProtocol {
+contract RedemptionLootboxPayableForward is RedemptionCloseTools {
     // =====================================================================
     //                          CONSTANTS / SLOTS
     // =====================================================================
@@ -122,13 +122,7 @@ contract RedemptionLootboxPayableForward is DeployProtocol {
 
     /// @dev Resolve a day's pool by pranking the game contract (deterministic roll), mirroring the
     ///      Game's resolve hook: the resolve and the settlement-cohort word pin happen together.
-    function _resolveDay(uint32 dayToResolve, uint16 roll) internal {
-        vm.startPrank(address(game));
-        sdgnrs.resolveRedemptionPeriod(roll, uint24(dayToResolve));
-        sdgnrs.beginRedemptionSettlement(uint24(dayToResolve), SETTLEMENT_WORD);
-        vm.stopPrank();
-        _openSettlementStage(SETTLEMENT_WORD);
-    }
+    function _resolveDay(uint32 id, uint16 roll) internal { _resolveTestBatch(id, roll); }
 
     /// @dev Seed the Game's published, not-yet-complete read session for `word` with its ticket
     ///      stage done: the redemption consumer stage (stage 1), the only stage in which a live
@@ -144,7 +138,7 @@ contract RedemptionLootboxPayableForward is DeployProtocol {
     ///      settling the whole cohort. A refused claim would park instead of settling.
     function _settleCohort() internal {
         vm.prank(address(game));
-        assertTrue(sdgnrs.runRedemptionWork(9_000_000).done, "fixture: keeper drained the cohort");
+        assertTrue(sdgnrs.runRedemptionWork(batchWord, 9_000_000).done, "fixture: keeper drained the cohort");
         assertFalse(sdgnrs.redemptionSettlementPending(), "fixture: cohort cleared");
     }
 
@@ -165,14 +159,15 @@ contract RedemptionLootboxPayableForward is DeployProtocol {
     ///      REAL msg.value and pulls the rest as stETH — the mainnet funded state.
     function _burnResolveAndShapeCustody()
         internal
-        returns (uint24 dayD, uint256 ethDirect, uint256 lootboxEth)
+        returns (uint32 dayD, uint256 ethDirect, uint256 lootboxEth)
     {
-        dayD = game.currentDayView();
+        dayD = _openBatch();
         _primeCurrentDayRng();
         vm.prank(player);
         sdgnrs.burn(BURN_AMOUNT);
 
-        (uint96 owedBase, , ) = sdgnrs.pendingRedemptions(player, dayD);
+        _closeFunded();
+        uint256 owedBase = _batchBase(player, dayD);
         assertGt(uint256(owedBase), 0, "precondition: burn must record a positive claim base");
 
         vm.warp(block.timestamp + 1 days);
@@ -209,11 +204,11 @@ contract RedemptionLootboxPayableForward is DeployProtocol {
     ///         guard would refuse the entire claim (every mainnet claim, since a funded sDGNRS
     ///         always holds some liquid ETH).
     function test_LiveClaimSettlesWithForwardedEthLeg() public {
-        (uint24 dayD, uint256 ethDirect, uint256 lootboxEth) = _burnResolveAndShapeCustody();
+        (uint32 dayD, uint256 ethDirect, uint256 lootboxEth) = _burnResolveAndShapeCustody();
 
         uint256 gameValueBefore = address(game).balance + mockStETH.balanceOf(address(game));
         _settleCohort();
-        (uint96 owed, , ) = sdgnrs.pendingRedemptions(player, dayD);
+        (uint128 owed,) = sdgnrs.pendingRedemptions(player, dayD);
         assertEq(uint256(owed), 0, "the claim settled rather than parking");
 
         // Direct half lands as a game-claimable credit; the full rolled value reaches the game
@@ -236,12 +231,12 @@ contract RedemptionLootboxPayableForward is DeployProtocol {
     ///         claim's msg.value is still in flight — it must be payable or the claim is refused
     ///         one frame deeper than the outer fix.
     function test_LiveClaimSettlesWithBoonStateAndForwardedEthLeg() public {
-        (uint24 dayD, uint256 ethDirect, uint256 lootboxEth) = _burnResolveAndShapeCustody();
+        (uint32 dayD, uint256 ethDirect, uint256 lootboxEth) = _burnResolveAndShapeCustody();
         _injectBoonState(player);
 
         uint256 gameValueBefore = address(game).balance + mockStETH.balanceOf(address(game));
         _settleCohort();
-        (uint96 owed, , ) = sdgnrs.pendingRedemptions(player, dayD);
+        (uint128 owed,) = sdgnrs.pendingRedemptions(player, dayD);
         assertEq(uint256(owed), 0, "the claim settled rather than parking");
 
         assertEq(

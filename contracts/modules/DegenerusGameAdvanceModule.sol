@@ -218,13 +218,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
             }
         }
 
-        // Resolve the sentinel-stamped gambling-burn pool if any. Reading the
-        // sentinel rather than deriving `day - 1` makes multi-day RNG stalls correct by
-        // construction: the sentinel always names the (at most one) unresolved day, so a
-        // single resolve call after the stall recovers covers the stuck pool exactly.
-        _resolvePendingRedemption(currentWord);
-
-
         emit Advance(gapDays == 0 ? STAGE_DAILY_WORD_APPLIED : STAGE_GAP_BACKFILLED, lvl);
     }
 

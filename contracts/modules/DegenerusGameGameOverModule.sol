@@ -410,7 +410,9 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             if (day > first) _backfillGapDays(_rawDailyRngWord(currentWord), first, day);
             currentWord = _applyDailyRng(day, currentWord);
             if (lvl != 0) coinflip.processCoinflipPayouts(0, currentWord, day);
-            _resolvePendingRedemption(currentWord);
+            // A settling sDGNRS redemption batch whose live settlement never started resolves at
+            // a flat 100: every ending pays it at 100, never from a word.
+            dgnrs.resolveTerminalRedemptions();
             _finalizeLootboxRng(currentWord);
             work.progressed = true;
             return;
@@ -483,8 +485,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
 
         // Compute available funds FIRST (before any side effects)
         // Deity pass refunds have not happened yet, so claimablePool is pre-refund.
-        // sDGNRS redemption reservations are backed sDGNRS-side at submit (pullRedemptionReserve's
-        // ETH leg moves the ETH out of the game; its custody leg pins sDGNRS's own holdings), so
+        // sDGNRS redemption reserves are moved into sDGNRS custody when a batch closes, so
         // they are never part of totalFunds here — subtracting pendingRedemptionEthValue would
         // double-count them.
         uint256 reserved = uint256(claimablePool);
@@ -500,13 +501,10 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
 
         // === All side effects below this line (word confirmed, dead, or no funds to distribute) ===
 
-        // The deterministic ending has no word to roll a pending sDGNRS gambling-burn pool
-        // with, so it resolves at the roll's expected value, 100%. The pool's ETH is
-        // segregated in sDGNRS, so this moves nothing out of the game's balance.
-        if (dead) {
-            uint24 pendingDay = dgnrs.pendingResolveDay();
-            if (pendingDay != 0) dgnrs.resolveRedemptionPeriod(100, pendingDay);
-        }
+        // The deterministic ending resolves a settling sDGNRS redemption batch at a flat 100, as
+        // every ending does. Accounting inside sDGNRS only: it moves nothing out of the game's
+        // balance. The open batch is not closed; its claims unwind at the game-over price.
+        if (dead) dgnrs.resolveTerminalRedemptions();
 
         // Deity pass refunds (levels 0-9): refund each owner what they paid, capped at the flat
         // DEITY_PASS_EARLY_GAMEOVER_REFUND so a boon-discounted deity (paid < 20 ETH) never refunds
@@ -579,8 +577,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         );
 
         // Recalculate available after refunds (claimablePool may have grown).
-        // sDGNRS redemption reservations are backed sDGNRS-side at submit, so they are not part
-        // of totalFunds here — only claimablePool is reserved.
+        // sDGNRS redemption reserves sit in sDGNRS custody from their batch close, so they are
+        // not part of totalFunds here — only claimablePool is reserved.
         uint256 postRefundReserved = uint256(claimablePool);
         uint256 available = totalFunds > postRefundReserved ? totalFunds - postRefundReserved : 0;
 

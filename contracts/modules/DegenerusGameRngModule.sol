@@ -245,11 +245,14 @@ contract DegenerusGameRngModule is DegenerusGameRngUtils {
         );
     }
 
+    /// @dev Daily and mid-day fresh requests only, never a retry: the sealed cohort and the
+    ///      sDGNRS redemption batch closed here both settle on the word this request returns.
     function _sealRngWriteBuffer() private {
         lootboxRngPacked &= ~((LR_PENDING_ETH_MASK << LR_PENDING_ETH_SHIFT)
             | (LR_PENDING_FLIP_MASK << LR_PENDING_FLIP_SHIFT));
         _swapRngBuffers();
         _resetLootboxWriteBuffer(_rngWriteBuffer());
+        _closeRedemptionBatch();
     }
 
     function _revertDelegate(bytes memory reason) private pure {

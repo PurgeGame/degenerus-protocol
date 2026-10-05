@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
-import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
+import {RedemptionCloseTools} from "../fuzz/helpers/RedemptionCloseTools.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
 /// @dev Real burns, VRF requests and keeper lifecycle; no storage writes or mocked
 /// claim paths. Live claims settle only through mineFlip's Redemption stage, in the
 /// cohort's FIFO order.
-contract RedemptionConsumerOrderingTest is DeployProtocol {
+contract RedemptionConsumerOrderingTest is RedemptionCloseTools {
     address private constant ALICE = address(0xA11CE);
     address private constant BOB = address(0xB0B);
     address private constant CAROL = address(0xCA401);
-    uint24 private burnDay;
+    uint32 private burnDay;
 
     function setUp() public {
         _deployProtocol();
@@ -27,7 +27,7 @@ contract RedemptionConsumerOrderingTest is DeployProtocol {
             vm.prank(owners[i]);
             sdgnrs.burn(1_000_000_000 ether);
         }
-        burnDay = sdgnrs.pendingResolveDay();
+        burnDay = _openBatch();
         // A real paid ticket guarantees a read-side step after word publication.
         vm.deal(ALICE, 1 ether);
         vm.prank(ALICE);
@@ -48,19 +48,23 @@ contract RedemptionConsumerOrderingTest is DeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 1 days);
         _request();
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 7419);
-        for (uint256 i; i < 100 && sdgnrs.redemptionPeriods(burnDay) == 0; ++i) game.mineFlip();
-        assertGt(sdgnrs.redemptionPeriods(burnDay), 0, "resolved roll and pinned word");
+        assertEq(_batchRoll(burnDay), 0, "roll waits for the redemption stage");
     }
 
     function _ready() private {
         _publish();
         // Hold the cohort's worker while earlier work drains: the call that reaches the
         // redemption stage stops there, whatever its remaining allowance would admit.
-        vm.mockCall(address(sdgnrs), abi.encodeWithSignature("runRedemptionWork(uint256)"),
+        vm.mockCall(address(sdgnrs), abi.encodeWithSignature("runRedemptionWork(uint256,uint256)"),
             abi.encode(false, false, uint256(0)));
-        for (uint256 i; i < 100 && game.rngConsumerStage() != 1; ++i) game.mineFlip{gas: 3_100_000}();
+        for (uint256 i; i < 100 && game.rngConsumerStage() != 1; ++i) {
+            try game.mineFlip{gas: 10_000_000}() {} catch {
+                assertEq(game.rngConsumerStage(), 1, "only the held worker may stop progress");
+            }
+        }
         vm.clearMockedCalls();
         assertEq(game.rngConsumerStage(), 1, "redemption is next after daily work");
+        vm.prank(address(game)); sdgnrs.runRedemptionWork(7419, 200_000);
     }
 
     /// @dev One mineFlip at the smallest allowance (25k steps) that settles a beneficiary, probed on
@@ -81,15 +85,15 @@ contract RedemptionConsumerOrderingTest is DeployProtocol {
         revert("harness: no allowance settles a beneficiary");
     }
 
-    function _owed(address owner) private view returns (uint96 base) {
-        (base,,) = sdgnrs.pendingRedemptions(owner, burnDay);
+    function _owed(address owner) private view returns (uint128 base) {
+        (base,) = sdgnrs.pendingRedemptions(owner, burnDay);
     }
 
     function _claimsHash() private view returns (bytes32) {
-        (uint96 a, uint16 ascore, uint96 aflip) = sdgnrs.pendingRedemptions(ALICE, burnDay);
-        (uint96 b, uint16 bscore, uint96 bflip) = sdgnrs.pendingRedemptions(BOB, burnDay);
-        (uint96 c, uint16 cscore, uint96 cflip) = sdgnrs.pendingRedemptions(CAROL, burnDay);
-        return keccak256(abi.encode(a, ascore, aflip, b, bscore, bflip, c, cscore, cflip,
+        (uint128 a, uint16 ascore) = sdgnrs.pendingRedemptions(ALICE, burnDay);
+        (uint128 b, uint16 bscore) = sdgnrs.pendingRedemptions(BOB, burnDay);
+        (uint128 c, uint16 cscore) = sdgnrs.pendingRedemptions(CAROL, burnDay);
+        return keccak256(abi.encode(a, ascore, b, bscore, c, cscore,
             sdgnrs.pendingRedemptionEthValue(), game.claimableWinningsOf(ALICE),
             game.claimableWinningsOf(BOB), game.claimableWinningsOf(CAROL)));
     }
@@ -101,11 +105,11 @@ contract RedemptionConsumerOrderingTest is DeployProtocol {
         bytes32 beforeClaims = _claimsHash();
         assertTrue(game.nextMinerAction() != 8, "the engine finishes daily work before MinerAction.Redemption");
         // A live game has no self-claim door: the resolved claim waits for the engine.
-        vm.expectRevert(sDGNRS.NotGameOver.selector);
+        vm.expectRevert(_batchRoll(burnDay) == 0 ? sDGNRS.NotResolved.selector : sDGNRS.NotGameOver.selector);
         sdgnrs.claimRedemption(ALICE, burnDay);
         vm.expectRevert(sDGNRS.RedemptionStageBlocked.selector);
         vm.prank(address(game));
-        sdgnrs.runRedemptionWork(9_000_000);
+        sdgnrs.runRedemptionWork(7419, 9_000_000);
         assertEq(_claimsHash(), beforeClaims, "all rejected paths preserve entitlements");
         _complete();
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
@@ -114,8 +118,8 @@ contract RedemptionConsumerOrderingTest is DeployProtocol {
     function test_KeeperSettlesFifoHeadsAndResumesAtNextBeneficiary() public {
         _ready();
         assertEq(game.nextMinerAction(), 8, "the cohort is the engine's next work (MinerAction.Redemption)");
-        uint96 bob = _owed(BOB);
-        uint96 carol = _owed(CAROL);
+        uint128 bob = _owed(BOB);
+        uint128 carol = _owed(CAROL);
         assertGt(_owed(ALICE), 0); assertGt(bob, 0); assertGt(carol, 0);
 
         // Burned ALICE, BOB, CAROL: one admitted claim per call, taken in that order.
@@ -125,7 +129,7 @@ contract RedemptionConsumerOrderingTest is DeployProtocol {
         assertEq(_owed(CAROL), carol, "later beneficiaries are untouched");
         assertTrue(sdgnrs.redemptionSettlementPending());
         // A consumed head cannot be taken again through any door in a live game.
-        vm.expectRevert(sDGNRS.NotGameOver.selector);
+        vm.expectRevert(_batchRoll(burnDay) == 0 ? sDGNRS.NotResolved.selector : sDGNRS.NotGameOver.selector);
         sdgnrs.claimRedemption(ALICE, burnDay);
 
         _mineOneClaim();
@@ -142,14 +146,14 @@ contract RedemptionConsumerOrderingTest is DeployProtocol {
         _mineOneClaim();
         _mineOneClaim();
         assertEq(_owed(ALICE), 0); assertEq(_owed(BOB), 0);
-        uint96 carol = _owed(CAROL);
+        uint128 carol = _owed(CAROL);
         assertGt(carol, 0, "the last beneficiary is still owed");
         assertTrue(sdgnrs.redemptionSettlementPending(), "the unfinished cohort stays live");
         assertEq(game.rngConsumerStage(), 1, "the cohort keeps its stage until its last claim settles");
         assertFalse(game.rngComplete());
         assertEq(game.nextMinerAction(), 8, "no request can cut in ahead of MinerAction.Redemption");
         vm.prank(address(game));
-        bool done = sdgnrs.runRedemptionWork(11_000).done;
+        bool done = sdgnrs.runRedemptionWork(7419, 11_000).done;
         assertFalse(done);
         assertEq(_owed(CAROL), carol, "tiny budget cannot settle the last claim");
         assertTrue(sdgnrs.redemptionSettlementPending(), "tiny budget cannot erase the cohort");
@@ -159,6 +163,6 @@ contract RedemptionConsumerOrderingTest is DeployProtocol {
         assertFalse(sdgnrs.redemptionSettlementPending());
         vm.prank(ALICE);
         sdgnrs.burn(1 ether);
-        assertEq(sdgnrs.pendingResolveDay(), game.currentDayView(), "fresh queue day can be established");
+        assertEq(_openBatch(), burnDay + 1, "next open batch accepts burns");
     }
 }

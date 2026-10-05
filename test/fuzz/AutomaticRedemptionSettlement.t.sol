@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
-import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {RedemptionFixture} from "./helpers/RedemptionFixture.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -13,6 +13,7 @@ contract RedemptionTerminalSeeder is DegenerusGame {
         _setRngSessionPublished(true);
         _setRngRequestActive(false);
         _setRngComplete(false);
+        ticketsFullyProcessed = true;
         rngLockedFlag = false;
     }
 }
@@ -20,106 +21,43 @@ contract RedemptionRejectEth {
     receive() external payable { revert(); }
 }
 
-contract AutomaticRedemptionSettlementTest is DeployProtocol {
-    address internal alice = address(0xA11CE);
-    address internal bob = address(0xB0B);
-    uint256 private fulfilled;
-
-    function setUp() public {
-        _deployProtocol();
-        vm.warp(vm.getBlockTimestamp() + 1 days);
-        mockVRF.fundSubscription(1, 100 ether);
-        _complete(2);
-        vm.deal(address(sdgnrs), 10_000 ether);
-        vm.startPrank(address(game));
-        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, alice, sdgnrs.totalSupply() / 20);
-        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, bob, sdgnrs.totalSupply() / 20);
-        vm.stopPrank();
-    }
-
-    function _complete(uint256 word) internal {
-        for (uint256 i; i < 500; ++i) {
-            if (!game.advanceDue() && !game.rngLocked() && game.rngComplete()) return;
-            game.mineFlip();
-            uint256 req = mockVRF.lastRequestId();
-            if (req != 0 && req != fulfilled) {
-                (,, bool done) = mockVRF.pendingRequests(req);
-                if (!done) mockVRF.fulfillRandomWords(req, word);
-                fulfilled = req;
-            }
-        }
-        revert("redemption fixture did not finish");
-    }
-
+contract AutomaticRedemptionSettlementTest is RedemptionFixture {
     function _process(uint256 budget) internal returns (bool done) {
-        done = sdgnrs.runRedemptionWork(budget).done;
+        done = sdgnrs.runRedemptionWork(settlementWord, budget).done;
     }
-
-    /// @dev The cohort's queue cursor (sDGNRS `_redemptionCursor`, slot 10, low 32 bits).
-    function _redemptionCursor() internal view returns (uint256) {
-        return uint32(uint256(vm.load(address(sdgnrs), bytes32(uint256(10)))));
+    function _redemptionCursor() internal view returns (uint256) { return _cursor(); }
+    function _oneClaimAllowance() internal returns (uint256) { return _oneClaimBudget(); }
+    function _settleClaimAt(uint256 budget) internal {
+        uint256 before = _cursor();
+        _work(budget);
+        assertTrue(_cursor() == before + 1 || !sdgnrs.redemptionSettlementPending());
     }
-
-    /// @dev The smallest allowance (10k steps) with which the Redemption-stage worker, called as the
-    ///      Game the way mineFlip dispatches it, moves the cohort: the admission of the FIFO head.
-    ///      Probed on snapshots; the state is left unchanged.
-    function _oneClaimAllowance() internal returns (uint256 g) {
-        uint256 cursor = _redemptionCursor();
-        for (g = 500_000; g <= 9_000_000; g += 10_000) {
-            uint256 snap = vm.snapshotState();
-            vm.prank(address(game));
-            _process(g);
-            bool moved = _redemptionCursor() != cursor || !sdgnrs.redemptionSettlementPending();
-            assertTrue(vm.revertToState(snap));
-            if (moved) return g;
-        }
-        revert("harness: no allowance settles a beneficiary");
-    }
-
-    /// @dev One Redemption-stage step at allowance `g`; asserts it consumed exactly the FIFO head.
-    function _settleClaimAt(uint256 g) internal {
-        uint256 cursor = _redemptionCursor();
-        vm.prank(address(game));
-        _process(g);
-        assertTrue(
-            _redemptionCursor() == cursor + 1 || !sdgnrs.redemptionSettlementPending(),
-            "harness: the step consumed exactly the FIFO head"
-        );
-    }
-
-    function _settleOneClaim() internal {
-        _settleClaimAt(_oneClaimAllowance());
-    }
-
-    function _burn(address player, uint256 amount) internal {
-        vm.prank(player);
-        sdgnrs.burn(amount);
-    }
-
-    function _resolve(uint24 day, uint16 roll, uint256 word) internal {
-        vm.startPrank(address(game));
-        sdgnrs.resolveRedemptionPeriod(roll, day);
-        sdgnrs.beginRedemptionSettlement(day, word);
-        vm.stopPrank();
-        // This fixture injects a chosen roll instead of making a fresh request.
-        // Match the already-drained session's published-word lifecycle too.
+    function _settleOneClaim() internal { _settleClaimAt(_oneClaimAllowance()); }
+    /// @dev Close and resolve using an actual batch word whose roll matches the fixture.
+    function _resolve(uint32 batchId, uint16 roll, uint256 entropy) internal {
+        assertEq(batchId, _openBatchId());
+        _closeAsGame();
+        settlementWord = ((entropy % (type(uint256).max / 155 / 256)) * 155 + roll - 21) * 256 + 2;
         bytes memory original = address(game).code;
         vm.etch(address(game), type(RedemptionTerminalSeeder).runtimeCode);
-        RedemptionTerminalSeeder(payable(address(game))).seedLiveRedemptionWord(word);
+        RedemptionTerminalSeeder(payable(address(game))).seedLiveRedemptionWord(settlementWord);
         vm.etch(address(game), original);
+        vm.prank(address(game));
+        sdgnrs.runRedemptionWork(settlementWord, 200_000);
+        assertEq(_rollOf(batchId), roll);
     }
 
     function test_AdvanceAutomaticallySettlesTopupsAndBothRecipients() public {
-        uint24 day = game.currentDayView();
+        uint32 day = _openBatchId();
         uint256 amount = sdgnrs.totalSupply() / 1000;
         _burn(alice, amount);
         _burn(alice, amount);
         _burn(bob, amount);
-        assertGt(sdgnrs.pendingRedemptionEthValue(), 0);
+        assertEq(sdgnrs.pendingRedemptionEthValue(), 0, "open burns reserve nothing");
         vm.warp(vm.getBlockTimestamp() + 1 days);
         _complete(38_402); // 175% roll, losing escrow flip
-        (uint96 a,,) = sdgnrs.pendingRedemptions(alice, day);
-        (uint96 b,,) = sdgnrs.pendingRedemptions(bob, day);
+        (uint128 a,) = sdgnrs.pendingRedemptions(alice, day);
+        (uint128 b,) = sdgnrs.pendingRedemptions(bob, day);
         assertEq(a, 0);
         assertEq(b, 0);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
@@ -128,13 +66,13 @@ contract AutomaticRedemptionSettlementTest is DeployProtocol {
     }
 
     function test_KeeperSettlesFifoHeadThenCannotPayTwice() public {
-        uint24 day = game.currentDayView();
+        uint32 day = _openBatchId();
         _burn(alice, sdgnrs.totalSupply() / 1000);
         _burn(bob, sdgnrs.totalSupply() / 1000);
         _resolve(day, 100, 99);
         _settleOneClaim();
-        (uint96 a,,) = sdgnrs.pendingRedemptions(alice, day);
-        (uint96 b,,) = sdgnrs.pendingRedemptions(bob, day);
+        (uint128 a,) = sdgnrs.pendingRedemptions(alice, day);
+        (uint128 b,) = sdgnrs.pendingRedemptions(bob, day);
         assertEq(a, 0, "the first burner heads the queue");
         assertGt(b, 0, "the second waits for the next step");
         uint256 aliceCredit = game.claimableWinningsOf(alice);
@@ -156,7 +94,7 @@ contract AutomaticRedemptionSettlementTest is DeployProtocol {
     /// @dev A dependency refusing one claim must not hold the cohort (and every later RNG
     ///      request): the claim parks with its word and settles later, once, for its player.
     function test_RefusedSettlementParksClaimAndCohortCompletes() public {
-        uint24 day = game.currentDayView();
+        uint32 day = _openBatchId();
         _burn(alice, sdgnrs.totalSupply() / 1000);
         _burn(bob, sdgnrs.totalSupply() / 1000);
         _resolve(day, 100, 99);
@@ -177,10 +115,10 @@ contract AutomaticRedemptionSettlementTest is DeployProtocol {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter == address(sdgnrs)
-                && logs[i].topics[0] == keccak256("RedemptionParked(address,uint24,bytes)")) ++parked;
+                && logs[i].topics[0] == keccak256("RedemptionParked(address,uint32,bytes)")) ++parked;
         }
         assertEq(parked, 2);
-        (uint96 a,,) = sdgnrs.pendingRedemptions(alice, day);
+        (uint128 a,) = sdgnrs.pendingRedemptions(alice, day);
         assertGt(a, 0, "parked claim keeps its record");
 
         // Custody restored: only the player (or an approved operator) settles, exactly once.
@@ -194,7 +132,7 @@ contract AutomaticRedemptionSettlementTest is DeployProtocol {
         vm.prank(alice);
         sdgnrs.claimParkedRedemption(alice, day);
         assertGt(game.claimableWinningsOf(alice), before, "parked claim pays its direct half");
-        (a,,) = sdgnrs.pendingRedemptions(alice, day);
+        (a,) = sdgnrs.pendingRedemptions(alice, day);
         assertEq(a, 0);
         vm.expectRevert(sDGNRS.NoClaim.selector);
         vm.prank(alice);
@@ -204,7 +142,7 @@ contract AutomaticRedemptionSettlementTest is DeployProtocol {
     /// @dev The Game re-raises an out-of-gas module call as EmptyRevert(). Settlement must treat
     ///      it as caller-withheld gas and revert, never as a refusal that parks the claim.
     function test_OutOfGasGameModuleCallRevertsInsteadOfParking() public {
-        uint24 day = game.currentDayView();
+        uint32 day = _openBatchId();
         _burn(alice, sdgnrs.totalSupply() / 1000);
         _resolve(day, 100, 99);
         vm.mockCallRevert(address(game), abi.encodeWithSelector(DegenerusGame.resolveRedemptionLootbox.selector),
@@ -238,7 +176,7 @@ contract AutomaticRedemptionSettlementTest is DeployProtocol {
     ///      call per claim with the Game's live word moved in between, and the parked route
     ///      (claims refused, then claimed later on their parked word) all produce one transcript.
     function test_FrozenWordProducesSameTranscriptAcrossAllClaimRoutes() public {
-        uint24 day = game.currentDayView();
+        uint32 day = _openBatchId();
         uint256 amount = sdgnrs.totalSupply() / 1000;
         _burn(alice, amount);
         _burn(bob, amount);
@@ -277,7 +215,7 @@ contract AutomaticRedemptionSettlementTest is DeployProtocol {
         mockStETH.transfer(address(0xDEAD), st);
         vm.prank(address(game));
         assertTrue(_process(9_000_000));
-        (uint96 parked,,) = sdgnrs.pendingRedemptions(alice, day);
+        (uint128 parked,) = sdgnrs.pendingRedemptions(alice, day);
         assertGt(parked, 0, "harness: the refused claim parked");
         vm.deal(address(sdgnrs), eth);
         vm.prank(address(0xDEAD));
@@ -295,7 +233,7 @@ contract AutomaticRedemptionSettlementTest is DeployProtocol {
         uint256 amount = sdgnrs.totalSupply() / 1000;
         vm.prank(address(game));
         assertEq(sdgnrs.transferFromPool(sDGNRS.Pool.Whale, address(receiver), amount), amount);
-        uint24 day = game.currentDayView();
+        uint32 day = _openBatchId();
         _burn(address(receiver), sdgnrs.balanceOf(address(receiver)));
         _resolve(day, 100, 99);
         vm.prank(address(game));
@@ -305,11 +243,10 @@ contract AutomaticRedemptionSettlementTest is DeployProtocol {
     }
 
     function test_MaxCapMaximumRollAutoSettlementFitsGasCeiling() public {
-        uint24 day = game.currentDayView();
+        uint32 day = _openBatchId();
         _burn(alice, sdgnrs.totalSupply() * 16 / 1000);
-        (uint96 base,,) = sdgnrs.pendingRedemptions(alice, day);
-        assertEq(base, 160 ether);
         _resolve(day, 175, 99);
+        assertEq(_claimBase(alice, day), 160 ether);
         vm.prank(address(game));
         uint256 beforeGas = gasleft();
         assertTrue(_process(9_000_000));
@@ -320,7 +257,7 @@ contract AutomaticRedemptionSettlementTest is DeployProtocol {
     }
 
     function test_TerminalClaimHasNoExpiry() public {
-        uint24 day = game.currentDayView();
+        uint32 day = _openBatchId();
         _burn(alice, sdgnrs.totalSupply() / 1000);
         _resolve(day, 100, 99);
         // The self-claim is the terminal door only: a live game settles through mineFlip.

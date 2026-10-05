@@ -361,13 +361,10 @@ contract DeadVrfEndingTest is DeployProtocol {
         game.claimDeadVrf(dave, one);
     }
 
-    /// @dev The dead ending has no word to roll a pending gambling-burn pool with, so it calls
-    ///      sDGNRS pendingResolveDay and then resolveRedemptionPeriod at 100, the expected roll.
+    /// @dev Both endings resolve an unrolled closed batch at the terminal 100% rate.
     function test_pendingRedemptionResolvesAtExpectedValue() public {
         _seedHoldings();
-        uint24 d = game.currentDayView() - 1;
-        vm.mockCall(address(sdgnrs), abi.encodeWithSelector(sdgnrs.pendingResolveDay.selector), abi.encode(d));
-        vm.expectCall(address(sdgnrs), abi.encodeWithSelector(sdgnrs.resolveRedemptionPeriod.selector, uint16(100), d));
+        vm.expectCall(address(sdgnrs), abi.encodeWithSelector(sdgnrs.resolveTerminalRedemptions.selector));
         _endGame();
     }
 

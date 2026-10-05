@@ -253,14 +253,15 @@ interface ICoinflip {
     /// @custom:reverts OnlysDGNRS If caller is not the sDGNRS contract.
     function redeemableFlipBacking() external returns (uint256 backing);
 
-    /// @notice Remove `base` whole FLIP of sDGNRS's FLIP backing at redemption submit.
+    /// @notice Remove up to `base` whole FLIP of sDGNRS's FLIP backing as a redemption batch closes.
     /// @dev sDGNRS-only. Waterfall: settled claimable (consumed) → auto-rebuy carry (decremented) —
     ///      sDGNRS holds no wallet balance, so backing lives entirely in these two. Credits nothing;
-    ///      the redeemer's escrowed slice is paid later on the resolving day's coinflip win via
-    ///      creditFlip. Fail-closed if backing < base.
+    ///      the batch escrow is paid later on its synthetic flip win via creditFlip. Clamps to the
+    ///      backing instead of reverting, so a batch close cannot fail here.
     /// @param base Whole-FLIP backing to remove from sDGNRS.
+    /// @return removed Whole FLIP actually removed.
     /// @custom:reverts OnlysDGNRS If caller is not the sDGNRS contract.
-    function withdrawRedeemedFlip(uint256 base) external;
+    function withdrawRedeemedFlip(uint256 base) external returns (uint256 removed);
 
     /*+======================================================================+
       |                          VIEW FUNCTIONS                              |

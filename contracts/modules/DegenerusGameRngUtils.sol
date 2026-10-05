@@ -3,6 +3,8 @@ pragma solidity 0.8.34;
 
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
+import {IStETH} from "../interfaces/IStETH.sol";
+import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 
 /// @dev Daily and terminal entropy share identical recording, nudge and gap rules.
@@ -13,16 +15,27 @@ abstract contract DegenerusGameRngUtils is DegenerusGameStorage {
     /// @notice Finalized daily word and the nudges applied to its raw input.
     event DailyRngApplied(uint24 day, uint256 rawWord, uint256 nudges, uint256 finalWord);
 
-    /// @dev Resolve the sentinel-stamped gambling-burn pool off `word`. Three call sites in this
-    ///      module ran this identically; folded into one so the encoding is emitted once.
-    function _resolvePendingRedemption(uint256 word) internal {
-        IsDGNRS sdgnrs = IsDGNRS(ContractAddresses.SDGNRS);
-        uint24 toResolve = sdgnrs.pendingResolveDay();
-        if (toResolve != 0) {
-            sdgnrs.resolveRedemptionPeriod(uint16(((word >> 8) % 151) + 25), toResolve);
-            // The committed cohort consumes this session's final word before another
-            // normal request is permitted, including recovery from a multi-day stall.
-            sdgnrs.beginRedemptionSettlement(toResolve, word);
+    /// @dev Close sDGNRS's open redemption batch with the live request (daily or mid-day) that
+    ///      commits the next word, and move the part of its reserve that sDGNRS custody does not
+    ///      already hold out of sDGNRS's game claimable. The close prices the batch and never
+    ///      reverts; the move is bounded by that claimable, so the debit cannot fail. ETH goes
+    ///      first; any ETH shortfall is sent as stETH. The ending's request closes nothing.
+    function _closeRedemptionBatch() internal {
+        address sdgnrs = ContractAddresses.SDGNRS;
+        uint256 claimable = _claimableOf(sdgnrs);
+        uint256 pull = IsDGNRS(sdgnrs).closeRedemptionBatch(claimable);
+        if (pull == 0) return;
+        _debitClaimable(sdgnrs, pull);
+        claimablePool -= uint128(pull);
+        emit ClaimableSpent(sdgnrs, pull, claimable - pull, MintPaymentKind.Internal, pull);
+        uint256 ethOut = address(this).balance;
+        if (ethOut > pull) ethOut = pull;
+        if (ethOut != 0) {
+            (bool ok,) = payable(sdgnrs).call{value: ethOut}("");
+            if (!ok) revert TransferFailed();
+        }
+        if (pull != ethOut) {
+            if (!IStETH(ContractAddresses.STETH_TOKEN).transfer(sdgnrs, pull - ethOut)) revert TransferFailed();
         }
     }
 
@@ -53,9 +66,8 @@ abstract contract DegenerusGameRngUtils is DegenerusGameStorage {
     ///      1..31, anchored at startDay;
     ///      other daily consumers retain the final gap day's keccak256(vrfWord, gapDay).
     ///      NOTE: Gap days get zero nudges (totalFlipReversals not consumed).
-    ///      NOTE: resolveRedemptionPeriod is NOT called for backfilled gap days —
-    ///      the redemption timer continued ticking in real time during the stall;
-    ///      it resolves only on the current day via the normal rngGate path.
+    ///      NOTE: sDGNRS redemption batches are keyed by request, not by day, so gap days
+    ///      resolve none; the batch the request closed settles on its word.
     /// @param vrfWord The first post-gap VRF random word.
     /// @param startDay First gap day (dailyIdx + 1).
     /// @param endDay Current day (exclusive — not backfilled, handled by normal path).

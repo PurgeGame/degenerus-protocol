@@ -18,7 +18,6 @@ OWNER	_subOpenCursor	modules/GameAfkingModule.sol	_runAfkingWork persists the ri
 OWNER	_subscriberIndex	modules/GameAfkingModule.sol	_addToSet/_removeFromSet maintain the 1-indexed membership map; sole writer
 OWNER	_subscribers	modules/GameAfkingModule.sol	_removeFromSet swap-and-pop (push/pop elsewhere in the module); sole writer
 OWNER	balancesPacked	DegenerusGame.sol	claimWinnings/withdrawAfkingFunding debit a player's claimable/afking halves inline (byte-identical to the storage helpers) paired with a claimablePool debit
-OWNER	balancesPacked	modules/DegenerusGameLootboxModule.sol	pullRedemptionReserve debits SDGNRS's claimable half inline (guard proved no borrow) paired with claimablePool -=; the helper's guard is dead here
 OWNER	balancesPacked	modules/DegenerusGameMintModule.sol	_processMintPayment debits claimable and afking from one packed snapshot; preserves the low-half sentinel and checks high-half sufficiency; _purchaseForWithCached applies the matching combined claimablePool debit
 HELPER	balancesPacked	storage/DegenerusGameStorage.sol	_creditClaimable/_debitClaimable/_debitAfking/_debitClaimableAndAfking/_settleShortfallNoPool/_creditAfkingValue: the per-player packed-balance mutators every module calls
 OWNER	boonPacked	DegenerusGame.sol	NOT A STORAGE WRITE: deityBoonData declares a local uint32 boonPacked = deityBoonPacked[deity] in a view; label collision with the storage identifier
@@ -32,7 +31,7 @@ OWNER	claimablePool	modules/DegenerusGameDegeneretteModule.sol	_addClaimableEth 
 OWNER	claimablePool	modules/DegenerusGameGameOverModule.sol	_handleGameOverDrain adds deity refunds and the terminal affiliate share; _handleFinalSweep zeroes it after debiting VAULT/SDGNRS/GNRUS (terminal, GO_SWEPT latch guards later withdraws)
 OWNER	claimablePool	modules/DegenerusGameJackpotModule.sol	jackpot payouts (_processDailyEth liabilityDelta, golden ticket, yield surplus) add liability in tandem with _creditClaimable
 OWNER	claimablePool	modules/DegenerusGameJackpotDrawModule.sol	BAF stage completion releases the reserved ETH term of awards no candidate took (jackpotWork.paid residue) back to the future pool
-OWNER	claimablePool	modules/DegenerusGameLootboxModule.sol	creditRedemptionDirect (SDGNRS pays in) += and pullRedemptionReserve -= in tandem with SDGNRS's balancesPacked half
+OWNER	claimablePool	modules/DegenerusGameLootboxModule.sol	creditRedemptionDirect receives ETH/stETH from SDGNRS and increases claimablePool with the beneficiary credit; reserve funding debits now live in RngUtils.
 OWNER	claimablePool	modules/DegenerusGameMintModule.sol	_purchaseForWithCached folds the ticket+lootbox legs' claimable/afking draws into one pool decrement after _settleShortfallNoPool debited the player
 OWNER	claimablePool	modules/DegenerusGamePayoutUtils.sol	_creditBoxProceeds bumps the pool by boxEth while crediting VAULT 80% / SDGNRS 20%; shared payout utility inherited by modules
 OWNER	claimablePool	modules/GameAfkingModule.sol	_deliverAfkingBuy debits the pool for the afking-funded + claimable-funded spend after the per-account debits (one checked RMW)
@@ -209,3 +208,4 @@ HELPER	ticketPending	storage/DegenerusGameStorage.sol	Canonical queue helper wri
 OWNER	ticketSoloOffset	modules/DegenerusGameTicketModule.sol	Ticket worker persists aligned immutable-stream offset; queue release or genuine cohort retirement resets it. Same-cohort terminal continuation preserves it.
 HELPER	ticketSoloOffset	storage/DegenerusGameStorage.sol	Ticket worker persists aligned immutable-stream offset; queue release or genuine cohort retirement resets it. Same-cohort terminal continuation preserves it.
 HELPER	farFutureOwed	storage/DegenerusGameStorage.sol	Canonical owed codec preserves neighboring circular lanes, authenticates queue level tags and saturates far-future adds at 2^30-1.
+OWNER	claimablePool	modules/DegenerusGameRngUtils.sol	_closeRedemptionBatch debits the funding shortfall once per live request, paired with _debitClaimable and an ETH/stETH transfer to sDGNRS.

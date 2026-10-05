@@ -66,7 +66,7 @@ contract RandomnessSeedInputsTest is DeployProtocol {
         else if (route == 1) host.afking(PLAYER, amount, word);
         else {
             vm.prank(address(sdgnrs));
-            game.resolveRedemptionLootbox{value: amount}(PLAYER, amount, word, 0);
+            game.resolveRedemptionLootbox{value: amount}(PLAYER, amount, word, 0, 1);
         }
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool found;
@@ -103,7 +103,7 @@ contract RandomnessSeedInputsTest is DeployProtocol {
                 ? uint256(keccak256(abi.encode(word, PLAYER, uint256(0x426f784f70656e), uint256(1))))
                 : route == 1
                     ? uint256(keccak256(abi.encode(word, PLAYER, uint256(0x41666b696e67426f78), uint256(100))))
-                    : uint256(keccak256(abi.encode(word, PLAYER, uint256(0x526564656d7074696f6e426f78))));
+                    : uint256(keccak256(abi.encode(word, PLAYER, uint256(0x426f784f70656e), uint256(1))));
             uint256 rewardRoll = uint16(seed >> 40) % 20;
             // Pass denomination intentionally chooses passes or a fallback spin from
             // the award size. Compare identity only when both sizes take the same branch.

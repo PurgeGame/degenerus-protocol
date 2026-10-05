@@ -38,7 +38,8 @@ contract TerminalSinkStub {
     uint256 public burns;
     function burnAtGameOver() external { ++burns; }
     function tombstoneAtGameOver() external { ++burns; }
-    function pendingResolveDay() external pure returns (uint24) { return 0; }
+    function closeRedemptionBatch(uint256) external pure returns (uint256) { return 0; }
+    function resolveTerminalRedemptions() external pure {}
 }
 
 /// @dev Module harness: the normal ending with its terminal word applied and published, except

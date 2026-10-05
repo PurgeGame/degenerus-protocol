@@ -4,7 +4,7 @@ pragma solidity 0.8.34;
 import {IJackpotBattle} from "../../contracts/interfaces/IJackpotBattle.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
-import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
+import {RedemptionCloseTools} from "../fuzz/helpers/RedemptionCloseTools.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
@@ -24,7 +24,7 @@ contract StateEnginePoolFixture is DegenerusGame {
 
 /// @dev Real deployed modules and real VRF request/fulfillment lifecycle. No cursor writes,
 /// etched workers, mocked payouts or synthetic session publication are used in these checks.
-contract StateEngineIntegrationTest is DeployProtocol {
+contract StateEngineIntegrationTest is RedemptionCloseTools {
     address private constant MINER = address(0xA11CE999);
     address private constant ALICE = address(0xA11CE);
     bytes32 private constant MINER_WORK = keccak256("MinerWork(address,uint8,uint256,uint256)");
@@ -93,14 +93,14 @@ contract StateEngineIntegrationTest is DeployProtocol {
         revert("engine fixture failed to finish the committed lifecycle");
     }
 
-    function _queueMixedWork() private returns (uint24 burnDay) {
+    function _queueMixedWork() private returns (uint32 burnDay) {
         vm.deal(address(sdgnrs), 10_000 ether);
         uint256 amount = sdgnrs.totalSupply() * 16 / 1000;
         vm.prank(address(game));
         sdgnrs.transferFromPool(sDGNRS.Pool.Reward, ALICE, amount);
         vm.prank(ALICE);
         sdgnrs.burn(amount);
-        burnDay = sdgnrs.pendingResolveDay();
+        burnDay = _openBatch();
         (,,,, uint256 price) = game.purchaseInfo();
         for (uint256 i; i < 6; ++i) {
             address player = address(uint160(0xB0000 + i));
@@ -114,8 +114,8 @@ contract StateEngineIntegrationTest is DeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 1 days);
     }
 
-    function _outcome(uint24 burnDay) private view returns (bytes32 digest) {
-        digest = keccak256(abi.encode(game.level(), game.currentDayView(), sdgnrs.redemptionPeriods(burnDay),
+    function _outcome(uint32 burnDay) private view returns (bytes32 digest) {
+        digest = keccak256(abi.encode(game.level(), game.currentDayView(), _batchRoll(burnDay),
             sdgnrs.pendingRedemptionEthValue(), game.claimableWinningsOf(ALICE), coinflip.coinflipAmount(ALICE),
             mockVRF.lastRequestId(), game.rngComplete()));
         for (uint256 i; i < 6; ++i) {
@@ -136,7 +136,7 @@ contract StateEngineIntegrationTest is DeployProtocol {
     }
 
     function test_GasPartitionsPreservePlayerOutcomesAndRewardMeasuredWork() public {
-        uint24 burnDay = _queueMixedWork();
+        uint32 burnDay = _queueMixedWork();
         uint256 snap = vm.snapshotState();
         (, uint256 paid) = _drain(LOW_GAS);
         assertGt(paid, 0, "calls supplied less than 10M gas can earn compensation");

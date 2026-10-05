@@ -1546,18 +1546,20 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       +======================================================================+*/
 
     /// @notice Resolve redemption lootboxes for an sDGNRS gambling burn claim.
-    /// @dev Called by sDGNRS during claimRedemption. Thin delegatecall dispatch stub into
+    /// @dev Called by sDGNRS while it settles a live redemption (the miner's batch settlement or
+    ///      a parked claim). Thin delegatecall dispatch stub into
     ///      DegenerusGameLootboxModule's resolveRedemptionLootbox body (auth, funding-mix pull,
-    ///      pool credit, and the 5-ETH chunked resolution all live there). The signature matches
+    ///      pool credit, and the one-order box resolution all live there). The signature matches
     ///      the module function exactly (identical selector), so the calldata + msg.value forward
     ///      as-is — re-encoding here would cost contract-size headroom for no behavior change.
     ///      Signature: resolveRedemptionLootbox(address player, uint256 amount, uint256 rngWord,
-    ///      uint16 activityScore).
+    ///      uint16 activityScore, uint32 batchId).
     function resolveRedemptionLootbox(
         address,
         uint256,
         uint256,
-        uint16
+        uint16,
+        uint32
     ) external payable {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_LOOTBOX_MODULE
@@ -1566,7 +1568,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Credit the direct half of an sDGNRS redemption claim to `player`'s claimable winnings.
-    /// @dev Called by sDGNRS during a live-game claimRedemption. The value arrives with the same
+    /// @dev Called by sDGNRS while it settles a live redemption. The value arrives with the same
     ///      funding mix as resolveRedemptionLootbox: msg.value covers 0..amount and the rest is
     ///      pulled as stETH via transferFrom (sDGNRS pre-approves GAME for max). The credit rides
     ///      the claimable reserve (claimablePool in tandem). Body lives in the lootbox module (the
@@ -1574,23 +1576,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      Signature: creditRedemptionDirect(address player, uint256 amount). `amount` is the
     ///      total direct-half value (msg.value ETH + the stETH remainder pulled in the module).
     function creditRedemptionDirect(address, uint256) external payable {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_LOOTBOX_MODULE
-            .delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
-    }
-
-    /// @notice Back the sDGNRS redemption reservation: segregate game-side ETH, or verify custody.
-    /// @dev Called by sDGNRS at gambling-burn submit to reserve the MAX (175%) owed for this burn so
-    ///      it can never be re-spent by a concurrent claimable drain (AfKing self-sub, claimWinnings,
-    ///      a second same-day claimant). Thin delegatecall dispatch stub into the lootbox module —
-    ///      the sDGNRS-gated redemption surface, alongside resolveRedemptionLootbox and
-    ///      creditRedemptionDirect — which holds the auth gate, the ETH leg's CHECKED debit and
-    ///      transfer, and the cumulative custody leg. The signature matches the module function
-    ///      exactly (identical selector), so the calldata forwards as-is — re-encoding here would
-    ///      cost contract-size headroom for no behavior change.
-    ///      Signature: pullRedemptionReserve(uint256 amount). `amount` is the MAX 175% reservation.
-    function pullRedemptionReserve(uint256) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_LOOTBOX_MODULE
             .delegatecall(msg.data);

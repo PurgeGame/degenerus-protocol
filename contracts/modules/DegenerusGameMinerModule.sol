@@ -149,7 +149,11 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
                 } else if (action == MinerAction.Redemption) {
                     target = ContractAddresses.SDGNRS;
                     externalWorker = true;
-                    callData = abi.encodeWithSelector(IsDGNRS.runRedemptionWork.selector, allowance);
+                    // Stage 1 runs before any later request, so the published read word is the
+                    // one that answered the request that closed the settling batch.
+                    callData = abi.encodeWithSelector(
+                        IsDGNRS.runRedemptionWork.selector, _lootboxWord(_rngReadBuffer()), allowance
+                    );
                 } else {
                     target = ContractAddresses.CRAPS;
                     externalWorker = true;

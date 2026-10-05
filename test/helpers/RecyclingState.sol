@@ -55,8 +55,5 @@ library RecyclingState {
         uint256 mask = uint256(0xFF) << 240;
         vm.store(host, bytes32(0), bytes32((state & ~mask) | (count << 240)));
     }
-    function pending(address host, uint24 day) internal view returns (bytes32) {
-        uint24 stamped = uint24(uint256(vm.load(host, bytes32(uint256(0)))) >> 224);
-        return stamped == day && day != 0 ? vm.load(host, bytes32(uint256(7))) : bytes32(0);
-    }
+
 }

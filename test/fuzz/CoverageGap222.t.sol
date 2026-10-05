@@ -911,16 +911,14 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o1, ) = address(sdgnrs).call(
             abi.encodeWithSignature(
-                "resolveRedemptionPeriod(uint16,uint32,uint32)",
-                uint16(0),
-                uint32(0),
-                uint32(0)
+                "closeRedemptionBatch(uint256)",
+                uint256(0)
             )
         );
         vm.prank(buyer);
         (bool o2, ) = address(sdgnrs).call(
             abi.encodeWithSignature(
-                "claimRedemption(address,uint24)",
+                "claimRedemption(address,uint32)",
                 buyer,
                 uint24(0)
             )
@@ -937,7 +935,7 @@ contract CoverageGap222 is DeployProtocol {
         (bool o5, ) = address(sdgnrs).call(
             abi.encodeWithSignature("gameAdvance()")
         );
-        assertFalse(o1, "sdgnrs.resolveRedemptionPeriod rejected non-authorized caller");
+        assertFalse(o1, "sdgnrs.closeRedemptionBatch rejected non-authorized caller");
         assertFalse(o2, "sdgnrs.claimRedemption rejected caller with no pending redemption");
         assertFalse(o3, "sdgnrs.burnAtGameOver rejected caller before game over");
         assertFalse(o4, "sdgnrs.depositSteth rejected non-authorized caller");
@@ -1474,11 +1472,12 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool ok, ) = address(game).call(
             abi.encodeWithSignature(
-                "resolveRedemptionLootbox(address,uint256,uint256,uint16)",
+                "resolveRedemptionLootbox(address,uint256,uint256,uint16,uint32)",
                 buyer,
                 uint256(1 ether),
                 uint256(1),
-                uint16(0)
+                uint16(0),
+                uint32(1)
             )
         );
         assertFalse(ok, "resolveRedemptionLootbox rejected non-authorized caller");

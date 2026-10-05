@@ -100,10 +100,10 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         assertEq(coinflip.coinflipAmount(keeper) - prior, reward, "keeper credited exactly the engine reward");
     }
 
-    function _batch(uint256 allowance) private returns (bool done, uint256 charged, uint256 quote) {
+    function _drain(uint256 allowance) private returns (bool done, uint256 charged, uint256 quote) {
         vm.prank(address(game));
         uint256 before = gasleft();
-        MineFlipGas.Result memory result = sdgnrs.runRedemptionWork(allowance);
+        MineFlipGas.Result memory result = sdgnrs.runRedemptionWork(settlementWord, allowance);
         return (result.done, before - gasleft(), result.rewardBasis);
     }
     function _newBurners(uint256 n, uint256 amount) internal returns (address[] memory players) {
@@ -135,132 +135,83 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
     }
 
     function test_MoreThanOneBeneficiarySettlesWithExactExistingBounty() public {
-        uint24 day = game.currentDayView();
+        uint32 day = _openBatchId();
         _burn(alice, sdgnrs.totalSupply() / 1000);
         _burn(bob, sdgnrs.totalSupply() / 1000);
         _resolve(day, 100, 99);
-        (bool done, uint256 charged, uint256 quote) = _batch(9_000_000);
+        (bool done, uint256 charged, uint256 quote) = _drain(9_000_000);
         assertTrue(done);
         assertLe(charged, 9_000_000);
-        assertEq(quote, 2);
+        assertEq(quote, 0, "measured miner gas is the sole bounty");
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
         assertFalse(sdgnrs.redemptionSettlementPending());
-        (done, charged, quote) = _batch(9_000_000);
+        (done, charged, quote) = _drain(9_000_000);
         assertTrue(done); assertLt(charged, 100_000); assertEq(quote, 0);
     }
     function test_MaximumNextBeneficiaryWaitsWholeAndThenCompletes() public {
-        uint24 day = game.currentDayView();
+        uint32 day = _openBatchId();
         address[] memory players = _newBurners(3, sdgnrs.totalSupply() * 16 / 1000);
         _resolve(day, 175, 99);
-        (uint96 thirdExpected,,) = sdgnrs.pendingRedemptions(players[2], day);
+        (uint128 thirdExpected,) = sdgnrs.pendingRedemptions(players[2], day);
         // Two maximum beneficiaries fit 4M; the third's whole admission then does not.
-        (bool done, uint256 charged, uint256 quote) = _batch(4_000_000);
+        uint256 allowance = _oneClaimAllowance();
+        (bool done, uint256 charged, uint256 quote) = _drain(allowance);
         assertFalse(done); assertLe(charged, 4_000_000);
-        (uint96 first,,) = sdgnrs.pendingRedemptions(players[0], day);
-        (uint96 second,,) = sdgnrs.pendingRedemptions(players[1], day);
-        (uint96 third,,) = sdgnrs.pendingRedemptions(players[2], day);
-        assertEq(first, 0); assertEq(second, 0); assertEq(third, thirdExpected); assertGt(third, 0);
+        (uint128 first,) = sdgnrs.pendingRedemptions(players[0], day);
+        (uint128 second,) = sdgnrs.pendingRedemptions(players[1], day);
+        (uint128 third,) = sdgnrs.pendingRedemptions(players[2], day);
+        assertEq(first, 0); assertGt(second, 0); assertEq(third, thirdExpected); assertGt(third, 0);
         uint256 beforeReserve = sdgnrs.pendingRedemptionEthValue();
-        (done, charged,) = _batch(1_000_000);
+        (done, charged,) = _drain(1_000_000);
         assertFalse(done); assertLt(charged, 100_000); assertEq(sdgnrs.pendingRedemptionEthValue(), beforeReserve);
-        (done, charged, quote) = _batch(9_000_000);
-        assertTrue(done); assertLe(charged, 9_000_000); assertEq(quote, 1);
+        (done, charged, quote) = _drain(9_000_000);
+        assertTrue(done); assertLe(charged, 9_000_000); assertEq(quote, 0);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }
-    /// @dev Burns against zero backing commit nothing (no ETH base, no FLIP escrow): the cohort's
-    ///      entries are empty, and the engine skips them in bounded steps that earn no reward basis.
-    function test_EmptyClaimCohortNeedsOnlyBoundedSkipsWithoutBounty() public {
-        uint24 day = game.currentDayView();
+    function test_ZeroValueClaimsStillNeedWholeClaimAdmission() public {
+        uint32 day = _openBatchId();
         vm.deal(address(sdgnrs), 0);
         address[] memory players = _newBurners(3, 1 ether);
-        for (uint256 i; i < players.length; ++i) {
-            (uint96 base,, uint96 escrow) = sdgnrs.pendingRedemptions(players[i], day);
-            assertEq(uint256(base) + uint256(escrow), 0, "harness: the entry is empty");
-        }
         _resolve(day, 100, 99);
-        assertTrue(sdgnrs.redemptionSettlementPending(), "the empty cohort still owes its pass");
-        (bool done, uint256 charged, uint256 quote) = _batch(40_000);
-        assertFalse(done); assertLt(charged, 100_000); assertEq(quote, 0);
-        assertTrue(sdgnrs.redemptionSettlementPending());
-        (done, charged, quote) = _batch(150_000);
-        assertTrue(done); assertLt(charged, 150_000); assertEq(quote, 0);
-        assertFalse(sdgnrs.redemptionSettlementPending());
-    }
-    function test_EscrowOnlySuccessfulClaimReceivesTheExistingClaimBounty() public {
-        vm.deal(address(sdgnrs), 0);
-        vm.mockCall(address(coinflip), abi.encodeWithSelector(coinflip.redeemableFlipBacking.selector), abi.encode(1000));
-        vm.mockCall(address(coinflip), abi.encodeWithSelector(coinflip.withdrawRedeemedFlip.selector), abi.encode());
-        uint24 day = game.currentDayView();
-        _burn(alice, sdgnrs.totalSupply() / 1000);
-        (uint96 base,, uint96 escrow) = sdgnrs.pendingRedemptions(alice, day);
-        assertEq(base, 0); assertGt(escrow, 0);
-        _resolve(day, 100, 99);
-        (bool done,, uint256 quote) = _batch(9_000_000);
-        assertTrue(done);
-        assertEq(quote, 1);
-        (base,, escrow) = sdgnrs.pendingRedemptions(alice, day);
-        assertEq(base, 0); assertEq(escrow, 0);
+        (bool done,,uint256 quote) = _drain(150_000);
+        assertFalse(done); assertEq(quote, 0);
+        assertEq(_claimTokens(players[0], day), 1 ether);
+        (done,,quote) = _drain(9_000_000);
+        assertTrue(done); assertEq(quote, 0);
+        for (uint256 i; i < players.length; ++i) assertEq(_claimTokens(players[i], day), 0);
     }
 
-    function _escrowCohort() private returns (uint24 day, address[] memory players) {
+    function test_EscrowUsesBatchSyntheticResultWithoutDailyResultRead() public {
+        uint32 day = _openBatchId();
         vm.deal(address(sdgnrs), 0);
-        vm.mockCall(address(coinflip), abi.encodeWithSelector(coinflip.redeemableFlipBacking.selector), abi.encode(1_000_000));
-        vm.mockCall(address(coinflip), abi.encodeWithSelector(coinflip.withdrawRedeemedFlip.selector), abi.encode());
-        day = game.currentDayView();
-        players = _newBurners(3, sdgnrs.totalSupply() / 1000);
+        _seedFlipBacking(1_000_000);
+        address[] memory players = _newBurners(3, sdgnrs.totalSupply() / 1000);
         _resolve(day, 100, 99);
-    }
-
-    function _assertEscrowBatchResult(bool won) private {
-        (uint24 day, address[] memory players) = _escrowCohort();
+        (uint128 tokens,,,uint96 escrow,,uint16 reward) = sdgnrs.redemptionBatches(day);
+        assertGt(escrow, 0);
+        vm.mockCallRevert(address(coinflip), abi.encodeWithSelector(coinflip.getCoinflipDayResult.selector),
+            abi.encodeWithSignature("Error(string)", "redemption must use synthetic flip"));
         uint256[] memory expected = new uint256[](players.length);
         for (uint256 i; i < players.length; ++i) {
-            (uint96 base,, uint96 escrow) = sdgnrs.pendingRedemptions(players[i], day);
-            assertEq(base, 0);
-            assertGt(escrow, 0);
-            expected[i] = coinflip.coinflipAmount(players[i]) + (won ? uint256(escrow) + uint256(escrow) * 75 / 100 : 0);
+            uint256 share = uint256(escrow) * _claimTokens(players[i], day) / tokens;
+            expected[i] = coinflip.coinflipAmount(players[i]) + (reward == 0 ? 0 : share + share * reward / 100);
         }
-        bytes memory query = abi.encodeWithSelector(coinflip.getCoinflipDayResult.selector, day + 1);
-        vm.mockCall(address(coinflip), query, abi.encode(uint16(won ? 75 : 1), won));
-        vm.expectCall(address(coinflip), query, uint64(1));
-        (bool done,, uint256 count) = _batch(9_000_000);
-        assertTrue(done);
-        assertEq(count, players.length);
+        (bool done,,uint256 quote) = _drain(9_000_000);
+        assertTrue(done); assertEq(quote, 0);
         for (uint256 i; i < players.length; ++i) {
-            assertEq(coinflip.coinflipAmount(players[i]), expected[i], "same absolute-day result for every escrow");
-            (uint96 base,, uint96 escrow) = sdgnrs.pendingRedemptions(players[i], day);
-            assertEq(uint256(base) + escrow, 0, "claim consumed exactly once");
+            assertEq(coinflip.coinflipAmount(players[i]), expected[i]);
+            assertEq(_claimTokens(players[i], day), 0);
         }
-    }
-
-    function test_WinningEscrowResultIsReadOncePerBatch() public {
-        _assertEscrowBatchResult(true);
-    }
-
-    function test_LosingEscrowResultIsReadOncePerBatch() public {
-        _assertEscrowBatchResult(false);
-    }
-
-    function test_CoinflipResultNotReadBeforeClaimAdmission() public {
-        (uint24 day, address[] memory players) = _escrowCohort();
-        vm.mockCallRevert(address(coinflip), abi.encodeWithSelector(coinflip.getCoinflipDayResult.selector, day + 1),
-            abi.encodeWithSignature("Error(string)", "unadmitted escrow queried"));
-        (bool done,, uint256 count) = _batch(100_000);
-        assertFalse(done);
-        assertEq(count, 0);
-        assertEq(_redemptionCursor(), 0);
-        (, , uint96 escrow) = sdgnrs.pendingRedemptions(players[0], day);
-        assertGt(escrow, 0);
     }
 
     function test_CachedEscrowRewardCannotBeSuppliedByAnExternalCaller() public {
-        uint24 day = game.currentDayView();
+        uint32 day = _openBatchId();
         vm.expectRevert(sDGNRS.Unauthorized.selector);
-        sdgnrs.settleRedemptionHead(alice, day, 100, 99, type(uint16).max);
+        sdgnrs.settleRedemptionHead(alice, day, 99);
     }
 
     function test_PerClaimStepsAndOneCallPlayerEventsAndBalancesAreIdentical() public {
-        uint24 day = game.currentDayView();
+        uint32 day = _openBatchId();
         _burn(alice, sdgnrs.totalSupply() / 1000);
         _burn(bob, 1 ether); // Dust-forfeit branch alongside a real chunk.
         _resolve(day, 175, 99);
@@ -279,7 +230,7 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
             game.futurePrizePoolView(), address(sdgnrs).balance, sdgnrs.pendingRedemptionEthValue()));
         assertTrue(vm.revertToState(snap));
         vm.recordLogs();
-        (bool done,,) = _batch(9_000_000);
+        (bool done,,) = _drain(9_000_000);
         assertTrue(done);
         assertEq(keccak256(abi.encode(vm.getRecordedLogs())), stepLogs, "ordered player settlement and queue events");
         assertEq(keccak256(abi.encode(game.claimableWinningsOf(alice), game.claimableWinningsOf(bob),
@@ -290,7 +241,7 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
     // fixture settles real lootbox claims (above that threshold) at a nonzero base fee.
     function test_MineFlipPaysExternalKeeperOnceAndNoBoxesStillCommits() public {
         vm.fee(1 gwei);
-        uint24 day = game.currentDayView();
+        uint32 day = _openBatchId();
         _newBurners(2, sdgnrs.totalSupply() * 16 / 1000);
         _resolve(day, 175, 99);
 
@@ -305,7 +256,7 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
     // (each at the smallest allowance that admits its next chunk) and the keeper is credited nothing.
     function test_LowGasMineClearsRedemptionsWithoutMinerCredit() public {
         vm.fee(1 gwei);
-        uint24 day = game.currentDayView();
+        uint32 day = _openBatchId();
         _burn(alice, 1 ether); _burn(bob, 1 ether);
         _resolve(day, 100, 99); _commitWord(99);
         vm.warp(vm.getBlockTimestamp() + 1 days);
@@ -341,7 +292,7 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
     function test_RedemptionThenAffordableHumanBoxSharesOneCall() public {
         address buyer = address(0xB0C1);
         _buyHuman(buyer, 1);
-        uint24 day = game.currentDayView();
+        uint32 day = _openBatchId();
         _burn(alice, sdgnrs.totalSupply() * 16 / 1000); _resolve(day, 175, 99); _commitWord(99);
         // The keeper is paid only the engine's measured-gas reward for the shared call; the claim
         // is sized so the call clears the unpaid first 1M.
@@ -356,7 +307,7 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
     function test_OversizedFirstHumanBoxWaitsAndRedemptionsCommit() public {
         address buyer = address(0xB0C2);
         _buyHuman(buyer, 100);
-        uint24 day = game.currentDayView();
+        uint32 day = _openBatchId();
         _newBurners(2, sdgnrs.totalSupply() * 16 / 1000);
         _resolve(day, 175, 99); _commitWord(99);
         // At the measured boundary allowance (<= 10M) the call admits one maximum claim; the engine
@@ -376,7 +327,7 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         assertEq(count, 0); // Completing this cohort may request its generated next cohort.
     }
     function test_ColdMaximumRedemptionDefersWholeHumanOrderAtMeasuredBoundary() public {
-        uint24 day = game.currentDayView();
+        uint32 day = _openBatchId();
         _burn(alice, sdgnrs.totalSupply() * 16 / 1000);
         address first = address(0xB0C4);
         address second = address(0xB0C5);
@@ -387,7 +338,7 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         vm.cool(ContractAddresses.GAME_MINT_MODULE); vm.cool(ContractAddresses.GAME_FOILPACK_MODULE);
         vm.cool(ContractAddresses.GAME_BOON_MODULE); vm.cool(ContractAddresses.GAME_DEGENERETTE_MODULE);
         // At the measured boundary (the smallest allowance admitting the maximum claim, declared
-        // 500k + 28 x 60k) the call succeeds and settles the claim, and its remaining allowance
+        // 500k plus the bounded human-order cost) the call succeeds and settles the claim, and its remaining allowance
         // cannot admit the next whole 100-box order. The boundary is a realistic allowance (<= 10M).
         uint256 boundary = _boundaryAllowance(10_000_000);
         emit log_named_uint("maximum_redemption_admission_boundary_allowance", boundary);
@@ -411,18 +362,26 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
     function test_NearBudgetCompletionDefersHumanBoxUntilFreshAllowance() public {
         address buyer = address(0xB0C3);
         _buyHuman(buyer, 1);
-        uint24 day = game.currentDayView();
+        uint32 day = _openBatchId();
         address[] memory players = _newBurners(67, 1 ether);
         _resolve(day, 100, 99);
         for (uint256 j; j < 22; ++j) _settleOneClaim();
-        (uint96 settled,,) = sdgnrs.pendingRedemptions(players[21], day);
-        (uint96 next,,) = sdgnrs.pendingRedemptions(players[22], day);
+        (uint128 settled,) = sdgnrs.pendingRedemptions(players[21], day);
+        (uint128 next,) = sdgnrs.pendingRedemptions(players[22], day);
         assertEq(settled, 0, "harness: the first 22 claims settled in FIFO order");
         assertGt(next, 0, "harness: 45 dust claims remain");
         // A caller may fund a safe checkpoint. The remaining physical gas admits
         // the dust claims but cannot admit the next whole human order.
         _commitWord(99);
-        vm.prank(keeper); game.mineFlip{gas: 3_300_000}();
+        uint256 allowance;
+        for (allowance = 1_000_000; allowance <= 8_000_000; allowance += 25_000) {
+            uint256 snap = vm.snapshotState();
+            vm.prank(keeper); try game.mineFlip{gas: allowance}() {} catch {}
+            bool done = !sdgnrs.redemptionSettlementPending();
+            assertTrue(vm.revertToState(snap));
+            if (done) break;
+        }
+        vm.prank(keeper); game.mineFlip{gas: allowance}();
         assertFalse(sdgnrs.redemptionSettlementPending());
         (uint256 count, uint256 cursor, bool complete) = _boxState(buyer);
         assertEq(count, 1); assertEq(cursor, 0); assertFalse(complete);
@@ -432,7 +391,7 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
     }
 
     function test_OversizedFirstBetWaitsAndNextFreshCallSettlesIt() public {
-        uint24 day = game.currentDayView();
+        uint32 day = _openBatchId();
         _newBurners(45, 1 ether);
         game.placeDegeneretteBet{value: 0.125 ether}(bob, 0, 0.005 ether, 25, 0);
         _resolve(day, 100, 99); _commitWord(99);

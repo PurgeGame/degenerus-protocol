@@ -10,7 +10,7 @@ import {sDGNRS} from "../../../contracts/sDGNRS.sol";
 
 /// @title RedemptionInvariants -- Proves gambling burn redemption system invariants
 /// @notice Current redemption solvency, supply, wrapper backing and claim invariants.
-/// @dev Per-day reservation sums and the supply cap are checked by RedemptionAccounting.
+/// @dev Per-batch reservation sums and the supply cap are checked by RedemptionAccounting.
 ///      Legacy scalar slots and never-updated ghost counters are not current properties.
 ///         Exercises the full burn-resolve-claim lifecycle via RedemptionHandler and VRFHandler.
 /// @dev Run: forge test --match-contract RedemptionInvariants -vv
@@ -172,14 +172,14 @@ contract RedemptionInvariants is DeployProtocol {
     //                        INV-06: ROLL BOUNDS
     // =========================================================================
 
-    /// @notice Roll bounds always in [25, 175] for resolved periods.
+    /// @notice Roll bounds always in [21, 175] for resolved periods.
     /// @dev The handler's ghost_rollOutOfBounds counter increments if any
     ///      resolved period has a roll outside the valid range.
     function invariant_rollBounds() public view {
         assertEq(
             handler.ghost_rollOutOfBounds(),
             0,
-            "INV-06: resolved roll outside [25, 175]"
+            "INV-06: resolved roll outside [21, 175]"
         );
     }
 

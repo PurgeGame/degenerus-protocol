@@ -29,7 +29,6 @@ import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol
 import {CrapsPriceLib} from "../libraries/CrapsPriceLib.sol";
 import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 import {IStETH} from "../interfaces/IStETH.sol";
-import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 
 import {IDegenerusGameBoonModule, IDegenerusGameDegeneretteModule} from "../interfaces/IDegenerusGameModules.sol";
 import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
@@ -274,11 +273,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint256 private constant BOX_WWXRP_SPIN_TAG = 0x57777872705370696e; // "WwxrpSpin"
     uint256 private constant BOX_FLIP_SPIN_TAG = 0x4275726e69655370696e; // "BurnieSpin"
     uint256 private constant BOX_ETH_SPIN_TAG = 0x4574685370696e; // "EthSpin"
-    // Draw identities, never financial inputs. Separate entry, boon, redemption and AFKing
-    // streams explicitly instead of relying on a box amount to make their preimages differ.
+    // Draw identities, never financial inputs. Separate entry, boon and AFKing streams
+    // explicitly instead of relying on a box amount to make their preimages differ. A redemption
+    // order rolls through the entry stream on its own player-mixed word with a tagged index.
     uint256 private constant BOX_OPEN_TAG = 0x426f784f70656e; // "BoxOpen"
     uint256 private constant BOX_BOON_TAG = 0x426f78426f6f6e; // "BoxBoon"
-    uint256 private constant REDEMPTION_BOX_TAG = 0x526564656d7074696f6e426f78; // "RedemptionBox"
     uint256 private constant AFKING_BOX_TAG = 0x41666b696e67426f78; // "AfkingBox"
     bytes32 private constant PRESALE_BOX_TAG = keccak256("PRESALE_BOX");
     /// @dev Domain-separation tag for the 100-FLIP award collapse. Keyed off the box/roll
@@ -892,15 +891,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             );
         }
 
-        // A bonus order (mult > NEUTRAL) draws min(spend, CAP - used) from the shared
-        // per-(player, level) accumulator; neutral and sub-neutral orders draw nothing.
-        uint256 evExtra;
-        if (_lootboxEvMultiplierFromScore(_lbGet(word, LB_SCORE_SHIFT, LB_SCORE_MASK)) > LOOTBOX_EV_NEUTRAL_BPS) {
-            uint256 used = _lootboxEvUsedFor(buyer, capLevel);
-            uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP ? 0 : LOOTBOX_EV_BENEFIT_CAP - used;
-            evExtra = costWei < remaining ? costWei : remaining;
-            if (evExtra != 0) _setLootboxEvUsedFor(buyer, capLevel, used + evExtra);
-        }
+        uint256 evExtra = _drawEvBenefit(buyer, capLevel, costWei, _lbGet(word, LB_SCORE_SHIFT, LB_SCORE_MASK));
         word = _lbSet(
             word,
             LB_ADJ_SHIFT,
@@ -909,6 +900,22 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         );
 
         lootboxOrder[idx & 1][buyer] = word;
+    }
+
+    /// @dev The EV-cap draw an order's `adjBps` lane records: a bonus score (mult > NEUTRAL)
+    ///      draws min(spend, CAP - used) from the shared per-(player, level) accumulator; neutral
+    ///      and sub-neutral scores draw nothing. Shared by the buy path and the sDGNRS redemption
+    ///      order, which draws at resolution.
+    function _drawEvBenefit(address player, uint24 capLevel, uint256 spend, uint256 score)
+        private
+        returns (uint256 evExtra)
+    {
+        if (_lootboxEvMultiplierFromScore(score) > LOOTBOX_EV_NEUTRAL_BPS) {
+            uint256 used = _lootboxEvUsedFor(player, capLevel);
+            uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP ? 0 : LOOTBOX_EV_BENEFIT_CAP - used;
+            evExtra = spend < remaining ? spend : remaining;
+            if (evExtra != 0) _setLootboxEvUsedFor(player, capLevel, used + evExtra);
+        }
     }
 
     /// @dev Per-entry reward accumulator. Every lane an entry's boxes can pay into is summed
@@ -977,7 +984,15 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // Marked processed before resolution: external roll calls see an empty logical order,
         // while its nonzero backing payload remains available for the next buffer occupant.
         lootboxOrder[index & 1][player] = word | BOX_PROCESSED;
+        _rollOrder(player, index, word, rngWord, currentLevel);
+        return true;
+    }
 
+    /// @dev Storage-free order core: resolve every box of the packed order `word` for `player`
+    ///      on `rngWord`, then settle the entry. `index` tags the boon seed and the open events.
+    ///      The sweep marks the stored order processed first; the sDGNRS redemption leg builds
+    ///      its order in memory and passes a tagged batch id that no buffer index can equal.
+    function _rollOrder(address player, uint48 index, uint256 word, uint256 rngWord, uint24 currentLevel) private {
         // `c`'s declaration allocates its nested BoxAcc; use it directly rather than
         // allocating a second one and repointing.
         BoxRoll memory c;
@@ -1021,13 +1036,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // write per distinct level. DGNRS may already be checkpointed at an ETH-spin boundary.
         // Boon draws have completed before this remaining fungible/ticket flush.
         _flushBoxAcc(player, c.acc, currentLevel);
-
-        return true;
     }
 
     /// @dev One box's boon draw, for the resolvers that settle a single box outside the
-    ///      entry sweep (afking covers, degenerette auto-resolve, ETH-spin recirc,
-    ///      sDGNRS redemption chunks). Identical draw to the entry path's per-tier call;
+    ///      entry sweep (afking covers, degenerette auto-resolve, ETH-spin recirc).
+    ///      Identical draw to the entry path's per-tier call;
     ///      `seed` is the box's own player-specific resolution seed, drawn at nonce 0.
     function _rollSingleBoxBoons(address player, uint256 amount, uint24 currentLevel, uint256 seed) private {
         (bool ok,) = ContractAddresses.GAME_BOON_MODULE
@@ -1478,6 +1491,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         _rollSingleBoxBoons(player, scaledAmount, currentLevel, seed);
     }
 
+    /// @dev Tag bit on a redemption order's index: the batch id rides below it, and a real
+    ///      lootbox buffer index is 0 or 1, so the two never collide in seeds or events.
+    uint48 private constant REDEMPTION_INDEX_TAG = uint48(1) << 47;
+
     /// @notice Resolve redemption lootboxes for an sDGNRS gambling burn claim.
     /// @dev Delegatecall target of the Game's resolveRedemptionLootbox stub, so msg.sender
     ///      (sDGNRS), msg.value, and address(this) (the Game) are all the caller's. The owed value
@@ -1486,19 +1503,21 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      max). This lets a partial- or zero-ETH sDGNRS (mid-game depletion) still settle — an
     ///      ETH-only forward would revert and strand the whole claim. Both media credit
     ///      futurePrizePool and count toward the game's claimablePool backing identically. No
-    ///      claimableWinnings[SDGNRS] debit occurs — pullRedemptionReserve backed the reservation
-    ///      sDGNRS-side at submit (claimable already debited on the ETH leg, never owed on the
-    ///      custody leg), so debiting claimable here would double-spend it. Splits into 5 ETH
-    ///      boxes resolved by plain internal calls inside this one
-    ///      delegatecall frame (same Game storage context, identical per-chunk seed-rehash chain).
+    ///      claimableWinnings[SDGNRS] debit occurs — the batch close already moved the reserve
+    ///      into sDGNRS custody, so debiting claimable here would double-spend it. The whole leg
+    ///      resolves now as ONE box order through the sweep's own core: N = min(ceil(amount /
+    ///      1 ETH), 20) custom boxes of amount / N each (1e12 granularity), at the live level, with
+    ///      the snapshotted score and the EV-cap draw taken here, as the redemption leg always did.
+    ///      Per-box seeds come from the redemption entropy; the order's index is the tagged batch
+    ///      id. The pool takes the whole amount, so the size rounding dust stays protocol value.
     /// @param player Player receiving lootbox rewards
     /// @param amount Total lootbox value to resolve (msg.value ETH + the stETH remainder pulled here)
     /// @param rngWord RNG entropy for lootbox resolution
     /// @param activityScore Snapshotted activity score (whole points) from burn submission
-    function resolveRedemptionLootbox(address player, uint256 amount, uint256 rngWord, uint16 activityScore)
-        external
-        payable
-    {
+    /// @param batchId The redemption batch the claim belongs to (seed and event tag)
+    function resolveRedemptionLootbox(
+        address player, uint256 amount, uint256 rngWord, uint16 activityScore, uint32 batchId
+    ) external payable {
         if (msg.sender != ContractAddresses.SDGNRS) revert OnlySDGNRS();
         if (amount == 0) return;
         // Forwarded ETH (msg.value) funds the leg; any remainder is pulled as stETH so a
@@ -1512,9 +1531,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             if (!steth.transferFrom(msg.sender, address(this), stethPortion)) revert TransferFailed();
         }
 
-        // Credit the just-arrived value to the future prize pool (respects freeze state). The
-        // value was segregated out of claimableWinnings[SDGNRS] at submit, so there is no
-        // claimable debit here — only a real-value-in credit.
+        // Credit the whole arrived value to the future prize pool (respects freeze state). The
+        // reserve left the Game at batch close, so there is no claimable debit here — only a
+        // real-value-in credit. The boxes below are award sizes drawn against it.
         if (prizePoolFrozen) {
             (uint128 pNext, uint128 pFuture) = _getPendingPools();
             _setPendingPools(pNext, pFuture + uint128(amount));
@@ -1523,50 +1542,24 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             _setPrizePools(next, future + uint128(amount));
         }
 
-        // Resolve lootboxes in 5 ETH chunks
-        uint256 remaining = amount;
-        while (remaining != 0) {
-            uint256 box = remaining > 5 ether ? 5 ether : remaining;
-            _resolveRedemptionChunk(player, box, rngWord, activityScore);
-            remaining -= box;
-            rngWord = EntropyLib.hash1(rngWord);
-        }
-    }
-
-    /// @dev Resolve one redemption lootbox chunk (≤ 5 ETH, never 0) with a snapshotted activity
-    ///      score. Uses the provided score instead of reading current (snapshotted at submission).
-    /// @param player Player address to resolve for
-    /// @param amount ETH amount for this chunk's resolution
-    /// @param rngWord RNG word to use for resolution
-    /// @param activityScore Raw activity score (whole points) snapshotted at burn submission
-    function _resolveRedemptionChunk(address player, uint256 amount, uint256 rngWord, uint16 activityScore) private {
+        // One order: ~1 ETH boxes up to 20 ETH, then 20 equal larger boxes. The leg is at least
+        // the 0.01 ETH lootbox floor, so every box keeps a nonzero 1e12-granular size.
+        uint256 boxes = (amount - 1) / GasBounds.REDEMPTION_BOX_UNIT + 1;
+        if (boxes > GasBounds.REDEMPTION_BOXES_MAX) boxes = GasBounds.REDEMPTION_BOXES_MAX;
+        uint256 sizeScaled = amount / boxes / LB_CUSTOM_SCALE;
         uint24 currentLevel = level + 1;
-        // Freeze-safe seed with NO live day: claim timing must not re-roll the outcome (rngWord,
-        // frozen at submission, already domain-separates). No live day is read here — boon expiry
-        // uses the boon path's own currentDay, and the event day is unused for this claim.
-        uint256 seed = uint256(keccak256(abi.encode(rngWord, player, REDEMPTION_BOX_TAG)));
-        uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
-
-        uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(activityScore));
-        uint256 scaledAmount = _applyEvMultiplierWithCap(player, currentLevel, amount, evMultiplierBps);
-
-        // Each chunk emits its own itemized LootBoxOpened so the per-chunk FLIP datum (otherwise
-        // lost in the commingled creditFlip) is recoverable — every box, including a redemption
-        // chunk, leaves exactly one settlement event. payColdBustConsolation stays false (no WWXRP
-        // on a redemption cold-bust).
-        // allowEthSpin=true: redemption credits the pool to storage before this loop, so each
-        // chunk's ETH-spin reads/writes fresh storage — no deferred memory-accumulator to race.
-        BoxAcc memory acc;
-        _resolveLootboxCommon(
-            player, 0, scaledAmount, targetLevel, currentLevel, seed, false, 0, 0, activityScore, true, acc
+        uint256 score = activityScore > ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS
+            ? ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS
+            : activityScore;
+        uint256 nominal = boxes * sizeScaled * LB_CUSTOM_SCALE;
+        uint256 word = _lbSet(0, LB_LEVEL_SHIFT, LB_LEVEL_MASK, currentLevel);
+        word = _lbSet(word, LB_SCORE_SHIFT, LB_SCORE_MASK, score);
+        word = _lbSet(
+            word, LB_ADJ_SHIFT, LB_BPS_MASK, _blendBps(0, 0, _drawEvBenefit(player, currentLevel, nominal, score), nominal)
         );
-        // Single-box entry: the accumulator exists for uniformity, and flushing it
-        // here keeps every reward credit on one path.
-        _flushBoxAcc(player, acc, currentLevel);
-        // The boon draw the box's 10% haircut paid for. The common resolver takes the
-        // haircut for EVERY caller, so every caller must also draw — the entry sweep does
-        // it per tier; the single-box resolvers do it here.
-        _rollSingleBoxBoons(player, scaledAmount, currentLevel, seed);
+        word = _lbSet(word, LB_CUSTOM_COUNT_SHIFT, LB_COUNT_MASK, boxes);
+        word = _lbSet(word, LB_CUSTOM_SIZE_SHIFT, LB_CUSTOM_SIZE_MASK, sizeScaled);
+        _rollOrder(player, REDEMPTION_INDEX_TAG | uint48(batchId), word, rngWord, currentLevel);
     }
 
     /// @notice Credit the direct half of an sDGNRS redemption claim to `player`'s claimable winnings.
@@ -1591,65 +1584,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
         _creditClaimable(player, amount);
         claimablePool += uint128(amount);
-    }
-
-    /// @notice Back the sDGNRS redemption reservation: segregate game-side ETH, or verify custody.
-    /// @dev Delegatecall target of the Game's pullRedemptionReserve stub, so msg.sender (sDGNRS)
-    ///      and address(this) (the Game) are both the caller's — the ETH leg's debit hits the
-    ///      Game's ledger and the transfer draws the Game's balance, exactly as an inline body
-    ///      would. Called by sDGNRS at gambling-burn submit to reserve the MAX (175%) owed for this
-    ///      burn so it can never be re-spent by a concurrent claimable drain (AfKing self-sub,
-    ///      claimWinnings, a second same-day claimant). Fail-closed, donation-robust:
-    ///      - ETH leg: if claimableWinnings[SDGNRS] AND the game's liquid ETH both cover `amount`,
-    ///        physically move the at-risk ETH out to sDGNRS (CHECKED debit, CEI).
-    ///      - Custody leg: otherwise (mid-game ETH depletion, or a stETH donation inflating the
-    ///        submit base beyond claimable), sDGNRS's own ETH + stETH custody backs the reservation
-    ///        in place — no game-side move or ledger debit; the caller's pendingRedemptionEthValue
-    ///        records it and the claim pays from custody. Coverage is CUMULATIVE (custody covers
-    ///        every outstanding reservation plus this one), keeping in-contract ETH + stETH >=
-    ///        pendingRedemptionEthValue an invariant.
-    ///      - Neither leg covers => revert (fail-closed).
-    /// @param amount The MAX 175% reservation for this burn.
-    /// @custom:reverts OnlySDGNRS If caller is not sDGNRS.
-    /// @custom:reverts TransferFailed If the ETH transfer fails.
-    /// @custom:reverts Insolvent If neither the ETH nor the custody leg covers `amount`.
-    function pullRedemptionReserve(uint256 amount) external {
-        if (msg.sender != ContractAddresses.SDGNRS) revert OnlySDGNRS();
-        if (amount == 0) return;
-
-        // ETH leg: the claimable[SDGNRS] ledger AND the game's liquid ETH both cover
-        // `amount` — segregate the at-risk ETH out to sDGNRS. CHECKED debit (no unchecked); CEI.
-        uint256 packedSD = balancesPacked[ContractAddresses.SDGNRS];
-        if (uint128(packedSD) >= amount && address(this).balance >= amount) {
-            // _debitClaimable's guard is dead here — the branch already proved the low half
-            // covers `amount`, so `packedSD - amount` touches only the low half (no borrow).
-            // Residual for the event is the post-debit low half, computed from the cache.
-            balancesPacked[ContractAddresses.SDGNRS] = packedSD - amount;
-            claimablePool -= uint128(amount);
-            emit ClaimableSpent(
-                ContractAddresses.SDGNRS, amount, uint128(packedSD) - amount, MintPaymentKind.Internal, amount
-            );
-            (bool ok,) = payable(ContractAddresses.SDGNRS).call{value: amount}("");
-            if (!ok) revert TransferFailed();
-            return;
-        }
-
-        // Custody leg (fallback): the ETH side cannot cover (mid-game ETH depletion, or a stETH
-        // donation inflated the submit base beyond claimable[SDGNRS]). sDGNRS's own ETH + stETH
-        // custody backs the reservation in place, so NO game-side move or ledger debit is needed —
-        // the caller's pendingRedemptionEthValue records it and the claim pays from custody.
-        // Coverage is CUMULATIVE: custody must cover every outstanding reservation plus this one
-        // (pendingRedemptionEthValue is read pre-increment), so the same custody can never back two
-        // reservations and in-contract ETH + stETH >= pendingRedemptionEthValue holds inductively.
-        if (
-            ContractAddresses.SDGNRS.balance + steth.balanceOf(ContractAddresses.SDGNRS)
-                >= IsDGNRS(ContractAddresses.SDGNRS).pendingRedemptionEthValue() + amount
-        ) {
-            return;
-        }
-
-        // Neither leg covers => fail-closed.
-        revert Insolvent();
     }
 
     /// @notice Resolve an AfKing-subscription box at the LIVE level from a caller-passed
@@ -1799,9 +1733,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///        target-level roll's base and the FLIP legs' price basis.
     /// @param seed Per-resolution 256-bit keccak seed (single-source-of-entropy threaded through all sub-rolls and bit-sliced per-consumer)
     /// @dev One keccak seed per box, derived by the caller from the committed word and the
-    ///      box's immutable identity — entry sweep: hash4(rngWord, player, BOX_OPEN_TAG, nonce);
-    ///      direct auto-resolve: hash2(rngWord, player); redemption chunk:
-    ///      keccak(abi.encode(rngWord, player, REDEMPTION_BOX_TAG)); afking:
+    ///      box's immutable identity — entry sweep and sDGNRS redemption order: hash4(rngWord,
+    ///      player, BOX_OPEN_TAG, nonce), the redemption's rngWord being its player-mixed
+    ///      entropy; direct auto-resolve: hash2(rngWord, player); afking:
     ///      hash4(rngWord, player, AFKING_BOX_TAG, frozenDay) — and bit-sliced per consumer:
     ///        bits[0..15]    rangeRoll % 100         (_rollTargetLevel)
     ///        bits[16..23]   near-offset % 5         (_rollTargetLevel)

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
-import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
+import {RedemptionCloseTools} from "../fuzz/helpers/RedemptionCloseTools.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -47,7 +47,7 @@ interface IFlipCoinflipPlayerMock {
 ///
 /// @dev TEST-ONLY. No contracts/*.sol are touched.
 ///      Run: forge test --match-path test/repro/V62RedemptionReentrancy.t.sol -vv
-contract V62RedemptionReentrancy is DeployProtocol {
+contract V62RedemptionReentrancy is RedemptionCloseTools {
     // =====================================================================
     //                          CONSTANTS / SLOTS
     // =====================================================================
@@ -131,13 +131,7 @@ contract V62RedemptionReentrancy is DeployProtocol {
     /// @dev Resolve a day by pranking the game (deterministic roll; bypasses the VRF cycle so the
     ///      gambling-burn gates (gameOver/rngLocked/livenessTriggered) stay clean for the reentrant
     ///      burn inside the claim hook).
-    function _resolveDay(uint32 dayToResolve, uint16 roll) internal {
-        vm.prank(address(game));
-        sdgnrs.resolveRedemptionPeriod(roll, uint24(dayToResolve));
-        vm.prank(address(game));
-        sdgnrs.beginRedemptionSettlement(uint24(dayToResolve), 99);
-        _openSettlementStage(99);
-    }
+    function _resolveDay(uint32 id, uint16 roll) internal { _resolveTestBatch(id, roll); }
 
     /// @dev Seed the Game's published, not-yet-complete read session for `word` with its ticket
     ///      stage done: the redemption consumer stage (stage 1), the only stage in which a live
@@ -168,13 +162,14 @@ contract V62RedemptionReentrancy is DeployProtocol {
     function test_V62_03_LiveClaim_RunsNoClaimantCode() public {
         // ---- 1. Outer gambling burn on day D. Reserves 175% MAX into pendingRedemptionEthValue;
         //         the ETH leg of pullRedemptionReserve segregates that ETH into sDGNRS's balance. ----
-        uint24 dayD = game.currentDayView();
+        uint32 dayD = _openBatch();
         // Land day D's daily RNG so the gambling-burn admission gate (rngWordForDay(D) != 0) admits
         // this burn; under the gate the pool resolves on the NEXT day's draw (window-(b)).
         _primeCurrentDayRng();
         attacker.outerBurn(BURN_AMOUNT);
 
-        (uint96 owedBase, , ) = sdgnrs.pendingRedemptions(address(attacker), uint24(dayD));
+        _closeFunded();
+        uint256 owedBase = _batchBase(address(attacker), dayD);
         assertGt(uint256(owedBase), 0, "precondition: outer burn must record a positive claim base");
         assertTrue(_reserveIdentityHolds(), "precondition: reserve identity holds right after submit");
 
@@ -216,8 +211,8 @@ contract V62RedemptionReentrancy is DeployProtocol {
         vm.expectRevert(sDGNRS.NotGameOver.selector);
         attacker.claim(dayD);
         vm.prank(address(game));
-        assertTrue(sdgnrs.runRedemptionWork(9_000_000).done, "V62-03 L1: keeper drained the cohort");
-        (uint96 owedAfter, , ) = sdgnrs.pendingRedemptions(address(attacker), uint24(dayD));
+        assertTrue(sdgnrs.runRedemptionWork(batchWord, 9_000_000).done, "V62-03 L1: keeper drained the cohort");
+        (uint128 owedAfter,) = sdgnrs.pendingRedemptions(address(attacker), dayD);
         assertEq(uint256(owedAfter), 0, "V62-03 L1: the claim settled rather than parking");
 
         // ---- HEADLINE: no claimant code ran — the re-entry surface is gone by construction. ----
@@ -254,11 +249,12 @@ contract V62RedemptionReentrancy is DeployProtocol {
     ///         burn() against backing that EXCLUDES the in-flight stETH and extracts nothing.
     function test_V62_03_GameOverClaim_PayEthCEIHoldsReserveIdentity() public {
         // ---- 1. Outer gambling burn + resolve at the MAX roll, exactly as in Layer 1. ----
-        uint24 dayD = game.currentDayView();
+        uint32 dayD = _openBatch();
         _primeCurrentDayRng();
         attacker.outerBurn(BURN_AMOUNT);
 
-        (uint96 owedBase, , ) = sdgnrs.pendingRedemptions(address(attacker), uint24(dayD));
+        _closeFunded();
+        uint256 owedBase = _batchBase(address(attacker), dayD);
         assertGt(uint256(owedBase), 0, "precondition: outer burn must record a positive claim base");
 
         vm.warp(block.timestamp + 1 days);
@@ -364,7 +360,7 @@ contract Attacker {
         maxIterations = iterations;
     }
 
-    function claim(uint24 day) external {
+    function claim(uint32 day) external {
         sdgnrs.claimRedemption(address(this), day);
     }
 

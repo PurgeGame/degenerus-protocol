@@ -26,13 +26,40 @@ pragma solidity 0.8.34;
 
 /**
  * @title FlipRoundLib
- * @notice Rounds whole-FLIP awards to hundreds with a committed random word.
+ * @notice Rounds whole-FLIP awards to hundreds with a committed random word, and maps a
+ *         word to a coinflip day's reward percentage.
  * @dev A remainder of r tokens rounds up with probability r/100. Callers bind entropy
  *      to immutable per-award data and round individual awards, never caller-chosen batches.
  */
 library FlipRoundLib {
     uint256 internal constant FLIP_ROUND_UNIT = 100;
     uint256 internal constant FLIP_ROUND_THRESHOLD = 1_000;
+
+    bytes32 private constant REWARD_PERCENT_TAG = keccak256("degenerus.coinflip.reward-percent");
+    uint16 private constant COINFLIP_EXTRA_MIN_PERCENT = 78;
+    uint16 private constant COINFLIP_EXTRA_RANGE = 38;
+
+    /// @dev Reward percentage paid on a winning flip: principal + principal * percent / 100.
+    ///      ~5% each for 50 or 150, otherwise [78, 115], plus `bonus`. The tagged seed keeps
+    ///      the size independent of the word's other draws. Coinflip days and the sDGNRS
+    ///      redemption flip share this mapping; `epoch` keys the draw.
+    function coinflipRewardPercent(uint8 bonus, uint256 rngWord, uint24 epoch)
+        internal pure returns (uint16 rewardPercent)
+    {
+        uint256 seedWord = uint256(keccak256(abi.encodePacked(REWARD_PERCENT_TAG, rngWord, epoch)));
+        uint256 roll = seedWord % 20;
+        if (roll == 0) {
+            rewardPercent = 50;
+        } else if (roll == 1) {
+            rewardPercent = 150;
+        } else {
+            rewardPercent = uint16((seedWord % COINFLIP_EXTRA_RANGE) + COINFLIP_EXTRA_MIN_PERCENT);
+        }
+        // Max 150 + 6, so the add cannot overflow.
+        unchecked {
+            rewardPercent += bonus;
+        }
+    }
 
     /// @dev The 32-bit entropy window retains the existing negligible modulo bias.
     function roundFlipToHundreds(uint256 amount, uint256 entropy) internal pure returns (uint256) {

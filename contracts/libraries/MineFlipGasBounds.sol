@@ -143,8 +143,11 @@ library MineFlipGasBounds {
     uint256 internal constant CRAPS_SWEEP_TAIL_GAS = 130_000;
 
     // REDEEM
-    // Cold beneficiary: 0.23M measured with no lootbox chunk, 0.51M with two, 1.45M with 28.
+    // Cold beneficiary without a lootbox leg: 0.23M measured (pre-batch; re-measure).
     uint256 internal constant REDEMPTION_BASE_GAS = 500_000;
-    uint256 internal constant REDEMPTION_CHUNK_GAS = 60_000;
     uint256 internal constant REDEMPTION_TAIL_GAS = 80_000;
+    // A claim's lootbox leg resolves as ONE box order of min(ceil(leg / UNIT), BOXES_MAX)
+    // equal custom boxes, admitted like a human entry: HUMAN_ENTRY_GAS + boxes * HUMAN_BOX_GAS.
+    uint256 internal constant REDEMPTION_BOX_UNIT = 1 ether;
+    uint256 internal constant REDEMPTION_BOXES_MAX = 20;
 }

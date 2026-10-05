@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
-import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
+import {RedemptionCloseTools} from "../fuzz/helpers/RedemptionCloseTools.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 
 /// @notice Local mirror of the coinflip player surface so the submit-time FLIP leg is mocked to a
@@ -22,7 +22,7 @@ interface IFlipCoinflipPlayerMock {
 ///         Pre-fix this test's reserve-identity assertion and the claim both fail; post-fix both hold.
 /// @dev TEST-ONLY. No contracts/*.sol are mutated here.
 ///      Run: forge test --match-path test/repro/SdgnrsReserveUnderpullDoS.t.sol -vv
-contract SdgnrsReserveUnderpullDoS is DeployProtocol {
+contract SdgnrsReserveUnderpullDoS is RedemptionCloseTools {
     /// @dev balancesPacked (DegenerusGame) at slot 7; low 128 bits = claimable.
     uint256 internal constant GAME_CLAIMABLE_SLOT = 7;
     /// @dev claimablePool in the upper 128 bits of slot 1.
@@ -74,17 +74,17 @@ contract SdgnrsReserveUnderpullDoS is DeployProtocol {
 
     function test_reserveSurvivesGameOverDrainAndClaimantIsPaid() public {
         // 1. X's gambling burn on day D records a positive-base pending redemption.
-        uint24 dayD = uint24(game.currentDayView());
+        uint32 dayD = _openBatch();
         _primeCurrentDayRng();
         vm.prank(playerX);
         sdgnrs.burn(BURN);
-        (uint96 owedBase, , ) = sdgnrs.pendingRedemptions(playerX, dayD);
+        _closeFunded();
+        uint256 owedBase = _batchBase(playerX, dayD);
         assertGt(uint256(owedBase), 0, "precondition: X's gambling burn recorded a positive base");
 
         // 2. Advance and resolve at MAX (175%) so the reserve P is large; X leaves it unclaimed.
         vm.warp(block.timestamp + 1 days);
-        vm.prank(address(game));
-        sdgnrs.resolveRedemptionPeriod(175, dayD);
+        _resolveTestBatch(dayD, 175);
         uint256 P = sdgnrs.pendingRedemptionEthValue();
         assertGt(P, 0, "precondition: reserve P > 0 after resolve, unclaimed");
 

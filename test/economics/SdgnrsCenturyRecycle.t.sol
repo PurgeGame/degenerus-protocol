@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
-import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
+import {RedemptionCloseTools} from "../fuzz/helpers/RedemptionCloseTools.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -23,7 +23,7 @@ contract CenturyRedemptionSessionFixture is DegenerusGame {
     }
 }
 
-contract SdgnrsCenturyRecycleTest is DeployProtocol {
+contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
     uint256 private constant INITIAL = 1e30;
     uint256 private constant RNG_WORD = 53; // 50% at level 100; other centuries use separate draws.
     address private constant ALICE = address(0xA11CE);
@@ -63,20 +63,19 @@ contract SdgnrsCenturyRecycleTest is DeployProtocol {
     ///      Game) at the smallest allowance (10k steps) that moves the cohort: it settles exactly
     ///      the FIFO head. Probed on snapshots, then applied.
     function _settleOneClaim() private {
-        bytes32 cursorSlot = bytes32(uint256(10)); // sDGNRS _redemptionCursor (low 32 bits)
-        uint256 cursor = uint32(uint256(vm.load(address(sdgnrs), cursorSlot)));
+        (,,uint32 cursor,) = sdgnrs.redemptionBatchState();
         for (uint256 g = 500_000; g <= 9_000_000; g += 10_000) {
             uint256 snap = vm.snapshotState();
             vm.prank(address(game));
-            sdgnrs.runRedemptionWork(g);
-            bool moved = uint32(uint256(vm.load(address(sdgnrs), cursorSlot))) != cursor
+            sdgnrs.runRedemptionWork(batchWord, g);
+            bool moved = _cursor() != cursor
                 || !sdgnrs.redemptionSettlementPending();
             assertTrue(vm.revertToState(snap));
             if (moved) {
                 vm.prank(address(game));
-                sdgnrs.runRedemptionWork(g);
+                sdgnrs.runRedemptionWork(batchWord, g);
                 assertTrue(
-                    uint32(uint256(vm.load(address(sdgnrs), cursorSlot))) == cursor + 1
+                    _cursor() == cursor + 1
                         || !sdgnrs.redemptionSettlementPending(),
                     "harness: the step consumed exactly the FIFO head"
                 );
@@ -85,6 +84,8 @@ contract SdgnrsCenturyRecycleTest is DeployProtocol {
         }
         revert("harness: no allowance settles a beneficiary");
     }
+
+    function _cursor() private view returns (uint32 cursor) { (,,cursor,) = sdgnrs.redemptionBatchState(); }
 
     function _pools() private view returns (uint256[5] memory amounts) {
         for (uint8 i; i < 5; ++i) amounts[i] = sdgnrs.poolBalance(sDGNRS.Pool(i));
@@ -98,13 +99,22 @@ contract SdgnrsCenturyRecycleTest is DeployProtocol {
         _assertRefill(lvl, burned, RNG_WORD);
     }
 
+    struct RefillSnapshot { uint256 supply; uint256 checkpoint; uint256 inventory; uint256 wrapper; uint256 wrapperSupply; uint256 voting; }
+
     function _assertRefill(uint24 lvl, uint256 burned, uint256 rngWord) private {
-        uint256 supply = sdgnrs.totalSupply();
-        uint256 checkpoint = sdgnrs.centurySupplyCheckpoint();
-        uint256 inventory = sdgnrs.balanceOf(address(sdgnrs));
-        uint256 wrapper = sdgnrs.balanceOf(address(dgnrs));
-        uint256 wrapperSupply = dgnrs.totalSupply();
-        uint256 voting = sdgnrs.votingSupply();
+        this.checkRefill(lvl, burned, rngWord);
+    }
+
+    // External test helper prevents the optimizer from inlining this full accounting
+    // oracle into every century of the long fuzz loop.
+    function checkRefill(uint24 lvl, uint256 burned, uint256 rngWord) external {
+        RefillSnapshot memory prior;
+        prior.supply = sdgnrs.totalSupply();
+        prior.checkpoint = sdgnrs.centurySupplyCheckpoint();
+        prior.inventory = sdgnrs.balanceOf(address(sdgnrs));
+        prior.wrapper = sdgnrs.balanceOf(address(dgnrs));
+        prior.wrapperSupply = dgnrs.totalSupply();
+        prior.voting = sdgnrs.votingSupply();
         uint256[5] memory beforePools = _pools();
         uint256 percent = _refillPercent(lvl, rngWord);
         uint256 mint = burned * percent / 100;
@@ -125,16 +135,16 @@ contract SdgnrsCenturyRecycleTest is DeployProtocol {
         assertEq(afterPools[3] - beforePools[3], whale);
         assertEq(afterPools[4], beforePools[4], "presale never refilled");
         assertEq(_sum(afterPools) - _sum(beforePools), mint, "pool credits conserve the mint");
-        assertEq(sdgnrs.balanceOf(address(sdgnrs)) - inventory, mint, "inventory funded exactly once");
-        assertEq(sdgnrs.balanceOf(address(sdgnrs)) - _sum(afterPools), inventory - _sum(beforePools));
-        assertEq(sdgnrs.totalSupply(), supply + mint);
-        assertEq(sdgnrs.centurySupplyCheckpoint(), supply + mint, "checkpoint is POST mint");
-        assertLe(sdgnrs.totalSupply(), checkpoint);
+        assertEq(sdgnrs.balanceOf(address(sdgnrs)) - prior.inventory, mint, "prior.inventory funded exactly once");
+        assertEq(sdgnrs.balanceOf(address(sdgnrs)) - _sum(afterPools), prior.inventory - _sum(beforePools));
+        assertEq(sdgnrs.totalSupply(), prior.supply + mint);
+        assertEq(sdgnrs.centurySupplyCheckpoint(), prior.checkpoint - burned + mint, "prior.checkpoint includes unpriced holder escrow");
+        assertLe(sdgnrs.totalSupply(), prior.checkpoint);
         assertLe(sdgnrs.totalSupply(), INITIAL);
         assertEq(sdgnrs.lastRecycledCentury(), lvl / 100);
-        assertEq(sdgnrs.votingSupply(), voting, "excluded pool inventory offsets new supply");
-        assertEq(sdgnrs.balanceOf(address(dgnrs)), wrapper);
-        assertEq(dgnrs.totalSupply(), wrapperSupply);
+        assertEq(sdgnrs.votingSupply(), prior.voting, "excluded pool prior.inventory offsets new prior.supply");
+        assertEq(sdgnrs.balanceOf(address(dgnrs)), prior.wrapper);
+        assertEq(dgnrs.totalSupply(), prior.wrapperSupply);
     }
 
     function testInitialCheckpointAndOnlyGame() public {
@@ -253,6 +263,7 @@ contract SdgnrsCenturyRecycleTest is DeployProtocol {
         vm.prank(ALICE);
         vm.expectRevert(sDGNRS.Insufficient.selector);
         sdgnrs.burn(type(uint256).max);
+        _closeFunded();
         _assertRefill(100, direct + wrapped + selfBurn);
         assertEq(sdgnrs.balanceOf(ALICE), direct);
         assertEq(sdgnrs.balanceOf(BOB), 9_000 ether, "ordinary transfers and unwraps are not burns");
@@ -298,109 +309,60 @@ contract SdgnrsCenturyRecycleTest is DeployProtocol {
         vm.store(address(coinflip), slot, bytes32((packed & (type(uint256).max << 128)) | uint128(1e30)));
     }
 
-    function _claimSlot(address who, uint24 day) private pure returns (bytes32) {
-        return keccak256(abi.encode(uint256(day), keccak256(abi.encode(who, uint256(5)))));
+    function _pendingFingerprint(uint32 id) private view returns (bytes32) {
+        (uint128 at,uint16 ascore) = sdgnrs.pendingRedemptions(ALICE, id);
+        (uint128 bt,uint16 bscore) = sdgnrs.pendingRedemptions(BOB, id);
+        (uint128 t,uint128 supply,uint96 base,uint96 escrow,uint16 roll,uint16 reward) = sdgnrs.redemptionBatches(id);
+        return keccak256(abi.encode(at, ascore, bt, bscore, t, supply, base, escrow, roll, reward,
+            sdgnrs.pendingRedemptionEthValue(), address(sdgnrs).balance, mockStETH.balanceOf(address(sdgnrs)),
+            game.claimableWinningsOf(address(sdgnrs)), sdgnrs.flipReserve()));
     }
-
-    function _pendingFingerprint(uint24 day) private view returns (bytes32) {
-        // Include both neighboring lanes of slot 0, full day cap/base, claims, resolution,
-        // real ETH/stETH custody, game claimable and FLIP backing. Only supply may change.
-        return keccak256(abi.encode(
-            uint256(vm.load(address(sdgnrs), bytes32(0))) >> 128,
-            vm.load(address(sdgnrs), keccak256(abi.encode(uint256(day), uint256(7)))),
-            vm.load(address(sdgnrs), _claimSlot(ALICE, day)),
-            vm.load(address(sdgnrs), _claimSlot(BOB, day)),
-            sdgnrs.redemptionPeriods(day),
-            address(sdgnrs).balance,
-            mockStETH.balanceOf(address(sdgnrs)),
-            game.claimableWinningsOf(address(sdgnrs)),
-            sdgnrs.flipReserve()
-        ));
-    }
-
     function testPendingAndResolvedClaimsSurviveRefillsAndSettle() public {
         _fundFlip();
         mockStETH.mint(address(sdgnrs), 50 ether);
         _award(sDGNRS.Pool.Reward, ALICE, 10_000 ether);
         _award(sDGNRS.Pool.Reward, BOB, 10_000 ether);
-        uint24 day = game.currentDayView();
-        vm.prank(ALICE);
-        sdgnrs.burn(1_000 ether + 1);
-        vm.prank(BOB);
-        sdgnrs.burn(2_000 ether + 1);
-        (uint96 baseAlice,, uint96 escrowAlice) = sdgnrs.pendingRedemptions(ALICE, day);
+        uint32 id = _openBatch();
+        vm.prank(ALICE); sdgnrs.burn(1_000 ether + 1);
+        vm.prank(BOB); sdgnrs.burn(2_000 ether + 1);
+        assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
+        bytes32 fingerprint = _pendingFingerprint(id);
+        _assertRefill(100, 0); // Open burns retain their economic holder share.
+        assertEq(_pendingFingerprint(id), fingerprint);
+        _resolveTestBatch(id, 175);
+        uint256 baseAlice = _batchBase(ALICE, id);
         assertGt(baseAlice, 0);
-        assertGt(escrowAlice, 0);
-        assertEq(sdgnrs.pendingResolveDay(), day);
-        assertGt(sdgnrs.pendingRedemptionEthValue(), 0);
-        bytes32 fingerprint = _pendingFingerprint(day);
-        _assertRefill(100, 3_000 ether + 2);
-        assertEq(_pendingFingerprint(day), fingerprint, "unresolved claims and packed neighbors preserved");
-
-        vm.startPrank(address(game));
-        sdgnrs.resolveRedemptionPeriod(175, day);
-        sdgnrs.beginRedemptionSettlement(day, RNG_WORD);
-        vm.stopPrank();
-        bytes memory originalCode = address(game).code;
-        vm.etch(address(game), type(CenturyRedemptionSessionFixture).runtimeCode);
-        CenturyRedemptionSessionFixture(payable(address(game))).publishRedemptionSession(day, RNG_WORD);
-        vm.etch(address(game), originalCode);
-        assertEq(game.rngConsumerStage(), 1, "settlement uses the published redemption cohort after predecessors");
-        uint256 reserved = sdgnrs.pendingRedemptionEthValue();
+        (,,,uint96 escrow,,) = sdgnrs.redemptionBatches(id);
+        assertGt(escrow, 0);
+        uint256 reserve = sdgnrs.pendingRedemptionEthValue();
         _award(sDGNRS.Pool.Whale, address(sdgnrs), 7_000 ether);
-        fingerprint = _pendingFingerprint(day);
-        _assertRefill(200, 7_000 ether);
-        assertEq(_pendingFingerprint(day), fingerprint, "resolved claims preserved");
-
-        // Existing claims retain their fixed base/escrow. Small ETH awards intentionally take
-        // the real dust-box forfeit path. A recorded winning flip exercises the real FLIP credit.
-        bytes32 resultSlot = keccak256(abi.encode(uint256((day + 1) >> 5), uint256(1)));
-        uint256 shift = (uint256(day + 1) & 31) * 8;
-        uint256 result = uint256(vm.load(address(coinflip), resultSlot));
-        vm.store(address(coinflip), resultSlot, bytes32((result & ~(uint256(255) << shift)) | (uint256(100) << shift)));
+        fingerprint = _pendingFingerprint(id);
+        _assertRefill(200, 10_000 ether + 2); // The close now counts both live burns.
+        assertEq(_pendingFingerprint(id), fingerprint);
         uint256 supply = sdgnrs.totalSupply();
-        uint256 beforeClaimable = game.claimableWinningsOf(ALICE);
-        _settleOneClaim(); // ALICE burned first, so she heads the queue
-        (uint96 bobWaiting,,) = sdgnrs.pendingRedemptions(BOB, day);
-        assertGt(bobWaiting, 0, "the next claim waits for its own step");
-        uint256 expectedDirect = uint256(baseAlice) * 175 / 100 / 2;
-        // Game's claimable ledger initializes a 1-wei dust sentinel on its first credit.
-        uint256 credited = game.claimableWinningsOf(ALICE) - beforeClaimable;
-        assertGe(credited, expectedDirect);
-        assertLe(credited, expectedDirect + 1);
-        assertEq(sdgnrs.pendingRedemptionEthValue(), reserved - uint256(baseAlice) * 175 / 100);
+        uint256 before = game.claimableWinningsOf(ALICE);
+        _settleOneClaim();
+        (uint128 waiting,) = sdgnrs.pendingRedemptions(BOB, id);
+        assertGt(waiting, 0);
+        assertApproxEqAbs(game.claimableWinningsOf(ALICE) - before, baseAlice * 175 / 100 / 2, 1);
+        assertEq(sdgnrs.pendingRedemptionEthValue(), reserve - baseAlice * 175 / 100);
         _settleOneClaim();
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
-        assertFalse(sdgnrs.redemptionSettlementPending(), "the last claim clears the cohort");
-        assertEq(sdgnrs.totalSupply(), supply, "settling a burn is not another supply reduction");
+        assertFalse(sdgnrs.redemptionSettlementPending());
+        assertEq(sdgnrs.totalSupply(), supply);
         _assertRefill(300, 0);
-        // A settled claim is not paid again: a live self-claim is refused and the drained
-        // cohort's worker has nothing left to settle.
-        vm.expectRevert(sDGNRS.NotGameOver.selector);
-        vm.prank(ALICE);
-        sdgnrs.claimRedemption(ALICE, day);
-        uint256 aliceCredit = game.claimableWinningsOf(ALICE);
-        vm.prank(address(game));
-        assertTrue(sdgnrs.runRedemptionWork(1_000_000).done);
-        assertEq(game.claimableWinningsOf(ALICE), aliceCredit, "nothing paid twice");
-        assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }
-
-    function testExistingDailyCapIsNotResetByRefill() public {
+    function testExistingBatchCapIsNotResetByRefill() public {
         _award(sDGNRS.Pool.Reward, ALICE, 3_000 ether);
-        vm.prank(ALICE);
-        sdgnrs.burn(1_000 ether + 1);
-        uint24 day = game.currentDayView();
-        bytes32 slot = bytes32(uint256(7)); // retained pendingAggregate; day is stamped in slot 0
-        assertEq(sdgnrs.pendingResolveDay(), day);
-        uint256 beforeDay = uint256(vm.load(address(sdgnrs), slot));
-        _recycle(100);
-        vm.prank(ALICE);
-        sdgnrs.burn(1_000 ether + 1);
-        uint256 afterDay = uint256(vm.load(address(sdgnrs), slot));
-        assertEq(uint64(afterDay >> 64), uint64(beforeDay >> 64), "original daily supply snapshot survives");
-        assertEq(uint64(afterDay >> 128), uint64(beforeDay >> 128) + 1001, "rounded daily burns accumulate");
-        _assertRefill(200, 1_000 ether + 1);
+        uint32 id = _openBatch();
+        vm.prank(ALICE); sdgnrs.burn(1_000 ether + 1);
+        (,uint128 snapshot,,,,) = sdgnrs.redemptionBatches(id);
+        _assertRefill(100, 0);
+        vm.prank(ALICE); sdgnrs.burn(1_000 ether + 1);
+        (uint128 tokens,uint128 afterSnapshot,,,,) = sdgnrs.redemptionBatches(id);
+        assertEq(afterSnapshot, snapshot);
+        assertEq(tokens, 2_000 ether + 2);
+        _assertRefill(200, 0);
     }
 
     function _endGame() private {

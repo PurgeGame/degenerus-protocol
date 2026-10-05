@@ -66,8 +66,8 @@ interface IsDGNRS {
     /// @notice Burn all undistributed pool tokens at game over and permanently close recycling
     function burnAtGameOver() external;
 
-    /// @notice Burn sDGNRS. Post-gameOver: immediate proportional payout. During game: enters
-    ///         gambling claim queue (returns 0,0,0) — call claimRedemption() after resolution.
+    /// @notice Burn sDGNRS. Post-gameOver: immediate proportional payout. During game: joins the
+    ///         open redemption batch (returns 0,0,0); the miner settles it after the batch's word.
     /// @param amount Amount of sDGNRS to burn
     /// @return ethOut ETH received (0 during active game)
     /// @return stethOut stETH received (0 during active game)
@@ -104,30 +104,27 @@ interface IsDGNRS {
     /// @return flipOut Amount of FLIP that would be minted
     function previewBurnValue(uint256 amount) external view returns (uint256 ethOut, uint256 flipOut);
 
-    /// @notice Check if day `day` has an unresolved gambling-burn pool.
-    /// @param day Wall-clock day to query.
-    /// @return True if day matches the active pending stamp and its ETH base is nonzero.
-    function hasPendingRedemptions(uint24 day) external view returns (bool);
-
-    /// @notice Sentinel for the single-pool invariant.
-    /// @return The wall-day of the currently-pending unresolved gambling-burn pool, or 0 if none.
-    ///         Read by AdvanceModule to derive `dayToResolve` under both normal and stall paths.
-    function pendingResolveDay() external view returns (uint24);
-
-    /// @notice Total ETH value reserved in sDGNRS custody for in-flight gambling-burn redemptions.
-    /// @dev Backed sDGNRS-side either way — the ETH leg of pullRedemptionReserve moves the ETH out
-    ///      of the Game at submit, the custody leg pins sDGNRS's existing ETH + stETH — so it is
-    ///      never part of the Game's balance and the game-over drain never subtracts it. Read by
-    ///      the custody leg to enforce cumulative coverage.
+    /// @notice Total ETH value reserved in sDGNRS custody for closed gambling-burn batches.
+    /// @dev A batch close reserves its MAX payout and the Game moves whatever sDGNRS custody does
+    ///      not already hold out of sDGNRS's claimable, so the reserve is never part of the
+    ///      Game's balance and the game-over drain never subtracts it.
     function pendingRedemptionEthValue() external view returns (uint256);
 
-    /// @notice Resolve day `dayToResolve`'s gambling-burn pool with RNG results.
-    /// @dev Only callable by game contract during mineFlip. Writes redemptionPeriods[dayToResolve],
-    ///      emits RedemptionResolved, then invalidates the reusable aggregate via its day stamp.
-    /// @param roll The random roll (25-175).
-    /// @param dayToResolve Wall-clock day whose pool this call resolves.
-    function resolveRedemptionPeriod(uint16 roll, uint24 dayToResolve) external;
+    /// @notice Close the open redemption batch: price it, take its FLIP escrow and reserve its MAX
+    ///         payout. Game only, inside the transaction that sends the next live (daily or
+    ///         mid-day) VRF request; the ending's request closes nothing.
+    /// @dev Never reverts. An empty batch, or a close while another batch settles, is a no-op.
+    /// @param gameClaimable sDGNRS's claimable balance on the Game.
+    /// @return pull ETH value the Game must move from that claimable into sDGNRS custody.
+    function closeRedemptionBatch(uint256 gameClaimable) external returns (uint256 pull);
+
+    /// @notice Resolve the settling batch at a flat roll of 100 if its live settlement never started
+    ///         (Game only; both endings).
+    function resolveTerminalRedemptions() external;
+
+    /// @notice True while a closed batch has unsettled claims (RNG consumer stage 1).
     function redemptionSettlementPending() external view returns (bool);
-    function beginRedemptionSettlement(uint24 day, uint256 word) external;
-    function runRedemptionWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
+
+    /// @notice Settle the closed batch on `word`, the published word of the current session.
+    function runRedemptionWork(uint256 word, uint256 gasAllowance) external returns (MineFlipGas.Result memory);
 }

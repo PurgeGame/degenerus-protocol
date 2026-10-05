@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
-import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
+import {RedemptionCloseTools} from "../fuzz/helpers/RedemptionCloseTools.sol";
 
 /// @dev Real burns and requests: every claim the mandatory keeper drain settles, in a normal or a
 /// recovered (stalled) session, resolves its box from the cohort's pinned session word, and the
 /// drained cohort then permits buffer reuse. The keeper settles live claims inside the same call
 /// that finishes the daily work, as far as its allowance admits; the cohort is sized so claims
 /// outlast that call's spare allowance and are settled by later engine calls.
-contract ForcedRedemptionSessionWordTest is DeployProtocol {
+contract ForcedRedemptionSessionWordTest is RedemptionCloseTools {
     address private constant ALICE = address(0xA11CE);
     address private constant BOB = address(0xB0B);
     address private constant CAROL = address(0xCA401);
@@ -60,14 +60,14 @@ contract ForcedRedemptionSessionWordTest is DeployProtocol {
     ///      declared bound, so a step that crosses into stage 1 with gas to spare settles heads in
     ///      the same call; such a step is replayed with a smaller allowance (the largest that
     ///      leaves two claims pending).
-    function _unsettled(uint24 day) private view returns (uint256 n) {
+    function _unsettled(uint32 day) private view returns (uint256 n) {
         for (uint256 i; i < OWNERS; ++i) {
-            (uint96 base,,) = sdgnrs.pendingRedemptions(_owner(i), day);
+            (uint128 base,) = sdgnrs.pendingRedemptions(_owner(i), day);
             if (base != 0) ++n;
         }
     }
 
-    function _toRedemptionStage(uint24 day) private {
+    function _toRedemptionStage(uint32 day) private {
         for (uint256 i; i < 200 && game.rngConsumerStage() != 1; ++i) {
             uint256 snap = vm.snapshotState();
             bool stepped;
@@ -94,27 +94,29 @@ contract ForcedRedemptionSessionWordTest is DeployProtocol {
         mockStETH.mint(address(sdgnrs), 2000 ether);
         uint256[] memory boxes = new uint256[](OWNERS);
         uint16[] memory scores = new uint16[](OWNERS);
-        uint24 burnDay;
+        uint32 burnDay;
         for (uint256 i; i < OWNERS; ++i) {
             address owner = _owner(i);
             dgnrs.unwrapTo(owner, 1_000_000_000 ether);
             vm.prank(owner);
             sdgnrs.burn(500_000_000 ether);
-            burnDay = sdgnrs.pendingResolveDay();
-            (uint96 base, uint16 score,) = sdgnrs.pendingRedemptions(owner, burnDay);
-            uint256 rolled = uint256(base) * (((WORD >> 8) % 151) + 25) / 100;
-            uint256 box = rolled - rolled / 2;
-            assertGe(box, 0.01 ether, "paid lootbox leg");
-            assertLe(box, 5 ether, "one chunk");
-            boxes[i] = box;
+            burnDay = _openBatch();
+            (, uint16 score) = sdgnrs.pendingRedemptions(owner, burnDay);
             scores[i] = score;
         }
         vm.warp(vm.getBlockTimestamp() + 1 days);
         _request();
+        for (uint256 i; i < OWNERS; ++i) {
+            uint256 rolled = _batchBase(_owner(i), burnDay) * (((WORD >> 8) % 155) + 21) / 100;
+            boxes[i] = rolled - rolled / 2;
+            assertGe(boxes[i], 0.01 ether);
+        }
         if (stalled) vm.warp(vm.getBlockTimestamp() + 2 days);
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), WORD);
         _toRedemptionStage(burnDay);
-        assertGt(sdgnrs.redemptionPeriods(burnDay), 0, "cohort resolved");
+        // The first admitted worker call resolves the batch.
+        vm.prank(address(game)); sdgnrs.runRedemptionWork(WORD, 200_000);
+        assertGt(_batchRoll(burnDay), 0, "cohort resolved");
         assertFalse(game.rngLocked(), "daily work released the lock");
         assertTrue(sdgnrs.redemptionSettlementPending(), "read cohort remains outstanding");
         assertFalse(game.rngComplete(), "reuse blocked before remaining claims settle");
@@ -123,7 +125,7 @@ contract ForcedRedemptionSessionWordTest is DeployProtocol {
         // FIFO: the first unsettled owner heads the queue; at least one more follows it.
         uint256 head = OWNERS;
         for (uint256 i; i < OWNERS && head == OWNERS; ++i) {
-            (uint96 base,,) = sdgnrs.pendingRedemptions(_owner(i), burnDay);
+            (uint128 base,) = sdgnrs.pendingRedemptions(_owner(i), burnDay);
             if (base != 0) head = i;
         }
         assertLt(head + 1, OWNERS, "harness: a head and a later claim remain");
@@ -133,16 +135,16 @@ contract ForcedRedemptionSessionWordTest is DeployProtocol {
             if (!terminal || i == head) {
                 vm.expectCall(address(game), abi.encodeWithSelector(
                     game.resolveRedemptionLootbox.selector, _owner(i), boxes[i],
-                    uint256(keccak256(abi.encode(WORD, uint256(uint160(_owner(i)))))), scores[i] - 1
+                    uint256(keccak256(abi.encode(WORD, uint256(uint160(_owner(i)))))), scores[i] - 1, burnDay
                 ));
             }
         }
         if (terminal) {
             // The engine settles the head live; the other paid claims survive terminal cutover.
             _mineOneClaim();
-            (uint96 settled,,) = sdgnrs.pendingRedemptions(_owner(head), burnDay);
+            (uint128 settled,) = sdgnrs.pendingRedemptions(_owner(head), burnDay);
             assertEq(settled, 0, "the head settled live");
-            (uint96 waiting,,) = sdgnrs.pendingRedemptions(_owner(head + 1), burnDay);
+            (uint128 waiting,) = sdgnrs.pendingRedemptions(_owner(head + 1), burnDay);
             assertGt(waiting, 0, "later claims wait for the ending");
             vm.warp(vm.getBlockTimestamp() + 1001 days);
             assertTrue(game.livenessTriggered(), "ending disables live settlement");
@@ -164,7 +166,7 @@ contract ForcedRedemptionSessionWordTest is DeployProtocol {
                 vm.prank(owner);
                 sdgnrs.claimRedemption(owner, burnDay);
                 assertGt(mockStETH.balanceOf(owner), beforeSteth, "late terminal withdrawal paid");
-                (uint96 base,,) = sdgnrs.pendingRedemptions(owner, burnDay);
+                (uint128 base,) = sdgnrs.pendingRedemptions(owner, burnDay);
                 assertEq(base, 0, "late entitlement consumed once");
             }
             assertGt(reserved, 0);
@@ -174,7 +176,7 @@ contract ForcedRedemptionSessionWordTest is DeployProtocol {
         _complete();
         assertFalse(sdgnrs.redemptionSettlementPending(), "no retained obligation");
         for (uint256 i; i < OWNERS; ++i) {
-            (uint96 base,,) = sdgnrs.pendingRedemptions(_owner(i), burnDay);
+            (uint128 base,) = sdgnrs.pendingRedemptions(_owner(i), burnDay);
             assertEq(base, 0, "all paid claims consumed");
         }
     }

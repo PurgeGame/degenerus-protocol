@@ -72,9 +72,8 @@ contract FSMEmptyDependencies {
         return (address(0), 0);
     }
 
-    function pendingResolveDay() external pure returns (uint24) {
-        return 0;
-    }
+    function closeRedemptionBatch(uint256) external pure returns (uint256) { return 0; }
+    function resolveTerminalRedemptions() external pure {}
 
     function burnAtGameOver() external {
         ++burns;

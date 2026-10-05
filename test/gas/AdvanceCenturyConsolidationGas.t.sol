@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+import {sDGNRS} from "../../contracts/sDGNRS.sol";
+
 pragma solidity ^0.8.26;
 
 import {Vm} from "forge-std/Vm.sol";
@@ -577,19 +579,17 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         assertEq(count, 4096, "draw layout must match source");
         assertEq(weight, 409_600, "draw intervals must fill its header");
 
-        // A nonempty unresolved sDGNRS day shares the fresh-word transaction.
-        // Layout checked by the public getters before measurement: slot0 packs
-        // supply[128], pending ETH[96], pending day[24]; pendingByDay is slot7.
-        uint256 supply = uint128(uint256(vm.load(address(sdgnrs), bytes32(0))));
-        vm.store(address(sdgnrs), bytes32(0), bytes32(supply | (uint256(17.5 ether) << 128) | (uint256(399) << 224)));
-        vm.store(
-            address(sdgnrs),
-            bytes32(uint256(7)),
-            bytes32(uint256(10 ether / 1 gwei) | (uint256(1_000_000) << 64) | (uint256(10) << 128))
-        );
-        vm.deal(address(sdgnrs), 17.5 ether);
-        assertEq(sdgnrs.pendingResolveDay(), 399, "redemption layout");
-        assertEq(sdgnrs.pendingRedemptionEthValue(), 17.5 ether, "redemption reservation");
+        // A real closed batch remains unresolved until the later redemption consumer stage.
+        vm.deal(address(sdgnrs), 10_000 ether);
+        uint256 burn = sdgnrs.totalSupply() / 1000;
+        address burner = address(0xCE470);
+        vm.prank(address(game)); sdgnrs.transferFromPool(sDGNRS.Pool.Reward, burner, burn);
+        vm.prank(burner); sdgnrs.burn(burn);
+        uint256 claimable = game.claimableWinningsOf(address(sdgnrs));
+        vm.prank(address(game)); sdgnrs.closeRedemptionBatch(claimable);
+        (,uint32 settling,,) = sdgnrs.redemptionBatchState();
+        assertGt(settling, 0);
+        assertGt(sdgnrs.pendingRedemptionEthValue(), 0);
 
         uint8 historyMode = _vaultHistoryMode();
         if (historyMode != 0) {
@@ -705,7 +705,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         _checkConsolidation(false);
     }
 
-    /// @dev The fresh word applies alone: the day's RNG record, the pending sDGNRS redemption, the
+    /// @dev The fresh word applies alone: the day's RNG record (redemption stays pending), the
     ///      craps day it opens and, in the history variants, the vault's 365-day claim.
     function _checkWordApply(bool measureComposition) private {
         uint8 historyMode = _vaultHistoryMode();
@@ -714,7 +714,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
             // reverts; a rolled-back cursor alone would not exclude an early failure.
             vm.expectCall(
                 ContractAddresses.WWXRP,
-                abi.encodeWithSignature("mintPrize(address,uint256)", ContractAddresses.VAULT, 1 ether)
+                abi.encodeWithSignature("mintPrize(address,uint256)", ContractAddresses.VAULT, 1)
             );
         }
         CenturyNativeGasHost host = CenturyNativeGasHost(payable(address(game)));
@@ -736,7 +736,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
             1,
             "fresh RNG must apply in the word-apply call"
         );
-        assertEq(_countTopic(logs, keccak256("RedemptionResolved(uint24,uint16)")), 1, "pending redemption must resolve");
+        assertEq(_countTopic(logs, keccak256("RedemptionResolved(uint32,uint16,uint16)")), 0, "redemption resolves only after daily work");
         if (historyMode != 0) {
             bytes32 stateSlot = keccak256(abi.encode(ContractAddresses.VAULT, uint256(2)));
             uint24 cursor = uint24(uint256(vm.load(address(coinflip), stateSlot)) >> 128);

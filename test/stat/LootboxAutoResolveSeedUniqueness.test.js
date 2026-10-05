@@ -1,36 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
-// LootboxAutoResolveSeedUniqueness.test.js — Phase 275 Wave 2 TST-LBX-AR-04
-//
-// Per D-275-TST-04-01: direct-call seed-uniqueness chi-square + cross-pair
-// independence + cross-slice independence across the 3 upstream auto-resolve
-// callers:
-//   (b) DegeneretteModule:786 — single-shot per payout
-//   (c) sDGNRS:672 — single-shot per redemption; upstream
-//       entropy = keccak(rngWord, player)
-//   (d) DegenerusGame:1721 redemption-loop — rngWord EVOLVES per iteration
-//       via `rngWord = keccak256(abi.encode(rngWord))` at L1769
-//
-// The chi-square verifies bit-slice independence of `bits[224..255]` (the
-// Bernoulli slice consumed by both manual + auto-resolve branches per
-// D-275-HOIST-01). The keccak-chain seed-uniqueness across the 3 callers is
-// analytically attested in 275-A-PLAN.md T-275-02 threat-model; this stat
-// test provides empirical confirmation that bits[224..255] are uncorrelated
-// across distinct caller-shape input sets.
-//
-// PLACEMENT: stat/ per D-275-TST-PLACEMENT-01 (heavy-MC tier; wired into
-// `test:stat` npm script).
-//
-// CROSS-CITES:
-//   - D-275-TST-04-01 (direct-call seed-uniqueness; full-stack deferred)
-//   - feedback_rng_backward_trace.md (per-resolution seed uniqueness)
-//   - FINDINGS-v39.0.md §4 (b) bit-slice [224..255] independence (carries verbatim)
-//   - test/stat/TraitDistribution.test.js (chi² + Wilson-Hilferty infrastructure)
+// Statistical seed model for direct lootboxes and redemption orders. Redemption
+// mixes the session word with the player in sDGNRS, then uses the human-order
+// BoxOpen domain and a one-based box nonce. No amount or former 5-ETH chunk
+// enters that draw. This model tests distribution, not production wiring;
+// RandomnessSeedInputs and RedemptionForwardBatches execute the real resolver.
 
 import { expect } from "chai";
 import hre from "hardhat";
-
-const TICKET_SCALE = 100n;
 
 async function deployTester() {
   const Factory = await hre.ethers.getContractFactory("LootboxBernoulliTester");
@@ -46,14 +23,18 @@ function wilsonHilfertyZ(chi2, df) {
   return term / Math.sqrt(2 / (9 * df));
 }
 
-// Direct boxes already receive a caller-derived word. Redemption adds its own domain.
-const REDEMPTION_BOX_TAG = 0x526564656d7074696f6e426f78n;
-function deriveSeed(rngWord, player, redemption = false) {
-  const encoded = hre.ethers.AbiCoder.defaultAbiCoder().encode(
-    redemption ? ["uint256", "address", "uint256"] : ["uint256", "address"],
-    redemption ? [rngWord, player, REDEMPTION_BOX_TAG] : [rngWord, player]
-  );
-  return BigInt(hre.ethers.keccak256(encoded));
+// EntropyLib.hash2/hash4 encode each input in a full 32-byte word.
+const BOX_OPEN_TAG = 0x426f784f70656en;
+function deriveSeed(rngWord, player) {
+  return BigInt(hre.ethers.keccak256(hre.ethers.AbiCoder.defaultAbiCoder().encode(
+    ["uint256", "address"], [rngWord, player]
+  )));
+}
+function redemptionSeed(rngWord, player, nonce = 1) {
+  const entropy = deriveSeed(rngWord, player);
+  return BigInt(hre.ethers.keccak256(hre.ethers.AbiCoder.defaultAbiCoder().encode(
+    ["uint256", "address", "uint256", "uint256"], [entropy, player, BOX_OPEN_TAG, nonce]
+  )));
 }
 
 function makeCallerBSeeds(N) {
@@ -68,48 +49,39 @@ function makeCallerBSeeds(N) {
 }
 
 function makeCallerCSeeds(N) {
-  // sDGNRS: single-shot per redemption; entropy = keccak(rngWord, player) upstream.
+  // First box for distinct beneficiaries and session words.
   const seeds = [];
   for (let i = 0; i < N; i++) {
-    // Fixed historical sample prefix; never search prefixes to pass a statistic.
-    const upstreamRng = BigInt(hre.ethers.keccak256("0x" + ("c0275c" + i.toString(16).padStart(58, "0"))));
+    const rngWord = BigInt(hre.ethers.keccak256("0x" + ("c0275c" + i.toString(16).padStart(58, "0"))));
     const player = "0x" + (BigInt(0x3a00) + BigInt(i)).toString(16).padStart(40, "0");
-    // Model upstream rngWord = keccak(upstreamRng, player).
-    const rngWord = BigInt(
-      hre.ethers.keccak256(
-        hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint256", "address"], [upstreamRng, player])
-      )
-    );
-    seeds.push(deriveSeed(rngWord, player, true));
+    seeds.push(redemptionSeed(rngWord, player));
   }
   return seeds;
 }
 
 function makeCallerDSeeds(N) {
-  // DegenerusGame:1721 redemption-loop — `rngWord = keccak256(abi.encode(rngWord))`
-  // evolves per chunk at L1769. Each iteration derives a fresh seed from the
-  // evolved rngWord.
+  // All twenty box nonces for one beneficiary across successive synthetic sessions.
   const seeds = [];
   let rngWord = BigInt(hre.ethers.keccak256("0x" + "d4".padStart(64, "0")));
   const player = "0x" + BigInt(0x4000).toString(16).padStart(40, "0");
   for (let i = 0; i < N; i++) {
-    // Evolve rngWord per L1769 pattern.
-    const encoded = hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint256"], [rngWord]);
-    rngWord = BigInt(hre.ethers.keccak256(encoded));
-    seeds.push(deriveSeed(rngWord, player, true)); // 5-ETH-chunk
+    if (i % 20 === 0) {
+      rngWord = BigInt(hre.ethers.keccak256(hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint256"], [rngWord])));
+    }
+    seeds.push(redemptionSeed(rngWord, player, i % 20 + 1));
   }
   return seeds;
 }
 
-describe("LootboxAutoResolveSeedUniqueness (stat-suite, heavy-MC) — TST-LBX-AR-04 chi-square across 3 upstream callers", function () {
+describe("LootboxAutoResolveSeedUniqueness (stat-suite, heavy-MC) — TST-LBX-AR-04 chi-square across 3 seed families", function () {
   this.timeout(600_000);
 
-  describe("Per-caller chi² uniformity of bits[224..255] % 100 at N=10K per caller (DegeneretteModule / sDGNRS / DegenerusGame redemption-loop)", function () {
+  describe("Per-caller chi² uniformity of bits[224..255] % 100 at N=10K per caller (DegeneretteModule / sDGNRS / redemption order nonces)", function () {
     const N = 10_000;
     const CALLERS = [
       { id: "b-DegeneretteModule", gen: makeCallerBSeeds },
       { id: "c-sDGNRS", gen: makeCallerCSeeds },
-      { id: "d-DegenerusGame-1721-redemption-loop-L1769", gen: makeCallerDSeeds },
+      { id: "d-redemption-order-nonces", gen: makeCallerDSeeds },
     ];
 
     CALLERS.forEach(({ id, gen }) => {

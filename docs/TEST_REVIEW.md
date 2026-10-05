@@ -88,3 +88,29 @@ unsigned value with zero, or count a setup-only check as a protocol property.
 Use `afterInvariant` and focused success cases to establish meaningful activity;
 use a deliberate bad state or mutation where an invariant's detector is subtle.
 Keep shared handler changes under the campaigns that consume those handlers.
+
+## Forward redemption batches — 2026-10-05
+
+The redemption suites now exercise request-bound batches. Historical assertions
+about day-keyed claims, submit-time pricing/reservation, blocked burns during RNG,
+and 5 ETH chunks no longer describe the protocol and were replaced, rather than
+preserved behind compatibility shims. Common deployment and worker fixtures live
+in `test/fuzz/helpers/RedemptionFixture.sol` and `RedemptionCloseTools.sol`.
+The latter exposes the production close/funding hook; real request integration
+remains covered separately by `RedemptionForwardBatches` and the session suites.
+
+| Former property | Current regression coverage |
+| --- | --- |
+| A burn fixes its base and reserves 175% immediately | Burns record raw token weights and frozen scores; escrow preserves holder share until a daily or midday request closes and prices the batch. `RedemptionForwardBatches`, `StakedStonkRedemption`, `RedemptionEdgeCases`. |
+| Day-keyed pending totals and supply cap | Exact batch token conservation, first-burn supply snapshot, 50% cap, wallet wall-day cap across batches, and exact reserves including cursor rounding dust and parked claims. `RedemptionAccounting` and `RedemptionEdgeCases`. |
+| The next daily coinflip pays the escrow | A tagged synthetic batch flip uses the shared no-bonus percent function; its result is independent of the daily win bit. `RedemptionForwardBatches`, `StakedStonkRedemption`, `RedemptionBatching`. |
+| Per-5-ETH chunks and overflow handling | One custom order with at most 20 boxes, full value funding, amount-independent first-draw identity, cold gas bounds, and constant-time cleanup. `RedemptionForwardBatches`, `RedemptionBatchGas`, `RandomnessSeedInputs`. The retired independent chunk-award model does not describe the shared human-order roller. |
+| Submit-time Game ETH or custody fallback | At close, existing custody offsets the reserve; the Game transfers only the shortfall, ETH first and stETH for the remainder, with matching claimable and pool debits. Transfer failure rolls back the close. `RedemptionStethFallback`. |
+| Burn immediately counts toward century recycling | Open escrow remains in the economic holder base; the burn counts once the batch closes. Pending and resolved claims survive refills. `SdgnrsCenturyRecycle`. |
+| A terminal word rerolls unresolved claims | Both endings resolve an unrolled closed batch at 100%; a live resolved batch retains its roll, while the open batch unwinds at terminal backing value. `RedemptionForwardBatches`, `DeadVrfEnding`. |
+
+The migrated repros retain real payable forwarding, stETH-before-ETH reentrancy
+checks, protection of other claims' reserves, settlement order, parked retries,
+operator authorization and terminal claims without an expiry. Older source-pinned
+reports and their test counts are historical evidence, not attestations for this
+migration. Current commands and run evidence are recorded in `VERIFICATION.md`.

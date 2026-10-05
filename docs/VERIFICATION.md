@@ -454,3 +454,69 @@ The combined build, all eleven source/interface gates, 37 deployment-size checks
 tool tests pass. DegenerusJackpots is 5,364 runtime bytes and the Degenerette
 module is 21,258. The accepted contract sources and changed tests match main
 exactly. The larger release audit remains outside this focused verification.
+
+## Forward redemption batches and bounded lootbox orders (2026-10-05)
+
+Live burns now queue raw token weights and a frozen activity score. The next live
+RNG request closes the batch, fixes its ETH/FLIP backing, and reserves the maximum
+ETH outcome. Its response supplies the redemption roll (21–175%) and an independent
+synthetic flip. Open escrow remains in the holder base until close. Terminal
+resolution uses 100% for an unrolled closed batch; an open batch unwinds at terminal
+backing value. A live lootbox leg becomes one custom-size order of at most 20 boxes,
+using the shared human-order roller and no whale-pass overflow conversion.
+
+The legacy redemption tests, public selectors, worker fixtures, gas admission
+checks, source manifests and sDGNRS layout golden were migrated to that behavior.
+This preparation changed verification code and records, not production contract
+logic. See `TEST_REVIEW.md` for the coverage mapping and retired assumptions.
+
+Production build and deployment-size validation pass for all 37 deployment
+entries with the original address pins (SHA-256
+`007af42d7a34fa7e9b612bccfeeb1844526d5a960d07d443f17f49554894dbe2`).
+DegenerusGame is 24,539 runtime bytes, leaving **37 bytes**; the lootbox module is
+20,436 bytes and sDGNRS is 18,525 bytes. All layout goldens match the reviewed
+source, and the recursive delegate-layout comparison reports no mismatch across
+16 modules. Interface coverage and all ten other source gates pass. The 51 Python
+assurance-tool tests pass; the complete 622-file Solidity source/test type check
+also passes.
+
+The build, layout and interface checks ran in the disposable checkout
+`/home/zak/.cache/purgegame-tmp/redemption-hardhat-ready-ztkhthk7`, with matching
+contract-source hashes. Production build/size evidence is copied under
+`.audit-test-logs/redemption-ready/`. Hardhat's DGNRS and Coinflip suites pass all
+105 tests (`20261005T093914.162316Z-9bad1204`); the updated redemption seed model
+passes five statistical checks (`20261005T095147.345703Z-239e0795`). Both maintained
+runs report no compiler or source drift and their evidence is copied under
+`.audit-test-logs/hardhat/`.
+
+The accepted latest executions across 38 selected Foundry roots pass all 345
+checks, with 1,000-run fuzz properties and default invariant settings (including
+suite-specific overrides recorded in source). The combined run
+`20261005T095320.358976Z-37d75683` passes 344 and exposes one terminal assertion
+reading its expected value after claim deletion. The corrected file is rerun in
+`20261005T100547.199651Z-4cf5185d`, passing all 17 checks, and that exact file is
+copied back into the working tree. No other test or contract source changed after
+the combined run. The per-test accepted-result index is
+`.audit-test-logs/redemption-ready/accepted-tests.json`; earlier failures remain
+in the logs. Coverage includes exact reserves/token accounting, arbitrary-input
+safety, RNG freezing, delayed responses, and award equality across keeper gas
+partitions while the next batch accepts burns.
+
+The isolated cold campaign `20261005T095321.718553Z-e2ae7086` passes all 58 test
+executions with 1,000-run fuzz properties and no input drift. It selects
+`RedemptionBatchGas`, `AdvanceCenturyConsolidationGas`, `SdgnrsPendingReuseGas`
+and `RedemptionForwardBatches`, with `FOUNDRY_ISOLATE=true --threads 1`.
+It includes ETH and stETH funding, boxes up to 120 million ETH, real request and
+settlement flows, and constant-time cleanup for 2 versus 2,000 beneficiaries.
+The worst measured cold 20-box beneficiary uses 1,047,681 gas against the declared
+2,430,000 allowance (including the return tail). The large-value order fuzz test
+asserts the separate 1,850,000 order bound for every sampled amount and seed.
+The century variants cover both a committing and a reverting 365-day vault claim;
+their setup now uses whole FLIP/WWXRP units. These are measured bounds over the
+specified fixtures and fuzz samples, not a proof over every possible EVM state.
+Evidence is copied under `.audit-test-logs/foundry/`.
+
+This is focused commit verification, not a completed whole-repository release
+audit, deep invariant campaign, symbolic campaign or remote CI run. Historical
+counts and source-pinned report drafts do not attest this revision. Refreshing the
+audit snapshot authenticates the current inputs only; it does not expand that scope.

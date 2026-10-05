@@ -1,47 +1,23 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.26;
+pragma solidity 0.8.34;
+import {RedemptionFixture} from "../fuzz/helpers/RedemptionFixture.sol";
+import {sDGNRS} from "../../contracts/sDGNRS.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
-import {RedemptionGasTest} from "../fuzz/RedemptionGas.t.sol";
-import {Vm} from "forge-std/Vm.sol";
+/// @notice Regression coverage for request-bound, forward-priced redemption batches.
+contract SdgnrsPendingReuseGasTest is RedemptionFixture {
 
-/// @dev Run cold on current source and the original per-day baseline, unchanged.
-contract SdgnrsPendingReuseGasTest is RedemptionGasTest {
-    function _refund() private view returns (uint256) {
-        Vm.Gas memory m = vm.lastCallGas();
-        if (m.gasRefunded <= 0) return 0;
-        uint256 r = uint256(uint64(m.gasRefunded));
-        return r < m.gasTotalUsed / 5 ? r : m.gasTotalUsed / 5;
-    }
-    function test_ColdPendingAggregateThroughFourRealBurnResolvePeriods() public {
-        uint256 burns; uint256 resolutions; uint256 burnRefunds; uint256 resolveRefunds;
-        for (uint256 period; period < 4; ++period) {
-            _primeCurrentDayRng();
-            uint24 day = game.currentDayView();
-            vm.prank(player);
-            sdgnrs.burn(PLAYER_SDGNRS / 1000);
-            burnRefunds += _refund();
-            uint256 b = vm.snapshotGasLastCall("pending-pool-burn");
-            burns += b;
-            assertTrue(sdgnrs.hasPendingRedemptions(day), "paid burn populated this day's pool");
-            vm.prank(address(game));
-            sdgnrs.resolveRedemptionPeriod(100, day);
-            resolveRefunds += _refund();
-            uint256 r = vm.snapshotGasLastCall("pending-pool-resolve");
-            resolutions += r;
-            assertEq(sdgnrs.pendingResolveDay(), 0, "resolved pool invalidated");
-            assertFalse(sdgnrs.hasPendingRedemptions(day), "retained payload is logically absent");
-            // Unmeasured: the Game pins the session word with the resolve and its keeper drains
-            // the single live cohort before another day's burn can enter (PriorDayUnresolved).
-            _openSettlement(day);
-            _drainSettlementCohort();
-            emit log_named_uint("period", period);
-            emit log_named_uint("cold burn isolated transaction gas", b);
-            emit log_named_uint("cold resolve isolated transaction gas", r);
-            vm.warp(vm.getBlockTimestamp() + 1 days);
+    function test_ColdAlternatingBatchListsThroughFourRequests() public {
+        for (uint256 i; i < 4; ++i) {
+            uint32 id = _openBatchId();
+            _burn(alice, 1 ether); _burn(bob, 1 ether);
+            _resolveLive(100);
+            assertTrue(_work(9_000_000));
+            assertEq(_claimTokens(alice,id) + _claimTokens(bob,id), 0);
+            assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
+            assertEq(_openBatchId(), id + 1);
+            assertFalse(sdgnrs.redemptionSettlementPending());
         }
-        emit log_named_uint("four-period burn isolated transaction gas", burns);
-        emit log_named_uint("four-period resolve isolated transaction gas", resolutions);
-        emit log_named_uint("four-period burn refund proxy", burnRefunds);
-        emit log_named_uint("four-period resolve refund proxy", resolveRefunds);
     }
+
 }

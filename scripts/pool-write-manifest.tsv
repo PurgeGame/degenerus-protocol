@@ -110,7 +110,7 @@ POOL-TO-POOL	claimablePool	claimDeadVrf	modules/DegenerusGameGameOverModule.sol	
 VALUE-IN	claimablePool	creditRedemptionDirect	modules/DegenerusGameLootboxModule.sol	WRITE	aggregate in tandem with the arriving value
 VALUE-IN	claimablePool	distributeYieldSurplus	modules/DegenerusGameJackpotModule.sol	WRITE	aggregate for the three sink credits (23% x3)
 DRAIN-ZERO	claimablePool	_handleFinalSweep	modules/DegenerusGameGameOverModule.sol	WRITE	30-day final sweep: sinks paid their claimable, residual forfeited three-way, claims closed (GO_SWEPT)
-VALUE-OUT	claimablePool	pullRedemptionReserve	modules/DegenerusGameLootboxModule.sol	WRITE	redemption reserve segregated to sDGNRS: ETH transfers out; re-counted there as pendingRedemptionEthValue (boundary paired by RedemptionAccounting)
+VALUE-OUT	claimablePool	_closeRedemptionBatch	modules/DegenerusGameRngUtils.sol	WRITE	Request close transfers the custody shortfall as ETH then stETH, paired with the same claimable debit; close caps pull at available claimable. RedemptionStethFallback verifies both ledgers and receipt.
 VALUE-OUT	claimablePool	withdrawAfkingFunding	DegenerusGame.sol	WRITE	prepaid afking returned to funder; per-player afking half debited in tandem
 DECL	currentPrizePool	<file-scope>	storage/DegenerusGameStorage.sol	DECL	counted-term state variable declaration
 POOL-TO-POOL	currentPrizePool	_consolidatePoolsAndRewardJackpots	modules/DegenerusGameAdvanceModule.sol	WRITE	consolidation: next merges into current, x00 keep-roll moves future->current

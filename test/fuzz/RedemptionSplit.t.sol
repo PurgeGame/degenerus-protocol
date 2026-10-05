@@ -22,7 +22,7 @@ contract RedemptionSplitTest is Test {
         bool isGameOver
     ) public pure {
         ethValueOwed = uint96(bound(ethValueOwed, 1, MAX_DAILY_REDEMPTION_EV));
-        uint16 roll = uint16(bound(rollRaw, 25, 175));
+        uint16 roll = uint16(bound(rollRaw, 21, 175));
 
         uint256 totalRolledEth = (uint256(ethValueOwed) * roll) / 100;
 
@@ -53,7 +53,7 @@ contract RedemptionSplitTest is Test {
         uint16 rollRaw
     ) public pure {
         ethValueOwed = uint96(bound(ethValueOwed, 1, MAX_DAILY_REDEMPTION_EV));
-        uint16 roll = uint16(bound(rollRaw, 25, 175));
+        uint16 roll = uint16(bound(rollRaw, 21, 175));
 
         uint256 totalRolledEth = (uint256(ethValueOwed) * roll) / 100;
         uint256 ethDirect = totalRolledEth;
@@ -70,14 +70,14 @@ contract RedemptionSplitTest is Test {
     }
 
     /// @dev Live game, lootbox half at or above the floor: the normal 50/50 split, no forfeit.
-    ///      Lower-bound ethValueOwed so even the smallest roll (25%) keeps the lootbox half >= floor.
+    ///      Lower-bound ethValueOwed so even the smallest roll (21%) keeps the lootbox half >= floor.
     function testFuzz_INV03_noGameOver_normalSplit(
         uint96 ethValueOwed,
         uint16 rollRaw
     ) public pure {
-        // rolled >= ethValueOwed * 25/100; lootbox ~ rolled/2; need lootbox >= 0.01 ETH for all rolls.
+        // rolled >= ethValueOwed * 21/100; lootbox ~ rolled/2; need lootbox >= 0.01 ETH for all rolls.
         ethValueOwed = uint96(bound(ethValueOwed, 0.1 ether, MAX_DAILY_REDEMPTION_EV));
-        uint16 roll = uint16(bound(rollRaw, 25, 175));
+        uint16 roll = uint16(bound(rollRaw, 21, 175));
 
         uint256 totalRolledEth = (uint256(ethValueOwed) * roll) / 100;
         uint256 ethDirect = totalRolledEth / 2;
@@ -109,7 +109,7 @@ contract RedemptionSplitTest is Test {
         // rolled <= ethValueOwed * 175/100; lootbox ~ rolled/2; need lootbox < 0.01 ETH for all rolls.
         // ethValueOwed <= 0.01 ETH => rolled <= 0.0175 ETH => lootbox <= ~0.00875 ETH < floor.
         ethValueOwed = uint96(bound(ethValueOwed, 1, 0.01 ether));
-        uint16 roll = uint16(bound(rollRaw, 25, 175));
+        uint16 roll = uint16(bound(rollRaw, 21, 175));
 
         uint256 totalRolledEth = (uint256(ethValueOwed) * roll) / 100;
         uint256 ethDirect = totalRolledEth / 2;
