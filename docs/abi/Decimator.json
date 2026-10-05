@@ -1,0 +1,964 @@
+{
+  "format": 1,
+  "contracts": {
+    "FLIP": [
+      {
+        "type": "function",
+        "name": "autoDecimatorBurn",
+        "inputs": [
+          {
+            "name": "lvl",
+            "type": "uint24",
+            "internalType": "uint24"
+          },
+          {
+            "name": "cap",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "outputs": [
+          {
+            "name": "amount",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "type": "function",
+        "name": "decimatorBurn",
+        "inputs": [
+          {
+            "name": "player",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "amount",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "chips",
+            "type": "uint32",
+            "internalType": "uint32"
+          }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "type": "event",
+        "name": "DecimatorBurn",
+        "inputs": [
+          {
+            "name": "player",
+            "type": "address",
+            "indexed": true,
+            "internalType": "address"
+          },
+          {
+            "name": "amountBurned",
+            "type": "uint256",
+            "indexed": false,
+            "internalType": "uint256"
+          },
+          {
+            "name": "entryId",
+            "type": "uint64",
+            "indexed": false,
+            "internalType": "uint64"
+          }
+        ],
+        "anonymous": false
+      }
+    ],
+    "DegenerusGame": [
+      {
+        "type": "function",
+        "name": "decWindow",
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "",
+            "type": "bool",
+            "internalType": "bool"
+          }
+        ],
+        "stateMutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "recordDecBurn",
+        "inputs": [
+          {
+            "name": "",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "",
+            "type": "uint24",
+            "internalType": "uint24"
+          },
+          {
+            "name": "",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "",
+            "type": "uint32",
+            "internalType": "uint32"
+          }
+        ],
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint64",
+            "internalType": "uint64"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "type": "function",
+        "name": "runDecimatorJackpot",
+        "inputs": [
+          {
+            "name": "",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "",
+            "type": "uint24",
+            "internalType": "uint24"
+          },
+          {
+            "name": "",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "outputs": [
+          {
+            "name": "returnAmountWei",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      }
+    ],
+    "DegenerusGameDecimatorModule": [
+      {
+        "type": "function",
+        "name": "runDecimatorJackpotAwards",
+        "inputs": [
+          {
+            "name": "terms",
+            "type": "tuple",
+            "internalType": "struct DecimatorJackpotTerms",
+            "components": [
+              {
+                "name": "word",
+                "type": "uint256",
+                "internalType": "uint256"
+              },
+              {
+                "name": "shares",
+                "type": "uint256[4]",
+                "internalType": "uint256[4]"
+              },
+              {
+                "name": "targets",
+                "type": "uint16[4]",
+                "internalType": "uint16[4]"
+              },
+              {
+                "name": "solo",
+                "type": "uint8",
+                "internalType": "uint8"
+              }
+            ]
+          },
+          {
+            "name": "allowance",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "outputs": [
+          {
+            "name": "result",
+            "type": "tuple",
+            "internalType": "struct MineFlipGas.Result",
+            "components": [
+              {
+                "name": "progressed",
+                "type": "bool",
+                "internalType": "bool"
+              },
+              {
+                "name": "done",
+                "type": "bool",
+                "internalType": "bool"
+              },
+              {
+                "name": "rewardBasis",
+                "type": "uint256",
+                "internalType": "uint256"
+              }
+            ]
+          },
+          {
+            "name": "soloAmount",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "type": "function",
+        "name": "runDecimatorWork",
+        "inputs": [
+          {
+            "name": "gasAllowance",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "outputs": [
+          {
+            "name": "",
+            "type": "tuple",
+            "internalType": "struct MineFlipGas.Result",
+            "components": [
+              {
+                "name": "progressed",
+                "type": "bool",
+                "internalType": "bool"
+              },
+              {
+                "name": "done",
+                "type": "bool",
+                "internalType": "bool"
+              },
+              {
+                "name": "rewardBasis",
+                "type": "uint256",
+                "internalType": "uint256"
+              }
+            ]
+          }
+        ],
+        "stateMutability": "nonpayable"
+      },
+      {
+        "type": "event",
+        "name": "DecBurnRecorded",
+        "inputs": [
+          {
+            "name": "player",
+            "type": "address",
+            "indexed": true,
+            "internalType": "address"
+          },
+          {
+            "name": "lvl",
+            "type": "uint24",
+            "indexed": true,
+            "internalType": "uint24"
+          },
+          {
+            "name": "entryId",
+            "type": "uint64",
+            "indexed": true,
+            "internalType": "uint64"
+          },
+          {
+            "name": "baseAmount",
+            "type": "uint256",
+            "indexed": false,
+            "internalType": "uint256"
+          },
+          {
+            "name": "credited",
+            "type": "uint256",
+            "indexed": false,
+            "internalType": "uint256"
+          },
+          {
+            "name": "stack",
+            "type": "uint256",
+            "indexed": false,
+            "internalType": "uint256"
+          },
+          {
+            "name": "chips",
+            "type": "uint32",
+            "indexed": false,
+            "internalType": "uint32"
+          }
+        ],
+        "anonymous": false
+      },
+      {
+        "type": "event",
+        "name": "DecimatorClaimed",
+        "inputs": [
+          {
+            "name": "player",
+            "type": "address",
+            "indexed": true,
+            "internalType": "address"
+          },
+          {
+            "name": "lvl",
+            "type": "uint24",
+            "indexed": true,
+            "internalType": "uint24"
+          },
+          {
+            "name": "entryId",
+            "type": "uint64",
+            "indexed": true,
+            "internalType": "uint64"
+          },
+          {
+            "name": "amountWei",
+            "type": "uint256",
+            "indexed": false,
+            "internalType": "uint256"
+          },
+          {
+            "name": "halfPasses",
+            "type": "uint256",
+            "indexed": false,
+            "internalType": "uint256"
+          }
+        ],
+        "anonymous": false
+      },
+      {
+        "type": "event",
+        "name": "DecimatorFieldBound",
+        "inputs": [
+          {
+            "name": "lvl",
+            "type": "uint24",
+            "indexed": true,
+            "internalType": "uint24"
+          },
+          {
+            "name": "fieldEntries",
+            "type": "uint40",
+            "indexed": false,
+            "internalType": "uint40"
+          },
+          {
+            "name": "capacity",
+            "type": "uint8",
+            "indexed": false,
+            "internalType": "uint8"
+          }
+        ],
+        "anonymous": false
+      },
+      {
+        "type": "event",
+        "name": "DecimatorGenerated",
+        "inputs": [
+          {
+            "name": "lvl",
+            "type": "uint24",
+            "indexed": true,
+            "internalType": "uint24"
+          },
+          {
+            "name": "id",
+            "type": "uint64",
+            "indexed": true,
+            "internalType": "uint64"
+          },
+          {
+            "name": "recipient",
+            "type": "address",
+            "indexed": true,
+            "internalType": "address"
+          },
+          {
+            "name": "quadrant",
+            "type": "uint8",
+            "indexed": false,
+            "internalType": "uint8"
+          },
+          {
+            "name": "chips",
+            "type": "uint32",
+            "indexed": false,
+            "internalType": "uint32"
+          },
+          {
+            "name": "normalizedPeak",
+            "type": "uint256",
+            "indexed": false,
+            "internalType": "uint256"
+          },
+          {
+            "name": "score",
+            "type": "uint256",
+            "indexed": false,
+            "internalType": "uint256"
+          }
+        ],
+        "anonymous": false
+      },
+      {
+        "type": "event",
+        "name": "DecimatorJackpotPlan",
+        "inputs": [
+          {
+            "name": "lvl",
+            "type": "uint24",
+            "indexed": true,
+            "internalType": "uint24"
+          },
+          {
+            "name": "word",
+            "type": "uint256",
+            "indexed": false,
+            "internalType": "uint256"
+          },
+          {
+            "name": "originalPool",
+            "type": "uint96",
+            "indexed": false,
+            "internalType": "uint96"
+          },
+          {
+            "name": "originalStack",
+            "type": "uint64",
+            "indexed": false,
+            "internalType": "uint64"
+          },
+          {
+            "name": "originalCount",
+            "type": "uint40",
+            "indexed": false,
+            "internalType": "uint40"
+          },
+          {
+            "name": "availableBudget",
+            "type": "uint128",
+            "indexed": false,
+            "internalType": "uint128"
+          },
+          {
+            "name": "funding",
+            "type": "uint96",
+            "indexed": false,
+            "internalType": "uint96"
+          },
+          {
+            "name": "soloAmount",
+            "type": "uint128",
+            "indexed": false,
+            "internalType": "uint128"
+          },
+          {
+            "name": "traits",
+            "type": "uint32",
+            "indexed": false,
+            "internalType": "uint32"
+          },
+          {
+            "name": "generatedEntries",
+            "type": "uint40",
+            "indexed": false,
+            "internalType": "uint40"
+          },
+          {
+            "name": "weights",
+            "type": "uint64",
+            "indexed": false,
+            "internalType": "uint64"
+          }
+        ],
+        "anonymous": false
+      },
+      {
+        "type": "event",
+        "name": "DecimatorRanked",
+        "inputs": [
+          {
+            "name": "lvl",
+            "type": "uint24",
+            "indexed": true,
+            "internalType": "uint24"
+          },
+          {
+            "name": "champion",
+            "type": "uint64",
+            "indexed": false,
+            "internalType": "uint64"
+          },
+          {
+            "name": "winners",
+            "type": "uint8",
+            "indexed": false,
+            "internalType": "uint8"
+          }
+        ],
+        "anonymous": false
+      },
+      {
+        "type": "event",
+        "name": "DecimatorReferenceUpdated",
+        "inputs": [
+          {
+            "name": "lvl",
+            "type": "uint24",
+            "indexed": true,
+            "internalType": "uint24"
+          },
+          {
+            "name": "totalCreditedStack",
+            "type": "uint64",
+            "indexed": false,
+            "internalType": "uint64"
+          },
+          {
+            "name": "entrants",
+            "type": "uint40",
+            "indexed": false,
+            "internalType": "uint40"
+          }
+        ],
+        "anonymous": false
+      },
+      {
+        "type": "event",
+        "name": "DecimatorResolved",
+        "inputs": [
+          {
+            "name": "lvl",
+            "type": "uint24",
+            "indexed": true,
+            "internalType": "uint24"
+          },
+          {
+            "name": "rngWord",
+            "type": "uint256",
+            "indexed": false,
+            "internalType": "uint256"
+          },
+          {
+            "name": "poolWei",
+            "type": "uint256",
+            "indexed": false,
+            "internalType": "uint256"
+          },
+          {
+            "name": "entrants",
+            "type": "uint64",
+            "indexed": false,
+            "internalType": "uint64"
+          }
+        ],
+        "anonymous": false
+      },
+      {
+        "type": "event",
+        "name": "DecimatorRun",
+        "inputs": [
+          {
+            "name": "lvl",
+            "type": "uint24",
+            "indexed": true,
+            "internalType": "uint24"
+          },
+          {
+            "name": "entryId",
+            "type": "uint64",
+            "indexed": true,
+            "internalType": "uint64"
+          },
+          {
+            "name": "normalizedPeak",
+            "type": "uint256",
+            "indexed": false,
+            "internalType": "uint256"
+          }
+        ],
+        "anonymous": false
+      }
+    ],
+    "DegenerusGameLens": [
+      {
+        "type": "function",
+        "name": "decBattleRoundOf",
+        "inputs": [
+          {
+            "name": "game",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "lvl",
+            "type": "uint24",
+            "internalType": "uint24"
+          }
+        ],
+        "outputs": [
+          {
+            "name": "r",
+            "type": "tuple",
+            "internalType": "struct DegenerusGameStorage.DecBattleRound",
+            "components": [
+              {
+                "name": "poolWei",
+                "type": "uint96",
+                "internalType": "uint96"
+              },
+              {
+                "name": "count",
+                "type": "uint40",
+                "internalType": "uint40"
+              },
+              {
+                "name": "totalCreditedStack",
+                "type": "uint64",
+                "internalType": "uint64"
+              },
+              {
+                "name": "openedDay",
+                "type": "uint24",
+                "internalType": "uint24"
+              },
+              {
+                "name": "phase",
+                "type": "uint8",
+                "internalType": "uint8"
+              },
+              {
+                "name": "capacity",
+                "type": "uint8",
+                "internalType": "uint8"
+              },
+              {
+                "name": "winners",
+                "type": "uint8",
+                "internalType": "uint8"
+              },
+              {
+                "name": "paid",
+                "type": "uint8",
+                "internalType": "uint8"
+              },
+              {
+                "name": "cursor",
+                "type": "uint64",
+                "internalType": "uint64"
+              },
+              {
+                "name": "champion",
+                "type": "uint64",
+                "internalType": "uint64"
+              },
+              {
+                "name": "next",
+                "type": "uint24",
+                "internalType": "uint24"
+              }
+            ]
+          }
+        ],
+        "stateMutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "decBurnOf",
+        "inputs": [
+          {
+            "name": "game",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "lvl",
+            "type": "uint24",
+            "internalType": "uint24"
+          },
+          {
+            "name": "player",
+            "type": "address",
+            "internalType": "address"
+          }
+        ],
+        "outputs": [
+          {
+            "name": "e",
+            "type": "tuple",
+            "internalType": "struct DegenerusGameLens.DecBurnEntry",
+            "components": [
+              {
+                "name": "entryId",
+                "type": "uint64",
+                "internalType": "uint64"
+              },
+              {
+                "name": "owner",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "stack",
+                "type": "uint256",
+                "internalType": "uint256"
+              },
+              {
+                "name": "chips",
+                "type": "uint32",
+                "internalType": "uint32"
+              }
+            ]
+          }
+        ],
+        "stateMutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "decBurnReferenceOf",
+        "inputs": [
+          {
+            "name": "game",
+            "type": "address",
+            "internalType": "address"
+          }
+        ],
+        "outputs": [
+          {
+            "name": "stack",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "count",
+            "type": "uint40",
+            "internalType": "uint40"
+          },
+          {
+            "name": "automaticCap",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ],
+        "stateMutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "decEntryAt",
+        "inputs": [
+          {
+            "name": "game",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "lvl",
+            "type": "uint24",
+            "internalType": "uint24"
+          },
+          {
+            "name": "id",
+            "type": "uint64",
+            "internalType": "uint64"
+          }
+        ],
+        "outputs": [
+          {
+            "name": "owner",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "stack",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "chips",
+            "type": "uint32",
+            "internalType": "uint32"
+          }
+        ],
+        "stateMutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "decJackpotPlanOf",
+        "inputs": [
+          {
+            "name": "game",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "lvl",
+            "type": "uint24",
+            "internalType": "uint24"
+          }
+        ],
+        "outputs": [
+          {
+            "name": "p",
+            "type": "tuple",
+            "internalType": "struct DegenerusGameStorage.DecJackpotPlan",
+            "components": [
+              {
+                "name": "soloAmount",
+                "type": "uint128",
+                "internalType": "uint128"
+              },
+              {
+                "name": "weights",
+                "type": "uint64",
+                "internalType": "uint64"
+              },
+              {
+                "name": "generatedEntries",
+                "type": "uint40",
+                "internalType": "uint40"
+              },
+              {
+                "name": "cursor",
+                "type": "uint16",
+                "internalType": "uint16"
+              },
+              {
+                "name": "mode",
+                "type": "uint8",
+                "internalType": "uint8"
+              }
+            ]
+          }
+        ],
+        "stateMutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "decSettleCursorOf",
+        "inputs": [
+          {
+            "name": "game",
+            "type": "address",
+            "internalType": "address"
+          }
+        ],
+        "outputs": [
+          {
+            "name": "head",
+            "type": "uint24",
+            "internalType": "uint24"
+          },
+          {
+            "name": "tail",
+            "type": "uint24",
+            "internalType": "uint24"
+          }
+        ],
+        "stateMutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "decSurvivorAt",
+        "inputs": [
+          {
+            "name": "word",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "lvl",
+            "type": "uint24",
+            "internalType": "uint24"
+          },
+          {
+            "name": "fieldEntries",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "stratum",
+            "type": "uint16",
+            "internalType": "uint16"
+          }
+        ],
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint64",
+            "internalType": "uint64"
+          }
+        ],
+        "stateMutability": "pure"
+      },
+      {
+        "type": "function",
+        "name": "decWinnerAt",
+        "inputs": [
+          {
+            "name": "game",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "lvl",
+            "type": "uint24",
+            "internalType": "uint24"
+          },
+          {
+            "name": "index",
+            "type": "uint8",
+            "internalType": "uint8"
+          }
+        ],
+        "outputs": [
+          {
+            "name": "node",
+            "type": "tuple",
+            "internalType": "struct DegenerusGameLens.DecWinner",
+            "components": [
+              {
+                "name": "score",
+                "type": "uint256",
+                "internalType": "uint256"
+              },
+              {
+                "name": "key",
+                "type": "uint256",
+                "internalType": "uint256"
+              },
+              {
+                "name": "owner",
+                "type": "address",
+                "internalType": "address"
+              }
+            ]
+          }
+        ],
+        "stateMutability": "view"
+      }
+    ]
+  }
+}

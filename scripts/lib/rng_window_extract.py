@@ -255,7 +255,10 @@ def scan_file(path: str, relpath: str):
     # roots are all reported, conservatively, rather than silently discarded.
     roots_by_type = {}
     aliases = {}
-    binding_re = re.compile(r"\b([A-Za-z_]\w*)\s+storage\s+([A-Za-z_]\w*)\s*=\s*([A-Za-z_]\w*)\b")
+    # Mapping references (including nested mappings) bind roots just like struct references.
+    binding_re = re.compile(
+        r"\b(mapping\s*\([^;{}]*?\)|[A-Za-z_]\w*)\s+storage\s+([A-Za-z_]\w*)\s*=\s*([A-Za-z_]\w*)\b"
+    )
     for match in binding_re.finditer(masked):
         typ, alias, root = match.groups()
         if root not in VRF_WORD_IDENTIFIERS:

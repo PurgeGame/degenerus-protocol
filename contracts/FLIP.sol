@@ -172,10 +172,7 @@ contract FLIP {
     string public constant symbol = "FLIP";
 
     /// @dev Minimum FLIP amount for decimator burns (prevents dust spam).
-    uint256 private constant DECIMATOR_MIN = 1000;
-
-    /// @dev Maximum sDGNRS backing spent once per decimator opening.
-    uint256 private constant SDGNRS_DECIMATOR_CAP = 500_000;
+    uint256 private constant DECIMATOR_MIN = 2000;
 
     /// @dev Max base amount eligible for decimator boon boost.
     uint256 private constant DECIMATOR_BOON_CAP = 50_000;
@@ -775,7 +772,7 @@ contract FLIP {
       |  participation for the decimator jackpot.                            |
       +======================================================================+*/
 
-    /// @notice Enter sDGNRS once per decimator window with up to 500,000 FLIP of backing.
+    /// @notice Enter sDGNRS once per window, limited by the previous original-field average.
     /// @dev GAME calls this on the opening day's advance, after coinflip settlement and
     ///      before the craps seat. Uses the existing claimable -> carry consume path;
     ///      the caller has settled the backing even while the game RNG lock is up.
@@ -783,12 +780,14 @@ contract FLIP {
     ///      The opening-day RNG path calls this at most once (a stalled or late-consumed
     ///      arming word skips the day, like the quest force); no separate FLIP latch is needed.
     /// @param lvl Resolution level for the opening window (current game level + 1).
+    /// @param cap Whole-FLIP spending cap computed by Game from the previous sealed round.
     /// @return amount FLIP backing consumed, or zero when skipped.
-    function autoDecimatorBurn(uint24 lvl) external onlyGame returns (uint256 amount) {
+    function autoDecimatorBurn(uint24 lvl, uint256 cap) external onlyGame returns (uint256 amount) {
         address player = ContractAddresses.SDGNRS;
+        if (cap < DECIMATOR_MIN) return 0;
         uint256 backing = coinflip.previewSalvageFlipBacking(player);
         if (backing < DECIMATOR_MIN) return 0;
-        amount = backing < SDGNRS_DECIMATOR_CAP ? backing : SDGNRS_DECIMATOR_CAP;
+        amount = backing < cap ? backing : cap;
         amount = coinflip.consumeFlipForSalvage(player, amount);
         // Below the entry minimum the consumed backing is retired without an entry: the
         // battle takes no entry it would refuse, and the advance that called continues.
@@ -801,7 +800,7 @@ contract FLIP {
     /// @dev SECURITY: Burns BEFORE downstream calls (CEI pattern).
     ///      Quest and boon bonuses add chips before the degen and entry-day multipliers.
     /// @param player Player address to burn for (address(0) = msg.sender).
-    /// @param amount Amount (0 decimals) to burn; must satisfy MIN (1,000 FLIP).
+    /// @param amount Amount (0 decimals) to burn; must satisfy MIN (2,000 FLIP).
     /// @param chips The entry's board as a normal battle entry takes it (zero to seven named
     ///        chips, the dice scattering the rest); each burn sets it, so the last one counts.
     function decimatorBurn(address player, uint256 amount, uint32 chips) external {

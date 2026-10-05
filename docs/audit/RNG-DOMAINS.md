@@ -15,7 +15,8 @@ is known. Existing commitment guards remain necessary.
 - Ordinary lootbox size, presale value, redemption chunk value and AFKing amount
   no longer enter box seeds. Amounts still determine awards and applicable tables.
 - Decimator battle snapshots retain the full 256-bit word. Distinct dice, board,
-  final-coin and tie tags separate draws; dice exclude entry identity, the other roots include it.
+  sample and tie tags separate draws; dice exclude entry identity. Sampling hashes a
+  rotation and stratum offset; board/tie roots include the nonoverlapping entry ID.
 - Craps bounty boost uses the immutable window identifier instead of the battle
   key containing financial terms.
 - BAF ticket awards derive by fixed winner ordinal instead of consuming one
@@ -283,7 +284,9 @@ named constants in the consumer; full string hashes are constant expressions.
 | Presale box | packed `H(word, PRESALE_BOX_TAG, player, uint48(index))` | One record per owner/index; amount excluded |
 | Redemption box | `H(chunkWord, player, REDEMPTION_BOX_TAG)` | Chunk word advances by `H(word)`; upstream redemption word fixed |
 | AFKing box | `H(word, player, AFKING_BOX_TAG, stampedDay)` | Day recorded before fulfillment; amount excluded |
-| Decimator battle | `H(tag, fullWord, level[, entryId])` | Tags `decimator.battle.dice.v1`, `.board.v1`, `.final-coin.v1`, `.tie.v1`; dice omit entry id, others include it; engine survival uses frozen owner; hot activation follows shared dice duration |
+| Decimator battle | `H(tag, fullWord, level[, entryId])` | Tags `decimator.battle.dice.v1`, `.board.v1`, `.tie.v1`; dice omit entry id, board/tie include it; engine survival uses frozen owner; hot activation follows shared dice duration |
+| Decimator survivor sample | `H(SAMPLE_TAG, fullWord, uint24(level)[, uint256(stratum)])` | `decimator.battle.sample.v1`; no-stratum hash rotates by modulo T; stratum hash selects one offset in [floor(i*T/S),floor((i+1)*T/S)); S=min(1000,ceil(T/2)); exact distinct set shared by locked generated and unlocked original workers |
+| Decimator generated entries | `H(tag, fullWord, level, uint64(id)[, uint8(quadrant), uint8(trait)])` | `decimator.battle.generated.player.v1` and `.recipient.v1`; IDs N+1..N+M share the original `decimator.battle.board.v1` and `.tie.v1` domains; allocation is fixed cumulative rounding; recipients/preferences read only for sampled entries under the daily RNG lock |
 | Direct reward box | `H(callerDerivedWord, player)` | ETH bet caller binds the relevant bet; this is not an independent raw-word consumer |
 | Box secondary draws | `BOX_*_SPIN_TAG`, `BOX_PASS_ROUND_TAG`, `FLIP_ROUND_TAG` | Derive from that box's root; stake only sizes payout |
 | Degenerette result board | packed `H(word, uint32(index), QUICK_PLAY_SALT)` for spin 0; add `uint8(spin)` for later spins | **Shared by all ETH/FLIP players and bets in an RNG period**, including different stakes, hero symbols and currencies. Only ETH/FLIP bets use it; WWXRP is not a bet currency |
@@ -347,7 +350,13 @@ box resolutions after changing only amount. `DegeneretteFreezeResolution.t.sol`
 checks shared boards across owners, currencies, stakes and bet ids;
 `DegeneretteFlipRoundAntiGrind.t.sol` checks payout invariance under batch changes.
 `DecimatorBattle.t.sol` checks real-engine replay from the shared full-word dice seed,
-final-coin exclusion, payout conservation and settlement invariance across batch sizes.
+exact-sample exclusion, payout conservation and settlement invariance across batch sizes.
+`DecimatorJackpotIntegration.t.sol` additionally checks frozen preferences, synthetic
+run identities, caller/gas partitions, proportional eligibility, matching/allocation,
+independent single-entry ranking and per-ID payouts. Field size includes original and
+generated entries; above 2,000 the eligibility hash uses `hash % fieldEntries < 1000`
+without another coin flip. This numeric rate binds at deterministic jackpot planning;
+it is not claimed to be known before the word arrives.
 See [Verification](../VERIFICATION.md) to run these tests and understand their
 limits. This inventory does not establish statistical independence.
 

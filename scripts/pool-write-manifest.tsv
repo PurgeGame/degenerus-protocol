@@ -101,7 +101,7 @@ POOL-TO-POOL	claimablePool	_deliverAfkingBuy	modules/GameAfkingModule.sol	WRITE	
 POOL-TO-POOL	claimablePool	_handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	WRITE	two sites: refund total and terminal affiliate share - both move distributable ETH into claimable
 POOL-TO-POOL	claimablePool	_payGoldenTicket	modules/DegenerusGameJackpotModule.sol	WRITE	golden-ticket ETH rung aggregate: future -> claimable; per-player credit paired below
 POOL-TO-POOL	claimablePool	_purchaseForWithCached	modules/DegenerusGameMintModule.sol	WRITE	claimable-funded purchase legs: aggregate falls as the pools rise (relabel)
-POOL-TO-POOL	claimablePool	_releaseToFuture	modules/DegenerusGameDecimatorModule.sol	WRITE	Releases an all-tails round, or at ranking the exact pass money (and the ETH split's dust), from the sealed reservation; paired with the future credit below
+POOL-TO-POOL	claimablePool	_releaseToFuture	modules/DegenerusGameDecimatorModule.sol	WRITE	Releases a zero-quota round, or at ranking the exact pass money (and the ETH split's dust), from the sealed reservation; paired with the future credit below
 POOL-TO-POOL	claimablePool	_releaseBafReserve	modules/DegenerusGameJackpotDrawModule.sol	WRITE	At BAF stage completion releases the reserved ETH term of awards no candidate took; paired with the pending future credit
 POOL-TO-POOL	_setPendingPools	_releaseBafReserve	modules/DegenerusGameJackpotDrawModule.sol	READ	The release credits pending future (the stage runs under the daily lock, pools frozen), paired with the claimablePool decrement
 PAIRED-CREDIT	claimablePool	_resumeEth	modules/DegenerusGameJackpotModule.sol	WRITE	winners' liabilityDelta aggregate; per-winner credits in _payEthQuadrant; funded by the current-pool debit in runDailyJackpot
@@ -131,3 +131,9 @@ POOL-TO-POOL	yieldAccumulator	_startDailyEth	modules/DegenerusGameJackpotModule.
 VALUE-IN	yieldAccumulator	distributeYieldSurplus	modules/DegenerusGameJackpotModule.sol	WRITE	23% surplus share retained as the yield buffer
 POOL-TO-POOL	_setCurrentPrizePool	_resumeEth	modules/DegenerusGameJackpotModule.sol	READ	Each completed ETH quadrant subtracts its actual paid amount from the source current/future pool; paired per-player credits/liability are committed in the same atomic quadrant.
 POOL-TO-POOL	_setPrizePools	_resumeEth	modules/DegenerusGameJackpotModule.sol	READ	Each completed ETH quadrant subtracts its actual paid amount from the source current/future pool; paired per-player credits/liability are committed in the same atomic quadrant.
+
+# Decimator jackpot integration (2026-10-05)
+POOL-TO-POOL	_setCurrentPrizePool	_initializeJackpot	modules/DegenerusGameDecimatorModule.sol	READ	Once-only generated funding F moves current to claimable, recorded atomically in round reservation and JackpotWork.paid.
+POOL-TO-POOL	claimablePool	_initializeJackpot	modules/DegenerusGameDecimatorModule.sol	WRITE	Aggregate half of current-to-reserved funding F; mode transition prevents repeats.
+PAIRED-CREDIT	claimablePool	_resumeDecimatorEth	modules/DegenerusGameJackpotModule.sol	WRITE	Only solo ETH increases claimable alongside per-player credits; generated funding already counted by Decimator.
+POOL-TO-POOL	_setCurrentPrizePool	_resumeDecimatorEth	modules/DegenerusGameJackpotModule.sol	READ	Debit actual solo cash plus whale-pass cost; cash credits claimable and pass cost credits future atomically; generated funding excluded.

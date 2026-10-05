@@ -28,6 +28,14 @@ import {MintPaymentKind} from "./IDegenerusGame.sol";
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 import {TicketWorkPlan} from "../libraries/JackpotTicketPlan.sol";
 
+/// @dev Frozen daily ETH terms supplied only by the trusted Jackpot delegate dispatcher.
+struct DecimatorJackpotTerms {
+    uint256 word;
+    uint256[4] shares;
+    uint16[4] targets;
+    uint8 solo;
+}
+
 interface IDegenerusGameTicketModule {
     function registerAffiliateOwner(address owner, bool required) external returns (uint32 id);
     function runJackpotTicketAwards(TicketWorkPlan calldata plan, uint256 allowance)
@@ -161,6 +169,8 @@ interface IDegenerusGameJackpotModule {
 /// @title IDegenerusGameDecimatorModule
 /// @notice Interface for decimator jackpot tracking and resolution
 interface IDegenerusGameDecimatorModule {
+    function runDecimatorJackpotAwards(DecimatorJackpotTerms calldata terms, uint256 allowance)
+        external returns (MineFlipGas.Result memory result, uint256 soloAmount);
     function runDecimatorWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
     /// @notice Record a Decimator burn for jackpot eligibility.
     /// @param player Address of the player.

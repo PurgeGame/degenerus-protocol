@@ -117,6 +117,10 @@ contract LensStorageHarness is DegenerusGameMintStreakUtils {
         decBattleHeap[index] = node;
     }
 
+    function setDecGeneratedOwner(uint64 ordinal, address owner) external {
+        decGeneratedOwners[ordinal] = owner;
+    }
+
     function setDecQueue(uint24 head, uint24 tail) external {
         decBattleQueue = uint256(head) | uint256(tail) << 24;
     }
@@ -336,7 +340,7 @@ contract LensParityTest is Test {
         chips = uint32(bound(chips, 0, 0x3FFFFFFF));
         harness.setDecEntry(lvl, id, p, stackFlip, chips);
         DegenerusGameLens.DecBurnEntry memory e = lens.decBurnOf(game, lvl, p);
-        uint256 stack = uint256(stackFlip) * 1 ether;
+        uint256 stack = uint256(stackFlip);
         assertEq(e.entryId, id); assertEq(e.owner, p); assertEq(e.stack, stack); assertEq(e.chips, chips);
         (address o, uint256 s, uint32 c) = lens.decEntryAt(game, lvl, id);
         assertEq(o, p); assertEq(s, stack); assertEq(c, chips);
@@ -352,11 +356,21 @@ contract LensParityTest is Test {
         assertEq(abi.encode(lens.decBattleRoundOf(game, lvl)), abi.encode(r));
     }
 
-    function testFuzz_decWinner(uint24 lvl, uint8 index, uint256 word, uint192 score, uint64 id) public {
+    function testFuzz_decWinner(
+        uint24 lvl, uint8 index, uint256 word, uint192 score, uint64 id,
+        address owner, bool generated, uint40 ordinal
+    ) public {
         vm.assume(lvl != 0);
         word = bound(word, 2, type(uint256).max);
-        index = uint8(bound(index, 0, 99));
+        index = uint8(bound(index, 0, 199));
+        id = uint64(bound(id, 1, type(uint40).max));
         DegenerusGameLens.DecBattleRound memory r;
+        r.count = uint40(id);
+        ordinal = uint40(bound(ordinal, 1, id));
+        if (generated) id += ordinal;
+        address other = address(uint160(owner) ^ 1);
+        harness.setDecEntry(lvl, id, generated ? other : owner, 2000, 0);
+        harness.setDecGeneratedOwner(ordinal, generated ? owner : other);
         r.winners = index + 1;
         r.phase = 1;
         harness.setDecActiveWord(word, true);
@@ -368,6 +382,7 @@ contract LensParityTest is Test {
         harness.setDecQueue(lvl, lvl);
         DegenerusGameLens.DecWinner memory w = lens.decWinnerAt(game, lvl, index);
         assertEq(w.score, score);
+        assertEq(w.owner, owner, "winner resolves the correct original or generated owner source");
         uint256 tie = uint256(keccak256(abi.encode(keccak256("decimator.battle.tie.v1"), word, lvl, id)));
         assertEq(w.key, (tie & ~uint256(type(uint64).max)) | id);
         vm.expectRevert(); lens.decWinnerAt(game, lvl, index + 1);

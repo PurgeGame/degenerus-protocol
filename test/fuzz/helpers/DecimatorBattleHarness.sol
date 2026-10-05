@@ -4,6 +4,10 @@ pragma solidity 0.8.34;
 import {DegenerusGameDecimatorModule} from "../../../contracts/modules/DegenerusGameDecimatorModule.sol";
 
 contract DecimatorBattleHarness is DegenerusGameDecimatorModule {
+    function extsload(bytes32 slot) external view returns (bytes32 value) {
+        assembly { value := sload(slot) }
+    }
+
     function open(uint24 lvl) external {
         level = lvl - 1;
         _setDecWindowOpen(true);
@@ -23,6 +27,11 @@ contract DecimatorBattleHarness is DegenerusGameDecimatorModule {
         }
         returned = this.runDecimatorJackpot(pool, lvl, word);
         claimablePool += pool - uint128(returned);
+        // This harness exercises original-only settlement. Generated integration uses the
+        // separate locked Game-context jackpot harness and its real delegate dispatcher.
+        if (returned == 0) {
+            decJackpotPlans[lvl].mode = 0;
+        }
     }
 
     function roundOf(uint24 lvl) external view returns (DecBattleRound memory) {
@@ -93,7 +102,13 @@ contract DecimatorBattleHarness is DegenerusGameDecimatorModule {
         gameOver = true;
     }
 
-    function forceCount(uint24 lvl, uint64 count) external {
+    function referenceOf() external view returns (uint64, uint40, uint256) {
+        return (decPreviousStack, decPreviousCount, _decAutomaticCap());
+    }
+
+    function forceCursor(uint24 lvl, uint64 cursor) external { decBattleRounds[lvl].cursor = cursor; }
+
+    function forceCount(uint24 lvl, uint40 count) external {
         decBattleRounds[lvl].count = count;
     }
 }

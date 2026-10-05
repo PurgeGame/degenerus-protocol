@@ -218,3 +218,5 @@ EXEMPT-ADVANCE	rngFlagsAndNudges	_swapRngBuffers	storage/DegenerusGameStorage.so
 GATE	rngWordCurrent	_vrfDead	storage/DegenerusGameStorage.sol	READ	existence check only, read once a request is a whole VRF-dead window old: a delivered daily word means VRF works even if the day processing it never completes (a stuck stage or a backlog), so that game ends by the deadman on a fresh terminal word instead; no value decision
 GATE	_dailyWordAt	_reservableDay	storage/CrapsBattleStorage.sol	READ
 CONSUMER-SEALED	_lootboxWord	mineFlip	modules/DegenerusGameMinerModule.sol	READ	Stage 1 passes the published read word to the batch closed by its request; every later request waits for that stage to drain.
+
+# Decimator jackpot integration (2026-10-05)

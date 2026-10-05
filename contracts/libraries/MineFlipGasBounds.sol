@@ -98,14 +98,20 @@ library MineFlipGasBounds {
     uint256 internal constant DEGENERETTE_TAIL_GAS = 120_000;
 
     // DEC
-    // Cold: 436k measured, a 511-roll engine run plus the worst heap insert and worker frame.
+    // Cold: 456k conservative sum of a 511-roll engine and the worst 200-place heap/frame.
     uint256 internal constant DECIMATOR_RUN_GAS_MAX = 550_000;
-    uint256 internal constant DECIMATOR_TAILS_GAS_MAX = 20_000;
-    // Cold: 206k measured over 1,000-entry fields.
-    uint256 internal constant DECIMATOR_RANK_GAS_MAX = 250_000;
+    // Up to 200 entries: 464k cold rank call, including any admitted payment tail.
+    uint256 internal constant DECIMATOR_RANK_GAS_MAX = 500_000;
     // Cold: 80k measured for one payment, including the worker frame.
     uint256 internal constant DECIMATOR_PAYMENT_GAS_MAX = 100_000;
     uint256 internal constant DECIMATOR_WORK_TAIL_GAS = 80_000;
+    // Scale witness: cold saved-board/heap item plus 511-roll engine totals 456,226.
+    // Keep the established generated admission; checkpoint/return tail is separate.
+    uint256 internal constant DECIMATOR_GENERATED_GAS_MAX = 469_000;
+    // Opposite-phase stratum: 4,973 incremental cold gas, rounded to the next 1k.
+    uint256 internal constant DECIMATOR_SAMPLE_SKIP_GAS_MAX = 5_000;
+    // Cold four-cohort initialization including the worker frame: 59,983 gas.
+    uint256 internal constant DECIMATOR_PLAN_GAS_MAX = 60_000;
 
     // JACKPOT
     uint256 internal constant JACKPOT_SETUP_GAS = 500_000;

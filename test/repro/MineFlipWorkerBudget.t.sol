@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {DecimatorSampleReference as Sample} from "../helpers/DecimatorSamplingReference.sol";
 import {Test} from "forge-std/Test.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DecimatorBattleHarness} from "../fuzz/helpers/DecimatorBattleHarness.sol";
@@ -132,13 +133,13 @@ contract BudgetDecimatorFixture is DecimatorBattleHarness {
         humanReadComplete = stage != 3;
     }
 
-    /// @dev The single-head fixture after its flat-engine run, optionally after ranking.
+    /// @dev The single-survivor fixture after its flat-engine run, optionally after ranking.
     ///      Seed reachable checkpoints so each admission bound can be tested independently
     ///      even when a cheap preceding phase normally chains straight through it.
     function completedRunCheckpoint(bool ranked) external {
         uint24 lvl = uint24(decBattleQueue);
         DecBattleRound storage round = decBattleRounds[lvl];
-        require(round.count == 1 && round.cursor == 0 && round.phase == 1);
+        require(round.count == 2 && round.cursor == 0 && round.phase == 1);
         uint256 entry = decBattleEntries[(uint256(lvl) << 64) | 1];
         decBattleHeap[0] = (((entry >> 190) * 3000e18) << 64) | 1;
         round.cursor = 1;
@@ -166,9 +167,10 @@ contract MineFlipDecimatorBudgetTest is Test {
         host = new BudgetDecimatorFixture();
         vm.etch(ContractAddresses.CRAPS_ENGINE, type(BudgetBoundedEngine).runtimeCode);
         host.open(LVL);
-        vm.prank(ContractAddresses.COIN); host.recordDecBurn(address(0xA11CE), LVL, 1000 ether, 10_000, 0);
+        vm.prank(ContractAddresses.COIN); host.recordDecBurn(address(0xA11CE), LVL, 2000, 10_000, 0);
+        vm.prank(ContractAddresses.COIN); host.recordDecBurn(address(0xB0B), LVL, 2000, 10_000, 0);
         uint256 word = 2;
-        while (uint256(keccak256(abi.encode(keccak256("decimator.battle.final-coin.v1"), word, LVL, uint64(1)))) & 1 == 0) ++word;
+        while (Sample.at(word, LVL, 2, 0) != 1) ++word;
         host.seal(LVL, 30 ether, word);
     }
     function test_RunReservesBeforeMutationThenChainsRankAndPay() public {

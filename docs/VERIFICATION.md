@@ -545,3 +545,371 @@ removal (older suites not yet migrated to whole-token units). Rebased onto the r
 commit, the complete Solidity source/test tree type-checks, all eleven source gates,
 interface coverage and the storage-layout oracle pass, and the two test files edited by both
 changes pass all 80 checks.
+
+## Historical Decimator pack integration (2026-10-05)
+
+Superseded by the single-entry revision below. Counts, storage shape, gas and bounty figures
+in this section describe the earlier pack implementation, not the current working tree.
+
+Ordinary x5 rounds (excluding x95) now use one jackpot day, pool eligible ETH/pass
+budgets into generated average-stack entry packs, and route unused conversion budget
+to solo. Originals plus generated copies determine the paid-place quota:
+`min(200, floor(entries/2), max(20, ceil(entries/10)))`, further limited by eligible
+copies. The minimum burn is 2,000 whole FLIP; automatic burns use four times the
+previous nonempty round's average original stack, with an 8,000-FLIP bootstrap.
+Generated packs read the saved board frozen by the existing RNG lock. GameOver
+retains its existing behavior; there is no Decimator retirement, cancellation state,
+or running uncredited-reserve counter. The generated plan occupies three words.
+
+The final core campaign `20261005T192319.861644Z-75b1b25b` passes all 92 checks
+across seven selected roots, with 1,000-run fuzz properties and cold isolation.
+It covers tier and funding arithmetic, the half-entrant cap including a lone entrant,
+expanded-copy heap and payout parity, tied identities, raw Lens packing, recipient
+hash replay, actual board freezing, caller partitions, pool conservation, automatic
+burns and degraded consumes. The earlier broader campaign
+`20261005T190602.748234Z-15628fc5` passes 92 checks in adjacent jackpot, commitment,
+consumer and century-consolidation suites; its three fixture failures (Lens units
+and isolated-transaction basefee assumptions) are corrected and covered by the final
+core run. Hardhat FLIP unit tests pass all 47 checks in
+`20261005T192642.067879Z-539fcf74`. Maintained runners report no source drift and
+restore production address pins.
+
+The remaining worker/scheduling campaign `20261005T193113.258533Z-6825e042`
+passes all 28 checks with cold isolation. It covers fast/slow x5 scheduling,
+excluded levels, original-worker item admission and rollback, and RNG continuity
+through all checkpoints. The conservative original-run witness (flat-engine heap
+cost plus a 511-roll engine run) is 453,612 gas. Ranking including any admitted
+payout tail uses at most 463,428 gas, and the single-payment witness uses 79,211.
+All fit their declared admission bounds plus return tails.
+
+The cold real-Miner fixture settles 8,000 originals plus 8,000 generated copies
+(1,000 packs), retaining 200 places. With 10 million gas supplied per call, it needs
+three calls starting locked (24,355,631 gas) and five starting unlocked (45,208,291
+gas). Its largest external call, including the harness wrapper, uses 9,091,916 gas.
+The generated real-engine fixture with eight displacements and all 200 owner slots
+occupied uses 476,610 gas, below the 1,500,000 indivisible-item admission bound.
+These are measured fixtures, not exhaustive maximum-gas proofs; total original
+scanning remains proportional to the natural population.
+
+Foundry isolation exposes zero basefee in the measured child transactions, so those
+cold runs credit zero bounty. The separate non-isolated campaign
+`20261005T193007.628635Z-2de4dcfe` passes both complete Miner campaigns at an actual
+1-gwei basefee and 0.02-ETH ticket price. It checks emitted metering against the
+production reward formula and the actual credited balance: 616 whole FLIP at the
+initial rate without a pass, and 17,350 with an active pass after two hours.
+Both take three locked and five unlocked calls. This includes the 1-million-gas
+unpaid allowance per call, fee cap/time escalation, and pass/locked multipliers.
+Its gas totals differ from the isolated run; reward evidence does not replace the
+cold measurements.
+
+The round's first-word packing changes and reference/plan/owner roots are appended.
+This implementation requires a fresh deployment, not an in-place storage migration.
+The final production build passes with restored production address pins (SHA-256
+`007af42d7a34fa7e9b612bccfeeb1844526d5a960d07d443f17f49554894dbe2`).
+All 37 deployment entries fit the runtime limit: Decimator is 18,981 bytes,
+Jackpot is 23,643, and Game remains 24,539 (37 bytes of headroom). Existing
+top-level roots retain their slots, offsets and types; six new roots occupy slots
+82–85. The recursive comparison agrees across all 16 Game delegate modules and
+the CrapsBattle/JackpotBattle pair. Compiler layouts confirm the two-word round
+and three-word generated plan; Lens fuzz checks their packed decoding. The full
+632-file Solidity source/test type check and 53 assurance-tool tests pass.
+The exported Decimator ABI matches fresh artifacts.
+The delegatecall alignment gate now recognizes explicit gas options; its new
+positive/negative fixtures verify that a wrong target still fails validation.
+The layout oracle, interface coverage and all ten other source gates pass.
+Build, size, layout, gate and tooling-test evidence is saved under
+`.audit-test-logs/decimator-ready/`; the maintained test campaigns retain their
+source manifests and logs under their run IDs above. The audit snapshot records
+the current inputs only and does not expand this verification scope.
+This is focused implementation verification, not a whole-repository release audit.
+
+## Decimator single-entry revision and Lens owners (2026-10-05)
+
+This supersedes the pack design above. Generated entries are independent single places:
+`M=min(N,1000,floor(B*N/P))`, with funding `ceil(M*P/N)`. IDs N+1 through N+M share the
+original heap, tie domain and payment loop. The 20-place target, floor((N+M)/2) cap and
+200-place ceiling remain. Above 1,000 originals funding tapers; there is no 8,001 cutoff.
+Losing generated entries skip recipient, preference, engine and receipt work. The plan is
+one storage word. `decWinnerAt` returns score, ordering key and owner for either entry type.
+
+The final settlement campaign `20261005T202811.289538Z-8dc79b9c` passes **155 tests across
+35 suites**, from 15 selected roots plus imported suites, with 1,000-run fuzz and cold
+isolation. Coverage includes independent single-entry ranking/payment replay, common ties,
+50% entrant cap, exact funding and pool conservation, fractional-wei prices, count-cap and
+8000/8001 boundaries, mixed/empty cohorts and empty solo completion, frozen preferences,
+caller/gas partitions, automatic burns, x00/consolidation, worker checkpoints and RNG
+continuity. Both fast and slow closures run through the real public `mineFlip` flow with
+actual burn/request/fulfillment/seal/generation/unlock/settlement, without setting the
+one-day, daily-lock or final-day flags by hand.
+
+The later Lens-only change passes **34 tests** in `20261005T203807.741544Z-40e0d13d`.
+Its 1,000-case owner fuzz uses conflicting values in the unused original/generated owner
+source, and integration checks the live retained owners. Settlement code is unchanged by
+that follow-up. All **633 Solidity source/test roots** typecheck after the Lens change.
+
+Cold generated gas calibration uses the real Craps preferred-board reader, both fresh heap
+insertion and tied replacement, and a separate full 511-roll engine witness:
+
+| Operation | Measured gas | Admission bound |
+| --- | ---: | ---: |
+| Four-cohort plan plus worker frame | 67,624 | 68,000 |
+| Losing entry added to worker frame | 4,468 | 5,000 |
+| Generated heap/recipient/board frame plus 511-roll engine | 141,266 + 327,033 = 468,299 | 469,000 |
+
+The existing 80,000-gas checkpoint/return tail is separate. These are measured conservative
+fixtures, not exhaustive maximum-gas proofs. Total original scanning still grows with N.
+Admission reserves a bound; it charges elapsed gas, not that full bound per item.
+
+The real Miner/engine/preference fixtures, with 10M gas supplied per call, measured:
+
+| Original/generated entries | Calls starting locked / unlocked | Locked / unlocked total gas |
+| --- | --- | --- |
+| 1,000 / 1,000 | 8 / 5 | 68,664,102 / 36,907,444 |
+| 8,000 / 1,000 | 3 / 10 | 23,616,702 / 82,712,372 |
+
+The largest measured external call is 9,427,704 gas including the fixture wrapper. The
+Miner fixtures use a Coinflip credit probe and check each emitted reward against the
+production formula and the probe's credited balance. Isolation exposes zero transaction
+basefee, so a separate non-isolated run `20261005T204101.044687Z-545186ae` passes all **three
+reward checks** at a real 1-gwei transaction basefee and 0.02-ETH ticket price: 841 FLIP for
+8,000 originals at the initial rate, 1,140 for the full 1,000-original match, and 23,789 for
+8,000 originals with an active pass after two hours. Its gas totals differ from isolation.
+
+Fresh production build and all **37 deployment-size checks** pass with restored address
+pins (SHA-256 `007af42d7a34fa7e9b612bccfeeb1844526d5a960d07d443f17f49554894dbe2`). Runtime
+sizes are Decimator 13,286 bytes, Jackpot 23,646 and Game 24,539. The separately checked
+Lens is 11,303 bytes. All 129 pre-existing top-level storage roots keep their positions
+and types; four appended fields occupy slots 82–84. The compiler confirms a two-word round
+and one-word plan. Intentional nested round-layout changes still require a fresh deployment.
+The refreshed golden oracle and recursive layouts agree across all 16 Game delegates and
+the CrapsBattle/JackpotBattle pair. The exported Decimator ABI includes winner owners and
+matches fresh artifacts.
+
+All eleven source/interface gates pass. The storage-writer extractor now recognizes local
+mapping aliases, so the shared heap's actual writes remain registered after deleting the
+direct copy-heap path. Three regression tests cover heap aliases, nested mapping deletion
+and function-scoped/read-only exclusions; all **56 assurance-tool tests** pass. Evidence is
+saved under `.audit-test-logs/decimator-single-entry/` and the maintained campaign IDs above.
+The audit snapshot records current inputs only. This is focused integration verification,
+not a whole-repository release audit. No deployment or commit was performed.
+
+## Decimator solo whale budget retained (2026-10-05)
+
+This supersedes the solo conversion policy in the earlier Decimator verification sections.
+Only active non-solo shares form B; solo has no generated weight or ordinals. Its ordinary
+cash and whale-pass award remain, with L=B-F added to cash and no duplicated non-solo dust.
+The one-word plan/event/Lens field is now `unspentBudget` (L). No gas constants, RNG tags,
+entry identities, eligibility or quota rules changed.
+
+For a 1,000 ETH daily ETH leg and active cohorts: B=400 ETH, solo share=600 ETH,
+normal solo cash=451.5 ETH, and whale-pass value=148.5 ETH (66 half-passes). With
+N=2,000 and P=140 ETH: M=1,000, F=70 ETH, L=330 ETH; solo cash=781.5 ETH.
+Conservation is 70+781.5+148.5=1,000 ETH. Empty cohorts' unpaid amounts use the
+existing final-day sweep; empty solo leaves its share and L unpaid too.
+
+Focused campaigns use `scripts/test-foundry-groups.py`, `--threads 1 --fuzz-runs 1000 -v`,
+and cold isolation:
+
+- `20261005T205942.437736Z-1ae1ffae`: five selected roots (Integration, AdvanceFlow,
+  Gas, LensParity and JackpotCheckpoints), 49 pass and two new-fixture failures. Both
+  public fast/slow lifecycle tests, all 11 Lens tests and five normal Jackpot checkpoint
+  tests passed on the final contract code. A fuzz input used invalid RNG word zero and
+  skipped sealing; the new gas check compared an entire daily frame against a payout-only
+  bound. These were corrected in tests without changing contracts or gas bounds.
+- `20261005T210243.833739Z-8b3c18c8`: Integration/Gas roots plus imported fixtures,
+  **33 pass, zero failures**. Includes 1,000-case conservation over budgets, pot sizes,
+  cohort masks and solo rotations; zero solo ordinals/receipts; below/at the solo pass
+  threshold; real WhaleModule awards; empty solo; once-only funding; Lens packing;
+  replay/payment parity; and atomic solo cash/pass/golden-ticket resume. Together with
+  the 18 passing public-flow/Lens/checkpoint checks above, all 51 distinct focused checks
+  have passing evidence for this contract version.
+
+Cold gas calibration:
+
+| Operation | Measured gas | Existing admission |
+| --- | ---: | ---: |
+| Three-cohort plan plus frame | 61,269 | 68,000 |
+| Losing generated entry increment | 4,468 | 5,000 |
+| Generated frame + full 511-roll engine | 141,350 + 327,033 = 468,383 | 469,000 |
+| Solo cash/pass/gold plus completion beyond refused frame | 151,397 | 197,000 |
+
+The cold solo whole frame is 197,365 gas and its identical refused-admission frame is
+45,968 gas. The difference includes the award and subsequent daily accounting/completion,
+so the existing payout allowance needs no increase. Binary search finds first admission
+at 416,091 supplied allowance in this fixture; smaller calls preserve the unpaid checkpoint
+and issue no pass. The separate Jackpot return tail remains 180,000; the Decimator tail
+remains 80,000. These are measured witnesses, not exhaustive worst-case proofs.
+
+Real Miner, real engine and preferred-board campaigns supply 10M gas per call. The
+1,000/1,000 original/generated case takes 8 calls starting locked and 5 unlocked;
+8,000/1,000 takes 3 and 10. Largest cold external call is 9,428,780 gas including its
+wrapper. Non-isolated campaign `20261005T210444.487084Z-2da8bf89` passes **3/3** at
+actual basefee 1 gwei: 844 FLIP for 8,000 originals at the initial rate, 1,141 for
+1,000 originals, and 23,811 for 8,000 with an active pass after two hours. Each emitted
+reward matches the production formula and Coinflip probe credit.
+
+Fresh production build and all **37 deployment-size checks** pass: Decimator 13,201 bytes,
+Jackpot 23,678, Game 24,539; Lens is separately 11,303. The storage oracle matches every
+existing golden, and recursive layouts agree across all 16 Game delegates. Renaming
+`soloEth` to `unspentBudget` changes no storage offset: it remains uint128 at offset zero
+in the 32-byte plan. The exported client ABI reflects the new field/return/event name;
+the event type signature and topic are unchanged. All **633 Solidity source/test roots**
+typecheck and all **11 source/interface gates** pass.
+
+Every maintained runner restored the production address pins, SHA-256
+`007af42d7a34fa7e9b612bccfeeb1844526d5a960d07d443f17f49554894dbe2`. Logs and layout/size
+reports are under `.audit-test-logs/decimator-solo-whale/`; the execution notes have the
+handoff under **Solo whale budget retained**. The refreshed audit snapshot identifies
+inputs only. This is focused verification of the revised integration, not a complete
+repository release audit. No commit, push or deployment was performed.
+
+## Decimator shared tags and engine helper (2026-10-05)
+
+Original and generated IDs now share `decimator.battle.final-coin.v1` and
+`decimator.battle.board.v1`. IDs remain disjoint, so the eligibility and scatter
+probabilities are preserved. Generated outcomes for a given word change from the
+previous separate-tag version; replay clients must use the updated domains.
+Generated player and recipient domains remain separate. `DecimatorLib.sol` is removed:
+quota/eligibility/constants live in DecimatorModule, and the shared terms struct lives
+in `IDegenerusGameModules.sol`. Both entry paths use `_settleRun` for the engine call.
+The solo whale-pass policy, funding rules, prize cap, storage and public ABI are retained.
+
+Cold-isolated campaign `20261005T211457.876565Z-f69a6927` passes **91 tests across ten
+suites**, with 1,000-run fuzz, from eight selected roots: DecimatorBattle,
+DecimatorJackpotIntegration, DecimatorAdvanceFlow, LensParity, DecimatorJackpotGas,
+DecimatorPricing, DecimatorBattleGas and JackpotCheckpoints. Coverage includes the
+common-tag eligibility oracle, exact generated engine arguments, real-engine replay
+across caller/gas partitions, both public closure paths, heap/payment parity, funding
+and solo-pass conservation, and cold admission. Gas witnesses are:
+
+| Operation | Measured gas | Existing admission |
+| --- | ---: | ---: |
+| Three-cohort plan plus worker frame | 61,399 | 68,000 |
+| Losing generated entry increment | 4,534 | 5,000 |
+| Generated frame plus full 511-roll engine | 141,788 + 327,033 = 468,821 | 469,000 |
+| Solo award plus completion beyond refused frame | 151,397 | 197,000 |
+
+No admission bound increased. These are measured fixtures, not exhaustive gas proofs.
+With the changed deterministic draws, real Miner fixtures still need 8 locked/5 unlocked
+calls for 1,000 originals plus 1,000 generated entries, and 3/10 for 8,000 plus 1,000;
+10M gas is supplied per call. Their largest cold external call uses 9,422,086 gas.
+Non-isolated campaign `20261005T211844.363617Z-563bbf80` passes **3/3** reward checks
+at an actual 1-gwei basefee: 864 FLIP for 8,000 originals at the initial rate, 1,182 for
+1,000 originals, and 24,373 for 8,000 with an active pass after two hours. Each reward
+matches the production formula and credited Coinflip probe balance.
+
+Fresh production build and all 37 deployment-size checks pass: Decimator 13,126 bytes,
+Jackpot 23,695 and Game 24,539; Lens remains 11,303. The golden storage oracle matches,
+and recursive layouts agree across all 16 Game delegates. Evidence is saved under
+`.audit-test-logs/decimator-trims/` and the maintained campaign IDs above.
+
+All eleven source/interface gates pass, and the Decimator client ABI matches the fresh
+artifacts without an ABI change. Production address pins are restored (SHA-256
+`007af42d7a34fa7e9b612bccfeeb1844526d5a960d07d443f17f49554894dbe2`). The audit snapshot
+records the current inputs. This is focused verification; no commit or deployment was made.
+
+## Decimator scale revision (2026-10-05)
+
+This supersedes the capped-entry/coin/leftover-to-solo evidence above. The final field
+T=N+M uses exactly min(1000,ceil(T/2)) rotated-stratum survivors. Generated entries are
+uncapped up to N; available money is active non-solo shares plus solo's excess over
+floor(35% E). Solo receives min(activeNonSolo+soloShare-F,soloShare), with normal passes
+on that amount. Solo weight is zero; surplus and inactive shares use the existing sweep.
+
+Maintained runner evidence (all address pins restored after each campaign):
+
+| Campaign | Selection | Result |
+| --- | --- | --- |
+| `20261005T214804.237264Z-0d3c633c` | 17 focused roots: sampling, integration, gas, Battle, public Advance flow, Lens, pricing, references, schedules, auto-burn, worker/RNG regressions and pool consolidation | 179/179 across 43 suites; 1,000-case fuzz |
+| `20261005T215745.527169Z-736bc006` | NativeAtomicDecimator only, cold isolation | 1/1; 424-roll run and heap cost 370,553 gas |
+| `20261005T215902.683175Z-710fd1d4` | Three full-match real Miner campaigns, isolation disabled | 3/3 at actual 1-gwei basefee |
+
+The broad run covers both real public fast/slow closing paths; no candidate before final
+T/plan; transcript and final-state invariance across caller/gas splits in both phases;
+exact W=K and heap/payout oracle; normal solo passes, clipping below the pass threshold,
+empty solo and empty non-solo cohorts; P/E/N/activity conservation fuzzing; and uint40
+plan/Lens owner ordinals. Conservation is F+solo cash+solo pass funding+unpaid sweep=E.
+Solidity boundary sampling includes T=1,2,3,1999,2000,2001,2500 and 2*uint40.max.
+
+The initial scale compile hit a Yul stack-depth error, fixed by caching entries/count/
+rotation in a memory struct. The next campaign (`20261005T214432.999157Z-68395e81`)
+passed 87/88; its new no-progress fixture supplied only 1,000 gas and triggered the existing
+WorkGasBound guard. A 100,000 allowance tests the intended no-plan-progress case and passes
+in the final 179-test campaign. No outstanding runtime failures remain.
+
+### Settlement at scale
+
+Cold-isolated real Miner/engine/saved-board fixtures, full match M=N, P=140 ETH,
+E=1,000 ETH, sealed word 777. Each call supplies 10M gas. Counts and phase gas are grouped
+by the lock state at call start; a call can cross a phase boundary. Setup directly seeds
+count and aggregate and writes **only sampled natural entries**, bypassing N burns to
+measure settlement rather than entry creation. Every sampled ID is independently checked,
+visited exactly once and settled by production code. No generated population is materialized.
+
+| N (and M) | Generated/natural runs | Locked calls | Unlocked calls | Locked gas | Unlocked gas | Total gas | Largest cold item+frame ceiling |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1,000 | 500/500 | 8 | 5 | 70,619,003 | 37,744,035 | 108,363,038 | 470,854 |
+| 10,000 | 501/499 | 8 | 5 | 70,272,429 | 38,173,969 | 108,446,398 | 470,847 |
+| 100,000 | 500/500 | 8 | 5 | 70,698,001 | 38,186,372 | 108,884,373 | 470,847 |
+| 1,000,000 | 501/499 | 8 | 5 | 70,208,269 | 38,514,487 | 108,722,756 | 470,847 |
+
+The last column is a separately calibrated conservative generated-entry witness at each N:
+maximum of a cold tied-heap replacement and fresh-slot insertion frame with a flat engine,
+plus a full cold 511-roll engine call (327,033 gas). Keeping the flat call in the sum is
+conservative. Subtracting the identical refused frame gives 456,226 gas for the admitted
+item at every N, below the unchanged 469,000 bound; the 80,000 tail covers its worker frame.
+Largest external campaign calls are 9,412,693/9,420,555/9,417,850/9,420,797 gas respectively.
+These are measured fixtures, not exhaustive maxima over all random words.
+
+Other cold witnesses: original run+engine 448,017; ranking frame (including any admitted
+payment tail) 460,067; one payment 74,710; solo cash/pass/gold completion 198,378 total,
+151,828 beyond its refused frame, below 197,000 admission. Plan/frame 59,983 and skip increment
+4,973 reduce their bounds to 60,000 and 5,000. Original 550,000, generated 469,000, rank 500,000,
+payment 100,000 and their existing tails are unchanged.
+
+Actual-fee bounties match the production formula and credited balance: 1,171 FLIP for
+N=1,000 at the initial rate; 1,170 for N=8,000; 32,911 for N=8,000 with an active pass
+after two hours. The cold isolation campaigns correctly observe zero basefee.
+
+### Sampling and build evidence
+
+`python3 scripts/test-decimator-sampling.py` (PyCryptodome Keccak) independently checks
+2,000 deterministic random words at each of the eight boundary fields, exact size and
+distinctness, and exhaustive rotation symmetry for the small fields. Every ID appears
+in exactly S of all T rotations of a fixed unrotated sample. Per-ID frequency deviations
+stay below 3.8684 sigma; 100 position bins in the largest field stay below 0.4667 sigma.
+The script's word 777 replay vectors match Solidity and Lens. Settlement is bounded by
+1,000 strata per phase and at most 1,000 engine runs, through the existing uint40 count limit.
+
+Production build and all 37 deployment sizes pass: Game 24,539 bytes, Jackpot 23,648,
+Decimator 13,262; Lens 11,739. Golden layouts match and all 16 Game delegates have identical
+recursive layouts. The plan is 32 bytes: soloAmount128@0, weights64@16, generatedEntries40@24,
+cursor16@29, mode8@31 (offsets in bytes). The ABI export includes the widened plan/event,
+soloAmount semantics and decSurvivorAt. All eleven source/interface gates and all 635 Solidity source/test typechecks pass.
+The ABI export check passes; the final audit identity refresh/check records these inputs.
+
+Logs, scale JSON, statistics and recursive layouts are under `.audit-test-logs/decimator-scale/`;
+test transcripts are under the maintained campaign IDs above. Production pins use SHA256
+`007af42d7a34fa7e9b612bccfeeb1844526d5a960d07d443f17f49554894dbe2`.
+
+### Pre-commit verification (2026-10-05)
+
+One integrated pass on the committed tree, every step under a 30 GB memory scope, logs under
+`.audit-test-logs/decimator-commit/` (`summary.txt` holds each exit code). Production pins
+were unchanged before, between and after the runners.
+
+| Check | Result |
+| --- | --- |
+| `forge build --skip test`, `node scripts/check-deployment-sizes.js` | pass; 37 sizes; Game 24,539, Jackpot 23,648, Decimator 13,262 |
+| `storage_layout_oracle.sh`, `check_recursive_layout.py` | pass; 16 delegates agree |
+| Eleven `make check-*` source/interface gates, `make test-assurance-tools` | pass |
+| `scripts/export-decimator-abi.py --check`, `scripts/test-decimator-sampling.py` | pass |
+| Foundry campaign `20261005T221343.443306Z-30c002dd`, 18 roots (every new or edited test root: the eight Decimator/Lens/auto-burn fuzz roots, ReviewFixes0924, four repro and five gas roots incl. NativeAtomicWork), cold isolation, 1,000-case fuzz | 181/182 |
+| Hardhat `test/unit/FLIP.test.js` (new `autoDecimatorBurn(lvl, cap)`) | 47/47 |
+
+The one Foundry failure, `NativeAtomicDegeneretteTest.test_Max15FlipSpinsAndSurvivalMintFitOneStep`,
+predates this change: its fixture bets `100 ether` of zero-decimal FLIP, so the stake units
+exceed the 64-bit bound and the bet reverts `InvalidBet`. The Degenerette module and that
+half of the test file are unchanged by this work; it is owed with the pre-push battery.
+A final interface comment fix was followed by a fresh build, size, interface and ABI-export
+check, all passing.

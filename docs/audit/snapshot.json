@@ -1,8 +1,8 @@
 {
   "date": "2026-10-05",
   "status": "working-tree source identity; verification status is recorded separately",
-  "base_commit": "e3548795696cd980f6e6adf603f443748d4c169b",
-  "source_file_count": 82,
+  "base_commit": "bcdba75a9282535cc6970bb360bf8e1b1b444278",
+  "source_file_count": 83,
   "source_files": [
     "contracts/AFKingSubscriptionToken.sol",
     "contracts/Coinflip.sol",
@@ -49,6 +49,7 @@
     "contracts/libraries/BitPackingLib.sol",
     "contracts/libraries/CrapsPreferenceLib.sol",
     "contracts/libraries/CrapsPriceLib.sol",
+    "contracts/libraries/DecimatorSamplingLib.sol",
     "contracts/libraries/EntropyLib.sol",
     "contracts/libraries/FlipRoundLib.sol",
     "contracts/libraries/GameTimeLib.sol",

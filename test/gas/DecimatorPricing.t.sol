@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {DecimatorSampleReference as Sample} from "../helpers/DecimatorSamplingReference.sol";
 import {Test} from "forge-std/Test.sol";
 import {DecimatorBattleHarness} from "../fuzz/helpers/DecimatorBattleHarness.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
@@ -92,10 +93,10 @@ contract DecimatorPricingTest is Test {
         vm.startPrank(ContractAddresses.COIN);
         for (uint256 i = 1; i <= n; ++i) {
             uint256 amount;
-            if (shape == 1) amount = (n + 1 - i) * 1000 ether; // each heads entry is the new minimum
-            else if (shape == 2) amount = i * 1000 ether; // each heads entry is the new maximum
-            else if (shape == 3) amount = 1000 ether; // every score ties
-            else amount = 1000 ether + uint256(keccak256(abi.encode(salt, i))) % (1_000_000 ether);
+            if (shape == 1) amount = (n + 1 - i) * 1000; // each sampled entry is the new minimum
+            else if (shape == 2) amount = i * 1000; // each sampled entry is the new maximum
+            else if (shape == 3) amount = 1000; // every score ties
+            else amount = 1000 + uint256(keccak256(abi.encode(salt, i))) % (1_000_000);
             h.recordDecBurn(address(uint160(salt * 1_000_000 + i)), lvl, amount, 10_000, boards ? _board(i) : 0);
         }
         vm.stopPrank();
@@ -106,7 +107,7 @@ contract DecimatorPricingTest is Test {
         for (uint256 guard; uint24(h.queue()) != 0 && guard < 20_000; ++guard) {
             uint24 lvl = uint24(h.queue());
             uint8 phase = h.roundOf(lvl).phase;
-            bool ranking = phase == 1 && h.roundOf(lvl).cursor == h.roundOf(lvl).count;
+            bool ranking = phase == 1 && h.roundOf(lvl).cursor == Sample.count(h.roundOf(lvl).count);
             vm.cool(address(h));
             vm.cool(ContractAddresses.CRAPS_ENGINE);
             (uint256 used, MineFlipGas.Result memory result) = meter.settle{gas: 15_000_000}(h, allowance);
@@ -125,12 +126,6 @@ contract DecimatorPricingTest is Test {
     uint256 private maxOneRun;
     uint256 private maxOnePay;
 
-    bytes32 private constant COIN = keccak256("decimator.battle.final-coin.v1");
-
-    function _heads(uint24 lvl, uint64 id) private view returns (bool) {
-        return uint256(keccak256(abi.encode(COIN, h.activeWord(), lvl, id))) & 1 != 0;
-    }
-
     function _measure(uint256 allowance) private returns (uint256 used) {
         vm.cool(address(h));
         vm.cool(ContractAddresses.CRAPS_ENGINE);
@@ -139,7 +134,7 @@ contract DecimatorPricingTest is Test {
         assertTrue(result.progressed, "one-item allowance admits its item");
     }
 
-    /// @dev Settle with allowances that admit one heads run, one stretch of tails coins, the
+    /// @dev Settle with allowances that admit one sampled run, the
     ///      ranking or one payment per call, so each priced call is a single kind of step plus
     ///      the worker's fixed frame. A simulation call whose slack also covers the ranking is not
     ///      priced; the ranking is priced alone instead, over the entries already run.
@@ -147,7 +142,6 @@ contract DecimatorPricingTest is Test {
         // The worker's frame before its first admission check, but less than one more item.
         uint256 tail = GasBounds.DECIMATOR_WORK_TAIL_GAS;
         uint256 runAllowance = GasBounds.DECIMATOR_RUN_GAS_MAX + tail + 40_000;
-        uint256 tailsAllowance = GasBounds.DECIMATOR_TAILS_GAS_MAX + tail + 40_000;
         uint256 rankAllowance = GasBounds.DECIMATOR_RANK_GAS_MAX + tail + 30_000;
         uint256 payAllowance = GasBounds.DECIMATOR_PAYMENT_GAS_MAX + tail + 30_000;
         for (uint256 guard; uint24(h.queue()) != 0 && guard < 20_000; ++guard) {
@@ -156,11 +150,11 @@ contract DecimatorPricingTest is Test {
             if (r.phase == 2) {
                 uint256 used = _measure(payAllowance);
                 if (used > maxOnePay) maxOnePay = used;
-            } else if (r.cursor == r.count) {
+            } else if (r.cursor == Sample.count(r.count)) {
                 uint256 used = _measure(rankAllowance);
-                if (h.roundOf(lvl).paid == 0 && used > maxRankGas) maxRankGas = used;
+                if (used > maxRankGas) maxRankGas = used;
             } else {
-                uint256 allowance = _heads(lvl, r.cursor + 1) ? runAllowance : tailsAllowance;
+                uint256 allowance = runAllowance;
                 uint256 snapshot = vm.snapshotState();
                 uint256 used = _measure(allowance);
                 if (h.roundOf(lvl).phase == 1) {
@@ -170,33 +164,32 @@ contract DecimatorPricingTest is Test {
                 }
                 // Snapshots also restore this contract's maxima, so the alone figure stays local.
                 vm.revertToState(snapshot);
-                h.forceCount(lvl, r.cursor);
+                h.forceCursor(lvl, Sample.count(r.count));
                 uint256 rankUsed = _measure(rankAllowance);
-                bool rankAlone = h.roundOf(lvl).paid == 0;
                 assertTrue(vm.revertToStateAndDelete(snapshot));
-                if (rankAlone && rankUsed > maxRankGas) maxRankGas = rankUsed;
+                if (rankUsed > maxRankGas) maxRankGas = rankUsed;
                 _measure(allowance);
             }
         }
         assertEq(uint24(h.queue()), 0, "settled");
-        assertGt(maxRankGas, 0, "a ranking was priced alone");
+        assertGt(maxRankGas, 0, "a ranking call including any admitted payout tail was measured");
     }
 
-    /// @dev Per-item cold maxima against their declared bounds: one heads run (heaviest heap
+    /// @dev Per-item cold maxima against their declared bounds: one sampled run (heaviest heap
     ///      shapes, flat engine), the 511-roll engine ceiling on the heaviest board, one ranking,
     ///      and one payment (whale-pass and ETH shapes, fresh recipients).
     function test_SingleItemColdMaximaAgainstDeclaredBounds() public {
         vm.etch(ContractAddresses.CRAPS_ENGINE, type(DecimatorPricingFlatProbe).runtimeCode);
         for (uint8 shape = 1; shape <= 3; ++shape) {
-            _field(1000, 400 + shape, false, shape);
+            _field(2000, 400 + shape, false, shape);
             _settleOneByOne();
         }
         uint256 flatRun = maxOneRun;
         fieldPool = 2000 ether;
-        _field(1000, 410, false, 0);
+        _field(2000, 410, false, 0);
         _settleOneByOne();
         fieldPool = 100 ether;
-        _field(1000, 411, false, 0);
+        _field(2000, 411, false, 0);
         _settleOneByOne();
 
         // The engine's ceiling: 511 rolls before 48 shooters, the heaviest named board, a
@@ -217,7 +210,7 @@ contract DecimatorPricingTest is Test {
         }
         assertGt(ceilingRuns, 0, "a run reached the 511-roll ceiling");
         uint256 runWorst = flatRun + engineMax;
-        emit log_named_uint("DEC one heads run, flat engine, worst heap (cold)", flatRun);
+        emit log_named_uint("DEC one sampled run, flat engine, worst heap (cold)", flatRun);
         emit log_named_uint("DEC engine 511-roll ceiling run (cold)", engineMax);
         emit log_named_uint("DEC run worst = flat run + engine ceiling", runWorst);
         emit log_named_uint("DEC RANK cold max", maxRankGas);
@@ -256,7 +249,7 @@ contract DecimatorPricingTest is Test {
         h.open(lvl);
         vm.startPrank(ContractAddresses.COIN);
         for (uint64 id = 1; id <= 200; ++id) {
-            h.recordDecBurn(address(uint160(id) + 0x1000), lvl, 1000 ether + uint256(id) * 1 ether, 10_000, _board(id));
+            h.recordDecBurn(address(uint160(id) + 0x1000), lvl, 1000 + uint256(id), 10_000, _board(id));
         }
         vm.stopPrank();
         h.seal(lvl, 50 ether, uint256(keccak256(abi.encode("round200k", uint256(259)))));
@@ -267,7 +260,7 @@ contract DecimatorPricingTest is Test {
         h.open(again);
         vm.startPrank(ContractAddresses.COIN);
         for (uint64 id = 1; id <= 200; ++id) {
-            h.recordDecBurn(address(uint160(id) + 0x1000), again, 1000 ether + uint256(id) * 1 ether, 10_000, _board(id));
+            h.recordDecBurn(address(uint160(id) + 0x1000), again, 1000 + uint256(id), 10_000, _board(id));
         }
         vm.stopPrank();
         h.seal(again, 50 ether, uint256(keccak256(abi.encode("round200k", uint256(259)))));
@@ -280,9 +273,9 @@ contract DecimatorPricingTest is Test {
     function test_WhalePassPayoutsWithAvailableGas() public {
         vm.etch(ContractAddresses.CRAPS_ENGINE, type(DecimatorPricingFlatProbe).runtimeCode);
         fieldPool = 2000 ether;
-        _field(1000, 300, false, 0);
+        _field(2000, 300, false, 0);
         _settleAll(1_000_000);
-        _field(1000, 301, false, 0);
+        _field(2000, 301, false, 0);
         _settleAll(14_000_000);
         _report("whale pass payouts");
     }
@@ -292,9 +285,9 @@ contract DecimatorPricingTest is Test {
         vm.etch(ContractAddresses.CRAPS_ENGINE, type(DecimatorPricingFlatProbe).runtimeCode);
         for (uint8 pass; pass < 2; ++pass) {
             for (uint8 shape = 1; shape <= 3; ++shape) {
-                _field(1000, 100 + pass * 10 + shape, false, shape);
+                _field(2000, 100 + pass * 10 + shape, false, shape);
                 _settleAll(1_000_000);
-                _field(1000, 200 + pass * 10 + shape, false, shape);
+                _field(2000, 200 + pass * 10 + shape, false, shape);
                 _settleAll(14_000_000);
             }
         }

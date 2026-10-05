@@ -244,10 +244,11 @@ while IFS=$'\t' read -r file lineno; do
 
   # Observed target constant: the canonical form is
   #     <something>.GAME_XXX_MODULE.delegatecall( ... )
-  # often split across lines. Require `.delegatecall(` somewhere in the window
+  # often split across lines, optionally with `{gas: ...}` call options. Require
+  # `.delegatecall(` or `.delegatecall{...}(` somewhere in the window
   # (anchors this as a real delegatecall site) and take the LAST `.GAME_XXX_MODULE`
   # as the target.
-  if printf '%s\n' "$window" | grep -q '\.delegatecall('; then
+  if printf '%s\n' "$window" | grep -Eq '\.delegatecall[[:space:]]*(\{[^}]*\}[[:space:]]*)?\('; then
     target=$(printf '%s\n' "$window" | grep -oE '\.GAME_[A-Z_]+_MODULE' | tail -1 | sed -E 's/^\.//')
   elif [[ "${file##*/}" == "DegenerusGameMinerModule.sol" ]]; then
     # The dispatcher pairs its branch-local target assignment with calldata,

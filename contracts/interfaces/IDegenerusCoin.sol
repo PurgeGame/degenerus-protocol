@@ -56,8 +56,9 @@ interface IDegenerusCoin {
     /// @param amount The FLIP (whole tokens) to destroy.
     function burnCoinForSalvage(address target, uint256 amount) external;
 
-    /// @notice GAME-only sDGNRS decimator entry, capped at 500,000 FLIP; the advance calls it at most once per opening (a stalled arming word skips it).
+    /// @notice GAME-only sDGNRS decimator entry; the advance calls it at most once per opening (a stalled arming word skips it).
     /// @param lvl Resolution level for the opening window (current game level + 1).
-    /// @return amount Settled backing consumed; zero for an underfunded attempt.
-    function autoDecimatorBurn(uint24 lvl) external returns (uint256 amount);
+    /// @param cap Whole-FLIP spending cap: 4x the previous sealed round's average credited stack (8,000 before any).
+    /// @return amount Settled backing consumed; zero for an underfunded or below-minimum attempt.
+    function autoDecimatorBurn(uint24 lvl, uint256 cap) external returns (uint256 amount);
 }

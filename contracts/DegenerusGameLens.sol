@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {DecimatorSamplingLib as Sampling} from "./libraries/DecimatorSamplingLib.sol";
+
+
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
  *
@@ -207,11 +210,12 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         uint32 chips; // the chosen board, in the normal battles' thirty-bit encoding
     }
 
-    /// @notice A retained heads result: its score and its full ordering key (192-bit random
-    ///         tiebreak above the 64-bit entry id).
+    /// @notice A retained heads result: score, full ordering key (192-bit random tiebreak
+    ///         above the 64-bit entry id), and the owner of this original or generated entry.
     struct DecWinner {
         uint256 score;
         uint256 key;
+        address owner;
     }
 
     /// @notice A player's retained foil-pack record for a cycle level.
@@ -530,27 +534,39 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         assembly { root := decBattleRounds.slot }
         uint256 slot = uint256(_mapSlot(uint256(lvl), root));
         uint256 word = _sload(game, bytes32(slot));
-        r.poolWei = uint128(word);
-        r.count = uint64(word >> 128);
-        r.openedDay = uint24(word >> 192);
-        r.phase = uint8(word >> 216);
-        r.capacity = uint8(word >> 224);
-        r.winners = uint8(word >> 232);
-        r.paid = uint8(word >> 240);
+        r.poolWei = uint96(word);
+        r.count = uint40(word >> 96);
+        r.totalCreditedStack = uint64(word >> 136);
+        r.openedDay = uint24(word >> 200);
+        r.phase = uint8(word >> 224);
+        r.capacity = uint8(word >> 232);
+        r.winners = uint8(word >> 240);
+        r.paid = uint8(word >> 248);
         word = _sload(game, bytes32(slot + 1));
         r.cursor = uint64(word);
         r.champion = uint64(word >> 64);
         r.next = uint24(word >> 128);
     }
 
-    /// @notice A retained HEADS entry. Heap order is NOT finish order; champion is in the round.
-    /// @dev Absolute peak in wei is score / 3000 (a whole-FLIP stack times the peak normalized to
-    ///      a 3000-FLIP start).
+    /// @notice Last sealed original average as an exact fraction, plus the next automatic cap.
+    function decBurnReferenceOf(address game)
+        external view returns (uint64 stack, uint40 count, uint256 automaticCap)
+    {
+        bytes32 slot;
+        assembly { slot := decPreviousStack.slot }
+        uint256 word = _sload(game, slot);
+        stack = uint64(word);
+        count = uint40(word >> 64);
+        automaticCap = count == 0 ? 8000 : uint256(stack) * 4 / count;
+    }
+
+    /// @notice A retained eligible run. Heap order is NOT merit rank; champion is in the round.
+    /// @dev Absolute peak in whole FLIP is score / (3000 * 1e18), where 1e18 is engine precision.
     ///      One leaderboard is reused round after round, so it is readable only while `lvl` is at
     ///      the head of the settlement queue; finished rounds are in their DecimatorRanked and
     ///      DecimatorClaimed events.
     function decWinnerAt(address game, uint24 lvl, uint8 index)
-        external view returns (DecWinner memory node)
+        public view returns (DecWinner memory node)
     {
         DecBattleRound memory r = decBattleRoundOf(game, lvl);
         bytes32 queueSlot;
@@ -564,9 +580,39 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         uint256 rngWord = _decActiveWordOf(game);
         if (rngWord == 0) revert E();
         uint256 stored = _sload(game, _mapSlot(uint256(index), root));
+        uint64 id = uint64(stored);
+        bytes32 tag = keccak256("decimator.battle.tie.v1");
         node.score = stored >> 64;
-        node.key = (uint256(keccak256(abi.encode(keccak256("decimator.battle.tie.v1"), rngWord, lvl, uint64(stored))))
-            & ~uint256(type(uint64).max)) | uint64(stored);
+        node.key = (uint256(keccak256(abi.encode(tag, rngWord, lvl, id)))
+            & ~uint256(type(uint64).max)) | id;
+        if (id > r.count) {
+            assembly { root := decGeneratedOwners.slot }
+            node.owner = address(uint160(_sload(game, _mapSlot(uint256(id - r.count), root))));
+        } else {
+            (node.owner,,) = decEntryAt(game, lvl, id);
+        }
+    }
+
+    function decJackpotPlanOf(address game, uint24 lvl) public view returns (DecJackpotPlan memory p) {
+        uint256 root;
+        assembly { root := decJackpotPlans.slot }
+        uint256 slot = uint256(_mapSlot(uint256(lvl), root));
+        uint256 w = _sload(game, bytes32(slot));
+        p.soloAmount = uint128(w);
+        p.weights = uint64(w >> 128);
+        p.generatedEntries = uint40(w >> 192);
+        p.cursor = uint16(w >> 232);
+        p.mode = uint8(w >> 248);
+    }
+
+    /// @notice Replay a survivor from its sealed word, level, final field size and stratum.
+    function decSurvivorAt(uint256 word, uint24 lvl, uint64 fieldEntries, uint16 stratum)
+        external pure returns (uint64)
+    {
+        uint256 count = Sampling.survivors(fieldEntries);
+        if (stratum >= count) revert E();
+        return Sampling.sample(word, lvl, fieldEntries, count,
+            Sampling.rotation(word, lvl, fieldEntries), stratum);
     }
 
     /// @dev The pending battle owns this published session until its final payout.

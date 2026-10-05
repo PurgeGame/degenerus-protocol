@@ -485,40 +485,36 @@ for dilution and timing, and `SdgnrsCenturyRecycle` for the accounting tests.
 
 ### Decimator battle
 
-The periodic Decimator is a shared-dice craps battle paid in ETH and half whale passes. The old
-bucket lottery, migrations, pro-rata burn shares and lootbox settlement have been removed.
-See [Decimator battle](DECIMATOR-BATTLE.md) for the rules, ABI and accounting details.
+The periodic Decimator is a shared-dice craps battle paid in ETH and half whale passes.
+See [Decimator battle](DECIMATOR-BATTLE.md) for the full rules, ABI and accounting.
+Ordinary x5 excluding x95 uses one jackpot day; x00 remains original-only. Manual burns
+and top-ups require at least 2,000 whole FLIP. Automatic sDGNRS burns cap at four times
+the previous original mean, bootstrap 8,000, skipping available amounts below 2,000.
 
-Each wallet accumulates one event entry. Every burn locks its degen multiplier and its
-`0.9^dayOffset` timing factor at burn time. Degen reaches 1.9x at 500 and 2x at 30,000;
-there is no burn-size cap on that multiplier. Existing quest and boon chip bonuses remain.
-The window opening protocol day is stamped by Advance, independent of the first burn.
+For original count N and reserved pool P, available matching money is active non-solo
+shares plus solo's excess over floor(35% of the priced ETH leg). M=min(N,floor(available*N/P))
+generated slots cost F=ceil(M*P/N); no active non-solo cohort means M=0. Solo receives
+min(activeNonSolo+soloShare-F,soloShare), split into its normal cash/pass award. Solo
+weight is zero. Inactive shares and surplus above normal solo use the final-day unpaid sweep.
 
-At the closing request, the window closes before the word is known. Consolidation seals
-the full 256-bit word, pool and entrant count and appends the event to a FIFO. Each run uses
-one-fifth of its starting stack as its initial board wager, doubles every three shooters
-(every shooter from shooter 30),
-and has no cash-out or goal. A run ends at bust, after 48 shooters or at exactly 511 rolls. Shared event dice drive separately scattered boards and the
-existing owner-specific survival/boost draws. Absolute high point ranks the run, including
-its starting bankroll. A separately tagged final coin disqualifies tails before insertion.
+The fixed field T=N+M has exactly min(1000,ceil(T/2)) survivors, chosen by one hash draw
+per floor-rounded stratum plus a common tagged random rotation. Original and generated
+workers replay the same strata; the locked worker runs generated IDs and the unlocked
+worker runs originals. Opposite-type strata are cheap skips, and the generated loop is
+skipped entirely when M=0. At most 1,000 total engine runs occur, independent of population.
+Original IDs 1..N and generated IDs N+1..T use one top-K heap, with
+K=min(200,floor(T/2),max(20,ceil(T/10))). Enough survivors always exist to fill K.
+Original scores use frozen stack times peak; generated scores use the original mean.
+Both types share dice, board, tie and the bounded engine helper. Zero-quota rounds
+release the reservation after sampled work; normal payouts keep the champion/pass rules.
 
-A bounded min-heap retains the best `min(100, ceil(N/10))` heads. Once all runs finish,
-5% of the pool is the first-place bonus; 95% is split among all actual winners, including
-first. First absorbs rounding dust and takes half its amount in whole half whale passes.
-Once an equal share buys a half pass, the other places alternate between ETH and half
-passes. The money that buys passes returns to the future pool once, at ranking. If every
-coin is tails, the whole reservation returns. Both moves use the pending buffer during a
-freeze.
-
-The keeper leg receives at most 2,500 work units less prior box scanning, charges actual
-roll and heap work, and permits at most one bounded run to overshoot. Final ranking and
-credits use separate bounded calls, all inside `mineFlip`'s Decimator stage. Settlement
-stops at game over; the ending
-does not wait for the battle queue. Uncredited reservations remain in `claimablePool`
-until the final sweep releases them.
-
-The sealed pool is already reserved in `claimablePool`; per-winner credits do not add it
-again. The round's pool and payout cursor track assignment without a duplicate reserve counter.
+One plan word stores soloAmount128, four weights16, generated count40, stratum cursor16
+and mode8. The two-word round stores original pool/count/aggregate, phase, quota and
+its stratum cursor. Only retained generated candidates store owners by ordinal 1..N.
+Decimator owns funding and JackpotWork.paid; Jackpot pays normal solo cash/passes on
+soloAmount. The existing final-day sweep handles unspent daily ETH. Every delegate shares
+storage; this is a fresh-deployment change. Lens exposes the plan, both winner-owner types
+and survivor replay from (word,lvl,T,stratum).
 
 ### High-roller jackpot reserve
 

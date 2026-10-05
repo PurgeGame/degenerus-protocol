@@ -7,7 +7,7 @@ import {DegenerusGameDecimatorModule} from "../../contracts/modules/DegenerusGam
 /// @dev Module harness: seeds an entered round and the session state the seal checks, and
 ///      issues the seal as the facade self-call does (`msg.sender == address(this)`).
 contract DegradeDecimatorSealHarness is DegenerusGameDecimatorModule {
-    function enter(uint24 lvl, uint64 count) external {
+    function enter(uint24 lvl, uint40 count) external {
         level = lvl - 1;
         decBattleRounds[lvl].count = count;
         decBattleRounds[lvl].openedDay = _simulatedDayIndex();

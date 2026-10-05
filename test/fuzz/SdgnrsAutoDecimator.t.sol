@@ -21,6 +21,11 @@ contract AutoDecimatorAdvanceHarness is DegenerusGameAdvanceModule {
 }
 
 contract AutoDecimatorGameHarness is DegenerusGame {
+    function setDecReference(uint64 stack, uint40 count, uint24 lvl) external {
+        decPreviousStack = stack;
+        decPreviousCount = count;
+    }
+
     function prepareOpening(uint24 day, uint24 lvl, uint256 word, bool opening) external {
         dailyIdx = day - 1;
         purchaseStartDay = day - 1;
@@ -60,12 +65,12 @@ contract AutoDecimatorGameHarness is DegenerusGame {
         _setRngComplete(true);
     }
 
-    /// @dev The wallet's entry for `lvl` (zero if its latest entry is another event); stack in wei.
+    /// @dev The wallet's entry for `lvl` (zero if its latest entry is another event); whole-FLIP stack.
     function entryFor(uint24 lvl, address owner) public view returns (uint64 id, uint256 stack) {
         uint256 latest = decBattlePlayers[owner];
         if (uint24(latest >> 64) != lvl) return (0, 0);
         id = uint64(latest);
-        stack = (decBattleEntries[(uint256(lvl) << 64) | id] >> 190) * 1 ether;
+        stack = (decBattleEntries[(uint256(lvl) << 64) | id] >> 190);
     }
 
     function entry(uint24 lvl) external view returns (uint256 stack, uint64 id) {
@@ -76,7 +81,7 @@ contract AutoDecimatorGameHarness is DegenerusGame {
 
 contract SdgnrsAutoDecimatorTest is DeployProtocol {
     address private constant HOUSE = ContractAddresses.SDGNRS;
-    uint256 private constant CAP = 500_000 ether;
+    uint256 private constant CAP = 8000;
     bytes32 private constant BURN_EVENT = keccak256("DecimatorBurn(address,uint256,uint64)");
     bytes32 private constant RECORDED_EVENT =
         keccak256("DecBurnRecorded(address,uint24,uint64,uint256,uint256,uint256,uint32)");
@@ -121,7 +126,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
     function _autoBurn() private returns (uint256) {
         uint24 resolutionLevel = game.level() + 1;
         vm.prank(address(game));
-        return coin.autoDecimatorBurn(resolutionLevel);
+        return coin.autoDecimatorBurn(resolutionLevel, CAP);
     }
 
     /// @dev The single DecBurnRecorded of one burn: its base (burn plus bonuses) and credited chips.
@@ -153,9 +158,9 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         harness.applyOpeningWord(21);
         vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScore.selector, player), abi.encode(uint256(500)));
         vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScoreCached.selector, player), abi.encode(uint256(500)));
-        vm.prank(address(game)); coin.mintForGame(player, 4_000_000 ether);
+        vm.prank(address(game)); coin.mintForGame(player, 4_000_000);
         vm.recordLogs();
-        vm.prank(player); coin.decimatorBurn(player, 2_000_000 ether, 0);
+        vm.prank(player); coin.decimatorBurn(player, 2_000_000, 0);
         (uint256 firstBase, uint256 firstCredit) = _recorded(vm.getRecordedLogs());
         (uint64 id, uint256 first) = harness.entryFor(5, player);
         assertGt(id, 0);
@@ -163,7 +168,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         assertEq(first, firstBase * ActivityCurveLib.decBattleMultBps(game.playerActivityScore(player)) / 10_000);
         _warp(23);
         vm.recordLogs();
-        vm.prank(player); coin.decimatorBurn(player, 2_000_000 ether, 0);
+        vm.prank(player); coin.decimatorBurn(player, 2_000_000, 0);
         (uint256 topupBase,) = _recorded(vm.getRecordedLogs());
         (uint64 again, uint256 total) = harness.entryFor(5, player);
         uint256 mult = ActivityCurveLib.decBattleMultBps(game.playerActivityScore(player));
@@ -173,7 +178,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
     }
 
     function test_OpeningBurnsCarryBeforeCrapsAndCompletesTodaysQuest() public {
-        _fund(400_000 ether);
+        _fund(400_000);
         _prepare(21, 4, 3, true);
         uint256 supplyBefore = coin.totalSupply();
         vm.recordLogs();
@@ -194,7 +199,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
 
         uint256 base = CAP + questReward;
         uint256 multiplier = ActivityCurveLib.decBattleMultBps(game.playerActivityScore(HOUSE));
-        uint256 expected = base * multiplier / 10_000 / 1 ether * 1 ether; // whole FLIP of chips
+        uint256 expected = base * multiplier / 10_000; // whole FLIP of chips
         (uint256 weight, uint64 id) = harness.entry(5);
         assertEq(weight, expected, "quest reward enters day-zero chip math");
         assertEq(id, 1);
@@ -216,7 +221,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
     }
 
     function test_RepeatedAdvancesCannotBurnTwice() public {
-        _fund(400_000 ether);
+        _fund(400_000);
         _prepare(21, 4, 3, true);
         harness.applyOpeningWord(21);
         uint256 backing = coinflip.previewSalvageFlipBacking(HOUSE);
@@ -233,7 +238,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
     }
 
     function test_RealAdvanceGameReachesTheOpeningEntry() public {
-        _fund(400_000 ether);
+        _fund(400_000);
         _prepare(21, 4, 3, true);
         vm.deal(address(game), 1000 ether);
         vm.recordLogs();
@@ -258,7 +263,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
     }
 
     function test_CenturyOpeningTargetsLevel100() public {
-        _fund(400_000 ether);
+        _fund(400_000);
         _prepare(21, 99, 3, true);
         vm.deal(address(game), 1000 ether);
         // As in test_RealAdvanceGameReachesTheOpeningEntry: _mintCeiling() = level(99)+1 = 100,
@@ -276,7 +281,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
     function test_UnderfundedAttemptCannotRetryInTheSameWindow() public {
         _prepare(21, 4, 3, true);
         harness.applyOpeningWord(21);
-        _fund(400_000 ether);
+        _fund(400_000);
         harness.applyOpeningWord(21);
         // The next real daily request clears the opening flag while the decimator stays open.
         _warp(22);
@@ -297,7 +302,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
     }
 
     function test_NoOpeningLatchLeavesBackingForCraps() public {
-        _fund(400_000 ether);
+        _fund(400_000);
         _prepare(21, 4, 3, false);
         harness.applyOpeningWord(21);
         (uint256 weight,) = harness.entry(5);
@@ -315,7 +320,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
     }
 
     function test_PendingLossCannotEscapeIntoDecimator() public {
-        _fund(400_000 ether);
+        _fund(400_000);
         _prepare(21, 3, 3, false);
         harness.applyOpeningWord(21);
         assertGt(coinflip.previewSalvageFlipBacking(HOUSE), CAP);
@@ -333,8 +338,8 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         assertTrue(vm.revertToState(genesisBackingSnapshot));
         uint256 reserve = coinflip.previewSalvageFlipBacking(HOUSE);
         vm.prank(HOUSE);
-        coinflip.withdrawRedeemedFlip(reserve - 50_000 ether);
-        _fund(400_000 ether);
+        coinflip.withdrawRedeemedFlip(reserve - 2000);
+        _fund(400_000);
         _prepare(21, 4, 3, true);
         vm.prank(address(game));
         coinflip.processCoinflipPayouts(0, 3, 21);
@@ -358,33 +363,75 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         uint256 backing = coinflip.previewSalvageFlipBacking(HOUSE);
         vm.prank(HOUSE);
         coinflip.withdrawRedeemedFlip(backing - bankroll);
-        uint256 expected = bankroll < 1000 ether ? 0 : bankroll < CAP ? bankroll : CAP;
+        uint256 expected = bankroll < 2000 ? 0 : bankroll < CAP ? bankroll : CAP;
         assertEq(_autoBurn(), expected);
         assertEq(coinflip.previewSalvageFlipBacking(HOUSE), bankroll - expected);
     }
 
-    function test_MinimumEntryOnlyPartiallyCompletesQuest() public {
-        _fund(400_000 ether);
+    function test_MinimumEntryCompletesDecimatorQuest() public {
+        _fund(400_000);
         _prepare(21, 4, 3, true);
         vm.prank(address(game));
         coinflip.processCoinflipPayouts(0, 3, 21);
         uint256 backing = coinflip.previewSalvageFlipBacking(HOUSE);
         vm.prank(HOUSE);
-        coinflip.withdrawRedeemedFlip(backing - 1000 ether);
+        coinflip.withdrawRedeemedFlip(backing - 2000);
         vm.prank(address(game));
         quests.rollDailyQuest(21, 3, false, false, true);
-        assertEq(_autoBurn(), 1000 ether);
+        assertEq(_autoBurn(), 2000);
         (, bool secondary) = quests.questCompletionToday(HOUSE);
-        assertFalse(secondary);
+        assertTrue(secondary);
         (,, uint128[2] memory progress,) = quests.playerQuestStates(HOUSE);
-        assertEq(progress[1], 1000 ether);
+        assertEq(progress[1], 2000);
     }
 
     function test_OnlyGameMaySpendHouseBacking() public {
         vm.expectRevert(FLIP.OnlyGame.selector);
-        coin.autoDecimatorBurn(5);
+        coin.autoDecimatorBurn(5, CAP);
         vm.prank(ContractAddresses.CRAPS);
         vm.expectRevert(FLIP.OnlyGame.selector);
-        coin.autoDecimatorBurn(5);
+        coin.autoDecimatorBurn(5, CAP);
+    }
+
+    function test_PreviousReferenceAboveOldCapControlsOpeningBurn() public {
+        _fund(2_000_000);
+        harness.setDecReference(400_001, 2, 100);
+        _prepare(21, 104, 3, true);
+        vm.recordLogs();
+        harness.applyOpeningWord(21);
+        (uint256 spent, uint256 count) = _burned(vm.getRecordedLogs());
+        assertEq(spent, 800_002, "fourfold rational average, not rounded average or old ceiling");
+        assertEq(count, 1);
+    }
+
+    function test_SubminimumReferenceSkipsWithoutConsuming() public {
+        _fund(400_000);
+        _prepare(21, 4, 3, true);
+        vm.prank(address(game));
+        coinflip.processCoinflipPayouts(0, 3, 21);
+        uint256 beforeBacking = coinflip.previewSalvageFlipBacking(HOUSE);
+        vm.expectCall(address(coinflip), abi.encodeWithSignature("consumeFlipForSalvage(address,uint256)"), 0);
+        vm.prank(address(game));
+        assertEq(coin.autoDecimatorBurn(5, 1600), 0);
+        assertEq(coinflip.previewSalvageFlipBacking(HOUSE), beforeBacking);
+    }
+
+    function test_ManualMinimumIncludesEveryTopup() public {
+        address player = makeAddr("minimum-decimator");
+        _prepare(21, 4, 3, true);
+        harness.applyOpeningWord(21);
+        vm.prank(address(game));
+        coin.mintForGame(player, 8000);
+        vm.startPrank(player);
+        vm.expectRevert(FLIP.AmountLTMin.selector);
+        coin.decimatorBurn(player, 1999, 0);
+        coin.decimatorBurn(player, 2000, 0);
+        vm.expectRevert(FLIP.AmountLTMin.selector);
+        coin.decimatorBurn(player, 1999, 0);
+        coin.decimatorBurn(player, 2000, 0);
+        vm.stopPrank();
+        assertEq(coin.balanceOf(player), 4000);
+        (uint64 id,) = harness.entryFor(5, player);
+        assertEq(id, 1, "topup retains its original entry");
     }
 }

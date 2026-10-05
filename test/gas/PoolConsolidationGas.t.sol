@@ -13,7 +13,7 @@ import {CenturyBafScores, CenturyNativeGasHost} from "./AdvanceCenturyConsolidat
 ///      A Decimator event of `decEntrants` entrants is open for `lvl` (sealing is constant work
 ///      regardless of the entrant population).
 contract ConsolidationLevelSeeder is DegenerusGame {
-    function seed(uint24 lvl, uint128 nextPool, uint128 futurePool, uint64 decEntrants) external {
+    function seed(uint24 lvl, uint128 nextPool, uint128 futurePool, uint40 decEntrants) external {
         uint24 day = _simulatedDayIndex();
         level = lvl - 1;
         purchaseStartDay = day - 8;
@@ -66,7 +66,7 @@ abstract contract PoolConsolidationFixture is FreshWordLeg {
 
     function _label() internal pure virtual returns (string memory);
 
-    function _decEntrants() internal pure virtual returns (uint64) {
+    function _decEntrants() internal pure virtual returns (uint40) {
         return 0;
     }
 
@@ -261,7 +261,7 @@ contract PoolConsolidationCenturyWinGas is PoolConsolidationFixture {
         return "x00_win";
     }
 
-    function _decEntrants() internal pure override returns (uint64) {
+    function _decEntrants() internal pure override returns (uint40) {
         return 1_000_000;
     }
 }
@@ -282,7 +282,7 @@ contract PoolConsolidationCenturySkipGas is PoolConsolidationFixture {
         return "x00_skip_incinerator";
     }
 
-    function _decEntrants() internal pure override returns (uint64) {
+    function _decEntrants() internal pure override returns (uint40) {
         return 1_000_000;
     }
 
@@ -350,7 +350,7 @@ contract PoolConsolidationX5DecimatorGas is PoolConsolidationFixture {
         return "x5_decimator";
     }
 
-    function _decEntrants() internal pure override returns (uint64) {
+    function _decEntrants() internal pure override returns (uint40) {
         return 1_000_000;
     }
 }

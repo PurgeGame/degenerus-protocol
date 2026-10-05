@@ -214,7 +214,8 @@ contract ReviewClaimSeeder is DegenerusGame {
     function seedDecRound(uint24 lvl, address player, uint96 poolWei) external {
         decBattleRounds[lvl].poolWei = poolWei;
         decBattleRounds[lvl].phase = 2;
-        decBattleRounds[lvl].count = 1;
+        decBattleRounds[lvl].count = 2;
+        decBattleRounds[lvl].capacity = 1;
         decBattleRounds[lvl].winners = 1;
         decBattleRounds[lvl].champion = 1;
         decBattlePlayers[player] = (uint256(lvl) << 64) | 1;
@@ -225,31 +226,21 @@ contract ReviewClaimSeeder is DegenerusGame {
         claimablePool += uint128(poolWei);
     }
 
-    function seedLosingKeeperRun(uint24 lvl) external {
+    function seedZeroQuotaRun(uint24 lvl) external {
         uint24 day = _simulatedDayIndex();
         dailyIdx = day; purchaseStartDay = day;
         rngLockedFlag = false; ticketsFullyProcessed = true; subsFullyProcessed = true;
         _afkingResetDay = day;
         DecBattleRound storage round = decBattleRounds[lvl];
-        // Eight losing runs: enough work for one knee credit (15 units) at the measured prices.
-        round.phase = 1; round.winners = 0; round.champion = 0; round.capacity = 1; round.count = 8;
-        for (uint160 i = 2; i <= 8; ++i) decBattleEntries[(uint256(lvl) << 64) | i] = i;
-        uint256 word;
-        while (!_allTails(word, lvl, 8)) ++word;
+        // One sampled original with quota zero: engine work without a prize credit.
+        round.phase = 1; round.winners = 0; round.champion = 0; round.capacity = 0; round.count = 1;
+        round.cursor = 0;
+        uint256 word = 777;
         rngWordCurrent = word;
         _setRngSessionPublished(true);
         _setRngRequestActive(false);
         _setRngComplete(false);
         humanReadComplete = true;
-    }
-
-    function _allTails(uint256 word, uint24 lvl, uint64 n) private pure returns (bool) {
-        for (uint64 id = 1; id <= n; ++id) {
-            if (uint256(keccak256(abi.encode(keccak256("decimator.battle.final-coin.v1"), word, lvl, id))) & 1 != 0) {
-                return false;
-            }
-        }
-        return true;
     }
 
     function setGameOver() external {
@@ -311,12 +302,12 @@ contract DecimatorLegEndingIdleTest is RedemptionCloseTools {
 
     /// @dev The knee credit per resolved run is gone (60d31f775 / 72fc06f6c): mineFlip pays FLIP on
     ///      the gas a call measured above its unpaid first MIN_REWARDED_GAS, whatever the outcome.
-    ///      A tails-only run is still engine work and is paid by the same rule as any other.
-    function test_LosingRunStillPaysOneKeeperBounty() public {
+    ///      A zero-quota run is still engine work and uses the same bounty rule as any other.
+    function test_ZeroQuotaRunUsesNormalKeeperBountyPolicy() public {
         vm.etch(address(game), type(ReviewClaimSeeder).runtimeCode);
-        ReviewClaimSeeder(payable(address(game))).seedLosingKeeperRun(DLVL);
+        ReviewClaimSeeder(payable(address(game))).seedZeroQuotaRun(DLVL);
         vm.etch(address(game), realCode);
-        assertEq(game.nextMinerAction(), 12, "the losing runs are the next engine work (MinerAction.Decimator)");
+        assertEq(game.nextMinerAction(), 12, "the zero-quota run are the next engine work (MinerAction.Decimator)");
         vm.fee(1 gwei);
         address keeper = makeAddr("battle-keeper");
         uint256 before = coinflip.coinflipAmount(keeper);
@@ -331,13 +322,13 @@ contract DecimatorLegEndingIdleTest is RedemptionCloseTools {
                 (first, used, reward) = abi.decode(logs[i].data, (uint8, uint256, uint256));
             }
         }
-        assertEq(first, 12, "non-vacuity: the call ran the losing runs' Decimator stage");
+        assertEq(first, 12, "non-vacuity: the call ran the zero-quota run' Decimator stage");
         emit log_named_uint("losing run mineFlip gas", used);
         emit log_named_uint("losing run bounty", reward);
         assertEq(coinflip.coinflipAmount(keeper) - before, reward, "the bounty is credited to the keeper's stake");
-        if (used > MineFlipGas.MIN_REWARDED_GAS) assertGt(reward, 0, "tails work past the unpaid first million is paid");
+        if (used > MineFlipGas.MIN_REWARDED_GAS) assertGt(reward, 0, "sampled work past the unpaid first million is paid");
         else assertEq(reward, 0, "work inside the unpaid first million is unpaid, whatever its outcome");
-        assertEq(game.claimableWinningsOf(winner), 0, "tails has no ETH credit");
+        assertEq(game.claimableWinningsOf(winner), 0, "zero quota has no ETH credit");
     }
 
     /// @dev Once liveness triggers the read-consumer stage is closed and the ending owns the chain:

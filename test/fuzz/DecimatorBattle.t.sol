@@ -9,6 +9,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {ActivityCurveLib} from "../../contracts/libraries/ActivityCurveLib.sol";
 import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 import {Craps} from "../../contracts/Craps.sol";
+import {DecimatorSampleReference as Sample} from "../helpers/DecimatorSamplingReference.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
 /// @dev Makes ranking tests cheap while asserting the exact engine inputs. The real engine
@@ -49,24 +50,11 @@ contract DecimatorFlatProbe {
     }
 }
 
-/// @dev Peaks far past anything the engine's bounds admit, so every score hits its cap.
-contract DecimatorHugePeakProbe {
-    function settleSlipBounded(uint256, uint256, uint256 board, uint256, bytes32, uint256, address, uint256, uint256)
-        external
-        pure
-        returns (Craps.SlipResult memory r)
-    {
-        r.peakBankroll = (uint256(1) << 200) + board % (1_000_000);
-        r.totalRolls = 30;
-    }
-}
-
 contract DecimatorBattleTest is Test {
     DecimatorBattleHarness internal h;
     uint24 internal constant LVL = 5;
     bytes32 internal constant DICE = keccak256("decimator.battle.dice.v1");
     bytes32 internal constant BOARD = keccak256("decimator.battle.board.v1");
-    bytes32 internal constant COIN = keccak256("decimator.battle.final-coin.v1");
     bytes32 internal constant TIE = keccak256("decimator.battle.tie.v1");
 
     function setUp() public {
@@ -85,8 +73,8 @@ contract DecimatorBattleTest is Test {
         return target.recordDecBurn(p, lvl, amount, mult, 0);
     }
 
-    function _heads(uint256 word, uint24 lvl, uint64 id) internal pure returns (bool) {
-        return uint256(keccak256(abi.encode(COIN, word, lvl, id))) & 1 != 0;
+    function _sampled(uint256 word, uint24 lvl, uint64 id, uint256 total) internal pure returns (bool) {
+        return Sample.contains(word, lvl, total, id);
     }
 
     /// @dev Drive the live decimator worker (mineFlip's Decimator stage) with all remaining gas
@@ -186,10 +174,11 @@ contract DecimatorBattleTest is Test {
         assertEq(uint24(h.queue()), 0);
     }
 
-    function test_SingleHeadsGetsEverythingAndNoDoublePay() public {
+    function test_SingleSurvivorGetsEverythingAndNoDoublePay() public {
         _burn(h, address(1), LVL, 1000, 10_000);
+        _burn(h, address(2), LVL, 1000, 10_000);
         uint256 word = 2;
-        while (!_heads(word, LVL, 1)) ++word;
+        while (!_sampled(word, LVL, 1, h.roundOf(LVL).count) || _sampled(word, LVL, 2, h.roundOf(LVL).count)) ++word;
         h.seal(LVL, 13 ether + 17, word);
         h.freeze(true);
         _assertLockedSettlementIsIdle(h);
@@ -207,17 +196,18 @@ contract DecimatorBattleTest is Test {
         assertFalse(r.progressed);
     }
 
-    function test_SmallHeadsRoundSimulatesRanksAndPaysInOneCall() public {
+    function test_SmallSampledRoundSimulatesRanksAndPaysInOneCall() public {
         _burn(h, address(1), LVL, 1000, 10_000);
+        _burn(h, address(2), LVL, 1000, 10_000);
         uint256 word = 2;
-        while (!_heads(word, LVL, 1)) ++word;
+        while (!_sampled(word, LVL, 1, h.roundOf(LVL).count) || _sampled(word, LVL, 2, h.roundOf(LVL).count)) ++word;
         h.seal(LVL, 13 ether + 17, word);
 
         MineFlipGas.Result memory result = h.runDecimatorWork{gas: 2_000_000}(1_900_000);
 
         assertTrue(result.progressed);
         assertTrue(result.done, "one worker call drains the small round");
-        assertEq(result.rewardBasis, 3, "one simulation, one ranking and one payment");
+        assertEq(result.rewardBasis, 3, "one sampled run, one ranking and one payment");
         DegenerusGameStorage.DecBattleRound memory round = h.roundOf(LVL);
         assertEq(round.cursor, 1);
         assertEq(round.phase, 3);
@@ -229,42 +219,28 @@ contract DecimatorBattleTest is Test {
         assertEq(h.reserved() + h.future(), 13 ether + 17);
     }
 
-    function test_InsufficientRankGasCheckpointsWithoutChangingTranscript() public {
+    function test_InsufficientRunGasCheckpointsWithoutChangingTranscript() public {
         _burn(h, address(1), LVL, 1000, 10_000);
-        uint256 word = 2;
-        while (_heads(word, LVL, 1)) ++word;
-        h.seal(LVL, 7 ether, word);
+        h.seal(LVL, 7 ether, 777);
         uint256 snapshot = vm.snapshotState();
-
         vm.recordLogs();
-        MineFlipGas.Result memory full = h.runDecimatorWork{gas: 1_000_000}(1_000_000);
-        assertTrue(full.done);
+        _drain(h);
         bytes32 fullTranscript = _transcript(h, vm.getRecordedLogs());
         bytes32 fullState = _settledState(h);
         assertTrue(vm.revertToState(snapshot));
-
         vm.recordLogs();
-        MineFlipGas.Result memory simulated = h.runDecimatorWork{gas: 200_000}(200_000);
-        assertTrue(simulated.progressed);
-        assertFalse(simulated.done, "ranking keeps its own admission bound");
-        assertEq(simulated.rewardBasis, 1);
-        DegenerusGameStorage.DecBattleRound memory checkpoint = h.roundOf(LVL);
-        assertEq(checkpoint.cursor, checkpoint.count);
-        assertEq(checkpoint.phase, 1);
-        assertEq(h.reserved(), 7 ether, "the reservation waits for ranking");
-
-        MineFlipGas.Result memory ranked = h.runDecimatorWork{gas: 500_000}(500_000);
-        assertTrue(ranked.progressed);
-        assertTrue(ranked.done, "zero winners finish without entering payment terms");
-        assertEq(simulated.rewardBasis + ranked.rewardBasis, full.rewardBasis);
+        MineFlipGas.Result memory refused = h.runDecimatorWork{gas: 200_000}(200_000);
+        assertFalse(refused.progressed);
+        assertEq(h.roundOf(LVL).cursor, 0);
+        assertEq(h.reserved(), 7 ether);
+        _drain(h);
         assertEq(_transcript(h, vm.getRecordedLogs()), fullTranscript);
         assertEq(_settledState(h), fullState);
     }
 
-    function test_DailyLockDefersAllTailsReserveRelease() public {
+    function test_DailyLockDefersZeroQuotaReserveRelease() public {
         _burn(h, address(1), LVL, 1000, 10_000);
         uint256 word = 2;
-        while (_heads(word, LVL, 1)) ++word;
         h.seal(LVL, 7 ether, word);
         h.freeze(true);
         _assertLockedSettlementIsIdle(h);
@@ -278,19 +254,26 @@ contract DecimatorBattleTest is Test {
         assertEq(h.future(), 7 ether);
     }
 
-    /// @dev A tails run never reaches the engine: an engine that always reverts cannot stop it.
-    function test_TailsSkipsTheEngine() public {
-        vm.etch(ContractAddresses.CRAPS_ENGINE, hex"fe");
-        _burn(h, address(1), LVL, 1000, 10_000);
+    /// @dev Only the sampled slot is visited, even when the unsampled entry was recorded first.
+    function test_UnsampledEntriesNeverRun() public {
+        _probe();
+        _populate(h, LVL, 2);
         uint256 word = 2;
-        while (_heads(word, LVL, 1)) ++word;
+        while (Sample.contains(word, LVL, 2, 1)) ++word;
         h.seal(LVL, 5 ether, word);
-        MineFlipGas.Result memory r = h.runDecimatorWork(gasleft());
-        assertEq(r.rewardBasis, 2, "the tails simulation chains directly into ranking");
-        assertTrue(r.done, "an all-tails round completes in one call");
-        assertEq(h.roundOf(LVL).phase, 3);
-        assertEq(h.roundOf(LVL).winners, 0);
-        assertEq(h.future(), 5 ether, "all-tails pool returns to future");
+        vm.recordLogs();
+        _drain(h);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 runs;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] != keccak256("DecimatorRun(uint24,uint64,uint256)")) continue;
+            ++runs;
+            assertEq(uint64(uint256(logs[i].topics[2])), 2);
+        }
+        assertEq(runs, 1);
+        assertEq(h.roundOf(LVL).cursor, 1);
+        assertEq(h.roundOf(LVL).champion, 2);
+        assertEq(h.balanceOf(address(1)), 0);
     }
 
     /// @dev Game over stops settlement: the queued round keeps its reservation for the final sweep.
@@ -405,7 +388,7 @@ contract DecimatorBattleTest is Test {
         for (uint8 i; i < round.winners; ++i) {
             DecimatorBattleHarness.Node memory node = h.nodeOf(LVL, i);
             uint64 id = uint64(node.key);
-            assertTrue(_heads(word, LVL, id));
+            assertTrue(_sampled(word, LVL, id, h.roundOf(LVL).count));
             Craps.SlipResult memory run = CrapsEngine(ContractAddresses.CRAPS_ENGINE)
                 .settleSlipBounded(
                     0,
@@ -423,25 +406,25 @@ contract DecimatorBattleTest is Test {
         }
     }
 
-    function test_100WinnerCapExactPayoutAndNoTailsOnBoard() public {
+    function test_200WinnerCapExactPayoutAndOnlySampledIdsOnBoard() public {
         _probe();
-        _populate(h, LVL, 1001);
+        _populate(h, LVL, 2000);
         h.seal(LVL, 100 ether + 3, 777);
         _drain(h);
         DegenerusGameStorage.DecBattleRound memory round = h.roundOf(LVL);
-        assertEq(round.capacity, 100);
-        assertEq(round.winners, 100);
+        assertEq(round.capacity, 200);
+        assertEq(round.winners, 200);
         uint256 pool = 100 ether + 3;
-        uint256 base = (pool - pool / 20) / 100;
-        uint256 champ = pool - base * 99; // 5.95 ETH: half buys one half pass, 3.7 ETH stays ETH
-        uint256 perEth = 0; // shares of 0.95 ETH buy no pass, so nobody else takes passes
+        uint256 base = (pool - pool / 20) / 200;
+        uint256 champ = pool - base * 199; // 5.475 ETH: half buys one half pass
+        uint256 perEth = 0; // shares of 0.475 ETH buy no pass, so nobody else takes passes
         assertEq(uint64(h.nodeOf(LVL, 0).key), round.champion, "champion paid from position 0");
         assertEq(h.passesOf(address(uint160(round.champion))), 1);
         assertEq(h.balanceOf(address(uint160(round.champion))), champ - 2.25 ether);
         uint256 sum = champ - 2.25 ether;
-        for (uint8 i = 1; i < 100; ++i) {
+        for (uint8 i = 1; i < 200; ++i) {
             uint64 id = uint64(h.nodeOf(LVL, i).key);
-            assertTrue(_heads(777, LVL, id));
+            assertTrue(_sampled(777, LVL, id, h.roundOf(LVL).count));
             uint256 amount = h.balanceOf(address(uint160(id)));
             assertEq(amount, base + perEth, "equal ETH share plus the champion's leftover split");
             sum += amount;
@@ -452,22 +435,22 @@ contract DecimatorBattleTest is Test {
         // Every excluded eligible entry is weaker than the weakest retained one (ranking moved the
         // champion to position 0, so the minimum is found by scan).
         DecimatorBattleHarness.Node memory root = h.nodeOf(LVL, 0);
-        for (uint8 i = 1; i < 100; ++i) {
+        for (uint8 i = 1; i < 200; ++i) {
             DecimatorBattleHarness.Node memory node = h.nodeOf(LVL, i);
             if (node.score < root.score) root = node;
         }
-        for (uint64 id = 1; id <= 1001; ++id) {
-            if (!_heads(777, LVL, id) || h.balanceOf(address(uint160(id))) != 0 || id == round.champion) continue;
+        for (uint64 id = 1; id <= 2000; ++id) {
+            if (!_sampled(777, LVL, id, h.roundOf(LVL).count) || h.balanceOf(address(uint160(id))) != 0 || id == round.champion) continue;
             uint256 peak = 3000 + uint256(keccak256(abi.encode(BOARD, uint256(777), LVL, id))) % (1_000_000);
             assertLe(h.entryOf(LVL, id).stack / 1 * peak, root.score);
         }
     }
 
-    function test_TailsChampionNeverOccupiesPlace() public {
+    function test_UnsampledHighStackNeverOccupiesPlace() public {
         _probe();
         uint256 word = 2;
-        while (_heads(word, LVL, 1) || !_heads(word, LVL, 2)) ++word;
-        _burn(h, address(1), LVL, type(uint160).max, 10_000);
+        while (_sampled(word, LVL, 1, 2) || !_sampled(word, LVL, 2, 2)) ++word;
+        _burn(h, address(1), LVL, uint256(type(uint64).max) - 1000, 10_000);
         _burn(h, address(2), LVL, 1000, 10_000);
         h.seal(LVL, 1 ether, word);
         _drain(h);
@@ -504,9 +487,10 @@ contract DecimatorBattleTest is Test {
     function test_ChosenBoardDrivesTheRun() public {
         _probe();
         uint256 word = 2;
-        while (!_heads(word, LVL, 1)) ++word;
+        while (!_sampled(word, LVL, 1, 2) || _sampled(word, LVL, 2, 2)) ++word;
         vm.prank(ContractAddresses.COIN);
         h.recordDecBurn(address(1), LVL, 1000, 10_000, 2 | 3 << 12 | 1 << 21);
+        _burn(h, address(2), LVL, 1000, 10_000);
         h.seal(LVL, 1 ether, word);
         _drain(h); // the probe reverts unless chips, scatter count and boost all match
         assertEq(h.balanceOf(address(1)), 1 ether);
@@ -516,7 +500,7 @@ contract DecimatorBattleTest is Test {
         return (uint256(keccak256(abi.encode(TIE, word, lvl, id))) & ~uint256(type(uint64).max)) | id;
     }
 
-    /// @dev Equal scores: two higher stacks and a 33-entry equal-stack group share four places.
+    /// @dev Equal scores: two higher stacks and 38 sampled equal-stack entries contest 20 places.
     ///      The cutoff and first place both resolve by the tiebreak, identically at any batch size,
     ///      and every retained node reports the key the Lens derives.
     function test_EqualScoresRankByTiebreakAtCutoffAndFirst() public {
@@ -524,50 +508,46 @@ contract DecimatorBattleTest is Test {
         DecimatorBattleHarness other = new DecimatorBattleHarness();
         other.open(LVL);
         uint256 word = 2;
-        while (!_heads(word, LVL, 1) || !_heads(word, LVL, 2)) ++word;
-        for (uint160 i = 1; i <= 35; ++i) {
+        while (!Sample.contains(word, LVL, 80, 1) || !Sample.contains(word, LVL, 80, 2)) ++word;
+        for (uint160 i = 1; i <= 80; ++i) {
             uint256 amount = i <= 2 ? 2000 : 1000;
             _burn(h, address(i), LVL, amount, 10_000);
             _burn(other, address(i), LVL, amount, 10_000);
         }
         h.seal(LVL, 4 ether, word);
         other.seal(LVL, 4 ether, word);
-        // Bounded-gas chunks against one all-gas pass: the supplied gas never moves the outcome.
         _drainWithGas(h, 1_000_000);
         _drain(other);
-        assertEq(h.roundOf(LVL).capacity, 4);
-        assertEq(h.roundOf(LVL).winners, 4);
-        // First place: the two top stacks tie, so the larger tiebreak key wins.
+        assertEq(h.roundOf(LVL).capacity, 20);
+        assertEq(h.roundOf(LVL).winners, 20);
         uint64 first = _tieKey(word, LVL, 1) > _tieKey(word, LVL, 2) ? 1 : 2;
         assertEq(h.roundOf(LVL).champion, first);
-        // Cutoff: the two best-keyed heads entries of the equal group take the last two places.
-        uint64 best;
-        uint64 second;
-        for (uint64 id = 3; id <= 35; ++id) {
-            if (!_heads(word, LVL, id)) continue;
-            if (best == 0 || _tieKey(word, LVL, id) > _tieKey(word, LVL, best)) {
-                second = best;
-                best = id;
-            } else if (second == 0 || _tieKey(word, LVL, id) > _tieKey(word, LVL, second)) {
-                second = id;
-            }
+        uint256[38] memory keys;
+        uint256 used;
+        for (uint64 id = 3; id <= 80; ++id) if (Sample.contains(word, LVL, 80, id)) {
+            uint256 key = _tieKey(word, LVL, id);
+            uint256 at = used++;
+            while (at != 0 && keys[at - 1] < key) { keys[at] = keys[at - 1]; --at; }
+            keys[at] = key;
         }
-        bool[36] memory placed;
-        for (uint8 i; i < 4; ++i) {
+        assertEq(used, 38);
+        bool[81] memory placed;
+        for (uint8 i; i < 20; ++i) {
             DecimatorBattleHarness.Node memory node = h.nodeOf(LVL, i);
             uint64 id = uint64(node.key);
-            assertEq(node.key, _tieKey(word, LVL, id), "node key matches the Lens derivation");
-            assertEq(abi.encode(node), abi.encode(other.nodeOf(LVL, i)), "batch size never moves the heap");
+            assertEq(node.key, _tieKey(word, LVL, id));
+            assertEq(abi.encode(node), abi.encode(other.nodeOf(LVL, i)), "partition invariant heap");
             placed[id] = true;
         }
-        assertTrue(placed[1] && placed[2] && placed[best] && placed[second], "exact winner set");
-        uint256 base = (4 ether - 4 ether / 20) / 4; // champion 1.15 ETH: under a half pass, all ETH
-        assertEq(h.balanceOf(address(uint160(first))), 4 ether - base * 3);
-        assertEq(h.balanceOf(address(uint160(best))), base);
+        assertTrue(placed[1] && placed[2]);
+        for (uint256 i; i < 38; ++i) assertEq(placed[uint64(keys[i])], i < 18);
+        uint256 base = (4 ether - 4 ether / 20) / 20;
+        assertEq(h.balanceOf(address(uint160(first))), 4 ether - base * 19);
+        assertEq(h.balanceOf(address(uint160(uint64(keys[0])))), base);
     }
 
     function _runPhaseUnits(DecimatorBattleHarness target, uint24 lvl) internal returns (uint256 units) {
-        while (target.roundOf(lvl).phase == 1 && target.roundOf(lvl).cursor < target.roundOf(lvl).count) {
+        while (target.roundOf(lvl).phase == 1 && target.roundOf(lvl).cursor < Sample.count(target.roundOf(lvl).count)) {
             uint256 g0 = gasleft();
             target.runDecimatorWork(gasleft());
             units += g0 - gasleft();
@@ -578,7 +558,7 @@ contract DecimatorBattleTest is Test {
     ///      reach its results, and its filling inserts are charged the reused price.
     function test_LaterRoundReusesLeaderboardSlots() public {
         _probe();
-        _populate(h, LVL, 40); // four places
+        _populate(h, LVL, 40); // up to twenty places
         h.seal(LVL, 4 ether, 11);
         _drain(h);
         DecimatorBattleHarness fresh = new DecimatorBattleHarness();
@@ -640,7 +620,7 @@ contract DecimatorBattleTest is Test {
             DecimatorBattleHarness t = new DecimatorBattleHarness();
             t.open(LVL);
             _probe();
-            _populate(t, LVL, 60); // up to six places
+            _populate(t, LVL, 60); // up to twenty places
             uint256 pool = 60 ether + 7;
             t.seal(LVL, uint128(pool), 5);
             if (frozen == 1) {
@@ -711,34 +691,28 @@ contract DecimatorBattleTest is Test {
 
     /// @dev Past 2^66 FLIP the stack saturates: later burns still record, and the owner and board
     ///      beside it are untouched.
-    function test_StackSaturatesInsteadOfWrapping() public {
-        uint256 cap = ((uint256(1) << 66) - 1) * 1;
-        _burn(h, address(1), LVL, type(uint160).max, 10_000);
-        assertEq(h.entryOf(LVL, 1).stack, cap);
+    function test_StackCannotOverflowCreditedAggregate() public {
+        _burn(h, address(1), LVL, type(uint64).max, 10_000);
         vm.prank(ContractAddresses.COIN);
-        assertEq(h.recordDecBurn(address(1), LVL, type(uint160).max, 20_000, 3), 1);
+        vm.expectRevert();
+        h.recordDecBurn(address(1), LVL, 2000, 20_000, 3);
         DecimatorBattleHarness.Entry memory e = h.entryOf(LVL, 1);
-        assertEq(e.stack, cap);
+        assertEq(e.stack, type(uint64).max);
         assertEq(e.owner, address(1));
-        assertEq(e.chips, 3);
+        assertEq(e.chips, 0);
         assertEq(h.roundOf(LVL).count, 1);
     }
 
-    /// @dev A peak past the engine's bounds saturates the score: equal capped scores fall to the
-    ///      tiebreak, and settlement completes.
-    function test_ScoreSaturatesInsteadOfWrapping() public {
-        vm.etch(ContractAddresses.CRAPS_ENGINE, type(DecimatorHugePeakProbe).runtimeCode);
-        uint256 word = 2;
-        while (!_heads(word, LVL, 1) || !_heads(word, LVL, 2)) ++word;
-        _burn(h, address(1), LVL, type(uint160).max, 10_000);
-        _burn(h, address(2), LVL, 1000, 10_000);
-        h.seal(LVL, 1 ether, word);
-        _drain(h);
-        assertEq(h.roundOf(LVL).winners, 1);
-        uint64 champion = _tieKey(word, LVL, 1) > _tieKey(word, LVL, 2) ? 1 : 2;
-        assertEq(h.roundOf(LVL).champion, champion);
-        assertEq(h.nodeOf(LVL, 0).score, (uint256(1) << 192) - 1);
-        assertEq(h.balanceOf(address(uint160(champion))), 1 ether);
+    /// @dev A loose envelope from the actual bounded engine inputs still leaves 18 score bits.
+    function test_EnginePayoutEnvelopeFitsScoreLane() public pure {
+        uint256 stake = 600e18;
+        uint256 escalation = uint256(1) << 27; // last permitted shooter (47)
+        // Nine-to-one is the largest profit multiple; include all stakes/refunds and
+        // one survival doubling per shooter, even though these maxima cannot coincide.
+        uint256 peakBound = 3000e18 + 511 * 9 * stake * 130 / 100 * escalation
+            + 48 * 2 * stake * escalation;
+        assertLt(peakBound, uint256(1) << 110);
+        assertLt(((uint256(1) << 66) - 1) * peakBound, uint256(1) << 192);
     }
 
     function testFuzz_WinnerQuotaAndConservation(uint8 population, uint256 word, uint96 pool) public {
@@ -748,15 +722,61 @@ contract DecimatorBattleTest is Test {
         _populate(h, LVL, n);
         h.seal(LVL, pool, word);
         _drain(h);
-        uint8 cap = uint8((n + 9) / 10);
-        uint8 heads;
+        uint8 cap = uint8(n / 2); // this property covers 1–35 entrants, below the 20-place plateau
         uint256 sum;
         for (uint64 id = 1; id <= n; ++id) {
-            if (_heads(word, LVL, id)) ++heads;
             sum += h.balanceOf(address(uint160(id)));
         }
-        assertEq(h.roundOf(LVL).winners, heads < cap ? heads : cap);
+        assertEq(h.roundOf(LVL).winners, cap);
         assertEq(sum + h.future(), pool);
         assertEq(h.reserved(), sum);
+    }
+
+    function test_QuotaBoundariesAndCenturyUseSameRule() public {
+        uint40[18] memory counts = [uint40(1),2,19,20,39,40,41,190,191,199,200,201,999,1000,1001,1999,2000,2001];
+        uint8[18] memory quotas = [uint8(0),1,9,10,19,20,20,20,20,20,20,21,100,100,101,200,200,200];
+        uint256 clean = vm.snapshotState();
+        for (uint256 i; i < counts.length; ++i) {
+            assertTrue(vm.revertToState(clean));
+            clean = vm.snapshotState();
+            h.open(100);
+            h.forceCount(100, counts[i]);
+            h.seal(100, 0, 777);
+            assertEq(h.roundOf(100).capacity, quotas[i]);
+        }
+    }
+
+    function test_RoundedUpSurvivorsRespectFloorHalfQuota() public {
+        _probe();
+        _populate(h, LVL, 19);
+        h.seal(LVL, 60 ether, 777);
+        _drain(h);
+        assertEq(h.roundOf(LVL).cursor, 10);
+        assertEq(h.roundOf(LVL).winners, 9);
+        assertEq(h.roundOf(LVL).paid, 9);
+        uint256 sum;
+        for (uint160 i = 1; i <= 19; ++i) sum += h.balanceOf(address(i));
+        assertEq(sum + h.future(), 60 ether);
+    }
+
+    function test_LargeFieldVisitsExactlyOneThousandSurvivors() public {
+        _probe();
+        _populate(h, LVL, 2001);
+        h.seal(LVL, 100 ether, 777);
+        vm.recordLogs();
+        _drain(h);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bool[2002] memory ran;
+        uint256 runs;
+        for (uint256 i; i < logs.length; ++i) if (logs[i].topics[0] == keccak256("DecimatorRun(uint24,uint64,uint256)")) {
+            uint64 id = uint64(uint256(logs[i].topics[2]));
+            assertFalse(ran[id]);
+            ran[id] = true;
+            ++runs;
+        }
+        for (uint64 id = 1; id <= 2001; ++id) assertEq(ran[id], Sample.contains(777, LVL, 2001, id));
+        assertEq(runs, 1000);
+        assertEq(h.roundOf(LVL).cursor, 1000);
+        assertEq(h.roundOf(LVL).winners, 200);
     }
 }

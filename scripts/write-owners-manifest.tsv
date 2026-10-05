@@ -26,7 +26,7 @@ HELPER	boxCursor	storage/DegenerusGameStorage.sol	Fresh seal resets the cursor a
 HELPER	centuryBonusUsed	storage/DegenerusGameStorage.sol	_setCenturyUsedFor stamps (level<<224|used); the x00 bonus cap mutator
 OWNER	claimablePool	DegenerusGame.sol	claimWinnings/withdrawAfkingFunding release liability: pool -= payout in tandem with the per-player debit
 OWNER	claimablePool	modules/DegenerusGameAdvanceModule.sol	_consolidatePoolsAndRewardJackpots adds the level-transition claimableDelta after crediting winners; one of the paired liability writers
-OWNER	claimablePool	modules/DegenerusGameDecimatorModule.sol	_releaseToFuture moves an all-tails round, or the pass money fixed at ranking, from the reservation to the (frozen-aware) future pool
+OWNER	claimablePool	modules/DegenerusGameDecimatorModule.sol	_releaseToFuture moves an zero-quota round, or the pass money fixed at ranking, from the reservation to the (frozen-aware) future pool
 OWNER	claimablePool	modules/DegenerusGameDegeneretteModule.sol	_addClaimableEth pairs pool += with _creditClaimable for Degenerette ETH wins; same identity as every other crediting site
 OWNER	claimablePool	modules/DegenerusGameGameOverModule.sol	_handleGameOverDrain adds deity refunds and the terminal affiliate share; _handleFinalSweep zeroes it after debiting VAULT/SDGNRS/GNRUS (terminal, GO_SWEPT latch guards later withdraws)
 OWNER	claimablePool	modules/DegenerusGameJackpotModule.sol	jackpot payouts (_processDailyEth liabilityDelta, golden ticket, yield surplus) add liability in tandem with _creditClaimable
@@ -209,3 +209,11 @@ OWNER	ticketSoloOffset	modules/DegenerusGameTicketModule.sol	Ticket worker persi
 HELPER	ticketSoloOffset	storage/DegenerusGameStorage.sol	Ticket worker persists aligned immutable-stream offset; queue release or genuine cohort retirement resets it. Same-cohort terminal continuation preserves it.
 HELPER	farFutureOwed	storage/DegenerusGameStorage.sol	Canonical owed codec preserves neighboring circular lanes, authenticates queue level tags and saturates far-future adds at 2^30-1.
 OWNER	claimablePool	modules/DegenerusGameRngUtils.sol	_closeRedemptionBatch debits the funding shortfall once per live request, paired with _debitClaimable and an ETH/stETH transfer to sDGNRS.
+
+# Decimator jackpot integration (2026-10-05)
+OWNER	decBattleHeap	modules/DegenerusGameDecimatorModule.sol	Reusable top-200 entry min heap; rank swaps champion first, only Decimator settlement mutates nodes.
+OWNER	jackpotWork	modules/DegenerusGameDecimatorModule.sol	Initialization adds the single generated funding transfer to paid; the Jackpot caller must not debit funding again.
+OWNER	decPreviousStack	modules/DegenerusGameDecimatorModule.sol	Successful nonempty seal snapshots original credited aggregate once; generated entries excluded.
+OWNER	decPreviousCount	modules/DegenerusGameDecimatorModule.sol	Successful nonempty seal snapshots original count once; empty and rejected seals retain history.
+OWNER	decJackpotPlans	modules/DegenerusGameDecimatorModule.sol	Seal sets pending mode only for positive x5 references; initialize/fund once and advance generated cursor in one packed word.
+OWNER	decGeneratedOwners	modules/DegenerusGameDecimatorModule.sol	Only retained generated candidates write the owner by entry ordinal (1..N); later rounds reuse those keys.

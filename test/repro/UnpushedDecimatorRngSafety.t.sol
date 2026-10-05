@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {DecimatorSampleReference as Sample} from "../helpers/DecimatorSamplingReference.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
@@ -40,6 +41,7 @@ contract UnpushedDecimatorSessionSeeder is DegenerusGameStorage {
     }
 
     function closeWindow() external { _setDecWindowOpen(false); }
+    function originalOnly(uint24 lvl) external { decJackpotPlans[lvl].mode = 0; }
 
     /// @dev The Decimator stage worker; returns its result and the gas the delegatecall used.
     function runDecimator(uint256 allowance) external returns (MineFlipGas.Result memory r, uint256 used) {
@@ -86,7 +88,6 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
     uint128 private constant POOL = 4 ether;
     uint256 private constant WORD = 0xDEC1A470;
     uint64 private constant COUNT = 40;
-    bytes32 private constant COIN = keccak256("decimator.battle.final-coin.v1");
     bytes32 private constant TIE = keccak256("decimator.battle.tie.v1");
     bytes private gameCode;
     bytes private seedCode;
@@ -108,11 +109,12 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
         vm.etch(ContractAddresses.CRAPS_ENGINE, address(new UnpushedDecimatorFlatEngine()).code);
         for (uint64 id = 1; id <= COUNT; ++id) {
             vm.prank(ContractAddresses.COIN);
-            game.recordDecBurn(address(uint160(0xD000 + id)), LVL, 1000 ether, 10_000, 0);
+            game.recordDecBurn(address(uint160(0xD000 + id)), LVL, 2000, 10_000, 0);
         }
         _seed(abi.encodeCall(UnpushedDecimatorSessionSeeder.closeWindow, ()));
         vm.prank(address(game));
         assertEq(game.runDecimatorJackpot(POOL, LVL, WORD), 0);
+        _seed(abi.encodeCall(UnpushedDecimatorSessionSeeder.originalOnly, (LVL)));
     }
 
     function _seed(bytes memory data) private {
@@ -152,8 +154,8 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
 
     // The Decimator worker runs under the allowance it is given, admitting each step by its
     // declared bound and carrying on into the next phase while the rest still covers it:
-    // RUN_ALLOWANCE admits a heads run and a cold frame, so a call runs only a few of the flat
-    // engine's cheap heads; PAY_ALLOWANCE admits one PAYMENT plus its tail.
+    // RUN_ALLOWANCE admits a sampled run and a cold frame, so a call runs only a few of the flat
+    // engine's cheap sampled runs; PAY_ALLOWANCE admits one PAYMENT plus its tail.
     uint256 private constant RUN_ALLOWANCE =
         GasBounds.DECIMATOR_RUN_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + 100_000;
     uint256 private constant PAY_ALLOWANCE = 230_000;
@@ -161,8 +163,8 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
     function test_ActiveWordSurvivesEveryWorkerCheckpointUntilRequest() public {
         _requestBlocked();
         uint64 champion;
-        for (uint64 id = 1; id <= COUNT; ++id) {
-            if (uint256(keccak256(abi.encode(COIN, WORD, LVL, id))) & 1 == 0) continue;
+        for (uint256 i; i < Sample.count(COUNT); ++i) {
+            uint64 id = Sample.at(WORD, LVL, COUNT, i);
             if (champion == 0 || _key(id) > _key(champion)) champion = id;
         }
         DegenerusGameStorage.DecBattleRound memory r;
@@ -176,8 +178,8 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
             assertTrue(r.cursor > before.cursor || r.phase > before.phase || r.paid > before.paid,
                 "each bounded call makes progress");
             if (r.phase > 1) {
-                assertEq(r.cursor, COUNT, "every entrant ran before ranking");
-                assertEq(r.winners, 4);
+                assertEq(r.cursor, Sample.count(COUNT), "every stratum ran before ranking");
+                assertEq(r.winners, 20);
                 assertEq(r.champion, champion, "ranking uses the same active word as every run");
             }
             if (r.phase == 3) break;
@@ -204,7 +206,7 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
         DegenerusGameStorage.DecBattleRound memory started = lens.decBattleRoundOf(address(game), LVL);
         assertEq(started.phase, 1, "the normal battle is part-run when the terminal word lands");
         assertGt(started.cursor, 0);
-        assertLt(started.cursor, COUNT);
+        assertLt(started.cursor, Sample.count(COUNT));
         bytes memory beforeRound = abi.encode(started);
         _seed(abi.encodeCall(UnpushedDecimatorSessionSeeder.terminalWord, (uint256(0xDEADCAFE))));
         assertFalse(game.gameOver());
@@ -212,8 +214,8 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
         (MineFlipGas.Result memory r, uint256 used) = _runDecimator(0);
         assertEq(r.rewardBasis, 0);
         // A refused resume admits no run at all, so the worker call spends less than the
-        // smallest declared step (a tails run).
-        assertLt(used, GasBounds.DECIMATOR_TAILS_GAS_MAX);
+        // sampled run; measure only the read-only readiness refusal.
+        assertLt(used, 20_000);
         assertFalse(r.progressed);
         assertEq(abi.encode(lens.decBattleRoundOf(address(game), LVL)), beforeRound);
         vm.expectRevert(); lens.decWinnerAt(address(game), LVL, 0);

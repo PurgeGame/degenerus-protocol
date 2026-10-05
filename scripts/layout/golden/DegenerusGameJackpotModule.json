@@ -1030,5 +1030,37 @@
     "offset": 0,
     "slot": 81,
     "typeLabel": "mapping(uint32 => uint256[13])"
+  },
+  {
+    "bytes": "8",
+    "encoding": "inplace",
+    "label": "decPreviousStack",
+    "offset": 0,
+    "slot": 82,
+    "typeLabel": "uint64"
+  },
+  {
+    "bytes": "5",
+    "encoding": "inplace",
+    "label": "decPreviousCount",
+    "offset": 8,
+    "slot": 82,
+    "typeLabel": "uint40"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "decJackpotPlans",
+    "offset": 0,
+    "slot": 83,
+    "typeLabel": "mapping(uint24 => struct DegenerusGameStorage.DecJackpotPlan)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "decGeneratedOwners",
+    "offset": 0,
+    "slot": 84,
+    "typeLabel": "mapping(uint256 => address)"
   }
 ]

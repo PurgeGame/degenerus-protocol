@@ -1,238 +1,193 @@
 # Decimator battle
 
-The periodic Decimator now burns FLIP into a shared-dice craps competition with ETH prizes.
-The former bucket lottery and ETH/lootbox payout split are removed. Everything from entry
-accounting through the last ETH credit executes on chain. This change requires a fresh
-protocol deployment; it is not a migration of live bucket records.
+Decimator burns build a virtual craps starting stack. Entries compete by peak bankroll;
+that bankroll is a score, not a token balance players can withdraw. Ordinary x5 levels,
+excluding x95, combine the original pool with generated entries funded by that level's
+single jackpot day. x00 remains an original-only battle.
 
-## Entry and timing
+## Entry and automatic burn
 
-`FLIP.decimatorBurn(player, amount, chips)` retains its operator authorization and 1,000 FLIP
-minimum. A wallet gets one accumulated entry per event, regardless of top-up count.
-There is no configured maximum burn and no amount-based chip discount.
+Each manual burn, top-up and automatic entry requires at least **2,000 whole FLIP**.
+FLIP has zero decimals. Each wallet has one original entry per round; top-ups add credited
+chips and replace its chosen board. A legal board names at most seven chips, at most three
+per leg, and cannot name both pass and don't-pass.
 
-`chips` is the entry's board, in the normal battles' thirty-bit encoding and under their
-rules: ten three-bit leg counts, at most three chips on a leg, at most seven named in all,
-never both the pass line and don't pass. Zero leaves the whole board to the dice. Each burn
-sets the board, so the last burn before the window closes decides it; every burn precedes
-the sealed word. The vault enters through `coinDecimatorBurn(amount, chips)`; the protocol's
-sDGNRS auto-entry plays a fully random board.
+Credits include existing quest/boon additions, the Decimator activity multiplier and the
+entry-day factor. The multiplier interpolates through 1x at score 0, 1.7049x at 235, 1.9x
+at 500, and 2x at 30,000. Each burn locks its own timing and multiplier. The day factor is
+0.9^d from the protocol-stamped opening day, using downward-rounded 18-decimal exponentiation.
+A credit rounding to zero reverts. Protocol days reset at 22:57 UTC. Credited stacks are
+whole FLIP, with no token multiplier.
 
-Each burn adds:
+The automatic sDGNRS burn spends the smaller of settled backing and
+`floor(4 * previousCreditedStack / previousOriginalCount)`. Before a nonempty round has
+sealed, the cap is 8,000 FLIP. A cap or available amount below 2,000 skips the burn.
+The reference updates once on each successfully sealed nonempty original field, including
+x00, zero-pot and zero-quota rounds. Empty rounds and rejected/repeated seals preserve
+it. Generated entries never enter this reference. There is no fixed 500,000 cap.
+
+The aggregate tracks actual credited additions to original stacks and is checked
+against uint64; original count is checked against uint40. These are storage packing bounds,
+not an 8,000-player admission limit.
+
+## Jackpot-generated entries
+
+Ordinary x5 keeps its ticket legs and solo/golden-ticket delivery. Let E be the day's
+priced ETH leg, Q its normal solo share (about 60%), A the total of active non-solo shares,
+N the original count, C its total credited stack and P the reserved Decimator pool.
+For positive N and P:
 
 ```
-base = amount + completed quest bonus + consumed Decimator boon bonus
-chips = floor(base × degenMultBps × dayFactor / (10,000 × 10^18))   (whole FLIP)
-startingStack += chips
+available           = A + max(0, Q - floor(35*E/100))
+generated entries M = min(N, floor(available*N/P))
+funding F           = ceil(M*P/N)
+soloAmount U        = min(A + Q - F, Q)
+Decimator pool      = P + F
 ```
 
-Chips count in whole FLIP, so a burn's credit rounds down to a whole FLIP (under 0.1% of the
-1,000-FLIP minimum). A stack saturates at 2^66 − 1 FLIP, far past FLIP's supply; a burn past it
-still records but adds nothing, and cannot spill into the other packed fields. Events and the
-Lens report chips as whole FLIP, with no 10^18 token multiplier.
+There is no separate generated-entry cap. A full match adds N slots and P of funding;
+with all cohorts active this is possible whenever P<=65% of E. Empty non-solo cohorts
+contribute neither budget nor weight; if all are empty M=0. Matching can draw on solo's
+share above 35% of E. Solo keeps between that floor and its normal share, up to wei rounding,
+and never receives surplus above its normal share. Each generated slot can win one place.
 
-Existing quest rewards still credit Coinflip; their chip addition and the existing boon
-bonus (which applies to at most 50,000 base FLIP per burn) are retained. The protocol's
-sDGNRS auto-entry spending policy remains capped at 500,000 FLIP. That policy does not cap
-player burns or the amount receiving the degen multiplier.
+Solo receives its normal cash/pass split on U: with H=2.25 ETH, pass cost is
+`floor(U/(8*H))*(2*H)` when U>=8*H, otherwise zero. Cash is U minus that cost. No non-solo
+cash dust is added. An empty solo is unpaid. All unused money, including inactive shares
+and surplus when the full match is cheap, follows the existing final-day sweep to future prizes.
 
-The battle multiplier interpolates in integer basis points through:
+For a **1,000 ETH leg** with all cohorts active, A=400, Q=600 and available=650 ETH.
+At N=2,000 and P=140 ETH, M=2,000 and F=140 ETH. Solo gets **451.5 ETH cash plus
+148.5 ETH in whale passes** (66 half-passes), and 260 ETH is swept. The accounting is
+140+451.5+148.5+260=1,000 ETH. At P=650 ETH the full match leaves solo 350 ETH:
+264.5 ETH cash and 85.5 ETH in passes. At P=1,000 ETH, M=1,300 and F remains 650 ETH.
 
-| Degen score | Multiplier |
+Only active non-solo cohorts have weights, equal to their existing ETH winner targets.
+Solo weight is zero and it receives no generated entries. A sampled generated ordinal j
+belongs to the first quadrant whose `floor(M*cumulativeWeight/totalWeight)` reaches j.
+It draws from real tickets plus the existing deity weight, then reads that recipient's
+saved board. The daily RNG lock freezes cohorts and preferences until this work finishes.
+Repeated recipients retain distinct entry IDs. With no originals or zero P, normal
+cash/pass awards apply; the one-day schedule and ticket legs remain.
+
+## Runs and eligibility
+
+All runs share the event dice seed. The engine starts at 3,000 × 10^18 simulation units with
+ten 60-FLIP chips: chosen chips plus random scattering, using the normal battle boost row
+for the named-chip count. It stops at bust, 48 shooters or exactly 511 rolls. The highest
+bankroll at completed shooter boundaries determines the score; a mid-hand roll cutoff also
+counts remaining wagers at face value. A later bust does not erase an earlier peak.
+
+An original score is its credited stack times normalized peak. A generated score is
+`floor(C * normalizedPeak / N)`. The bounded engine keeps scores within 192 bits. Equal scores use an independent
+tagged random key, then entry ID. The same tie domain applies to both entry types. Generated survival keys use synthetic player
+identities, so another award to the same wallet does not reuse its original run.
+
+Let T=N+M. **Exactly S=min(1000,ceil(T/2)) slots survive**: half rounded up through
+2,000 slots, exactly 1,000 above that. Partition [0,T) into S floor-rounded strata,
+pick one position per stratum, and rotate all selected positions by one common random offset:
+
+```
+r = H(SAMPLE_TAG,word,lvl) % T
+lo = i*T/S; hi = (i+1)*T/S
+pos = lo + H(SAMPLE_TAG,word,lvl,i) % (hi-lo)
+id = (pos+r)%T + 1
+```
+
+Strata give distinct survivors. Over all rotations every slot appears equally often,
+so inclusion probability is S/T under uniform hash draws, independent of ID. The usual
+negligible modulo bias of 256-bit hashes remains. Unselected IDs are never visited.
+The complete survivor set replays from (word,lvl,T); plan terms bind before any run.
+
+Hash inputs use full ABI words. Sampling's domain is `decimator.battle.sample.v1`;
+original and generated runs share `decimator.battle.dice.v1`, `.board.v1` and `.tie.v1`.
+Generated entries additionally use `.generated.player.v1` and `.generated.recipient.v1`.
+IDs never overlap; shared dice omits identity. There is no per-entry eligibility coin.
+
+## Prize places and payments
+
+```
+K = min(200, floor(fieldEntries / 2), max(20, ceil(fieldEntries / 10)))
+W = K                         // S >= K at every field size
+```
+
+The 20-place target is always subject to the **50% entrant cap, rounded down**, even when
+more entries survive. x00 and original-only fallbacks use the same rule. One entry means
+zero prize places even if it is eligible. Entries count, not distinct wallets.
+
+| Field entries | Maximum prize places |
 |---:|---:|
-| 0 | 1x |
-| 235 | 1.7049x |
-| 500 | 1.9x |
-| 30,000 and above | 2x |
+| 1 / 2 | 0 / 1 |
+| 19 / 20 | 9 / 10 |
+| 39 / 40 / 41 | 19 / 20 / 20 |
+| 199 / 200 / 201 | 20 / 20 / 21 |
+| 1,990 / 1,991 / 2,000 | 199 / 200 / 200 |
 
-The entry-day factor is `0.9^d`, where `d` counts protocol day boundaries since the window
-opened. Protocol days reset at 22:57 UTC. Advance stamps the opening day; the first burner
-does not start the clock. Opening day receives 1x, then 0.9x, 0.81x, 0.729x, and so on.
-Both multiplier and timing lock separately for each burn. Top-ups do not reprice earlier
-chips or inherit their earlier timing. The old 1.2x opening modifier, final-day modifier,
-and first-500,000 multiplier cap are gone. The original activity curve remains for WWXRP.
-
-Timing uses 18-decimal exponentiation by squaring with downward rounding at each product,
-bounded by the 24-bit day offset. A burn that rounds to zero chips reverts atomically.
-
-## Run and ranking
-
-FLIP uses zero decimals, while the stateless engine retains 10^18 simulation
-sub-units per FLIP through every hand and hot bonus. Its normalized peak and the
-ranking product keep that precision. These mathematical units are not token
-balances; no fractional FLIP is minted, burned, or transferred.
-
-Entry closes before the resolving VRF word is known. The sealed round stores its full word,
-entrant count and ETH pool. All entries use the same event dice. Each plays ten chips: the
-ones its board names, the dice scattering the rest, with total opening wager equal to
-one-fifth of its starting stack. Wagers double every three shooters, and every shooter from the
-31st (shooter 30) on, as in every craps battle. Existing owner-specific survival draws remain,
-and the shooter-profit boost follows the normal battles' row for the
-number of named chips (`Craps._shooterBoostTerms`): a fully random board keeps the natural
-15% chance of a 32% boost, and each named chip trades some of it away. There is no rotating
-boost. There is no goal, protected bankroll, payout for surviving bankroll or cash-out.
-A run ends at bust, after 48 shooters, or at exactly 511 rolls, and is ranked by the
-highest virtual bankroll it reached. Nothing is wagered or returned: the bankroll exists only to
-score the run. When the roll cap stops a hand mid-way, chips still on the table count at face
-value for that last reading. 511 is the longest cut the engine makes exactly; a roll budget of
-512 or more is judged between shooters. The bounds are a safety limit for the gas budget, set
-where runs essentially never reach them: none of 200,000 simulated shared-dice runs over every
-board size came near (the longest ran 430 rolls and 36 shooters), and 70 of 286 million engine
-runs across every strategy reached 511 rolls. The engine exposes them as
-`settleSlipBounded(..., bounds)`; a replay must pass the same `(511 << 16) | 48`.
-
-Ranking uses the highest bankroll at a **completed shooter boundary**, including the
-initial bankroll; a run the roll cap stops mid-hand takes its last reading at the cut.
-Busting later does not erase the high point. To avoid a wager-type cap on large burns, the
-engine runs in normalized units: 3,000 starting FLIP and ten 60-FLIP chips. The score is the
-whole-FLIP starting stack times the normalized peak (the common denominator is 3,000 × 10^18 simulation sub-units), so
-comparisons carry no truncation beyond the stack's whole-FLIP rounding. The run bounds keep a
-peak far below 2^126 simulation sub-units, so a real score stays well inside the 192 bits a node gives it; a
-score past them would saturate, not wrap, and equal capped scores fall to the tiebreak. This
-normalized process defines the virtual chips' rounding behavior.
-
-After each run, a separately tagged fair coin controls eligibility. **Tails never enters the
-leaderboard and gets no prize**, even with the highest raw peak. Heads compete for places.
-Repeated settlement cannot reroll an entry. A separate 192-bit random tiebreak orders equal
-peaks, with immutable entry id as the final fallback. The coin does not depend on the run, so
-settlement flips it first and runs the engine only for heads. A tails run is still exactly
-replayable off chain: every engine input is public after sealing and `settleSlipBounded` is a
-pure function at the pinned engine address.
-
-Domain-separated roots use `keccak256(abi.encode(tag, fullWord, level[, entryId]))`:
-`decimator.battle.dice.v1` omits entry identity; `board.v1`, `final-coin.v1` and `tie.v1`
-include it. The final coin is derived from the same sealed word, so its replay order does
-not imply later-arriving entropy.
-
-## Prizes
-
-For `N` original entries, the quota is `K = min(100, ceil(N/10))`. Keep the highest `K`
-HEADS entries. Actual winners `W` may be fewer if fewer than `K` coins return heads.
-Above 1,000 entrants the cap means fewer than 10% can receive prizes.
-
-First receives a bonus of 5% of the entire pool. The remaining 95% is split equally among
-**all winners, including first**; second and third have no extra bonus. With pool `P`:
+The best K survivors are paid. Every retained node is one
+entry and one prize place. The best retained run receives the champion bonus **once**. With a positive winner count:
 
 ```
-bonus = floor(P / 20)
-base = floor((P - bonus) / W)
-first = base + (P - base × W)
-others = base
+bonus = floor(pool / 20)
+base  = floor((pool - bonus) / W)
+first = pool - base * (W - 1)
 ```
 
-Thus first gets 14.5% with 10 winners or 5.95% with 100; each other winner gets 9.5% or
-0.95%, respectively. First absorbs all rounding dust. One eligible winner gets everything.
+The champion gets half its award in whole half whale passes, rounded down at 2.25 ETH each,
+and the rest in ETH. If `base` buys a half pass, other logical payout positions alternate:
+odd positions take ETH, even positions take whole half passes. Otherwise all take ETH.
+Pass-position leftovers top up other ETH positions; final division dust follows pass
+funding to future prizes. The champion receives 9.75% at 20 places and 5.475% at 200 before
+pass conversions and integer rounding.
 
-Each winner is paid in ETH or in half whale passes (2.25 ETH each), never both:
+Payout order puts the champion first, followed by heap positions, not sorted merit rank.
+Every retained entry receives its own ETH/pass credit and claim receipt.
+Passes use the existing claim flow; no ETH is pushed during settlement. Empty fields return
+their pool. Zero winners, including a one-entry field, release the whole reservation to
+future prizes, using the pending buffer while frozen.
 
-- First (the champion, moved to leaderboard position 0 at ranking) is the exception and
-  takes both: half its amount, bonus included, in whole half passes rounded down, and the
-  rest (including that half's leftover) in ETH.
-- Once an equal share `base` also buys a half pass, the other places alternate in payout
-  order: odd positions take ETH, even positions take whole half passes. Otherwise they all
-  take ETH.
-- Only the money that buys passes leaves the reservation, returned to the future prize pool
-  (pending while frozen) in one move when the round is ranked. Every other pass winner's
-  leftover below a half pass is split equally over the other ETH winners on top of their
-  `base`; that split's indivisible dust follows the passes.
-- Passes are claimed later through the existing `claimWhalePass` flow.
-No entries returns the pool immediately; all tails releases the sealed reservation back to
-the future pool, using the pending buffer if frozen. Zero-value pools distribute zero ETH.
+## Settlement, accounting and replay
 
-Large stacks retain higher absolute peaks, but prize saturation and the final coin limit
-returns from a dominant entry. ETH EV is field-dependent and is not strictly proportional
-to chips. The accepted simulation showed moderately above-field stacks can have better
-ETH per FLIP than average or very large stacks. That simulation drew every board at random;
-chosen boards with their different boost terms are not yet covered by it. Wallet splitting
-remains possible; wallet identity is not proof of a distinct human.
+Generated work completes under the RNG lock; originals run at consumer stage 5 after
+unlock. Both cursors count strata, at most 1,000 each. The locked worker skips natural IDs;
+the unlocked worker skips generated IDs. With M=0 the locked loop is skipped entirely.
+Only the sampled survivors call the engine: at most 1,000 runs in total, independent of N.
+Gas and keeper identity affect checkpoint sizes, never outcomes. Admission uses a measured
+small bound for opposite-type strata and the existing full bound for an engine run.
 
-## Bounded settlement and accounting
+One min-heap retains at most 200 eligible entries. Every node stores a 192-bit score and
+64-bit ID. Original IDs are `1..N`; generated IDs are `N+1..N+M`. Generated owners are keyed
+by ordinal `id-N` (1–N), reused across rounds; only candidates admitted to the heap write
+an owner. Evictions need no cleanup. Original owners come from their entry records. Ranking
+scans at most 100 leaves, moves the champion first and releases pass funding once.
 
-Sealing is constant work. Rounds append to a FIFO, so a large field does not hold the
-main RNG lock or stop later entry windows. Each run visits a min-heap of at most 100
-eligible entries, with at most six heap moves. Total settlement work grows with entrants;
-per-call work stays bounded. The entry count is a checked `uint64`, rather than a configured
-population cap. No implementation can process literally infinite players in finite time.
+Advance reserves `P` once. Initialization transfers `F` from current to claimable once,
+recording it in JackpotWork.paid. Jackpot debits subsequent solo cash and pass cost; only
+cash increases claimable liability, and pass cost funds futurePrizePool. Winner
+ETH consumes the reservation without increasing aggregate claimable funds. One plan word
+stores uint128 `soloAmount`, four uint16 weights, uint40 generated count, uint16 stratum
+cursor and uint8 mode. Cumulative allocation ends are calculated for sampled entries. Pricing
+inputs appear in the plan event; field count derives from original plus generated counts,
+and traits stay in the live JackpotWork while generated entries run. x00 and zero-pot seals
+write no plan. Game-over behavior is unchanged: the existing ending and final sweep handle
+remaining funds. There is no Decimator-specific retirement or uncredited-fund counter.
 
-The keeper leg uses at most 2,500 work units (4.7k gas each) minus prior box-scan work, and may
-finish one bounded item beyond it. Runs are priced at the heaviest board's dice, so mixed fields
-use well under their charge: full calls measure about 7.3M gas on mixed boards and at most
-8.2M on a field of the heaviest board. Every piece of work
-is charged after it runs, by its outcome and at its measured worst case: the call frame, a
-tails coin, a heads run's fixed cost plus one unit per six rolls, a filling insert (fresh or
-reused slots priced apart), each heap level, a root reject, each scanned leaf and each ETH
-credit. `test/gas/DecimatorPricing.t.sol` pins every call, real dice on all board sizes and the
-heaviest heap shapes alike, at or under 90% of its charge. Calls have an additional 256-run limit. Final ranking scans
-the heap's leaves (at most 50 nodes) on a separate call, followed by bounded ETH-credit
-batches. Budget and caller identity do not affect results. Sealed battles can progress during
-RNG locks. Settlement stops at game over and the ending never waits for it: a round still
-queued keeps its uncredited reservation in `claimablePool`, which the final sweep releases.
+Lens exposes `decBurnReferenceOf` (stack, count, next automatic cap), `decBattleRoundOf`,
+`decJackpotPlanOf` and `decWinnerAt` (score, ordering key and owner for either entry type),
+and `decSurvivorAt(word,lvl,T,stratum)`, alongside original entry and cursor views. Field size,
+survival odds and whether the floor raised capacity are derived by the client. The
+shared heap is readable only for its active round; finished results use receipts.
 
-Advance moves the sealed pool from future prizes into `claimablePool` once. Winner credits
-use that reservation without increasing `claimablePool`. An all-tails refund, and the pass
-money moved at ranking, reduce `claimablePool` and increase future prizes by the same amount. No separate pending-pool
-counter is stored. Run cursors, heap size and payout progress are saved once per batch.
-No ETH is pushed to winners during settlement; the existing claim flow applies.
+`DecimatorReferenceUpdated` includes the reference level, without storing a duplicate level.
+`DecimatorResolved` records the original seal. `DecimatorFieldBound` reports original-only
+capacity; `DecimatorJackpotPlan` carries jackpot pricing, traits and allocation instead.
+`DecimatorGenerated` records sampled generated entries with ID, recipient, quadrant, board,
+peak and score. Skipped IDs replay from the sealed word and final field size. Sampled
+originals emit `DecimatorRun`. `DecimatorRanked` identifies the champion; each
+`DecimatorClaimed` reports one entry's ETH and passes. There are no bucket-budget, separate
+funding, pack or group-payment events.
 
-## Integration surface
-
-- Player entry is `FLIP.decimatorBurn(address,uint256,uint32 chips)`; the vault's is
-  `coinDecimatorBurn(uint256,uint32 chips)`.
-- Internal Game record ABI is now `recordDecBurn(address,uint24,uint256,uint256,uint32) -> uint64`.
-- Settlement progresses only through `mineFlip`'s Decimator stage (`runDecimatorWork`), in
-  the shared consumer order, paid by the engine's work-priced reward.
-- `DecimatorBurn` now emits a `uint64 entryId` instead of a bucket.
-- `DecBurnRecorded` reports event, entry, base amount (burn plus quest and boon bonuses),
-  credited chips, cumulative stack and the board the burn set. Storage keeps one word per
-  entry, keyed by event and id, packing owner, board and whole-FLIP stack, which is all a run
-  reads. A wallet's own slot holds only its latest event and id, to find its entry for a
-  top-up; it is reused window after window, and settlement never reads it, so a new window's
-  entry cannot disturb an older round still in the queue. A retained node is one slot, the
-  score above the entry id, and the tiebreak is recomputed from the id when two scores are
-  equal. The FIFO settles one round at a time, so a single leaderboard is reused round after
-  round: only the first round to reach a position pays for a fresh slot, and a filling insert
-  is charged by whether its slot was fresh.
-- `DecimatorResolved` reports event, full word, pool and entrant count.
-- `DecimatorRun` reports each heads run's normalized peak. Tails skip the engine and log
-  nothing: the coin and the run both replay from the sealed word and entry id. A missing run
-  event alone does not distinguish tails from an entry not yet processed; compare the id with
-  the round's `cursor`.
-- `DecimatorRanked` reports champion id and actual winner count.
-- `DecimatorClaimed` reports each payout: the ETH credited and the half passes queued (one of the two is zero, except the champion's). `PlayerCredited` also fires for ETH.
-- Lens: `decBurnOf` (a wallet's entry for its latest event only) and `decEntryAt` (owner,
-  stack and board by event and id, readable for every event), `decBattleRoundOf`,
-  `decWinnerAt` (the score and the full ordering key; the absolute peak in whole FLIP is score / (3000 × 10^18);
-  answers only while the round is at the head of the queue, since the next round reuses the
-  slots; finished rounds are recorded by their `DecimatorRanked` and `DecimatorClaimed` events),
-  `decSettleCursorOf`. Winner indices expose heap order, not display rank. Sort by the
-  score/key pair for a leaderboard; the round explicitly identifies first. An event with no
-  entrants is never written, so `phase == 0` alone does not mean a window is open; read
-  `decWindow()` and the level.
-
-The shared Game storage replaces only retired Decimator roots at slots 40–43 and 75;
-the unused final slot 76 is removed.
-Every unrelated slot retains its position and type. Modules use the same shared layout.
-
-Tests are in `test/fuzz/DecimatorBattle.t.sol`, `test/gas/DecimatorBattleGas.t.sol`,
-`test/gas/DecimatorPricing.t.sol`, the
-Decimator cases in `LensParity.t.sol` and `ReviewFixes0924.t.sol`, and the migrated
-`SdgnrsAutoDecimator.t.sol` / century-consolidation integration suites.
-
-Validation uses the standard Foundry address fixture (`node scripts/lib/patchForFoundry.js`).
-The focused suite command is:
-
-```sh
-forge test --match-contract 'DecimatorBattleTest|DecimatorBattleGasTest|DecimatorPricingTest|SdgnrsAutoDecimatorTest|LensParityTest|DecimatorLegEndingIdleTest|JackpotCommitmentFreezeTest|AdvanceCentury|ConsumerPointEquivalence' --fuzz-runs 256 -vv
-```
-
-On 29 September 2026, after the gas pass, every suite above passed with 256 runs per fuzz
-test. The real-engine gas corpus settled three 1,001-entry fields in 37 batches (84 before the
-pass); the largest batch used **6,915,709 gas**. A real `mineFlip` with a pending round settled
-142 runs in **6,321,818 gas**. Across the pricing corpus no call exceeded 81% of its charge.
-Sealing a synthetic `uint64.max` entrant count costs what a one-entry seal does. These are
-measured cases, not a claim to have sampled every possible dice sequence.
-
-Interface coverage, delegatecall alignment, storage-layout consistency, raw selectors,
-RNG window/taint, pool accounting, storage ownership, unchecked arithmetic, bounded array
-clears, advance-call classification and deterministic-drain source checks passed. All
-affected production contracts fit the 24,576-byte runtime limit. No deployment was made.
+This revision requires a fresh deployment: round packing changes to uint96 pool, uint40
+original count and uint64 credited aggregate; reference and generated-plan storage is
+appended. Every delegate module shares the layout. This is not an in-place migration.
+Earlier economic simulations and gas measurements do not validate this revised quota or
+saved-board generated field.

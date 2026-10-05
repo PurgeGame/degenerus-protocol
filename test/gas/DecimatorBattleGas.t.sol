@@ -26,12 +26,12 @@ contract DecimatorBattleGasTest is Test {
         // Fresh harness gives both rounds an empty queue.
         DecimatorBattleHarness big = new DecimatorBattleHarness();
         big.open(5);
-        big.forceCount(5, type(uint64).max);
+        big.forceCount(5, type(uint40).max);
         gasBefore = gasleft();
         big.seal(5, 100 ether, 321);
         uint256 many = gasBefore - gasleft();
         assertLt(many, single + 10_000);
-        assertEq(big.roundOf(5).capacity, 100);
+        assertEq(big.roundOf(5).capacity, 200);
         emit log_named_uint("seal, uint64 max entrants", many);
     }
 
@@ -42,8 +42,8 @@ contract DecimatorBattleGasTest is Test {
         for (uint24 round = 5; round <= 25; round += 10) {
             h.open(round);
             vm.startPrank(ContractAddresses.COIN);
-            for (uint64 i = 1; i <= 1001; ++i) {
-                h.recordDecBurn(address(uint160(i)), round, uint256(i) * 1000 ether, 10_000, 0);
+            for (uint64 i = 1; i <= 2000; ++i) {
+                h.recordDecBurn(address(uint160(i)), round, uint256(i) * 1000, 10_000, 0);
             }
             vm.stopPrank();
             h.seal(round, 100 ether, uint256(keccak256(abi.encode("decimator gas", round))));
@@ -61,7 +61,7 @@ contract DecimatorBattleGasTest is Test {
                 ++batches;
             }
         }
-        emit log_named_uint("real engine maximum batch gas (3 x 1001 entries)", peakGas);
+        emit log_named_uint("real engine maximum batch gas (3 x 2000 entries)", peakGas);
         emit log_named_uint("total batches", batches);
     }
 }

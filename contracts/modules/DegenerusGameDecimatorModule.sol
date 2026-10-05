@@ -28,9 +28,14 @@ import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol
 
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
+import {DecimatorSamplingLib as Sampling} from "../libraries/DecimatorSamplingLib.sol";
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 import {Craps} from "../Craps.sol";
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {DecimatorJackpotTerms} from "../interfaces/IDegenerusGameModules.sol";
+
+interface IDecimatorBoardPreference {
+    function preferredBoardOf(address player) external view returns (uint32 chips);
+}
 
 /// @dev Pinned stateless engine. The pure ABI ensures a STATICCALL from the Game context.
 interface IDecimatorCrapsEngine {
@@ -55,13 +60,13 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
     uint256 private constant SCALE = 3000 * 1e18;
     bytes32 private constant DICE_TAG = keccak256("decimator.battle.dice.v1");
     bytes32 private constant BOARD_TAG = keccak256("decimator.battle.board.v1");
-    bytes32 private constant COIN_TAG = keccak256("decimator.battle.final-coin.v1");
     bytes32 private constant TIE_TAG = keccak256("decimator.battle.tie.v1");
+    bytes32 private constant GEN_PLAYER_TAG = keccak256("decimator.battle.generated.player.v1");
+    bytes32 private constant GEN_DRAW_TAG = keccak256("decimator.battle.generated.recipient.v1");
 
     // Admission bounds cover one indivisible run/rank/payment, not a debited currency.
     // Actual elapsed gas determines how much allowance remains after each operation.
     uint256 private constant RUN_GAS_MAX = GasBounds.DECIMATOR_RUN_GAS_MAX;
-    uint256 private constant TAILS_GAS_MAX = GasBounds.DECIMATOR_TAILS_GAS_MAX;
     uint256 private constant RANK_GAS_MAX = GasBounds.DECIMATOR_RANK_GAS_MAX;
     uint256 private constant PAYMENT_GAS_MAX = GasBounds.DECIMATOR_PAYMENT_GAS_MAX;
     uint256 private constant WORK_TAIL_GAS = GasBounds.DECIMATOR_WORK_TAIL_GAS;
@@ -77,10 +82,9 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
     // stack in whole FLIP of virtual chips in the top 66 bits.
     uint256 private constant CHIPS_SHIFT = 160;
     uint256 private constant STACK_SHIFT = 190;
-    uint256 private constant MAX_STACK = (1 << 66) - 1;
-    // A node's score sits above the 64-bit id. The engine's roll and shooter bounds keep a peak far
-    // below 2^126 wei, so no real score reaches the cap; stack and score saturate rather than wrap.
-    uint256 private constant MAX_SCORE = (1 << 192) - 1;
+    // A node's score sits above the 64-bit id. With ten 60-FLIP chips, at most 511 rolls,
+    // 48 shooters (escalation <= 2^27) and at most 30% boost, peak < 2^110.
+    // Even a full 66-bit stack therefore produces a score below the 192-bit lane.
 
     event DecBurnRecorded(
         address indexed player,
@@ -92,7 +96,19 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         uint32 chips
     );
     event DecimatorResolved(uint24 indexed lvl, uint256 rngWord, uint256 poolWei, uint64 entrants);
-    /// @dev Heads runs only; a tails entry's coin and run both replay from the sealed word.
+    event DecimatorReferenceUpdated(uint24 indexed lvl, uint64 totalCreditedStack, uint40 entrants);
+    event DecimatorFieldBound(uint24 indexed lvl, uint40 fieldEntries, uint8 capacity);
+    event DecimatorJackpotPlan(
+        uint24 indexed lvl, uint256 word, uint96 originalPool, uint64 originalStack, uint40 originalCount,
+        uint128 availableBudget, uint96 funding, uint128 soloAmount, uint32 traits,
+        uint40 generatedEntries, uint64 weights
+    );
+    /// @dev Sampled generated entries only; survivors replay from the plan and sealed word.
+    event DecimatorGenerated(
+        uint24 indexed lvl, uint64 indexed id, address indexed recipient, uint8 quadrant,
+        uint32 chips, uint256 normalizedPeak, uint256 score
+    );
+    /// @dev Sampled original runs only; losers are never visited.
     event DecimatorRun(uint24 indexed lvl, uint64 indexed entryId, uint256 normalizedPeak);
     event DecimatorRanked(uint24 indexed lvl, uint64 champion, uint8 winners);
     /// @dev `amountWei` is the ETH credited; `halfPasses` the half whale passes queued instead.
@@ -116,9 +132,8 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         uint24 day = _simulatedDayIndex();
         if (round.openedDay == 0 || day < round.openedDay) revert E();
         uint256 factor = _dayFactor(day - round.openedDay);
-        // Whole FLIP of chips. Multiply timing first to avoid overflow for very large, heavily
-        // decayed burns.
-        uint256 credited = Math.mulDiv(baseAmount, factor * multBps, 1 ether * 10_000);
+        // Round once to whole FLIP. The uint64 aggregate bound keeps every accepted numerator below 2^138.
+        uint256 credited = baseAmount * (factor * multBps) / (1 ether * 10_000);
         if (credited == 0) revert E();
         // The wallet slot finds a top-up; a new window's first burn overwrites it. Settlement reads
         // only the entry, so an older round still in the queue keeps its own.
@@ -131,9 +146,11 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
             id = ++round.count;
             decBattlePlayers[player] = (uint256(lvl) << 64) | id;
         }
+        // The checked 64-bit aggregate also bounds each stack inside its 66-bit entry lane.
+        uint256 total = uint256(round.totalCreditedStack) + credited;
+        if (total > type(uint64).max) revert E();
         stack += credited;
-        // 2^66 FLIP is far past FLIP's supply; saturating keeps any history out of the other fields.
-        if (stack > MAX_STACK) stack = MAX_STACK;
+        round.totalCreditedStack = uint64(total);
         decBattleEntries[_entryKey(lvl, id)] =
             (stack << STACK_SHIFT) | (uint256(chips) << CHIPS_SHIFT) | uint256(uint160(player));
         emit DecBurnRecorded(player, lvl, id, baseAmount, credited, stack, chips);
@@ -174,15 +191,138 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         if (round.phase != 0 || round.count == 0) return poolWei;
         // A seal the session cannot take hands the pool back unsealed: the round keeps its
         // entries at phase 0, the pool stays with the caller and no entrant is paid.
-        if (_decWindowOpen() || poolWei > type(uint128).max || decBattleQueue != 0
+        if (_decWindowOpen() || poolWei > type(uint96).max || decBattleQueue != 0
             || rngWord <= RNG_WORD_WAITING || rngWord != _lootboxWord(_rngReadBuffer())) return poolWei;
         _setRngComplete(false);
-        round.poolWei = uint128(poolWei);
-        uint256 places = (uint256(round.count) + 9) / 10;
-        round.capacity = uint8(places > 100 ? 100 : places);
+        round.poolWei = uint96(poolWei);
+        decPreviousStack = round.totalCreditedStack;
+        decPreviousCount = round.count;
+        emit DecimatorReferenceUpdated(lvl, round.totalCreditedStack, round.count);
+        round.capacity = _quota(round.count);
+        if (lvl % 10 == 5 && lvl % 100 != 95 && poolWei != 0) {
+            decJackpotPlans[lvl].mode = 1;
+        } else {
+            emit DecimatorFieldBound(lvl, round.count, round.capacity);
+        }
         round.phase = 1;
         decBattleQueue = uint256(lvl) | (uint256(lvl) << 24);
         emit DecimatorResolved(lvl, rngWord, poolWei, round.count);
+    }
+
+    /// @dev Only the trusted Jackpot delegate dispatcher can reach this entry in Game context.
+    ///      Funding and JackpotWork.paid are owned here; the caller must not debit them again.
+    function runDecimatorJackpotAwards(DecimatorJackpotTerms calldata terms, uint256 allowance)
+        external returns (MineFlipGas.Result memory result, uint256 soloAmount)
+    {
+        MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
+        uint24 lvl = jackpotWork.lvl;
+        DecBattleRound storage round = decBattleRounds[lvl];
+        DecJackpotPlan storage plan = decJackpotPlans[lvl];
+        if (plan.mode == 1) {
+            if (!MineFlipGas.canRun(meter, GasBounds.DECIMATOR_PLAN_GAS_MAX, WORK_TAIL_GAS)) return (result, 0);
+            _initializeJackpot(lvl, round, plan, terms);
+            result.progressed = true;
+            ++result.rewardBasis;
+        }
+        Sampling.Field memory field = Sampling.field(terms.word, lvl, uint256(round.count) + plan.generatedEntries);
+        if (plan.generatedEntries == 0) field.count = 0;
+        // Each entry commits before reusing temporary ABI/engine memory.
+        uint256 free;
+        assembly ("memory-safe") { free := mload(0x40) }
+        while (plan.cursor < field.count) {
+            uint64 id = Sampling.sample(terms.word, lvl, field, plan.cursor);
+            bool generated = id > round.count;
+            if (!MineFlipGas.canRun(meter, generated ? GasBounds.DECIMATOR_GENERATED_GAS_MAX
+                : GasBounds.DECIMATOR_SAMPLE_SKIP_GAS_MAX, WORK_TAIL_GAS)) break;
+            if (generated) _runGenerated(lvl, round, plan, terms.word, id - round.count);
+            ++plan.cursor;
+            ++result.rewardBasis;
+            result.progressed = true;
+            assembly ("memory-safe") { mstore(0x40, free) }
+        }
+        result.done = plan.cursor == field.count;
+        soloAmount = plan.soloAmount;
+        MineFlipGas.finish(meter);
+    }
+
+    function _initializeJackpot(
+        uint24 lvl, DecBattleRound storage round, DecJackpotPlan storage plan, DecimatorJackpotTerms calldata terms
+    ) private {
+        uint256 activeNonSolo;
+        uint64 weights;
+        for (uint8 q; q < 4; ++q) {
+            if (q == terms.solo) continue;
+            uint8 trait = uint8(jackpotWork.traits >> (uint256(q) * 8));
+            uint256 len = _bucketLengthUnchecked(lvl, trait);
+            address deity = _traitDeity(trait);
+            bool active = len + _deityVirtualCount(trait, len, deity) != 0;
+            uint256 share = active ? terms.shares[q] : 0;
+            uint16 weight = share == 0 ? 0 : terms.targets[q];
+            activeNonSolo += share;
+            weights |= uint64(weight) << (uint256(q) * 16);
+        }
+        uint256 soloShare = terms.shares[terms.solo];
+        uint256 floor = (terms.shares[0] + terms.shares[1] + terms.shares[2] + terms.shares[3]) * 35 / 100;
+        uint256 available = activeNonSolo + (soloShare > floor ? soloShare - floor : 0);
+        uint256 n = round.count;
+        uint96 originalPool = round.poolWei;
+        // available <= uint128 and n <= uint40; both products fit ordinary uint256 math.
+        // An empty generated cohort cannot spend even the solo contribution.
+        uint256 entries = weights == 0 ? 0 : available * n / originalPool;
+        if (entries > n) entries = n;
+        uint256 funding = (entries * originalPool + n - 1) / n;
+        uint256 pool = uint256(originalPool) + funding;
+        if (pool > type(uint96).max) revert E();
+        uint256 solo = activeNonSolo + soloShare - funding;
+        if (solo > soloShare) solo = soloShare;
+        plan.generatedEntries = uint40(entries);
+        plan.soloAmount = uint128(solo);
+        plan.weights = weights;
+        plan.mode = 2;
+        round.poolWei = uint96(pool);
+        round.capacity = _quota(n + entries);
+        if (funding != 0) {
+            _setCurrentPrizePool(_getCurrentPrizePool() - funding);
+            claimablePool += uint128(funding);
+            jackpotWork.paid += uint128(funding);
+        }
+        emit DecimatorJackpotPlan(lvl, terms.word, originalPool, round.totalCreditedStack, round.count,
+            uint128(available), uint96(funding), plan.soloAmount, jackpotWork.traits, plan.generatedEntries, weights);
+    }
+
+    function _runGenerated(uint24 lvl, DecBattleRound storage round, DecJackpotPlan storage plan,
+        uint256 word, uint64 ordinal)
+        private
+    {
+        uint64 weights = plan.weights;
+        uint256 totalWeight = uint256(uint16(weights)) + uint16(weights >> 16)
+            + uint16(weights >> 32) + uint16(weights >> 48);
+        uint8 q;
+        uint256 cumulative = uint16(weights);
+        while (q < 3 && ordinal > uint256(plan.generatedEntries) * cumulative / totalWeight) {
+            ++q;
+            cumulative += uint16(weights >> (uint256(q) * 16));
+        }
+        uint8 trait = uint8(jackpotWork.traits >> (uint256(q) * 8));
+        uint256 len = _bucketLengthUnchecked(lvl, trait);
+        address deity = _traitDeity(trait);
+        uint256 effectiveLen = len + _deityVirtualCount(trait, len, deity);
+        // Allocation selects a nonempty cohort; the daily lock preserves it through every entry.
+        uint64 id = uint64(round.count) + ordinal;
+        uint256 index = uint256(keccak256(abi.encode(GEN_DRAW_TAG, word, lvl, id, q, trait))) % effectiveLen;
+        address owner = index < len ? _bucketOwnerAtUnchecked(lvl, trait, index) : deity;
+        // The registry guarantees a nonzero owner and Craps validates boards when saving them.
+        uint32 chips = IDecimatorBoardPreference(ContractAddresses.CRAPS).preferredBoardOf(owner);
+        Craps.SlipResult memory run = _settleRun(
+            chips, uint256(keccak256(abi.encode(BOARD_TAG, word, lvl, id))),
+            keccak256(abi.encode(DICE_TAG, word, lvl)),
+            address(uint160(uint256(keccak256(abi.encode(GEN_PLAYER_TAG, word, lvl, id)))))
+        );
+        uint256 score = uint256(round.totalCreditedStack) * run.peakBankroll / round.count;
+        (uint256 winners, bool retained) = _insert(lvl, word, round.capacity, round.winners, (score << 64) | id);
+        round.winners = uint8(winners);
+        if (retained) decGeneratedOwners[ordinal] = owner;
+        emit DecimatorGenerated(lvl, id, owner, q, chips, run.peakBankroll, score);
     }
 
     /// @notice Resolve the next Decimator obligation within its available gas.
@@ -197,23 +337,24 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         if (_rngConsumerStage() != 5) return result;
         DecBattleRound storage round = decBattleRounds[lvl];
         uint256 word = _lootboxWord(_rngReadBuffer());
-        if (word == 0) return result;
+        DecJackpotPlan storage plan = decJackpotPlans[lvl];
         if (round.phase == 1) {
             uint64 cursor = round.cursor;
-            uint64 count = round.count;
-            if (cursor < count) {
+            Sampling.Field memory field = Sampling.field(word, lvl, uint256(round.count) + plan.generatedEntries);
+            if (cursor < field.count) {
                 uint256 capacity = round.capacity;
                 uint256 winners = round.winners;
                 uint256 winnersBefore = winners;
                 bytes32 seed = keccak256(abi.encode(DICE_TAG, word, lvl));
                 uint256 free;
                 assembly ("memory-safe") { free := mload(0x40) }
-                while (cursor < count) {
-                    uint64 next = cursor + 1;
-                    bool heads = uint256(keccak256(abi.encode(COIN_TAG, word, lvl, next))) & 1 != 0;
-                    if (!MineFlipGas.canRun(meter, heads ? RUN_GAS_MAX : TAILS_GAS_MAX, WORK_TAIL_GAS)) break;
-                    if (heads) winners = _run(lvl, next, word, seed, capacity, winners);
-                    cursor = next;
+                while (cursor < field.count) {
+                    uint64 id = Sampling.sample(word, lvl, field, cursor);
+                    bool original = id <= round.count;
+                    if (!MineFlipGas.canRun(meter, original ? RUN_GAS_MAX
+                        : GasBounds.DECIMATOR_SAMPLE_SKIP_GAS_MAX, WORK_TAIL_GAS)) break;
+                    if (original) winners = _run(lvl, id, word, seed, capacity, winners);
+                    ++cursor;
                     ++result.rewardBasis;
                     assembly ("memory-safe") { mstore(0x40, free) }
                 }
@@ -225,13 +366,13 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
             }
             // Phase boundaries are gas checkpoints: finish the simulation's writes before
             // ranking, then continue into payments whenever their existing bounds fit.
-            if (cursor == count && MineFlipGas.canRun(meter, RANK_GAS_MAX, WORK_TAIL_GAS)) {
+            if (cursor == field.count && MineFlipGas.canRun(meter, RANK_GAS_MAX, WORK_TAIL_GAS)) {
                 _rank(lvl, round, word);
                 result.progressed = true;
                 ++result.rewardBasis;
             }
         }
-        // An all-tails rank finishes at phase 3; it must never enter _payTerms with zero winners.
+        // Zero capacity finishes at phase 3, without zero-winner division.
         if (round.phase == 2) {
             uint256 winners = round.winners;
             uint256 paid = round.paid;
@@ -240,7 +381,8 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
             while (paid < winners) {
                 if (!MineFlipGas.canRun(meter, PAYMENT_GAS_MAX, WORK_TAIL_GAS)) break;
                 uint64 id = uint64(heap[paid]);
-                address owner = address(uint160(decBattleEntries[_entryKey(lvl, id)]));
+                address owner = id > round.count ? decGeneratedOwners[id - round.count]
+                    : address(uint160(decBattleEntries[_entryKey(lvl, id)]));
                 if (paid == 0) {
                     if (champPasses != 0) whalePassClaims[owner] += champPasses;
                     uint256 eth = champ - champPasses * HALF_WHALE_PASS_PRICE;
@@ -301,41 +443,45 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         private
         returns (uint256)
     {
-        // The caller already tested the independent final coin for admission. Only heads
-        // reaches the engine; tails cannot place and remains freely replayable from the word.
+        // Only sampled survivors reach the engine; original IDs are never scanned.
         uint256 entry = decBattleEntries[_entryKey(lvl, id)];
         address owner = address(uint160(entry));
         // The board was checked at burn, so settlement only counts its named chips.
         uint256 chips = (entry >> CHIPS_SHIFT) & 0x3FFFFFFF;
-        uint256 named = _named(chips);
-        // Exactly 1/5 starting bankroll on the ten-chip board: the named chips, the dice scattering
-        // the rest, and the normal battles' shooter boost for that many named chips (the
-        // Craps._shooterBoostTerms row). Normalize only engine units: multiplying the result by
-        // the original stack preserves the absolute high point.
-        Craps.SlipResult memory result = IDecimatorCrapsEngine(ContractAddresses.CRAPS_ENGINE).settleSlipBounded(
-            chips,
-            60,
-            uint256(keccak256(abi.encode(BOARD_TAG, word, lvl, id))),
-            10 - named,
-            seed,
-            SCALE,
-            owner,
-            (0x050c070c0a0c0e0c120c140c190c1e0c >> (named << 4)) & 0xFFFF,
-            RUN_BOUNDS
-        );
-        emit DecimatorRun(lvl, id, result.peakBankroll);
-        (uint256 high, uint256 score) = Math.mul512(entry >> STACK_SHIFT, result.peakBankroll);
-        if (high != 0 || score > MAX_SCORE) score = MAX_SCORE;
-        return _insert(lvl, word, capacity, winners, (score << 64) | id);
+        Craps.SlipResult memory run = _settleRun(chips, uint256(keccak256(abi.encode(BOARD_TAG, word, lvl, id))), seed, owner);
+        emit DecimatorRun(lvl, id, run.peakBankroll);
+        uint256 score = (entry >> STACK_SHIFT) * run.peakBankroll;
+        (uint256 retained,) = _insert(lvl, word, capacity, winners, (score << 64) | id);
+        return retained;
     }
 
-    /// @dev Min heap: the weakest retained eligible entry is at the root. At most 100 nodes. A
+    /// @dev Ten 60-FLIP chips, ordinary scatter/boost and shared dice. Normalize only engine
+    ///      units; callers weight the peak by the original stack or the frozen original mean.
+    function _settleRun(uint256 chips, uint256 board, bytes32 seed, address player)
+        private pure returns (Craps.SlipResult memory)
+    {
+        uint256 named = _named(chips);
+        return IDecimatorCrapsEngine(ContractAddresses.CRAPS_ENGINE).settleSlipBounded(
+            chips, 60, board, 10 - named, seed, SCALE, player,
+            (0x050c070c0a0c0e0c120c140c190c1e0c >> (named << 4)) & 0xFFFF, RUN_BOUNDS
+        );
+    }
+
+    function _quota(uint256 entries) private pure returns (uint8) {
+        uint256 places = (entries + 9) / 10;
+        if (places < 20) places = 20;
+        if (places > entries / 2) places = entries / 2;
+        return uint8(places > 200 ? 200 : places);
+    }
+
+    /// @dev Min heap: the weakest retained eligible entry is at the root. At most 200 nodes. A
     ///      filling insert takes the next position; the first round ever to reach it pays for
     ///      fresh slots, every later round reuses them.
     function _insert(uint24 lvl, uint256 word, uint256 capacity, uint256 size, uint256 node)
         private
-        returns (uint256)
+        returns (uint256, bool)
     {
+        if (capacity == 0) return (0, false);
         mapping(uint256 => uint256) storage heap = decBattleHeap;
         uint256 pos;
         if (size < capacity) {
@@ -349,7 +495,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
                 pos = parent;
             }
         } else {
-            if (!_less(word, lvl, heap[0], node)) return size;
+            if (!_less(word, lvl, heap[0], node)) return (size, false);
             while (true) {
                 uint256 child = pos * 2 + 1;
                 if (child >= size) break;
@@ -367,7 +513,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
             }
         }
         heap[pos] = node;
-        return size;
+        return (size, true);
     }
 
     /// @dev Score order (the bits above the id), then the random tiebreak, then the entry id.
@@ -409,7 +555,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         round.phase = 2;
         (,,,, uint256 recycled,) = _payTerms(round);
         if (recycled != 0) _releaseToFuture(recycled);
-        emit DecimatorRanked(lvl, uint64(bestNode), uint8(winners));
+        emit DecimatorRanked(lvl, round.champion, uint8(winners));
     }
 
     /// @dev Move part of a sealed round's reservation back to future prizes (pending while frozen).

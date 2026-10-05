@@ -41,7 +41,7 @@ import {FlipRoundLib} from "../libraries/FlipRoundLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {JackpotBucketLib} from "../libraries/JackpotBucketLib.sol";
 import {TicketWorkPlan} from "../libraries/JackpotTicketPlan.sol";
-import {IDegenerusGameWhaleModule, IDegenerusGameJackpotDrawModule, IDegenerusGameTicketModule} from "../interfaces/IDegenerusGameModules.sol";
+import {IDegenerusGameWhaleModule, IDegenerusGameJackpotDrawModule, IDegenerusGameTicketModule, IDegenerusGameDecimatorModule, DecimatorJackpotTerms} from "../interfaces/IDegenerusGameModules.sol";
 
 /// @dev Minimal WWXRP surface for the golden-ticket consolation mint. The delegatecall
 ///      context makes msg.sender the Game, which is a whitelisted WWXRP minter.
@@ -468,6 +468,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
         );
         d.solo = JackpotBucketLib.soloBucketIndex(entropy);
         d.shares = JackpotBucketLib.bucketShares(work.budget, bps, d.counts, d.solo);
+        if (d.jackpotPhase && decJackpotPlans[d.lvl].mode != 0) {
+            _resumeDecimatorEth(work, d, entropy, word, meter, result);
+            return;
+        }
         uint8[4] memory order = d.terminal
             ? JackpotBucketLib.bucketOrderLargestFirst(d.counts)
             : JackpotBucketLib.bucketOrderSoloLast(d.counts, d.solo);
@@ -507,6 +511,48 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
         if (cursor != work.quadrant) work.quadrant = cursor;
         if (pos != work.winner) work.winner = uint16(pos);
         result.done = cursor == 4;
+    }
+
+    /// @dev Generated awards own their funding debit; only solo is credited/debited here.
+    function _resumeDecimatorEth(JackpotWork storage work, EthDraw memory d, uint256 entropy, uint256 word,
+        MineFlipGas.Meter memory meter, MineFlipGas.Result memory result) private
+    {
+        uint256 childGas = MineFlipGas.forwardable(MineFlipGas.remaining(meter), JACKPOT_TAIL_GAS);
+        if (childGas < GasBounds.DECIMATOR_PLAN_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + 40_000) return;
+        DecimatorJackpotTerms memory terms = DecimatorJackpotTerms(word, d.shares, d.counts, d.solo);
+        (bool ok, bytes memory data) = ContractAddresses.GAME_DECIMATOR_MODULE.delegatecall{gas: childGas}(
+            abi.encodeWithSelector(IDegenerusGameDecimatorModule.runDecimatorJackpotAwards.selector, terms, childGas)
+        );
+        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
+        (MineFlipGas.Result memory generated, uint256 soloAmount) = abi.decode(data, (MineFlipGas.Result, uint256));
+        result.progressed = result.progressed || generated.progressed;
+        result.rewardBasis += generated.rewardBasis;
+        if (!generated.done) return;
+        uint256 passShare = soloAmount >= 8 * HALF_WHALE_PASS_PRICE ? soloAmount : 0;
+        // Pay the remaining solo budget normally; unpaid surplus uses the final-day sweep.
+        uint256 soloEth = soloAmount - (passShare != 0 ? _passCost(soloAmount) : 0);
+        if (soloEth != 0) {
+            uint256 pos;
+            uint256 paid;
+            uint256 liability;
+            (pos, paid, liability) = _payEthQuadrant(
+                d.lvl, d.solo, d.traits[d.solo], 1, soloEth, passShare,
+                EntropyLib.hash2(entropy, d.solo), _allGold(d.traits), work.winner, meter
+            );
+            if (pos == work.winner) return;
+            work.winner = uint16(pos);
+            if (paid != 0) {
+                work.paid += uint128(paid);
+                claimablePool += uint128(liability);
+                _setCurrentPrizePool(_getCurrentPrizePool() - paid);
+            }
+        } else if (!MineFlipGas.canRun(meter, 10_000, JACKPOT_TAIL_GAS)) {
+            return;
+        }
+        work.quadrant = 4;
+        result.progressed = true;
+        result.done = true;
+        ++result.rewardBasis;
     }
 
     /// @dev A quadrant's winner count, equal ETH award and whether it converts a pass share

@@ -3266,14 +3266,15 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Frozen event and bounded settlement cursors. Phase: 0 entry, 1 runs, 2 payouts, 3 done.
     struct DecBattleRound {
-        uint128 poolWei;
-        uint64 count;
+        uint96 poolWei;
+        uint40 count;
+        uint64 totalCreditedStack;
         uint24 openedDay;
         uint8 phase;
         uint8 capacity;
         uint8 winners;
         uint8 paid;
-        uint64 cursor;
+        uint64 cursor; // Sampled strata completed, at most 1000.
         uint64 champion;
         uint24 next;
     }
@@ -4543,6 +4544,28 @@ abstract contract DegenerusGameStorage {
 
     /// @dev 100 circular level lanes per owner: owed[0:29], snap[30], present[31].
     mapping(uint32 => uint256[13]) internal farFutureOwed;
+
+    /// @dev Previous nonempty sealed original field; generated jackpot entries never enter it.
+    uint64 internal decPreviousStack;
+    uint40 internal decPreviousCount;
+
+    /// @dev Mode 0: original-only; 1: awaiting jackpot pricing; 2: fixed/funded.
+    ///      One word per jackpot round; pricing inputs are carried by the plan event.
+    struct DecJackpotPlan {
+        uint128 soloAmount; // Solo cash/pass budget after matching; unpaid surplus is swept.
+        uint64 weights;
+        uint40 generatedEntries;
+        uint16 cursor; // Sampled strata completed in the locked phase.
+        uint8 mode;
+    }
+    mapping(uint24 => DecJackpotPlan) internal decJackpotPlans;
+    /// @dev Owners keyed by generated ordinal (1..original count), reused across rounds. Only retained
+    ///      candidates write; every entry runs once and the shared heap has one active round.
+    mapping(uint256 => address) internal decGeneratedOwners;
+
+    function _decAutomaticCap() internal view returns (uint256) {
+        return decPreviousCount == 0 ? 8000 : uint256(decPreviousStack) * 4 / decPreviousCount;
+    }
 
     error AfkingStethPullFailed();
 }

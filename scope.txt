@@ -1,5 +1,5 @@
 # Complete production Solidity inventory, including deployment constants and supporting artwork.
-# 82 files; 37 deployable types (38 CREATE instances). DegenerusGameLens, DeityBoonViewer and
+# 83 files; 37 deployable types (38 CREATE instances). DegenerusGameLens, DeityBoonViewer and
 # DeityPassCustomizationRenderer are outside the CREATE dependency closure (public readers/display code).
 # Tests/mocks and tools are reviewed as verification/deployment dependencies.
 
@@ -48,6 +48,7 @@ contracts/libraries/AffiliateIdentityLib.sol
 contracts/libraries/BitPackingLib.sol
 contracts/libraries/CrapsPreferenceLib.sol
 contracts/libraries/CrapsPriceLib.sol
+contracts/libraries/DecimatorSamplingLib.sol
 contracts/libraries/EntropyLib.sol
 contracts/libraries/FlipRoundLib.sol
 contracts/libraries/GameTimeLib.sol

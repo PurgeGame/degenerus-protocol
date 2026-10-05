@@ -191,7 +191,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
             // The recorded-word return makes this once per day, and the next fresh
             // request clears _decDayOneActive(). FLIP only sizes and records the entry.
             // On this opening-day path, lvl is the request-promoted level.
-            if (decDayOne) coin.autoDecimatorBurn(lvl + 1);
+            if (decDayOne) coin.autoDecimatorBurn(lvl + 1, _decAutomaticCap());
 
             // The craps bonus day opens on the same crank that applied its word — the
             // terms and the house's available backing have both settled. The WALL-day
@@ -389,6 +389,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
             }
         }
         bool isTicketJackpotDay = !jackpotPhaseFlag && lastPurchaseDay;
+        // Ordinary Decimator conversion uses one physical jackpot day, at either closure speed.
+        if (isTicketJackpotDay && (level + 1) % 10 == 5 && (level + 1) % 100 != 95) {
+            jackpotFlags |= JACKPOT_TURBO;
+        }
         if (isTicketJackpotDay && (jackpotFlags & JACKPOT_TURBO) != 0) _activateNextTickets();
         uint24 lvl = level + 1;
         uint48 lvlAndQuestDay = (uint48(day) << 24) | uint48(lvl);
@@ -768,6 +772,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         bool targetMet = _getNextPrizePool() > _prizePoolTarget(purchaseLevel);
         if (targetMet && day == wallDay && day >= psd) {
             lastPurchaseDay = true;
+            if (purchaseLevel % 10 == 5 && purchaseLevel % 100 != 95) jackpotFlags |= JACKPOT_TURBO;
             // Level L+1's first generation window opens with this latch: its frozen pool mints
             // on the first word requested after it (a post-seal mid-day word or the
             // last-purchase word), never on a word already public. One metadata write per

@@ -60,6 +60,7 @@ docs/*
 !docs/abi/
 docs/abi/*
 !docs/abi/DeityPassCustomizationRenderer.json
+!docs/abi/Decimator.json
 !docs/audit/
 docs/audit/*
 !docs/audit/RNG-DOMAINS.md

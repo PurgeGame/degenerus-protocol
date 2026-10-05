@@ -39,7 +39,7 @@ contract DegradeAutoDecimatorBurnTest is DeployProtocol {
     function _autoBurn() private returns (uint256 amount) {
         uint24 lvl = game.level() + 1;
         vm.prank(address(game));
-        amount = coin.autoDecimatorBurn(lvl);
+        amount = coin.autoDecimatorBurn(lvl, 8000);
     }
 
     function _burnEvents(Vm.Log[] memory logs) private pure returns (uint256 n) {
@@ -51,7 +51,7 @@ contract DegradeAutoDecimatorBurnTest is DeployProtocol {
     /// @dev Preview clears the floor, the consume lands below it: the window is skipped, nothing
     ///      is minted, no entry is recorded and the call returns like an empty bankroll.
     function test_DustConsumeSkipsTheWindow() public {
-        _mockLegs(5_000 ether, 999 ether);
+        _mockLegs(5_000, 1999);
         uint256 supply = coin.totalSupply();
         vm.expectCall(address(game), abi.encodeWithSelector(DegenerusGame.recordDecBurn.selector), 0);
         vm.recordLogs();
@@ -66,7 +66,7 @@ contract DegradeAutoDecimatorBurnTest is DeployProtocol {
 
     /// @dev Reachable shape: a consume at or above the floor still records the entry.
     function test_FloorConsumeStillRecords() public {
-        _mockLegs(5_000 ether, 1_000 ether);
+        _mockLegs(5_000, 2_000);
         vm.mockCall(
             address(quests),
             abi.encodeWithSelector(DegenerusQuests.handleDecimator.selector),
@@ -82,7 +82,7 @@ contract DegradeAutoDecimatorBurnTest is DeployProtocol {
 
         uint256 amount = _autoBurn();
 
-        assertEq(amount, 1_000 ether, "the consumed backing is the entry");
+        assertEq(amount, 2_000, "the consumed backing is the entry");
         assertEq(_burnEvents(vm.getRecordedLogs()), 1, "one entry recorded");
     }
 }

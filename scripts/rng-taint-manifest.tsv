@@ -116,8 +116,8 @@ CONSUMER-SEALED	PARAM	seed	rollBoxBoons	modules/DegenerusGameBoonModule.sol	dele
 CONSUMER-SEALED	PARAM	word	_insert	modules/DegenerusGameDecimatorModule.sol	Sealed round word forwarded only to _less for exact-score tiebreaks; heap membership is the top-K of a strict total order, so batch boundaries cannot change it
 PURE-DERIVE	PARAM	word	_less	modules/DegenerusGameDecimatorModule.sol	private pure comparator: score first (the bits above the id); the word reaches _tieKey only when two scores are equal
 CONSUMER-SEALED	PARAM	word	_rank	modules/DegenerusGameDecimatorModule.sol	Decimator tie-break uses active session word and preclosed participant identity; stage5 and completion gate prohibit next-word overlap.
-CONSUMER-SEALED	PARAM	seed	_run	modules/DegenerusGameDecimatorModule.sol	Shared dice H(DICE_TAG, full sealed round word, level); board and final coin bind frozen entry id with separate tags; owner and stack frozen before the word
-CONSUMER-SEALED	PARAM	word	_run	modules/DegenerusGameDecimatorModule.sol	Full sealed round word (stored once by runDecimatorJackpot): H(COIN_TAG, word, lvl, id) decides tails before any engine call; H(BOARD_TAG, word, lvl, id) scatters the unnamed chips; the pure engine gets that scatter, the shared dice seed and the entry board/owner/stack frozen at burn; caller budget never enters the run
+CONSUMER-SEALED	PARAM	seed	_run	modules/DegenerusGameDecimatorModule.sol	Shared dice H(DICE_TAG, full sealed round word, level); board and tie bind frozen entry id with separate tags; owner and stack frozen before the word
+CONSUMER-SEALED	PARAM	word	_run	modules/DegenerusGameDecimatorModule.sol	Full sealed round word (stored once by runDecimatorJackpot): Only sampled original IDs reach this function; H(BOARD_TAG, word, lvl, id) scatters the unnamed chips; the pure engine gets that scatter, the shared dice seed and the entry board/owner/stack frozen at burn; caller budget never enters the run
 PURE-DERIVE	PARAM	word	_tieKey	modules/DegenerusGameDecimatorModule.sol	private pure H(TIE_TAG, word, lvl, id) with the id in the low 64 bits; recomputed identically at insert, rank and by the Lens
 EXEMPT-ADVANCE	PARAM	rngWord	runDecimatorJackpot	modules/DegenerusGameDecimatorModule.sol	Game-only snapshot from Advance after the burn window closes at request time; all 256 bits stored once
 PURE-DERIVE	PARAM	seed	_boxBetId	modules/DegenerusGameDegeneretteModule.sol	private pure: packs 60 low bits of the box seed into a sentinel betId label for events; no outcome
@@ -336,3 +336,22 @@ NOT-RNG	PARAM	word	_rollOrder	modules/DegenerusGameLootboxModule.sol	Packed orde
 PURE-DERIVE	PARAM	word	_rollFromWord	sDGNRS.sol	Pure 21..175 percent roll from bits above bit zero; 155 equiprobable residues have mean 98.
 CONSUMER-SEALED	PARAM	word	_runRedemptionWork	sDGNRS.sol	Stage-1 gate plus request ordering binds the published read word to the closed batch; no new request until the mandatory drain finishes. A refused claim parks with this word.
 CONSUMER-SEALED	PARAM	word	runRedemptionWork	sDGNRS.sol	GAME-only entry forwards the stage-1 published read word unchanged; the batch was closed with that word request.
+
+# Decimator jackpot integration (2026-10-05)
+PURE-DERIVE	ARG	EntropyLib.hash2	_resumeDecimatorEth	modules/DegenerusGameJackpotModule.sol	Existing solo quadrant seed from sealed daily entropy and fixed solo index; generated cursor and solo amount excluded.
+EXEMPT-ADVANCE	PARAM	entropy	_resumeDecimatorEth	modules/DegenerusGameJackpotModule.sol	Locked daily jackpot dispatch; level, board, budget and solo cohort fixed by the sealed daily work; resumes preserve tagged identities.
+EXEMPT-ADVANCE	PARAM	word	_resumeDecimatorEth	modules/DegenerusGameJackpotModule.sol	Locked daily jackpot dispatch; level, board, budget and solo cohort fixed by the sealed daily work; resumes preserve tagged identities.
+CONSUMER-SEALED	PARAM	word	_runGenerated	modules/DegenerusGameDecimatorModule.sol	Trusted Jackpot dispatch under the daily lock fixes traits, cohorts, preferences, original mean and entry ordinal; only sampled entries reach this function, recipient/board/player draws never use caller or gas.
+CONSUMER-SEALED	PARAM	seed	_settleRun	modules/DegenerusGameDecimatorModule.sol	Shared pure engine helper receives shared dice derived only from the sealed word and level; board hash and original or synthetic player come from frozen entry identity.
+
+# Exact rotated survivor sampling (2026-10-05)
+CONSUMER-SEALED	ARG	Sampling.field	_runDecimatorWork	modules/DegenerusGameDecimatorModule.sol	Stage-5 worker derives cached sample size and rotation from the sealed word, level and fixed original+generated count.
+CONSUMER-SEALED	ARG	Sampling.field	runDecimatorJackpotAwards	modules/DegenerusGameDecimatorModule.sol	Trusted locked Jackpot dispatch initializes the plan before deriving its sample field; caller and gas excluded.
+CONSUMER-SEALED	ARG	Sampling.sample	_runDecimatorWork	modules/DegenerusGameDecimatorModule.sol	Fixed stratum index selects a survivor; original IDs run, generated IDs skip, preserving partition invariance.
+CONSUMER-SEALED	ARG	Sampling.sample	runDecimatorJackpotAwards	modules/DegenerusGameDecimatorModule.sol	Fixed stratum index selects a survivor; generated IDs run, originals skip under the daily lock.
+PURE-DERIVE	ARG	Sampling.rotation	decSurvivorAt	DegenerusGameLens.sol	Pure client replay of the common tagged rotation from word, level and supplied final field size.
+PURE-DERIVE	ARG	Sampling.sample	decSurvivorAt	DegenerusGameLens.sol	Pure client replay of the survivor for a validated stratum; writes no state.
+PURE-DERIVE	PARAM	word	decSurvivorAt	DegenerusGameLens.sol	Public pure replay input, no game-state mutation.
+PURE-DERIVE	PARAM	word	field	libraries/DecimatorSamplingLib.sol	Caches exact survivor count and tagged rotation; called only after total field size is fixed.
+PURE-DERIVE	PARAM	word	rotation	libraries/DecimatorSamplingLib.sol	H(SAMPLE_TAG,word,lvl) modulo entries; common rotation for both settlement phases.
+PURE-DERIVE	PARAM	word	sample	libraries/DecimatorSamplingLib.sol	H(SAMPLE_TAG,word,lvl,uint256(stratum)) selects within disjoint floor-rounded strata before the common rotation; overload only forwards cached values.
