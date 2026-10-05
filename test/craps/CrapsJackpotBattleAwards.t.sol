@@ -3,6 +3,8 @@ pragma solidity 0.8.34;
 
 import {CrapsPins, MockCoinflip} from "./CrapsPins.sol";
 import {CrapsViews} from "./CrapsViews.sol";
+import {JackpotBattleViews} from "./JackpotBattleViews.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 contract CrapsJackpotBattleAwardsTest is CrapsPins {
     CrapsViews private c;
@@ -11,6 +13,7 @@ contract CrapsJackpotBattleAwardsTest is CrapsPins {
 
     function setUp() public {
         _installPins();
+        vm.etch(ContractAddresses.JACKPOT_BATTLE, address(new JackpotBattleViews()).code);
         vm.cloneAccount(address(new MockCoinflip()), address(coinflip));
         c = new CrapsViews();
         c.seedProgressive(100_000_000);

@@ -56,7 +56,7 @@ contract RoundDrainHarness is MintBucketSeed {
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((uint48(0) + 1) & 1) << 12);
         rngWordCurrent = entropy | 1; _setRngSessionPublished(true); _setRngComplete(false);
         for (uint256 i; i < players.length; ++i) {
-            _queueEntriesScaled(players[i], lvl, entriesScaled[i], false);
+            _queueEntriesScaled(players[i], lvl, entriesScaled[i]);
         }
         ticketWriteSlot = !ticketWriteSlot;
         ticketCursor = 0;

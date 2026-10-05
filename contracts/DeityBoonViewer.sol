@@ -94,44 +94,6 @@ contract DeityBoonViewer {
     uint8 private constant DEITY_BOON_CRAPS_15 = 43;
 
     // Boon weights
-    uint16 private constant W_COINFLIP_5 = 200;
-    uint16 private constant W_COINFLIP_10 = 40;
-    uint16 private constant W_COINFLIP_25 = 8;
-    uint16 private constant W_LOOTBOX_5 = 200;
-    uint16 private constant W_LOOTBOX_15 = 30;
-    uint16 private constant W_LOOTBOX_25 = 8;
-    uint16 private constant W_PURCHASE_5 = 400;
-    uint16 private constant W_PURCHASE_15 = 80;
-    uint16 private constant W_PURCHASE_25 = 16;
-    uint16 private constant W_DECIMATOR_10 = 40;
-    uint16 private constant W_DECIMATOR_25 = 8;
-    uint16 private constant W_DECIMATOR_50 = 2;
-    uint16 private constant W_WHALE_10 = 28;
-    uint16 private constant W_WHALE_20 = 10;
-    uint16 private constant W_WHALE_35 = 2;
-    uint16 private constant W_DEITY_PASS_10 = 28;
-    uint16 private constant W_DEITY_PASS_20 = 10;
-    uint16 private constant W_DEITY_PASS_35 = 2;
-    uint16 private constant W_ACTIVITY_10 = 100;
-    uint16 private constant W_ACTIVITY_25 = 30;
-    uint16 private constant W_ACTIVITY_50 = 4;
-    uint16 private constant W_QUEST_SHIELD = 200;
-    uint16 private constant W_WHALE_PASS = 2;
-    uint16 private constant W_LAZY_PASS_10 = 30;
-    uint16 private constant W_LAZY_PASS_25 = 8;
-    uint16 private constant W_LAZY_PASS_50 = 2;
-    uint16 private constant W_DEGEN_ETH_4 = 200;
-    uint16 private constant W_DEGEN_ETH_8 = 50;
-    uint16 private constant W_DEGEN_ETH_12 = 10;
-    uint16 private constant W_DEGEN_FLIP_4 = 200;
-    uint16 private constant W_DEGEN_FLIP_8 = 50;
-    uint16 private constant W_DEGEN_FLIP_12 = 10;
-    uint16 private constant W_WWXRP_4 = 200;
-    uint16 private constant W_WWXRP_8 = 200;
-    uint16 private constant W_WWXRP_12 = 200;
-    uint16 private constant W_CRAPS_5 = 200;
-    uint16 private constant W_CRAPS_10 = 40;
-    uint16 private constant W_CRAPS_15 = 8;
     uint16 private constant W_TOTAL = 2856;
     uint16 private constant W_PRE_DECIMATOR = 982;
     uint16 private constant W_DECIMATOR_ALL = 50;
@@ -196,7 +158,7 @@ contract DeityBoonViewer {
     /// @dev Map a weighted random roll to a boon type ID over the static full table — the same
     ///      weight-balanced tree `DegenerusGameBoonModule._boonFromRoll` walks, restated here
     ///      because neither contract can read the other. `BoonRollTreeParity` holds the two
-    ///      statements and the W_* weights above together on every reachable roll.
+    ///      statements together on every reachable roll.
     /// @param roll Random value in [0, W_TOTAL).
     /// @return Boon type ID constant.
     function _boonFromRoll(uint256 roll) internal pure returns (uint8) {

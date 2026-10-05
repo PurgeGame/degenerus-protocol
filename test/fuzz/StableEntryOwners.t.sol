@@ -6,7 +6,7 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 contract StableOwnersHarness is DegenerusGameStorage {
     constructor() { level = 3; }
     function credit(address p, uint24 lvl, uint32 n) external { _queueEntries(p, lvl, n, false); }
-    function creditScaled(address p, uint24 lvl, uint32 n) external { _queueEntriesScaled(p, lvl, n, false); }
+    function creditScaled(address p, uint24 lvl, uint32 n) external { _queueEntriesScaled(p, lvl, n); }
     function flip() external { ticketWriteSlot = !ticketWriteSlot; }
     function owed(uint24 key, address p) external view returns (uint80) { return _entriesOwed(key,p); }
     function keys(uint24 lvl) external view returns(uint24,uint24,uint24) { return(_tqReadKey(lvl),_tqWriteKey(lvl),_tqFarFutureKey(lvl)); }

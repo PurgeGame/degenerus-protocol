@@ -694,8 +694,6 @@ interface IGameAfkingModule {
 interface IDegenerusGameFoilPackModule {
     function runFoilWork(uint256 allowance) external returns (MineFlipGas.Result memory);
     function recordPresaleBox(address buyer, uint48 index, uint256 word) external payable;
-    /// @notice Prepare a ticket level, returning false while takeover is unsafe.
-    function prepareTicketLevel(uint24 lvl) external payable returns (bool);
     /// @notice Queue every deity owner's perpetual ticket for a phase-transition target level.
     function queuePerpetualTickets(uint24 targetLevel) external;
 

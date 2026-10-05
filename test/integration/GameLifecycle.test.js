@@ -509,17 +509,16 @@ describe("GameLifecycle", function () {
         await loadFixture(deployFullProtocol);
 
       // Give alice FLIP for coinflip deposit
-      const vaultAddr = await vault.getAddress();
+      const minterAddr = await coinflip.getAddress();
       await hre.ethers.provider.send("hardhat_setBalance", [
-        vaultAddr,
+        minterAddr,
         "0x1000000000000000000",
       ]);
-      await hre.ethers.provider.send("hardhat_impersonateAccount", [vaultAddr]);
-      const vaultSigner = await hre.ethers.getSigner(vaultAddr);
-      await coin.connect(vaultSigner).vaultEscrow(eth(1000));
-      await coin.connect(vaultSigner).vaultMintTo(alice.address, eth(1000));
+      await hre.ethers.provider.send("hardhat_impersonateAccount", [minterAddr]);
+      const minterSigner = await hre.ethers.getSigner(minterAddr);
+      await coin.connect(minterSigner).mintForGame(alice.address, eth(1000));
       await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [
-        vaultAddr,
+        minterAddr,
       ]);
 
       // Trigger RNG lock (level 0, purchaseLevel = 1 → 1 % 10 != 0)

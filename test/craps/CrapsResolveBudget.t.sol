@@ -138,7 +138,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
                 for (uint256 i = 0; i < 12; ++i) craps.settleGas(slot, 3_000_000);
             }
 
-            CrapsBattle.Battle memory b = craps.battleOf(craps.keyOfSlot(slot));
+            CrapsViews.Battle memory b = craps.battleOf(craps.keyOfSlot(slot));
             assertTrue(b.finalized, "a chunking left the field unfinished");
             pool[mode] = craps.progressivePool();
             winner[mode] = b.winnerId;

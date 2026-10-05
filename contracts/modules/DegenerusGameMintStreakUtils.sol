@@ -280,21 +280,6 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         );
     }
 
-    /// @dev Shared activity score computation with explicit quest streak and streak base level.
-    ///      Accepts pre-fetched questStreak (eliminating STATICCALL to DegenerusQuests on hot path)
-    ///      and streakBaseLevel (allowing DegeneretteModule to pass level + 1 instead of _activeTicketLevel()).
-    /// @param player The player address to calculate score for.
-    /// @param questStreak Quest streak value (pre-fetched from handler return or external view).
-    /// @param streakBaseLevel Level used for mint streak calculation (typically _activeTicketLevel() or level + 1).
-    /// @return scorePoints Total activity score in whole points.
-    function _playerActivityScore(
-        address player,
-        uint32 questStreak,
-        uint24 streakBaseLevel
-    ) internal view returns (uint256 scorePoints) {
-        return _playerActivityScoreAt(player, questStreak, streakBaseLevel, level);
-    }
-
     /// @dev Activity score body operating on a caller-supplied current level, so every
     ///      level comparison (pass window, mint count, affiliate cache) shares one read.
     /// @param player The player address to calculate score for.

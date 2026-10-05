@@ -36,22 +36,18 @@ import {
 // ---------------------------------------------------------------------------
 
 /**
- * Mint FLIP to `player` using the vault contract's vaultMintTo function.
- * The vault must first escrow the tokens via vaultEscrow (callable by the vault itself).
- * We impersonate the vault contract address to call both.
+ * Mint FLIP to `player` through FLIP.mintForGame, impersonating an authorized
+ * minter (the coinflip contract).
  */
-async function giveFlip(coin, player, amount, vaultAddr) {
+async function giveFlip(coin, player, amount, minterAddr) {
   await hre.ethers.provider.send("hardhat_setBalance", [
-    vaultAddr,
+    minterAddr,
     "0x1000000000000000000",
   ]);
-  await hre.ethers.provider.send("hardhat_impersonateAccount", [vaultAddr]);
-  const vaultSigner = await hre.ethers.getSigner(vaultAddr);
-  // Vault can call vaultEscrow on itself to increase allowance
-  await coin.connect(vaultSigner).vaultEscrow(amount);
-  // Then mint to player
-  await coin.connect(vaultSigner).vaultMintTo(player.address, amount);
-  await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [vaultAddr]);
+  await hre.ethers.provider.send("hardhat_impersonateAccount", [minterAddr]);
+  const minterSigner = await hre.ethers.getSigner(minterAddr);
+  await coin.connect(minterSigner).mintForGame(player.address, amount);
+  await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [minterAddr]);
 }
 
 /**
@@ -132,7 +128,7 @@ describe("Coinflip", function () {
     it("reverts when amount is below 100 FLIP minimum", async function () {
       const { coinflip, coin, alice, vault } = await loadFixture(deployFullProtocol);
       const vaultAddr = await vault.getAddress();
-      await giveFlip(coin, alice, flip(200), vaultAddr);
+      await giveFlip(coin, alice, flip(200), await coinflip.getAddress());
       await expect(
         deposit(coinflip, alice, flip(99))
       ).to.be.revertedWithCustomError(coinflip, "AmountLTMin");
@@ -141,14 +137,14 @@ describe("Coinflip", function () {
     it("accepts minimum deposit of exactly 100 FLIP", async function () {
       const { coinflip, coin, alice, vault } = await loadFixture(deployFullProtocol);
       const vaultAddr = await vault.getAddress();
-      await giveFlip(coin, alice, flip(200), vaultAddr);
+      await giveFlip(coin, alice, flip(200), await coinflip.getAddress());
       await expect(deposit(coinflip, alice, flip(100))).to.not.be.reverted;
     });
 
     it("emits CoinflipDeposit event", async function () {
       const { coinflip, coin, alice, vault } = await loadFixture(deployFullProtocol);
       const vaultAddr = await vault.getAddress();
-      await giveFlip(coin, alice, flip(500), vaultAddr);
+      await giveFlip(coin, alice, flip(500), await coinflip.getAddress());
       const tx = await deposit(coinflip, alice, flip(200));
       const ev = await getEvent(tx, coinflip, "CoinflipDeposit");
       expect(ev.args.player).to.equal(alice.address);
@@ -160,7 +156,7 @@ describe("Coinflip", function () {
         deployFullProtocol
       );
       const vaultAddr = await vault.getAddress();
-      await giveFlip(coin, alice, flip(500), vaultAddr);
+      await giveFlip(coin, alice, flip(500), await coinflip.getAddress());
       const currentDay = await game.currentDayView();
       const tx = await deposit(coinflip, alice, flip(200));
       const ev = await getEvent(tx, coinflip, "CoinflipStakeUpdated");
@@ -172,7 +168,7 @@ describe("Coinflip", function () {
     it("records coinflipAmount for next day", async function () {
       const { coinflip, coin, alice, vault } = await loadFixture(deployFullProtocol);
       const vaultAddr = await vault.getAddress();
-      await giveFlip(coin, alice, flip(500), vaultAddr);
+      await giveFlip(coin, alice, flip(500), await coinflip.getAddress());
       await deposit(coinflip, alice, flip(300));
       // coinflipAmount() returns stake for the next day
       const stake = await coinflip.coinflipAmount(alice.address);
@@ -185,7 +181,7 @@ describe("Coinflip", function () {
       // the draw book entirely.
       const { coinflip, coin, alice, vault } = await loadFixture(deployFullProtocol);
       const vaultAddr = await vault.getAddress();
-      await giveFlip(coin, alice, flip(1000), vaultAddr);
+      await giveFlip(coin, alice, flip(1000), await coinflip.getAddress());
       const tx = await deposit(coinflip, alice, flip(500));
       const evs = await getEvents(tx, coinflip, "BafDrawEntered");
       expect(evs.length).to.equal(0);
@@ -197,7 +193,7 @@ describe("Coinflip", function () {
       // bob is NOT an approved operator for alice and funds the deposit himself:
       // depositCoinflip is a permissionless gift (caller pays, the stake is the
       // player's). Fund bob, then gift to alice.
-      await giveFlip(coin, bob, flip(500), vaultAddr);
+      await giveFlip(coin, bob, flip(500), await coinflip.getAddress());
       const tx = await coinflip.connect(bob).depositCoinflip(alice.address, flip(200));
       const ev = await getEvent(tx, coinflip, "CoinflipDeposit");
       expect(ev.args.player).to.equal(alice.address);
@@ -313,7 +309,7 @@ describe("Coinflip", function () {
     it("a direct deposit below the 200k FLIP floor does not move biggestFlipEver", async function () {
       const { coinflip, coin, alice, vault } = await loadFixture(deployFullProtocol);
       const vaultAddr = await vault.getAddress();
-      await giveFlip(coin, alice, flip(300_000), vaultAddr);
+      await giveFlip(coin, alice, flip(300_000), await coinflip.getAddress());
       const tx = await deposit(coinflip, alice, flip(150_000));
       const evs = await getEvents(tx, coinflip, "BigRecordUpdated");
       expect(evs.length).to.equal(0);
@@ -323,7 +319,7 @@ describe("Coinflip", function () {
     it("a direct deposit of exactly 200k FLIP bootstraps the flip record", async function () {
       const { coinflip, coin, alice, vault } = await loadFixture(deployFullProtocol);
       const vaultAddr = await vault.getAddress();
-      await giveFlip(coin, alice, flip(250_000), vaultAddr);
+      await giveFlip(coin, alice, flip(250_000), await coinflip.getAddress());
       const poolBefore = await coinflip.recordPool();
 
       const tx = await deposit(coinflip, alice, flip(200_000));
@@ -346,8 +342,8 @@ describe("Coinflip", function () {
         deployFullProtocol
       );
       const vaultAddr = await vault.getAddress();
-      await giveFlip(coin, alice, flip(250_000), vaultAddr);
-      await giveFlip(coin, bob, flip(250_000), vaultAddr);
+      await giveFlip(coin, alice, flip(250_000), await coinflip.getAddress());
+      await giveFlip(coin, bob, flip(250_000), await coinflip.getAddress());
 
       await deposit(coinflip, alice, flip(200_000)); // bootstraps the mark at 200k
       const poolBefore = await coinflip.recordPool();
@@ -367,8 +363,8 @@ describe("Coinflip", function () {
         deployFullProtocol
       );
       const vaultAddr = await vault.getAddress();
-      await giveFlip(coin, alice, flip(250_000), vaultAddr);
-      await giveFlip(coin, bob, flip(250_000), vaultAddr);
+      await giveFlip(coin, alice, flip(250_000), await coinflip.getAddress());
+      await giveFlip(coin, bob, flip(250_000), await coinflip.getAddress());
 
       await deposit(coinflip, alice, flip(200_000)); // bootstraps the mark at 200k
       const poolBefore = await coinflip.recordPool();
@@ -390,7 +386,7 @@ describe("Coinflip", function () {
       // bob is not an approved operator for alice, so this is a permissionless gift
       // (funded from bob's own FLIP) — and per _addDailyFlip, an indirect deposit
       // (player != msg.sender) never arms the flip record, however large.
-      await giveFlip(coin, bob, flip(400_000), vaultAddr);
+      await giveFlip(coin, bob, flip(400_000), await coinflip.getAddress());
       const tx = await coinflip.connect(bob).depositCoinflip(alice.address, flip(300_000));
       const evs = await getEvents(tx, coinflip, "BigRecordUpdated");
       expect(evs.length).to.equal(0);
@@ -627,7 +623,7 @@ describe("Coinflip", function () {
         deployFullProtocol
       );
       const vaultAddr = await vault.getAddress();
-      await giveFlip(coin, alice, flip(2000), vaultAddr);
+      await giveFlip(coin, alice, flip(2000), await coinflip.getAddress());
       await deposit(coinflip, alice, flip(1000));
 
       const currentDay = await game.currentDayView();
@@ -1011,7 +1007,7 @@ describe("Coinflip", function () {
         deployFullProtocol
       );
       const vaultAddr = await vault.getAddress();
-      await giveFlip(coin, alice, flip(1000), vaultAddr);
+      await giveFlip(coin, alice, flip(1000), await coinflip.getAddress());
       await deposit(coinflip, alice, flip(500));
 
       const currentDay = await game.currentDayView();
@@ -1031,7 +1027,7 @@ describe("Coinflip", function () {
     it("coinflipAmount increases after deposit", async function () {
       const { coinflip, coin, alice, vault } = await loadFixture(deployFullProtocol);
       const vaultAddr = await vault.getAddress();
-      await giveFlip(coin, alice, flip(1000), vaultAddr);
+      await giveFlip(coin, alice, flip(1000), await coinflip.getAddress());
       await deposit(coinflip, alice, flip(500));
       expect(await coinflip.coinflipAmount(alice.address)).to.be.gte(flip(500));
     });
@@ -1055,7 +1051,7 @@ describe("Coinflip", function () {
         deployFullProtocol
       );
       const vaultAddr = await vault.getAddress();
-      await giveFlip(coin, alice, flip(2000), vaultAddr);
+      await giveFlip(coin, alice, flip(2000), await coinflip.getAddress());
       const balBefore = await coin.balanceOf(alice.address);
 
       await deposit(coinflip, alice, flip(1000));
@@ -1069,7 +1065,7 @@ describe("Coinflip", function () {
         deployFullProtocol
       );
       const vaultAddr = await vault.getAddress();
-      await giveFlip(coin, alice, flip(2000), vaultAddr);
+      await giveFlip(coin, alice, flip(2000), await coinflip.getAddress());
       await deposit(coinflip, alice, flip(1000));
 
       const currentDay = await game.currentDayView();
@@ -1092,7 +1088,7 @@ describe("Coinflip", function () {
         deployFullProtocol
       );
       const vaultAddr = await vault.getAddress();
-      await giveFlip(coin, alice, flip(2000), vaultAddr);
+      await giveFlip(coin, alice, flip(2000), await coinflip.getAddress());
       await deposit(coinflip, alice, flip(1000));
 
       const currentDay = await game.currentDayView();
@@ -1114,7 +1110,7 @@ describe("Coinflip", function () {
       );
       await applyToday(hre.ethers, game, coinflip);
       const vaultAddr = await vault.getAddress();
-      await giveFlip(coin, alice, flip(5000), vaultAddr);
+      await giveFlip(coin, alice, flip(5000), await coinflip.getAddress());
 
       // Enable auto-rebuy with no take profit (all carries forward)
       await coinflip.connect(alice).setCoinflipAutoRebuy(ZERO_ADDRESS, true, 0n);

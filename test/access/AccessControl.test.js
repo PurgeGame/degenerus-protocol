@@ -43,14 +43,6 @@ describe("AccessControl", function () {
 
     // rollDailyQuest removed from FLIP — moved to DegenerusQuests (v13.0)
 
-    it("vaultEscrow: reverts when called by alice (OnlyVault)", async function () {
-      const { coin, alice } = await loadFixture(deployFullProtocol);
-
-      await expect(
-        coin.connect(alice).vaultEscrow(eth("1000"))
-      ).to.be.revertedWithCustomError(coin, "OnlyVault");
-    });
-
     it("mintForGame: reverts when called by alice (OnlyGame)", async function () {
       const { coin, alice, bob } = await loadFixture(deployFullProtocol);
 

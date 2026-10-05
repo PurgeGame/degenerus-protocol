@@ -4,12 +4,13 @@ pragma solidity ^0.8.26;
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Coinflip} from "../../contracts/Coinflip.sol";
+import {CoinflipStakeSetter} from "../helpers/CoinflipStakeSetter.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 
 /// @dev Exposes the stake codec for lane-level checks. Deployed off the pinned address, so it
 ///      shares nothing with the protocol fixture.
-contract CoinflipCodecHarness is Coinflip {
+contract CoinflipCodecHarness is CoinflipStakeSetter {
     function setStake(uint24 day, address p, uint256 weiAmount) external returns (uint256) {
         return _setFlipStake(day, p, weiAmount);
     }

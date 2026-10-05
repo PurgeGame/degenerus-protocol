@@ -541,9 +541,6 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     uint16 private constant LOOTBOX_BOON_BONUS_BPS = 500;
     /// @dev Maximum bonus amount for coinflip boon (5000 FLIP)
     uint256 private constant LOOTBOX_BOON_MAX_BONUS = 5000;
-    /// @dev Deity pass base price; the nominal figure BOON_FIXED_WEIGHTED_MAX was derived from,
-    ///      not read at runtime.
-    uint256 private constant DEITY_PASS_BASE = 24 ether;
     /// @dev 10% bonus in basis points for coinflip boon
     uint16 private constant LOOTBOX_COINFLIP_10_BONUS_BPS = 1000;
     /// @dev 25% bonus in basis points for coinflip boon
@@ -568,10 +565,6 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     uint24 private constant LOOTBOX_ACTIVITY_BOON_50_BONUS = 50;
     /// @dev Quest-streak shields granted per quest-shield boon
     uint16 private constant LOOTBOX_QUEST_SHIELD_GRANT = 1;
-    /// @dev Whale pass price (200 entries = 50 tickets over 100 levels); the nominal figure
-    ///      BOON_FIXED_WEIGHTED_MAX was derived from, not read at runtime.
-    uint256 private constant LOOTBOX_WHALE_PASS_PRICE =
-        4.50 ether;
     /// @dev Probability scale for granular boon rolls (ppm = 1e6).
     uint256 private constant BOON_PPM_SCALE = 1_000_000;
     /// @dev Number of boon slots available per deity per day
@@ -650,78 +643,8 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     uint8 private constant BOON_CRAPS_5 = 41;
     uint8 private constant BOON_CRAPS_10 = 42;
     uint8 private constant BOON_CRAPS_15 = 43;
-    /// @dev Weight for 5% coinflip boon
-    uint16 private constant BOON_WEIGHT_COINFLIP_5 = 200;
-    /// @dev Weight for 10% coinflip boon
-    uint16 private constant BOON_WEIGHT_COINFLIP_10 = 40;
-    /// @dev Weight for 25% coinflip boon
-    uint16 private constant BOON_WEIGHT_COINFLIP_25 = 8;
-    /// @dev Weight for 5% lootbox boost boon
-    uint16 private constant BOON_WEIGHT_LOOTBOX_5 = 200;
-    /// @dev Weight for 15% lootbox boost boon
-    uint16 private constant BOON_WEIGHT_LOOTBOX_15 = 30;
-    /// @dev Weight for 25% lootbox boost boon
-    uint16 private constant BOON_WEIGHT_LOOTBOX_25 = 8;
-    /// @dev Weight for 5% purchase boost boon
-    uint16 private constant BOON_WEIGHT_PURCHASE_5 = 400;
-    /// @dev Weight for 15% purchase boost boon
-    uint16 private constant BOON_WEIGHT_PURCHASE_15 = 80;
-    /// @dev Weight for 25% purchase boost boon
-    uint16 private constant BOON_WEIGHT_PURCHASE_25 = 16;
-    /// @dev Weight for 10% decimator boost boon
-    uint16 private constant BOON_WEIGHT_DECIMATOR_10 = 40;
-    /// @dev Weight for 25% decimator boost boon
-    uint16 private constant BOON_WEIGHT_DECIMATOR_25 = 8;
-    /// @dev Weight for 50% decimator boost boon
-    uint16 private constant BOON_WEIGHT_DECIMATOR_50 = 2;
-    /// @dev Weight for 10% whale boon
-    uint16 private constant BOON_WEIGHT_WHALE_10 = 28;
-    /// @dev Weight for tier-2 whale boon (20%)
-    uint16 private constant BOON_WEIGHT_WHALE_20 = 10;
-    /// @dev Weight for tier-3 whale boon (35%)
-    uint16 private constant BOON_WEIGHT_WHALE_35 = 2;
-    /// @dev Weight for 10% deity pass discount boon
-    uint16 private constant BOON_WEIGHT_DEITY_PASS_10 = 28;
-    /// @dev Weight for tier-2 deity pass discount boon (20%)
-    uint16 private constant BOON_WEIGHT_DEITY_PASS_20 = 10;
-    /// @dev Weight for tier-3 deity pass discount boon (35%)
-    uint16 private constant BOON_WEIGHT_DEITY_PASS_35 = 2;
-    /// @dev Weight for 10 point activity boon
-    uint16 private constant BOON_WEIGHT_ACTIVITY_10 = 100;
-    /// @dev Weight for 25 point activity boon
-    uint16 private constant BOON_WEIGHT_ACTIVITY_25 = 30;
-    /// @dev Weight for 50 point activity boon
-    uint16 private constant BOON_WEIGHT_ACTIVITY_50 = 4;
-    /// @dev Weight for the quest-streak-shield boon
-    uint16 private constant BOON_WEIGHT_QUEST_SHIELD = 200;
-    /// @dev Weight for whale pass award
-    uint16 private constant BOON_WEIGHT_WHALE_PASS = 2;
-    /// @dev Weight for 10% lazy pass discount boon
-    uint16 private constant BOON_WEIGHT_LAZY_PASS_10 = 30;
-    /// @dev Weight for 25% lazy pass discount boon
-    uint16 private constant BOON_WEIGHT_LAZY_PASS_25 = 8;
-    /// @dev Weight for 50% lazy pass discount boon
-    uint16 private constant BOON_WEIGHT_LAZY_PASS_50 = 2;
     /// @dev Combined weight of deity pass discount boons (10% + 20% + 35%)
     uint16 private constant BOON_WEIGHT_DEITY_PASS_ALL = 40;
-    /// @dev ETH and FLIP stake-boon weights taper by bonus size (200/50/10).
-    uint16 private constant BOON_WEIGHT_DEGEN_ETH_4 = 200;
-    uint16 private constant BOON_WEIGHT_DEGEN_ETH_8 = 50;
-    uint16 private constant BOON_WEIGHT_DEGEN_ETH_12 = 10;
-    uint16 private constant BOON_WEIGHT_DEGEN_FLIP_4 = 200;
-    uint16 private constant BOON_WEIGHT_DEGEN_FLIP_8 = 50;
-    uint16 private constant BOON_WEIGHT_DEGEN_FLIP_12 = 10;
-    /// @dev WWXRP tiers keep equal draw weight and zero nominal box-budget value.
-    uint16 private constant BOON_WEIGHT_WWXRP_4 = 200;
-    uint16 private constant BOON_WEIGHT_WWXRP_8 = 200;
-    uint16 private constant BOON_WEIGHT_WWXRP_12 = 200;
-    /// @dev Craps stake-boon weights, taken from the coinflip family they mirror.
-    uint16 private constant BOON_WEIGHT_CRAPS_5 = 200;
-    uint16 private constant BOON_WEIGHT_CRAPS_10 = 40;
-    uint16 private constant BOON_WEIGHT_CRAPS_15 = 8;
-    /// @dev Fixed nominal deity-pass price (mid-curve k=16: BASE + 16·17/2 ether); the nominal
-    ///      figure BOON_FIXED_WEIGHTED_MAX was derived from, not read at runtime.
-    uint256 private constant DEITY_PASS_NOMINAL_PRICE = DEITY_PASS_BASE + 136 ether;
     /// @dev Total weight sum when decimator boons are allowed (includes the +200 quest-shield weight)
     ///      WWXRP occupies 2008..2607 and craps occupies the tail 2608..2855.
     ///      The deity roll's decimator and deity-pass skip bands are unchanged.
@@ -766,30 +689,6 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     ///      LootBoxWhalePassJackpot event for downstream indexers; the
     ///      actual ticket materialization happens in claimWhalePass.
     uint32 private constant WHALE_PASS_ENTRIES_PER_LEVEL = 2;
-
-    /// @dev Coinflip boon cap for max deposit (100k FLIP). FLIP-denominated, so its ETH value
-    ///      scales with the ticket price: the nominal figure BOON_PRICE_WEIGHT was derived from,
-    ///      not read at runtime.
-    uint256 private constant COINFLIP_BOON_MAX_DEPOSIT = 100_000;
-
-    /// @dev Decimator boon cap for base amount (50k FLIP). FLIP-denominated, so its ETH value
-    ///      scales with the ticket price: the nominal figure BOON_PRICE_WEIGHT was derived from,
-    ///      not read at runtime.
-    uint256 private constant DECIMATOR_BOON_CAP = 50_000;
-
-    /// @dev 15% lootbox boost in basis points
-    uint16 private constant LOOTBOX_BOOST_15_BONUS_BPS = 1500;
-
-    /// @dev 25% lootbox boost in basis points
-    uint16 private constant LOOTBOX_BOOST_25_BONUS_BPS = 2500;
-
-    /// @dev 5% lootbox boost in basis points
-    uint16 private constant LOOTBOX_BOOST_5_BONUS_BPS = 500;
-
-    /// @dev Whale pass standard price; the nominal figure BOON_FIXED_WEIGHTED_MAX was derived
-    ///      from, not read at runtime.
-    uint256 private constant WHALE_PASS_STANDARD_PRICE =
-        4 ether;
 
     /// @notice Thrown when a deity attempts to issue a boon to themselves.
     error SelfBoon();

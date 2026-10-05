@@ -96,13 +96,6 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///         and holds only a warm-up or skipped day's detached jackpot battle.
     uint256 internal constant _BONUS_SLOTS_PER_DAY = 8;
 
-    /// @notice The routine windows' tiers, as whole FLIP: total buy-in (bankroll PLUS bounty),
-    ///         the bounty inside it, and the house seed that rides on top. The opener draws its
-    ///         tier flat; every later routine window draws 7:2:1.
-    uint256 internal constant _BONUS_SMALL_BANKROLL = 600;
-    uint256 internal constant _BONUS_MED_BANKROLL = 1800;
-    uint256 internal constant _BONUS_LARGE_BANKROLL = 4500;
-
     /// @notice THE SCHEDULED FORMAT, and the whole of it. Every protocol-scheduled Dice Run runs
     ///         a bankroll FIVE rounds deep and chases FIVE times that bankroll. A high-water run
     ///         ranks on how far it got rather than how fast it arrived, so drawing another target
@@ -211,7 +204,6 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///
     ///         The rare rung is tested first and OVERRIDES, so a field never pays both.
     uint256 internal constant _PROG_ROUTINE_COMMON_BPS = 500;
-    uint256 internal constant _PROG_ROUTINE_RARE_BPS = 1000;
 
     /// @dev The rare rung as DOUBLINGS of the common share, which is how the award applies it:
     ///      `_PROG_ROUTINE_COMMON_BPS << _PROG_RARE_DOUBLINGS` is the rare rung above.
@@ -272,22 +264,12 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
 
     uint256 internal constant _CB_CLOSE_MASK = 0xFFFFFFFFFF;
 
-    /// @notice The two sizes a protocol day's high-roller lane can take, and how often. One roll
-    ///         off the day's own committed word decides which, 79 of 90 buckets the smaller: a
-    ///         high roller buys `_HIGH_MULT` copies of the run AND posts that many bounties, so
-    ///         the tail day is a hundred times the ordinary seat rather than ten.
-    uint256 internal constant _HIGH_MULT = CrapsPriceLib.HIGH_BASE;
-    uint256 internal constant _HIGH_MULT_TAIL = CrapsPriceLib.HIGH_TAIL;
-
     /// @notice What part of the HIGH lane's own component goes to the main boost rather than
     ///         staying with the lane that earned it. Two parts in five — so twelve percent of high
     ///         action reads 4.8 points to the main lane and 7.2 to the high one.
     uint256 internal constant _HIGH_MAIN_NUM = 2;
     uint256 internal constant _HIGH_MAIN_DEN = 5;
 
-    /// @dev Separates the per-bet rounding roll from everything else on the same committed word.
-    uint256 internal constant CRAPS_ROUND_TAG = 0x4372617073526f756e64; // "CrapsRound"
-    uint256 internal constant SCATTER_TAG = 0x437261707353636174746572; // "CrapsScatter"
     uint256 internal constant SCHEDULE_TAG = 0x43726170735363686564756c65; // "CrapsSchedule"
     uint256 internal constant TIE_TAG = 0x4372617073546965; // "CrapsTie"
     /// @dev Domain tag for a battle's match key.
@@ -437,69 +419,6 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     // own seed is a function of the day's word and is never stored here.
     uint256 internal constant _BG_SEED_SHIFT = 219;
     uint256 internal constant _BG_SEED_MASK = 0x7FFFFFFF;
-
-    /// @notice A placed bet slip, decoded — what `_betOf` returns. Its logical ID is
-    ///         `(slot << 64) | seat`; scheduled records become unavailable after bank reuse.
-    /// @param player        Who staked it, and the only address any payment can ever reach.
-    /// @param slot          The battle this slip sits in. Its terms — bankroll, target, bounty,
-    ///                      bar — are the SLOT's; read them with `_customBattleOf` or
-    ///                      `_bonusTermsFor`.
-    /// @param seat          This entrant's place in its field, 1-based — the low half of its id.
-    /// @param settled       Whether it has been resolved, read off the slot's resolve cursor.
-    /// @param battleClaimed Whether this slip's battle has paid. A battle pays the instant its
-    ///                      last seat scores, so this is simply whether the field finished.
-    /// @param chips         The ten leg counts as one thirty-bit word, three bits each — the nine
-    ///                      light legs at bits 0..26 and the dark side at 27..29. Zero is a blank
-    ///                      ticket; the draw places all ten chips.
-    /// @dev The header is created at placement. Its chip slice may change through `amendSlip`
-    ///      before close; settlement never writes the bet, and the slot's cursor carries its
-    ///      settled mark.
-    struct Bet {
-        address player;
-        uint64 slot;
-        uint64 seat;
-        bool settled;
-        bool battleClaimed;
-        uint256 chips;
-    }
-
-    /// @notice One battle's scoreboard, decoded — what `_battleOf` returns.
-    /// @param entrants     Slips entered (and still in) the battle.
-    /// @param resolved     Entrants whose runs have settled.
-    /// @param winnerId     The winning seat within this slot; combine it with the slot for the bet id.
-    /// @param finalized    Every entrant resolved: the scoreboard is the verdict.
-    /// @param winningStop  The winning outcome class, meaningful once finalized.
-    /// @param winningHands The winning hand count — meaningful once finalized, and only where the
-    ///                     composite encodes it: a BUST, whose primary leads with its shooter
-    ///                     count. A goal ranks on its high point alone and reports zero here.
-    /// @param winningPeak  The winner's HIGH POINT in whole FLIP, once finalized.
-    /// @param winningEnd   The winner's raw ENDING bankroll in whole FLIP, once finalized — what
-    ///                     it was actually paid on, which a goal's peak may sit well above.
-    /// @dev The high point AS A MULTIPLE is not restated here: a battle key is a hash, so this
-    ///      reader cannot recover the starting bankroll to divide by. `CrapsBattleFinalized`
-    ///      carries `winningScoreBps` for exactly that reason, and a caller holding the window's
-    ///      terms divides `winningPeak` by them.
-    /// @param battleStake  One entrant's stake (wei).
-    /// @param seed         FLIP donated onto this battle by third parties (wei), via `donate`;
-    ///                     zero if nobody has. Never the protocol's own boost — a window's boost
-    ///                     is drawn from the word that settles it and read through `boostOf`.
-    ///                     Every field that forms pays it out — there is no head count below
-    ///                     which it falls back out of the pot.
-    /// @param pot          `battleStake x entrants`, plus banked seed (wei). A tier boost is drawn
-    ///                     from the word that settles the field and is therefore not included here.
-    struct Battle {
-        uint64 entrants;
-        uint64 resolved;
-        uint64 winnerId;
-        bool finalized;
-        Craps.SlipStop winningStop;
-        uint16 winningHands;
-        uint256 winningPeak;
-        uint256 winningEnd;
-        uint256 battleStake;
-        uint256 seed;
-        uint256 pot;
-    }
 
     /// @dev Resolved seat payment and action totals, returned as one memory pointer to keep the
     ///      batch resolver within the compiler's stack limit. This adds no persistent storage.
@@ -964,9 +883,8 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///
     ///         That figure is a CEILING, not a promise: every window is a lottery whose rung is
     ///         drawn from the word that SETTLES it, so it cannot be read while the field is still
-    ///         forming. `_bonusBoostBand` gives the spread it will be drawn from, `boostOf` gives
-    ///         the drawn figure the moment the table's word lands — which is after entry shuts and
-    ///         before any hand is settled — and none of it is stored. Entry is open from here
+    ///         forming. The drawn figure lands with the table's word — which is after entry shuts
+    ///         and before any hand is settled — and none of it is stored. Entry is open from here
     ///         until the window is armed.
     /// @param bankroll The bankroll every entrant burns; the remaining numeric terms follow it.
     event CrapsBonusOpened(
@@ -1117,7 +1035,6 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     uint256 internal constant _JACKPOT_PRICE = CrapsPriceLib.JACKPOT_FEE;
     uint256 internal constant _AWARD_UNITS_SHIFT = 224;
     uint256 internal constant JACKPOT_MULT_TAG = 0x436f696e447261774d756c7469706c696572;
-    uint256 internal constant JACKPOT_AWARDED_TAG = 0x4a61636b706f7441776172646564;
 
     event JackpotBattleLocked(uint64 indexed slot, uint24 requestDay, uint256 added, uint256 paidEntries);
     event JackpotBattleStarted(uint64 indexed slot, uint24 level, uint256 drawnEntries, uint256 drawnUnits, uint256 word);

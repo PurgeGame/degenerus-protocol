@@ -42,7 +42,6 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {JackpotBucketLib} from "../libraries/JackpotBucketLib.sol";
 import {TicketWorkPlan} from "../libraries/JackpotTicketPlan.sol";
 import {IDegenerusGameWhaleModule, IDegenerusGameJackpotDrawModule, IDegenerusGameTicketModule} from "../interfaces/IDegenerusGameModules.sol";
-import {IDegenerusJackpots} from "../interfaces/IDegenerusJackpots.sol";
 
 /// @dev Minimal WWXRP surface for the golden-ticket consolation mint. The delegatecall
 ///      context makes msg.sender the Game, which is a whitelisted WWXRP minter.
@@ -182,8 +181,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     // -------------------------------------------------------------------------
 
     IStETH internal constant steth = IStETH(ContractAddresses.STETH_TOKEN);
-    IDegenerusJackpots internal constant jackpots =
-        IDegenerusJackpots(ContractAddresses.JACKPOTS);
 
     // -------------------------------------------------------------------------
     // Constants — Timing & Thresholds

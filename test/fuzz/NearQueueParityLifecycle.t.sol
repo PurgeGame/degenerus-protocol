@@ -16,7 +16,7 @@ contract NearParityLifecycleHarness is TicketCheckpointHarness {
     function finalJackpotDay() external { jackpotCounter = _jackpotDays() - 1; }
     function buy(address buyer, uint32 scaled) external returns (uint24 target) {
         target = _activeTicketLevel();
-        _queueEntriesScaled(buyer, target, scaled, false);
+        _queueEntriesScaled(buyer, target, scaled);
     }
     function total(uint24 lvl, address buyer) external view returns (uint32) {
         return _entriesOwedTotal(lvl, buyer);

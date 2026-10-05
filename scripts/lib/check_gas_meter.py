@@ -43,7 +43,7 @@ REVIEWED = {
 GAS_READ = re.compile(r"\b(?:gasleft|gas)\s*\(")
 AMBIENT = re.compile(r"\b(?:msg\s*\.\s*sender|tx\s*\.|block\s*\.|blockhash\s*\()")
 DRAINS = set("""_seatEntry _runRound _resolveFoilBuyer _bucketAppendRun _bucketAppendLanes
-_rollRemainder""".split())
+""".split())
 
 # This entry allocates a permanent ID; it never derives ticket entropy. Pin the
 # exact access-control statement, rather than exempting the whole function.

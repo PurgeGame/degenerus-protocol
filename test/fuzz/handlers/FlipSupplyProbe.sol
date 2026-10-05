@@ -40,7 +40,7 @@ interface ICoinflipClaim {
 ///      event is emitted WITHOUT the matching field change:
 ///        * totalSupply += amt  <=> Transfer(from == 0, to, amt)        (_mint normal, vaultMintTo)
 ///        * totalSupply -= amt  <=> Transfer(from, to == 0, amt)        (_burn normal, ->VAULT, ->SDGNRS)
-///        * vaultAllowance += amt <=> VaultEscrowRecorded(sender, amt)  (_mint->VAULT, ->VAULT, vaultEscrow, tombstone)
+///        * vaultAllowance += amt <=> VaultEscrowRecorded(sender, amt)  (_mint->VAULT, ->VAULT, tombstone)
 ///        * vaultAllowance -= amt <=> VaultAllowanceSpent(spender, amt) (_burn->VAULT, vaultMintTo)
 ///      A normal (both-nonzero) Transfer moves no supply and is ignored. So per call:
 ///        totalSupply()        == t0 + Sigma[Transfer(from==0)] - Sigma[Transfer(to==0)]

@@ -29,23 +29,21 @@ PURE-DERIVE	PARAM	seed	_playerDraw	Craps.sol	private pure four-word keccak used 
 PURE-DERIVE	PARAM	seed	_runSettlement	Craps.sol	private pure hand machine over the committed seed; the board is the frozen, scattered slip
 PURE-DERIVE	PARAM	seed	_runSideSettlement	Craps.sol	private pure place/hardway specialization of _runSettlement over the same committed seed
 PURE-DERIVE	PARAM	word	_scatterInto	Craps.sol	internal pure: throws the unplaced chips at legs keccak(word, i) % 10; word is hash2(settling word, owner), passed to CrapsEngine.settleRanked by the table
-PURE-DERIVE	PARAM	seed	_settleSlip	Craps.sol	internal pure engine; seed = _crapsSeed(word, slot) from the caller; board, owner and boost row fixed at entry close, before the slot's index word existed
+PURE-DERIVE	PARAM	seed	_settleSlip	Craps.sol	internal pure engine; seed = hash3(_CRAPS_SEED_DOMAIN, word, slot) from the caller; board, owner and boost row fixed at entry close, before the slot's index word existed
 PURE-DERIVE	PARAM	seed	_survived	Craps.sol	internal pure second-chance coin keccak(tag, seed, round, owner); owner fixed at placement, seed the table's
 PURE-DERIVE	PARAM	seed	handSeed	Craps.sol	internal pure keccak(seed, hand i); no actor input
 PURE-DERIVE	PARAM	word	_bonusRoll	CrapsBattle.sol	private pure hash2(word, period+1): the window's draw off the day word
 PURE-DERIVE	PARAM	word	_boostMult	CrapsBattle.sol	internal pure hash3(word, key, BOOST_TAG) % 1000 -> 1/4/40/400 rung on the settling index word
-PURE-DERIVE	PARAM	word	_boostUnits	CrapsBattle.sol	internal view: _boostBase(w) (day budget fixed at open) x _boostMult(word, key) / granule; rung pure in the settling word
 CONSUMER-SEALED	PARAM	word	_enterDayLane	CrapsBattle.sol	word = rngWordByDay[today] (_dailyWordAt, sealed at _applyDailyRng); draws the day's PUBLISHED terms/highMult seen before buying; dice ride the slot's later index word; _backfillGapDays is a second day-word writer; the day field freezes in _writeDaySeat
 CONSUMER-SEALED	PARAM	word	_foldHigh	CrapsBattle.sol	settling index word (post-arm); folds the high seat into _highField[key] with the same tie-break; a sole lane rides that seat's own run
 PURE-DERIVE	PARAM	word	_highBoostUnits	CrapsBattle.sol	internal view: _highBase(w) (the day's high budget, stored once at open) x _boostMult(word, w.key); rung pure in the settling word, base a magnitude
 PURE-DERIVE	PARAM	word	_laneBoost	CrapsBattle.sol	private view: rounds the full _highBoostUnits(w, word), without an activity-score reduction; nothing joins after the arm
 EXEMPT-ADVANCE	PARAM	word	_openWindow	CrapsBattle.sol	reached only via openBonusDay (onlyGame, called by rngGate right after _applyDailyRng sealed rngWordByDay[today]); banks the window's published stake terms once per day
-NOT-RNG	PARAM	winnerWord	_payProgressive	CrapsBattle.sol	winnerWord = _bets[winnerId], the winning seat's packed bet HEADER (owner in the low 160 bits; no activity score); not a VRF value
 CONSUMER-SEALED	PARAM	word	_resolve	CrapsBattle.sol	same settling index word as _settleBatch; header (owner, chips, flags) frozen at entry close (amendSlip gates on _joinableSlot); only the scoreboard is written; DAY tickets amend under the period-0 test (:1378-1382), not _joinableSlot; upgradeDayWindows is a second post-entry header writer, safe because a shut window reverts it wholesale
 PURE-DERIVE	PARAM	word	_routineWeight	CrapsBattle.sol	Pure sum of 1<<_tierPick over five ordinary windows; shared tier decoder keeps pricing and budget weights equal
 CONSUMER-SEALED	PARAM	word	_scoreBattle	CrapsBattle.sol	word = the slot's settling index word (sealed after the arm); folds the frozen composite into _battles[key], tie-breaks on the word, pays via _payout when the last seat lands
 CONSUMER-SEALED	PARAM	word	_settleBatch	CrapsBattle.sol	word = _wordAt(_slotIndex[slot]-1), index bound at arm to _currentIndex()+1 (unworded); seats 1..entrants and their headers froze at entry close, before the arm; the seat->betId map recomputes ownN = entrants - dayTickets at settle, sound because the _dayTickets low bits stop at period-0 close
-PURE-DERIVE	PARAM	word	_settlementOf	CrapsBattle.sol	internal pure: scatter keyed hash3(word, SCATTER_TAG, owner), engine seed _crapsSeed(word, w.bound), rounding hash3(word, CRAPS_ROUND_TAG, betId); header frozen pre-arm; shared with the preview
+PURE-DERIVE	PARAM	word	_settlementOf	CrapsBattle.sol	internal pure: scatter keyed hash3(word, SCATTER_TAG, owner), engine seed hash3(_CRAPS_SEED_DOMAIN, word, w.bound), rounding hash3(word, CRAPS_ROUND_TAG, betId); header frozen pre-arm; shared with the preview
 PURE-DERIVE	PARAM	word	_tieBreak	CrapsBattle.sol	private pure hash2(word, challenger) > hash2(word, leader): random total order on the settling word, arrival-order free
 PURE-DERIVE	ARG	CrapsPriceLib.tier	_tierPick	CrapsBattle.sol	Pure shared tier decoder of _bonusRoll(word,period); bookends use the same fixed period, and entry terms and allocation weights use the same tier
 PURE-DERIVE	PARAM	word	_tierPick	CrapsBattle.sol	internal pure size tier from _bonusRoll(word, period); bit-identical to _bonusPreset's draw
@@ -84,9 +82,7 @@ PURE-DERIVE	ARG	CrapsPriceLib.tier	_tierPick	JackpotBattle.sol	Pure daily/window
 PURE-DERIVE	PARAM	word	_tierPick	JackpotBattle.sol	Pure daily/window-term helper on the committed day word and fixed period/domain; no post-commit selecting input.
 PURE-DERIVE	PARAM	word	_windowTermsOn	JackpotBattle.sol	Pure daily/window-term helper on the committed day word and fixed period/domain; no post-commit selecting input.
 CONSUMER-SEALED	PARAM	word	finalizeBattle	JackpotBattle.sol	Only the pinned table invokes finalization; the slot was sealed before the active read word, and canonical resolved seats determine standing.
-NOT-RNG	PARAM	winnerWord	payProgressive	JackpotBattle.sol	Packed winning-seat header (owner and standing), fixed by the resolved field; not a VRF word.
 CONSUMER-SEALED	PARAM	word	prepareJackpotBattle	JackpotBattle.sol	GAME-only via table delegate after paid-entry lock; forwards the committed battle word to _prepare and returns its frozen word, collection cursor and remaining target
-PURE-DERIVE	PARAM	word	_crapsSeed	LootboxCraps.sol	internal pure hash3(DOMAIN, word, index): the table seed; word = _wordAt(index) fetched by the caller
 PURE-DERIVE	PARAM	word	_drawHash	WWXRP.sol	private view keccak(domain, this, day, word); word = game.rngWordForDay(day+1) in claim(): entries bind to the wall day at enter(), day+1 cannot seal until the next day's advance
 EXEMPT-ADVANCE	PARAM	rngWord	resolveIncinerator	WWXRP.sol	msg.sender==GAME; called by _consolidatePoolsAndRewardJackpots on a skipped x00 BAF; entries recorded only while level%100==99, closed by the transition that requests the word
 NOT-RNG	PARAM	word	decode	libraries/CrapsPreferenceLib.sol	packed pass balances and saved board, not randomness; mask bits 64-83, ignore initialized sentinel
@@ -311,8 +307,6 @@ NOT-RNG	PARAM	word	_lbSet	storage/DegenerusGameStorage.sol	packed box-order fiel
 PURE-DERIVE	PARAM	rngWord	_packFoilDraw	storage/DegenerusGameStorage.sol	domain-separated 128-bit payout seed from the exact committed word and logical draw day, packed with board/level and explicit format flag
 PURE-DERIVE	PARAM	finalWord	_rawDailyRngWord	storage/DegenerusGameStorage.sol	Undo the frozen callback nudge modulo2^256 for exact raw replay/gap input; never re-publish it as read entropy.
 EXEMPT-ADVANCE	PARAM	word	_recordDailyRng	storage/DegenerusGameStorage.sol	advance-only tag-authenticated ring write
-PURE-DERIVE	ARG	EntropyLib.hash2	_rollRemainder	storage/DegenerusGameStorage.sol	hash2(entropy, rollSalt): fractional-ticket roll; pure
-PURE-DERIVE	PARAM	entropy	_rollRemainder	storage/DegenerusGameStorage.sol	private pure hash2(entropy, rollSalt) % 100 < rem
 CONSUMER-SEALED	ARG	ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall	_runHumanBoxWork	modules/GameAfkingModule.sol	FIFO-admitted committed order and published active word pass atomically to Lootbox settlement; no live owner/index choice enters the seed.
 CONSUMER-SEALED	PARAM	word	payBattlePot	JackpotBattle.sol	Self-only table finalization; fixed settlement word and frozen field select the named shooter for the stored longest shared hand; no reseed or entrant mutation.
 

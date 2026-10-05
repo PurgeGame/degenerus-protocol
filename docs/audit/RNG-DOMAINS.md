@@ -275,7 +275,7 @@ named constants in the consumer; full string hashes are constant expressions.
 | Degenerette player ticket | `H(H(word, index, heroSymbol, spin), PLAYER_TICKET_TAG)` | Shared across owners, bet ids, stakes and spin counts for the same hero; different heroes regenerate the other cells; no settlement inputs |
 | WWXRP box/foil spin | `H(boxSpinSeed, WWXRP_DRAW_TAG)`, result `H(that, RESULT_TICKET_TAG)` | Internal box and foil reward spins only (no player-funded WWXRP bets); derived from that box's root, separate from the ETH/FLIP board; rig `H(spinSeed, WWXRP_RIG_SALT)` |
 | Degenerette survival / rounding / record | `H(word, player, betId, respectiveTag)` | Owner + index-scoped bet id (queue position + 1, see DEGENERETTE-BET-QUEUE.md); tags `BET_SURVIVAL_TAG`, `FLIP_ROUND_TAG`, `RECORD_SPIN_TAG`; settlement batch excluded |
-| Craps dice | `_crapsSeed(word, bound)` | Shared table sequence; existing engine domains and rotating shooter retained |
+| Craps dice | `H(_CRAPS_SEED_DOMAIN, word, bound)` | Shared table sequence; existing engine domains and rotating shooter retained |
 | Craps scatter | `H(word, SCATTER_TAG, player)` | Per-owner board, distinct from lootbox boon |
 | Craps bounty boost | `H(word, bound, BOOST_TAG)` | Window identity; battle financial key excluded |
 | Craps schedule | `H(word, SCHEDULE_TAG, period)` | Fixed scheduled period |

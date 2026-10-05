@@ -3,11 +3,12 @@ pragma solidity 0.8.34;
 
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {TicketLevelPrep} from "../helpers/TicketLevelPrep.sol";
 
 /// @dev Setup advances completed levels; admission, lane mutation, tombstones,
 ///      queue release and inventory construction use production primitives.
 ///      This is not a complete engine reachability campaign.
-contract RecordLifetimeHarness is DegenerusGameStorage {
+contract RecordLifetimeHarness is TicketLevelPrep {
     function atLevel(uint24 current) external { level = current; }
     function add(address owner, uint24 target, uint32 amount) external { _queueEntries(owner, target, amount, false); }
     function flip() external { ticketWriteSlot = !ticketWriteSlot; }

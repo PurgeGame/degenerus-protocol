@@ -136,7 +136,7 @@ contract CrapsConservationInv is CrapsPins {
     function invariant_resolvedNeverExceedsEntrants() public view {
         uint256 n = handler.slotCount();
         for (uint256 i = 0; i < n; ++i) {
-            CrapsBattle.Battle memory b = craps.battleOf(craps.keyOfSlot(handler.slotAt(i)));
+            CrapsViews.Battle memory b = craps.battleOf(craps.keyOfSlot(handler.slotAt(i)));
             assertLe(b.resolved, b.entrants, "resolution cursor passed the head count");
         }
     }

@@ -177,31 +177,6 @@ library DegenerusTraitUtils {
       |  Packs 4 traits into 32-bit value for efficient storage.             |
       +======================================================================+*/
 
-    /// @notice Packs 4 quadrant traits derived from a 256-bit random seed into 32 bits
-    /// @dev Splits 256-bit seed into 4 x 64-bit words, generates 6-bit trait from each,
-    ///      adds quadrant identifier, and packs into 32-bit value.
-    ///
-    ///      Seed usage:
-    ///      - bits [63:0]    -> Trait A (quadrant 0)
-    ///      - bits [127:64]  -> Trait B (quadrant 1)
-    ///      - bits [191:128] -> Trait C (quadrant 2)
-    ///      - bits [255:192] -> Trait D (quadrant 3)
-    ///
-    ///      Output format: [traitD:8][traitC:8][traitB:8][traitA:8]
-    ///      Each trait byte: [QQ][CCC][SSS] (quadrant, color, symbol)
-    /// @param rand 256-bit random seed (typically from keccak256)
-    /// @return 32-bit packed traits value
-    function packedTraitsFromSeed(uint256 rand) internal pure returns (uint32) {
-        // Extract 6-bit trait from each 64-bit word, add quadrant identifier
-        uint8 traitA = traitFromWord(uint64(rand)); // Quadrant 0: bits 7-6 = 00
-        uint8 traitB = traitFromWord(uint64(rand >> 64)) | 64; // Quadrant 1: bits 7-6 = 01
-        uint8 traitC = traitFromWord(uint64(rand >> 128)) | 128; // Quadrant 2: bits 7-6 = 10
-        uint8 traitD = traitFromWord(uint64(rand >> 192)) | 192; // Quadrant 3: bits 7-6 = 11
-
-        // Pack into 32 bits: [D:24-31][C:16-23][B:8-15][A:0-7]
-        return uint32(traitA) | (uint32(traitB) << 8) | (uint32(traitC) << 16) | (uint32(traitD) << 24);
-    }
-
     /// @notice Four Degenerette traits with uniform symbols and colors, including gold.
     /// @dev Each lane uses disjoint 3-bit slices; format [QQ][CCC][SSS] per byte. Lane q takes
     ///      its color from bits [64q, 64q+2] and its symbol from bits [64q+32, 64q+34]; the
@@ -224,7 +199,7 @@ library DegenerusTraitUtils {
     /*+======================================================================+
       |                  FOIL TRAIT GENERATION (ACTIVITY-BOOSTED)            |
       +======================================================================+
-      |  Sibling producers to traitFromWord / packedTraitsFromSeed that      |
+      |  Sibling producers to traitFromWord that                             |
       |  lift the rare color tiers by an activity-frozen multiplier M =      |
       |  multBps / 10000 (10000 = 1x). The boost is tapered by rare-rank:    |
       |  gold takes the full M, each less-rare tier tapers toward 1x, and    |
@@ -232,7 +207,7 @@ library DegenerusTraitUtils {
       |  Color cutoffs are computed in a /15360 super-ladder (15360 = 256 x  |
       |  60; x60 clears the /5 taper denominator and the 3-way common split) |
       |  so the taper resolves exactly. Symbol stays uniform 1/8 from the    |
-      |  high word and the pack layout is identical to packedTraitsFromSeed. |
+      |  high word and each byte keeps the [QQ][CCC][SSS] trait layout.      |
       +======================================================================+*/
 
     /// @notice Builds the /15360 tapered color-cutoff ladder for an activity

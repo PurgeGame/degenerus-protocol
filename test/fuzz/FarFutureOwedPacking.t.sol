@@ -15,9 +15,10 @@ contract FuturePackingHarness is DegenerusGameStorage {
     function read(address p, uint24 key) external view returns (uint80) { return _entriesOwed(key, p); }
     function total(address p, uint24 lvl) external view returns (uint32) { return _entriesOwedTotal(lvl, p); }
     function credit(address p, uint24 lvl, uint32 n) external { _queueEntries(p, lvl, n, false); }
-    function creditScaled(address p, uint24 lvl, uint32 n) external { _queueEntriesScaled(p, lvl, n, false); }
+    function creditScaled(address p, uint24 lvl, uint32 n) external { _queueEntriesScaled(p, lvl, n); }
     function range(address p, uint24 lvl, uint24 n, uint24 stride, uint32 amount) external {
-        _queueEntryRangeStrided(p, lvl, n, stride, amount, false);
+        _queueEntryRangeStridedCore(p, lvl, n, stride, amount, _mintCeiling(), rngLockedFlag,
+            ticketWriteSlot ? TICKET_SLOT_BIT : uint24(0));
     }
     function consume(uint24 key) external {
         uint256[] storage q = ticketQueue[_ticketQueueStorageKey(key)];

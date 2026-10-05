@@ -12,7 +12,7 @@ import {Vm} from "forge-std/Vm.sol";
 
 contract TicketCheckpointHarness is DegenerusGameTicketModule {
     function initialize(uint24 lvl) external { level = lvl; }
-    function credit(address player, uint24 lvl, uint32 scaled) external { _queueEntriesScaled(player, lvl, scaled, false); }
+    function credit(address player, uint24 lvl, uint32 scaled) external { _queueEntriesScaled(player, lvl, scaled); }
     function commit(uint256 word, bool future) external {
         rngWordCurrent = word < 2 ? 2 : word;
         _setRngSessionPublished(true);

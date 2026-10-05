@@ -17,7 +17,13 @@ contract TraitUtilsTester {
         return DegenerusTraitUtils.traitFromWord(rnd);
     }
 
+    /// @dev Reference packing of four quadrant traits from one 256-bit seed: 64 bits per quadrant
+    ///      through `traitFromWord`, quadrant tag in bits 7-6, output [D:8][C:8][B:8][A:8].
     function packedTraitsFromSeed(uint256 rand) external pure returns (uint32) {
-        return DegenerusTraitUtils.packedTraitsFromSeed(rand);
+        uint8 traitA = DegenerusTraitUtils.traitFromWord(uint64(rand));
+        uint8 traitB = DegenerusTraitUtils.traitFromWord(uint64(rand >> 64)) | 64;
+        uint8 traitC = DegenerusTraitUtils.traitFromWord(uint64(rand >> 128)) | 128;
+        uint8 traitD = DegenerusTraitUtils.traitFromWord(uint64(rand >> 192)) | 192;
+        return uint32(traitA) | (uint32(traitB) << 8) | (uint32(traitC) << 16) | (uint32(traitD) << 24);
     }
 }

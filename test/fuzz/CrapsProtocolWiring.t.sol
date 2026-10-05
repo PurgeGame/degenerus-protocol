@@ -11,6 +11,7 @@ import {GameAfkingModule} from "../../contracts/modules/GameAfkingModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
+import {CrapsViews} from "../craps/CrapsViews.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 
 /// @title Craps protocol wiring
@@ -197,7 +198,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         vm.prank(ContractAddresses.CREATOR);
         uint256 betId = vault.crapsEnterBattle(slot, board, 1);
 
-        CrapsBattle.Bet memory bet = crapsBattle.betOf(betId);
+        CrapsViews.Bet memory bet = crapsBattle.betOf(betId);
         assertEq(bet.player, address(vault), "the proxy seated its owner instead of the vault");
         assertEq(bet.chips, board, "the packed board changed across the vault call");
 

@@ -520,3 +520,28 @@ This is focused commit verification, not a completed whole-repository release
 audit, deep invariant campaign, symbolic campaign or remote CI run. Historical
 counts and source-pinned report drafts do not attest this revision. Refreshing the
 audit snapshot authenticates the current inputs only; it does not expand that scope.
+
+## Dead-code removal (2026-10-05)
+
+The 10-05 dead-code review's findings are applied. Four external entry points with no
+production caller are removed with their interface declarations: `FLIP.vaultEscrow`,
+`JackpotBattle.completeRngSlot` and `payProgressive`, and `prepareTicketLevel` on the foil
+pack module. Helpers with no caller are deleted, test-only helpers and the decoded `Bet` /
+`Battle` structs move into test support, the always-false `rngBypass` argument leaves the
+scaled, range and half-pass queue helpers, and unused constants are removed. The four craps
+RNG domain tags that the engine and the hottest-shooter payout spelled as literals are named
+in `Craps.sol` and used at those sites.
+
+Compiled before and after on the same tree, 54 production contracts are byte-identical with
+metadata stripped, including DegenerusGame and CrapsBattle. The removals shrink the foil pack
+module by 242 bytes, FLIP by 184, JackpotBattle by 164, the whale module by 86, the AFKing
+module by 84 and the mint module by 34. CrapsEngine (+32) and the jackpot module (+31) change
+only through via-IR code ordering; a differential fuzz of the old and new CrapsEngine runtime
+returned identical data for every sampled settlement and used 0.14% less gas.
+
+The 94 affected Foundry roots ran 1,197 passing and 21 failing tests, and nine affected
+Hardhat files 22 failing tests; every failure fails by the same name on the tree before the
+removal (older suites not yet migrated to whole-token units). Rebased onto the redemption
+commit, the complete Solidity source/test tree type-checks, all eleven source gates,
+interface coverage and the storage-layout oracle pass, and the two test files edited by both
+changes pass all 80 checks.

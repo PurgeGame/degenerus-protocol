@@ -80,9 +80,6 @@
 CLASS	IDENTIFIER	FUNCTION	FILE	MODE
 # Slot0 flags contain the daily-frozen eight-bit nudge input. Runtime freezes that
 # count, not the mutable neighboring lifecycle bits; packing fuzz proves isolation.
-ACCESSOR	_dailyWordAt	_bonusBoostBand	CrapsBattle.sol	READ
-ACCESSOR	_dailyWordAt	_bonusDayOf	CrapsBattle.sol	READ
-ACCESSOR	_dailyWordAt	_bonusTermsFor	CrapsBattle.sol	READ
 CONSUMER-SEALED	_dailyWordAt	_enterToday	CrapsBattle.sol	READ
 GATE	_dailyWordAt	_reserveRun	CrapsBattle.sol	READ	Future-day existence check (word != 0 -> DayNotReservable) per reserved day; tags read once, no value decision.
 CONSUMER-SEALED	_dailyWordAt	_shareOf	CrapsBattle.sol	READ
@@ -107,7 +104,6 @@ CONSUMER-SEALED	_dailyWordAt	_shareOf	JackpotBattle.sol	READ
 CONSUMER-SEALED	_dailyWordAt	_windowTerms	JackpotBattle.sol	READ
 CONSUMER-SEALED	_dailyWordAt	lockJackpotBattle	JackpotBattle.sol	READ
 ACCESSOR	_dailyWordAt	_dailyWordAt	LootboxCraps.sol	READ
-CONSUMER-SEALED	_wordAt	_seedFor	LootboxCraps.sol	READ
 ACCESSOR	_wordAt	_wordAt	LootboxCraps.sol	READ
 EXEMPT-ADVANCE	_recordedDailyWord	_afKingSubDraw	modules/DegenerusGameAdvanceModule.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
 EXEMPT-ADVANCE	_currentRngWord	applyDailyGap	modules/DegenerusGameAdvanceModule.sol	READ	Decoded delivered entropy; waiting1 returns absence; accepted final words are >=2. Same locked daily/terminal consumption as before.

@@ -39,7 +39,6 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
 import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
 import {CrapsPriceLib} from "../libraries/CrapsPriceLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
-import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 
 interface IGameMinerMaintenance {
@@ -228,33 +227,11 @@ abstract contract DegenerusGameStorage {
     ///      entry by entry (thin rounds cost more than per-trait runs).
     uint256 internal constant ROUND_MIN_SEATS = 4;
 
-    // ---- Ticket-drain unit bound ------------------------------------------------------------
-    // Charge each actual bucket write from its stored value, before replacing stale headers:
-    // zero backing costs three units; nonzero backing costs one. Header-tail storage removes
-    // the separate partial-word write. Bitmap initialization and completed words are priced
-    // by the same rule. No first-call derate or transient markers. A cold read followed by
-    // a warm zero-to-nonzero store costs 22,100 gas; three 10k units cover it and addressing.
-    // The existing compute/admission reserves remain conservative. 900 units plus 1M fixed
-    // overhead give a 10M drain envelope, including startup and record-volume backing growth.
-    // TicketDrainWorstCaseBound pins the arithmetic; chunk and lifecycle fixtures measure it.
-    uint256 internal constant UNIT_GAS_BOUND = 10_000;
-    uint32 internal constant WRITES_BUDGET_SAFE = 900;
-
     /// @dev Seats in a drain round: one packed lane word per quadrant carries every seat.
     uint256 internal constant ROUND_SEATS = 8;
     /// @dev Color tiers at or above this spread a round's seats across the quadrant's eight
     ///      symbols, one lane per bucket, so the smallest buckets never take a whole round.
     uint8 internal constant ROUND_SPLIT_COLOR = 6;
-    /// @dev Retained conservative admission reserve: four appends, eight seat exits,
-    ///      reveals and seat loops. Actual bucket writes use uniform one-unit charges.
-    uint32 internal constant ROUND_UNITS = 38;
-    /// @dev Retained extra admission reserve for eight split appends in one quadrant.
-    uint32 internal constant ROUND_SPLIT_UNITS = 32;
-    /// @dev Units per seat join: cold queue, immutable owner and pending-word reads, a remainder
-    ///      zeroing write and the eventual write-back (14.2k) -> 2 units.
-    uint32 internal constant SEAT_JOIN_UNITS = 2;
-
-
 
     /// @dev ETH threshold for whale pass claim eligibility from lootbox wins.
     uint256 internal constant LOOTBOX_CLAIM_THRESHOLD = 5 ether;
@@ -949,22 +926,16 @@ abstract contract DegenerusGameStorage {
 
     /// @dev A mining crank paid in FLIP. The credit itself rides `coinflip.creditFlip`, which
     ///      emits nothing attributable, so without this the whole miner revenue stream is
-    ///      readable only by scanning tx selectors. `kind` is one of the MINER_BOUNTY_*
-    ///      constants below and is set explicitly per branch — the paying call sites converge
-    ///      on a single credit and carry no category of their own. Emitted from both the
-    ///      afking module and the Game, so it lives in the shared base.
+    ///      readable only by scanning tx selectors. The unified miner emits it with
+    ///      `MINER_BOUNTY_ADVANCE`, the only kind production pays.
     event MinerBounty(
         uint8 kind,
         address indexed miner,
         uint256 flipAmount
     );
 
-    /// @dev `MinerBounty.kind` values. Kind 3 (the retired Degenerette resolve helper) is
-    ///      unused: queued bets are resolved and bountied inside the box-open sweep (kind 2).
+    /// @dev `MinerBounty.kind` for a paid mining crank.
     uint8 internal constant MINER_BOUNTY_ADVANCE = 1;
-    uint8 internal constant MINER_BOUNTY_BOX_OPEN = 2;
-    uint8 internal constant MINER_BOUNTY_CRAPS_KEEP = 4;
-    uint8 internal constant MINER_BOUNTY_DECIMATOR = 5;
 
     /// @dev Emitted whenever a player's claimable balance is debited by the protocol. Covers
     ///      mint payments (MintPaymentKind.Claimable / Combined), lootbox/ticket shortfall
@@ -1262,15 +1233,13 @@ abstract contract DegenerusGameStorage {
     /// @param buyer Address to receive entries.
     /// @param targetLevel Level for which entries are queued.
     /// @param entriesScaled Scaled entries (entries x 100); owed gains entriesScaled / QTY_SCALE entries.
-    /// @param rngBypass True to skip the RngLocked revert on a new far-future registration.
     function _queueEntriesScaled(
         address buyer,
         uint24 targetLevel,
-        uint32 entriesScaled,
-        bool rngBypass
+        uint32 entriesScaled
     ) internal {
         if (entriesScaled == 0) return;
-        _queueEntriesScaledCore(buyer, targetLevel, entriesScaled, rngBypass, targetLevel > _mintCeiling());
+        _queueEntriesScaledCore(buyer, targetLevel, entriesScaled, targetLevel > _mintCeiling());
     }
 
     /// @dev Purchase callers route through _activeTicketLevel(), which never exceeds level+1.
@@ -1278,14 +1247,13 @@ abstract contract DegenerusGameStorage {
     ///      skip the far-future ceiling's cold earlyTicketLevel read and share the same codec.
     function _queuePurchaseEntries(address buyer, uint24 targetLevel, uint32 entriesScaled) internal {
         if (entriesScaled == 0) return;
-        _queueEntriesScaledCore(buyer, targetLevel, entriesScaled, false, false);
+        _queueEntriesScaledCore(buyer, targetLevel, entriesScaled, false);
     }
 
     function _queueEntriesScaledCore(
         address buyer,
         uint24 targetLevel,
         uint32 entriesScaled,
-        bool rngBypass,
         bool isFarFuture
     ) private {
         // No liveness gate (see _queueEntries): post-liveness queued tickets are harmless.
@@ -1296,12 +1264,9 @@ abstract contract DegenerusGameStorage {
         uint32 owed = uint32(packed >> 8);
         uint8 rem = uint8(packed);
         if (packed == 0) {
-            if (isFarFuture && rngLockedFlag && !rngBypass) revert RngLocked();
+            if (isFarFuture && rngLockedFlag) revert RngLocked();
             packed = _registerEntryOwner(buyer, targetLevel);
-            if (packed == 0) {
-                if (rngBypass) return;
-                revert E();
-            }
+            if (packed == 0) revert E();
             _tqAppend(wk, uint32(packed >> OWNER_IDX_SHIFT));
         }
         emit EntriesQueuedScaled(buyer, targetLevel, entriesScaled);
@@ -1332,21 +1297,15 @@ abstract contract DegenerusGameStorage {
     /// @param startLevel First level in range (inclusive).
     /// @param numLevels Number of consecutive levels.
     /// @param entriesPerLevel Entries to award per level (4 entries = 1 whole ticket).
-    /// @param rngBypass True to skip the RngLocked revert on a new far-future registration.
     function _queueEntryRange(
         address buyer,
         uint24 startLevel,
         uint24 numLevels,
-        uint32 entriesPerLevel,
-        bool rngBypass
+        uint32 entriesPerLevel
     ) internal {
-        _queueEntryRangeStrided(
-            buyer,
-            startLevel,
-            numLevels,
-            1,
-            entriesPerLevel,
-            rngBypass
+        _queueEntryRangeStridedCore(
+            buyer, startLevel, numLevels, 1, entriesPerLevel,
+            _mintCeiling(), rngLockedFlag, ticketWriteSlot ? TICKET_SLOT_BIT : uint24(0)
         );
     }
 
@@ -1359,7 +1318,6 @@ abstract contract DegenerusGameStorage {
     /// @param numLevels Number of covered levels.
     /// @param stride Gap between covered levels (1 = contiguous).
     /// @param entriesPerLevel Entries to award per covered level (4 entries = 1 whole ticket).
-    /// @param rngBypass True to skip the RngLocked revert on a new far-future registration.
     /// @param mintCeiling Caller's cached _mintCeiling(), read once for every leg of the walk.
     /// @param rngLockedCached Caller's cached `rngLockedFlag`, read once for every leg.
     /// @param writeSlotBit Caller's cached ticket write-slot bit
@@ -1370,11 +1328,10 @@ abstract contract DegenerusGameStorage {
         uint24 numLevels,
         uint24 stride,
         uint32 entriesPerLevel,
-        bool rngBypass,
         uint24 mintCeiling,
         bool rngLockedCached,
         uint24 writeSlotBit
-    ) private {
+    ) internal {
         // No liveness gate (see _queueEntries): post-liveness queued tickets are harmless.
         emit EntriesQueuedRange(buyer, startLevel, numLevels, stride, entriesPerLevel);
         // level / rngLockedFlag / ticketWriteSlot are loop-invariant and threaded in by the
@@ -1387,45 +1344,21 @@ abstract contract DegenerusGameStorage {
             uint80 packed = _entriesOwed(wk, buyer);
             uint32 owed = uint32(packed >> 8);
             uint8 rem = uint8(packed);
-            bool room = true;
             if (packed == 0) {
-                if (isFarFuture && rngLockedCached && !rngBypass) revert RngLocked();
+                if (isFarFuture && rngLockedCached) revert RngLocked();
                 packed = _registerEntryOwner(buyer, lvl);
-                // A full registry drops an advance-chain award's level and fails a purchase.
-                room = packed != 0;
-                if (!room && !rngBypass) revert E();
-                if (room) {
-                    _tqAppend(wk, uint32(packed >> OWNER_IDX_SHIFT));
-                }
+                if (packed == 0) revert E();
+                _tqAppend(wk, uint32(packed >> OWNER_IDX_SHIFT));
             }
-            if (room) {
-                owed = _addOwed(owed, entriesPerLevel, isFarFuture);
-                _setEntryOwed(wk, uint32(packed >> OWNER_IDX_SHIFT),
-                    (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem));
-            }
+            owed = _addOwed(owed, entriesPerLevel, isFarFuture);
+            _setEntryOwed(wk, uint32(packed >> OWNER_IDX_SHIFT),
+                (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem));
 
             unchecked {
                 lvl += stride;
                 ++i;
             }
         }
-    }
-
-    /// @dev Wrapper preserving the original single-range signature: reads the loop-invariant
-    ///      slot-0 fields once and delegates to the core. Multi-leg awards (_queueHalfPassAward)
-    ///      read the fields once and call the core per leg instead.
-    function _queueEntryRangeStrided(
-        address buyer,
-        uint24 startLevel,
-        uint24 numLevels,
-        uint24 stride,
-        uint32 entriesPerLevel,
-        bool rngBypass
-    ) internal {
-        _queueEntryRangeStridedCore(
-            buyer, startLevel, numLevels, stride, entriesPerLevel, rngBypass,
-            _mintCeiling(), rngLockedFlag, ticketWriteSlot ? TICKET_SLOT_BIT : uint24(0)
-        );
     }
 
     /// @dev Queues a half-pass award (1 half-pass = 1 entry/level over the span) as
@@ -1442,13 +1375,11 @@ abstract contract DegenerusGameStorage {
     /// @param startLevel First level of the span (inclusive).
     /// @param span Number of levels the award covers.
     /// @param halfPasses Half-pass count (1 half-pass = 1 entry/level equivalent).
-    /// @param rngBypass True to skip the RngLocked revert on a new far-future registration.
     function _queueHalfPassAward(
         address buyer,
         uint24 startLevel,
         uint24 span,
-        uint256 halfPasses,
-        bool rngBypass
+        uint256 halfPasses
     ) internal {
         // Read the loop-invariant slot-0 fields once for all <=3 legs — none is written by the
         // core body, so this is identical to each leg re-reading them, minus the repeated SLOADs.
@@ -1457,17 +1388,17 @@ abstract contract DegenerusGameStorage {
         uint24 writeSlotBit = ticketWriteSlot ? TICKET_SLOT_BIT : uint24(0);
         uint32 baseEntries = uint32((halfPasses / 4) * 4);
         if (baseEntries != 0) {
-            _queueEntryRangeStridedCore(buyer, startLevel, span, 1, baseEntries, rngBypass, mintCeiling, rngLockedCached, writeSlotBit);
+            _queueEntryRangeStridedCore(buyer, startLevel, span, 1, baseEntries, mintCeiling, rngLockedCached, writeSlotBit);
         }
         uint256 rem = halfPasses % 4;
         if (rem == 0) return;
         if (rem >= 2) {
-            _queueEntryRangeStridedCore(buyer, startLevel, (span + 1) / 2, 2, 4, rngBypass, mintCeiling, rngLockedCached, writeSlotBit);
+            _queueEntryRangeStridedCore(buyer, startLevel, (span + 1) / 2, 2, 4, mintCeiling, rngLockedCached, writeSlotBit);
         }
         if (rem == 1) {
-            _queueEntryRangeStridedCore(buyer, startLevel, (span + 3) / 4, 4, 4, rngBypass, mintCeiling, rngLockedCached, writeSlotBit);
+            _queueEntryRangeStridedCore(buyer, startLevel, (span + 3) / 4, 4, 4, mintCeiling, rngLockedCached, writeSlotBit);
         } else if (rem == 3) {
-            _queueEntryRangeStridedCore(buyer, startLevel + 1, (span + 2) / 4, 4, 4, rngBypass, mintCeiling, rngLockedCached, writeSlotBit);
+            _queueEntryRangeStridedCore(buyer, startLevel + 1, (span + 2) / 4, 4, 4, mintCeiling, rngLockedCached, writeSlotBit);
         }
     }
 
@@ -1776,21 +1707,6 @@ abstract contract DegenerusGameStorage {
             SNAP_DONE_BIT |
             (uint80(scaled / QTY_SCALE) << 8) |
             uint80(scaled % QTY_SCALE);
-    }
-
-    /// @dev Roll remainder chance for a fractional ticket (0-99).
-    function _rollRemainder(
-        uint256 entropy,
-        uint256 rollSalt,
-        uint8 rem
-    ) internal pure returns (bool win) {
-        // Hash via scratch-slot keccak so player address (stored in rollSalt
-        // bits 191-32) reaches the low 7 bits of rollEntropy consumed by
-        // `% QTY_SCALE`. A plain XOR mix only diffuses bits a fixed span
-        // outward, leaving upper player-address bits invisible to the roll
-        // outcome; keccak gives full low-bit diffusion of the high-bit input.
-        uint256 rollEntropy = EntropyLib.hash2(entropy, rollSalt);
-        return (rollEntropy % QTY_SCALE) < rem;
     }
 
     // =========================================================================
@@ -2386,28 +2302,6 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant LB_MED_MULTIPLE = 5;
     uint256 internal constant LB_LARGE_MULTIPLE = 25;
 
-    /// @dev Human-sweep walk weights, in the shared open-budget unit (1 unit ~= 4.7k gas, the
-    ///      same unit the afking ring-scan skip is calibrated in).
-    ///
-    ///      Two weights, because an entry's cost is not linear in its boxes. MEASURED
-    ///      (test/gas/BoxOrderOpenGas.t.sol): a one-box entry costs ~83.4k because it pays that
-    ///      player's cold settlement slots, while each ADDITIONAL box in the same entry costs
-    ///      ~15.2k at N=100 — the second box through the hundredth share every lane with the first. A
-    ///      single rate would either starve the sweep on wide entries or blow the ceiling on
-    ///      many narrow ones.
-    ///
-    ///      Sanity against the measurements: a 1920-unit sweep opened 90 one-box entries for
-    ///      ~5.11M gas, and one maximum 100-box entry costs 15 + 100*6 = 615 units ~= 2.89M
-    ///      against 2.37M for the most expensive measured shape.
-    ///
-    ///      BOX_WEIGHT is sized on the N=20 secant (~26k/box), not the N=100 one (~15k/box):
-    ///      the true marginal is concave (ticket write-keys saturate with width), so a
-    ///      100-fit weight under-charges every mid-width entry — the common shape — while
-    ///      the 20-fit only over-charges very wide entries, the safe direction. Charged per
-    ///      box INCLUDING the first, on top of the entry floor.
-    uint256 internal constant OPEN_HUMAN_ENTRY_WEIGHT = 15; // ~70.5k, the per-entry floor
-    uint256 internal constant OPEN_HUMAN_BOX_WEIGHT = 6;    // ~28k, per box, N=20 secant
-
     /// @dev Boxes one player may hold in one RNG index. Sized so a maximum entry — every box
     ///      rolled, plus one recirculated box per ETH spin — resolves inside a block alongside
     ///      the afking leg that shares the `mineFlip()` transaction. Not a spend limit: a
@@ -2852,7 +2746,7 @@ abstract contract DegenerusGameStorage {
 
         mintPacked_[player] = data;
 
-        _queueEntryRange(player, ticketStartLevel, 10, entriesPerLevel, false);
+        _queueEntryRange(player, ticketStartLevel, 10, entriesPerLevel);
         emit PassActivated(player, false, ticketStartLevel, newFrozenLevel, data);
     }
 
@@ -4522,8 +4416,6 @@ abstract contract DegenerusGameStorage {
     }
     uint256 internal constant LR_CRAPS_PENDING_SHIFT = 250;
 
-    uint256 internal constant BUCKET_COUNT_MASK = type(uint32).max;
-
     function _ticketBufferLevel(uint24 lvl) internal view returns (uint24 result) {
         assembly ("memory-safe") {
             result := and(shr(add(mul(ticketBufferLevels.offset, 8), mul(and(lvl, 1), 24)), sload(ticketBufferLevels.slot)), 0xffffff)
@@ -4580,14 +4472,6 @@ abstract contract DegenerusGameStorage {
                 }
             }
         }
-    }
-
-    /// @dev Constant work; pending paid obligations defer generation without clearing them.
-    function _prepareTicketLevel(uint24 lvl) internal virtual returns (bool) {
-        uint24 old = _ticketBufferLevel(lvl);
-        if (old != 0 && old != lvl && !gameOver && _lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK) == 0
-            && _lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) == 0 && _foilDrainPending()) return false;
-        return _prepareTicketLevelAfterFoil(lvl);
     }
 
     /// @dev The chronological foil worker already drained older packs before this buyer.

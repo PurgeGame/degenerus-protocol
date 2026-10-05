@@ -3,6 +3,7 @@ pragma solidity 0.8.34;
 
 import {Craps} from "../../contracts/Craps.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
+import {CrapsSeedViews} from "./CrapsSeedViews.sol";
 
 /// @title CrapsHarness
 /// @notice Exposes the craps table's `internal` settlement path so the TypeScript port of
@@ -30,7 +31,7 @@ import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 ///      NOTE ON SIZE: CrapsBattle's own runtime is already ~23.9 KB of the 24,576-byte
 ///      EIP-170 ceiling, so this subclass exceeds it. Deploy it against anvil started with
 ///      `--code-size-limit` raised; that changes nothing about the pure functions under test.
-contract CrapsHarness is CrapsBattle {
+contract CrapsHarness is CrapsSeedViews, CrapsBattle {
     /// @notice `_crapsSeed` — the table seed for a bound slot.
     function xCrapsSeed(uint256 word, uint48 index) external pure returns (bytes32) {
         return _crapsSeed(word, index);

@@ -22,8 +22,7 @@ contract FlipCoinInvariantsTest is DeployProtocol {
     }
 
     function _fundVault(uint256 amount) private {
-        vm.prank(address(game));
-        coin.vaultEscrow(amount);
+        _mint(address(vault), amount);
     }
 
     function testFuzz_supplyInvariant_afterMint(uint128 raw, bool toVault) public {

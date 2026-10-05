@@ -4,13 +4,14 @@ pragma solidity ^0.8.26;
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Coinflip} from "../../contracts/Coinflip.sol";
+import {CoinflipStakeSetter} from "../helpers/CoinflipStakeSetter.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @dev The stored-seed rule, as a reference: writes the active window's seed into both
 ///      recipients' stake lanes (stake = lane + SEED_FLIP_DAILY on every window day) and parks the
 ///      window start where no reachable day falls inside it, so the production walk then reads
 ///      the seed from the lanes alone. Etched over the protocol's Coinflip for one call.
-contract StoredSeedReference is Coinflip {
+contract StoredSeedReference is CoinflipStakeSetter {
     function materializeSeedWindow() external {
         uint24 start = seedWindowStart;
         for (uint24 i; i < 20; ++i) {

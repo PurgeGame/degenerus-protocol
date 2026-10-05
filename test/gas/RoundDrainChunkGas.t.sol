@@ -60,7 +60,7 @@ contract ChunkHarness is MintBucketSeed {
         if (ticketOwners.length == 0) _registerEntryOwner(address(1), lvl);
         for (uint256 i; i < n; ++i) {
             address p = address(base + uint160(i + 1));
-            _queueEntriesScaled(p, lvl, entriesScaled, false);
+            _queueEntriesScaled(p, lvl, entriesScaled);
         }
         ticketWriteSlot = !ticketWriteSlot;
         ticketLevel = 0;
@@ -107,7 +107,7 @@ contract ChunkHarness is MintBucketSeed {
         if (ticketOwners.length == 0) _registerEntryOwner(address(1), lvl);
         for (uint256 i; i < n; ++i) {
             address p = address(base + uint160(i + 1));
-            _queueEntriesScaled(p, lvl, entriesScaled, false);
+            _queueEntriesScaled(p, lvl, entriesScaled);
         }
         uint24 ffk = _tqFarFutureKey(lvl);
         require(_ticketQueueLength(ffk) == n, "fixture: every buyer sits on the far-future key");

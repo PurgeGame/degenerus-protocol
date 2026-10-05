@@ -9,6 +9,7 @@ pragma solidity ^0.8.26;
 // VaultHistorySeeder.
 
 import {Coinflip} from "../../contracts/Coinflip.sol";
+import {CoinflipStakeSetter} from "../helpers/CoinflipStakeSetter.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -21,7 +22,7 @@ contract DailyGasExtrasSeeder is DegenerusGame {
     }
 }
 
-contract VaultHistorySeeder is Coinflip {
+contract VaultHistorySeeder is CoinflipStakeSetter {
     function seedVaultHistory(bool sufficient) external {
         address player = ContractAddresses.VAULT;
         PlayerCoinflipState storage s = playerState[player];

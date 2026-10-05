@@ -22,8 +22,8 @@ contract RegistryCapHarness is DegenerusGameMintModule {
     function queueLen(uint24 lvl) external view returns (uint256) { return _ticketQueueLength(_tqWriteKey(lvl)); }
     function owedOf(uint24 lvl, address p) external view returns (uint80) { return _entriesOwed(_tqWriteKey(lvl), p); }
     function entries(address p, uint24 lvl, uint32 n, bool crank) external { _queueEntries(p, lvl, n, crank); }
-    function scaled(address p, uint24 lvl, uint32 n, bool crank) external { _queueEntriesScaled(p, lvl, n, crank); }
-    function range(address p, uint24 lvl, uint24 num, uint32 n, bool crank) external { _queueEntryRange(p, lvl, num, n, crank); }
+    function scaled(address p, uint24 lvl, uint32 n) external { _queueEntriesScaled(p, lvl, n); }
+    function range(address p, uint24 lvl, uint24 num, uint32 n) external { _queueEntryRange(p, lvl, num, n); }
 }
 
 /// @title OwnerRegistryCap — a full per-level owner registry never reaches the drain.
@@ -53,21 +53,22 @@ contract OwnerRegistryCap is Test {
         vm.expectRevert(bytes4(keccak256("E()")));
         h.entries(address(0xA1), LVL, 4, false);
         vm.expectRevert(bytes4(keccak256("E()")));
-        h.scaled(address(0xA1), LVL, 400, false);
+        h.scaled(address(0xA1), LVL, 400);
         vm.expectRevert(bytes4(keccak256("E()")));
-        h.range(address(0xA1), LVL, 1, 4, false);
+        h.range(address(0xA1), LVL, 1, 4);
         assertEq(h.ownerCount(LVL), FULL, "nothing registered");
         assertEq(h.queueLen(LVL), 0, "nothing queued");
     }
 
     function test_CrankSinksCannotAllocateNewIdAtTheCeiling() public {
         h.entries(address(0xA1), LVL, 4, true);
-        h.scaled(address(0xA1), LVL, 400, true);
         assertEq(h.ownerCount(LVL), FULL, "award dropped: no position taken");
         assertEq(h.queueLen(LVL), 0, "award dropped: nothing queued");
         assertEq(h.owedOf(LVL, address(0xA1)), 0, "award dropped: no owed word");
         // A full global namespace prevents new IDs at every target level.
-        h.range(address(0xA1), LVL - 1, 3, 4, true);
+        h.entries(address(0xA1), LVL - 1, 4, true);
+        h.entries(address(0xA1), LVL, 4, true);
+        h.entries(address(0xA1), LVL + 1, 4, true);
         assertEq(h.queueLen(LVL - 1), 0);
         assertEq(h.queueLen(LVL), 0);
         assertEq(h.queueLen(LVL + 1), 0);

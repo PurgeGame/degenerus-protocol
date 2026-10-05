@@ -23,7 +23,7 @@ contract GoldSixHarness is DegenerusGameTicketModule {
         deityBySymbol[(trait >> 6) * 8 + (trait & 7)] = who;
         return (_traitDeity(trait), _deityVirtualCount(trait, 100, who));
     }
-    function queue(address who, uint32 scaled) external { _queueEntriesScaled(who, level, scaled, false); }
+    function queue(address who, uint32 scaled) external { _queueEntriesScaled(who, level, scaled); }
     function commit(uint256 word) external {
         ticketWriteSlot = !ticketWriteSlot;
         rngWordCurrent = word;

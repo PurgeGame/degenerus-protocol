@@ -14,7 +14,7 @@ contract GoldSixGasHarness is DegenerusGameTicketModule {
     }
     function seed(uint256 players, uint32 entriesScaled) external {
         level = 1;
-        for (uint256 i; i < players; ++i) _queueEntriesScaled(address(uint160(0x1000 + i)), 1, entriesScaled, false);
+        for (uint256 i; i < players; ++i) _queueEntriesScaled(address(uint160(0x1000 + i)), 1, entriesScaled);
         ticketWriteSlot = !ticketWriteSlot;
         rngWordCurrent = 0xabcdef123456;
         _setRngSessionPublished(true);

@@ -99,7 +99,7 @@ contract FLIP {
     event DecimatorBurn(address indexed player, uint256 amountBurned, uint64 entryId);
 
     /// @notice Emitted when virtual coin is escrowed to the vault reserve.
-    /// @param sender The account tied to the escrow: the original transfer sender when routed to VAULT via _transfer, address(0) on a direct mint to VAULT, or the calling contract (GAME/VAULT) for vaultEscrow/tombstoneAtGameOver.
+    /// @param sender The account tied to the escrow: the original transfer sender when routed to VAULT via _transfer, address(0) on a direct mint to VAULT, or GAME for tombstoneAtGameOver.
     /// @param amount The amount added to vault mint allowance (0 decimals).
     event VaultEscrowRecorded(address indexed sender, uint256 amount);
     /// @notice Emitted when the vault spends from its mint allowance (may or may not mint tokens).
@@ -601,25 +601,10 @@ contract FLIP {
     /*+======================================================================+
       |                     VAULT ESCROW FUNCTIONS                           |
       +======================================================================+
-      |  Virtual mint allowance management for the VAULT. vaultEscrow()      |
-      |  increases the allowance (called by game/modules), vaultMintTo()     |
-      |  mints from the allowance (called by VAULT only).                    |
+      |  Virtual mint allowance management for the VAULT. FLIP minted or     |
+      |  transferred to the VAULT and the game-over tombstone increase the   |
+      |  allowance; vaultMintTo() mints from it (called by VAULT only).      |
       +======================================================================+*/
-
-    /// @notice Increase the vault's mint allowance without transferring tokens.
-    /// @dev Called by GAME (delegatecall modules) or VAULT to credit virtual FLIP to the vault.
-    ///      Rejection reuses the shared `OnlyVault()` generic, so a trace names OnlyVault() even
-    ///      though GAME is equally admitted.
-    /// @param amount Amount to add to vault's mint allowance.
-    function vaultEscrow(uint256 amount) external {
-        address sender = msg.sender;
-        if (sender != ContractAddresses.GAME && sender != ContractAddresses.VAULT) revert OnlyVault();
-        uint128 amount128 = _toUint128(amount);
-        unchecked {
-            _supply.vaultAllowance += amount128;
-        }
-        emit VaultEscrowRecorded(sender, amount);
-    }
 
     /// @notice One-shot gameover tombstone: floods the VAULT mint allowance by 1e18 FLIP as a
     ///         worthless-token overhang signal. The signal lands only in supplyIncUncirculated(),

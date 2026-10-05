@@ -139,12 +139,12 @@ OWNER	subsFullyProcessed	modules/DegenerusGameMinerModule.sol	Miner clears compl
 OWNER	terminalAffiliate	modules/DegenerusGameGameOverModule.sol	_handleGameOverPath latches the terminal level's top affiliate once, with the cohort level, before any terminal word exists; _handleGameOverDrain reads it
 HELPER	ticketBufferLevels	storage/DegenerusGameStorage.sol	_setTicketBufferLevel updates one parity epoch in verified spare bytes of slot 5; retirement derived from its higher occupant.
 OWNER	ticketCursor	modules/DegenerusGameTicketModule.sol	runTicketWork persists the mid-queue resume position and zeroes it at queue release; sole owner
-HELPER	ticketCursor	storage/DegenerusGameStorage.sol	_prepareTicketLevel clears old empty resume state on legal retirement; pending seats prohibit normal takeover.
+HELPER	ticketCursor	storage/DegenerusGameStorage.sol	_prepareTicketLevelAfterFoil clears old empty resume state on legal retirement; pending seats prohibit normal takeover.
 INIT	ticketGenerationStartBlock	DegenerusGame.sol	constructor stamps the deployment block for level 1, the first ticket level; outside all drain steps
 OWNER	ticketGenerationStartBlock	modules/DegenerusGameAdvanceModule.sol	early target-met request or last-purchase latch stamps the next level's generation window; later latches preserve its first opening block
 OWNER	ticketGenerationStartBlock	modules/DegenerusGameRngModule.sol	early target-met request or last-purchase latch stamps the next level's generation window; later latches preserve its first opening block
 OWNER	ticketLevel	modules/DegenerusGameTicketModule.sol	ticket batch workers stamp the level being walked (the far-future continuation stamps lvl|FF bit) and clear to 0 at release; sole owner
-HELPER	ticketLevel	storage/DegenerusGameStorage.sol	_prepareTicketLevel clears the old empty resume identity on legal retirement; no paid normal queue is discarded.
+HELPER	ticketLevel	storage/DegenerusGameStorage.sol	_prepareTicketLevelAfterFoil clears the old empty resume identity on legal retirement; no paid normal queue is discarded.
 HELPER	ticketOwnerId	storage/DegenerusGameStorage.sol	_registerEntryOwner assigns the wallet its permanent one-based ID only once, paired with appending the same wallet to ticketOwners; all ticket producers share this bounded allocation helper.
 OWNER	ticketRound	modules/DegenerusGameTicketModule.sol	_roundPhase advances the seated-round derivation counter once per round it runs (runTicketWork queue drain); sole writer
 OWNER	ticketSeats	modules/DegenerusGameTicketModule.sol	Canonical ticket round worker fills seats to eight or actual queue end, runs fixed rounds, then drains survivors in order; never rolls a partially filled frontier.

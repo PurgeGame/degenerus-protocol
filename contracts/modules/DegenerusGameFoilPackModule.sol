@@ -181,16 +181,6 @@ contract DegenerusGameFoilPackModule is
     ///      ladder and this and take the grand.
     uint256 private constant GOLDEN_TICKET_FLIP = 25_000;
 
-    /// @dev Budget units the grand's own writes cost when a pack pushes it from the
-    ///      drain: the futurePrizePool debit, the winner's claimable credit, the
-    ///      claimable-pool total, the whale-pass credit, and the coinflip module's own
-    ///      write behind an external call, plus the claim marker that closes the pull
-    ///      behind it — roughly 110k gas against this budget's ~10k-per-unit
-    ///      calibration, rounded up for headroom. Charged only on the pack that fires
-    ///      it, never folded into the fixed per-pack charge, so the ~7.1 billion packs
-    ///      that do not reach it pay nothing toward it.
-    uint32 private constant GRAND_DRAIN_UNITS = 14;
-
     // -------------------------------------------------------------------------
     // Events
     // -------------------------------------------------------------------------
@@ -820,11 +810,6 @@ contract DegenerusGameFoilPackModule is
         if (presaleBoxEth[index & 1][buyer] != 0) revert E();
         presaleBoxEth[index & 1][buyer] = word;
         boxPlayers[index & 1].push(buyer);
-    }
-
-    /// @notice Prepare a ticket level with constant work, deferring unsafe buffer takeover.
-    function prepareTicketLevel(uint24 lvl) external payable returns (bool) {
-        return _prepareTicketLevel(lvl);
     }
 
     function runFoilWork(uint256 allowance) external returns (MineFlipGas.Result memory) {

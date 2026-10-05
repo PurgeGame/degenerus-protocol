@@ -24,7 +24,7 @@ import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 ///      rule, the pot) is graded against runs it did not compute itself.
 contract BattleRef is Craps {
     uint256 internal constant DICE_TAG = 0x436f696e4472617744696365; // "CoinDrawDice"
-    uint256 internal constant SCATTER_TAG = 0x436f696e4472617753636174746572; // "CoinDrawScatter"
+    uint256 internal constant COIN_DRAW_SCATTER_TAG = 0x436f696e4472617753636174746572; // "CoinDrawScatter"
 
     /// @dev The scheduled row for a board the dice threw whole: 15% of shooters, +32% profit.
     uint256 internal constant BOOST_ROW = 12 | (30 << 8);
@@ -37,7 +37,7 @@ contract BattleRef is Craps {
     {
         uint256 bankroll = chipFlip * 50;
         Bets memory b;
-        _scatterInto(b, uint256(keccak256(abi.encode(word, SCATTER_TAG, uint256(uint160(p))))), chipFlip, 10);
+        _scatterInto(b, uint256(keccak256(abi.encode(word, COIN_DRAW_SCATTER_TAG, uint256(uint160(p))))), chipFlip, 10);
         bytes32 seed = keccak256(abi.encode(word, DICE_TAG));
         uint256 start = uint256(keccak256(abi.encode(ROTATING_SHOOTER_TAG, seed))) % n;
         uint256 offset = ((j + 1) + n - 1 - start) % n;
@@ -52,7 +52,7 @@ contract BattleRef is Craps {
         for (uint256 i; i < 10; ++i) placed += (chips >> (i * 3)) & 7;
         uint16[8] memory rows = [uint16(0x200f), 0x1d0e, 0x1d0c, 0x1d0b, 0x1d09, 0x1808, 0x1706, 0x1205];
         Bets memory b = _boardFrom(chips, chipFlip);
-        _scatterInto(b, uint256(keccak256(abi.encode(word, SCATTER_TAG, uint256(uint160(p))))), chipFlip, 10 - placed);
+        _scatterInto(b, uint256(keccak256(abi.encode(word, COIN_DRAW_SCATTER_TAG, uint256(uint160(p))))), chipFlip, 10 - placed);
         bytes32 seed = keccak256(abi.encode(word, DICE_TAG));
         uint256 start = uint256(keccak256(abi.encode(ROTATING_SHOOTER_TAG, seed))) % n;
         uint256 turn = (j + n - start) % n + 1;

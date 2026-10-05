@@ -685,7 +685,7 @@ contract CrapsRngSealHandler is Test {
                 }
             }
         }
-        CrapsBattle.Bet memory b = craps.betOf(betId);
+        CrapsViews.Bet memory b = craps.betOf(betId);
         if (b.player == address(0)) return;
         uint64 slot = uint64(betId >> 64);
         bool armed = craps.slotIndexOf(slot) != 0;
@@ -903,7 +903,7 @@ contract CrapsRngSealHandler is Test {
         }
         uint48 index = armedIndexOf[slot];
         bool hasWord = _lootboxRngWord(index) != 0;
-        CrapsBattle.Battle memory b = craps.battleOf(craps.keyOfSlot(slot));
+        CrapsViews.Battle memory b = craps.battleOf(craps.keyOfSlot(slot));
         if (!hasWord) ghost_settleAttemptsWithoutWord++;
         uint256 stake0 = _stakeLedger();
         uint256 bound = _liabilityBound(slot);
@@ -921,7 +921,7 @@ contract CrapsRngSealHandler is Test {
             (ghost_lastOverCredited, ghost_lastOverBound, ghost_lastOverSlot, ghost_lastOverWasKeep) =
                 (credited, bound, slot, false);
         }
-        CrapsBattle.Battle memory after_ = craps.battleOf(craps.keyOfSlot(slot));
+        CrapsViews.Battle memory after_ = craps.battleOf(craps.keyOfSlot(slot));
         if (after_.resolved > b.resolved) {
             if (hasWord) ghost_settlesWithWord++;
             else ghost_settlesWithoutWord++;
@@ -935,7 +935,7 @@ contract CrapsRngSealHandler is Test {
         for (uint256 i; i < n; i++) {
             uint64 slot = armedSlots[(pickSeed + i) % n];
             if (_lootboxRngWord(armedIndexOf[slot]) == 0) continue;
-            CrapsBattle.Battle memory b = craps.battleOf(craps.keyOfSlot(slot));
+            CrapsViews.Battle memory b = craps.battleOf(craps.keyOfSlot(slot));
             if (b.entrants == 0 || b.resolved == b.entrants) continue;
             return slot;
         }
@@ -947,7 +947,7 @@ contract CrapsRngSealHandler is Test {
         uint256 n = armedSlots.length;
         for (uint256 i; i < n; i++) {
             uint64 slot = armedSlots[(pickSeed + i) % n];
-            CrapsBattle.Battle memory b = craps.battleOf(craps.keyOfSlot(slot));
+            CrapsViews.Battle memory b = craps.battleOf(craps.keyOfSlot(slot));
             if (b.entrants == 0 || b.resolved == b.entrants) continue;
             return slot;
         }
@@ -1111,7 +1111,7 @@ contract CrapsRngSealHandler is Test {
     ///      whole progressive balance. A payout that draws from anything else is the divergence
     ///      this bounds.
     function _liabilityBound(uint64 slot) internal view returns (uint256 bound) {
-        CrapsBattle.Battle memory bt = craps.battleOf(craps.keyOfSlot(slot));
+        CrapsViews.Battle memory bt = craps.battleOf(craps.keyOfSlot(slot));
         // Every seat the walk will settle, priced by the settlement engine itself through
         // `settlementOn`: the field's own seats `1..ownN` at the slot, then the day tickets under
         // the day slot (the protocol's two bodies among them). A run is NOT bounded by its goal —
@@ -1248,7 +1248,7 @@ contract CrapsRngSealHandler is Test {
                 // A past day's window, or one of today's: both are armable once closed.
                 if (slot / SLOTS_PER_DAY > today) continue;
             }
-            CrapsBattle.Battle memory b = craps.battleOf(craps.keyOfSlot(slot));
+            CrapsViews.Battle memory b = craps.battleOf(craps.keyOfSlot(slot));
             if (b.entrants == 0) continue;
             return slot;
         }
@@ -1268,7 +1268,7 @@ contract CrapsRngSealHandler is Test {
     /// @dev The frozen slip fields: owner, slot, seat, the packed board, the standing. The
     ///      `settled` / `battleClaimed` flags are the settlement's own writes and are excluded.
     function _headerOf(uint256 betId) internal view returns (bytes32) {
-        CrapsBattle.Bet memory b = craps.betOf(betId);
+        CrapsViews.Bet memory b = craps.betOf(betId);
         return keccak256(abi.encode(b.player, b.slot, b.seat, b.chips));
     }
 

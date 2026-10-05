@@ -102,11 +102,11 @@ contract CrapsEngine is Craps, CrapsCustomTerms {
     {
         uint256 key = header >> 224 == 0
             ? uint160(header)
-            : uint160(_hash3(word, 0x4a61636b706f7441776172646564, betId));
+            : uint160(_hash3(word, JACKPOT_AWARDED_TAG, betId));
         uint256 chips = (header >> 160) & 0x3fffffff;
         uint256 placed;
         for (uint256 i; i < 30; i += 3) placed += (chips >> i) & 7;
-        bytes32 seed = bytes32(_hash3(uint256(keccak256("degenerus.lootbox.craps.v1")), word, bound));
+        bytes32 seed = bytes32(_hash3(uint256(_CRAPS_SEED_DOMAIN), word, bound));
         uint256 boost;
         if (bound < 1 << 40) {
             boost = _shooterBoostTerms(placed);
@@ -118,7 +118,7 @@ contract CrapsEngine is Craps, CrapsCustomTerms {
                 if (offset < _MAX_SLIP_HANDS) boost |= (offset + 1) << _BOOST_TURN_SHIFT;
             }
         }
-        r = _play(chips, chipFlip, _hash3(word, 0x437261707353636174746572, key),
+        r = _play(chips, chipFlip, _hash3(word, SCATTER_TAG, key),
             10 - placed, seed, bankroll * FLIP, goal * FLIP, address(uint160(key)), boost);
         r.unitsPlayed = _rankOf(r);
         // The existing final-award policy discards sub-FLIP dust before its hundreds roll.
@@ -127,7 +127,7 @@ contract CrapsEngine is Craps, CrapsCustomTerms {
         r.peakBankroll /= FLIP;
         uint256 paid = r.stop == SlipStop.Bust ? 0 : r.bankrollOut;
         r.bankrollIn = paid > FlipRoundLib.FLIP_ROUND_THRESHOLD
-            ? FlipRoundLib.roundFlipToHundreds(paid, _hash3(word, 0x4372617073526f756e64, betId))
+            ? FlipRoundLib.roundFlipToHundreds(paid, _hash3(word, CRAPS_ROUND_TAG, betId))
             : FlipRoundLib.floorWholeFlip(paid);
     }
 

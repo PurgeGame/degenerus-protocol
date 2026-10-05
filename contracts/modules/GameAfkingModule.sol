@@ -960,7 +960,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
             // The x00 century quantity bonus is a manual-mint mechanic; afking
             // deliveries queue the paid quantity as-is.
-            _queueEntriesScaled(player, targetLevel, uint32(amount), false);
+            _queueEntriesScaled(player, targetLevel, uint32(amount));
 
             // 10%/15% ticket buyer-bonus → claimable pendingFlip (pulled via
             // claimAfkingFlip). Uses the pre-bonus `amount`; whole FLIP with the ~16.7M (2^24-1) clamp.

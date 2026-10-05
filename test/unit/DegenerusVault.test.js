@@ -290,7 +290,7 @@ describe("DegenerusVault", function () {
       await hre.ethers.provider.send("hardhat_impersonateAccount", [gameAddr]);
       await hre.ethers.provider.send("hardhat_setBalance", [gameAddr, "0x1000000000000000000"]);
       try {
-        await coin.connect(await hre.ethers.getSigner(gameAddr)).vaultEscrow(flip("1000"));
+        await coin.connect(await hre.ethers.getSigner(gameAddr)).mintForGame(await vault.getAddress(), flip("1000"));
       } finally {
         await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
       }

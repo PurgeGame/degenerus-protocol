@@ -32,7 +32,7 @@ contract HalfPassAwardHarness is DegenerusGameStorage {
         uint24 span,
         uint256 halfPasses
     ) external {
-        _queueHalfPassAward(buyer, startLevel, span, halfPasses, false);
+        _queueHalfPassAward(buyer, startLevel, span, halfPasses);
     }
 
     function setRngLocked(bool v) external {

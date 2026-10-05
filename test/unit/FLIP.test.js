@@ -415,63 +415,34 @@ describe("FLIP", function () {
   // creditCoin() removed from FLIP in Phase 146 ABI cleanup (dead function, zero callers)
 
   // ---------------------------------------------------------------------------
-  // vaultEscrow() — only GAME or VAULT
+  // Mint to VAULT — escrows into the vault allowance
   // ---------------------------------------------------------------------------
 
-  describe("vaultEscrow()", function () {
-    it("reverts with OnlyVault when called by an unauthorized address", async function () {
-      const { coin, alice } = await getFixture();
-      await expect(
-        coin.connect(alice).vaultEscrow(flip(100))
-      ).to.be.revertedWithCustomError(coin, "OnlyVault");
-    });
-
-    it("increases vaultAllowance when called by GAME", async function () {
-      const { coin, game } = await getFixture();
+  describe("mint to VAULT (escrow)", function () {
+    it("increases vaultAllowance without increasing totalSupply", async function () {
+      const { coin, game, vault } = await getFixture();
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      const before = await coin.vaultMintAllowance();
-
-      await coin.connect(gameSigner).vaultEscrow(flip(500));
-      await stopImpersonate(gameAddr);
-
-      expect(await coin.vaultMintAllowance()).to.equal(before + flip(500));
-    });
-
-    it("increases vaultAllowance when called by VAULT", async function () {
-      const { coin, vault } = await getFixture();
-      const vaultAddr = await vault.getAddress();
-      const vaultSigner = await impersonate(vaultAddr);
-      const before = await coin.vaultMintAllowance();
-
-      await coin.connect(vaultSigner).vaultEscrow(flip(1000));
-      await stopImpersonate(vaultAddr);
-
-      expect(await coin.vaultMintAllowance()).to.equal(before + flip(1000));
-    });
-
-    it("emits VaultEscrowRecorded event", async function () {
-      const { coin, game } = await getFixture();
-      const gameAddr = await game.getAddress();
-      const gameSigner = await impersonate(gameAddr);
-
-      const tx = await coin.connect(gameSigner).vaultEscrow(flip(100));
-      await expect(tx)
-        .to.emit(coin, "VaultEscrowRecorded")
-        .withArgs(gameAddr, flip(100));
-      await stopImpersonate(gameAddr);
-    });
-
-    it("does NOT increase totalSupply (virtual escrow only)", async function () {
-      const { coin, game } = await getFixture();
-      const gameAddr = await game.getAddress();
-      const gameSigner = await impersonate(gameAddr);
+      const allowBefore = await coin.vaultMintAllowance();
       const supplyBefore = await coin.totalSupply();
 
-      await coin.connect(gameSigner).vaultEscrow(flip(1000));
+      await coin.connect(gameSigner).mintForGame(await vault.getAddress(), flip(500));
       await stopImpersonate(gameAddr);
 
+      expect(await coin.vaultMintAllowance()).to.equal(allowBefore + flip(500));
       expect(await coin.totalSupply()).to.equal(supplyBefore);
+    });
+
+    it("emits VaultEscrowRecorded with a zero sender", async function () {
+      const { coin, game, vault } = await getFixture();
+      const gameAddr = await game.getAddress();
+      const gameSigner = await impersonate(gameAddr);
+
+      const tx = await coin.connect(gameSigner).mintForGame(await vault.getAddress(), flip(100));
+      await expect(tx)
+        .to.emit(coin, "VaultEscrowRecorded")
+        .withArgs(ZERO_ADDRESS, flip(100));
+      await stopImpersonate(gameAddr);
     });
   });
 
@@ -492,7 +463,7 @@ describe("FLIP", function () {
       // Seed an allowance to mint from (starts at 0 — emission arrives as coinflip seed stakes).
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).vaultEscrow(flip(1000));
+      await coin.connect(gameSigner).mintForGame(await vault.getAddress(), flip(1000));
       await stopImpersonate(gameAddr);
       const vaultAddr = await vault.getAddress();
       const vaultSigner = await impersonate(vaultAddr);
@@ -512,7 +483,7 @@ describe("FLIP", function () {
       // Seed an allowance to mint from (starts at 0 — emission arrives as coinflip seed stakes).
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).vaultEscrow(flip(1000));
+      await coin.connect(gameSigner).mintForGame(await vault.getAddress(), flip(1000));
       await stopImpersonate(gameAddr);
       const vaultAddr = await vault.getAddress();
       const vaultSigner = await impersonate(vaultAddr);
@@ -529,7 +500,7 @@ describe("FLIP", function () {
       // Seed an allowance to mint from (starts at 0 — emission arrives as coinflip seed stakes).
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).vaultEscrow(flip(1000));
+      await coin.connect(gameSigner).mintForGame(await vault.getAddress(), flip(1000));
       await stopImpersonate(gameAddr);
       const vaultAddr = await vault.getAddress();
       const vaultSigner = await impersonate(vaultAddr);
@@ -572,7 +543,7 @@ describe("FLIP", function () {
       // Seed an allowance to mint from (starts at 0 — emission arrives as coinflip seed stakes).
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
-      await coin.connect(gameSigner).vaultEscrow(flip(1000));
+      await coin.connect(gameSigner).mintForGame(await vault.getAddress(), flip(1000));
       await stopImpersonate(gameAddr);
       const vaultAddr = await vault.getAddress();
       const vaultSigner = await impersonate(vaultAddr);
@@ -688,8 +659,8 @@ describe("FLIP", function () {
 
       // Mint some
       await coin.connect(gameSigner).mintForGame(alice.address, flip(500));
-      // Escrow some
-      await coin.connect(gameSigner).vaultEscrow(flip(200));
+      // Escrow some (a mint to VAULT lands in its allowance)
+      await coin.connect(gameSigner).mintForGame(vaultAddr, flip(200));
       // MintTo some from vault
       await coin.connect(vaultSigner).vaultMintTo(bob.address, flip(100));
 

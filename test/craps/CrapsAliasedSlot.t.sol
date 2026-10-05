@@ -6,6 +6,7 @@ import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol
 import {Vm} from "forge-std/Vm.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
+import {CrapsViews} from "./CrapsViews.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {CrapsPins} from "./CrapsPins.sol";
 import {BattleHarness} from "./CrapsBattle.t.sol";
@@ -143,7 +144,7 @@ contract CrapsAliasedSlotTest is CrapsPins {
         _setWord(index, uint256(keccak256("settled-window-word")));
 
         craps.settleSlot(slot, WHOLE_FIELD);
-        CrapsBattle.Battle memory done = craps.battleOf(key);
+        CrapsViews.Battle memory done = craps.battleOf(key);
         assertTrue(done.finalized, "fixture: the window did not finalize");
         uint64 entrants0 = done.entrants;
         uint64 dayN = craps.dayTicketsOf(day);
@@ -165,7 +166,7 @@ contract CrapsAliasedSlotTest is CrapsPins {
         vm.recordLogs();
         craps.settleSlot(slot, WHOLE_FIELD);
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        CrapsBattle.Battle memory again = craps.battleOf(key);
+        CrapsViews.Battle memory again = craps.battleOf(key);
 
         assertEq(again.resolved, entrants0, "the second walk moved the cursor past a finalized field");
         assertEq(_paidLogs(logs), 0, "a settled window paid a pot a second time");

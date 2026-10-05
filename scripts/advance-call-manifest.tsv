@@ -31,14 +31,11 @@ CRANK-TRY	IStETH.transferSharesFrom	pullAfkingSteth	modules/GameAfkingModule.sol
 CRANK-SELF	IReadCohortLifecycle.registerRngSlot	_armSlot	CrapsBattle.sol	BARE		Self call/delegate into pinned own Craps module; bounded lifecycle/settlement effects, failure atomic.
 OFF-CRANK	IFlipCoin.burnCoin	_burnCoin	CrapsBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
 OFF-CRANK	IFlipCoin.burnCoinForCraps	_burnForCraps	CrapsBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
-CRANK-PINNED	IFlipCoin.creditCrapsComps	_creditComps	CrapsBattle.sol	BARE	test/craps/JackpotBattle.t.sol	Pinned FLIP comps credit from authorized CRAPS context; bounded settlement amounts.
-CRANK-PINNED	ICoinflipStake.creditFlip	_creditFlip	CrapsBattle.sol	BARE	test/fuzz/CrapsProtocolWiring.t.sol	Pinned Coinflip credit, authorized CRAPS caller; bounded field/reserve payout.
 CRANK-SELF	yul:delegatecall	_delegateJackpot	CrapsBattle.sol	BARE		Self call/delegate into pinned own Craps module; bounded lifecycle/settlement effects, failure atomic.
 OFF-CRANK	IGameCraps.level	_entryPrice	CrapsBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
 OFF-CRANK	IGameCraps.mintPackedFor	_entryPrice	CrapsBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
 OFF-CRANK	IGameCraps.rngLocked	_joinableSlot	CrapsBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
 OFF-CRANK	IVaultOwnership.isVaultOwner	_mayOpenBattle	CrapsBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
-CRANK-SELF	IReadCohortLifecycle.payProgressive	_payProgressive	CrapsBattle.sol	BARE		Pinned Craps/Jackpot implementation self-call in the table storage context; canonical sealed slot and cursor are preserved and all settlement failures bubble.
 OFF-CRANK	IReadCohortLifecycle.admitCustom	_place	CrapsBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
 CRANK-PINNED	IGameCraps.rngLocked	_rememberBoard	CrapsBattle.sol	BARE	test/craps/CrapsPins.sol	Pinned Game view; fixed slot read for scheduled board update.
 CRANK-SELF	IHighRollerReserve.settleHighRollerReserve	_resolveSlotRange	CrapsBattle.sol	BARE		Self call/delegate into pinned own Craps module; bounded lifecycle/settlement effects, failure atomic.

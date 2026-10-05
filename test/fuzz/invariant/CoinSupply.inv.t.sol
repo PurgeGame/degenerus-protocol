@@ -59,7 +59,7 @@ contract CoinSupplyInvariant is DeployProtocol {
     /// @notice REAL conservation: FLIP's stored virtual vault allowance equals its initial value
     ///         plus every escrow credit minus every allowance spend.
     /// @dev Underflow-free form of `vaultAllowance == initialVault + ghostEscrowed - ghostSpent`.
-    ///      Catches the vault-side leg specifically: transfer->VAULT, vaultEscrow, vaultMintTo, and
+    ///      Catches the vault-side leg specifically: mint/transfer->VAULT, vaultMintTo, and
     ///      the gameover tombstone flood all move vaultAllowance, each via its own event.
     function invariant_flipVaultAllowanceConserved() public view {
         assertEq(

@@ -4,6 +4,9 @@ pragma solidity ^0.8.26;
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {Craps} from "../../contracts/Craps.sol";
+import {IJackpotBattleViews} from "./JackpotBattleViews.sol";
+import {CrapsSeedViews} from "./CrapsSeedViews.sol";
+import {CrapsPriceLib} from "../../contracts/libraries/CrapsPriceLib.sol";
 
 /// @title The reader surface production no longer ships
 /// @notice `CrapsBattle` keeps its whole reader surface internal: nothing on chain calls a craps
@@ -13,7 +16,7 @@ import {Craps} from "../../contracts/Craps.sol";
 ///         production kept. Every signature below is byte-for-byte the one that used to be on the
 ///         contract, which is what lets the assertions that grade them stay untouched.
 /// @dev Test-only. It is never deployed to a live chain, so its size is nobody's constraint.
-contract CrapsViews is CrapsBattle {
+contract CrapsViews is CrapsSeedViews, CrapsBattle {
     /// @dev Legacy score helper for harnesses. Production receives this score from the engine
     ///      in Settlement.rank and has no reason to compute it again.
     function _compositeOf(Settlement memory s) internal pure returns (uint256) {
@@ -46,9 +49,10 @@ contract CrapsViews is CrapsBattle {
     uint256 public constant BONUS_SLOTS_PER_DAY = _BONUS_SLOTS_PER_DAY;
     uint256 public constant CUSTOM_SLOT_BASE = _CUSTOM_SLOT_BASE;
     uint256 public constant BONUS_EVENT_CLOSE = 20 minutes;
-    uint256 public constant BONUS_SMALL_BANKROLL = _BONUS_SMALL_BANKROLL;
-    uint256 public constant BONUS_MED_BANKROLL = _BONUS_MED_BANKROLL;
-    uint256 public constant BONUS_LARGE_BANKROLL = _BONUS_LARGE_BANKROLL;
+    /// @dev The routine tiers' total buy-ins, as packed into `_bonusPreset`.
+    uint256 public constant BONUS_SMALL_BANKROLL = 600;
+    uint256 public constant BONUS_MED_BANKROLL = 1800;
+    uint256 public constant BONUS_LARGE_BANKROLL = 4500;
     uint256 public constant BONUS_CHIPS = _BONUS_CHIPS;
     uint256 public constant BOOST_ACTION_BPS = _BOOST_ACTION_BPS;
     uint256 public constant BPS_DENOMINATOR = _BPS_DENOMINATOR;
@@ -63,7 +67,7 @@ contract CrapsViews is CrapsBattle {
     uint256 public constant SYBIL_SCORE_FLOOR = _SYBIL_SCORE_FLOOR;
     uint256 public constant MAX_ROLLS = _MAX_ROLLS;
     uint256 public constant SLIP_ROLL_BUDGET = _SLIP_ROLL_BUDGET;
-    uint256 public constant SLIP_ROLL_CEILING = _SLIP_ROLL_CEILING;
+    uint256 public constant SLIP_ROLL_CEILING = _SLIP_ROLL_BUDGET - 1 + _MAX_ROLLS;
     uint256 public constant ESC_HANDS = _ESC_HANDS;
     uint256 public constant ESC_FAST_FROM = _ESC_FAST_FROM;
     uint256 public constant ESC_CAP = _ESC_CAP;
@@ -71,8 +75,8 @@ contract CrapsViews is CrapsBattle {
     uint256 public constant SCHED_GOAL = _SCHED_GOAL;
     uint256 public constant DICE_RUN_RECORD_FLOOR = _DICE_RUN_RECORD_FLOOR;
     bytes32 public constant CRAPS_SEED_DOMAIN = _CRAPS_SEED_DOMAIN;
-    uint256 public constant HIGH_MULT = _HIGH_MULT;
-    uint256 public constant HIGH_MULT_TAIL = _HIGH_MULT_TAIL;
+    uint256 public constant HIGH_MULT = CrapsPriceLib.HIGH_BASE;
+    uint256 public constant HIGH_MULT_TAIL = CrapsPriceLib.HIGH_TAIL;
     uint256 public constant MAX_HIGH_MULT = _MAX_HIGH_MULT;
 
     /// @dev Three the production table stopped exposing. `stakeFor` alone cost 276 bytes of
@@ -557,7 +561,7 @@ contract CrapsViews is CrapsBattle {
     }
 
     function PROG_ROUTINE_RARE_BPS() external pure returns (uint256) {
-        return _PROG_ROUTINE_RARE_BPS;
+        return _PROG_ROUTINE_COMMON_BPS << _PROG_RARE_DOUBLINGS;
     }
 
     function PROG_RARE_DOUBLINGS() external pure returns (uint256) {
@@ -767,5 +771,309 @@ contract CrapsViews is CrapsBattle {
 
     function boostBudgetOf(uint24 day) external view returns (uint256) {
         return _boostBudget[day] & _BUDGET_MASK;
+    }
+
+    // ── Readers production no longer carries ────────────────────────────────
+    /// @notice A placed bet slip, decoded — what `_betOf` returns. Its logical ID is
+    ///         `(slot << 64) | seat`; scheduled records become unavailable after bank reuse.
+    /// @param player        Who staked it, and the only address any payment can ever reach.
+    /// @param slot          The battle this slip sits in. Its terms — bankroll, target, bounty,
+    ///                      bar — are the SLOT's; read them with `_customBattleOf` or
+    ///                      `_bonusTermsFor`.
+    /// @param seat          This entrant's place in its field, 1-based — the low half of its id.
+    /// @param settled       Whether it has been resolved, read off the slot's resolve cursor.
+    /// @param battleClaimed Whether this slip's battle has paid. A battle pays the instant its
+    ///                      last seat scores, so this is simply whether the field finished.
+    /// @param chips         The ten leg counts as one thirty-bit word, three bits each — the nine
+    ///                      light legs at bits 0..26 and the dark side at 27..29. Zero is a blank
+    ///                      ticket; the draw places all ten chips.
+    /// @dev The header is created at placement. Its chip slice may change through `amendSlip`
+    ///      before close; settlement never writes the bet, and the slot's cursor carries its
+    ///      settled mark.
+    struct Bet {
+        address player;
+        uint64 slot;
+        uint64 seat;
+        bool settled;
+        bool battleClaimed;
+        uint256 chips;
+    }
+
+    /// @notice One battle's scoreboard, decoded — what `_battleOf` returns.
+    /// @param entrants     Slips entered (and still in) the battle.
+    /// @param resolved     Entrants whose runs have settled.
+    /// @param winnerId     The winning seat within this slot; combine it with the slot for the bet id.
+    /// @param finalized    Every entrant resolved: the scoreboard is the verdict.
+    /// @param winningStop  The winning outcome class, meaningful once finalized.
+    /// @param winningHands The winning hand count — meaningful once finalized, and only where the
+    ///                     composite encodes it: a BUST, whose primary leads with its shooter
+    ///                     count. A goal ranks on its high point alone and reports zero here.
+    /// @param winningPeak  The winner's HIGH POINT in whole FLIP, once finalized.
+    /// @param winningEnd   The winner's raw ENDING bankroll in whole FLIP, once finalized — what
+    ///                     it was actually paid on, which a goal's peak may sit well above.
+    /// @dev The high point AS A MULTIPLE is not restated here: a battle key is a hash, so this
+    ///      reader cannot recover the starting bankroll to divide by. `CrapsBattleFinalized`
+    ///      carries `winningScoreBps` for exactly that reason, and a caller holding the window's
+    ///      terms divides `winningPeak` by them.
+    /// @param battleStake  One entrant's stake (wei).
+    /// @param seed         FLIP donated onto this battle by third parties (wei), via `donate`;
+    ///                     zero if nobody has. Never the protocol's own boost — a window's boost
+    ///                     is drawn from the word that settles it and read through `boostOf`.
+    ///                     Every field that forms pays it out — there is no head count below
+    ///                     which it falls back out of the pot.
+    /// @param pot          `battleStake x entrants`, plus banked seed (wei). A tier boost is drawn
+    ///                     from the word that settles the field and is therefore not included here.
+    struct Battle {
+        uint64 entrants;
+        uint64 resolved;
+        uint64 winnerId;
+        bool finalized;
+        Craps.SlipStop winningStop;
+        uint16 winningHands;
+        uint256 winningPeak;
+        uint256 winningEnd;
+        uint256 battleStake;
+        uint256 seed;
+        uint256 pot;
+    }
+
+    /// @dev Whether a bet has settled. No slip carries a settled bit — its slot's cursor marks the
+    ///      whole field at once, and an id's low half is its place in that field.
+    function _settledOf(uint256 betId) internal view returns (bool) {
+        uint256 slot = betId >> 64;
+        uint256 ordinal = uint64(betId);
+        if (_loadBet(betId) >> _AWARD_UNITS_SHIFT != 0) {
+            (, uint64 dayN) = _dayField(slot);
+            ordinal += dayN;
+        }
+        return ordinal <= _bonusCursorOf(slot);
+    }
+
+    /// @notice The custom battle at `slot`: its match key, the table it shut onto (zero until it
+    ///         does), and its packed definition. `terms` is handed back whole rather than spread
+    ///         into eight returns — the layout is fixed by `CrapsBattleCreated` and a client
+    ///         decodes it for nothing, where eight returns cost real code on a table with none
+    ///         to spare.
+    function _customBattleOf(uint64 slot) internal view returns (bytes32 battleKey, uint48 index, uint256 terms) {
+        (Window memory w, uint256 c) = _customTerms(slot);
+        uint48 stored = _slotIndexOf(slot);
+        unchecked {
+            if (stored != 0) index = stored - 1;
+        }
+        return (w.key, index, c);
+    }
+
+    /// @notice One of today's windows as it stands: its battle, the table it settled on (zero
+    ///         until it shuts), its seed, and whether it is still taking entries.
+    function _bonusWindowOf(uint256 period)
+        internal
+        view
+        returns (bytes32 battleKey, uint48 index, uint256 seed, bool joinable)
+    {
+        (uint24 today,, uint256 slot) = _currentBonusSlot();
+        if (period >= _BONUS_PERIODS_PER_DAY) return (bytes32(0), 0, 0, false);
+        Window memory w = _windowTerms(today, period);
+        battleKey = w.key;
+        uint256 target = w.bound;
+        uint48 stored = _slotIndexOf(target);
+        if (stored != 0) index = stored - 1;
+        uint256 g = _battles[w.key];
+        // The MOST this window can pay on top of the stakes, plus whatever has been donated onto
+        // it. The rung itself is the settling table's, so `boostOf` is where the drawn figure
+        // shows up and `_bonusBoostBand` is the spread it was drawn from.
+        seed = _boostBase(w) * _BOOST_MAX_MULT + ((g >> _BG_SEED_SHIFT) & _BG_SEED_MASK) * _BATTLE_STAKE_UNIT;
+        joinable = g != 0 && stored == 0 && target >= slot;
+    }
+
+    /// @notice What a bonus window's boost can be, in wei: its worst rung, its MEAN, and its
+    ///         ceiling. Every window is a lottery — the rung comes off the word that SETTLES the
+    ///         table, which does not exist while the field is forming — so this is the whole of
+    ///         what is knowable at entry, and `boostOf` is where the drawn figure appears once
+    ///         that word lands.
+    /// @dev `mid` is the ladder's mean and therefore this window's share of the day's budget
+    ///      exactly — half for the event, the other half split across the six routine windows
+    ///      by tier (`_windowShare`) — which is what makes a day's budget an EXPECTATION rather
+    ///      than a cap: the realised total can land far above it or far below.
+    function _bonusBoostBand(uint24 day, uint256 period)
+        internal
+        view
+        returns (uint256 low, uint256 mid, uint256 high)
+    {
+        if (_dailyWordAt(day) == 0 || period >= _BONUS_PERIODS_PER_DAY) return (0, 0, 0);
+        Window memory w = _windowTerms(day, period);
+        unchecked {
+            uint256 base = _boostBase(w);
+            // The bottom rung is a quarter of the base, so an unlucky window is never nothing —
+            // it is simply the smallest thing the schedule pays.
+            low = base / 4;
+            mid = base;
+            high = base * _BOOST_MAX_MULT;
+        }
+    }
+
+    /// @notice Whether today's windows have been opened yet, and when the next day's can be.
+    function _bonusDayOf() internal view returns (uint24 openedDay, bool openableNow) {
+        uint256 latch = _bonus;
+        uint24 today = _currentDayIndex();
+        unchecked {
+            if (latch != 0) openedDay = uint24(latch - 1);
+        }
+        openableNow = latch < uint256(today) + 1 && _dailyWordAt(today) != 0;
+    }
+
+    /// @dev A stored composite back into what it says. `hands` is recoverable for a BUST, whose
+    ///      primary leads with its shooter count, and reads zero for a goal, whose primary is its
+    ///      high point alone. A bust's high point ranks it against other busts but DECODES AS
+    ///      ZERO: the progressive, the record and the finalization log read a high point only
+    ///      for a goal, whatever a bust once held.
+    function _decodeBest(uint256 best)
+        internal
+        pure
+        returns (Craps.SlipStop stop, uint256 hands, uint256 peakFlip, uint256 endFlip)
+    {
+        unchecked {
+            uint256 primary = (best >> _SC_PRIMARY_SHIFT) & _SC_PRIMARY_MASK;
+            endFlip = (best >> _SC_WON_SHIFT) & _SC_WON_MASK;
+            if (best & _SC_GOAL_BIT == 0) {
+                return (Craps.SlipStop.Bust, primary >> _SC_BUST_HANDS_SHIFT, 0, endFlip);
+            }
+            return (Craps.SlipStop.Goal, 0, primary, endFlip);
+        }
+    }
+
+    function _boostUnits(Window memory w, uint256 word) internal view returns (uint256) {
+        unchecked {
+            // Multiplied in WEI and only then cut to granules. Flooring the base first would
+            // round a small window's whole boost away — a thin day funds well under one granule
+            // per window, and it is the top rungs that make such a window pay at all.
+            return (_boostBase(w) * _boostMult(word, w.bound)) / (4 * _BATTLE_STAKE_UNIT);
+        }
+    }
+
+    /// @notice What a day's action contributes to a later budget: `dayStaked * _BOOST_ACTION_BPS / _BPS_DENOMINATOR`.
+    ///         Drawn from the HANDLE rather than from the realised result, so it does not move
+    ///         with the dice and a lucky week cannot starve the next one. It measures no burn and
+    ///         never has — it is a linear rate on what the seats put up.
+    function _dayActionRate(uint24 day) internal view returns (uint256) {
+        unchecked {
+            return (uint256(uint128(_dayStaked[day])) * _BOOST_ACTION_BPS) / _BPS_DENOMINATOR;
+        }
+    }
+
+    /// @dev `floor(pool * bps / 10_000)` that CANNOT overflow, whatever the pool comes to hold.
+    ///      Dividing at the denominator FIRST bounds the multiplication by the result — which is
+    ///      at most the pool itself — where a bare `pool * bps` would wrap silently inside an
+    ///      unchecked block at the 80% rung.
+    ///
+    ///      EXACT, not an approximation: write `pool = 10_000q + r`. Then
+    ///      `floor(pool * bps / 10_000)` is `q * bps + floor(r * bps / 10_000)`, which is
+    ///      term-for-term what this returns. Floor semantics are preserved at every rung.
+    function _poolShare(uint256 pool, uint256 bps) internal pure returns (uint256) {
+        unchecked {
+            return (pool / _BPS_DENOMINATOR) * bps + ((pool % _BPS_DENOMINATOR) * bps) / _BPS_DENOMINATOR;
+        }
+    }
+
+    /// @dev THE PROGRESSIVE AWARD, and the whole of it. Reached once per finalized SCHEDULED
+    ///      field, from `_payout`'s single scheduled branch, so it cannot pay twice however the
+    ///      settlement batches were cut and a custom field can never reach the pool.
+    ///
+    ///      IT ADDS NO RANDOMNESS. The recipient is the winner the ordinary comparator already
+    ///      named; the qualification is that winner's HIGH POINT against its window's target; and
+    ///      the amount is a fixed share of the live pool, chosen by the rung. Every scheduled
+    ///      window, the jackpot slot included, pays on the same two rungs: 5% of the pool at a
+    ///      25x high point, 10% at 120x. Nothing is re-run and no runner-up is ever considered.
+    ///
+    ///      A BUST NEVER QUALIFIES, however high it got: its `peakFlip` decodes as zero, which is
+    ///      below every cutoff. A custom battle neither draws on the pool nor funds it and is excluded
+    ///      by the caller before this helper is reached.
+    /// @param w The window the finalized winner played.
+    /// @param peakFlip The finalized winner's HIGH POINT in whole FLIP, straight off the
+    ///        scoreboard the field just closed. Nothing is re-run to obtain it.
+    /// @param score That high point over the run's own starting bankroll, in basis points — the
+    ///        same figure the finalization log carries, computed once by the caller.
+    /// @param winnerId The winner's bet id, logged with the payout.
+    /// @param winnerWord The winner's settled bet header, carrying its owner address.
+    /// @param winner The winner's address, credited with the payout.
+    ///      Reached by self-call through the table's delegate fallback, so the suite installs
+    ///      `JackpotBattleViews` at `JACKPOT_BATTLE` before calling it.
+    function _payProgressive(Window memory w, uint256 peakFlip, uint256 score, uint256 winnerId, uint256 winnerWord, address winner) internal {
+        IJackpotBattleViews(address(this)).payProgressive(w, peakFlip, score, winnerId, winnerWord, winner);
+    }
+
+    function _betOf(uint256 betId) internal view returns (Bet memory bet) {
+        uint256 header = _loadBet(betId);
+        bet.player = address(uint160(header));
+        bet.slot = uint64(betId >> 64);
+        bet.seat = uint64(betId);
+        bet.settled = _settledOf(betId);
+        uint256 slot = betId >> 64;
+        // A DAY TICKET holds no battle of its own — it plays all seven of its day's, and the
+        // reserved slot it lives at names no window — so there is no single field whose finish
+        // this could report and it stays false. Read those seven through their own slots.
+        if (slot >= _CUSTOM_SLOT_BASE || slot % _BONUS_SLOTS_PER_DAY != 0) {
+            uint256 board = _battles[_slotWindow(slot).key];
+            uint256 field = board & _MASK32;
+            bet.battleClaimed = field != 0 && ((board >> _BG_RESOLVED_SHIFT) & _MASK32) == field;
+        }
+        bet.chips = (header >> _BET_CHIPS_SHIFT) & _BET_CHIPS_MASK;
+    }
+
+    /// @notice The battle a bet is entered in — its slot's, since that is the only battle a slip
+    ///         at that slot can be in.
+    function _battleKeyOf(uint256 betId) internal view returns (bytes32) {
+        if (address(uint160(_loadBet(betId))) == address(0)) revert NoSuchBet();
+        return _slotWindow(betId >> 64).key;
+    }
+
+    /// @notice One battle's scoreboard, decoded. The winning stop and hand count mean something
+    ///         once `finalized`.
+    function _battleOf(bytes32 key) internal view returns (Battle memory info) {
+        uint256 g = _battles[key];
+        info.entrants = uint32(g);
+        info.resolved = uint32(g >> _BG_RESOLVED_SHIFT);
+        info.winnerId = uint64(uint32(g >> _BG_WINNER_SHIFT));
+        info.finalized = info.entrants != 0 && info.resolved == info.entrants;
+        info.battleStake = ((g >> _BG_STAKE_SHIFT) & _BSTAKE_MAX) * _BATTLE_STAKE_UNIT;
+        // DONATIONS ONLY. A window's own seed is a function of the day's word, and a key is a
+        // hash — there is no day to recover here — so read the full figure from `bonusOpenState`
+        // or `_bonusTermsFor`, both of which take the day and period.
+        info.seed = ((g >> _BG_SEED_SHIFT) & _BG_SEED_MASK) * _BATTLE_STAKE_UNIT;
+        info.pot = info.battleStake * info.entrants + info.seed;
+        if (info.finalized) {
+            (Craps.SlipStop stop, uint256 hands, uint256 peakFlip, uint256 endFlip) =
+                _decodeBest((g >> _BG_BEST_SHIFT) & _SC_BEST_MASK);
+            info.winningStop = stop;
+            info.winningHands = uint16(hands);
+            info.winningPeak = peakFlip;
+            info.winningEnd = endFlip;
+        }
+    }
+
+    /// @notice The terms a bonus battle armed in `period` of `day` carries — derivable from the
+    ///         day's word alone, so a front end can publish the whole day's timetable the moment
+    ///         that word lands, including windows nobody has armed yet. Zero bankroll means that
+    ///         day has no word and nothing is scheduled.
+    function _bonusTermsFor(uint24 day, uint256 period)
+        internal
+        view
+        returns (
+            uint128 bankroll,
+            uint128 goal,
+            uint256 boardStake,
+            uint256 battleStake,
+            uint256 boostQuote
+        )
+    {
+        if (_dailyWordAt(day) == 0 || period >= _BONUS_PERIODS_PER_DAY) {
+            return (0, 0, 0, 0, 0);
+        }
+        Window memory w = _windowTerms(day, period);
+        (bankroll, goal, boardStake) = (w.bankroll, w.goal, w.postedStake);
+        battleStake = w.stakeUnits * _BATTLE_STAKE_UNIT;
+        // The MOST this window can put up on top of the stakes, before any donation adds to it.
+        // Every window is a lottery, so a ceiling is the honest single number; `_bonusBoostBand`
+        // gives the spread and `boostOf` the figure once the table's word lands.
+        boostQuote = _boostBase(w) * _BOOST_MAX_MULT;
     }
 }

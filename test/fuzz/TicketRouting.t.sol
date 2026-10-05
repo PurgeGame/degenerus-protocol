@@ -17,11 +17,11 @@ contract TicketRoutingHarness is DegenerusGameStorage {
     }
 
     function queueTicketsScaled(address buyer, uint24 targetLevel, uint32 quantityScaled) external {
-        _queueEntriesScaled(buyer, targetLevel, quantityScaled, false);
+        _queueEntriesScaled(buyer, targetLevel, quantityScaled);
     }
 
     function queueTicketRange(address buyer, uint24 startLevel, uint24 numLevels, uint32 ticketsPerLevel) external {
-        _queueEntryRange(buyer, startLevel, numLevels, ticketsPerLevel, false);
+        _queueEntryRange(buyer, startLevel, numLevels, ticketsPerLevel);
     }
 
     function setLevel(uint24 lvl) external {

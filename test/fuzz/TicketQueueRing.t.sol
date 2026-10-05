@@ -3,9 +3,10 @@ pragma solidity 0.8.34;
 
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {TicketLevelPrep} from "../helpers/TicketLevelPrep.sol";
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 
-contract TicketQueueRingHarness is DegenerusGameStorage {
+contract TicketQueueRingHarness is TicketLevelPrep {
     function setLevel(uint24 lvl) external { level = lvl; jackpotPhaseFlag = false; }
     function enqueue(address player, uint24 lvl, uint32 n) external { _queueEntries(player, lvl, n, false); }
     function append(uint24 key, uint32 pos) external { _tqAppend(key, pos); }

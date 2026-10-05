@@ -88,7 +88,8 @@ contract Craps {
     /// @notice Shared roll budget for every bet slip, judged between shooters.
     /// @dev This is what makes a slip settlement's gas a GUARANTEE instead of a probability. The
     ///      shooter cap alone leaves a bounded-but-huge worst case (cap x _MAX_ROLLS rolls); with
-    ///      this budget the hard ceiling is `_SLIP_ROLL_CEILING` rolls however the dice fall.
+    ///      this budget the hard ceiling is `_SLIP_ROLL_BUDGET - 1 + _MAX_ROLLS` rolls however the
+    ///      dice fall, since the last shooter admitted may still run a full hand.
     ///      Hitting it is an ordinary stop between shooters; every shooter still settles whole,
     ///      and the budget never cuts a hand mid-roll. A safety bound, not a rule of play: with
     ///      every shooter doubling from `_ESC_FAST_FROM`, none of 286 million simulated runs
@@ -99,11 +100,6 @@ contract Craps {
     ///         and plays on — so it needs room past the escalator ceiling at shooter 52. Either
     ///         this cap or `_SLIP_ROLL_BUDGET` ends a run, whichever the dice reach first.
     uint256 internal constant _MAX_SLIP_HANDS = 512;
-
-    /// @notice THE ABSOLUTE TOTAL-ROLL CEILING, and the figure the gas and work-unit bounds are
-    ///         sized on. NOT the budget: the budget is judged BETWEEN shooters, so the last
-    ///         shooter it admits may still run a full `_MAX_ROLLS` hand of its own.
-    uint256 internal constant _SLIP_ROLL_CEILING = _SLIP_ROLL_BUDGET - 1 + _MAX_ROLLS;
 
     /// @notice Shooters between each mandatory doubling of a slip's base wager.
     /// @dev The escalator: shooters 0-2 wager 1x the board, 3-5 wager 2x, 6-8 wager 4x, and so on
@@ -146,6 +142,15 @@ contract Craps {
     /// @notice Domain tag for the field's rotating-shooter start, separated from every other
     ///         draw the same seed answers. One draw per FIELD: the seat offset does the rest.
     uint256 internal constant ROTATING_SHOOTER_TAG = 0x526f746174696e6753686f6f746572; // "RotatingShooter"
+
+    /// @notice Domain tag mixed into every craps seed.
+    bytes32 internal constant _CRAPS_SEED_DOMAIN = keccak256("degenerus.lootbox.craps.v1");
+    /// @dev Separates the per-bet rounding roll from everything else on the same committed word.
+    uint256 internal constant CRAPS_ROUND_TAG = 0x4372617073526f756e64; // "CrapsRound"
+    /// @dev Keys the owner's board scatter.
+    uint256 internal constant SCATTER_TAG = 0x437261707353636174746572; // "CrapsScatter"
+    /// @dev Keys an awarded entry's run to its bet id rather than its wallet.
+    uint256 internal constant JACKPOT_AWARDED_TAG = 0x4a61636b706f7441776172646564; // "JackpotAwarded"
 
     /// @dev Extra percentage points on HOT profit when this seat is the shooter. Both bonuses
     ///      apply only after the threshold, add before one floor, and never boost early profit.

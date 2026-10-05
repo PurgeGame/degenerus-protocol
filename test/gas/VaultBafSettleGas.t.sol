@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {Coinflip} from "../../contracts/Coinflip.sol";
+import {CoinflipStakeSetter} from "../helpers/CoinflipStakeSetter.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
@@ -25,7 +26,7 @@ import {VaultBafRig} from "../repro/VaultBafSettlement.t.sol";
 ///           stays at or under 10M.
 
 /// @dev Writes the vault's coinflip history through Coinflip's own lane helpers.
-contract VaultSettleSeeder is Coinflip {
+contract VaultSettleSeeder is CoinflipStakeSetter {
     function seedVaultHistory(uint24 latest, uint24 gap, bool rebuy) external {
         address v = ContractAddresses.VAULT;
         PlayerCoinflipState storage s = playerState[v];

@@ -57,7 +57,7 @@ contract JackpotBattle is CrapsBattleStorage {
         if (slot < _CUSTOM_SLOT_BASE) {
             uint256 heat = (_highField[key] >> _HF_HOTTEST_SHIFT) & _HF_HOTTEST_MASK;
             if (heat != 0 && pot != 0) {
-                uint256 seed = uint256(keccak256(abi.encode(keccak256("degenerus.lootbox.craps.v1"), word, uint256(slot))));
+                uint256 seed = uint256(keccak256(abi.encode(_CRAPS_SEED_DOMAIN, word, uint256(slot))));
                 uint256 n = uint32(_battles[key]);
                 uint256 start = uint256(keccak256(abi.encode(uint256(0x526f746174696e6753686f6f746572), seed))) % n;
                 uint256 seat = 1 + (start + 511 - (heat & 511)) % n;
@@ -165,11 +165,6 @@ contract JackpotBattle is CrapsBattleStorage {
         if (_rngPending[physical]++ == 0) {
             IGameCrapsPending(ContractAddresses.GAME).setCrapsRngPending(index, true);
         }
-    }
-
-    function completeRngSlot(uint64 slot, uint48 index) external {
-        if (msg.sender != address(this)) revert OnlyTableSelf();
-        _completeRngSlot(slot, index);
     }
 
     function _completeRngSlot(uint64 slot, uint48 index) private {
@@ -515,11 +510,6 @@ contract JackpotBattle is CrapsBattleStorage {
             unchecked { index = _slotIndexOf(w.bound) - 1; }
             _completeRngSlot(w.bound, index);
         }
-    }
-
-    function payProgressive(Window calldata w, uint256 peak, uint256 score, uint256 winnerId, uint256 winnerWord, address winner) external {
-        if (msg.sender != address(this)) revert OnlyTableSelf();
-        _payProgressive(w, peak, score, winnerId, winnerWord, winner);
     }
 
     function _bonusRoll(uint256 word, uint256 period) private pure returns (uint256) {

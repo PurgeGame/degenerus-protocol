@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {CrapsOracle} from "./CrapsOracle.sol";
 import {LootboxCraps} from "../../contracts/LootboxCraps.sol";
+import {CrapsSeedViews} from "./CrapsSeedViews.sol";
 import {CrapsPins} from "./CrapsPins.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
@@ -37,7 +38,7 @@ contract SlotProbe is DegenerusGameStorage {
 
 /// @dev Adds only the replay taps the suite grades the binding with. It overrides nothing —
 ///      the doubles live at the pins (see CrapsPins), so every rule under test is the real one.
-contract LootboxCrapsHarness is LootboxCraps {
+contract LootboxCrapsHarness is CrapsSeedViews {
 
     /// @dev The `resolveHandAt` / `resolveHandsAt` / `shooterDice` replay wrappers were cut from
     ///      production: they cost `CrapsBattle` its EIP-170 headroom and the paying path never called

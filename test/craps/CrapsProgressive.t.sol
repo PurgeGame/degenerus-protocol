@@ -6,6 +6,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {CrapsBattle, IReadCohortLifecycle} from "../../contracts/CrapsBattle.sol";
 import {CrapsPins} from "./CrapsPins.sol";
+import {JackpotBattleViews} from "./JackpotBattleViews.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @dev Taps for the progressive alone. Every one of them drives a SHIPPED internal — the fold
@@ -210,6 +211,7 @@ contract CrapsProgressiveTest is CrapsPins {
 
     function setUp() public {
         _installPins();
+        vm.etch(ContractAddresses.JACKPOT_BATTLE, address(new JackpotBattleViews()).code);
         craps = new ProgHarness();
         // The deployment day is a Craps warm-up day with no windows; every fixture plays
         // from genesis + 1, the first day the table opens.
@@ -989,7 +991,7 @@ contract CrapsProgressiveTest is CrapsPins {
         bytes32 key = keccak256("stamped");
         craps.writeBattleWord(key, 1);
         craps.scoreAt(key, craps.goalScore(7777, 42, 3), 1, 0, TAP_SLOT);
-        CrapsBattle.Battle memory b = craps.battleOf(key);
+        CrapsViews.Battle memory b = craps.battleOf(key);
         assertTrue(b.finalized, "the one-seat field did not finalize");
         assertEq(b.winningPeak, 7777, "the board did not report its high point");
         assertEq(b.winningEnd, 42, "the board did not report its ending bankroll");
@@ -1026,7 +1028,7 @@ contract CrapsProgressiveTest is CrapsPins {
         craps.settleSlot(slot, WHOLE_FIELD);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
-        CrapsBattle.Battle memory done = craps.battleOf(key);
+        CrapsViews.Battle memory done = craps.battleOf(key);
         assertTrue(done.finalized, "the field did not finalize");
         assertEq(done.winningEnd, ends[done.winnerId], "the board holds another seat's ending bankroll");
         if (done.winningStop == Craps.SlipStop.Goal) {
@@ -1132,7 +1134,7 @@ contract CrapsProgressiveTest is CrapsPins {
                 // Every seat in its own transaction, the smallest batches the lane allows.
                 craps.resolveSeats(slot, 16);
             }
-            CrapsBattle.Battle memory b = craps.battleOf(craps.keyOfSlot(slot));
+            CrapsViews.Battle memory b = craps.battleOf(craps.keyOfSlot(slot));
             assertTrue(b.finalized, "the field did not finalize");
             pool[pass] = craps.progressivePool();
             winner[pass] = b.winnerId;
@@ -1665,7 +1667,7 @@ contract CrapsProgressiveTest is CrapsPins {
         assertGt(banked, 0, "a converting boost banked nothing");
 
         // The pot: every bounty whole, plus only the liquid part of the boost.
-        CrapsBattle.Battle memory done = craps.battleOf(key);
+        CrapsViews.Battle memory done = craps.battleOf(key);
         uint256 stakes = done.battleStake * done.entrants;
         PaidOut[] memory pots = _potsIn(logs);
         assertEq(pots.length, 1, "the field paid other than one pot");

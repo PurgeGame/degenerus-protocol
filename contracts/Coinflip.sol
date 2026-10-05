@@ -1956,28 +1956,6 @@ contract Coinflip {
         }
     }
 
-    /// @dev Masked write of `day`'s stake lane, preserving the seven sibling days. The whole-FLIP
-    ///      amount clamps at STAKE_LANE_MAX before it is shifted in:
-    ///      the write is masked, so an over-wide value would not truncate — it would spill
-    ///      into a SIBLING DAY's lane and hand that day a stake nobody deposited. Clamping
-    ///      makes that impossible by construction instead of by an invariant every caller
-    ///      has to keep holding.
-    ///
-    ///      A stake is not bounded by supply — a deposit burns the FLIP it stakes, and credits
-    ///      add stake nobody minted — so the clamp is the bound: if the credit paths ever reach it, the failure is one capped
-    ///      stake rather than a neighbouring day's books. Fresh SLOAD/SSTORE.
-    /// @return stored The whole-FLIP value the lane now holds.
-    function _setFlipStake(uint24 day, address p, uint256 amount) internal returns (uint256 stored) {
-        uint256 units = amount;
-        if (units > STAKE_LANE_MAX) units = STAKE_LANE_MAX;
-        uint256 shift = (day & 7) << 5;
-        uint24 key = day >> 3;
-        uint256 w = coinflipStakePacked[key][p];
-        w = (w & ~(STAKE_LANE_MAX << shift)) | (units << shift);
-        coinflipStakePacked[key][p] = w;
-        stored = units;
-    }
-
     /// @dev Day result for `day` (32 days/slot, 8-bit lanes). 3-state byte:
     ///      0 = unresolved, 1 = resolved loss, 50..156 = resolved win at that reward%.
     ///      win is derived (byte >= 50, since every win stores reward >= 50); losing

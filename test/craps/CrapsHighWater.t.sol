@@ -762,7 +762,7 @@ contract CrapsCustomBoundaryTest is CrapsPins {
                 craps.settleSlot(slot, 8);
                 craps.settleSlot(slot, WHOLE_FIELD);
             }
-            CrapsBattle.Battle memory b = craps.battleOf(key);
+            CrapsViews.Battle memory b = craps.battleOf(key);
             assertTrue(b.finalized, "a partition left the field unfinished");
             winner[mode] = b.winnerId;
             peak[mode] = b.winningPeak;

@@ -197,11 +197,11 @@ contract FlipTombstone is DeployProtocol {
     /// @notice The checked _toUint128 add holds at a realistic high allowance (a large
     ///         escrow) — no SupplyOverflow, result == existing + 1e18.
     function test_BTOMB03_CheckedAddNoOverflow() public {
-        // Escrow a large additional allowance as GAME (vaultEscrow is GAME-or-VAULT gated). Push the
+        // Escrow a large additional allowance by minting to the VAULT as GAME. Push the
         // existing allowance to a plausible high value.
         uint256 escrow = 1_000_000_000_000; // whole FLIP
         vm.prank(GAME);
-        coin.vaultEscrow(escrow);
+        coin.mintForGame(VAULT, escrow);
 
         uint256 existing = coin.vaultMintAllowance();
         assertEq(existing, SEED_VAULT_ALLOWANCE + escrow, "escrow applied");
@@ -224,7 +224,7 @@ contract FlipTombstone is DeployProtocol {
         uint256 target = U128_MAX - TOMBSTONE_AMOUNT;
         uint256 escrow = target - SEED_VAULT_ALLOWANCE;
         vm.prank(GAME);
-        coin.vaultEscrow(escrow);
+        coin.mintForGame(VAULT, escrow);
 
         assertEq(coin.vaultMintAllowance(), target, "existing pushed to U128_MAX - 1e18");
 
@@ -246,7 +246,7 @@ contract FlipTombstone is DeployProtocol {
         uint256 target = U128_MAX - TOMBSTONE_AMOUNT + 1;
         uint256 escrow = target - SEED_VAULT_ALLOWANCE;
         vm.prank(GAME);
-        coin.vaultEscrow(escrow);
+        coin.mintForGame(VAULT, escrow);
 
         assertEq(coin.vaultMintAllowance(), target, "existing pushed 1 wei past the flood-holds bound");
 

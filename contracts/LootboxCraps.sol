@@ -55,9 +55,6 @@ contract LootboxCraps is Craps {
     uint256 internal constant RNG_WORD_BY_DAY_SLOT = 10;
     uint256 internal constant RNG_DAY_TAGS_SLOT = 34;
 
-    /// @notice Domain tag mixed into every craps seed.
-    bytes32 internal constant _CRAPS_SEED_DOMAIN = keccak256("degenerus.lootbox.craps.v1");
-
     // ---------------------------------------------------------------------------------------
     // Reading the protocol
     // ---------------------------------------------------------------------------------------
@@ -105,26 +102,6 @@ contract LootboxCraps is Craps {
         unchecked {
             return uint24((block.timestamp - 82_620) / 1 days) - uint24(ContractAddresses.DEPLOY_DAY_BOUNDARY) + 1;
         }
-    }
-
-    // ---------------------------------------------------------------------------------------
-    // Seeding and resolution
-    // ---------------------------------------------------------------------------------------
-
-    /// @notice The seed for the table at `index`.
-    /// @dev Takes nothing but the index on purpose: the shooter belongs to the table, not to a
-    ///      player. Reverts until the word lands.
-    function _seedFor(uint48 index) internal view returns (bytes32) {
-        uint256 word = _wordAt(index);
-        if (word == 0) revert RngNotReady();
-        return _crapsSeed(word, index);
-    }
-
-    /// @dev The seed derivation alone, for a caller that already fetched the word — `_wordAt` is an
-    ///      external round-trip into the game, and a settlement needs the word for its own rolls
-    ///      too, so it should pay for that read exactly once.
-    function _crapsSeed(uint256 word, uint48 index) internal pure returns (bytes32) {
-        return bytes32(_hash3(uint256(_CRAPS_SEED_DOMAIN), word, index));
     }
 
     // ---------------------------------------------------------------------------------------

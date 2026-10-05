@@ -2,8 +2,9 @@
 pragma solidity ^0.8.33;
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {TicketLevelPrep} from "../helpers/TicketLevelPrep.sol";
 
-contract RecyclingGasHarness is DegenerusGameStorage {
+contract RecyclingGasHarness is TicketLevelPrep {
     function seed(bool payload) external {
         _setTicketBufferLevel(1);
         level = 2;

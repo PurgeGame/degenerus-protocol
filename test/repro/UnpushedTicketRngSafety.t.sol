@@ -11,7 +11,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 contract UnpushedTicketRngHarness is DegenerusGameTicketModule {
     function initialize() external { level = 1; }
     function credit(address player, uint24 lvl, uint32 scaled) external {
-        _queueEntriesScaled(player, lvl, scaled, false);
+        _queueEntriesScaled(player, lvl, scaled);
     }
     function creditWhole(address player, uint24 lvl, uint32 entries) external {
         _queueEntries(player, lvl, entries, false);

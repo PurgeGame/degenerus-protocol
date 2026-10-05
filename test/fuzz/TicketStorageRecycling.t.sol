@@ -3,8 +3,9 @@ pragma solidity ^0.8.33;
 
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {TicketLevelPrep} from "../helpers/TicketLevelPrep.sol";
 
-contract TicketRecyclingHarness is DegenerusGameStorage {
+contract TicketRecyclingHarness is TicketLevelPrep {
     function completed(uint24 lvl) external { level = lvl; jackpotPhaseFlag = false; }
     function prepare(uint24 lvl) external returns (bool) { return _prepareTicketLevel(lvl); }
     function append(uint24 lvl, uint8 trait, address owner, uint256 n) external {

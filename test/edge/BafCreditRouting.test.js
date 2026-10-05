@@ -119,18 +119,17 @@ describe("BafCreditRouting", function () {
     ]);
   }
 
-  async function mintFlipToAlice(coin, vault, alice, amount = eth(10000)) {
-    const vaultAddr = await vault.getAddress();
+  async function mintFlipToAlice(coin, coinflip, alice, amount = eth(10000)) {
+    const minterAddr = await coinflip.getAddress();
     await hre.ethers.provider.send("hardhat_setBalance", [
-      vaultAddr,
+      minterAddr,
       "0x1000000000000000000",
     ]);
-    await hre.ethers.provider.send("hardhat_impersonateAccount", [vaultAddr]);
-    const vaultSigner = await hre.ethers.getSigner(vaultAddr);
-    await coin.connect(vaultSigner).vaultEscrow(amount);
-    await coin.connect(vaultSigner).vaultMintTo(alice.address, amount);
+    await hre.ethers.provider.send("hardhat_impersonateAccount", [minterAddr]);
+    const minterSigner = await hre.ethers.getSigner(minterAddr);
+    await coin.connect(minterSigner).mintForGame(alice.address, amount);
     await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [
-      vaultAddr,
+      minterAddr,
     ]);
   }
 
@@ -168,7 +167,7 @@ describe("BafCreditRouting", function () {
   async function setupAliceWinningFlip(fixture) {
     const { game, coin, coinflip, deployer, mockVRF, alice, vault } = fixture;
 
-    await mintFlipToAlice(coin, vault, alice);
+    await mintFlipToAlice(coin, coinflip, alice);
 
     // alice places a coinflip stake (deposit). This routes the FLIP into the
     // coinflipBalance[nextDay][alice] mapping.
@@ -243,7 +242,7 @@ describe("BafCreditRouting", function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, coinflip, coin, alice, vault } = fixture;
 
-      await mintFlipToAlice(coin, vault, alice);
+      await mintFlipToAlice(coin, coinflip, alice);
       const gameAddr = await game.getAddress();
 
       await setLevel(gameAddr, 10);
@@ -305,7 +304,7 @@ describe("BafCreditRouting", function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { game, coinflip, coin, alice, vault } = fixture;
 
-      await mintFlipToAlice(coin, vault, alice);
+      await mintFlipToAlice(coin, coinflip, alice);
       const gameAddr = await game.getAddress();
 
       await setLevel(gameAddr, 5);

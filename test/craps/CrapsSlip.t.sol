@@ -296,7 +296,7 @@ contract CrapsSlipTest is CrapsPins {
         assertEq(flip.burned(alice), uint256(PLAYED) * 5 * 1, "burned the bankroll");
         assertEq(betId, (uint256(slot) << 64) | 1, "the id is the slot and the seat");
 
-        CrapsBattle.Bet memory bet = craps.betOf(betId);
+        CrapsViews.Bet memory bet = craps.betOf(betId);
         assertEq(bet.player, alice, "owner");
         assertEq(bet.slot, slot, "bound to its battle");
         assertEq(bet.seat, 1, "first seat in the field");

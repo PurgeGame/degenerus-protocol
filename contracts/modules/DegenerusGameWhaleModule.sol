@@ -536,16 +536,14 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                 buyer,
                 ticketStartLevel,
                 bonusCount,
-                bonusEntries,
-                false
+                bonusEntries
             );
         }
         _queueHalfPassAward(
             buyer,
             ticketStartLevel + bonusCount,
             100 - bonusCount,
-            WHALE_HALF_PASSES_PER_PASS * awardQty,
-            false
+            WHALE_HALF_PASSES_PER_PASS * awardQty
         );
 
         // Affiliate, fresh 25% at affiliate levels 1-3 / 20% at 4+, halved for
@@ -927,7 +925,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         // transition (targeting level + 101) continues it; in the jackpot phase the level
         // is already promoted, passLevel is level + 1 and the next transition targets
         // level + 100 itself, so the grant stops one level short.
-        _queueEntryRange(buyer, passLevel, jackpotPhaseFlag ? 99 : 100, DEITY_PERPETUAL_ENTRIES, false);
+        _queueEntryRange(buyer, passLevel, jackpotPhaseFlag ? 99 : 100, DEITY_PERPETUAL_ENTRIES);
         ++deityPassSales;
 
         // DGNRS rewards
@@ -957,16 +955,14 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                 affiliateAddr,
                 ticketStartLevel,
                 bonusCount,
-                WHALE_BONUS_ENTRIES_PER_LEVEL,
-                false
+                WHALE_BONUS_ENTRIES_PER_LEVEL
             );
         }
         _queueHalfPassAward(
             affiliateAddr,
             ticketStartLevel + bonusCount,
             100 - bonusCount,
-            WHALE_HALF_PASSES_PER_PASS,
-            false
+            WHALE_HALF_PASSES_PER_PASS
         );
         _applyWhalePassStats(affiliateAddr, ticketStartLevel);
 
@@ -1309,7 +1305,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         _applyWhalePassStats(player, startLevel);
         emit WhalePassClaimed(player, msg.sender, halfPasses, startLevel);
-        _queueHalfPassAward(player, startLevel, 100, halfPasses, false);
+        _queueHalfPassAward(player, startLevel, 100, halfPasses);
     }
 
     /// @dev One-per-address-LIFETIME AFKing seat latch. The seat is a perk of BUYING a

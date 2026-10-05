@@ -361,7 +361,7 @@ contract CrapsBattleTest is CrapsPins {
 
         // It RANKS. A zero bounty used to skip the scoreboard entirely, so `resolved` never caught
         // `entrants` and the battle could never finalize.
-        CrapsBattle.Battle memory info = craps.battleOf(craps.battleKeyOf(a));
+        CrapsViews.Battle memory info = craps.battleOf(craps.battleKeyOf(a));
         assertEq(info.resolved, 3, "a friendly field did not score");
         assertTrue(info.finalized, "a friendly battle never finalized");
         assertTrue(info.winnerId != 0, "a friendly battle named no winner");
@@ -386,7 +386,7 @@ contract CrapsBattleTest is CrapsPins {
         assertEq(craps.battleKeyOf(b), key, "board composition leaked into the match key");
         assertEq(craps.battleKeyOf(c), key, "board composition leaked into the match key");
 
-        CrapsBattle.Battle memory info = craps.battleOf(key);
+        CrapsViews.Battle memory info = craps.battleOf(key);
         assertEq(info.entrants, 3, "entrants");
         assertEq(info.resolved, 0, "resolved early");
         assertEq(info.battleStake, SUW, "stake echo");
@@ -528,7 +528,7 @@ contract CrapsBattleTest is CrapsPins {
             // each run its own winnings and a balance would carry both.
             PaidOut memory pot = _onlyPot(craps, slot, WHOLE_FIELD);
 
-            CrapsBattle.Battle memory info = craps.battleOf(key);
+            CrapsViews.Battle memory info = craps.battleOf(key);
             assertTrue(info.finalized, "battle not finalized after its last entrant");
             assertEq(info.resolved, 3, "resolved count");
             assertEq(info.winnerId, uint64(ids[best]), "the scoreboard named the wrong winner");
@@ -587,7 +587,7 @@ contract CrapsBattleTest is CrapsPins {
         uint256 beforeMint = flip.minted(alice);
         PaidOut memory pot = _onlyPot(craps, slot, WHOLE_FIELD);
 
-        CrapsBattle.Battle memory info = craps.battleOf(craps.battleKeyOf(a));
+        CrapsViews.Battle memory info = craps.battleOf(craps.battleKeyOf(a));
         assertTrue(info.finalized, "finalized");
         assertEq(info.winnerId, expected, "the table word did not break the tie");
         assertEq(craps.settlementAt(a).won, craps.settlementAt(b).won, "twins diverged");
@@ -701,7 +701,7 @@ contract CrapsBattleTest is CrapsPins {
             for (uint256 k = 0; k < 3; ++k) {
                 craps.scoreAt(key, sc[orders[o][k]], uint64(orders[o][k]) + 1, SU);
             }
-            CrapsBattle.Battle memory info = craps.battleOf(key);
+            CrapsViews.Battle memory info = craps.battleOf(key);
             // Entrant 0 holds the only GOAL, so it wins from every arrival order.
             assertEq(info.winnerId, 1, "arrival order moved the verdict");
         }
@@ -756,7 +756,7 @@ contract CrapsBattleTest is CrapsPins {
         );
 
         // And the winner takes the bounties, and ONLY the bounties.
-        CrapsBattle.Battle memory info = craps.battleOf(craps.battleKeyOf(ids[0]));
+        CrapsViews.Battle memory info = craps.battleOf(craps.battleKeyOf(ids[0]));
         assertEq(pot.betId, _idAt(slot, info.winnerId), "the pot went to a seat the scoreboard did not name");
         assertEq(pot.amount, SUW * 3, "the deleted remainders reached the winner");
     }
@@ -787,7 +787,7 @@ contract CrapsBattleTest is CrapsPins {
 
         craps.settleSlot(slot, WHOLE_FIELD);
 
-        CrapsBattle.Battle memory info = craps.battleOf(craps.battleKeyOf(ids[0]));
+        CrapsViews.Battle memory info = craps.battleOf(craps.battleKeyOf(ids[0]));
         address winner = craps.betOf(_idAt(slot, info.winnerId)).player;
         uint256 before = coinflip.staked(winner);
         assertEq(coinflip.staked(winner) - before, 0, "a zero-bounty battle paid out a bust remnant");
@@ -815,7 +815,7 @@ contract CrapsBattleTest is CrapsPins {
             coinflip.totalCredited() - before, paidA + paidB + paidC + pot.amount, "the batched credit mispaid"
         );
 
-        CrapsBattle.Battle memory info = craps.battleOf(craps.battleKeyOf(a));
+        CrapsViews.Battle memory info = craps.battleOf(craps.battleKeyOf(a));
         assertTrue(info.finalized, "the field did not finalize");
         assertEq(info.entrants, 3, "entrants");
         assertEq(info.resolved, 3, "resolved");
@@ -880,7 +880,7 @@ contract CrapsBattleTest is CrapsPins {
         vm.prank(alice);
         uint256 betId = craps.enterBattle(slot, c, 9); // a multiple, so its byte is non-zero too
 
-        CrapsBattle.Bet memory bet = craps.betOf(betId);
+        CrapsViews.Bet memory bet = craps.betOf(betId);
         assertEq(
             bet.chips,
             (uint256(3) << 27) | (uint256(3) << 9) | (uint256(1) << 12),
@@ -1054,7 +1054,7 @@ contract CrapsBattleTest is CrapsPins {
         vm.prank(alice);
         craps.amendSlip(betId, _boardB());
 
-        CrapsBattle.Bet memory bet = craps.betOf(betId);
+        CrapsViews.Bet memory bet = craps.betOf(betId);
         assertEq(
             bet.chips,
             (uint256(3) << 9) | (uint256(3) << 12) | (uint256(1) << 15),
@@ -1131,7 +1131,7 @@ contract CrapsBattleTest is CrapsPins {
             bool isDay = betId >> 64 == daySlot;
             if (!isDay && betId >> 64 != slot) continue;
 
-            CrapsBattle.Bet memory stored = craps.betOf(betId);
+            CrapsViews.Bet memory stored = craps.betOf(betId);
             assertEq(address(uint160(uint256(logs[i].topics[1]))), stored.player, "wrong owner");
             assertEq(bet & 0x7FFFFFF, stored.chips, "wrong chips");
             assertEq((bet >> 190) & 0xFFFF, uint256(0), "wrong frozen standing");
@@ -1751,7 +1751,7 @@ contract CrapsBattleTest is CrapsPins {
         Vm.Log[] memory payoutLogs = vm.getRecordedLogs();
         PaidOut memory pot = _potsIn(payoutLogs)[0];
 
-        CrapsBattle.Battle memory info = craps.battleOf(_keyOf(PER));
+        CrapsViews.Battle memory info = craps.battleOf(_keyOf(PER));
         uint256 winnerId = _idAt(slot, info.winnerId);
         uint256 held = uint256(0);
 
@@ -1793,7 +1793,7 @@ contract CrapsBattleTest is CrapsPins {
         _closeOn(craps, slot, 0, uint256(keccak256("customboost")));
         PaidOut memory pot = _onlyPot(craps, slot, WHOLE_FIELD);
 
-        CrapsBattle.Battle memory info = craps.battleOf(_slotKeyOf(slot));
+        CrapsViews.Battle memory info = craps.battleOf(_slotKeyOf(slot));
         uint256 winnerId = _idAt(slot, info.winnerId);
         assertEq((craps.betWordOf(winnerId) >> 190) & 0xFFFF, 0, "winner header contains score bits");
         // The ladder WOULD have zeroed this if it applied here.
@@ -2305,7 +2305,7 @@ contract CrapsBattleTest is CrapsPins {
         (uint128 wantBank, uint128 wantGoal, uint256 wantStack, uint256 wantStake,,) = craps.bonusTermsFor(day, PER);
         vm.prank(ContractAddresses.GAME);
         craps.openBonusDay();
-        CrapsBattle.Battle memory info = craps.battleOf(_keyOf(PER));
+        CrapsViews.Battle memory info = craps.battleOf(_keyOf(PER));
         assertEq(info.battleStake, wantStake, "opened a bounty the schedule did not advertise");
         // The terms belong to the SLOT, not to the seat: every entrant plays these, so they are
         // read once from the window rather than out of any one slip.
@@ -2408,7 +2408,7 @@ contract CrapsBattleTest is CrapsPins {
         Vm.Log[] memory payoutLogs = vm.getRecordedLogs();
         PaidOut memory pot = _potsIn(payoutLogs)[0];
 
-        CrapsBattle.Battle memory done = craps.battleOf(key);
+        CrapsViews.Battle memory done = craps.battleOf(key);
         assertTrue(done.finalized, "battle did not finalize");
 
         // The pot: one bounty per entrant, plus the boost this battle just rolled — all of it to
@@ -3286,7 +3286,7 @@ contract CrapsBattleTest is CrapsPins {
         craps.settleSlot(slot, WHOLE_FIELD);
         Vm.Log[] memory payoutLogs = vm.getRecordedLogs();
         PaidOut memory pot = _potsIn(payoutLogs)[0];
-        CrapsBattle.Battle memory done = craps.battleOf(key);
+        CrapsViews.Battle memory done = craps.battleOf(key);
         (uint24 qday,,) = craps.currentBonusSlot();
         (,, uint256 high) = craps.bonusBoostBand(qday, PER);
         uint256 stakes = uint256(BON_SU) * unit * field.length;

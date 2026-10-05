@@ -205,7 +205,7 @@ contract CrapsFlowHandler {
             uint64 bound = _boundOf(d, p);
             uint48 idx = craps.slotIndexOf(bound);
             if (idx == 0 || craps.wordAt(idx - 1) == 0) continue;
-            CrapsBattle.Battle memory b = craps.battleOf(craps.keyOfSlot(bound));
+            CrapsViews.Battle memory b = craps.battleOf(craps.keyOfSlot(bound));
             if (b.entrants == 0 || b.resolved == b.entrants) continue;
             _settleBound(bound);
         }
@@ -271,7 +271,7 @@ contract CrapsFlowHandler {
     function amend(uint256 pickSeed, uint256 boardSeed) external {
         if (ghost_betIds.length == 0) return;
         uint256 betId = ghost_betIds[pickSeed % ghost_betIds.length];
-        CrapsBattle.Bet memory b = craps.betOf(betId);
+        CrapsViews.Bet memory b = craps.betOf(betId);
         if (b.player == address(0)) return;
         vm.prank(b.player);
         try craps.amendSlip(betId, _board(boardSeed)) {} catch {}
@@ -455,7 +455,7 @@ contract CrapsFlowHandler {
             uint48 idx = craps.slotIndexOf(slot);
             if (idx == 0) continue;
             if (craps.wordAt(idx - 1) == 0) continue;
-            CrapsBattle.Battle memory b = craps.battleOf(craps.keyOfSlot(slot));
+            CrapsViews.Battle memory b = craps.battleOf(craps.keyOfSlot(slot));
             if (b.entrants == 0 || b.resolved == b.entrants) continue;
             return slot;
         }

@@ -5,6 +5,7 @@ import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {CrapsRngSealHandler} from "../handlers/CrapsRngSealHandler.sol";
 import {CrapsBattle} from "../../../contracts/CrapsBattle.sol";
+import {CrapsViews} from "../../craps/CrapsViews.sol";
 import {Craps} from "../../../contracts/Craps.sol";
 import {LootboxCraps} from "../../../contracts/LootboxCraps.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
@@ -163,7 +164,7 @@ contract CrapsRngSeal is DeployProtocol {
     ///         fields are byte-identical.
     function test_amendIsRefusedOnceTheFieldShuts() public {
         (uint64 slot, uint256 betId, address who) = _openDayWithOneEntrant();
-        CrapsBattle.Bet memory before = crapsBattle.betOf(betId);
+        CrapsViews.Bet memory before = crapsBattle.betOf(betId);
         vm.warp(block.timestamp + crapsBattle.BONUS_EVENT_CLOSE() + crapsBattle.BONUS_CLOCK_ALIGN());
         crapsBattle.armWindow(slot);
         Craps.Bets memory other;
@@ -171,7 +172,7 @@ contract CrapsRngSeal is DeployProtocol {
         vm.prank(who);
         vm.expectRevert();
         crapsBattle.amendSlip(betId, other);
-        CrapsBattle.Bet memory after_ = crapsBattle.betOf(betId);
+        CrapsViews.Bet memory after_ = crapsBattle.betOf(betId);
         assertEq(after_.chips, before.chips, "the packed board moved after the arm");
         assertEq(after_.seat, before.seat, "the seat moved after the arm");
     }

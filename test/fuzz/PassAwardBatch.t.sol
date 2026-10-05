@@ -6,11 +6,12 @@ import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
 contract PassAwardBatchHarness is DegenerusGameStorage {
-    function award(address buyer, uint24 start, uint24 span, uint256 amount, bool bypass) external {
-        _queueHalfPassAward(buyer, start, span, amount, bypass);
+    function award(address buyer, uint24 start, uint24 span, uint256 amount) external {
+        _queueHalfPassAward(buyer, start, span, amount);
     }
-    function range(address buyer, uint24 start, uint24 count, uint24 stride, uint32 amount, bool bypass) external {
-        _queueEntryRangeStrided(buyer, start, count, stride, amount, bypass);
+    function range(address buyer, uint24 start, uint24 count, uint24 stride, uint32 amount) external {
+        _queueEntryRangeStridedCore(buyer, start, count, stride, amount, _mintCeiling(), rngLockedFlag,
+            ticketWriteSlot ? TICKET_SLOT_BIT : uint24(0));
     }
     function configure(uint24 lvl, uint24 early, bool locked, bool writeSlot) external {
         level = lvl;
@@ -109,12 +110,12 @@ contract PassAwardBatchTest is Test {
             assertTrue(found, "no new storage location");
         }
     }
-    function _award(address buyer, uint24 start, uint24 span, uint256 amount, bool bypass) internal {
-        _equivalent(abi.encodeCall(h.oracleAward, (buyer, start, span, amount, bypass)),
-            abi.encodeCall(h.award, (buyer, start, span, amount, bypass)));
+    function _award(address buyer, uint24 start, uint24 span, uint256 amount) internal {
+        _equivalent(abi.encodeCall(h.oracleAward, (buyer, start, span, amount, false)),
+            abi.encodeCall(h.award, (buyer, start, span, amount)));
     }
     function testFuzzAward(uint24 seed, uint8 spanSeed, uint32 amount, uint32 existing, bool locked,
-        bool bypass, bool writeSlot, uint8 remSeed) public {
+        bool writeSlot, uint8 remSeed) public {
         uint24 lvl = uint24(bound(seed, 1, 900));
         uint24 start = lvl + 1;
         uint24 span = uint24(bound(spanSeed, 0, 100));
@@ -123,36 +124,36 @@ contract PassAwardBatchTest is Test {
         h.seed(BUYER, start, existing, remSeed & 1 != 0);
         if (span > 1) h.seed(BUYER, start + span - 1, existing, remSeed & 2 != 0);
         h.configure(lvl, 0, locked, writeSlot);
-        _award(BUYER, start, span, amount, bypass);
+        _award(BUYER, start, span, amount);
     }
     function testFuzzStrided(uint24 seed, uint8 countSeed, uint8 strideSeed, uint32 amount, bool locked,
-        bool bypass, bool writeSlot) public {
+        bool writeSlot) public {
         uint24 lvl = uint24(bound(seed, 1, 900));
         uint24 stride = uint24(bound(strideSeed, 1, 4));
         uint24 count = uint24(bound(countSeed, 0, 100 / stride));
         h.configure(lvl, 0, false, writeSlot);
         h.seed(BUYER, lvl + 1, 17, true);
         h.configure(lvl, 0, locked, writeSlot);
-        _equivalent(abi.encodeCall(h.oracleRange, (BUYER, lvl + 1, count, stride, amount, bypass)),
-            abi.encodeCall(h.range, (BUYER, lvl + 1, count, stride, amount, bypass)));
+        _equivalent(abi.encodeCall(h.oracleRange, (BUYER, lvl + 1, count, stride, amount, false)),
+            abi.encodeCall(h.range, (BUYER, lvl + 1, count, stride, amount)));
     }
     function testRecycledFarWordTags() public {
         h.configure(100, 0, false, false);
         for (uint24 i = 105; i <= 200; ++i) h.recycled(BUYER, i, 9123);
         h.configure(200, 0, false, false);
-        _award(BUYER, 201, 100, 7, false);
+        _award(BUYER, 201, 100, 7);
     }
     function testEarlyPoolCeiling() public {
         h.configure(24, 26, false, true);
         h.seed(BUYER, 25, type(uint32).max - 1, true);
         h.seed(BUYER, 26, 19, false);
-        _award(BUYER, 25, 100, 7, false);
+        _award(BUYER, 25, 100, 7);
     }
     function testLockedExistingFarLanesCanTopUp() public {
         h.configure(24, 0, false, false);
-        h.award(BUYER, 25, 100, 4, false);
+        h.award(BUYER, 25, 100, 4);
         h.configure(24, 0, true, false);
-        _award(BUYER, 25, 100, 7, false);
+        _award(BUYER, 25, 100, 7);
     }
     function testPreserveUnrelatedOwnerAndOutsideLanes() public {
         h.configure(100, 0, false, false);
@@ -160,22 +161,20 @@ contract PassAwardBatchTest is Test {
             h.seed(address(0xABCD), i, 9123, true);
             h.seed(BUYER, i, 400, true);
         }
-        _award(BUYER, 105, 3, 7, false);
+        _award(BUYER, 105, 3, 7);
     }
     function testTruncatedBaseKeepsStridedSemantics() public {
-        _award(BUYER, 1, 100, (uint256(1) << 32) + 3, false);
+        _award(BUYER, 1, 100, (uint256(1) << 32) + 3);
     }
     function testTruncatedBaseWithRemainder() public {
-        _award(BUYER, 1, 100, (uint256(1) << 32) + 7, false);
+        _award(BUYER, 1, 100, (uint256(1) << 32) + 7);
     }
-    function testCapacityBypassDropsNewOwner() public { h.capacity(); _award(BUYER, 1, 100, 7, true); }
-    function testCapacityPurchaseReverts() public { h.capacity(); _award(BUYER, 1, 100, 7, false); }
-    function testZeroBuyerBypass() public { _award(address(0), 1, 100, 7, true); }
-    function testZeroBuyerPurchase() public { _award(address(0), 1, 100, 7, false); }
+    function testCapacityPurchaseReverts() public { h.capacity(); _award(BUYER, 1, 100, 7); }
+    function testZeroBuyerPurchase() public { _award(address(0), 1, 100, 7); }
     function testFarQueueCollisionReverts() public {
         h.configure(100, 0, false, false);
         h.seed(BUYER, 150, 99, false);
         h.configure(200, 0, false, false);
-        _award(BUYER, 201, 100, 7, false);
+        _award(BUYER, 201, 100, 7);
     }
 }
