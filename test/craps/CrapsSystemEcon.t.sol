@@ -295,7 +295,7 @@ contract CrapsSystemEconTest is CrapsPins {
         // nothing else exposes that split.
         if (period == 5) {
             (CrapsBattleStorage.JackpotRound memory round,,) = JackpotBattle(address(craps)).jackpotBattleOf(slot);
-            uint256 price = JackpotBattle(address(craps)).jackpotEntryPrice();
+            uint256 price = round.entryPrice;
             uint256 totalUnits = uint256(round.paidCount) + uint256(round.drawnUnits);
             uint256 highPool = (uint256(round.paidUnits) - round.paidCount) * price * round.multiplierBps / 10_000;
             uint256 mainPool = round.totalPool - highPool;

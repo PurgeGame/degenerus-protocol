@@ -196,8 +196,8 @@ contract PurchaseZeroPoolBattleFloorTest is PurchaseBattleStagesBase {
     }
 
     function test_ZeroPoolLocksTheFloorBattleThenSeals() public {
-        (, uint256 added,,) = battle.jackpotProgress();
-        assertEq(added, 150_000 ether, "level-one floor");
+        (uint64 slot, uint256 added,,) = battle.jackpotProgress();
+        assertEq(added, 150_000 * battle.jackpotEntryPriceOf(slot) / 8_000, "scaled level-one floor");
         _apply();
         (, uint256 entries) = _battle();
         assertEq(entries, 15, "one award per 10,000 of Added");

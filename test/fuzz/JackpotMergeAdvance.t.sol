@@ -224,7 +224,7 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
         vm.etch(address(game), code);
         _requestAndApply();
         (, uint256 added,,) = api.jackpotProgress();
-        assertEq(added, 50_000 ether, "level-6 floor");
+        assertEq(added, 50_000 * reader.jackpotEntryPriceOf(slot) / 8_000, "scaled level-6 floor");
         _drain(false,false);
         (CrapsBattleStorage.JackpotRound memory r,,) = reader.jackpotBattleOf(slot);
         assertEq(r.awardTarget, 5);

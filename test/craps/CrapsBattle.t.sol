@@ -2541,7 +2541,9 @@ contract CrapsBattleTest is CrapsPins {
             (uint128 b,,,uint256 bb,,) = craps.bonusTermsFor(day,4);
             assertEq(a,b); assertEq(ab,bb);
             (uint128 pending,,,uint256 fee,,) = craps.bonusTermsFor(day,5);
-            assertEq(pending,0); assertEq(fee,8_000);
+            assertEq(pending,0);
+            uint256 priceBucket = uint256(keccak256(abi.encode(uint256(keccak256(abi.encode("mix", day))), uint256(0x43726170735363686564756c65), uint256(5)))) & 3;
+            assertEq(fee, priceBucket == 0 ? 6_000 : priceBucket == 3 ? 10_000 : 8_000);
         }
         // Routine odds are 55/25/20; bookend odds are 20/30/50.
         assertApproxEqAbs(routine[0]*100,1200*55,6000);

@@ -63,34 +63,79 @@ The **20-bit storage encoding differs from the 30-bit API encoding**. Use `prefe
 
 The jackpot battle is the day's sixth window (period 5, slot `day * 8 + 6`). It is one craps battle with two kinds of seat:
 
-- **Paid seats.** A direct entry or a day ticket costs a fixed 8,000 FLIP, burned at entry. The seat plays the board it was entered with, and a high seat counts as its day's high multiple of units.
+- **Paid seats.** The public daily base fee is 6,000 / 8,000 / 10,000 FLIP with 25% / 50% / 25% odds. A direct entry or the jackpot component of a day ticket burns this fee, subject to existing newcomer pricing. The seat plays its chosen board; high extras use the same fee times the day's high multiple. Future commitments retain the 8,000-FLIP expected fee.
 - **Awarded seats.** The Game draws these from the far-future ticket queues of the next 99 levels. Each award plays the wallet's saved preference, and a wallet drawn twice gets two separate seats.
 
 Warm-up and skipped days have no paid field. Their award-only battle uses the otherwise unused slot `day * 8 + 7`.
 
 ### Lock and funding
 
-The daily RNG request locks the field before its word exists:
+The opening schedule word sets the public price `P`. Its jackpot-period draw is
+`keccak256(abi.encode(dailyWord, uint256(0x43726170735363686564756c65), uint256(5)))`;
+the low two bits select 6,000 for zero, 10,000 for three, and 8,000 otherwise.
+Both entry routes and the event quote use the frozen price.
 
-- the paid entries and day tickets;
-- the **Added** allocation: 0.5% of the recorded prize pool at the level's ticket price, raised to 150,000 FLIP while the Game's `level` is 0 or 1 and to 50,000 after.
+At the daily RNG request, the field, fee, and award target lock before the future
+settlement word exists. The unscaled subsidy baseline `A` is 0.5% of the recorded
+prize pool converted at the level's ticket price, with a floor of 150,000 FLIP at
+levels 0–1 and 50,000 thereafter. The stored gross allocation is
+`Added = floor(A * P / 8000)`. Its original floor is applied only to `A`.
 
-Preference edits freeze with the lock. The lock stays held, across midnight too, until the battle has finished.
+The request funds `floor(Added / 20)` into the high-roller reserve once and fixes
+`awardTarget = min(floor(A / 10000), 500)`. Awarded seats are part of this funding,
+not another payment on top. Their target does not depend on either hidden roll
+or paid turnout. Warm-up/skipped-day detached rounds use the neutral price 8,000.
 
-At lock, `floor(Added / 20)` funds the high-roller reserve. When the word lands,
-one roll multiplies the remaining pool,
-`(paid units × 8,000 + Added - floor(Added / 20)) × multiplier`:
+The future word supplies two separately tagged draws:
 
-| Probability | Multiplier |
+| Probability | Hidden main subsidy multiplier S |
+| --- | ---: |
+| 60% | 0.25× |
+| 30% | 1× |
+| 9% | 5× |
+| 1% | 10× |
+
+The subsidy bucket is
+`uint256(keccak256(abi.encode(battleWord, uint256(slot), uint256(keccak256("CrapsJackpotSubsidy"))))) % 100`.
+Buckets 0–59, 60–89, 90–98, and 99 select the four outcomes. This cannot be
+computed from the public opening word. It becomes public on settlement fulfillment.
+
+| Probability | Existing event multiplier M |
 | --- | ---: |
 | 90% | 0.5× |
 | 9% | 3× |
 | 0.9% | 20× |
 | 0.1% | 100× |
 
-The expected multiplier is 1. The roll is `uint256(keccak256(abi.encode(battleWord, uint256(tag)))) % 1000` with tag `0x436f696e447261774d756c7469706c696572` ("CoinDrawMultiplier"). Buckets 0–899, 900–989, 990–998 and 999 map to the four tiers.
+The event draw retains
+`uint256(keccak256(abi.encode(battleWord, uint256(0x436f696e447261774d756c7469706c696572)))) % 1000`.
+Buckets 0–899, 900–989, 990–998, and 999 select the four outcomes. Both multipliers
+have mean one. The 10× subsidy plus 100× event outcome has one-in-100,000 odds.
 
-Awards come from Added alone: one per 10,000 FLIP of Added, at most 500. Paid volume and the multiplier never change the count.
+```text
+mainAdded = Added - floor(Added / 20)
+rolledMainAdded = floor(mainAdded * S)
+totalPool = floor((paidUnits * P + rolledMainAdded) * M)
+highPool = floor((paidUnits - paidCount) * P * M)
+mainPool = totalPool - highPool
+```
+
+The reserve receives neither multiplier. High extras receive only the event
+multiplier and remain fee-funded. The hidden subsidy can make a particular
+field's award funding smaller than the paid fee; the preserved rule is expected
+allocation, not a guarantee that paid seats never subsidize awards in an outcome.
+
+At an 8,000 price, 50,000 baseline and ten paid plus five awarded seats, the
+unrounded mean main pool is 127,500 FLIP, or 8,500 of starting capital per seat.
+The most common pair (0.25× subsidy and 0.5× event, probability 54%) gives 45,937.5
+before integer floors. Actual winnings depend on the runs and competitive prizes.
+These are nominal funding expectations. Existing engine limits and Coinflip's
+4,294,967,295-FLIP stake cap per wallet/day still apply; the credit event reports
+the amount actually accepted when several large awards reach the same wallet.
+
+Preference edits and entries freeze with the request. Fees, award targets,
+reserve funding, multipliers, and draw identities remain fixed across midnight,
+word retirement, retries, and resumed draw/settlement chunks.
 
 ### Draw and seal
 
@@ -106,7 +151,7 @@ Each paid seat has one base place in the Added-funded main pool; extra high unit
 receive a separate fee-only allocation under the same multiplier. With N base
 paid seats plus awarded seats:
 
-- each base seat's bankroll is half the main pool per seat, rounded down to a multiple of 300 FLIP (at least 1,800, and capped at the engine's chip limit);
+- each base seat's bankroll is half the main pool per seat, rounded down to a multiple of 300 FLIP (at least 300, and capped at the engine's chip limit);
 - the rest of each unit's share is its bounty, in 100-FLIP granules, never above its bankroll;
 - rounding dust stays in the pot.
 
@@ -126,7 +171,7 @@ Every seat throws the same dice. Seats settle through the table's normal resolve
 
 Scoring, the pot, the high-roller lane and payment follow any scheduled battle. The last seat finalizes the field once:
 
-- The best-ranked run takes the pot: the bounties plus the seal's remainder.
+- The bounties plus the seal's remainder form the pot. With a hottest shooter, it splits 90/10 between the best-ranked run and that shooter; without one, the winner receives it all.
 - A contested high lane pays its winner.
 - The pot winner's high point can also claim RIU. At **25×** it pays **5%** of the live progressive pool; at **120×** it pays **10%** instead. RIU keeps its usual pass/liquid split and the fixed standing of 100.
 - At **100×** or more, a strict improvement claims the biggest Dice Run record, with its FLIP, sDGNRS and trophy awards.
@@ -146,17 +191,22 @@ Once the field completes, the day continues with its usual stages. Advance clien
 Call these at the **CRAPS address**; the table delegates their selectors to `JackpotBattle`:
 
 ```solidity
-function jackpotEntryPrice() external pure returns (uint256);
+function jackpotEntryPrice() external view returns (uint256);
+function jackpotEntryPriceOf(uint64 slot) external view returns (uint256);
 function jackpotProgress() external view returns (uint64 slot, uint256 added, bool started, bool complete);
 function jackpotBattleOf(uint64 slot) external view returns (JackpotRound memory round, uint256 board, uint64 cursor);
 
 event JackpotBattleLocked(uint64 indexed slot, uint24 requestDay, uint256 added, uint256 paidEntries);
 event JackpotBattleEntry(uint64 indexed slot, uint256 indexed betId, address indexed player, uint256 units, uint32 chips);
 event JackpotBattleStarted(uint64 indexed slot, uint24 level, uint256 drawnEntries, uint256 drawnUnits, uint256 word);
+event JackpotSubsidyRolled(uint64 indexed slot, uint32 multiplierBps, uint256 mainSubsidy);
 ```
 
 - `JackpotBattleEntry.chips` is the canonical 30-bit board the award plays. An indexer can replay a run after the wallet changes its preference.
-- `JackpotRound` carries the raw Added, the rolled pool, the multiplier in basis points, the unit bankroll and bounty, the pot remainder, paid and drawn counts, the award target, the draw cursor and the committed word.
+- `JackpotRound.added` is the scaled gross allocation before either lottery. `entryPrice` is the frozen fee; `subsidyMultiplierBps` is zero until preparation, then 2,500 / 10,000 / 50,000 / 100,000. `multiplierBps` retains the existing event meaning. `awardTarget` is already populated at lock.
+- `entryPrice` and `subsidyMultiplierBps` occupy slot 5 offsets 22 and 26 after `awardTarget`; all previous member offsets and the eight-word size remain unchanged. ABI tuple consumers must include the two new members before `drawWord` and `drawCursor`.
+- `jackpotEntryPrice()` quotes the currently advertised event. `jackpotEntryPriceOf(slot)` also serves a locked or historical event after its fee field in the scoreboard becomes a bounty. An unopened event reverts with `RngNotReady`, rather than returning an apparent actual 8,000 quote.
+- `JackpotSubsidyRolled` reports the main subsidy after its own multiplier and before the event multiplier. It is emitted once. Before fulfillment, clients should show odds and an estimated baseline, not a realized subsidy.
 - Settlement and payment use the table's ordinary events: `CrapsBetSettled`, `CrapsBattleFinalized`, `CrapsBattlePaid`, `CrapsHighRollerPaid`, `CrapsProgressivePaid` and `CrapsProtocolAwardSplit`. Record claims appear as `BigRecordUpdated` and the trophy events.
 - `CrapsSlipPlaced` records the board of each paid ticket.
 

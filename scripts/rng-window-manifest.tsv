@@ -102,7 +102,6 @@ CONSUMER-SEALED	_wordAt	_keepRngCohort	JackpotBattle.sol	READ	registered slot in
 CONSUMER-SEALED	_wordAt	_keepScheduled	JackpotBattle.sol	READ
 CONSUMER-SEALED	_dailyWordAt	_shareOf	JackpotBattle.sol	READ
 CONSUMER-SEALED	_dailyWordAt	_windowTerms	JackpotBattle.sol	READ
-CONSUMER-SEALED	_dailyWordAt	lockJackpotBattle	JackpotBattle.sol	READ
 ACCESSOR	_dailyWordAt	_dailyWordAt	LootboxCraps.sol	READ
 ACCESSOR	_wordAt	_wordAt	LootboxCraps.sol	READ
 EXEMPT-ADVANCE	_recordedDailyWord	_afKingSubDraw	modules/DegenerusGameAdvanceModule.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age

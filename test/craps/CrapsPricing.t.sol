@@ -68,7 +68,7 @@ contract CrapsPricingTest is CrapsPins {
         assertEq(table.NORMAL_PASS_VALUE(), 24_800);
         assertEq(table.HIGH_PASS_VALUE(), 520_800);
         assertGt(CrapsPriceLib.HIGH_SWITCH, CrapsPriceLib.HIGH_VALUE);
-        assertEq(table.presetPrice(type(uint256).max, 5), 8_000);
+        assertEq(table.presetPrice(type(uint256).max, 5), 10_000);
     }
 
     function test_jackpotAddedFloorsAndAwardCount() public pure {
@@ -81,7 +81,7 @@ contract CrapsPricingTest is CrapsPins {
         assertEq(CrapsPriceLib.jackpotAdded(0, type(uint24).max), 50_000);
         assertEq(CrapsPriceLib.JACKPOT_EARLY_MIN_ADDED / CrapsPriceLib.JACKPOT_AWARD_VALUE, 15);
         assertEq(CrapsPriceLib.JACKPOT_MIN_ADDED / CrapsPriceLib.JACKPOT_AWARD_VALUE, 5);
-        // Added per award never falls below the fee, so paid entries never fund awards.
+        // The baseline funding allowance exceeds the mean fee; a hidden low roll can reduce it.
         assertGt(CrapsPriceLib.JACKPOT_AWARD_VALUE, CrapsPriceLib.JACKPOT_FEE);
     }
 }

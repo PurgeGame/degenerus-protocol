@@ -322,7 +322,7 @@ contract CrapsBattle is CrapsBattleStorage {
                         // Each high seat's extra fee allocation is split equally between its
                         // bankroll rider and the high-only bounty. Added never enters either.
                         if (w.highMult > 1) {
-                            w.highExtra = (w.highMult - 1) * _JACKPOT_PRICE * r.multiplierBps / 20_000;
+                            w.highExtra = (w.highMult - 1) * r.entryPrice * r.multiplierBps / 20_000;
                         }
                     }
                 }
@@ -1895,7 +1895,7 @@ contract CrapsBattle is CrapsBattleStorage {
         returns (uint128 bankroll, uint128 goal, uint256 boardStake, uint256 stakeUnits, uint256 tier)
     {
         // The jackpot fee is known now. Its bankroll/pot are derived only after its field locks.
-        if (period == _BONUS_PERIODS_PER_DAY - 1) return (0, 0, 0, _JACKPOT_PRICE / _BATTLE_STAKE_UNIT, 0);
+        if (period == _BONUS_PERIODS_PER_DAY - 1) return (0, 0, 0, CrapsPriceLib.jackpotPrice(roll) / _BATTLE_STAKE_UNIT, 0);
         uint256 pick = CrapsPriceLib.tier(roll, period == 0 || period == _BONUS_PERIODS_PER_DAY - 2);
         uint256 bank = (uint256(0x119407080258) >> (pick * 16)) & 0xffff;
         uint256 bounty = (uint256(0xdac09c405dc057803e802580190012c00c8) >> ((pick * 3 + ((roll >> 8) % 3)) * 16)) & 0xffff;

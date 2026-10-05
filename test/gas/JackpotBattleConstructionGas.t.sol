@@ -93,7 +93,10 @@ contract BattleConstructionTableSeed is CrapsBattleStorage {
         uint256 daySlot = uint256(day) * _BONUS_SLOTS_PER_DAY;
         uint64 slot = uint64(daySlot + _BONUS_PERIODS_PER_DAY);
         _dayTickets[daySlot] = 50 + 25 * _DT_ALL_HIGH;
-        _battles[bytes32(uint256(slot))] = 50;
+        // Opened events already carry their advertised fee and high-lane terms at lock.
+        _battles[bytes32(uint256(slot))] = 50
+            | ((_JACKPOT_PRICE / _BATTLE_STAKE_UNIT) << _BG_STAKE_SHIFT)
+            | (_BG_TERMS_FROZEN << _BG_TERM_TIER_SHIFT);
         _highField[bytes32(uint256(slot))] = 25;
         for (uint256 i = 1; i <= 50; ++i) {
             _storeBet((uint256(slot) << 64) | i, uint160(address(uint160(0x310000 + i))));

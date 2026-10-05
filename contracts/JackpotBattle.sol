@@ -208,14 +208,23 @@ contract JackpotBattle is CrapsBattleStorage {
             uint256 high = (tickets >> (_DT_HIGH_SHIFT * _BONUS_PERIODS_PER_DAY)) & _MASK32;
             if (high != 0) _highField[key] += high;
         }
-        g |= (_JACKPOT_PRICE / _BATTLE_STAKE_UNIT) << _BG_STAKE_SHIFT;
+        // An opened battle already holds its advertised fee. Only detached award-only
+        // rounds need neutral terms; OR-ing the old constant into a drawn fee corrupts it.
+        uint256 entryPrice = detached ? _JACKPOT_PRICE : ((g >> _BG_STAKE_SHIFT) & _BSTAKE_MAX) * _BATTLE_STAKE_UNIT;
+        if (detached) g |= (entryPrice / _BATTLE_STAKE_UNIT) << _BG_STAKE_SHIFT;
         _battles[key] = g;
         _setSlotIndex(slot, type(uint48).max);
-        // Added is 0.5% of the pool at the level's ticket price, raised to its floor.
-        r.added = CrapsPriceLib.jackpotAdded(pool * _PRICE_COIN_UNIT / (PriceLookupLib.priceForLevel(level) * 200), level);
+        // Floor the baseline first. Awards depend on that baseline alone, and are frozen
+        // in the same packed word as the fee/counts before any settlement word exists.
+        uint256 added = CrapsPriceLib.jackpotAdded(pool * _PRICE_COIN_UNIT / (PriceLookupLib.priceForLevel(level) * 200), level);
+        uint256 target = added / CrapsPriceLib.JACKPOT_AWARD_VALUE;
+        r.awardTarget = uint32(target > 500 ? 500 : target);
+        r.entryPrice = uint32(entryPrice);
+        r.added = added * entryPrice / _JACKPOT_PRICE;
         r.paidCount = uint32(g);
-        uint256 highMult = _dailyWordAt(uint24(day));
-        highMult = highMult == 0 ? 1 : _highMultOf(highMult);
+        // Frozen terms survive retirement of the opening word.
+        uint256 highMult = detached ? 1 : (g >> _BG_TERM_TIER_SHIFT & _BG_TERM_HIGH_TAIL != 0
+            ? CrapsPriceLib.HIGH_TAIL : CrapsPriceLib.HIGH_BASE);
         r.paidUnits = uint64(uint256(r.paidCount) + uint32(_highField[key]) * (highMult - 1));
         r.requestDay = requestDay;
         _activeJackpotSlot = slot;
@@ -226,7 +235,7 @@ contract JackpotBattle is CrapsBattleStorage {
     }
 
     /// @notice Initialize a resumable draw, returning its frozen word, cursor and units still wanted.
-    /// @dev The total target grows with unrolled Added; paid volume does not create extra free units.
+    /// @dev The target was frozen from the unscaled baseline at lock; paid volume adds no free units.
     function prepareJackpotBattle(uint24 level, uint256 word)
         external returns (uint256 drawWord, uint256 cursor, uint256 remaining)
     {
@@ -243,20 +252,25 @@ contract JackpotBattle is CrapsBattleStorage {
         if (r.drawWord != 0) return r;
         uint256 roll = _hash2(word, JACKPOT_MULT_TAG) % 1_000;
         uint256 multiplier = roll < 900 ? 5_000 : roll < 990 ? 30_000 : roll < 999 ? 200_000 : 1_000_000;
-        // The reserve is funded before the lottery and receives none of its multiplier.
-        // Award counts still use GROSS Added; high extras remain entirely fee-funded.
+        // The reserve and award target were committed at lock. This independently tagged
+        // draw changes only the main subsidy, with 60/30/9/1 odds and an exact 1x mean.
+        uint256 subsidyBps = _subsidyMultiplier(_hash3(word, _activeJackpotSlot, JACKPOT_SUBSIDY_TAG));
         uint256 mainAdded = r.added - r.added / _HIGH_RESERVE_DIVISOR;
-        uint256 pool = (uint256(r.paidUnits) * _JACKPOT_PRICE + mainAdded) * multiplier / 10_000;
-        // Awards come from unrolled Added alone; paid fees do not create them. At least 9,500 of
-        // main-pool Added per award (after the 5% reserve) and 8,000 per paid unit leave the 0.5x
-        // roll at least 4,000 FLIP per unit, so every bankroll rounds to at least 1,800.
-        uint256 target = r.added / CrapsPriceLib.JACKPOT_AWARD_VALUE;
-        if (target > 500) target = 500;
-        r.awardTarget = uint32(target);
+        mainAdded = mainAdded * subsidyBps / 10_000;
+        uint256 pool = (uint256(r.paidUnits) * r.entryPrice + mainAdded) * multiplier / 10_000;
+        // At the 6,000 fee and both minimum rolls, awarded capital is still >=890
+        // per seat before the bankroll split: every nonempty field retains >=300.
         r.totalPool = pool;
         r.multiplierBps = uint32(multiplier);
+        r.subsidyMultiplierBps = uint32(subsidyBps);
         r.level = level;
         r.drawWord = word;
+        emit JackpotSubsidyRolled(_activeJackpotSlot, uint32(subsidyBps), mainAdded);
+    }
+
+    function _subsidyMultiplier(uint256 entropy) internal pure returns (uint256) {
+        uint256 roll = entropy % 100;
+        return roll < 60 ? 2_500 : roll < 90 ? 10_000 : roll < 99 ? 50_000 : 100_000;
     }
 
     /// @notice Collect at most `JackpotBattleFieldLib.MAX_CHUNK` units; the final chunk freezes terms
@@ -299,7 +313,7 @@ contract JackpotBattle is CrapsBattleStorage {
         // Every paid seat buys ONE place in the Added-funded main battle. Its extra high
         // units form their own fee-only bankroll/bounty allocation under the same fair roll.
         uint256 totalUnits = uint256(r.paidCount) + units;
-        uint256 highPool = (uint256(r.paidUnits) - r.paidCount) * _JACKPOT_PRICE * r.multiplierBps / 10_000;
+        uint256 highPool = (uint256(r.paidUnits) - r.paidCount) * r.entryPrice * r.multiplierBps / 10_000;
         uint256 mainPool = r.totalPool - highPool;
         uint256 bankroll;
         uint256 bounty;
@@ -397,12 +411,12 @@ contract JackpotBattle is CrapsBattleStorage {
         uint256 paidCount = r.paidCount;
         if (paidCount == 0 || ranBankroll == 0) return;
         uint256 bps = r.multiplierBps < 10_000 ? r.multiplierBps : 10_000;
-        uint256 staked = paidCount * _JACKPOT_PRICE * bps / 10_000 * ranBankroll / mainPool;
+        uint256 staked = paidCount * r.entryPrice * bps / 10_000 * ranBankroll / mainPool;
         uint256 high = staked * highSeats / paidCount;
         unchecked {
             _dayStaked[uint24(uint256(slot) / _BONUS_SLOTS_PER_DAY)] += staked + (high << _DAY_HIGH_SHIFT);
         }
-        uint256 highFees = (uint256(r.paidUnits) - paidCount) * _JACKPOT_PRICE;
+        uint256 highFees = (uint256(r.paidUnits) - paidCount) * r.entryPrice;
         uint256 atRisk = highSeats == 1 ? highFees : highFees / 2;
         uint256 lossBudget = atRisk * _HIGH_LOSS_BPS / _BPS_DENOMINATOR;
         uint256 highComps = lossBudget * _HIGH_COMP_SHARE_BPS / _BPS_DENOMINATOR;
@@ -427,9 +441,20 @@ contract JackpotBattle is CrapsBattleStorage {
         return (_jackpotRounds[slot], _battles[_rngBattleKey(slot)], _bonusCursorOf(slot));
     }
 
-    /// @notice The fee is fixed; bankroll and pot are sized from the locked field after its pool roll.
-    function jackpotEntryPrice() external pure returns (uint256) {
-        return _JACKPOT_PRICE;
+    /// @notice The advertised jackpot's base fee, including after it locks. No opening means no quote.
+    function jackpotEntryPrice() external view returns (uint256) {
+        if (_bonus == 0) revert RngNotReady();
+        return jackpotEntryPriceOf(uint64((_bonus - 1) * _BONUS_SLOTS_PER_DAY + _BONUS_PERIODS_PER_DAY));
+    }
+
+    /// @notice An opened/locked event's fee survives word retirement and the bounty overwrite.
+    function jackpotEntryPriceOf(uint64 slot) public view returns (uint256) {
+        if (!_isJackpotSlot(slot)) revert BadJackpotField();
+        uint256 price = _jackpotRounds[slot].entryPrice;
+        if (price != 0) return price;
+        uint256 board = _battles[bytes32(uint256(slot))];
+        if ((board >> _BG_TERM_TIER_SHIFT) & _BG_TERMS_FROZEN == 0) revert RngNotReady();
+        return ((board >> _BG_STAKE_SHIFT) & _BSTAKE_MAX) * _BATTLE_STAKE_UNIT;
     }
 
     function convertNormalToHigh(uint32 highCount) external {
@@ -918,7 +943,7 @@ contract JackpotBattle is CrapsBattleStorage {
         returns (uint128 bankroll, uint128 goal, uint256 boardStake, uint256 stakeUnits, uint256 tier)
     {
         // The jackpot fee is known now. Its bankroll/pot are derived only after its field locks.
-        if (period == _BONUS_PERIODS_PER_DAY - 1) return (0, 0, 0, _JACKPOT_PRICE / _BATTLE_STAKE_UNIT, 0);
+        if (period == _BONUS_PERIODS_PER_DAY - 1) return (0, 0, 0, CrapsPriceLib.jackpotPrice(roll) / _BATTLE_STAKE_UNIT, 0);
         uint256 pick = CrapsPriceLib.tier(roll, period == 0 || period == _BONUS_PERIODS_PER_DAY - 2);
         uint256 bank = (uint256(0x119407080258) >> (pick * 16)) & 0xffff;
         uint256 bounty = (uint256(0xdac09c405dc057803e802580190012c00c8) >> ((pick * 3 + ((roll >> 8) % 3)) * 16)) & 0xffff;

@@ -737,7 +737,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     uint256 internal constant _PASS_MAX = 0xFFFFFFFF;
 
     /// @dev Future-window comps pay the class expectation: bookends draw tiers 20/30/50,
-    ///      routines 55/25/20, and the jackpot fee is fixed. The high draw averages 21x.
+    ///      routines 55/25/20, and the jackpot fee averages 8,000. The high draw averages 21x.
     uint256 internal constant _EV_WINDOW_OPENER = CrapsPriceLib.BOOKEND_EV;
     uint256 internal constant _EV_WINDOW_ROUTINE = CrapsPriceLib.ROUTINE_EV;
     uint256 internal constant _EV_WINDOW_TAIL = CrapsPriceLib.JACKPOT_FEE;
@@ -1010,6 +1010,9 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         uint24 level;
         uint24 requestDay;
         uint32 awardTarget;
+        // Fill slot 5's spare bytes; drawWord/drawCursor retain slots 6/7.
+        uint32 entryPrice;
+        uint32 subsidyMultiplierBps;
         uint256 drawWord;
         uint256 drawCursor;
     }
@@ -1035,9 +1038,12 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     uint256 internal constant _JACKPOT_PRICE = CrapsPriceLib.JACKPOT_FEE;
     uint256 internal constant _AWARD_UNITS_SHIFT = 224;
     uint256 internal constant JACKPOT_MULT_TAG = 0x436f696e447261774d756c7469706c696572;
+    uint256 internal constant JACKPOT_SUBSIDY_TAG = uint256(keccak256("CrapsJackpotSubsidy"));
 
     event JackpotBattleLocked(uint64 indexed slot, uint24 requestDay, uint256 added, uint256 paidEntries);
     event JackpotBattleStarted(uint64 indexed slot, uint24 level, uint256 drawnEntries, uint256 drawnUnits, uint256 word);
+    /// @notice The hidden subsidy result, frozen once after entry locks. Reserve funding is excluded.
+    event JackpotSubsidyRolled(uint64 indexed slot, uint32 multiplierBps, uint256 mainSubsidy);
     event HighRollerReserveFunded(uint64 indexed slot, uint256 contribution, uint256 balance);
     /// @notice A finalized event's single reserve draw. No eligible entries means no attempt.
     /// @param winner Zero on a miss or an empty eligible field.

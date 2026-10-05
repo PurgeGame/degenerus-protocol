@@ -169,10 +169,12 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
   expect(requestId).to.be.gt(oldRequest);
   const requestDay = await game.currentDayView();
   const locked = await battle.jackpotProgress();
-  const expectedAdded = recordedPool * ethers.parseEther("1000") / (ethers.parseEther("0.01") * 200n);
+  const baseline = recordedPool * 1000n / (ethers.parseEther("0.01") * 200n);
+  const price = await battle.jackpotEntryPriceOf(locked.slot);
+  const expectedAdded = baseline * price / 8000n;
   expect(locked.added).to.equal(expectedAdded);
   expect(locked.started).to.equal(false);
-  expect(Number(expectedAdded / ethers.parseEther("10000"))).to.equal(expectedAwards);
+  expect(Number(baseline / 10000n)).to.equal(expectedAwards);
   await (await mockVRF.fulfillRandomWords(requestId, WORD)).wait();
 
   // Stop on the actual day seal; never hide a fulfillment failure or call a completed day.
@@ -214,7 +216,7 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
   let pots = 0;
   let hottest = 0;
   const addCredit = (owner, amount) => credits.set(owner, (credits.get(owner) ?? 0n) + amount);
-  const expectedShare = recordedPool * ethers.parseEther("1000") / (ethers.parseEther("0.01") * 400n) / 50n;
+  const expectedShare = recordedPool * 1000n / (ethers.parseEther("0.01") * 400n) / 50n;
   for (const r of receipts) {
     const traitLogs = r.logs.filter((l) => l.address.toLowerCase() === gameAddr.toLowerCase() && l.topics[0] === FLIP_WIN_TOPIC);
     const battleLogs = r.logs.filter((l) => l.address.toLowerCase() === crapsAddr.toLowerCase()

@@ -25,6 +25,21 @@ is known. Existing commitment guards remain necessary.
   explicit domains. Numeric ordinals, owners and period identifiers provide
   uniqueness within those domains; they are not sources of entropy.
 
+## Jackpot price and hidden subsidy on 2026-10-05
+
+The public jackpot price decodes the low two bits of the existing period-five
+schedule root `hash3(dailyWord, SCHEDULE_TAG, 5)`. This period was already separate
+from ordinary-window and high-multiple draws. Price freezes in the opening terms
+and is copied into the round at request lock; the original word can later retire.
+
+The hidden subsidy uses `hash3(battleWord, immutableSlot, keccak256("CrapsJackpotSubsidy"))`
+and buckets modulo 100 at 60/90/99. The existing event multiplier retains
+`hash2(battleWord, JACKPOT_MULT_TAG)` and its original buckets. Both consume the
+future committed battle word, not the known opening word. The field, fee, award
+target, baseline and reserve contribution lock before that future word; preparation
+persists the two results once, across resumed chunks. The extra hash is domain
+separation, not an additional VRF request.
+
 ## Ticket checkpoint generator V2 (2026-10-02)
 
 Ticket materialization is owned by `DegenerusGameTicketModule`. This is an

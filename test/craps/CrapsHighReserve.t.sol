@@ -46,7 +46,9 @@ contract CrapsHighReserveTest is CrapsPins {
         game.setRngLocked(false);
         multiple = h;
         uint256 word = 1;
-        while (table.highMultOfWord(word) != h) ++word;
+        while (table.highMultOfWord(word) != h
+            || uint256(keccak256(abi.encode(word, uint256(0x43726170735363686564756c65), uint256(5)))) & 3 == 0
+            || uint256(keccak256(abi.encode(word, uint256(0x43726170735363686564756c65), uint256(5)))) & 3 == 3) ++word;
         _setDailyWord(day, word);
         vm.prank(ContractAddresses.GAME);
         table.openBonusDay();
@@ -127,7 +129,7 @@ contract CrapsHighReserveTest is CrapsPins {
             _start(word, 15);
             (CrapsBattleStorage.JackpotRound memory r,,) = cold.jackpotBattleOf(slot);
             assertEq(r.awardTarget, 15);
-            assertEq(r.totalPool, (80_000 + 142_500) * wanted[j] / 10_000);
+            assertEq(r.totalPool, (80_000 + 142_500 * uint256(r.subsidyMultiplierBps) / 10_000) * wanted[j] / 10_000);
             assertEq(cold.highRollerReserve(), 7_500, "pool multiplier reached reserve");
             vm.prank(ContractAddresses.GAME);
             api.prepareJackpotBattle(2, word + 1);

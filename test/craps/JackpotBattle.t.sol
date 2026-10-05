@@ -209,7 +209,7 @@ contract JackpotBattleTest is CrapsPins {
         _start(123, 15, alice);
         CrapsBattleStorage.JackpotRound memory r = _round();
         assertEq(r.drawnCount, 15);
-        assertGe(r.bankroll, 1_800);
+        assertGe(r.bankroll, 300);
     }
 
     function test_AwardCountIgnoresPaidVolumeAndPoolRoll() public {
@@ -266,7 +266,7 @@ contract JackpotBattleTest is CrapsPins {
         api.appendJackpotBattle(field, 100, true);
         assertEq(_round().drawnCount, 100);
         assertEq(_round().word, 123);
-        assertGe(_round().bankroll, 1_800);
+        assertGe(_round().bankroll, 300);
         _finish();
     }
 
@@ -279,10 +279,10 @@ contract JackpotBattleTest is CrapsPins {
         assertEq(_round().paidUnits, 100);
         _start(123, 5, bob);
         CrapsBattleStorage.JackpotRound memory r = _round();
-        assertEq(r.totalPool, uint256(942_500) * r.multiplierBps / 10_000);
+        assertEq(r.totalPool, _expectedPool(r));
     }
 
-    function test_FixedFeeVariableStakeAndExactPoolConservation() public {
+    function test_DrawnFeeVariableStakeAndExactPoolConservation() public {
         _enter(alice, false); _enter(bob, true);
         assertEq(flip.burned(alice), 8_000);
         _lock(400_000); _start(123, 50, address(0x1000));
@@ -290,7 +290,7 @@ contract JackpotBattleTest is CrapsPins {
         assertEq(r.paidCount, 2); assertEq(r.paidUnits, 2);
         uint256 n = r.paidUnits + r.drawnUnits;
         assertEq(r.drawnUnits, 40);
-        assertEq(r.totalPool, (uint256(396_000) * r.multiplierBps) / 10_000);
+        assertEq(r.totalPool, _expectedPool(r));
         assertEq(uint256(r.bankroll) % 300, 0);
         assertEq(n * (uint256(r.bankroll) + uint256(r.bountyUnits) * 100) + r.potRemainder, r.totalPool);
         assertLe(uint256(r.bankroll) * n, r.totalPool / 2);
@@ -511,7 +511,7 @@ contract JackpotBattleTest is CrapsPins {
         vm.stopPrank();
         CrapsBattleStorage.JackpotRound memory r = _round();
         assertEq(r.paidUnits, h); assertEq(r.drawnUnits, 3); assertEq(r.drawnCount, 3);
-        assertEq(r.totalPool, (uint256(h) * 8_000 + r.added - r.added / 20) * r.multiplierBps / 10_000);
+        assertEq(r.totalPool, _expectedPool(r));
         _finish();
     }
     function test_OnlyGameCanLockOrSupplyField() public {
@@ -528,7 +528,7 @@ contract JackpotBattleTest is CrapsPins {
         }
         vm.expectRevert(); table.jackpotTerms(uint64(uint256(day) * 8 + 7));
     }
-    function test_DayPriceUsesNewPresetsAndFixedJackpotFee() public {
+    function test_DayPriceUsesNewPresetsAndDrawnJackpotFee() public {
         uint256 total;
         for (uint256 p; p < 6; ++p) {
             (uint128 bank,,,uint256 bounty,,) = table.bonusTermsFor(day,p);
@@ -564,7 +564,8 @@ contract JackpotBattleTest is CrapsPins {
         slot = uint64(uint256(day) * 8 + 6);
         multiple = tail ? 100 : 10;
         for (uint256 word = 1; ; ++word) {
-            if (table.highMultOfWord(word) == multiple) {
+            if (table.highMultOfWord(word) == multiple
+                && CrapsPriceLib.jackpotPrice(uint256(keccak256(abi.encode(word, uint256(0x43726170735363686564756c65), uint256(5))))) == 8_000) {
                 _setDailyWord(day, word);
                 vm.prank(ContractAddresses.GAME);
                 table.openBonusDay();
@@ -602,6 +603,11 @@ contract JackpotBattleTest is CrapsPins {
             result.stop = Craps.SlipStop.Goal;
         }
         vm.mockCall(ContractAddresses.CRAPS_ENGINE, abi.encodeWithSelector(CrapsEngine.settleBattle.selector), abi.encode(result));
+    }
+
+    function _expectedPool(CrapsBattleStorage.JackpotRound memory r) private pure returns (uint256) {
+        uint256 subsidy = (r.added - r.added / 20) * r.subsidyMultiplierBps / 10_000;
+        return (uint256(r.paidUnits) * r.entryPrice + subsidy) * r.multiplierBps / 10_000;
     }
 
     function _mainPot(CrapsBattleStorage.JackpotRound memory r) private pure returns (uint256) {
@@ -717,7 +723,7 @@ contract JackpotBattleTest is CrapsPins {
         _lock(50_000); _start(_wordForMultiplier(5000), 0, address(0));
         CrapsBattleStorage.JackpotRound memory r = _round();
         uint256 extra = table.jackpotTerms(slot).highExtra;
-        uint256 mainPool = (47_500 + 8_000) / 2;
+        uint256 mainPool = r.totalPool - 2 * extra;
         uint256 baseAction = 4_000 * uint256(r.bankroll) / mainPool;
         assertEq(extra, 18_000);
         assertEq(flip.compLane() - before, baseAction / 50 + 6_912, "sole bounty risk omitted or comped twice");

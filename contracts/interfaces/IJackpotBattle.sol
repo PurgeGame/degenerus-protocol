@@ -10,4 +10,6 @@ interface IJackpotBattle {
     function appendJackpotBattle(uint256[] calldata field, uint256 cursor, bool last) external;
     function jackpotProgress() external view returns (uint64 slot, uint256 added, bool started, bool complete);
     function highRollerReserve() external view returns (uint256);
+    function jackpotEntryPrice() external view returns (uint256);
+    function jackpotEntryPriceOf(uint64 slot) external view returns (uint256);
 }

@@ -6,14 +6,15 @@ pragma solidity 0.8.34;
 library CrapsPriceLib {
     uint256 internal constant NORMAL_RETAIL = 25_000;
     uint256 internal constant HIGH_RETAIL = 500_000;
+    // Expected fee for future commitments; an opened event uses jackpotPrice instead.
     uint256 internal constant JACKPOT_FEE = 8_000;
     // Jackpot Added is 0.5% of the recorded pool, raised to a floor: 150,000 FLIP while the
     // game level is 0 or 1, then 50,000.
     uint256 internal constant JACKPOT_EARLY_MIN_ADDED = 150_000;
     uint256 internal constant JACKPOT_MIN_ADDED = 50_000;
     uint256 internal constant JACKPOT_EARLY_LAST_LEVEL = 1;
-    // One award per 10,000 FLIP of Added keeps Added per award above the fee, so paid entries
-    // never fund the awards.
+    // One award per 10,000 FLIP of the unscaled baseline. The hidden subsidy changes
+    // realized funding, never the committed award count.
     uint256 internal constant JACKPOT_AWARD_VALUE = 10_000;
 
     // Tier means (bankroll + mean bounty): 900, 2,800 and 7,000 FLIP.
@@ -40,6 +41,12 @@ library CrapsPriceLib {
 
     function highMultiple(uint256 draw) internal pure returns (uint256) {
         return draw % HIGH_BUCKETS < HIGH_TAIL_BUCKETS ? HIGH_TAIL : HIGH_BASE;
+    }
+
+    /// @dev The jackpot period's domain-separated schedule roll: 25/50/25, mean 8,000.
+    function jackpotPrice(uint256 roll) internal pure returns (uint256) {
+        uint256 bucket = roll & 3;
+        return bucket == 0 ? 6_000 : bucket == 3 ? 10_000 : JACKPOT_FEE;
     }
 
     function jackpotAdded(uint256 percentage, uint256 level) internal pure returns (uint256) {

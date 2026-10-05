@@ -202,10 +202,11 @@ on that board (purchase tickets, jackpot daily tickets, early-bird tickets) skip
 it is the only active bucket.
 
 Jackpot battle: the day's sixth window (period 5) is one craps battle of paid seats (an
-8,000-FLIP entry, direct or on a day ticket) and awarded seats drawn from the far-future
-queues. The daily RNG request locks the paid field and the Added allocation (0.5% of the
-recorded prize pool at the level's ticket price, at least 150,000 FLIP while `level` is 0 or 1
-and 50,000 after), and latches the battle's pending bit. Stage 18 applies the fresh word and
+announced 6,000/8,000/10,000-FLIP base entry at 25/50/25 odds, direct or on a day ticket) and awarded seats drawn from the far-future
+queues. The daily RNG request locks the paid field, its fee, and the award target. The
+unscaled baseline is 0.5% of the recorded prize pool at the level's ticket price, at least
+150,000 FLIP while `level` is 0 or 1 and 50,000 after. Stored Added is that baseline
+scaled by the frozen fee divided by 8,000. The request latches the battle's pending bit. Stage 18 applies the fresh word and
 does nothing else. Every later advance runs one battle step, stage 16 on jackpot days and 17 on
 purchase days, until the field completes; only then does the day's ETH, ticket and
 transition work run. The RNG lock stays held across all of it, including across midnight, so
@@ -219,10 +220,18 @@ credited lifetime mint levels, or holds a deity pass. The latter two checks use 
 record and skip the current-level call. Awarded passes and vault comps retain their funded
 entitlement without a newcomer charge.
 
-At lock, 5% of unrolled gross Added funds the high-roller reserve. The word rolls one
-multiplier for the remaining pool, `(paid units x 8,000 + Added - floor(Added / 20)) x m`:
-90% at 0.5x, 9% at 3x, 0.9% at 20x and 0.1% at 100x, a 1x mean. Awards come from gross
-Added alone, one per 10,000 FLIP, at most 500. The Game draws them in chunks of up to 50, continuing within the same transaction
+At lock, 5% of unrolled gross Added funds the high-roller reserve, and the award target
+is fixed at one per 10,000 FLIP of the **unscaled baseline**, capped at 500. The two
+new uint32 fields, frozen fee and subsidy multiplier, occupy the spare bytes in the
+round's slot 5; no previous member moves. The future battle word selects a separate
+hidden subsidy multiplier (60% at 0.25x, 30% at 1x, 9% at 5x, 1% at 10x). The existing
+event multiplier remains 90% at 0.5x, 9% at 3x, 0.9% at 20x and 0.1% at 100x.
+Both average 1x. With integer floors, the pool is
+`(paid units * frozen fee + (Added - floor(Added / 20)) * subsidyMultiplier) * eventMultiplier`.
+High extras receive only fee-funded capital times the event multiplier; the reserve
+receives neither roll. Price is public before entry, while the subsidy stays unknown
+until the future word arrives. Award counts do not grow with either lottery. The Game
+draws them in chunks of up to 50, continuing within the same transaction
 while another full chunk fits the remaining gas:
 each visit picks uniformly among nonempty eligible levels in the 99 unminted levels above
 the mint ceiling, chooses a starting queue position, then walks every holder at that level
@@ -230,7 +239,7 @@ once, wrapping at the end. Levels are selected with replacement between visits, 
 can hold multiple awarded seats. Chunk boundaries preserve the unfinished visit. It batch-reads the
 distinct wallets' saved boards and appends one packed word per entry; the battle makes no
 storage callbacks. The chunk that reaches the target seals the field: each unit's bankroll is
-half its share of the main pool, rounded down to 300 FLIP (at least 1,800), its bounty is
+half its share of the main pool, rounded down to 300 FLIP (at least 300), its bounty is
 bounded by that bankroll, and the dust stays in the pot. Each paid seat gets one place in
 the Added-funded main allocation. Extra high units receive a separate, fee-only allocation
 under the same pool multiplier. Only the base seats' fee-funded bankroll is booked as craps
@@ -513,4 +522,4 @@ again. The round's pool and payout cursor track assignment without a duplicate r
 
 ### High-roller jackpot reserve
 
-`JackpotBattle.lockJackpotBattle` assigns 5% of gross, unrolled Added to a persistent reserve and leaves 95% for the main field. Award counts still use gross Added. Once the field finalizes, any eligible high entry gives the event one 10% chance to pay the whole reserve through Coinflip credit. Each accepted high entry has one equal ticket; sDGNRS is excluded, the vault is eligible, and activity score is unused. Pass and comp entries consume their existing funding and qualify. Paid entry/upgrade closure freezes the field before the settling RNG. The cold module samples already-resolved paid seats in bounded batches, preserving its nominee/count/cursor; the final draw is idempotent. Reserve grants do not generate action, comps or another protocol multiplier.
+`JackpotBattle.lockJackpotBattle` assigns 5% of gross, price-scaled, unrolled Added to a persistent reserve and leaves 95% for the main subsidy lottery. Award counts use the unscaled baseline and are fixed at lock. Neither hidden multiplier changes the reserve contribution. Once the field finalizes, any eligible high entry gives the event one 10% chance to pay the whole reserve through Coinflip credit. Each accepted high entry has one equal ticket; sDGNRS is excluded, the vault is eligible, and activity score is unused. Pass and comp entries consume their existing funding and qualify. Paid entry/upgrade closure freezes the field before the settling RNG. The cold module samples already-resolved paid seats in bounded batches, preserving its nominee/count/cursor; the final draw is idempotent. Reserve grants do not generate action, comps or another protocol multiplier.
