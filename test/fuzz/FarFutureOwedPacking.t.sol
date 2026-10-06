@@ -4,10 +4,15 @@ pragma solidity 0.8.34;
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 contract FuturePackingHarness is DegenerusGameStorage, WalletSeed {
     function write(address p, uint24 key, uint32 owed, uint8 rem, bool snapped) external {
-        if (key & TICKET_FAR_FUTURE_BIT != 0) _bindTicketQueue(key);
+        if (key & TICKET_FAR_FUTURE_BIT != 0) {
+            // Materialize the root's level tag, as a production append would.
+            (uint256[] storage q, uint256 header) = _bindTicketQueue(key);
+            assembly ("memory-safe") { sstore(q.slot, header) }
+        }
         uint80 owner = (uint80(_seedWallet(p)) << OWNER_IDX_SHIFT);
         uint80 value = owed == 0 && rem == 0 && !snapped ? 0
             : owner | (uint80(owed) << 8) | uint80(rem) | (snapped ? SNAP_DONE_BIT : uint80(0));
@@ -54,8 +59,8 @@ contract FarFutureOwedPackingTest is Test {
 
     function test_AppendedRootAndEightLanes() public {
         (uint256 oldRoot, uint256 newRoot) = h.roots();
-        assertEq(oldRoot, 78);
-        assertEq(newRoot, 81);
+        assertEq(oldRoot, GameSlots.TICKET_PENDING);
+        assertEq(newRoot, GameSlots.FAR_FUTURE_OWED);
         h.range(A, 9, 8, 1, 4);
         uint256 expected;
         for (uint24 i; i < 8; ++i) {

@@ -700,11 +700,10 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
     ) external view returns (bool found, uint32 position, uint32 nextOffset, uint32 total) {
         uint256 base;
         uint24 physical = _ticketQueueStorageKey(key);
-        assembly { base := ticketQueueLevels.slot }
-        uint24 occupying = uint24(_sload(game, _mapSlot(uint256(physical), base)));
+        assembly { base := ticketQueue.slot }
+        uint24 occupying = uint24(_sload(game, _mapSlot(uint256(physical), base)) >> 32);
         if (occupying == 0) occupying = physical & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT);
         if (occupying != key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT)) return (false, 0, 0, 0);
-        assembly { base := ticketQueue.slot }
         uint32[] memory targets = new uint32[](1);
         targets[0] = ownerPosition;
         return _findPackedIndex(game, _mapSlot(uint256(physical), base), targets, offset, maxWords, false);

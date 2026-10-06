@@ -142,7 +142,8 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
     const owners = Array.from({ length: FF_HOLDERS }, (_, i) => holder(0xb00000000n + lvl * 0x100n + BigInt(i + 1)));
     owners.forEach((owner) => fieldOwners.add(owner.toLowerCase()));
     await writeLanes(gameAddr, mapSlot(lvl | FF_BIT, queueRoot), await registerOwners(gameAddr, ownerRoot, lvl, owners));
-    await setSlot(gameAddr, mapSlot(lvl | FF_BIT, storageRootOf("ticketQueueLevels")), lvl);
+    // Queue header: owner count in bits 0..31, occupying level tag in bits 32..55.
+    await setSlot(gameAddr, mapSlot(lvl | FF_BIT, queueRoot), BigInt(FF_HOLDERS) | (lvl << 32n));
   }
   const recordedPool = ethers.parseEther(prevPoolEth);
   await setSlot(gameAddr, mapSlot(0n, poolRoot), recordedPool);

@@ -63,8 +63,7 @@ contract DeityPerpetualTicketsTest is DeployProtocol {
     }
     function _assertOnce(uint24 lvl, address who, uint24 atLevel) private view {
         uint24 key = _key(lvl, atLevel);
-        bytes32 root = keccak256(abi.encode(uint256(RingStorage.queueKey(uint24(key))), uint256(12)));
-        uint256 n = uint256(vm.load(address(game), root));
+        uint256 n = RingStorage.length(address(game), key);
         uint256 seen;
         for (uint256 i; i < n; ++i) if (TQ.ownerAt(address(game), key, lvl, i) == who) ++seen;
         assertEq(seen, 1, "one queue lane despite additive awards");

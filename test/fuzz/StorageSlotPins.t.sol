@@ -131,7 +131,6 @@ contract GameSlotHarness is DegenerusGameStorage {
     function s_deadClaimed() external pure returns (uint256 s, uint256 o) { assembly { s := deadClaimed.slot o := deadClaimed.offset } }
     function s_decBattleQueue() external pure returns (uint256 s, uint256 o) { assembly { s := decBattleQueue.slot o := decBattleQueue.offset } }
     function s_traitBucketLive() external pure returns (uint256 s, uint256 o) { assembly { s := traitBucketLive.slot o := traitBucketLive.offset } }
-    function s_ticketQueueLevels() external pure returns (uint256 s, uint256 o) { assembly { s := ticketQueueLevels.slot o := ticketQueueLevels.offset } }
     function s_ticketPending() external pure returns (uint256 s, uint256 o) { assembly { s := ticketPending.slot o := ticketPending.offset } }
     function s_jackpotWork() external pure returns (uint256 s, uint256 o) { assembly { s := jackpotWork.slot o := jackpotWork.offset } }
     function s_farFutureOwed() external pure returns (uint256 s, uint256 o) { assembly { s := farFutureOwed.slot o := farFutureOwed.offset } }
@@ -313,7 +312,6 @@ contract StorageSlotPinsTest is Test {
         (s, o) = h.s_deadClaimed(); assertEq(s, GameSlots.DEAD_CLAIMED, "deadClaimed.slot"); assertEq(o, 0, "deadClaimed.offset");
         (s, o) = h.s_decBattleQueue(); assertEq(s, GameSlots.DEC_BATTLE_QUEUE, "decBattleQueue.slot"); assertEq(o, 0, "decBattleQueue.offset");
         (s, o) = h.s_traitBucketLive(); assertEq(s, GameSlots.TRAIT_BUCKET_LIVE, "traitBucketLive.slot"); assertEq(o, 0, "traitBucketLive.offset");
-        (s, o) = h.s_ticketQueueLevels(); assertEq(s, GameSlots.TICKET_QUEUE_LEVELS, "ticketQueueLevels.slot"); assertEq(o, 0, "ticketQueueLevels.offset");
         (s, o) = h.s_ticketPending(); assertEq(s, GameSlots.TICKET_PENDING, "ticketPending.slot"); assertEq(o, 0, "ticketPending.offset");
         (s, o) = h.s_jackpotWork(); assertEq(s, GameSlots.JACKPOT_WORK, "jackpotWork.slot"); assertEq(o, 0, "jackpotWork.offset");
         (s, o) = h.s_farFutureOwed(); assertEq(s, GameSlots.FAR_FUTURE_OWED, "farFutureOwed.slot"); assertEq(o, 0, "farFutureOwed.offset");

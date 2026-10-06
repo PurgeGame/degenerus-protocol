@@ -734,15 +734,18 @@ abstract contract DegenerusGameStorage {
     ///      - ticketQueue[_ticketQueueStorageKey(6+)] → far-future space; 6 can mint once level 5 meets its goal
     ///
     ///      Near queues reuse two parity slots; far-future queues reuse slots 1..100.
-    ///      Logical keys pass through _ticketQueueStorageKey; ticketQueueLevels authenticates them.
+    ///      Logical keys pass through _ticketQueueStorageKey; the header's level tag authenticates them.
     ///      Keys retain their domain flags: bit 23 selects the
     ///      double-buffer write/read half (ticketWriteSlot); tickets targeting > level+1 use the
     ///      disjoint far-future key space (bit 22). Raw-level indices above hold only when
     ///      ticketWriteSlot is false.
-    ///      The length word counts QUEUED OWNERS. Data word w holds eight uint32 lanes for
-    ///      positions 8w..8w+7, low lane first, each holding a nonzero wallet ID (the wallet
-    ///      table position). Never use Solidity array indexing, push, pop or delete on this mapping.
-    ///      Readers are length-gated; append overwrites the selected lane after queue reuse.
+    ///      The length word is a HEADER: bits 0..31 count QUEUED OWNERS and bits 32..55 tag the
+    ///      occupying absolute level (zero: the physical slot's own level, `physical & 0x7f`).
+    ///      Release clears only the count, so a reused root keeps a nonzero header. Data word w
+    ///      holds eight uint32 lanes for positions 8w..8w+7, low lane first, each holding a
+    ///      nonzero wallet ID (the wallet table position). Never use Solidity array indexing,
+    ///      length, push, pop or delete on this mapping. Readers are length-gated; append
+    ///      overwrites the selected lane after queue reuse.
     mapping(uint24 => uint256[]) internal ticketQueue;
 
     /// @dev Wallet table: element `id` is the wallet whose permanent ID is `id`. Each element
@@ -1622,35 +1625,35 @@ abstract contract DegenerusGameStorage {
         uint24 physical = _ticketQueueStorageKey(key);
         assembly ("memory-safe") {
             mstore(0, physical)
-            mstore(32, ticketQueueLevels.slot)
-            let occupying := sload(keccak256(0, 64))
+            mstore(32, ticketQueue.slot)
+            let header := sload(keccak256(0, 64))
+            let occupying := and(shr(32, header), 0xffffff)
             if iszero(occupying) { occupying := and(physical, 0x7f) }
-            if eq(occupying, and(key, 0x3fffff)) {
-                mstore(32, ticketQueue.slot)
-                length := sload(keccak256(0, 64))
-            }
+            if eq(occupying, and(key, 0x3fffff)) { length := and(header, 0xffffffff) }
         }
     }
 
     /// @dev Bind only an empty queue. A collision must preserve every paid obligation.
-    function _bindTicketQueue(uint24 key) internal returns (uint256[] storage q) {
+    ///      Returns the header the caller's append writes back: the live count under an
+    ///      explicit tag for `key`'s level, so the first append also materializes the tag.
+    function _bindTicketQueue(uint24 key) internal view returns (uint256[] storage q, uint256 header) {
         uint24 physical = _ticketQueueStorageKey(key);
         assembly ("memory-safe") {
             mstore(0, physical)
             mstore(32, ticketQueue.slot)
             q.slot := keccak256(0, 64)
-            mstore(32, ticketQueueLevels.slot)
-            let tag := keccak256(0, 64)
+            header := sload(q.slot)
             let lvl := and(key, 0x3fffff)
-            let occupying := sload(tag)
+            let occupying := and(shr(32, header), 0xffffff)
             if iszero(occupying) { occupying := and(physical, 0x7f) }
+            let len := and(header, 0xffffffff)
             if iszero(eq(occupying, lvl)) {
-                if sload(q.slot) {
+                if len {
                     mstore(0, 0x92bbf6e8)
                     revert(28, 4)
                 }
-                sstore(tag, lvl)
             }
+            header := or(len, shl(32, lvl))
         }
     }
 
@@ -1673,8 +1676,8 @@ abstract contract DegenerusGameStorage {
             if lvl {
                 let position := mod(sub(lvl, 1), 100)
                 mstore(0, or(add(position, 1), 0x400000))
-                mstore(32, ticketQueueLevels.slot)
-                let occupying := sload(keccak256(0, 64))
+                mstore(32, ticketQueue.slot)
+                let occupying := and(shr(32, sload(keccak256(0, 64))), 0xffffff)
                 if iszero(occupying) { occupying := add(position, 1) }
                 if eq(occupying, lvl) {
                     mstore(0, id)
@@ -1962,9 +1965,9 @@ abstract contract DegenerusGameStorage {
     ///      starts a whole word so the fresh tail has no inherited upper lanes.
     function _tqAppend(uint24 key, uint32 ownerPos) internal {
         if (ownerPos == 0) revert E();
-        uint256[] storage q = _bindTicketQueue(key);
+        (uint256[] storage q, uint256 header) = _bindTicketQueue(key);
         assembly ("memory-safe") {
-            let len := sload(q.slot)
+            let len := and(header, 0xffffffff)
             mstore(0x00, q.slot)
             let slot := add(keccak256(0x00, 0x20), shr(3, len))
             let shift := shl(5, and(len, 7))
@@ -1973,7 +1976,7 @@ abstract contract DegenerusGameStorage {
                 value := or(and(sload(slot), not(shl(shift, 0xffffffff))), shl(shift, value))
             }
             sstore(slot, value)
-            sstore(q.slot, add(len, 1))
+            sstore(q.slot, add(header, 1))
         }
     }
 
@@ -1981,14 +1984,9 @@ abstract contract DegenerusGameStorage {
     ///      stale tail lanes after queue reuse; preserve only the live prefix. Used by
     ///      deity renewal to update the queue length once per packed group.
     function _tqAppendLanes(uint24 key, uint256 lanes, uint256 count) internal {
-        uint256[] storage q = _bindTicketQueue(key);
-        _tqAppendLanesBound(q, lanes, count);
-    }
-
-    /// @dev Caller must authenticate the queue, or prove it is an unreused genesis root.
-    function _tqAppendLanesBound(uint256[] storage q, uint256 lanes, uint256 count) internal {
+        (uint256[] storage q, uint256 header) = _bindTicketQueue(key);
         assembly ("memory-safe") {
-            let len := sload(q.slot)
+            let len := and(header, 0xffffffff)
             mstore(0, q.slot)
             let slot := add(keccak256(0, 32), shr(3, len))
             let fill := and(len, 7)
@@ -1997,7 +1995,7 @@ abstract contract DegenerusGameStorage {
             sstore(slot, or(prefix, shl(shift, lanes)))
             let room := sub(8, fill)
             if gt(count, room) { sstore(add(slot, 1), shr(shl(5, room), lanes)) }
-            sstore(q.slot, add(len, count))
+            sstore(q.slot, add(header, count))
         }
     }
 
@@ -2022,7 +2020,8 @@ abstract contract DegenerusGameStorage {
     ///      that last lane, preserving neighbours even when both positions share a word.
     function _tqSwapPop(uint256[] storage q, uint256 k) internal {
         assembly ("memory-safe") {
-            let last := sub(sload(q.slot), 1)
+            let header := sload(q.slot)
+            let last := sub(and(header, 0xffffffff), 1)
             mstore(0x00, q.slot)
             let base := keccak256(0x00, 0x20)
             let lastSlot := add(base, shr(3, last))
@@ -2035,7 +2034,7 @@ abstract contract DegenerusGameStorage {
                 let shift := shl(5, and(k, 7))
                 sstore(slot, or(and(sload(slot), not(shl(shift, 0xffffffff))), shl(shift, pos)))
             }
-            sstore(q.slot, last)
+            sstore(q.slot, sub(header, 1))
         }
     }
 
@@ -2058,24 +2057,26 @@ abstract contract DegenerusGameStorage {
         return lvl | TICKET_FAR_FUTURE_BIT;
     }
 
-    /// @dev Release a drained ticket queue in O(1): zero only the array's LENGTH
-    ///      slot. `delete` on a dynamic storage array compiles into a loop zeroing
-    ///      every element slot (~5k gas each against committed storage), so a long
-    ///      queue would push the finishing batch past the block gas limit and brick
-    ///      advancement — the batch loop is write-budgeted, but a `delete`'s
-    ///      compiler-generated clear is not. Zeroing just the length keeps every
-    ///      `.length` readiness gate exact while leaving stale element slots
-    ///      behind; they are unreachable because all reads are length-gated and a
-    ///      push overwrites slots from index 0 upward.
+    /// @dev Release a drained ticket queue in O(1): clear only the header's count, keeping
+    ///      the level tag. Element slots stay behind; they are unreachable because every
+    ///      read is length-gated and an append overwrites lanes from index 0 upward. A
+    ///      stale release (another level now occupies the root) changes nothing.
     function _releaseTicketQueue(uint24 rk) internal {
         uint24 physical = _ticketQueueStorageKey(rk);
-        uint24 occupying = ticketQueueLevels[physical];
-        if (occupying == 0) occupying = physical & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT);
-        if (occupying != rk & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT)) return;
-        uint256[] storage q = ticketQueue[physical];
+        bool matched;
         assembly ("memory-safe") {
-            sstore(q.slot, 0)
+            mstore(0, physical)
+            mstore(32, ticketQueue.slot)
+            let slot := keccak256(0, 64)
+            let header := sload(slot)
+            let occupying := and(shr(32, header), 0xffffff)
+            if iszero(occupying) { occupying := and(physical, 0x7f) }
+            if eq(occupying, and(rk, 0x3fffff)) {
+                matched := 1
+                if and(header, 0xffffffff) { sstore(slot, and(header, not(0xffffffff))) }
+            }
         }
+        if (!matched) return;
         if (ticketSeats != 0) ticketSeats = 0;
         if (ticketSoloOffset != 0) ticketSoloOffset = 0;
     }
@@ -4437,10 +4438,6 @@ abstract contract DegenerusGameStorage {
     /// @dev Bit t identifies a trait header initialized for ticketBufferLevels[parity].
     ///      Cleared only on successful buffer takeover; owner index zero remains valid.
     uint256[2] internal traitBucketLive;
-
-    /// @dev Absolute levels occupying two roots per near cohort and 100 far-future roots.
-    ///      Zero authenticates the initial level equal to the physical slot number.
-    mapping(uint24 => uint24) internal ticketQueueLevels;
 
     /// @dev ticketPending[id] holds even A/B then odd A/B in bits0..167.
     ///      Even/odd level tags occupy bits168..215.

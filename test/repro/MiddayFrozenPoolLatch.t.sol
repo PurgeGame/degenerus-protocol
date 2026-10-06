@@ -315,7 +315,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
 
     /// @dev _ticketQueueLength(key) — the mapping sits at slot 12.
     function _queueLen(uint24 key) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(key), uint256(12)))));
+        return uint32(uint256(vm.load(address(game), keccak256(abi.encode(uint256(key), uint256(12))))));
     }
 
     /// @dev ticketWriteSlot — slot 0, byte 25.

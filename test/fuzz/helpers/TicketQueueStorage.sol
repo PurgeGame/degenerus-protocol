@@ -10,7 +10,6 @@ library TicketQueueStorage {
     uint256 internal constant QUEUE = GameSlots.TICKET_QUEUE;
     uint256 internal constant MINT = GameSlots.MINT_PACKED; // Forward ID at bits 224..255.
     uint256 internal constant OWNERS = GameSlots.WALLETS; // Wallet table; ID = position.
-    uint256 internal constant QUEUE_LEVELS = GameSlots.TICKET_QUEUE_LEVELS;
     uint256 internal constant PENDING = GameSlots.TICKET_PENDING;
     uint256 internal constant FUTURE = GameSlots.FAR_FUTURE_OWED;
     uint256 private constant ID_SHIFT = 224;
@@ -31,12 +30,20 @@ library TicketQueueStorage {
     function _pending(uint24, uint32 id) private pure returns (bytes32) {
         return keccak256(abi.encode(uint256(id), PENDING));
     }
+    /// @dev Queue header: owner count in bits 0..31, occupying level tag in bits 32..55
+    ///      (zero: the physical slot's own level).
+    function _header(address host, uint24 physical) private view returns (uint256) {
+        return uint256(vm.load(host, keccak256(abi.encode(uint256(physical), QUEUE))));
+    }
+    function _occupying(uint256 header, uint24 physical) private pure returns (uint24 occupying) {
+        occupying = uint24(header >> 32);
+        if (occupying == 0) occupying = physical & 0x3fffff;
+    }
     function length(address host, uint24 key) internal view returns (uint256) {
         uint24 physical = queueKey(key);
-        uint24 occupying = uint24(uint256(vm.load(host, keccak256(abi.encode(uint256(physical), QUEUE_LEVELS)))));
-        if (occupying == 0) occupying = physical & 0x3fffff;
-        if (occupying != (key & 0x3fffff)) return 0;
-        return uint256(vm.load(host, keccak256(abi.encode(uint256(physical), QUEUE))));
+        uint256 header = _header(host, physical);
+        if (_occupying(header, physical) != (key & 0x3fffff)) return 0;
+        return uint32(header);
     }
     /// @dev A raw jump models completed prior queues by consuming only their matching balances.
     function retireCompleted(address host, uint24 throughLevel) internal {
@@ -45,8 +52,8 @@ library TicketQueueStorage {
                 uint24 flags = domain == 0 ? 0 : (domain == 1 ? uint24(1 << 23) : uint24(1 << 22));
                 if (domain != 2 && physical > 2) continue;
                 uint24 root = physical | flags;
-                uint24 occupying = uint24(uint256(vm.load(host, keccak256(abi.encode(uint256(root), QUEUE_LEVELS)))));
-                if (occupying == 0) occupying = physical;
+                uint256 header = _header(host, root);
+                uint24 occupying = _occupying(header, root);
                 if (occupying > throughLevel) continue;
                 uint24 key = occupying | flags;
                 uint256 n = length(host, key);
@@ -54,7 +61,7 @@ library TicketQueueStorage {
                     address player = ownerAt(host, key, occupying, i);
                     if (owed(host, key, player) != 0) setOwed(host, key, player, 0);
                 }
-                vm.store(host, keccak256(abi.encode(uint256(root), QUEUE)), bytes32(0));
+                vm.store(host, keccak256(abi.encode(uint256(root), QUEUE)), bytes32(header & ~uint256(type(uint32).max)));
             }
         }
     }
@@ -86,17 +93,13 @@ library TicketQueueStorage {
         setOwed(host, key, player, (uint80(id) << 48) | uint48(value));
         uint24 physical = queueKey(key);
         bytes32 queue = keccak256(abi.encode(uint256(physical), QUEUE));
-        bytes32 tag = keccak256(abi.encode(uint256(physical), QUEUE_LEVELS));
-        uint24 occupying = uint24(uint256(vm.load(host, tag)));
-        if (occupying == 0) occupying = physical & 0x3fffff;
-        if (occupying != lvl) vm.store(host, queue, bytes32(0));
-        vm.store(host, tag, bytes32(uint256(lvl)));
-        index = uint256(vm.load(host, queue));
+        uint256 header = uint256(vm.load(host, queue));
+        index = _occupying(header, physical) == lvl ? uint32(header) : 0;
         bytes32 slot = bytes32(uint256(keccak256(abi.encode(queue))) + index / 8);
         uint256 factor = 2 ** (32 * (index % 8));
         uint256 word = uint256(vm.load(host, slot));
         vm.store(host, slot, bytes32((word & ~(uint256(type(uint32).max) * factor)) | (uint256(id) * factor)));
-        vm.store(host, queue, bytes32(index + 1));
+        vm.store(host, queue, bytes32((index + 1) | (uint256(lvl) << 32)));
     }
     function owed(address host, uint24 key, address player) internal view returns (uint80) {
         uint32 id = _id(host, player);
@@ -105,9 +108,7 @@ library TicketQueueStorage {
             uint24 lvl = key & 0x3fffff;
             if (lvl == 0) return 0;
             uint24 physical = queueKey(key);
-            uint24 occupying = uint24(uint256(vm.load(host, keccak256(abi.encode(uint256(physical), QUEUE_LEVELS)))));
-            if (occupying == 0) occupying = physical & 0x3fffff;
-            if (occupying != lvl) return 0;
+            if (_occupying(_header(host, physical), physical) != lvl) return 0;
             uint256 position = (lvl - 1) % 100;
             uint256 lane = uint32(uint256(vm.load(host, _future(key, id))) >> ((position & 7) * 32));
             return lane & 0x80000000 == 0 ? 0 : (uint80(id) << 48)

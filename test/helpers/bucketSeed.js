@@ -22,7 +22,6 @@ const OWNER_SLOT = rootOf("wallets");
 const MINT_PACKED_SLOT = rootOf("mintPacked_");
 const WALLET_ID_SHIFT = 224n;
 const QUEUE_SLOT = rootOf("ticketQueue");
-const QUEUE_LEVELS_SLOT = rootOf("ticketQueueLevels");
 const PENDING_SLOT = rootOf("ticketPending");
 const FAR_FUTURE_OWED_SLOT = rootOf("farFutureOwed");
 const TRAIT_BITMAP_SLOT = rootOf("traitBucketLive");
@@ -127,8 +126,8 @@ async function seedTicketQueue(addr, key, holders) {
   const level = BigInt(key) & ((1n << 22n) - 1n);
   const physical = queueStorageKey(key);
   const lengthSlot = mapSlot(physical, QUEUE_SLOT);
-  await setStorage(addr, mapSlot(physical, QUEUE_LEVELS_SLOT), level);
-  await setStorage(addr, lengthSlot, BigInt(holders.length));
+  // Queue header: owner count in bits 0..31, occupying level tag in bits 32..55.
+  await setStorage(addr, lengthSlot, BigInt(holders.length) | (level << 32n));
   const base = dataBase(lengthSlot);
   for (let w = 0; w * 8 < lanes.length; ++w) {
     let word = 0n;
@@ -147,7 +146,8 @@ async function ownerIdOf(addr, player) {
 async function farFuturePosition(addr, lvl) {
   if (lvl === 0n) return null;
   const position = (lvl - 1n) % 100n;
-  let occupying = await getStorage(addr, mapSlot((position + 1n) | TICKET_FAR_FUTURE_BIT, QUEUE_LEVELS_SLOT));
+  const header = await getStorage(addr, mapSlot((position + 1n) | TICKET_FAR_FUTURE_BIT, QUEUE_SLOT));
+  let occupying = (header >> 32n) & 0xffffffn;
   if (occupying === 0n) occupying = position + 1n;
   return occupying === lvl ? position : null;
 }

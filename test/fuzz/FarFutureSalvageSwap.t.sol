@@ -116,7 +116,8 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
     }
 
     function _ffQueueLen(uint24 L) internal view returns (uint256) {
-        return uint256(vm.load(address(game), _queueBaseSlot(ffk.ffKey(L))));
+        // Queue header: count in bits 0..31, level tag above it.
+        return uint32(uint256(vm.load(address(game), _queueBaseSlot(ffk.ffKey(L)))));
     }
 
     function _ownedEntries(address who, uint24 L) internal view returns (uint32) {

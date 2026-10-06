@@ -962,17 +962,9 @@
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "ticketQueueLevels",
-    "offset": 0,
-    "slot": 72,
-    "typeLabel": "mapping(uint24 => uint24)"
-  },
-  {
-    "bytes": "32",
-    "encoding": "mapping",
     "label": "ticketPending",
     "offset": 0,
-    "slot": 73,
+    "slot": 72,
     "typeLabel": "mapping(uint32 => uint256)"
   },
   {
@@ -980,7 +972,7 @@
     "encoding": "inplace",
     "label": "jackpotWork",
     "offset": 0,
-    "slot": 74,
+    "slot": 73,
     "typeLabel": "struct DegenerusGameStorage.JackpotWork"
   },
   {
@@ -988,7 +980,7 @@
     "encoding": "mapping",
     "label": "farFutureOwed",
     "offset": 0,
-    "slot": 76,
+    "slot": 75,
     "typeLabel": "mapping(uint32 => uint256[13])"
   },
   {
@@ -996,7 +988,7 @@
     "encoding": "inplace",
     "label": "decPreviousStack",
     "offset": 0,
-    "slot": 77,
+    "slot": 76,
     "typeLabel": "uint64"
   },
   {
@@ -1004,7 +996,7 @@
     "encoding": "inplace",
     "label": "decPreviousCount",
     "offset": 8,
-    "slot": 77,
+    "slot": 76,
     "typeLabel": "uint40"
   },
   {
@@ -1012,7 +1004,7 @@
     "encoding": "mapping",
     "label": "decJackpotPlans",
     "offset": 0,
-    "slot": 78,
+    "slot": 77,
     "typeLabel": "mapping(uint24 => struct DegenerusGameStorage.DecJackpotPlan)"
   },
   {
@@ -1020,7 +1012,7 @@
     "encoding": "mapping",
     "label": "decGeneratedOwners",
     "offset": 0,
-    "slot": 79,
+    "slot": 78,
     "typeLabel": "mapping(uint256 => uint32)"
   }
 ]

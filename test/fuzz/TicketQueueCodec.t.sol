@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 contract TicketQueueCodecHarness is DegenerusGameStorage, WalletSeed {
     function roots() external pure returns (uint256 q, uint256 locator, uint256 owners, uint256 pending) {
@@ -41,9 +42,9 @@ contract TicketQueueCodecHarness is DegenerusGameStorage, WalletSeed {
         }
     }
     function seedWord(uint24 key, uint256 value) external {
-        uint256[] storage q = _bindTicketQueue(key);
+        (uint256[] storage q, uint256 header) = _bindTicketQueue(key);
         assembly ("memory-safe") {
-            sstore(q.slot, 8)
+            sstore(q.slot, or(and(header, not(0xffffffff)), 8))
             mstore(0, q.slot)
             sstore(keccak256(0, 32), value)
         }
@@ -85,9 +86,9 @@ contract TicketQueueCodecTest is Test {
 
     function test_ReferenceModelRootsMatchCompilerLayout() public view {
         (uint256 q, uint256 locator, uint256 owners, uint256 pending) = h.roots();
-        // Golden layout (scripts/layout/golden/DegenerusGame.json): ticketPending moved 79 -> 78 when
-        // earlyBirdWhalePasses was removed in 5b25fded0 (every slot from 75 shifted down one).
-        assertEq(q, 12); assertEq(locator, 13); assertEq(owners, 67); assertEq(pending, 78);
+        // GameSlots is pinned to the compiled layout by StorageSlotPins.
+        assertEq(q, GameSlots.TICKET_QUEUE); assertEq(locator, GameSlots.MINT_PACKED);
+        assertEq(owners, GameSlots.WALLETS); assertEq(pending, GameSlots.TICKET_PENDING);
     }
 
     function testFuzz_OwedRewritePreservesOwnerAndNeighbour(address player, uint80 owed, uint32 position) public {

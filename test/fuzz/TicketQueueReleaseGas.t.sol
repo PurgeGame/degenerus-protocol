@@ -78,9 +78,10 @@ contract TicketQueueReleaseGasTest is DeployProtocol {
     }
 
     function _queueLen(address host, uint24 key) private view returns (uint256) {
-        return uint256(
+        // Queue header: count in bits 0..31, level tag above it.
+        return uint32(uint256(
             vm.load(host, keccak256(abi.encode(uint256(RingStorage.queueKey(uint24(key))), SLOT_TICKET_QUEUE)))
-        );
+        ));
     }
 
     function _armEntropy(address host) private {

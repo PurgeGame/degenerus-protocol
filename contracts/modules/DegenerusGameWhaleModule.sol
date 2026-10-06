@@ -1060,16 +1060,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             _setEntryOwed(key, id,
                 (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(uint8(packed)));
         }
-        if (count != 0) {
-            // Genesis is restricted to level zero; keys1..100 cannot have been reused.
-            uint256[] storage q;
-            assembly ("memory-safe") {
-                mstore(0, key)
-                mstore(32, ticketQueue.slot)
-                q.slot := keccak256(0, 64)
-            }
-            _tqAppendLanesBound(q, lanes, count);
-        }
+        if (count != 0) _tqAppendLanes(key, lanes, count);
     }
 
     /// @dev Compute the total ETH cost of a 10-level lazy pass starting at startLevel.

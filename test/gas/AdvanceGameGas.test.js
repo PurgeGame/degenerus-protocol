@@ -156,7 +156,6 @@ describe("AdvanceGame Gas Benchmarks", function () {
   const TICKET_FAR_FUTURE_BIT = 1n << 22n;
   const layoutSlot = (label) => BigInt(GAME_LAYOUT.find((e) => e.label === label).slot);
   const QUEUE_SLOT = layoutSlot("ticketQueue");
-  const QUEUE_LEVELS_SLOT = layoutSlot("ticketQueueLevels");
   const TICKET_CURSOR_SLOT = layoutSlot("ticketCursor");
   const mapSlot = (key, base) => hre.ethers.keccak256(
     hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint256", "uint256"], [key, base]));
@@ -165,9 +164,10 @@ describe("AdvanceGame Gas Benchmarks", function () {
   /** Mirror of DegenerusGameStorage._ticketQueueLength for a far-future key. */
   async function ffQueueLength(game, lvl) {
     const physical = TICKET_FAR_FUTURE_BIT | ((lvl - 1n) % 100n + 1n);
-    let occupying = await readSlot(game, mapSlot(physical, QUEUE_LEVELS_SLOT));
+    const header = await readSlot(game, mapSlot(physical, QUEUE_SLOT));
+    let occupying = (header >> 32n) & 0xffffffn;
     if (occupying === 0n) occupying = physical & 0x7fn;
-    return occupying === lvl ? readSlot(game, mapSlot(physical, QUEUE_SLOT)) : 0n;
+    return occupying === lvl ? header & 0xffffffffn : 0n;
   }
 
   /** Far-future queue lengths plus the ticket drain cursor (ticketCursor/ticketLevel word). */

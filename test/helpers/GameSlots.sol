@@ -178,15 +178,14 @@ library GameSlots {
     uint256 internal constant DEAD_CLAIMED = 68;
     uint256 internal constant DEC_BATTLE_QUEUE = 69;
     uint256 internal constant TRAIT_BUCKET_LIVE = 70;
-    uint256 internal constant TICKET_QUEUE_LEVELS = 72;
-    uint256 internal constant TICKET_PENDING = 73;
-    uint256 internal constant JACKPOT_WORK = 74;
-    uint256 internal constant FAR_FUTURE_OWED = 76;
-    uint256 internal constant DEC_PREVIOUS_STACK = 77;
-    uint256 internal constant DEC_PREVIOUS_COUNT = 77;
+    uint256 internal constant TICKET_PENDING = 72;
+    uint256 internal constant JACKPOT_WORK = 73;
+    uint256 internal constant FAR_FUTURE_OWED = 75;
+    uint256 internal constant DEC_PREVIOUS_STACK = 76;
+    uint256 internal constant DEC_PREVIOUS_COUNT = 76;
     uint256 internal constant DEC_PREVIOUS_COUNT_OFFSET = 8;
-    uint256 internal constant DEC_JACKPOT_PLANS = 78;
-    uint256 internal constant DEC_GENERATED_OWNERS = 79;
+    uint256 internal constant DEC_JACKPOT_PLANS = 77;
+    uint256 internal constant DEC_GENERATED_OWNERS = 78;
 }
 
 /// @title CrapsSlots

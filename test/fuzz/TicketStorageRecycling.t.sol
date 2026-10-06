@@ -21,12 +21,12 @@ contract TicketRecyclingHarness is TicketLevelPrep, WalletSeed {
     }
     function retired(uint24 lvl) external view returns (bool) { return _ticketLevelRetired(lvl); }
     function pending(uint24 lvl, bool write, uint256 n) external {
-        uint256[] storage q = _bindTicketQueue(write ? _tqWriteKey(lvl) : _tqReadKey(lvl));
-        assembly ("memory-safe") { sstore(q.slot, n) }
+        (uint256[] storage q, uint256 header) = _bindTicketQueue(write ? _tqWriteKey(lvl) : _tqReadKey(lvl));
+        assembly ("memory-safe") { sstore(q.slot, or(and(header, not(0xffffffff)), n)) }
     }
     function farPending(uint24 lvl, uint256 n) external {
-        uint256[] storage q=_bindTicketQueue(_tqFarFutureKey(lvl));
-        assembly ("memory-safe") { sstore(q.slot,n) }
+        (uint256[] storage q, uint256 header) = _bindTicketQueue(_tqFarFutureKey(lvl));
+        assembly ("memory-safe") { sstore(q.slot, or(and(header, not(0xffffffff)), n)) }
     }
     function seated(uint24 lvl, uint32 n) external { ticketLevel=lvl; ticketSeats=n; }
     function livePhase(uint24 lvl) external { level=lvl; jackpotPhaseFlag=true; }

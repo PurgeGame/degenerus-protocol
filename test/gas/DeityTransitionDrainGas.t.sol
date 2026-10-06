@@ -74,7 +74,7 @@ contract DeityTransitionDrainGasTest is BoundaryGasFixture {
         _checkOwners();
         assertFalse(game.rngLocked(), "transition closes in this advance");
         // Nothing crosses a far-future boundary at the close: the survivors stay unminted.
-        assertEq(uint256(vm.load(address(game), ffLenSlot)), 8, "transition must not drain an unminted queue");
+        assertEq(uint32(uint256(vm.load(address(game), ffLenSlot))), 8, "transition must not drain an unminted queue");
         for (uint160 i; i < 8; ++i) {
             assertEq(uint32(TQ.owed(address(game), ffKey, address(SURVIVOR_BASE + i)) >> 8), 1_000_000);
         }

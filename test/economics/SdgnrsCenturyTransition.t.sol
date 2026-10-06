@@ -96,7 +96,7 @@ contract SdgnrsCenturyTransitionTest is BoundaryGasFixture {
         uint256 beforeSupply = sdgnrs.totalSupply();
         uint24 ffKey = (uint24(1) << 22) | (game.level() + 2);
         bytes32 ffLenSlot = keccak256(abi.encode(uint256(RingStorage.queueKey(uint24(ffKey))), uint256(12)));
-        assertEq(uint256(vm.load(address(game), ffLenSlot)), 150, "fixture: unminted queue seeded");
+        assertEq(uint32(uint256(vm.load(address(game), ffLenSlot))), 150, "fixture: unminted queue seeded");
 
         game.mineFlip();
         assertEq(sdgnrs.lastRecycledCentury(), 1, "transition closes and refills in one advance");
@@ -105,7 +105,7 @@ contract SdgnrsCenturyTransitionTest is BoundaryGasFixture {
         assertFalse(game.rngLocked(), "lock released at transition close");
         // The unminted level is not touched by the transition: every owner still owes its entries
         // on the far-future key, and the queue is not released.
-        assertEq(uint256(vm.load(address(game), ffLenSlot)), 150, "transition must not drain an unminted queue");
+        assertEq(uint32(uint256(vm.load(address(game), ffLenSlot))), 150, "transition must not drain an unminted queue");
         for (uint160 i; i < 150; ++i) {
             assertEq(uint32(TQ.owed(address(game), ffKey, address(0xF0200000 + i)) >> 8), 4);
         }
