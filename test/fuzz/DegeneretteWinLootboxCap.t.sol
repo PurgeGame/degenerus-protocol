@@ -182,14 +182,22 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
         assertTrue(ok); // expectRevert makes the observed low-level call succeed
     }
 
-    function _winningWord() private pure returns (uint256 word) {
+    /// @dev A word where spin 0 scores 6 or more and the win boxes of bets 1 and 2 roll a ticket
+    ///      outcome (a spin roll emits BoxSpin instead of LootBoxOpened).
+    function _winningWord() private view returns (uint256 word) {
         for (uint256 k; ; ++k) {
             word = uint256(keccak256(abi.encode("win-cap", k)));
             (uint8 score,) = Ref.score(
                 Ref.player(word, uint32(INDEX), SYMBOL, 0, false),
-                Ref.house(word, uint32(INDEX), 0, false), SYMBOL >> 3
-            );
-            if (score >= 6) return word;
+                Ref.house(word, uint32(INDEX), 0, false));
+            if (score < 6) continue;
+            bool tickets = true;
+            for (uint256 betId = 1; betId <= 2; ++betId) {
+                uint256 boxWord = uint256(keccak256(abi.encode(word, betId)));
+                uint256 seed = uint256(keccak256(abi.encode(boxWord, uint256(uint160(player)))));
+                if (uint16(seed >> 40) % 20 >= 8) tickets = false;
+            }
+            if (tickets) return word;
         }
     }
 

@@ -362,8 +362,8 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     /// @notice DSPIN-02 mixed-currency batch via the sweep: the same ETH-25 + FLIP-15 worst case
     ///         as `testWorstCaseMixedCurrencyBatchGas`, but resolved automatically by `mineFlip`.
     function testWorstCaseMixedCurrencyBatchGasViaSweep() public {
-        uint128 flipPerTicket = 200 ether; // >= MIN_BET_FLIP (100 ether)
-        _fundFlip(player, uint256(flipPerTicket) * MAX_SPINS_FLIP + 1 ether);
+        uint128 flipPerTicket = 200; // FLIP has 0 decimals; minimum is 100 whole FLIP.
+        _fundFlip(player, uint256(flipPerTicket) * MAX_SPINS_FLIP + 1);
 
         uint64 ethBet = _placeWorstCaseBetN(player, MAX_SPINS_ETH, worstCaseTicket25);
         uint64 flipBet = _placeCurrencyBet(player, 1, flipPerTicket, MAX_SPINS_FLIP, worstCaseTicket25);
@@ -450,7 +450,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
             for (uint8 hero; hero < 8; ++hero) {
                 for (uint8 spin; spin < MAX_SPINS_ETH; ++spin) {
                     (uint8 score,) = Ref.score(Ref.player(candidate, uint32(INDEX), hero, spin, false),
-                        Ref.house(candidate, uint32(INDEX), spin, false), 0);
+                        Ref.house(candidate, uint32(INDEX), spin, false));
                     if (score >= 7) return (candidate, hero);
                 }
             }
@@ -554,9 +554,8 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         for (uint8 spinIdx; spinIdx < spins; ++spinIdx) {
             (uint8 score,) = Ref.score(
                 Ref.player(word, uint32(index), symbol, spinIdx, false),
-                Ref.house(word, uint32(index), spinIdx, false), 0
-            );
-            if (score >= 2) ++wins;
+                Ref.house(word, uint32(index), spinIdx, false));
+            if (score >= 3) ++wins;
         }
     }
 

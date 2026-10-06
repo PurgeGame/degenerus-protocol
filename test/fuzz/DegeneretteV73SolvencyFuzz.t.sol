@@ -16,11 +16,11 @@ import {DegeneretteMathHarness} from "../../contracts/mocks/DegeneretteMathHarne
 /// @notice Sweeps random heroes and words through manual FLIP bets and automatic WWXRP spins,
 ///         asserting the protocol-pillar invariants hold for EVERY reachable input — the coverage the
 ///         analytical EV proof and the single-config 3000-spin parity test sampled only narrowly:
-///           SOLVENCY  — score S in {0..9}; the honest base payout never exceeds the shared S=9 payout with four gold matches
+///           SOLVENCY  — score S in {1..9}; the honest base payout never exceeds the shared S=9 payout with four house wilds
 ///                       (the table's max entry → no dispatch reads an inflated/OOB value); the pay
-///                       floor holds (S<2 → payout 0).
-///           RNG       — the WWXRP rig only LIFTS (rigged S in [honestS, honestS+1]) and can NEVER
-///                       fabricate the S=9 jackpot (rigged S==9 ⇒ the honest reel already had M==8).
+///                       floor holds (S<3 → payout 0).
+///           RNG       — the WWXRP rig only LIFTS (rigged S in [honestS, honestS+1]), never changes the
+///                       house wild count and can NEVER fabricate the S=9 jackpot.
 ///           LIVENESS  — every resolve succeeds (no revert/brick) for any ticket/hero/seed.
 ///
 /// @dev Run: forge test --match-path test/fuzz/DegeneretteV73SolvencyFuzz.t.sol
@@ -63,9 +63,9 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
     function testFuzz_v73_manualFlipSolvency(uint8 symbol, uint256 word) public {
         word = bound(word, 2, type(uint256).max);
         symbol %= 24;
-        uint128 perTicket = 100 ether;
+        uint128 perTicket = 100;
         vm.prank(address(game));
-        coin.mintForGame(player, uint256(perTicket) + 1 ether);
+        coin.mintForGame(player, uint256(perTicket) + 1);
         vm.prank(player);
         game.placeDegeneretteBet(address(0), CURRENCY_FLIP, perTicket, 1, symbol);
         uint64 betId = DQ.lastBetId(vm, address(game), 1);
@@ -76,13 +76,14 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
         vm.recordLogs();
         vm.prank(player);
         game.mineFlip();
-        (uint8 score, uint8 gold) = _firstSpin();
-        assertLe(gold, 4, "at most four gold matches");
-        uint256 payout = math.payout(score, gold, CURRENCY_FLIP, DQ.stake(bet), DQ.activity(bet));
-        assertLe(score, 9, "score must be in {0..9}");
+        (uint8 score, uint8 wilds) = _firstSpin();
+        assertLe(wilds, 4, "at most four house wilds");
+        uint256 payout = math.payout(score, wilds, CURRENCY_FLIP, DQ.stake(bet), DQ.activity(bet));
+        assertGe(score, 1, "the hero color always scores");
+        assertLe(score, 9, "score must be in {1..9}");
         uint256 base = (payout * 1_000_000) / (uint256(perTicket) * roiBps);
-        assertLe(base, 50_050_050, "honest base exceeds S=9 with four gold matches");
-        if (score < 2) assertEq(payout, 0, "pay floor: S<2 must pay 0");
+        assertLe(base, 46_000_000, "honest base exceeds S=9 with four house wilds");
+        if (score < 3) assertEq(payout, 0, "pay floor: S<3 must pay 0");
     }
 
     /// @notice WWXRP keeps its rig through the production automatic-spin resolver.
@@ -108,12 +109,14 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
             uint32 ticket = uint32(packed);
             uint256 drawSeed = Ref.drawWord(word, true);
             uint32 honestReel = Ref.traits(uint256(keccak256(abi.encode(drawSeed, uint256(0x446567656e526573756c74)))));
-            (uint8 honestScore, uint8 honestMatches) = _scoreAndM(ticket, honestReel, symbol >> 3);
+            (uint8 honestScore, uint8 honestWilds) = Ref.score(ticket, honestReel);
+            (, uint8 wilds) = Ref.score(ticket, uint32(packed >> 32));
             assertLe(score, 9, "score outside valid range");
             assertGe(score, honestScore, "rig lowered honest score");
             assertLe(score, honestScore + 1, "rig lifted score by more than one");
-            if (score == 9) assertEq(honestMatches, 8, "rig manufactured the jackpot");
-            if (score < 2) assertEq(payout, 0, "automatic payout below score floor");
+            assertEq(wilds, honestWilds, "rig changed the house wild count");
+            if (score == 9) assertEq(honestScore, 9, "rig manufactured the jackpot");
+            if (score < 3) assertEq(payout, 0, "automatic payout below score floor");
             assertEq(abi.decode(result, (uint256)), payout, "returned payout differs from event");
             found = true;
         }
@@ -121,21 +124,6 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
     }
 
     // ---- helpers ----
-
-    function _scoreAndM(uint32 pt, uint32 rt, uint8 hero) internal pure returns (uint8 s, uint8 m) {
-        for (uint8 q; q < 4; ++q) {
-            uint8 pq = uint8(pt >> (q * 8));
-            uint8 rq = uint8(rt >> (q * 8));
-            bool colorMatch = ((pq >> 3) & 7) == ((rq >> 3) & 7);
-            bool symMatch = (pq & 7) == (rq & 7);
-            if (colorMatch) ++m;
-            if (symMatch) ++m;
-            if (symMatch) {
-                s += (q == hero) ? 2 : 1;
-            }
-            if (colorMatch) ++s;
-        }
-    }
 
     function _roiBps(uint256 score) internal pure returns (uint256 roiBps) {
         if (score >= ACTIVITY_EFFECTIVE_CAP_POINTS) return ROI_MAX_BPS;
@@ -150,13 +138,13 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
             (ACTIVITY_EFFECTIVE_CAP_POINTS - ACTIVITY_SEG_B_KNEE_POINTS);
     }
 
-    function _firstSpin() internal returns (uint8 score, uint8 gold) {
+    function _firstSpin() internal returns (uint8 score, uint8 wilds) {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length != 0 && logs[i].topics[0] == DQ.RESOLVED_SIG) {
                 (,, bytes memory spins) = abi.decode(logs[i].data, (uint256, uint32, bytes));
-                (, score, gold) = DQ.spinAt(spins, 0);
-                return (score, gold);
+                (, score, wilds) = DQ.spinAt(spins, 0);
+                return (score, wilds);
             }
         }
         revert("no DegeneretteResolved");

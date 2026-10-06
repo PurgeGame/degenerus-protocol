@@ -327,14 +327,18 @@ contract KeeperFaucetResistance is DeployProtocol {
         // The keeper pays the base fee as its gas price; the bounty is priced at min(basefee, cap).
         vm.fee(gasPriceWei);
         vm.txGasPrice(gasPriceWei);
-        uint256 preStake = coinflip.coinflipAmount(player);
+        // A winning bet's win box credits its own FLIP to the bettor's stake, so the sweep runs from a
+        // separate address and its stake delta is the bounty alone; the gas is the same either way.
+        address sweeper = makeAddr("faucet_sweeper");
+        uint256 preStake = coinflip.coinflipAmount(sweeper);
         vm.recordLogs();
-        vm.prank(player);
+        vm.prank(sweeper);
         uint256 g0 = gasleft();
         game.mineFlip();
         uint256 crankGas = g0 - gasleft();
-        uint256 bounty = coinflip.coinflipAmount(player) - preStake;
-        (, uint256 measured, uint256 reported) = _minerWork(vm.getRecordedLogs());
+        Vm.Log[] memory sweepLogs = vm.getRecordedLogs();
+        uint256 bounty = coinflip.coinflipAmount(sweeper) - preStake;
+        (, uint256 measured, uint256 reported) = _minerWork(sweepLogs);
 
         assertEq(DQ.lastBetId(vm, address(game), INDEX), n, "n bets queued");
         for (uint64 id = 1; id <= n; ++id) assertEq(game.degeneretteBetInfo(INDEX, id), 0, "sweep resolved every bet");
@@ -372,8 +376,8 @@ contract KeeperFaucetResistance is DeployProtocol {
         uint256 word;
         for (uint256 k; ; ++k) {
             word = uint256(keccak256(abi.encodePacked("faucet_losing_word", k)));
-            (uint8 score,) = Ref.score(Ref.player(word, uint32(INDEX), 9, 0, false), Ref.house(word, uint32(INDEX), 0, false), 1);
-            if (score < 2) break;
+            (uint8 score,) = Ref.score(Ref.player(word, uint32(INDEX), 9, 0, false), Ref.house(word, uint32(INDEX), 0, false));
+            if (score < 3) break;
         }
         _injectLootboxRngWord(INDEX, word);
         _openSweepFor(INDEX);

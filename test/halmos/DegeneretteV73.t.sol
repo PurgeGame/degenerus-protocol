@@ -4,29 +4,22 @@ pragma solidity 0.8.34;
 import "forge-std/Test.sol";
 import {DegeneretteMathHarness} from "../../contracts/mocks/DegeneretteMathHarness.sol";
 
-/// @title Degenerette v73 independent-color symbolic proofs (pillar hardening — Halmos track).
-/// @notice Proves for ALL 2^32 × 2^32 (player, reel) tickets and every hero quadrant the two
-///         load-bearing arithmetic facts the audit argued informally — on a loop mirror of
-///         `_score` (DegenerusGameDegeneretteModule.sol), the form it had before the branch-free
-///         rewrite (same approach as SolvencyArithmetic.t.sol mirroring the storage packing).
-///         (0) binds the production `_score` to that mirror for every input, so (1) and (2) hold
-///         for the deployed code:
+/// @title Degenerette wild-color symbolic proofs (Halmos track).
+/// @notice Proves, for all 2^32 × 2^32 (player, house) words, facts about the branch-free `_score`
+///         (DegenerusGameDegeneretteModule.sol) through a loop mirror:
 ///
-///         (0) PARITY — the production branch-free `_score` returns the mirror's score and
-///             matched-gold count for all 2^32 × 2^32 tickets and every hero byte.
+///         (0) PARITY — production `_score` returns the mirror's score and house wild count for
+///             every input (bit 7 of a lane is ignored by both).
 ///
-///         (1) SCORE BOUND — `_score` is always in {0..9}. A score outside that range would index
-///             the packed payout slot / S8 / S9 dispatch out of its calibrated domain (a solvency /
-///             OOB hazard). Proven ⇒ `_getBasePayoutBps` is always reached with s ≤ 9.
+///         (1) SCORE BOUND — on a valid board (the player's only wild is the hero lane) the score is
+///             in {1..9}, so the payout table is never indexed outside its calibrated domain.
 ///
-///         (2) JACKPOT CHARACTERIZATION — `_score == 9  ⟺  all 8 axes match (M == 8)`. This is the
-///             load-bearing lemma behind "the WWXRP rig can NEVER fabricate the S=9 jackpot": the rig
-///             fires only when honest M ≤ 6 and forces exactly ONE axis (a code fact pinned by
-///             test/mutation/DegeneretteV73MutationKills.t.sol), so post-force M ≤ 7 < 8, hence by (2)
-///             the rigged score is never 9. (1)+(2) are the symbolic backbone of the RNG/solvency
-///             pillar attestation.
+///         (2) JACKPOT CHARACTERIZATION — on a valid board, `score == 9` exactly when all eight
+///             axes match (M == 8, the hero color counting once) AND the house hero lane is wild.
+///             Score = M + (house hero lane wild), so a WWXRP help (honest M <= 6, one axis forced)
+///             leaves M <= 7 and the score below 9: the rig cannot fabricate the jackpot.
 ///
-/// @dev halmos --contract DegeneretteV73HalmosTest --solver-timeout-assertion 120000
+/// @dev FOUNDRY_PROFILE=halmos halmos --contract DegeneretteV73HalmosTest --forge-build-out forge-out-halmos --loop 5 --solver-timeout-assertion 120000
 contract DegeneretteV73HalmosTest is Test {
     DegeneretteMathHarness private h;
 
@@ -34,98 +27,74 @@ contract DegeneretteV73HalmosTest is Test {
         h = new DegeneretteMathHarness();
     }
 
-    /// @dev Matched gold per the loop form: a quadrant whose colors match and whose player color is
-    ///      gold (7) counts once.
-    function _goldMatches(uint32 playerTicket, uint32 resultTicket) internal pure returns (uint8 g) {
+    function _lane(uint32 word, uint8 q) private pure returns (uint8) {
+        return uint8(word >> (q * 8));
+    }
+
+    /// @dev Loop mirror: symbol equal +1; color: two wilds +2, one wild +1, else equal colors +1.
+    function _score(uint32 pt, uint32 rt) internal pure returns (uint8 s, uint8 w) {
         for (uint8 q = 0; q < 4; ) {
-            uint8 pQuad = uint8(playerTicket >> (q * 8));
-            uint8 rQuad = uint8(resultTicket >> (q * 8));
-            if (((pQuad >> 3) & 7) == ((rQuad >> 3) & 7) && ((pQuad >> 3) & 7) == 7) {
-                unchecked {
-                    ++g;
-                }
-            }
+            uint8 a = _lane(pt, q);
+            uint8 b = _lane(rt, q);
+            bool aw = a & 0x40 != 0;
+            bool bw = b & 0x40 != 0;
             unchecked {
+                if ((a & 7) == (b & 7)) ++s;
+                if (aw && bw) s += 2;
+                else if (aw || bw) ++s;
+                else if (((a >> 3) & 7) == ((b >> 3) & 7)) ++s;
+                if (bw) ++w;
                 ++q;
             }
         }
+    }
+
+    /// @dev Matched axes, the hero color counting once: symbols plus colors matched by equality
+    ///      or by any wild.
+    function _matchCount(uint32 pt, uint32 rt) internal pure returns (uint8 m) {
+        for (uint8 q = 0; q < 4; ) {
+            uint8 a = _lane(pt, q);
+            uint8 b = _lane(rt, q);
+            unchecked {
+                if ((a & 7) == (b & 7)) ++m;
+                if ((a | b) & 0x40 != 0 || ((a >> 3) & 7) == ((b >> 3) & 7)) ++m;
+                ++q;
+            }
+        }
+    }
+
+    function _validPlayer(uint32 pt, uint8 hero) private pure returns (bool) {
+        return hero < 4 && pt & 0x40404040 == uint32(0x40) << (hero * 8);
     }
 
     /// @notice (0) The production `_score` equals the loop mirror everywhere.
-    function check_production_score_matches_mirror(uint32 pt, uint32 rt, uint8 hero) public view {
-        (uint8 s, uint8 g) = h.score(pt, rt, hero);
-        assert(s == _score(pt, rt, hero));
-        assert(g == _goldMatches(pt, rt));
+    function check_production_score_matches_mirror(uint32 pt, uint32 rt) public view {
+        (uint8 s, uint8 w) = h.score(pt, rt);
+        (uint8 ms, uint8 mw) = _score(pt, rt);
+        assert(s == ms);
+        assert(w == mw);
     }
 
-    /// @dev Exact mirror of the FROZEN independent-color `_score`: per quadrant a symbol match scores +1
-    ///      (hero +2); the quadrant's color independently scores +1.
-    function _score(uint32 playerTicket, uint32 resultTicket, uint8 heroQuadrant)
-        internal
-        pure
-        returns (uint8 s)
-    {
-        for (uint8 q = 0; q < 4; ) {
-            uint8 pQuad = uint8(playerTicket >> (q * 8));
-            uint8 rQuad = uint8(resultTicket >> (q * 8));
-            if ((pQuad & 7) == (rQuad & 7)) {
-                unchecked {
-                    s += (q == heroQuadrant) ? 2 : 1;
-
-                }
-            }
-            if (((pQuad >> 3) & 7) == ((rQuad >> 3) & 7)) ++s;
-            unchecked {
-                ++q;
-            }
-        }
-    }
-
-    /// @dev Count all 8 per-axis matches (color + symbol per quadrant) — the rig's `m`.
-    function _matchCount(uint32 playerTicket, uint32 resultTicket) internal pure returns (uint8 m) {
-        for (uint8 q = 0; q < 4; ) {
-            uint8 pQuad = uint8(playerTicket >> (q * 8));
-            uint8 rQuad = uint8(resultTicket >> (q * 8));
-            if (((pQuad >> 3) & 7) == ((rQuad >> 3) & 7)) {
-                unchecked {
-                    ++m;
-                }
-            }
-            if ((pQuad & 7) == (rQuad & 7)) {
-                unchecked {
-                    ++m;
-                }
-            }
-            unchecked {
-                ++q;
-            }
-        }
-    }
-
-    /// @notice (1) `_score` is bounded to {0..9} for every input (hero quadrant < 4).
+    /// @notice (1) On a valid board the score is in {1..9}.
     function check_score_in_range(uint32 pt, uint32 rt, uint8 hero) public pure {
-        vm.assume(hero < 4);
-        uint8 s = _score(pt, rt, hero);
-        assert(s <= 9);
+        vm.assume(_validPlayer(pt, hero));
+        (uint8 s,) = _score(pt, rt);
+        assert(s >= 1 && s <= 9);
     }
 
-    /// @notice (2) `_score == 9` exactly characterizes the all-8-axes match (M == 8) — neither side
-    ///         can hold without the other. This is what makes the m>=7 rig cap a hard no-S=9 guarantee.
-    function check_score9_iff_allMatch(uint32 pt, uint32 rt, uint8 hero) public pure {
-        vm.assume(hero < 4);
-        uint8 s = _score(pt, rt, hero);
-        uint8 m = _matchCount(pt, rt);
-        assert((s == 9) == (m == 8));
+    /// @notice (2) On a valid board, S9 iff all eight axes match and the house hero lane is wild.
+    function check_score9_iff_allMatch_and_heroWild(uint32 pt, uint32 rt, uint8 hero) public pure {
+        vm.assume(_validPlayer(pt, hero));
+        (uint8 s,) = _score(pt, rt);
+        bool heroWild = _lane(rt, hero) & 0x40 != 0;
+        assert((s == 9) == (_matchCount(pt, rt) == 8 && heroWild));
     }
 
-    /// @notice Corollary used by the rig: if at most 7 axes match (M <= 7) the score is never the
-    ///         jackpot. (Direct consequence of (2); stated separately as the exact post-force bound —
-    ///         a fired rig roll starts at M <= 6 and adds one axis, so M <= 7 here.)
+    /// @notice Corollary used by the rig: at most seven matched axes never score the jackpot.
     function check_le7_axes_never_jackpot(uint32 pt, uint32 rt, uint8 hero) public pure {
-        vm.assume(hero < 4);
-        uint8 m = _matchCount(pt, rt);
-        vm.assume(m <= 7);
-        uint8 s = _score(pt, rt, hero);
+        vm.assume(_validPlayer(pt, hero));
+        vm.assume(_matchCount(pt, rt) <= 7);
+        (uint8 s,) = _score(pt, rt);
         assert(s < 9);
     }
 }

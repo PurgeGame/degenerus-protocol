@@ -6,41 +6,23 @@ import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
 
 /// @dev Exposes the production pure math for exhaustive and differential tests.
 contract DegeneretteMathHarness is DegenerusGameDegeneretteModule {
-    function paidStake(uint256 bet) external pure returns (uint128) {
-        return _paidBetStake(bet);
+    function score(uint32 p, uint32 r) external pure returns (uint8, uint8) {
+        return _score(p, r);
     }
 
-    function capPaidPayout(uint256 bet, uint256 amount) external pure returns (uint256) {
-        return _capPaidBetPayout(bet, amount);
-    }
-
-    function score(uint32 p, uint32 r, uint8 hero) external pure returns (uint8, uint8) {
-        return _score(p, r, hero);
-    }
-
-    /// @dev Calls _score with arbitrary bits above each argument's type width, as assembly-built
-    ///      or unmasked sub-word values may carry.
-    function scoreDirty(uint256 pWord, uint256 rWord, uint256 heroWord) external pure returns (uint8, uint8) {
-        uint32 p;
-        uint32 r;
-        uint8 hero;
-        assembly ("memory-safe") {
-            p := pWord
-            r := rWord
-            hero := heroWord
-        }
-        return _score(p, r, hero);
-    }
-
-    function payout(uint8 s, uint8 g, uint8 currency, uint128 stake, uint16 activity) external pure returns (uint256) {
+    function payout(uint8 s, uint8 w, uint8 currency, uint128 stake, uint16 activity) external pure returns (uint256) {
         SpinResult memory spin;
         spin.score = s;
-        spin.goldMatches = g;
+        spin.resultWilds = w;
         return _degenerettePayout(spin, currency, stake, activity);
     }
 
     function base(uint8 s) external pure returns (uint256) {
         return _basePayoutCentiX(s);
+    }
+
+    function ethAdd(uint8 s) external pure returns (uint256) {
+        return _ethAddCentiX(s);
     }
 
     function roi(uint16 activity) external pure returns (uint256) {
@@ -59,6 +41,10 @@ contract DegeneretteMathHarness is DegenerusGameDegeneretteModule {
         return DegenerusTraitUtils.packedTraitsDegenerette(seed);
     }
 
+    function ordinaryTraits(uint256 seed) external pure returns (uint32) {
+        return DegenerusTraitUtils.packedTraitsDegeneretteOrdinary(seed);
+    }
+
     function hero(uint256 seed, uint8 symbol) external pure returns (uint8) {
         return _spinSymbol(seed, symbol);
     }
@@ -68,9 +54,9 @@ contract DegeneretteMathHarness is DegenerusGameDegeneretteModule {
     }
 
     function spin(uint256 seed, uint256 houseSeed, uint8 symbol, uint8 currency)
-        external pure returns (uint32, uint32, uint8, uint8, uint8)
+        external pure returns (uint32, uint32, uint8, uint8)
     {
         SpinResult memory s = _rollSpin(seed, houseSeed, symbol, currency);
-        return (s.playerTraits, s.resultTraits, s.heroQuadrant, s.score, s.goldMatches);
+        return (s.playerTraits, s.resultTraits, s.score, s.resultWilds);
     }
 }

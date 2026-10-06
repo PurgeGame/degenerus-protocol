@@ -84,15 +84,16 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
             (, firstHouse, spins) = abi.decode(logs[i].data, (uint256, uint32, bytes));
             tickets = new uint32[](spins.length / 5);
             for (uint8 spin; spin < tickets.length; ++spin) {
-                (uint32 ticket, uint8 score,) = DQ.spinAt(spins, spin);
+                (uint32 ticket, uint8 score, uint8 wilds) = DQ.spinAt(spins, spin);
                 tickets[spin] = ticket;
                 assertEq(
                     ticket, Ref.player(word, 1, symbol, spin, false), "generated ticket differs from public stream"
                 );
                 assertEq((ticket >> ((symbol >> 3) * 8)) & 7, symbol & 7, "hero pick was lost");
                 uint32 house = Ref.house(word, 1, spin, false);
-                (uint8 natural,) = Ref.score(ticket, house, symbol >> 3);
-                assertEq(score, natural, "independent color score mismatch");
+                (uint8 natural, uint8 naturalWilds) = Ref.score(ticket, house);
+                assertEq(score, natural, "independent wild score mismatch");
+                assertEq(wilds, naturalWilds, "house wild count mismatch");
             }
         }
         assertGt(tickets.length, 0, "bet resolution event missing");
@@ -214,40 +215,51 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         }
     }
 
-    function testIndependentColorsHeroWeightAndMatchedGold() public view {
-        // All symbols differ; four gold colors match independently.
-        (uint8 s, uint8 g) = math.score(0x38383838, 0x39393939, 0);
+    function testWildScoringAndNoGoldPremium() public view {
+        // Hero lane 0 wild (symbol 0); lanes 1..3 gold (color 7), symbol 0.
+        uint32 p = 0x38383840;
+        // Gold equal on lanes 1..3, every symbol missed: hero color 1 + three colors.
+        (uint8 s, uint8 w) = math.score(p, 0x39393909);
         assertEq(s, 4);
-        assertEq(g, 4);
-        (s, g) = math.score(0x38383838, 0x39393938, 0);
-        assertEq(s, 6);
-        assertEq(g, 4);
-        (s, g) = math.score(0x38383838, 0, 0);
+        assertEq(w, 0);
+        // The same board with ordinary color 2 instead of gold scores the same: gold has no premium.
+        (uint8 s2,) = math.score(0x10101040, 0x11111109);
+        assertEq(s2, s);
+        // Four house wilds, every symbol missed: hero double wild 2 + three wild colors.
+        (s, w) = math.score(p, 0x41414141);
         assertEq(s, 5);
-        assertEq(g, 0, "unmatched gold must not boost");
-        assertEq(math.payout(4, 1, 1, 1, 0), 11);
-        assertEq(math.payout(4, 1, 3, 1, 0), 7, "WWXRP base is calibrated for its rig");
-        assertEq(math.payout(1, 1, 0, 1 ether, 0), 0);
+        assertEq(w, 4);
+        assertEq(math.payout(4, 1, 1, 1 ether, 0), 3.375 ether);
+        assertEq(math.payout(4, 1, 3, 1 ether, 0), 2.160925838625 ether, "WWXRP base is calibrated for its rig");
+        assertEq(math.payout(2, 4, 0, 1 ether, 30_000), 0, "S2 never pays");
     }
 
-    function testAllAxesAndAllHeroesAgainstIndependentScore() public view {
-        for (uint16 mask; mask < 256; ++mask) {
-            uint32 p = 0x38383838;
-            uint32 r;
-            for (uint8 q; q < 4; ++q) {
-                r |= uint32(((mask >> q) & 1 == 1 ? 0 : 1) | ((mask >> (q + 4)) & 1 == 1 ? 56 : 0)) << (q * 8);
-            }
-            for (uint8 hero; hero < 4; ++hero) {
-                (uint8 expected, uint8 gold) = Ref.score(p, r, hero);
-                (uint8 actual, uint8 actualGold) = math.score(p, r, hero);
+    /// @dev One valid board per combination of symbol hits, house wilds and ordinary color
+    ///      equalities (lane `hero` holds the player wild), against the independent score and
+    ///      the WWXRP help rule.
+    function testAllAxesAllHeroesAndWildsAgainstIndependentScoreAndRig() public view {
+        for (uint8 hero; hero < 4; ++hero) {
+            uint32 p = uint32(0x40) << (hero * 8);
+            for (uint16 mask; mask < 4096; ++mask) {
+                uint32 r;
+                for (uint8 q; q < 4; ++q) {
+                    uint32 sym = (mask >> q) & 1 == 1 ? 0 : 1;
+                    bool wild = (mask >> (q + 4)) & 1 == 1;
+                    bool eq = (mask >> (q + 8)) & 1 == 1;
+                    r |= (wild ? 0x40 | sym : (eq ? sym : 0x08 | sym)) << (q * 8);
+                }
+                (uint8 expected, uint8 wilds) = Ref.score(p, r);
+                (uint8 actual, uint8 actualWilds) = math.score(p, r);
                 assertEq(actual, expected);
-                assertEq(actualGold, gold);
+                assertEq(actualWilds, wilds);
+                assertGe(actual, 1);
                 assertLe(actual, 9);
+                uint8 matched = actual - uint8((r >> (hero * 8 + 6)) & 1);
                 uint32 rigged = math.rig(p, r, hero, 0); // help gate fires
-                (uint8 helped, uint8 helpedGold) = math.score(p, rigged, hero);
-                assertGe(helped, actual);
-                assertLe(helped, actual + 1);
-                assertGe(helpedGold, gold);
+                (uint8 helped, uint8 helpedWilds) = math.score(p, rigged);
+                assertEq(helped, actual >= 3 && matched <= 6 ? actual + 1 : actual, "help adds one point iff eligible");
+                assertEq(helpedWilds, wilds, "help never creates or removes a wild");
+                assertEq(rigged & 0x40404040, r & 0x40404040, "wild bits unchanged");
                 if (actual != 9) assertLt(helped, 9);
                 assertEq((rigged >> (hero * 8)) & 7, (r >> (hero * 8)) & 7, "rig changes hero symbol");
                 assertEq(math.rig(p, r, hero, 1), r, "non-help draw must stay unchanged");
@@ -255,29 +267,32 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         }
     }
 
-    function testUniformProducerAllColorSymbolPairs() public view {
+    function testHouseProducerAllColorSymbolPairsAndWildNibble() public view {
         for (uint8 c; c < 8; ++c) {
             for (uint8 sy; sy < 8; ++sy) {
-                uint256 lane = uint256(c) | (uint256(sy) << 32);
-                uint32 t = math.traits(lane | (lane << 64) | (lane << 128) | (lane << 192));
-                for (uint8 q; q < 4; ++q) {
-                    assertEq(uint8(t >> (q * 8)), (q << 6) | (c << 3) | sy);
+                for (uint256 nibble; nibble < 16; ++nibble) {
+                    uint256 lane = uint256(c) | (nibble << 3) | (uint256(sy) << 32);
+                    uint32 t = math.traits(lane | (lane << 64) | (lane << 128) | (lane << 192));
+                    for (uint8 q; q < 4; ++q) {
+                        assertEq(uint8(t >> (q * 8)), nibble == 0 ? 0x40 | sy : (c << 3) | sy);
+                    }
                 }
             }
         }
     }
 
-    function testFuzzPayoutBoundsAndWwxrpBonusTiers(uint128 amount, uint8 score, uint8 gold, uint16 activity)
+    function testFuzzPayoutBoundsAndWwxrpBonusTiers(uint128 amount, uint8 score, uint8 wilds, uint16 activity)
         public
         view
     {
         score %= 10;
-        gold %= 5;
-        uint256 wx = math.payout(score, gold, 3, amount, activity);
-        if (score < 6) assertEq(wx, math.payout(score, gold, 3, amount, 0));
-        else assertGe(wx, math.payout(score, gold, 3, amount, 0));
-        assertLe(wx, uint256(amount) * 6_601_883);
-        assertLe(math.payout(score, gold, 0, amount, activity), uint256(amount) * 947_393);
+        wilds %= 5;
+        uint256 wx = math.payout(score, wilds, 3, amount, activity);
+        if (score < 6) assertEq(wx, math.payout(score, wilds, 3, amount, 0));
+        else assertGe(wx, math.payout(score, wilds, 3, amount, 0));
+        assertLe(wx, uint256(amount) * 3_844_040);
+        assertLe(math.payout(score, wilds, 0, amount, activity), uint256(amount) * 907_708);
+        assertLe(math.payout(score, wilds, 1, amount, activity), uint256(amount) * 459_540);
         assertLe(math.roi(activity), 9990);
         assertGe(math.roi(activity), 9000);
     }
@@ -324,12 +339,12 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
                 uint8 hero = symbol == 32 ? Ref.randomHero(ss) : symbol;
                 uint32 p = uint32(packed >> (i * 72));
                 uint32 r = uint32(packed >> (i * 72 + 32));
-                assertEq((packed >> (225 + i * 2)) & 3, hero >> 3);
+                assertEq((p >> ((hero >> 3) * 8)) & 0xFF, 0x40 | (hero & 7), "hero lane carries the wild");
                 assertEq(p, math.ticket(ss, hero));
                 assertEq(r, Ref.traits(uint256(keccak256(abi.encode(ss, uint256(0x446567656e526573756c74))))));
-                (uint8 score, uint8 gold) = Ref.score(p, r, hero >> 3);
+                (uint8 score, uint8 wilds) = Ref.score(p, r);
                 assertEq(uint8(packed >> (i * 72 + 64)), score);
-                expectedTotal += math.payout(score, gold, 1, 1000e18, 305);
+                expectedTotal += math.payout(score, wilds, 1, 1000e18, 305);
             }
             bool survived =
                 expectedTotal != 0 && uint256(keccak256(abi.encode(seed, uint256(0x537572766976616c)))) & 1 == 1;
@@ -365,10 +380,10 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
                 math.rig(p, natural, symbol >> 3, uint256(keccak256(abi.encode(wwSeed, uint256(0x52494721)))));
             assertEq(p, math.ticket(wwSeed, symbol));
             assertEq(r, rigged);
-            assertEq((packed >> 225) & 3, symbol >> 3);
-            (uint8 score, uint8 gold) = Ref.score(p, r, symbol >> 3);
+            assertEq(packed >> 225, 0, "no hero-quadrant metadata: the player lane marks the hero");
+            (uint8 score, uint8 wilds) = Ref.score(p, r);
             assertEq(uint8(packed >> 64), score);
-            uint256 rawPayout = math.payout(score, gold, 3, 1e18, 305);
+            uint256 rawPayout = math.payout(score, wilds, 3, 1e18, 305);
             uint256 expected = rawPayout / 1e18;
             if (expected == 0 && rawPayout != 0) expected = 1;
             assertEq(payout, expected);
@@ -376,29 +391,22 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         }
     }
 
-    /// @notice A natural WWXRP jackpot keeps its token payout and cannot create a whale pass.
-    /// @dev Pinned from an off-chain Keccak search: seed 729121, hero 7 produces identical
-    ///      player and natural house tickets 0xd3a34927 (score 9, zero matched gold).
-    function testNaturalWwxrpJackpotPaysTokensWithoutWhalePass() public {
-        uint256 seed = 729_121;
-        uint8 symbol = 7;
+    /// @notice A natural WWXRP jackpot pays its token prize through the ordinary payout path.
+    /// @dev Pinned from an off-chain Keccak search (.planning/wild-color/find_box_jackpot.py):
+    ///      seed 359696, hero 15 gives a natural S9 with two house wilds, before the rig.
+    function testNaturalWwxrpJackpotPaysTokens() public {
+        uint256 seed = 359_696;
+        uint8 symbol = 15;
         uint256 drawSeed = Ref.drawWord(seed, true);
         uint32 ticket = math.ticket(drawSeed, symbol);
         uint32 natural = Ref.traits(
             uint256(keccak256(abi.encode(drawSeed, uint256(0x446567656e526573756c74))))
         );
-        (uint8 naturalScore, uint8 gold) = Ref.score(ticket, natural, symbol >> 3);
-        assertEq(ticket, 0xd3a34927, "pinned player ticket");
-        assertEq(ticket, natural, "jackpot must be natural, before the rig");
-        assertEq(naturalScore, 9, "must exercise the removed whale-pass award branch");
-        assertEq(gold, 0);
-
-        // These mappings retain their layout even though the WWXRP award is removed.
-        bytes32 claimsSlot = keccak256(abi.encode(alice, uint256(20)));
-        bytes32 bracketSlot = keccak256(abi.encode(uint256(game.level()) / 10, uint256(21)));
-        // The retired increment would also revert at this claim balance.
-        vm.store(address(game), claimsSlot, bytes32(type(uint256).max));
-        assertEq(vm.load(address(game), bracketSlot), bytes32(0), "fresh award bracket");
+        (uint8 naturalScore, uint8 wilds) = Ref.score(ticket, natural);
+        assertEq(ticket, 0x3031473d, "pinned player ticket");
+        assertEq(natural, 0x3041473d, "pinned natural house ticket");
+        assertEq(naturalScore, 9, "jackpot must be natural, before the rig");
+        assertEq(wilds, 2);
 
         (bytes memory returned, Vm.Log[] memory logs) = _awardCall(
             abi.encodeCall(
@@ -408,20 +416,15 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         );
         (uint256 packed, uint256 payout) = _boxRecord(logs);
         assertEq(uint8(packed >> 64), 9, "production spin kept the natural jackpot");
-        assertEq(payout, 616_586, "WWXRP jackpot payout changed");
+        assertEq(uint32(packed >> 32), natural, "the rig never touches a jackpot");
+        assertEq(payout, 864_370, "WWXRP jackpot payout changed");
         assertEq(abi.decode(returned, (uint256)), payout, "caller receives the token payout");
-        assertEq(vm.load(address(game), claimsSlot), bytes32(type(uint256).max), "WWXRP changed whale-pass claims");
-        assertEq(vm.load(address(game), bracketSlot), bytes32(0), "WWXRP consumed a whale-pass bracket");
-        bytes32 retiredAward = keccak256("WwxrpJackpotWhalePass(address,uint256)");
-        for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics.length != 0) assertTrue(logs[i].topics[0] != retiredAward, "retired award emitted");
-        }
     }
 
-    /// @notice Exercise a real million-x jackpot through ETH's cap and lootbox recirculation.
+    /// @notice Exercise a real jackpot through ETH's cash cap and lootbox recirculation.
     function testNaturalEthJackpotCapsCashAndResolvesOverflow() public {
-        // Reuse the known natural WWXRP jackpot's inner seed on the ordinary ETH stream.
-        uint256 seed = Ref.drawWord(729_121, true);
+        // Reuse the natural WWXRP jackpot's inner seed on the ordinary ETH stream.
+        uint256 seed = Ref.drawWord(359_696, true);
         uint256 claimableBefore = game.claimableWinningsOf(alice);
         bytes memory facade = address(game).code;
         address facadeCopy = makeAddr("eth_jackpot_facade");
@@ -429,13 +432,13 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         vm.etch(address(game), address(new DegeneretteEthAwardRouter(facadeCopy)).code);
         vm.recordLogs();
         IDegenerusGameDegeneretteModule(address(game)).resolveEthSpinFromBox(
-            alice, 0.01 ether, uint16(30_000), seed, uint8(7)
+            alice, 0.01 ether, uint16(30_000), seed, uint8(15)
         );
         Vm.Log[] memory logs = vm.getRecordedLogs();
         vm.etch(address(game), facade);
         (uint256 packed, uint256 payout) = _boxRecord(logs);
         assertEq(uint8(packed >> 64), 9, "must exercise the natural jackpot");
-        assertEq(payout, 4_736.962082350125 ether, "jackpot includes max activity and ETH bonus");
+        assertEq(payout, 6_807.81 ether, "jackpot includes max activity, two wilds and the ETH addition");
         // 25% of gross exceeds the cap: exactly 10% of the 10,000 ETH future pool is cash.
         assertEq(game.claimableWinningsOf(alice) - claimableBefore, 1000 ether);
         assertEq(uint256(vm.load(address(game), bytes32(uint256(2)))) >> 128, 9000 ether);
@@ -445,7 +448,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
             if (logs[i].topics.length == 0 || logs[i].topics[0] != capTopic) continue;
             (uint256 cash, uint256 overflow) = abi.decode(logs[i].data, (uint256, uint256));
             assertEq(cash, 1000 ether);
-            assertEq(overflow, 3_736.962082350125 ether);
+            assertEq(overflow, 5_807.81 ether);
             capped = true;
         }
         assertTrue(capped, "jackpot must report the capped cash and lootbox remainder");

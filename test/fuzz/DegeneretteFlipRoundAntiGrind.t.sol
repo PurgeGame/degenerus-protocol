@@ -6,6 +6,7 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
+import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 import {FlipRoundLib} from "../../contracts/libraries/FlipRoundLib.sol";
 
 /// @title DegeneretteFlipRoundAntiGrind — the 100-FLIP collapse is fixed at VRF fulfillment,
@@ -69,6 +70,7 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
     ///      minimum would sit under the threshold and only be floored, making the test vacuous.
     uint128 private constant FLIP_PER_SPIN = 5_000;
     uint8 private constant SPINS = 3;
+    uint256 private constant BET_SURVIVAL_TAG = 0x446567656e537572766976616c; // "DegenSurvival"
 
     address private player;
     address private keeper;
@@ -108,6 +110,11 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
     function testSweepCallGroupingCannotMoveTheFlipTotal() public {
         uint48 index = 1;
         uint256 word = uint256(keccak256("flip-round-anti-grind"));
+        // Spin 0 must pay and the first bet must win its survival flip, so FLIP mints.
+        while (
+            !_spin0Pays(index, word)
+                || uint256(keccak256(abi.encode(word, player, uint256(1), BET_SURVIVAL_TAG))) & 1 == 0
+        ) ++word;
 
         _placeWinningFlipBets(index, word);
         _injectLootboxRngWord(index, word);
@@ -246,8 +253,14 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
         revert("bet not placed");
     }
 
-    /// @dev The spin-0 winning custom ticket for (index, word): the spin-0 result ticket itself
-    ///      (8/8 self-match guarantees a win on spin 0 -> the resolution actually pays).
+    /// @dev Whether spin 0 pays (S >= 3) for the hero symbol taken from the house's lane 0.
+    function _spin0Pays(uint48 index, uint256 word) internal pure returns (bool) {
+        uint32 house = _resultTicketForSpin(index, word, 0);
+        (uint8 score,) = Ref.score(Ref.player(word, uint32(index), uint8(house & 7), 0, false), house);
+        return score >= 3;
+    }
+
+    /// @dev The spin-0 house ticket; its lane-0 symbol is the hero, so the hero lane scores at least 2.
     function _winningTicketFor(uint48 index, uint256 word)
         internal
         pure

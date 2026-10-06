@@ -200,7 +200,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
 
     /// @notice Claim DGNRS affiliate rewards for the current level.
     /// @dev Requires a minimum affiliate score and allows one claim per level.
-    ///      Draws from a segregated allocation (5% of the affiliate pool snapshotted
+    ///      Draws from a segregated allocation (2.5% of the affiliate pool snapshotted
     ///      at level transition). All claimants for the same level share a fixed pot,
     ///      eliminating first-mover advantage. Uses totalAffiliateScore as the exact
     ///      denominator for score-proportional distribution.

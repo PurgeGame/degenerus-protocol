@@ -2457,8 +2457,7 @@ abstract contract DegenerusGameStorage {
     ///      - [171]      record flag: a biggest-spin record bounty waits in degeneretteRecordBounty
     ///      - [172..187] activity score in whole points
     ///      - [188..251] stake per spin in currency units (ETH: gwei, FLIP: whole FLIP)
-    ///      - [252..253] consumed stake-boon tier (0..3 = +0/4/8/12%)
-    ///      - [254..255] reserved (always zero)
+    ///      - [252..255] reserved (always zero)
     mapping(uint48 => uint256[]) internal degeneretteQueue;
 
     // =========================================================================
@@ -2501,7 +2500,7 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev Segregated DGNRS allocation + cumulative claimed per level, packed into one
-    ///      slot: bits [0:128) = allocation (5% of affiliate pool, snapshot at transition),
+    ///      slot: bits [0:128) = allocation (2.5% of affiliate pool, snapshot at transition),
     ///      bits [128:256) = cumulative claimed. Both are DGNRS base units, bounded by the
     ///      sDGNRS supply (~1e30) << uint128 (3.4e38). Claims draw against the fixed
     ///      allocation, not the live pool, eliminating first-mover advantage.

@@ -177,11 +177,11 @@ library DegenerusTraitUtils {
       |  Packs 4 traits into 32-bit value for efficient storage.             |
       +======================================================================+*/
 
-    /// @notice Four Degenerette traits with uniform symbols and colors, including gold.
-    /// @dev Each lane uses disjoint 3-bit slices; format [QQ][CCC][SSS] per byte. Lane q takes
-    ///      its color from bits [64q, 64q+2] and its symbol from bits [64q+32, 64q+34]; the
-    ///      constant 0xC0804000 is the four quadrant tags (bits 6-7 of each byte).
-    function packedTraitsDegenerette(uint256 rand) internal pure returns (uint32 t) {
+    /// @notice Four ordinary Degenerette lanes: uniform symbols and uniform colors, no wilds.
+    /// @dev Degenerette lane byte: [0][W][CCC][SSS], quadrant = byte position (no quadrant
+    ///      tags). Lane q takes its color from bits [64q, 64q+2] and its symbol from bits
+    ///      [64q+32, 64q+34]. The player ticket's non-hero lanes come from here.
+    function packedTraitsDegeneretteOrdinary(uint256 rand) internal pure returns (uint32 t) {
         assembly ("memory-safe") {
             t := or(
                 or(
@@ -190,9 +190,25 @@ library DegenerusTraitUtils {
                 ),
                 or(
                     or(shl(19, and(shr(128, rand), 7)), shl(16, and(shr(160, rand), 7))),
-                    or(or(shl(27, and(shr(192, rand), 7)), shl(24, and(shr(224, rand), 7))), 0xC0804000)
+                    or(shl(27, and(shr(192, rand), 7)), shl(24, and(shr(224, rand), 7)))
                 )
             )
+        }
+    }
+
+    /// @notice Four Degenerette house lanes: each wild with probability 1/16, otherwise an
+    ///         ordinary lane as above (each ordinary color 15/128).
+    /// @dev Lane q is wild when bits [64q+3, 64q+6] are all zero, a slice disjoint from the
+    ///      color and symbol bits. A wild lane sets bit 6 and clears its color bits, so each
+    ///      wild has one encoding (0x40 | symbol).
+    function packedTraitsDegenerette(uint256 rand) internal pure returns (uint32 t) {
+        t = packedTraitsDegeneretteOrdinary(rand);
+        assembly ("memory-safe") {
+            let w := or(
+                or(shl(6, iszero(and(shr(3, rand), 0xF))), shl(14, iszero(and(shr(67, rand), 0xF)))),
+                or(shl(22, iszero(and(shr(131, rand), 0xF))), shl(30, iszero(and(shr(195, rand), 0xF))))
+            )
+            t := or(and(t, not(mul(shr(3, w), 7))), w)
         }
     }
 

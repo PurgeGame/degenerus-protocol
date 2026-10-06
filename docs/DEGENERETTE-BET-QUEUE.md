@@ -38,8 +38,7 @@ in the storage layout shifted.
 | 171 | record flag | set when a biggest-spin record bounty is armed in `degeneretteRecordBounty` |
 | 172..187 | activity | activity score in whole points |
 | 188..251 | stake per spin | in currency units: ETH = gwei, FLIP = whole FLIP |
-| 252..253 | consumed stake-boon tier | 0..3 = +0/4/8/12%; recovers original paid stake for the payout ceiling |
-| 254..255 | reserved | always zero |
+| 252..255 | reserved | always zero |
 
 ## Placement rules
 
@@ -132,17 +131,20 @@ queued bet word (layout above).
 `DegeneretteResolved(address indexed player, uint32 indexed index, uint64
 indexed betId, uint256 totalPayout, uint32 resultTraits, bytes spins)` is
 emitted once per resolved bet, always by the sweep. `spins` packs 5 bytes per spin (spin 0 first): 4
-bytes of big-endian player traits, then one byte of `score (bits 0-3) | gold
-matches (bits 4-6)`. Per-spin payouts are recomputable off-chain from each
-spin's score and gold, the bet word's stake-per-spin and currency, and its
+bytes of big-endian player traits, then one byte of `score (bits 0-3) | house
+wild count (bits 4-6)`; bit 7 is zero. Traits use the Degenerette lane format
+(`[0][wild][color][symbol]` per byte, quadrant = byte position; the player's hero
+lane is its only wild) and `resultTraits` is the spin-0 house ticket in the same
+format. Per-spin payouts are recomputable off-chain from each spin's score and
+wild count, the bet word's stake-per-spin and currency, and its
 activity score — nothing else needed to itemize an indexer's view of a bet's
 spins beyond this one event. `PayoutCapped` (ETH pool-cap overflow to
 lootbox) is unchanged.
 
 ## Settlement order and indexing
 
-Everything a bet's spins roll — player tickets, the house reel, scores, gold
-matches, the FLIP survival flip and rounding — is fixed by the index word and
+Everything a bet's spins roll — player tickets, the house reel, scores, house
+wilds, the FLIP survival flip and rounding — is fixed by the index word and
 the bet's own id, so no choice made after the word lands can change them. A
 few payout legs read live state instead, so the order bets settle in can shift
 their size: the ETH leg is capped at 10% of the live future pool (later wins

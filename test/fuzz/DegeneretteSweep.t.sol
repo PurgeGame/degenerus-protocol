@@ -328,12 +328,12 @@ contract DegeneretteSweep is DeployProtocol {
             assertEq(spins.length, 25 * 5, "five bytes per spin");
             for (uint8 s; s < 25; ++s) {
                 uint32 p = Ref.player(word, uint32(IDX), SYMBOL, s, false);
-                (uint8 score, uint8 gold) = Ref.score(p, Ref.house(word, uint32(IDX), s, false), SYMBOL >> 3);
+                (uint8 score, uint8 wilds) = Ref.score(p, Ref.house(word, uint32(IDX), s, false));
                 uint256 o = uint256(s) * 5;
                 uint32 packedTraits = (uint32(uint8(spins[o])) << 24) | (uint32(uint8(spins[o + 1])) << 16)
                     | (uint32(uint8(spins[o + 2])) << 8) | uint32(uint8(spins[o + 3]));
                 assertEq(packedTraits, p, "player traits");
-                assertEq(uint8(spins[o + 4]), score | (gold << 4), "score | gold << 4");
+                assertEq(uint8(spins[o + 4]), score | (wilds << 4), "score | wilds << 4");
             }
         }
         assertTrue(found, "one resolved event");
@@ -415,8 +415,7 @@ contract DegeneretteSweep is DeployProtocol {
         for (uint256 k; k < 200_000; ++k) {
             word = uint256(keccak256(abi.encodePacked("sweep_high_score", k)));
             (uint8 s,) = Ref.score(
-                Ref.player(word, uint32(IDX), SYMBOL, 0, false), Ref.house(word, uint32(IDX), 0, false), SYMBOL >> 3
-            );
+                Ref.player(word, uint32(IDX), SYMBOL, 0, false), Ref.house(word, uint32(IDX), 0, false));
             if (s >= minScore) return word;
         }
         revert("no word");

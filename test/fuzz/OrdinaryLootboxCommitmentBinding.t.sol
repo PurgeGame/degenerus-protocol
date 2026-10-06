@@ -272,7 +272,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
 
     function _dgnrs(uint256 seed, uint256 inventory) private pure returns (uint256 amount) {
         uint256 roll = uint24(seed >> 56) % 1000;
-        uint256 ppm = roll < 795 ? 10 : roll < 945 ? 390 : roll < 995 ? 800 : 8000;
+        uint256 ppm = roll < 497 ? 10 : roll < 864 ? 390 : roll < 995 ? 800 : 8000;
         // 1 ETH * 90.16% frozen score multiplier, less the 10% boon budget.
         amount = inventory * ppm * 0.811_44 ether / (1_000_000 * 1 ether);
         uint256 step = 1;
@@ -313,9 +313,9 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
                     uint256 rem = amount % 100 ether / 1 ether;
                     uint256 entropy = uint256(keccak256(abi.encode(seed, FLIP_ROUND_TAG)));
                     if (uint32(entropy) % 100 < rem) ++hundreds;
-                    expected.flip += hundreds * 100 ether;
+                    expected.flip += hundreds * 100;
                 } else {
-                    expected.flip += amount / 1 ether * 1 ether;
+                    expected.flip += amount / 1 ether;
                 }
             } else if (roll == 15 || roll == 16) {
                 uint256 budget = _largeFlip(seed);

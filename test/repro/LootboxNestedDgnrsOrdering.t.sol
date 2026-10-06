@@ -240,8 +240,8 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
     function _dgnrsReward(uint256 amount, uint256 entropy, uint256 poolBalance) private pure returns (uint256 reward) {
         uint256 tierRoll = uint24(entropy >> 56) % 1000;
         uint256 ppm;
-        if (tierRoll < 795) ppm = 10;
-        else if (tierRoll < 945) ppm = 390;
+        if (tierRoll < 497) ppm = 10;
+        else if (tierRoll < 864) ppm = 390;
         else if (tierRoll < 995) ppm = 800;
         else ppm = 8000;
 

@@ -383,9 +383,9 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
       expect(refIdx, "`refFlip` affiliate credit not found").to.be.greaterThan(
         -1
       );
-      // The affiliate credit is emitted from the raw `refFlip * 7 / 100`, with no
-      // collapse between its derivation and the credit call.
-      const creditIdx = body.indexOf("(refFlip * 7) / 100");
+      // The affiliate credit is emitted from the raw `refFlip * AFFILIATE_BOX_BPS / 10_000`,
+      // with no collapse between its derivation and the credit call.
+      const creditIdx = body.indexOf("(refFlip * AFFILIATE_BOX_BPS) / 10_000");
       expect(creditIdx).to.be.greaterThan(refIdx);
       const between = body.slice(refIdx, creditIdx);
       expect(

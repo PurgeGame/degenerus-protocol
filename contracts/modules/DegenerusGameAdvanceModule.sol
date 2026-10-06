@@ -104,8 +104,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
     bytes32 private constant SKIM_VARIANCE_TAG = keccak256("degenerus.skim.variance");
     uint256 private constant SEAT_DRAW_FLIP_PER_DAY = 10;
     uint256 private constant SEAT_DRAW_MAX_FLIP = 4000;
-    uint16 private constant AFFILIATE_POOL_REWARD_BPS = 100;
-    uint16 private constant AFFILIATE_DGNRS_LEVEL_BPS = 500;
+    uint16 private constant AFFILIATE_POOL_REWARD_BPS = 50;
+    uint16 private constant AFFILIATE_DGNRS_LEVEL_BPS = 250;
 
     /// @notice Compact skipped-day funding is a separate indivisible daily action.
     function applyDailyGap() external {
@@ -537,7 +537,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
             poolBalance -= paid;
         }
 
-        // Segregate 5% of remaining affiliate pool for per-affiliate claims.
+        // Segregate 2.5% of remaining affiliate pool for per-affiliate claims.
         // Scores at index lvl are frozen (new scores go to lvl + 1).
         uint256 levelAllocation = (poolBalance * AFFILIATE_DGNRS_LEVEL_BPS) / 10_000;
         _setLevelDgnrsAllocation(lvl, levelAllocation);

@@ -7,10 +7,11 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {IsDGNRS} from "../../contracts/interfaces/IsDGNRS.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 
 /// @notice Functional balance reconciliation for a real ordinary box's ETH spin.
 /// Public buy/request/fulfill/open only; vm.load reads commitments but never changes them.
-/// An independent scalar reel/score/payout oracle prices a nonzero score-six spin,
+/// An independent scalar reel/score/payout oracle prices a nonzero high-score spin,
 /// the live cash cap and its sDGNRS-paying child. Events are outputs under test,
 /// not the source of expected rewards. Both cases hold game.level at zero
 /// (the box resolver's currentLevel and denomination are level + 1 == 1).
@@ -22,7 +23,7 @@ import {Vm} from "forge-std/Vm.sol";
 contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
     address private constant PLAYER = address(0xA11CE);
     address private constant KEEPER = address(0xC0DE);
-    uint256 private constant WORD = 7145;
+    uint256 private word;
     bytes32 private constant SPIN = keccak256("BoxSpin(address,uint64,uint256,uint256,uint256)");
     bytes32 private constant OPENED = keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
     bytes32 private constant DGNRS_BATCH = keccak256("LootBoxDgnrsBatch(address,uint256,uint256)");
@@ -161,54 +162,62 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         return uint16(seed) % 100 < 20 ? 6 + uint16(seed >> 24) % 46 : 1 + uint8(seed >> 16) % 5;
     }
 
-    function _reference(uint256 future, uint256 inventory) private pure returns (Expected memory e) {
+    /// @dev Independent oracle for the ordinary ETH-spin carrier at `word_`: `ok` is false unless the
+    ///      word is an ordinary ETH spin whose win reaches the quarter-cash band, binds the live cash
+    ///      cap at `future` and whose recirculated child pays sDGNRS.
+    function _reference(uint256 word_, uint256 future, uint256 inventory)
+        private
+        pure
+        returns (Expected memory e, bool ok)
+    {
         uint256 seed =
-            uint256(keccak256(abi.encode(WORD, uint256(uint160(PLAYER)), uint256(0x426f784f70656e), uint256(1))));
-        require(uint16(seed >> 40) % 20 == 19, "fixture must be an ordinary ETH spin");
+            uint256(keccak256(abi.encode(word_, uint256(uint160(PLAYER)), uint256(0x426f784f70656e), uint256(1))));
+        if (uint16(seed >> 40) % 20 != 19) return (e, false);
         // Frozen score 1 gives 90.16% box EV; 10% is reserved for the boon draw.
         uint256 budget = 0.811_44 ether * 19_678 / 10_000;
         budget = budget * (_target(seed) >= 6 ? 15_000 : 8750) / 10_000;
         e.stake = budget * _variance(seed) / 10_000;
         e.spinSeed = _hash(seed, 0x4574685370696e);
-        uint256 hero = _hash(e.spinSeed, 0x446567656e4865726f) % 24;
-        uint256 heroQuadrant = hero / 8;
-        uint32 playerTraits = _traits(_hash(e.spinSeed, 0x446567656e506c61796572));
-        playerTraits = (playerTraits & ~(uint32(7) << (8 * heroQuadrant))) | (uint32(hero & 7) << (8 * heroQuadrant));
-        uint32 resultTraits = _traits(_hash(e.spinSeed, 0x446567656e526573756c74));
-        uint256 score;
-        uint256 gold;
-        for (uint256 q; q < 4; ++q) {
-            uint256 p = (playerTraits >> (8 * q)) & 63;
-            uint256 r = (resultTraits >> (8 * q)) & 63;
-            if (p % 8 == r % 8) score += q == heroQuadrant ? 2 : 1;
-            if (p / 8 == r / 8) {
-                ++score;
-                if (p / 8 == 7) ++gold;
-            }
-        }
-        require(score == 6 && gold == 0, "fixed carrier must use score six without gold");
+        uint256 hero = Ref.randomHero(e.spinSeed);
+        uint32 playerTraits = Ref.ordinary(_hash(e.spinSeed, 0x446567656e506c61796572));
+        uint256 shift = (hero / 8) * 8;
+        playerTraits = (playerTraits & ~(uint32(0xFF) << shift)) | (uint32(0x40 | (hero & 7)) << shift);
+        uint32 resultTraits = Ref.traits(_hash(e.spinSeed, 0x446567656e526573756c74));
+        (uint256 score, uint256 wilds) = Ref.score(playerTraits, resultTraits);
+        if (score < 6) return (e, false);
         e.packedSpin = uint256(playerTraits) | (uint256(resultTraits) << 32) | (score << 64) | (uint256(1) << 216);
-        // Score-six base is 125x; ordinary score-one ROI is 9002 bps.
-        // The ETH high-score surplus factor at S6 is 1,013,556 / 1,000,000.
-        e.gross = e.stake * 12_500 * 4 * (uint256(9002) * 1_000_000 + 500 * 1_013_556) / 4_000_000_000_000;
-        require(e.gross > e.stake * 10, "fixture must reach the quarter-cash band");
-        require(e.gross / 4 > future / 10, "live future pool cap must bind");
+        // Ordinary score-one ROI is 9002 bps; ETH surplus is added per score.
+        uint256 base = [uint256(10_000), 62_500, 1_817_328, 23_000_000][score - 6];
+        uint256 add = [uint256(240), 4600, 105_000, 22_408_400][score - 6];
+        e.gross = e.stake * (base * 9002 + add * 10_000) * (4 + wilds) / 4_000_000;
+        if (e.gross <= e.stake * 10 || e.gross / 4 <= future / 10) return (e, false);
         e.cash = future / 10;
         e.recirculated = e.gross - e.cash;
         uint256 childSeed = _hash(_hash(e.spinSeed, 0x5265636972), uint256(uint160(PLAYER)));
         uint256 path = uint16(childSeed >> 40) % 20;
-        require(path >= 8 && path < 11, "child must actually pay sDGNRS");
+        if (path < 8 || path >= 11) return (e, false);
         e.childTarget = _target(childSeed);
         e.childAmount = e.recirculated * 9016 / 10_000;
         uint256 haircut = e.childAmount / 10;
         if (haircut > 1 ether) haircut = 1 ether;
         uint256 tier = uint24(childSeed >> 56) % 1000;
-        uint256 ppm = tier < 795 ? 10 : tier < 945 ? 390 : tier < 995 ? 800 : 8000;
+        uint256 ppm = tier < 497 ? 10 : tier < 864 ? 390 : tier < 995 ? 800 : 8000;
         e.childDgnrs = inventory * ppm * (e.childAmount - haircut) / (1_000_000 * 1 ether);
         uint256 step = 1;
         while (e.childDgnrs / step >= 1000) step *= 10;
         e.childDgnrs = e.childDgnrs / step * step;
         if (e.childDgnrs > inventory) e.childDgnrs = inventory;
+        ok = e.childDgnrs > 0;
+    }
+
+    /// @dev The first word (searched deterministically) that yields the carrier. The live future may
+    ///      still grow by the second purchase, so the cap must bind at `future + 3 ether`.
+    function _carrierWord(uint256 future, uint256 inventory) private pure returns (uint256 w) {
+        for (uint256 k = 1;; ++k) {
+            w = uint256(keccak256(abi.encode("eth-spin-carrier", k)));
+            (, bool ok) = _reference(w, future + 3 ether, inventory);
+            if (ok) return w;
+        }
     }
 
     function _balances() private view returns (Balances memory b) {
@@ -314,7 +323,8 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         assertGt(request, 0);
         (,, bool fulfilled) = mockVRF.pendingRequests(request);
         assertFalse(fulfilled);
-        mockVRF.fulfillRandomWords(request, WORD);
+        word = _carrierWord(game.futurePrizePoolView(), IsDGNRS(address(sdgnrs)).poolBalance(IsDGNRS.Pool(2)));
+        mockVRF.fulfillRandomWords(request, word);
         // Publish the delivered midday word, in minimal checkpoints, up to the cohort's
         // human-box stage: the committed order is then mineFlip's next read consumer.
         for (uint256 i; i < 100 && game.nextMinerAction() != 10; ++i) _stepMinimal(); // HumanBoxes
@@ -331,7 +341,8 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         assertEq(game.level(), 0, "fixed live denomination");
         uint256 nextOrder = _order((index ^ 1));
         Balances memory beforeState = _balances();
-        Expected memory e = _reference(beforeState.future, beforeState.pools[2]);
+        (Expected memory e, bool carrier) = _reference(word, beforeState.future, beforeState.pools[2]);
+        assertTrue(carrier, "searched word is the ordinary ETH-spin carrier");
         assertGt(e.cash, 0);
         assertGt(e.childDgnrs, 0);
         if (laterPurchase) assertGt(e.cash, initialFuture / 10, "live cap changed with successful second purchase");
@@ -359,7 +370,7 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
             assertEq(
                 afterState.pools[i] + (i == 2 ? e.childDgnrs : 0),
                 beforeState.pools[i],
-                "only Lootbox inventory pays S6 child"
+                "only Lootbox inventory pays the child"
             );
         }
         assertEq(afterState.flip, beforeState.flip);

@@ -2266,7 +2266,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @dev Calculate DGNRS reward amount from the lootbox pool.
-    ///      79.5% small tier, 15% medium, 5% large, 0.5% mega.
+    ///      49.7% small tier, 36.7% medium, 13.1% large, 0.5% mega.
     ///      Bit budget (consumed from `entropy` — the threaded per-resolution seed):
     ///        - tierRoll: bits[56..79] via uint24(entropy >> 56) % 1000 (bias 0.0024%)
     /// @param amount ETH amount for calculation
@@ -2280,9 +2280,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     {
         uint256 tierRoll = uint24(entropy >> 56) % 1000;
         uint256 ppm;
-        if (tierRoll < 795) {
+        if (tierRoll < 497) {
             ppm = LOOTBOX_DGNRS_POOL_SMALL_PPM;
-        } else if (tierRoll < 945) {
+        } else if (tierRoll < 864) {
             ppm = LOOTBOX_DGNRS_POOL_MEDIUM_PPM;
         } else if (tierRoll < 995) {
             ppm = LOOTBOX_DGNRS_POOL_LARGE_PPM;

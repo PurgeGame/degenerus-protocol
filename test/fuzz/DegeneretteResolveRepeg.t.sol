@@ -6,6 +6,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {DegeneretteQueue as DQ} from "../helpers/DegeneretteQueue.sol";
+import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 
 /// @title DegeneretteResolveRepeg -- sweep-budget invariance of queued-bet resolution.
 /// @notice Bets are queued per RNG index (`degeneretteQueue[index & 1]`, id = queue position + 1) and
@@ -95,7 +96,10 @@ contract DegeneretteResolveRepeg is DeployProtocol {
         // minimal-allowance call that admits one bet can never also admit the next.
         uint48 index = 1;
         uint256 word = uint256(keccak256("repeg_partition_independence_v1"));
-        while (uint256(keccak256(abi.encode(word, player, uint256(1), BET_SURVIVAL_TAG))) & 1 == 0) ++word;
+        while (
+            !_spin0Pays(index, word)
+                || uint256(keccak256(abi.encode(word, player, uint256(1), BET_SURVIVAL_TAG))) & 1 == 0
+        ) ++word;
         uint32 ticket = _winningTicketFor(index, word);
 
         _fundFlip(player, 1_000);
@@ -165,10 +169,16 @@ contract DegeneretteResolveRepeg is DeployProtocol {
         betId = DQ.lastBetId(vm, address(game), 1);
     }
 
-    /// @dev The spin-0 winning custom ticket for (index, word): the spin-0 result ticket itself
-    ///      (8/8 self-match guarantees a win on spin 0 -> the resolution actually pays).
+    /// @dev The spin-0 house ticket; its lane-0 symbol is the hero, so the hero lane scores at least 2.
     function _winningTicketFor(uint48 index, uint256 word) internal pure returns (uint32) {
         return _resultTicketForSpin(index, word, 0);
+    }
+
+    /// @dev Whether spin 0 pays (S >= 3) for the hero symbol taken from the house's lane 0.
+    function _spin0Pays(uint48 index, uint256 word) internal pure returns (bool) {
+        uint32 house = _resultTicketForSpin(index, word, 0);
+        (uint8 score,) = Ref.score(Ref.player(word, uint32(index), uint8(house & 7), 0, false), house);
+        return score >= 3;
     }
 
     /// @dev Reproduce the on-chain per-spin result ticket (_resolveBet derivation).

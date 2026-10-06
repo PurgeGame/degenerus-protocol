@@ -236,7 +236,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     ///         freeze-intact resolve path and the always-to-claimable credit path are proven
     ///         together on the live tree.
     function testEthWinningsAlwaysLandInClaimable() public {
-        // Engineer a WINNING bet (>= 2 matches) so _distributePayout credits claimable.
+        // Engineer a WINNING bet (score 3) so _distributePayout credits claimable.
         (uint32 winTicket, uint256 word) = _findWinningCombo(INDEX);
         // Re-seed FIXED behavior: use the engineered winning word at INDEX.
         uint128 betAmount = 0.01 ether;
@@ -1033,9 +1033,9 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         }
     }
 
-    /// @dev Find a (winningTicket, rngWord) pair guaranteeing >= 2 matches at spin 0 — the
-    ///      custom ticket equals the result ticket so it is a guaranteed win (8/8). Mirrors the
-    ///      established DegeneretteFreezeResolution._findWinningCombo pattern.
+    /// @dev Find a (resultTicket, rngWord) pair whose spin 0 is the smallest win (score 3, no
+    ///      house wild: half the stake back, all cash) for the hero symbol taken from the result's
+    ///      lane 0. Mirrors the established DegeneretteFreezeResolution._findWinningCombo pattern.
     function _findWinningCombo(
         uint48 index
     ) internal pure returns (uint32 winTicket, uint256 rngWord) {
@@ -1045,8 +1045,8 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
             );
             winTicket = _resultTicketFor(index, rngWord);
             uint8 symbol = uint8(winTicket) & 7;
-            (uint8 score, uint8 gold) = Ref.score(Ref.player(rngWord, uint32(index), symbol, 0, false), winTicket, 0);
-            if (score == 2 && gold == 0) return (winTicket, rngWord);
+            (uint8 score, uint8 wilds) = Ref.score(Ref.player(rngWord, uint32(index), symbol, 0, false), winTicket);
+            if (score == 3 && wilds == 0) return (winTicket, rngWord);
         }
         revert("no winning combo in 100 attempts");
     }

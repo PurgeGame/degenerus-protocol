@@ -8,8 +8,8 @@ import {Vm} from "forge-std/Vm.sol";
 ///         id is the queue position + 1, so the queue length is the newest bet's id. The word
 ///         packs owner [0..159] | symbol [160..164] | spins [165..169] | currency [170] |
 ///         record flag [171] | activity [172..187] | stake units [188..251] (ETH gwei, FLIP
-///         whole) | consumed boon tier [252..253]. DegeneretteResolved carries five bytes per spin: player traits (big-endian)
-///         then score | gold << 4.
+///         whole). DegeneretteResolved carries five bytes per spin: player traits (big-endian)
+///         then score | house wilds << 4.
 library DegeneretteQueue {
     uint256 internal constant QUEUE_SLOT = 21;
     bytes32 internal constant PLACED_SIG = keccak256("DegeneretteBetPlaced(address,uint32,uint64,uint256)");
@@ -47,13 +47,13 @@ library DegeneretteQueue {
     function spinAt(bytes memory spins, uint256 i)
         internal
         pure
-        returns (uint32 playerTraits, uint8 score, uint8 gold)
+        returns (uint32 playerTraits, uint8 score, uint8 wilds)
     {
         uint256 o = i * 5;
         playerTraits = (uint32(uint8(spins[o])) << 24) | (uint32(uint8(spins[o + 1])) << 16)
             | (uint32(uint8(spins[o + 2])) << 8) | uint32(uint8(spins[o + 3]));
         uint8 tail = uint8(spins[o + 4]);
         score = tail & 0x0F;
-        gold = tail >> 4;
+        wilds = tail >> 4;
     }
 }

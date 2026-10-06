@@ -38,7 +38,7 @@ contract NativeAtomicDegeneretteTest is DeployProtocol {
     function _winningWord(uint32 index, uint8 minimum, bool flip) private pure returns (uint256 word) {
         for (uint256 nonce;; ++nonce) {
             word = uint256(keccak256(abi.encode("native atomic bet", nonce)));
-            (uint8 score,) = Ref.score(Ref.player(word, index, 9, 0, false), Ref.house(word, index, 0, false), 1);
+            (uint8 score,) = Ref.score(Ref.player(word, index, 9, 0, false), Ref.house(word, index, 0, false));
             if (score >= minimum && (!flip || uint256(keccak256(abi.encode(
                 word, uint256(uint160(PLAYER)), uint256(1), uint256(0x446567656e537572766976616c)
             ))) & 1 == 1)) return word;
@@ -75,7 +75,7 @@ contract NativeAtomicDegeneretteTest is DeployProtocol {
 
     function test_Max15FlipSpinsAndSurvivalMintFitOneStep() public {
         uint256 beforeBalance = coin.balanceOf(PLAYER);
-        uint256 used = _measure(1, 100 ether, 15, 5);
+        uint256 used = _measure(1, 100, 15, 5);
         assertGt(coin.balanceOf(PLAYER), beforeBalance - 1500 ether, "surviving FLIP winnings minted");
         emit log_named_uint("cold_atomic_15_flip_spins_survival", used);
     }

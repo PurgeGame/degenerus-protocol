@@ -114,9 +114,8 @@ contract DegeneretteSweepGas is DeployProtocol {
         for (uint256 k; ; ++k) {
             word = uint256(keccak256(abi.encodePacked("sweep_gas_lose", k)));
             (uint8 s,) = Ref.score(
-                Ref.player(word, uint32(IDX), SYMBOL, 0, false), Ref.house(word, uint32(IDX), 0, false), SYMBOL >> 3
-            );
-            if (s < 2) return word;
+                Ref.player(word, uint32(IDX), SYMBOL, 0, false), Ref.house(word, uint32(IDX), 0, false));
+            if (s < 3) return word;
         }
     }
 
@@ -125,8 +124,7 @@ contract DegeneretteSweepGas is DeployProtocol {
         for (uint256 k; ; ++k) {
             word = uint256(keccak256(abi.encodePacked("sweep_gas_win", k)));
             (uint8 s,) = Ref.score(
-                Ref.player(word, uint32(IDX), SYMBOL, 0, false), Ref.house(word, uint32(IDX), 0, false), SYMBOL >> 3
-            );
+                Ref.player(word, uint32(IDX), SYMBOL, 0, false), Ref.house(word, uint32(IDX), 0, false));
             if (s >= minScore) return word;
         }
     }
@@ -180,13 +178,12 @@ contract DegeneretteSweepGas is DeployProtocol {
         _marginal("eth_25spin", 0, 0.005 ether, 25, uint256(keccak256("sweep_gas_25")));
     }
 
-    /// @dev Spin scores of one bet's spins for SYMBOL at IDX: wins (s >= 2) and highs (s >= 7).
+    /// @dev Spin scores of one bet's spins for SYMBOL at IDX: wins (s >= 3) and highs (s >= 7).
     function _spinScores(uint256 word, uint8 spins) private pure returns (uint256 wins, uint256 highs) {
         for (uint8 i; i < spins; ++i) {
             (uint8 s,) = Ref.score(
-                Ref.player(word, uint32(IDX), SYMBOL, i, false), Ref.house(word, uint32(IDX), i, false), SYMBOL >> 3
-            );
-            if (s >= 2) ++wins;
+                Ref.player(word, uint32(IDX), SYMBOL, i, false), Ref.house(word, uint32(IDX), i, false));
+            if (s >= 3) ++wins;
             if (s >= 7) ++highs;
         }
     }
@@ -255,14 +252,14 @@ contract DegeneretteSweepGas is DeployProtocol {
     }
 
     function testGasFlip1Losing() public {
-        _marginal("flip_1spin_lose", 1, 100 ether, 1, _losingWord());
+        _marginal("flip_1spin_lose", 1, 100, 1, _losingWord());
     }
 
     function testGasFlip1Winning() public {
-        _marginal("flip_1spin_win_s5", 1, 100 ether, 1, _scoringWord(5));
+        _marginal("flip_1spin_win_s5", 1, 100, 1, _scoringWord(5));
     }
 
     function testGasFlip15() public {
-        _marginal("flip_15spin", 1, 100 ether, 15, uint256(keccak256("sweep_gas_15")));
+        _marginal("flip_15spin", 1, 100, 15, uint256(keccak256("sweep_gas_15")));
     }
 }

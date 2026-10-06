@@ -1,27 +1,18 @@
 import { expect } from 'chai';
 import { execFileSync } from 'node:child_process';
 
-describe('Matched-gold and ETH bonus budgets', function () {
+describe('Result-wild, ETH addition and side-reward budgets', function () {
   const m = JSON.parse(execFileSync('python3', ['-B', 'scripts/data/degenerette_single_symbol_math.py'], { encoding: 'utf8' }));
-  it('funds matched gold in the base EV using its joint distribution with score', function () {
-    expect(m.gold_extra_base_ev_pp).to.be.closeTo(4.800387613475323, 1e-9);
-    expect(m.any_gold_match_percent).to.be.closeTo(6.10503554344, 1e-9);
+  it('adds the literal ETH additions at every activity tier', function () {
+    expect(m.eth_extra_pp).to.be.closeTo(4.999995757825673, 1e-12);
+    for (const r of m.activity_returns_percent) expect(r.ETH - r.ordinary).to.be.closeTo(m.eth_extra_pp, 1e-9);
   });
-  it('adds five ETH return percentage points at every activity tier', function () {
-    expect(m.eth_bonus_ev_pp).to.be.closeTo(5, 0.000001);
-    for (const r of m.activity_returns_percent) expect(r.ETH_with_5pp-r.ordinary).to.be.closeTo(5, 0.000001);
+  it('lets the fully boosted paid jackpot exceed 1,000,000x with no ceiling', function () {
+    expect(m.paid_maxima_x.FLIP_after_survival).to.equal(1029369.6);
+    expect(m.paid_maxima_x.ETH_gross).to.equal(1016632.96);
   });
-  it('bounds the final paid jackpot and keeps even the largest boon cap EV cost tiny', function () {
-    const cap = m.paid_bet_ceiling;
-    expect(cap.max_x).to.equal(1_000_000);
-    expect(cap.unboosted_max_x.FLIP).to.be.closeTo(999_999.999, 0.000001);
-    expect(cap.unboosted_max_x.ETH).to.be.below(1_000_000);
-    for (const cost of Object.values(cap.max_boon_cap_ev_cost_pp)) {
-      expect(cost).to.be.above(0).and.below(0.0001);
-    }
-  });
-  it('calibrates the rig and gold to 70-130%, negative EV through activity 169', function () {
-    expect(m.wwxrp.base_ev_percent).to.be.closeTo(70, 0.000001);
+  it('calibrates the WWXRP rig and wilds to 70-130%, negative EV through activity 169', function () {
+    expect(m.wwxrp.base_ev_percent).to.be.closeTo(70, 0.00002);
     expect(m.wwxrp.max_ev_percent).to.be.closeTo(130, 0.00002);
     expect(m.wwxrp.first_nonnegative_activity).to.equal(170);
     for (const r of m.activity_returns_percent) {
@@ -29,8 +20,14 @@ describe('Matched-gold and ETH bonus budgets', function () {
       if (r.activity_score < 170) expect(r.WWXRP).to.be.below(100);
     }
   });
-  it('spends the max-activity surplus on scores 6-9 in the existing 10/30/30/30 split', function () {
+  it('spends the max-activity WWXRP surplus on scores 6-9 in the 10/30/30/30 split', function () {
     const bonuses = m.wwxrp.activity_bonus_ev_by_winning_score_pp;
-    for (const s of [6,7,8,9]) expect(bonuses[s]).to.be.closeTo(s===6 ? 6 : 18, 0.00001);
+    for (const s of [6, 7, 8, 9]) expect(bonuses[s]).to.be.closeTo(s === 6 ? 6 : 18, 0.00001);
+  });
+  it('keeps the sDGNRS and affiliate side rewards at the previous expected value', function () {
+    expect(m.side_rewards.dgnrs_bps).to.deep.equal({ 7: 204, 8: 466, 9: 1010 });
+    expect(m.side_rewards.dgnrs_new_over_old).to.be.closeTo(1, 0.002);
+    expect(m.side_rewards.affiliate_bps).to.equal(426);
+    for (const r of m.side_rewards.affiliate_by_activity) expect(r.new_over_old).to.be.closeTo(1, 0.01);
   });
 });

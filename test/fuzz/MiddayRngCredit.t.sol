@@ -451,9 +451,9 @@ contract MiddayRngCreditTest is DeployProtocol {
     function test_creditPaysForAFlipOnlyQueue() public pricedBlock {
         // A FLIP Degenerette bet is pending FLIP work with no pending ETH.
         vm.prank(address(game));
-        coin.mintForGame(outsider, 1_000 ether);
+        coin.mintForGame(outsider, 1_000);
         vm.prank(outsider);
-        game.placeDegeneretteBet(address(0), 1, 200 ether, 1, 0);
+        game.placeDegeneretteBet(address(0), 1, 200, 1, 0);
         // lootboxRngPacked (slot 33): bits 48..111 pending ETH, bits 184..223 pending FLIP.
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(33))));
         assertEq((packed >> 48) & type(uint64).max, 0, "harness: no pending ETH");
