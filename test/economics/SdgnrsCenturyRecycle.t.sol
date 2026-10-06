@@ -310,8 +310,8 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
     }
 
     function _pendingFingerprint(uint32 id) private view returns (bytes32) {
-        (uint128 at,uint16 ascore) = sdgnrs.pendingRedemptions(ALICE, id);
-        (uint128 bt,uint16 bscore) = sdgnrs.pendingRedemptions(BOB, id);
+        (uint128 at,uint16 ascore) = sdgnrs.pendingRedemptions(game.walletIdOf(ALICE), id);
+        (uint128 bt,uint16 bscore) = sdgnrs.pendingRedemptions(game.walletIdOf(BOB), id);
         (uint128 t,uint128 supply,uint96 base,uint96 escrow,uint16 roll,uint16 reward) = sdgnrs.redemptionBatches(id);
         return keccak256(abi.encode(at, ascore, bt, bscore, t, supply, base, escrow, roll, reward,
             sdgnrs.pendingRedemptionEthValue(), address(sdgnrs).balance, mockStETH.balanceOf(address(sdgnrs)),
@@ -342,7 +342,7 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
         uint256 supply = sdgnrs.totalSupply();
         uint256 before = game.claimableWinningsOf(ALICE);
         _settleOneClaim();
-        (uint128 waiting,) = sdgnrs.pendingRedemptions(BOB, id);
+        (uint128 waiting,) = sdgnrs.pendingRedemptions(game.walletIdOf(BOB), id);
         assertGt(waiting, 0);
         assertApproxEqAbs(game.claimableWinningsOf(ALICE) - before, baseAlice * 175 / 100 / 2, 1);
         assertEq(sdgnrs.pendingRedemptionEthValue(), reserve - baseAlice * 175 / 100);

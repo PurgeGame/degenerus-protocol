@@ -4,11 +4,12 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-contract GenesisQueueSeeder is DegenerusGameStorage {
+contract GenesisQueueSeeder is DegenerusGameStorage, WalletSeed {
     function setLevel(uint24 lvl) external { level = lvl; }
     function queue(address owner, uint24 lvl, uint32 entries) external {
-        _queueEntries(owner, lvl, entries, false);
+        _queueEntries(_seedWallet(owner), lvl, entries, false);
     }
 }
 

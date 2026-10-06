@@ -29,25 +29,23 @@ pragma solidity 0.8.34;
  * @notice Library for bit-packed storage field operations and mint data constants.
  * @dev Consolidates packed field manipulation used across DegenerusGame, modules, and helpers.
  *
- *      Mint data layout (256 bits):
+ *      Mint data layout (256 bits, contiguous):
  *      [0-23]    LAST_LEVEL_SHIFT            - Last level purchased (24 bits)
  *      [24-47]   LEVEL_COUNT_SHIFT           - Total level purchases (24 bits)
  *      [48-71]   LEVEL_STREAK_SHIFT          - Consecutive level streak (24 bits, managed by MintStreakUtils)
- *      [72-103]  DAY_SHIFT                   - Day index of last purchase (32 bits)
- *      [104-127] LEVEL_UNITS_LEVEL_SHIFT     - Level for unit tracking (24 bits)
- *      [128-151] FROZEN_UNTIL_LEVEL_SHIFT    - Frozen level for lazy/whale passes (24 bits)
- *      [152-153] WHALE_PASS_TYPE_SHIFT     - Pass type (2 bits: 0=none, 1=lazy/10-lvl, 3=whale/100-lvl)
- *      [154]     SEAT_CLAIMED_SHIFT          - AFKing seat mint latch (1 bit)
- *      [155]     SEAT_ENCUMBERED_SHIFT       - AFKing seat encumbrance latch (1 bit)
- *      [156-159] (unused)
- *      [160-183] MINT_STREAK_LAST_COMPLETED  - Last level credited for mint streak (24 bits, managed by MintStreakUtils)
- *      [184]     HAS_DEITY_PASS_SHIFT        - Deity pass flag (1 bit)
- *      [185-208] AFFILIATE_BONUS_LEVEL_SHIFT - Cached affiliate bonus level (24 bits)
- *      [209-214] AFFILIATE_BONUS_POINTS_SHIFT - Cached affiliate bonus points (6 bits)
- *      [215-222] CURSE_COUNT_SHIFT            - Cashout/smite curse counter (8 bits)
- *      [223-227] (unused)
- *      [228-243] LEVEL_UNITS_SHIFT           - Units purchased at current level (16 bits)
- *      [244-255] (reserved)
+ *      [72-95]   DAY_SHIFT                   - Day index of last purchase (24 bits)
+ *      [96-119]  LEVEL_UNITS_LEVEL_SHIFT     - Level for unit tracking (24 bits)
+ *      [120-143] FROZEN_UNTIL_LEVEL_SHIFT    - Frozen level for lazy/whale passes (24 bits)
+ *      [144-145] WHALE_PASS_TYPE_SHIFT       - Pass type (2 bits: 0=none, 1=lazy/10-lvl, 3=whale/100-lvl)
+ *      [146]     SEAT_CLAIMED_SHIFT          - AFKing seat mint latch (1 bit)
+ *      [147]     SEAT_ENCUMBERED_SHIFT       - AFKing seat encumbrance latch (1 bit)
+ *      [148-171] MINT_STREAK_LAST_COMPLETED  - Last level credited for mint streak (24 bits, managed by MintStreakUtils)
+ *      [172]     HAS_DEITY_PASS_SHIFT        - Deity pass flag (1 bit)
+ *      [173-196] AFFILIATE_BONUS_LEVEL_SHIFT - Cached affiliate bonus level (24 bits)
+ *      [197-202] AFFILIATE_BONUS_POINTS_SHIFT - Cached affiliate bonus points (6 bits)
+ *      [203-207] CURSE_COUNT_SHIFT           - Cashout/smite curse counter (5 bits, capped at 20)
+ *      [208-223] LEVEL_UNITS_SHIFT           - Units purchased at current level (16 bits)
+ *      [224-255] WALLET_ID_SHIFT             - Permanent wallet ID (32 bits; written only at registration)
  */
 library BitPackingLib {
     // -------------------------------------------------------------------------
@@ -60,14 +58,11 @@ library BitPackingLib {
     /// @notice 24-bit mask for level/count/streak fields
     uint256 internal constant MASK_24 = (uint256(1) << 24) - 1;
 
-    /// @notice 32-bit mask for day field
-    uint256 internal constant MASK_32 = (uint256(1) << 32) - 1;
-
     /// @notice 6-bit mask for affiliate bonus points field
     uint256 internal constant MASK_6 = (uint256(1) << 6) - 1;
 
-    /// @notice 8-bit mask for the curse counter field
-    uint256 internal constant MASK_8 = (uint256(1) << 8) - 1;
+    /// @notice 5-bit mask for the curse counter field
+    uint256 internal constant MASK_5 = (uint256(1) << 5) - 1;
 
     // -------------------------------------------------------------------------
     // Bit Shift Positions
@@ -82,28 +77,28 @@ library BitPackingLib {
     /// @notice Bit position for consecutive streak (bits 48-71)
     uint256 internal constant LEVEL_STREAK_SHIFT = 48;
 
-    /// @notice Bit position for day index (bits 72-103)
+    /// @notice Bit position for day index (bits 72-95)
     uint256 internal constant DAY_SHIFT = 72;
 
-    /// @notice Bit position for level units tracking level (bits 104-127)
-    uint256 internal constant LEVEL_UNITS_LEVEL_SHIFT = 104;
+    /// @notice Bit position for level units tracking level (bits 96-119)
+    uint256 internal constant LEVEL_UNITS_LEVEL_SHIFT = 96;
 
-    /// @notice Bit position for frozen until level (bits 128-151)
-    uint256 internal constant FROZEN_UNTIL_LEVEL_SHIFT = 128;
+    /// @notice Bit position for frozen until level (bits 120-143)
+    uint256 internal constant FROZEN_UNTIL_LEVEL_SHIFT = 120;
 
-    /// @notice Bit position for whale pass type (bits 152-153)
-    uint256 internal constant WHALE_PASS_TYPE_SHIFT = 152;
+    /// @notice Bit position for whale pass type (bits 144-145)
+    uint256 internal constant WHALE_PASS_TYPE_SHIFT = 144;
 
-    /// @notice Bit position for the AFKing seat latch (bit 154). Set on an
+    /// @notice Bit position for the AFKing seat latch (bit 146). Set on an
     ///         address's FIRST pass PURCHASE (whale/lazy/deity), which is also
     ///         when the seat is minted; one free-tranche seat per address,
     ///         ever. Passes that are won (the whale-pass claim lane) or
     ///         conferred (a deity buyer's affiliate) never set it. This bit is
     ///         the sole once-per-address guard — the token caps the tranche at
     ///         1,000 but keeps no per-address record of its own.
-    uint256 internal constant SEAT_CLAIMED_SHIFT = 154;
+    uint256 internal constant SEAT_CLAIMED_SHIFT = 146;
 
-    /// @notice Bit position for the AFKing seat encumbrance latch (bit 155).
+    /// @notice Bit position for the AFKing seat encumbrance latch (bit 147).
     ///         Set by a fresh subscribe, cleared by a manual cancel and by the
     ///         AFKING_SUB_TOKEN-only clearSeatEncumbrance — an eviction leaves
     ///         it set, so `encumbered && !active` proves an uncollected
@@ -112,25 +107,29 @@ library BitPackingLib {
     ///         renders the evicted art once the sub is inactive, reclaimSeat
     ///         can seize one seat to the vault, and a fresh subscribe reverts
     ///         SeatForfeited.
-    uint256 internal constant SEAT_ENCUMBERED_SHIFT = 155;
+    uint256 internal constant SEAT_ENCUMBERED_SHIFT = 147;
 
-    /// @notice Bit position for last level credited for mint streak (bits 160-183)
-    uint256 internal constant MINT_STREAK_LAST_COMPLETED_SHIFT = 160;
+    /// @notice Bit position for last level credited for mint streak (bits 148-171)
+    uint256 internal constant MINT_STREAK_LAST_COMPLETED_SHIFT = 148;
 
-    /// @notice Bit position for deity pass flag (bit 184)
-    uint256 internal constant HAS_DEITY_PASS_SHIFT = 184;
+    /// @notice Bit position for deity pass flag (bit 172)
+    uint256 internal constant HAS_DEITY_PASS_SHIFT = 172;
 
-    /// @notice Bit position for cached affiliate bonus level (bits 185-208)
-    uint256 internal constant AFFILIATE_BONUS_LEVEL_SHIFT = 185;
+    /// @notice Bit position for cached affiliate bonus level (bits 173-196)
+    uint256 internal constant AFFILIATE_BONUS_LEVEL_SHIFT = 173;
 
-    /// @notice Bit position for cached affiliate bonus points (bits 209-214)
-    uint256 internal constant AFFILIATE_BONUS_POINTS_SHIFT = 209;
+    /// @notice Bit position for cached affiliate bonus points (bits 197-202)
+    uint256 internal constant AFFILIATE_BONUS_POINTS_SHIFT = 197;
 
-    /// @notice Bit position for the cashout/smite curse counter (bits 215-222)
-    uint256 internal constant CURSE_COUNT_SHIFT = 215;
+    /// @notice Bit position for the cashout/smite curse counter (bits 203-207)
+    uint256 internal constant CURSE_COUNT_SHIFT = 203;
 
-    /// @notice Bit position for level units count (bits 228-243)
-    uint256 internal constant LEVEL_UNITS_SHIFT = 228;
+    /// @notice Bit position for level units count (bits 208-223)
+    uint256 internal constant LEVEL_UNITS_SHIFT = 208;
+
+    /// @notice Bit position for the permanent wallet ID (bits 224-255). The ID is the
+    ///         wallet's position in the Game wallet table; zero means unregistered.
+    uint256 internal constant WALLET_ID_SHIFT = 224;
 
     // -------------------------------------------------------------------------
     // Packing Functions

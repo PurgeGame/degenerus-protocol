@@ -14,6 +14,7 @@ import {Vm} from "forge-std/Vm.sol";
 
 contract HumanOrderGasSeed is DegenerusGame {
     function seedOrder(address player, uint256 input, uint256 coverWei, bool presale, uint256 entropy) external {
+        _registerWallet(player, type(uint256).max);
         level = 99;
         dailyIdx = _simulatedDayIndex();
         purchaseStartDay = dailyIdx;
@@ -82,11 +83,11 @@ contract HumanOrderGasSeed is DegenerusGame {
     }
 
     function outcome(address player) external view returns (bytes32 digest) {
-        digest = keccak256(abi.encode(_claimableOf(player), boonPacked[player], mintPacked_[player],
+        digest = keccak256(abi.encode(_claimableOf(_walletIdOf(player)), boonPacked[player], mintPacked_[player],
             _getCurrentPrizePool(), _getNextPrizePool(), _getFuturePrizePool(),
             presaleDrained, humanReadComplete, _boxOrder(_rngReadBuffer(), player)));
         for (uint24 lvl = 100; lvl <= 150; ++lvl) {
-            digest = keccak256(abi.encode(digest, _entriesOwedTotal(lvl, player)));
+            digest = keccak256(abi.encode(digest, _entriesOwedTotal(lvl, _walletIdOf(player))));
         }
     }
 }

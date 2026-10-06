@@ -39,13 +39,13 @@ contract MutationKills is DeployProtocol {
     ///      were masked off, (c) the two pre-existing sibling fields are untouched. A CR/return-0
     ///      mutant fails (a) and (c); a wrong-MASK mutant fails (b).
     function test_kills_BitPackingLib_110_setPacked_roundTrip() public pure {
-        // Seed a word with LEVEL_COUNT (24-bit) = 0xABCDEF and DAY (32-bit) = 0x11223344 already set.
+        // Seed a word with LEVEL_COUNT (24-bit) = 0xABCDEF and DAY (24-bit) = 0x112233 already set.
         uint256 word = 0;
         word = BitPackingLib.setPacked(
             word, BitPackingLib.LEVEL_COUNT_SHIFT, BitPackingLib.MASK_24, 0xABCDEF
         );
         word = BitPackingLib.setPacked(
-            word, BitPackingLib.DAY_SHIFT, BitPackingLib.MASK_32, 0x11223344
+            word, BitPackingLib.DAY_SHIFT, BitPackingLib.MASK_24, 0x112233
         );
 
         // Write LEVEL_UNITS (16-bit) with an OVER-WIDE value (0x3FFFF > 16 bits). A correct mask
@@ -62,9 +62,9 @@ contract MutationKills is DeployProtocol {
 
         // (c) sibling fields preserved (a CR/return-0 mutant zeroes the whole word).
         uint256 countField = (word >> BitPackingLib.LEVEL_COUNT_SHIFT) & BitPackingLib.MASK_24;
-        uint256 dayField = (word >> BitPackingLib.DAY_SHIFT) & BitPackingLib.MASK_32;
+        uint256 dayField = (word >> BitPackingLib.DAY_SHIFT) & BitPackingLib.MASK_24;
         assertEq(countField, 0xABCDEF, "LEVEL_COUNT sibling clobbered (setPacked body removed)");
-        assertEq(dayField, 0x11223344, "DAY sibling clobbered (setPacked body removed)");
+        assertEq(dayField, 0x112233, "DAY sibling clobbered (setPacked body removed)");
 
         // Direct round-trip: a clear-then-set over a fully-populated field replaces it exactly.
         uint256 replaced = BitPackingLib.setPacked(

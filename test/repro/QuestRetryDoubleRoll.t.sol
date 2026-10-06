@@ -5,6 +5,7 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {QuestInfo} from "../../contracts/interfaces/IDegenerusQuests.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title QuestRetryDoubleRoll -- a cross-midnight daily RETRY must not re-force a quest
 /// @notice The foil daily is rolled at the final-jackpot RNG REQUEST — the boundary where
@@ -26,7 +27,7 @@ import {Vm} from "forge-std/Vm.sol";
 ///      green retry test cannot be an artifact of never arming the roll at all.
 contract QuestRetryDoubleRoll is DeployProtocol {
     /// @dev prizePoolsPacked slot: [future:128 | next:128] (see RngRetryLootboxStall).
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED;
 
     uint8 private constant QUEST_TYPE_MINT_ETH = 1;
     uint8 private constant QUEST_TYPE_FOIL = 4;
@@ -47,7 +48,7 @@ contract QuestRetryDoubleRoll is DeployProtocol {
 
     function _generationStart(uint24 lvl) private view returns (uint256) {
         // Append-only mapping slot, independently pinned by the layout oracle.
-        return uint256(game.extsload(keccak256(abi.encode(uint256(lvl), uint256(70)))));
+        return uint256(game.extsload(keccak256(abi.encode(uint256(lvl), GameSlots.TICKET_GENERATION_START_BLOCK))));
     }
 
     function test_generationWindowBootstrapAndUnopenedLevel() public view {

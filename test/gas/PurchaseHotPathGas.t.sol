@@ -7,8 +7,10 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {TicketQueueStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
-contract PurchaseHotPathSeeder is DegenerusGameStorage {
+contract PurchaseHotPathSeeder is DegenerusGameStorage, WalletSeed {
     function seed(uint24 lvl, address buyer, bool presale, bool frozen) external {
         level = lvl;
         purchaseStartDay = _simulatedDayIndex();
@@ -23,13 +25,13 @@ contract PurchaseHotPathSeeder is DegenerusGameStorage {
         // Pre-existing pools make the measurements independent of zero-pool initialization.
         _setPrizePools(10 ether, 10 ether);
         prizePoolPendingPacked = uint256(1 ether) | (uint256(1 ether) << 128);
-        balancesPacked[buyer] = uint256(100 ether) | (uint256(100 ether) << 128);
+        balancesPacked[_seedWallet(buyer)] = uint256(100 ether) | (uint256(100 ether) << 128);
         claimablePool = 200 ether;
     }
 
     function seedAfking(address buyer, bool lapsed) external {
         uint24 today = _simulatedDayIndex();
-        Sub storage sub = _subOf[buyer];
+        Sub storage sub = _subOf[_seedWallet(buyer)];
         sub.afkingStartDay = today - 5;
         sub.afkCoveredThroughDay = lapsed ? today - 3 : today;
         sub.subStreakLatch = 20;
@@ -135,15 +137,15 @@ contract PurchaseHotPathGasTest is DeployProtocol {
             vm.load(address(quests), keccak256(abi.encode(BUYER, uint256(3))))
         ));
         digest = keccak256(abi.encode(digest,
-            vm.load(address(game), keccak256(abi.encode(BUYER, uint256(7)))),
+            vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), GameSlots.BALANCES_PACKED))),
             game.claimablePoolView(),
-            vm.load(address(game), keccak256(abi.encode(BUYER, uint256(17)))),
-            vm.load(address(game), keccak256(abi.encode(BUYER, uint256(39)))),
-            vm.load(address(game), keccak256(abi.encode(BUYER, uint256(46)))),
-            vm.load(address(game), keccak256(abi.encode(BUYER, uint256(52)))),
-            vm.load(address(game), keccak256(abi.encode(BUYER, keccak256(abi.encode(uint256(0), uint256(15)))))),
-            vm.load(address(game), keccak256(abi.encode(BUYER, keccak256(abi.encode(uint256(1), uint256(15)))))),
-            vm.load(address(game), keccak256(abi.encode(BUYER, keccak256(abi.encode(uint256((game.level() + 1) & 3), uint256(58))))))
+            vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), GameSlots.PRESALE_BOX_CREDIT))),
+            vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), GameSlots.LOOTBOX_EV_CAP_PACKED))),
+            vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), GameSlots.CENTURY_BONUS_USED))),
+            vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), GameSlots.SUB_OF))),
+            vm.load(address(game), keccak256(abi.encode(BUYER, keccak256(abi.encode(uint256(0), GameSlots.LOOTBOX_ORDER))))),
+            vm.load(address(game), keccak256(abi.encode(BUYER, keccak256(abi.encode(uint256(1), GameSlots.LOOTBOX_ORDER))))),
+            vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), keccak256(abi.encode(uint256((game.level() + 1) & 3), GameSlots.FOIL_RECORD)))))
         ));
         emit log_named_bytes32(string.concat(scenario, " state"), digest);
     }
@@ -236,8 +238,8 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         vm.record();
         _buy(400, 0, 0, MintPaymentKind.DirectEth, price);
         (bytes32[] memory reads,) = vm.accesses(address(game));
-        assertFalse(_contains(reads, bytes32(uint256(38))), "purchase does not need earlyTicketLevel");
-        assertFalse(_contains(reads, keccak256(abi.encode(BUYER, uint256(52)))), "ticket-only buy needs no Sub");
+        assertFalse(_contains(reads, bytes32(GameSlots.EARLY_TICKET_LEVEL)), "purchase does not need earlyTicketLevel");
+        assertFalse(_contains(reads, _subSlot()), "ticket-only buy needs no Sub");
         (reads,) = vm.accesses(address(quests));
         assertFalse(_contains(reads, bytes32(uint256(2))), "level quest shares the active daily word");
     }
@@ -247,7 +249,7 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         vm.record();
         _buy(400, 1, 0, MintPaymentKind.DirectEth, price * 2);
         (bytes32[] memory reads,) = vm.accesses(address(game));
-        assertFalse(_contains(reads, keccak256(abi.encode(BUYER, uint256(52)))), "manual score uses returned streak");
+        assertFalse(_contains(reads, _subSlot()), "manual score uses returned streak");
     }
 
     function test_Storage_AfkingBoxReadsLiveSub() public {
@@ -256,7 +258,11 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         vm.record();
         _buy(400, 1, 0, MintPaymentKind.DirectEth, price * 2);
         (bytes32[] memory reads,) = vm.accesses(address(game));
-        assertTrue(_contains(reads, keccak256(abi.encode(BUYER, uint256(52)))), "afking score resolves live streak");
+        assertTrue(_contains(reads, _subSlot()), "afking score resolves live streak");
+    }
+
+    function _subSlot() private view returns (bytes32) {
+        return keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), GameSlots.SUB_OF));
     }
 
     function _contains(bytes32[] memory words, bytes32 word) private pure returns (bool) {
@@ -274,7 +280,7 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         uint256 fresh = payment == MintPaymentKind.Claimable ? 0 : bound(freshSeed, 0, cost);
         uint256 claimable = bound(claimableSeed, 0, cost * 2);
         uint256 afking = bound(afkingSeed, 0, cost * 2);
-        bytes32 balanceSlot = keccak256(abi.encode(BUYER, uint256(7)));
+        bytes32 balanceSlot = keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), GameSlots.BALANCES_PACKED));
         bytes32 beforeBalance = bytes32(claimable | (afking << 128));
         vm.store(address(game), balanceSlot, beforeBalance);
         uint256 drawn = cost - fresh;

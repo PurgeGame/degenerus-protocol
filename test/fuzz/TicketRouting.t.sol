@@ -3,25 +3,26 @@ pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 /// @title TicketRoutingHarness -- Exposes internal queue functions and state for routing/guard tests
-contract TicketRoutingHarness is DegenerusGameStorage {
+contract TicketRoutingHarness is DegenerusGameStorage, WalletSeed {
     // error RngLocked() — inherited from DegenerusGameStorage
 
     function queueTickets(address buyer, uint24 targetLevel, uint32 quantity) external {
-        _queueEntries(buyer, targetLevel, quantity, false);
+        _queueEntries(_seedWallet(buyer), targetLevel, quantity, false);
     }
 
     function queueTicketsWithBypass(address buyer, uint24 targetLevel, uint32 quantity) external {
-        _queueEntries(buyer, targetLevel, quantity, true);
+        _queueEntries(_seedWallet(buyer), targetLevel, quantity, true);
     }
 
     function queueTicketsScaled(address buyer, uint24 targetLevel, uint32 quantityScaled) external {
-        _queueEntriesScaled(buyer, targetLevel, quantityScaled);
+        _queueEntriesScaled(_seedWallet(buyer), targetLevel, quantityScaled);
     }
 
     function queueTicketRange(address buyer, uint24 startLevel, uint24 numLevels, uint32 ticketsPerLevel) external {
-        _queueEntryRange(buyer, startLevel, numLevels, ticketsPerLevel);
+        _queueEntryRange(_seedWallet(buyer), startLevel, numLevels, ticketsPerLevel);
     }
 
     function setLevel(uint24 lvl) external {
@@ -41,7 +42,7 @@ contract TicketRoutingHarness is DegenerusGameStorage {
     }
 
     function getQueueEntry(uint24 wk, uint256 idx) external view returns (address) {
-        return _tqOwnerAt(ticketQueue[_ticketQueueStorageKey(wk)], wk & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT), idx);
+        return _walletKey(_tqPositionAt(ticketQueue[_ticketQueueStorageKey(wk)], idx));
     }
 
     function tqWriteKey(uint24 lvl) external view returns (uint24) {

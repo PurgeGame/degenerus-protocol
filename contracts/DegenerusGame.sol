@@ -447,7 +447,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
             uint24 afkCoveredThroughDay
         )
     {
-        Sub storage s = _subOf[player];
+        Sub storage s = _subOf[_walletIdOf(player)];
         active = s.dailyQuantity != 0;
         dailyQuantity = s.dailyQuantity;
         afkingStartDay = s.afkingStartDay;
@@ -466,8 +466,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         }
     }
 
-    /// @notice Affiliate-only permanent wallet registration; the ticket module enforces access.
-    function registerAffiliateOwner(address, bool) external returns (uint32 id) {
+    /// @notice Wallet-ID hook for trusted protocol contracts: the existing ID, or with `allocate`
+    ///         a new one (paid admission applies). The ticket module enforces the caller set.
+    function registerWallet(address, bool) external returns (uint32 id) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
         id = abi.decode(data, (uint32));
@@ -668,13 +669,19 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ) external payable {
         buyer = _resolvePlayer(buyer);
         if (foil) {
-            _purchaseWithFoil(
-                buyer,
-                entryQuantityScaled,
-                boxOrder,
-                affiliateCode,
-                payKind
-            );
+            (bool ok, bytes memory data) = ContractAddresses
+                .GAME_FOILPACK_MODULE
+                .delegatecall(
+                    abi.encodeWithSelector(
+                        IDegenerusGameFoilPackModule.purchaseWithFoil.selector,
+                        buyer,
+                        entryQuantityScaled,
+                        boxOrder,
+                        affiliateCode,
+                        payKind
+                    )
+                );
+            if (!ok) _revertDelegate(data);
         } else {
             _purchaseFor(
                 buyer,
@@ -706,91 +713,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                 )
             );
         if (!ok) _revertDelegate(data);
-    }
-
-    /// @dev Price a packed box order via the Lootbox module (delegatecall — the tier sizes
-    ///      come off the order's FROZEN level in this Game's storage, so no local math can
-    ///      reproduce it).
-    function _quoteBoxOrderCost(address buyer, uint256 boxOrder) private returns (uint256) {
-        if (boxOrder == 0) return 0;
-        (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
-            abi.encodeWithSelector(
-                IDegenerusGameLootboxModule.quoteBoxOrder.selector,
-                buyer,
-                boxOrder
-            )
-        );
-        if (!ok) _revertDelegate(data);
-        return abi.decode(data, (uint256));
-    }
-
-    /// @dev Foil branch of purchase(): the foil pack is an additive leg on top of the
-    ///      optional ticket/lootbox legs. Fresh ETH is capped at the combined cost (tickets +
-    ///      lootbox + a foil pack at ten level prices shifted by the level's snap
-    ///      exponent), and any overpay is credited to the
-    ///      payer's withdrawable afking so excess never reverts or strands. The ticket/lootbox
-    ///      leg takes fresh ETH first (capped at its own cost) through the mint module's
-    ///      purchaseWith, which uses the explicit ethValue and ignores the carried msg.value;
-    ///      the foil leg gets the remainder, with claimable then prepaid afking covering any
-    ///      foil shortfall, through the foil module. Each leg routes its own money/affiliate and completes the
-    ///      daily MINT_ETH primary (idempotent across legs). Orchestrated here, not in the mint
-    ///      module, so the near-full mint module's purchase body stays within the via-IR stack
-    ///      budget and the EIP-170 size limit.
-    function _purchaseWithFoil(
-        address buyer,
-        uint256 entryQuantityScaled,
-        uint256 boxOrder,
-        bytes32 affiliateCode,
-        MintPaymentKind payKind
-    ) private {
-        // Quote both legs at the routed level (the level the ticket queue and the foil module
-        // both deliver to), so the final-jackpot-day reroute to level+1 cannot strand the
-        // buyer's overpay or under-quote the foil cost. The foil term carries the level's
-        // snap exponent — the SAME quote the foil module charges — so the fresh-ETH cap
-        // covers the full shifted price and a thanos level cannot brick DirectEth foils or
-        // force an unintended claimable draw.
-        uint24 routedLvl = _activeTicketLevel();
-        uint256 priceWei = PriceLookupLib.priceForLevel(routedLvl);
-        // The box term is a QUOTE of the packed order — the parameter is counts and a size,
-        // not wei, and adding it raw would misroute the fresh-ETH split between the legs.
-        uint256 mintCost = (priceWei * entryQuantityScaled) /
-            (4 * QTY_SCALE) +
-            _quoteBoxOrderCost(buyer, boxOrder);
-        uint256 cost = mintCost +
-            ((FOIL_PACK_TICKETS * priceWei) << _snapShiftFor(routedLvl));
-        uint256 fresh = payKind == MintPaymentKind.Claimable
-            ? 0
-            : (msg.value < cost ? msg.value : cost);
-        if (msg.value > fresh) _creditAfkingValue(msg.sender, msg.value - fresh);
-        uint256 mintFresh = fresh < mintCost ? fresh : mintCost;
-        if (mintCost != 0) {
-            (bool ok, bytes memory data) = ContractAddresses
-                .GAME_MINT_MODULE
-                .delegatecall(
-                    abi.encodeWithSelector(
-                        IDegenerusGameMintModule.purchaseWith.selector,
-                        buyer,
-                        entryQuantityScaled,
-                        boxOrder,
-                        affiliateCode,
-                        payKind,
-                        mintFresh
-                    )
-                );
-            if (!ok) _revertDelegate(data);
-        }
-        (bool okFoil, bytes memory dataFoil) = ContractAddresses
-            .GAME_FOILPACK_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameFoilPackModule.buyFoilPack.selector,
-                    buyer,
-                    fresh - mintFresh,
-                    affiliateCode,
-                    payKind
-                )
-            );
-        if (!okFoil) _revertDelegate(dataFoil);
     }
 
     /// @notice Purchase tickets with FLIP.
@@ -1132,10 +1054,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         )
     {
         day = _simulatedDayIndex();
-        uint32 boonPacked = deityBoonPacked[deity];
+        uint32 boonPacked = deityBoonPacked[_walletIdOf(deity)];
         usedMask = uint24(boonPacked) == day ? uint8(boonPacked >> 24) : 0;
         decimatorOpen = _decWindowOpen();
-        deityPassAvailable = deityPassOwners.length < 32; // DEITY_PASS_MAX_TOTAL (see LootboxModule)
+        deityPassAvailable = _deityCount() < 32; // DEITY_PASS_MAX_TOTAL (see LootboxModule)
         // The issuance day's menu is fixed by the preceding day's finalized word.
         // Manual gifts need this predecessor. Automatic protocol draws fall back
         // to the award-day word when no predecessor exists.
@@ -1370,8 +1292,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function _claimWinningsInternal(address player, bool stethFirst, uint256 maxClaim) private {
         if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert AlreadySwept();
         // One packed load: claimable is the low half, afking the high half. The read reuse
-        // below and the debit both ride this single SLOAD (no external call intervenes).
-        uint256 packed = balancesPacked[player];
+        // below and the debit both ride this single SLOAD (no external call intervenes). An
+        // address with no wallet ID reads the always-empty ID-0 word and reverts below.
+        uint32 id = _walletIdOf(player);
+        uint256 packed = balancesPacked[id];
         uint256 amount = uint128(packed);
         // Post-gameOver the claim ALSO pays the caller's prepaid
         // afking ETH (lazy per-player merge — no unbounded loop). Pre-gameOver afkingFunding
@@ -1397,7 +1321,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         // Insolvent guards are provably dead here: claimDebit <= amount-1 < uint128(packed), and
         // afking is packed>>128 (or 0) — neither half can borrow, so the subtraction is
         // byte-identical to the helper's (which stays for its other callers).
-        balancesPacked[player] = packed - claimDebit - (afking << 128);
+        balancesPacked[id] = packed - claimDebit - (afking << 128);
         claimablePool -= uint128(payout); // CEI: update state before external call (checked math)
         emit WinningsClaimed(player, payout, uint128(amount - claimDebit));
         if (stethFirst) {
@@ -1413,8 +1337,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      rides inside claimablePool (no separate aggregate) — credited in tandem.
     /// @param player The beneficiary whose afkingFunding bucket is credited.
     function depositAfkingFunding(address player) external payable {
-        if (player == address(0)) revert ZeroAddress();
-        _creditAfkingValue(player, msg.value);
+        _creditAfkingValue(_requireWalletId(player), msg.value);
     }
 
     /// @notice Withdraw prepaid afking ETH — the funding source reclaims its own balance.
@@ -1428,11 +1351,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert AlreadySwept();
         if (amount == 0) return;
         // One packed load: the guard reads the afking high half and the debit writes it back.
-        uint256 packed = balancesPacked[msg.sender];
+        uint32 id = _walletIdOf(msg.sender);
+        uint256 packed = balancesPacked[id];
         if (amount > (packed >> 128)) revert Insolvent();
         // Guard proved amount <= high half, so `amount << 128` subtracts only from the afking
         // half (no borrow into claimable) — byte-identical to _debitAfking's checked store.
-        balancesPacked[msg.sender] = packed - (amount << 128);
+        balancesPacked[id] = packed - (amount << 128);
         claimablePool -= uint128(amount); // tandem release (checked math)
         emit AfkingWithdrew(msg.sender, amount);
         // ETH first, stETH for any shortfall — the same backing claims draw on, so a game holding
@@ -1444,7 +1368,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @param player The player to query.
     /// @return The player's afkingFunding balance (wei).
     function afkingFundingOf(address player) external view returns (uint256) {
-        return _afkingOf(player);
+        return _afkingOf(_walletIdOf(player));
     }
 
     /// @notice Claim DGNRS affiliate rewards for the current level (single affiliate).
@@ -1552,10 +1476,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      pool credit, and the one-order box resolution all live there). The signature matches
     ///      the module function exactly (identical selector), so the calldata + msg.value forward
     ///      as-is — re-encoding here would cost contract-size headroom for no behavior change.
-    ///      Signature: resolveRedemptionLootbox(address player, uint256 amount, uint256 rngWord,
-    ///      uint16 activityScore, uint32 batchId).
+    ///      Signature: resolveRedemptionLootbox(address player, uint32 playerId, uint256 amount,
+    ///      uint256 rngWord, uint16 activityScore, uint32 batchId).
     function resolveRedemptionLootbox(
         address,
+        uint32,
         uint256,
         uint256,
         uint16,
@@ -1573,9 +1498,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      pulled as stETH via transferFrom (sDGNRS pre-approves GAME for max). The credit rides
     ///      the claimable reserve (claimablePool in tandem). Body lives in the lootbox module (the
     ///      sole redemption-side payable entry); the thin stub forwards the calldata + msg.value.
-    ///      Signature: creditRedemptionDirect(address player, uint256 amount). `amount` is the
+    ///      Signature: creditRedemptionDirect(uint32 playerId, uint256 amount). `amount` is the
     ///      total direct-half value (msg.value ETH + the stETH remainder pulled in the module).
-    function creditRedemptionDirect(address, uint256) external payable {
+    function creditRedemptionDirect(uint32, uint256) external payable {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_LOOTBOX_MODULE
             .delegatecall(msg.data);
@@ -1720,8 +1645,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 ethBal = address(this).balance;
         if (ethBal < amount) revert Insolvent();
         // Vault and DGNRS claimable can be settled in stETH, so exclude from ETH reserve
-        uint256 stethSettleable = _claimableOf(ContractAddresses.VAULT) +
-            _claimableOf(ContractAddresses.SDGNRS);
+        uint256 stethSettleable = _claimableOf(VAULT_WALLET_ID) +
+            _claimableOf(SDGNRS_WALLET_ID);
         uint256 reserve = claimablePool > stethSettleable
             ? claimablePool - stethSettleable
             : 0;
@@ -1784,30 +1709,19 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Mint mid-day RNG credit to a LINK donor.
     /// @dev Access: ADMIN only — called from the LINK donation hook once the donated LINK
-    ///      has reached the VRF coordinator, so credit only ever trails LINK the
-    ///      subscription already holds. Handled inline (not delegated): the body is one
-    ///      SLOAD, one add and one SSTORE, so the module delegatecall's cold account
-    ///      access would cost more than the code it saves.
-    ///      The donated LINK is banked verbatim, with no reward multiplier applied — a
-    ///      request debits a multiple of what it actually bills, so the price lives at
-    ///      redemption rather than in a stored rate. When the donor calls mineFlip with pending
-    ///      work below the mid-day threshold, credit pays that gate and the request issues; an
-    ///      empty queue is never requested, and the subscription LINK floor still binds on
-    ///      every request, credited or not.
-    /// @param to Donor to credit.
-    /// @param linkAmount LINK donated, in juels.
-    /// @custom:reverts OnlyAdmin If caller is not ADMIN.
-    function creditMiddayRng(address to, uint256 linkAmount) external {
-        if (msg.sender != ContractAddresses.ADMIN) revert OnlyAdmin();
-        uint256 balance = middayRngCredit[to] + linkAmount;
-        middayRngCredit[to] = balance;
-        emit MiddayRngCredited(to, linkAmount, balance);
+    ///      has reached the VRF coordinator, so credit only ever trails LINK the subscription
+    ///      already holds. A donation is a payment, so the donor registers a wallet ID; the
+    ///      RNG module holds the body. Signature: creditMiddayRng(address to, uint256
+    ///      linkAmount) — matches the module selector, so the calldata forwards as-is.
+    function creditMiddayRng(address, uint256) external {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_RNG_MODULE.delegatecall(msg.data);
+        if (!ok) _revertDelegate(data);
     }
 
     /// @notice Read a donor's unspent mid-day RNG credit, in juels of donated LINK.
     /// @param account Address to query.
     function middayRngCredits(address account) external view returns (uint256) {
-        return middayRngCredit[account];
+        return middayRngCredit[_walletIdOf(account)];
     }
 
     error NudgeCapReached();
@@ -2020,7 +1934,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ) external view returns (uint32) {
         unchecked {
             return
-                _entriesOwedTotal(lvl, player);
+                _entriesOwedTotal(lvl, _walletIdOf(player));
         }
     }
 
@@ -2071,7 +1985,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @param player Player to query.
     /// @return credit Remaining credit (consumed 1:1 when buying a box).
     function presaleBoxCreditOf(address player) external view returns (uint256 credit) {
-        return presaleBoxCredit[player];
+        return presaleBoxCredit[_walletIdOf(player)];
     }
 
     /// @notice Remaining coin-presale-box ETH capacity before the 50-ETH close.
@@ -2355,7 +2269,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @dev The current cashout/smite curse points for `player` (UI view).
     function curseCountOf(address player) external view returns (uint8) {
-        return uint8((mintPacked_[player] >> BitPackingLib.CURSE_COUNT_SHIFT) & BitPackingLib.MASK_8);
+        return uint8((mintPacked_[player] >> BitPackingLib.CURSE_COUNT_SHIFT) & BitPackingLib.MASK_5);
     }
 
     /*+======================================================================+
@@ -2386,15 +2300,17 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      curve keeps rising past its knee and saturates at ACTIVITY_EFFECTIVE_CAP_POINTS (30,000).
     /// @param player The player address to calculate for.
     /// @return scorePoints Total activity score in whole points.
+    /// @return walletId The player's wallet ID (zero if unregistered), read beside the score so a
+    ///         first-contact caller fills its ID cache without a second call.
     function playerActivityScore(
         address player
-    ) external view returns (uint256 scorePoints) {
+    ) external view returns (uint256 scorePoints, uint32 walletId) {
         // Unified effective quest streak: a live afking sub reads the Sub-side compute-on-read
         // (the run's funded days + in-run secondaries); everyone else reads the decay-aware manual
         // streak, which zeroes a lapsed stale-high streak so it can't inflate
         // lootbox EV or sDGNRS claims.
         uint32 streak = _effectiveQuestStreak(player);
-        return _playerActivityScore(player, streak);
+        return (_playerActivityScore(player, streak), _walletIdOf(player));
     }
 
     /// @notice Activity score for transactions; refreshes the current-level affiliate cache.
@@ -2405,7 +2321,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (uint24(packed >> BitPackingLib.AFFILIATE_BONUS_LEVEL_SHIFT) == level
             || (packed & ((BitPackingLib.MASK_24 << BitPackingLib.LAST_LEVEL_SHIFT)
                 | (BitPackingLib.MASK_24 << BitPackingLib.LEVEL_COUNT_SHIFT)
-                | (BitPackingLib.MASK_32 << BitPackingLib.DAY_SHIFT))) == 0) {
+                | (BitPackingLib.MASK_24 << BitPackingLib.DAY_SHIFT))) == 0) {
             return _playerActivityScore(player, _effectiveQuestStreak(player));
         }
         (bool ok, bytes memory data) = ContractAddresses.GAME_MINER_MODULE.delegatecall(msg.data);
@@ -2424,7 +2340,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @return Claimable amount in wei (excludes sentinel).
     function getWinnings() external view returns (uint256) {
         if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) return 0;
-        uint256 stored = _claimableOf(msg.sender);
+        uint256 stored = _claimableOf(_walletIdOf(msg.sender));
         if (stored <= 1) return 0;
         unchecked {
             return stored - 1;
@@ -2438,7 +2354,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         address player
     ) external view returns (uint256) {
         if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) return 0;
-        return _claimableOf(player);
+        return _claimableOf(_walletIdOf(player));
     }
 
     /// @notice Batched afking read — mintPrice + rngLock + per-player claimable in ONE call.
@@ -2458,8 +2374,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         claimables = new uint256[](n);
         afkingFundings = new uint256[](n);
         for (uint256 i; i < n; ) {
-            claimables[i] = swept ? 0 : _claimableOf(players[i]);
-            afkingFundings[i] = _afkingOf(players[i]); // raw — mirrors afkingFundingOf
+            uint32 id = _walletIdOf(players[i]);
+            claimables[i] = swept ? 0 : _claimableOf(id);
+            afkingFundings[i] = _afkingOf(id); // raw — mirrors afkingFundingOf
             unchecked {
                 ++i;
             }
@@ -2472,12 +2389,17 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     function whalePassClaimAmount(
         address player
     ) external view returns (uint256) {
-        return whalePassClaims[player];
+        return _halfPassCount(_walletIdOf(player));
     }
 
     /// @notice Whether a player holds a deity pass.
     function hasDeityPass(address player) external view returns (bool) {
         return mintPacked_[player] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0;
+    }
+
+    /// @notice A wallet's permanent ID (its wallet-table position), or zero if unregistered.
+    function walletIdOf(address player) external view returns (uint32) {
+        return _walletIdOf(player);
     }
 
     /// @notice Returns the packed mint data for a player.
@@ -2520,15 +2442,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
         uint256 take = len > 4 ? 4 : len;
         entries = new address[](take);
-        // Every draw uses the same bucket and owner registry. Hash their data roots
+        // Every draw uses the same bucket and wallet table. Hash their data roots
         // once, including for a padding redraw that selects a different packed word.
         uint256 wordsBase;
         uint256 ownersBase;
-        address[] storage owners = ticketOwners;
         assembly ("memory-safe") {
             mstore(0, headerSlot)
             wordsBase := keccak256(0, 32)
-            mstore(0, owners.slot)
+            mstore(0, wallets.slot)
             ownersBase := keccak256(0, 32)
         }
         PackedTicketSampleLib.Cursor memory cursor;
@@ -2594,7 +2515,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                 // append order) carries no edge — a word-first pick would over-weight a
                 // partial tail word.
                 uint256 a = (entropy >> 64) % len;
-                address first = _tqOwnerAt(queue, target, a);
+                address first = _walletKey(_tqPositionAt(queue, a));
                 // packs < 4 and the result array has eight slots.
                 assembly ("memory-safe") { mstore(add(add(tickets, 32), shl(5, packs)), first) }
                 uint256 window = len < 8 ? len : 8;
@@ -2602,7 +2523,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                     uint256 b;
                     // Registry-backed lengths fit uint32 and window is at most eight.
                     assembly ("memory-safe") { b := mod(add(add(a, 1), mod(shr(128, entropy), sub(window, 1))), len) }
-                    address second = _tqOwnerAt(queue, target, b);
+                    address second = _walletKey(_tqPositionAt(queue, b));
                     assembly ("memory-safe") { mstore(add(add(tickets, 160), shl(5, packs)), second) }
                 }
                 unchecked { ++packs; }
@@ -2641,8 +2562,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint256 end = offset + limit;
         if (end > total) end = total;
 
+        uint32 id = _walletIdOf(player);
         for (uint256 i = offset; i < end; ) {
-            if (_bucketOwnerAtUnchecked(lvl, trait, i) == player) count++;
+            if (_bucketIdAtUnchecked(lvl, trait, i) == id) count++;
             unchecked {
                 ++i;
             }
@@ -2662,7 +2584,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint24 lvl = level;
         unchecked {
             tickets =
-                _entriesOwedTotal(lvl, player);
+                _entriesOwedTotal(lvl, _walletIdOf(player));
         }
     }
 
@@ -2722,6 +2644,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      donation). Blocked once the game is over, since post-sweep afking is unwithdrawable.
     receive() external payable {
         if (gameOver) revert GameOver();
-        _creditAfkingValue(msg.sender, msg.value);
+        _creditAfkingValue(_requireWalletId(msg.sender), msg.value);
     }
 }

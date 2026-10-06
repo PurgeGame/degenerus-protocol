@@ -7,14 +7,15 @@ import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {IGameAfkingModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-contract ColdSubscriberSeeder is DegenerusGame {
+contract ColdSubscriberSeeder is DegenerusGame, WalletSeed {
     /// @dev The all-skip gas fixture also places the two permanent protocol
     /// subscribers on their already-bought guard for the measured next day.
     function prepareProtocolSkips() external {
         uint24 nextDay = _simulatedDayIndex() + 1;
-        _subOf[ContractAddresses.VAULT].lastAutoBoughtDay = nextDay;
-        _subOf[ContractAddresses.SDGNRS].lastAutoBoughtDay = nextDay;
+        _subOf[_seedWallet(ContractAddresses.VAULT)].lastAutoBoughtDay = nextDay;
+        _subOf[_seedWallet(ContractAddresses.SDGNRS)].lastAutoBoughtDay = nextDay;
     }
     /// @dev Run the engine's live human-box worker without consuming independent stamped AFKING boxes.
     function finishIndexedRead() external {
@@ -52,9 +53,9 @@ contract ColdSubscriberSeeder is DegenerusGame {
 
     function seedSplitBalances(address[] calldata players) external {
         for (uint256 i; i < players.length; ++i) {
-            _creditClaimable(players[i], 0.001 ether + 1);
+            _creditClaimable(_seedWallet(players[i]), 0.001 ether + 1);
         }
-        _creditClaimable(ContractAddresses.SDGNRS, 1 ether);
+        _creditClaimable(_seedWallet(ContractAddresses.SDGNRS), 1 ether);
         claimablePool += uint128(players.length * (0.001 ether + 1) + 1 ether);
     }
 }

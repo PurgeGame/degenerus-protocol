@@ -5,6 +5,7 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DeityBoonViewer} from "../../contracts/DeityBoonViewer.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title BoonStaticDiscard -- static boon table, discard-at-delivery, deity exclusions
 /// @notice Boon outcomes are pure functions of (word, player, amount). LOOTBOX draws walk
@@ -19,12 +20,12 @@ contract BoonStaticDiscard is DeployProtocol {
 
     // Storage slots (from `forge inspect DegenerusGame storage-layout`, see
     // LootboxBoonCoexistence which pins the same values).
-    uint256 constant SLOT_BOON_PACKED = 50; // mapping(address => BoonPacked)
-    uint256 constant SLOT_LOOTBOX_ETH = 15; // mapping(uint48 => mapping(address => uint256))
-    uint256 constant SLOT_LOOTBOX_WORD = 34; // mapping(uint48 => uint256)
-    uint256 constant SLOT_LOOTBOX_RNG_IDX = 33; // lootboxRngPacked (low 48 bits = lootboxRngIndex)
-    uint256 constant SLOT_BOX_PLAYERS = 57; // mapping(uint48 => address[]) boxPlayers (sweep's discovery queue)
-    uint256 constant SLOT_BOX_CURSORS = 56; // packed (boxCursor @ byte 7, humanReadComplete @ byte 13)
+    uint256 constant SLOT_BOON_PACKED = GameSlots.BOON_PACKED; // mapping(address => BoonPacked)
+    uint256 constant SLOT_LOOTBOX_ETH = GameSlots.LOOTBOX_ORDER; // mapping(uint48 => mapping(address => uint256))
+    uint256 constant SLOT_LOOTBOX_WORD = GameSlots.RNG_DAY_TAGS; // mapping(uint48 => uint256)
+    uint256 constant SLOT_LOOTBOX_RNG_IDX = GameSlots.LOOTBOX_RNG_PACKED; // lootboxRngPacked (low 48 bits = lootboxRngIndex)
+    uint256 constant SLOT_BOX_PLAYERS = GameSlots.BOX_PLAYERS; // mapping(uint48 => address[]) boxPlayers (sweep's discovery queue)
+    uint256 constant SLOT_BOX_CURSORS = GameSlots.BOX_CURSOR; // packed (boxCursor @ byte 7, humanReadComplete @ byte 13)
 
     uint256 constant LB_SCORE_SHIFT = 24;
     uint256 constant LB_CUSTOM_COUNT_SHIFT = 105;

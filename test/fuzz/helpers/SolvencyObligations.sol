@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {TicketQueueStorage} from "./TicketQueueStorage.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
+import {GameSlots} from "../../helpers/GameSlots.sol";
 
 /// @title SolvencyObligations -- canonical ETH-obligation set for the game contract
 /// @notice Computes the contract's TRUE ETH obligation set so solvency invariants can assert
@@ -41,7 +42,7 @@ library SolvencyObligations {
     ///      frozen audit subject c4d48008 via `forge inspect DegenerusGame storageLayout`
     ///      (prizePoolPendingPacked: slot 11, offset 0, full uint256). Packed
     ///      `[future:128 | next:128]`, matching _setPendingPools.
-    uint256 internal constant PRIZE_POOL_PENDING_PACKED_SLOT = 11;
+    uint256 internal constant PRIZE_POOL_PENDING_PACKED_SLOT = GameSlots.PRIZE_POOL_PENDING_PACKED;
 
     // Cheatcode address (forge-std Vm). Used to read the no-external-view pending buffer.
     address internal constant VM_ADDRESS =

@@ -4,13 +4,14 @@ pragma solidity 0.8.34;
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-contract PassAwardBatchHarness is DegenerusGameStorage {
+contract PassAwardBatchHarness is DegenerusGameStorage, WalletSeed {
     function award(address buyer, uint24 start, uint24 span, uint256 amount) external {
-        _queueHalfPassAward(buyer, start, span, amount);
+        _queueHalfPassAward(_seedWallet(buyer), start, span, amount);
     }
     function range(address buyer, uint24 start, uint24 count, uint24 stride, uint32 amount) external {
-        _queueEntryRangeStridedCore(buyer, start, count, stride, amount, _mintCeiling(), rngLockedFlag,
+        _queueEntryRangeStridedCore(_seedWallet(buyer), start, count, stride, amount, _mintCeiling(), rngLockedFlag,
             ticketWriteSlot ? TICKET_SLOT_BIT : uint24(0));
     }
     function configure(uint24 lvl, uint24 early, bool locked, bool writeSlot) external {
@@ -20,19 +21,19 @@ contract PassAwardBatchHarness is DegenerusGameStorage {
         ticketWriteSlot = writeSlot;
     }
     function capacity() external {
-        assembly ("memory-safe") { sstore(ticketOwners.slot, 3000000000) }
+        assembly ("memory-safe") { sstore(wallets.slot, add(3000000000, 1)) }
     }
     function seed(address buyer, uint24 lvl, uint32 amount, bool snapped) external {
-        _queueEntries(buyer, lvl, amount, true);
+        _queueEntries(_seedWallet(buyer), lvl, amount, true);
         if (snapped) {
             uint24 key = lvl > _mintCeiling() ? _tqFarFutureKey(lvl) : _tqWriteKey(lvl);
-            uint80 packed = _entriesOwed(key, buyer);
+            uint80 packed = _owedOf(key, buyer);
             _setEntryOwed(key, uint32(packed >> OWNER_IDX_SHIFT), packed | SNAP_DONE_BIT);
         }
     }
     function recycled(address buyer, uint24 lvl, uint32 amount) external {
         // Retire a physical queue while retaining its old lane, as production recycling does.
-        _queueEntries(buyer, lvl, amount, true);
+        _queueEntries(_seedWallet(buyer), lvl, amount, true);
         _releaseTicketQueue(_tqFarFutureKey(lvl));
     }
     function oracleRange(address buyer, uint24 start, uint24 count, uint24 stride, uint32 amount, bool bypass) external {
@@ -54,18 +55,18 @@ contract PassAwardBatchHarness is DegenerusGameStorage {
     }
     function _oracleRange(address buyer, uint24 start, uint24 count, uint24 stride, uint32 amount,
         bool bypass, uint24 ceiling, bool locked, uint24 writeSlot) private {
-        emit EntriesQueuedRange(buyer, start, count, stride, amount);
+        emit EntriesQueuedRange(_seedWallet(buyer), start, count, stride, amount);
         uint24 lvl = start;
         for (uint24 i; i < count;) {
             bool far = lvl > ceiling;
             uint24 key = far ? _tqFarFutureKey(lvl) : (lvl | writeSlot);
-            uint80 packed = _entriesOwed(key, buyer);
+            uint80 packed = _owedOf(key, buyer);
             uint32 owed = uint32(packed >> 8);
             uint8 rem = uint8(packed);
             bool room = true;
             if (packed == 0) {
                 if (far && locked && !bypass) revert RngLocked();
-                packed = _registerEntryOwner(buyer, lvl);
+                packed = (uint80(_seedWallet(buyer)) << OWNER_IDX_SHIFT);
                 room = packed != 0;
                 if (!room && !bypass) revert E();
                 if (room) _tqAppend(key, uint32(packed >> OWNER_IDX_SHIFT));

@@ -7,6 +7,7 @@ import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
+import {GameSlots} from "../../helpers/GameSlots.sol";
 
 /// @dev _currentRngWord() decodes rngWordCurrent in slot3; no extra readiness slot.
 /// @title RngWindowFreezeHandler — the FUZZ-02 RNG-FREEZE durable-invariant action handler.
@@ -66,9 +67,9 @@ contract RngWindowFreezeHandler is Test {
     // Authoritative c4d48008 storage layout (380-01-LAYOUT-KEY; confirmed against
     // RngFreezeAndRemovalProofs + V56FreezeSolvency — NOT the stale VRFPath literals).
     // -------------------------------------------------------------------------
-    uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint24 => uint256) day word
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33; // lootboxRngPacked (post Stage B pack: was 35); low 48 bits = index cursor
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3; // reusable uint256 lootbox payload; ready bit 249 in packed slot 33
+    uint256 private constant RNG_WORD_BY_DAY_SLOT = GameSlots.RNG_WORD_BY_DAY; // mapping(uint24 => uint256) day word
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED; // lootboxRngPacked (post Stage B pack: was 35); low 48 bits = index cursor
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = GameSlots.RNG_WORD_CURRENT; // reusable uint256 lootbox payload; ready bit 249 in packed slot 33
     uint256 private constant LR_INDEX_MASK = 0xFFFFFFFFFFFF; // low 48 bits of slot 33
     uint256 private constant DAILY_IDX_BYTE_OFF = 3; // dailyIdx uint24 @ slot 0 byte 3
     uint256 private constant DAILY_IDX_MASK = 0xFFFFFF; // uint24
@@ -553,13 +554,13 @@ contract RngWindowFreezeHandler is Test {
 
     function _snapshotFoilDraws() private {
         for (uint256 i; i < 2; ++i) {
-            _snapFoilDraws[i] = uint256(vm.load(address(game), keccak256(abi.encode(i, uint256(60)))));
+            _snapFoilDraws[i] = uint256(vm.load(address(game), keccak256(abi.encode(i, GameSlots.DAILY_FOIL_DRAW))));
         }
     }
 
     function _checkFoilDraws() private {
         for (uint256 i; i < 2; ++i) {
-            if (uint256(vm.load(address(game), keccak256(abi.encode(i, uint256(60))))) != _snapFoilDraws[i]) {
+            if (uint256(vm.load(address(game), keccak256(abi.encode(i, GameSlots.DAILY_FOIL_DRAW)))) != _snapFoilDraws[i]) {
                 ghost_frozenSlotMutations++;
                 ghost_lastMutatedSlotTag = 13;
             }
@@ -589,7 +590,7 @@ contract RngWindowFreezeHandler is Test {
         _snapRequestDay = _rngRequestDay();
         _snapIndex = _activeLootboxIndex() ^ 1;
         _snapDayWord = _rngWordByDay(_snapDay);
-        _snapDayTags = uint256(vm.load(address(game), bytes32(uint256(34)))); // rngDayTags
+        _snapDayTags = uint256(vm.load(address(game), bytes32(GameSlots.RNG_DAY_TAGS))); // rngDayTags
         _snapDayPayload0 = uint256(vm.load(address(game), keccak256(abi.encode(uint256(0), RNG_WORD_BY_DAY_SLOT))));
         _snapDayPayload1 = uint256(vm.load(address(game), keccak256(abi.encode(uint256(1), RNG_WORD_BY_DAY_SLOT))));
         _snapLootboxWord = _lootboxRngWord(_snapIndex);
@@ -699,7 +700,7 @@ contract RngWindowFreezeHandler is Test {
     // =========================================================================
 
     function _dailyRingChanged() private view returns (bool) {
-        return uint256(vm.load(address(game), bytes32(uint256(34)))) != _snapDayTags
+        return uint256(vm.load(address(game), bytes32(GameSlots.RNG_DAY_TAGS))) != _snapDayTags
             || uint256(vm.load(address(game), keccak256(abi.encode(uint256(0), RNG_WORD_BY_DAY_SLOT)))) != _snapDayPayload0
             || uint256(vm.load(address(game), keccak256(abi.encode(uint256(1), RNG_WORD_BY_DAY_SLOT)))) != _snapDayPayload1;
     }

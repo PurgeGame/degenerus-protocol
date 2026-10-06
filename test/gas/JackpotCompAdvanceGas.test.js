@@ -25,7 +25,7 @@ const { ethers } = hre;
 
 const WORD = BigInt(ethers.keccak256(ethers.toUtf8Bytes("comp-advance-gas-word")));
 const TRAIT_BOARD_TAG = ethers.keccak256(ethers.toUtf8Bytes("degenerus.jackpot.trait-board"));
-const FLIP_WIN_TOPIC = ethers.id("JackpotFlipWin(address,uint24,uint8,uint256,uint256)");
+const FLIP_WIN_TOPIC = ethers.id("JackpotFlipWin(uint32,uint24,uint8,uint256,uint256)");
 const BATTLE_ENTRY_TOPIC = ethers.id("JackpotBattleEntry(uint64,uint256,address,uint256,uint32)");
 const SETTLED_TOPIC = ethers.id("CrapsBetSettled(uint256,address,uint256,uint256)");
 const POT_TOPIC = ethers.id("CrapsBattlePaid(uint256,bytes32,address,uint256)");
@@ -62,30 +62,26 @@ async function getSlot(addr, slot) {
   return BigInt(await ethers.provider.getStorage(addr, pad32(slot)));
 }
 
-// Append owners and return FF queue positions: registry index PLUS ONE.
-// Trait occurrence lanes instead store raw registry indices (subtract one at that call site).
-// The dummy prefix is excluded from every seeded lane.
+// Register wallets in the `wallets` table and return their wallet IDs (the lanes of queues and
+// trait buckets). ID = table position; the id lives in mintPacked_ bits 224..255.
 async function registerOwners(addr, ownerRoot, lvl, holders) {
-  const lenSlot = ownerRoot;
-  const data = arrayData(lenSlot);
-  let count = await getSlot(addr, lenSlot);
-  if (count === 0n) {
-    await setSlot(addr, data, 1n);
-    count = 1n;
-  }
-  const positions = [];
+  const data = arrayData(ownerRoot);
+  const mintRoot = storageRootOf("mintPacked_");
+  let count = await getSlot(addr, ownerRoot);
+  const ids = [];
   for (const h of holders) {
-    const locator = mapSlot(BigInt(h), storageRootOf("ticketOwnerId"));
-    let id = await getSlot(addr, locator);
+    const mintSlot = mapSlot(BigInt(h), mintRoot);
+    const word = await getSlot(addr, mintSlot);
+    let id = (word >> 224n) & 0xffffffffn;
     if (id === 0n) {
-      await setSlot(addr, data + count, BigInt(h));
-      id = ++count;
-      await setSlot(addr, locator, id);
+      id = count++;
+      await setSlot(addr, data + id, BigInt(h));
+      await setSlot(addr, mintSlot, word | (id << 224n));
     }
-    positions.push(id);
+    ids.push(id);
   }
-  await setSlot(addr, lenSlot, count);
-  return positions;
+  await setSlot(addr, ownerRoot, count);
+  return ids;
 }
 
 // Replace a packed uint32-lane array (length slot `lenSlot`) with `lanes`.
@@ -120,7 +116,7 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
   const battle = await ethers.getContractAt("JackpotBattle", crapsAddr);
   const poolRoot = storageRootOf("levelPrizePool");
   const bucketRoot = storageRootOf("lvlTraitEntry");
-  const ownerRoot = storageRootOf("ticketOwners");
+  const ownerRoot = storageRootOf("wallets");
   const queueRoot = storageRootOf("ticketQueue");
   const deityRoot = storageRootOf("deityBySymbol");
   const crapsLayout = JSON.parse(readFileSync(new URL("../../scripts/layout/golden/CrapsBattle.json", import.meta.url), "utf8"));
@@ -138,7 +134,7 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
     const owners = Array.from({ length: TRAIT_HOLDERS }, (_, i) => holder(0xace000000n + BigInt(t) * 0x10000n + BigInt(i + 1)));
     owners.forEach((owner) => traitOwners.add(owner.toLowerCase()));
     const positions = await registerOwners(gameAddr, ownerRoot, 1n, owners);
-    await writeLanes(gameAddr, mapSlot(1n, bucketRoot) + BigInt(t), positions.map((pos) => pos - 1n), 1n);
+    await writeLanes(gameAddr, mapSlot(1n, bucketRoot) + BigInt(t), positions, 1n);
     traitLive |= 1n << BigInt(t);
   }
   await setSlot(gameAddr, traitLiveSlot, traitLive);

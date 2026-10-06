@@ -93,6 +93,7 @@ abstract contract PurchaseBattleStagesBase is PurchaseDailyFixture, FreshWordLeg
 contract PurchaseBattleStagesTest is PurchaseBattleStagesBase {
     function setUp() public {
         _start(_shape(128, 0, FF_HOLDERS, NEXT_POOL_QUIET, PREV_POOL_OPEN25));
+        _giveWalletId(address(0xBEEF));
     }
 
     function test_SeparateStagesHoldLockAndDoNotReplayBattle() public {
@@ -141,7 +142,7 @@ contract PurchaseBattleStagesTest is PurchaseBattleStagesBase {
         assertEq(tickets.stage, STAGE_PURCHASE_DAILY_TICKETS);
         assertFalse(game.rngLocked());
         vm.prank(address(0xBEEF)); crapsBattle.setPreferredBoard(3);
-        assertEq(crapsBattle.preferredBoardOf(address(0xBEEF)), 3);
+        assertEq(crapsBattle.preferredBoardOf(game.walletIdOf(address(0xBEEF))), 3);
     }
 
     function test_FailedBattleStepRetainsLockAndRetries() public {

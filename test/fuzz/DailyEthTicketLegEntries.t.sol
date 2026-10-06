@@ -87,7 +87,7 @@ contract DailyEthTicketLegEntries is Test {
         uint256 each = (tickets / maxWinners) * 4;
         assertLe(each, 100, "fixture: at most 25 tickets each, so no pass conversion");
 
-        bytes32 sig = keccak256("JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)");
+        bytes32 sig = keccak256("JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)");
         uint256 winners;
         uint256 delivered;
         for (uint256 i; i < logs.length; i++) {

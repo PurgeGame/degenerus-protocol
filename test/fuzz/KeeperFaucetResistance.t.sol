@@ -16,6 +16,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 // CURRENT ENGINE (60d31f775 / 72fc06f6c): the router below is retired. `mineFlip()` is the
 //      single engine (DegenerusGameMinerModule); it pays once per call, CEI-last, in FLIP coinflip
@@ -68,10 +69,10 @@ contract KeeperFaucetResistance is DeployProtocol {
     // -------------------------------------------------------------------------
 
     /// @dev lootboxRngPacked at slot 34; lootboxRngIndex is the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
 
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = GameSlots.RNG_WORD_CURRENT;
 
 
     // -------------------------------------------------------------------------
@@ -109,10 +110,10 @@ contract KeeperFaucetResistance is DeployProtocol {
     // -------------------------------------------------------------------------
 
     /// @dev _subOf mapping root (one packed Sub slot per subscriber).
-    uint256 private constant SUBOF_SLOT = 52;
+    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;
     uint256 private constant OFF_LASTBOUGHT = 7; // uint24 lastAutoBoughtDay (bytes 7..9; Sub: u8 qty, u8 flags, u16 score, u24 amount)
     uint256 private constant OFF_LASTOPENED = 10; // uint24 lastOpenedDay     (bytes 10..12)
-    uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit)
+    uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED; // mintPacked_ mapping root (deity bit)
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS_SHIFT in mintPacked_
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 50;
@@ -317,7 +318,7 @@ contract KeeperFaucetResistance is DeployProtocol {
             // The warm-ring shape really entered the boon draw: the ring slot now holds today.
             uint24 d = game.currentDayView();
             uint256 w = uint256(vm.load(address(game), keccak256(abi.encode(uint256(d & 1),
-                keccak256(abi.encode(address(vault), uint256(48)))))));
+                keccak256(abi.encode(address(vault), GameSlots.PROTOCOL_BOON_POOLS))))));
             assertEq(uint24(w >> 216), d, "ring slot not retagged to today");
             assertEq(uint32(w >> 176), n, "every bet entered the boon draw");
         }
@@ -599,14 +600,14 @@ contract KeeperFaucetResistance is DeployProtocol {
 
     /// @dev Read `who`'s lastAutoBoughtDay (_subOf slot 52, uint24 bytes 11..13) — the buy non-vacuity oracle.
     function _lastAutoBoughtDayOf(address who) internal view returns (uint32) {
-        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         return uint32(uint24(packed >> (OFF_LASTBOUGHT * 8)));
     }
 
     /// @dev Read `who`'s lastOpenedDay (uint24 bytes 14..16) — the afking-box open marker.
     function _lastOpenedDayOf(address who) internal view returns (uint32) {
-        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         return uint32(uint24(packed >> (OFF_LASTOPENED * 8)));
     }

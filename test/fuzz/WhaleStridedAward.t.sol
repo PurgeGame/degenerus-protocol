@@ -24,15 +24,16 @@ pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-contract HalfPassAwardHarness is DegenerusGameStorage {
+contract HalfPassAwardHarness is DegenerusGameStorage, WalletSeed {
     function award(
         address buyer,
         uint24 startLevel,
         uint24 span,
         uint256 halfPasses
     ) external {
-        _queueHalfPassAward(buyer, startLevel, span, halfPasses);
+        _queueHalfPassAward(_seedWallet(buyer), startLevel, span, halfPasses);
     }
 
     function setRngLocked(bool v) external {
@@ -43,7 +44,7 @@ contract HalfPassAwardHarness is DegenerusGameStorage {
     ///      to the mint ceiling, far-future key beyond) and return owed entries.
     function owedAt(uint24 lvl, address buyer) external view returns (uint32) {
         uint24 key = lvl > _mintCeiling() ? _tqFarFutureKey(lvl) : _tqWriteKey(lvl);
-        return uint32(_entriesOwed(key, buyer) >> 8);
+        return uint32(_owedOf(key, buyer) >> 8);
     }
 
     function queueLenAt(uint24 lvl) external view returns (uint256) {

@@ -8,6 +8,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IGameAfkingModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title Subscription churn accounting and streak regressions
 /// @notice Claim/cancel/upsert receipts are measured from wallet, claimable and next-day stake
@@ -22,8 +23,7 @@ contract V56SecUnmanipulable is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots + the v56 Sub-slot offset block (V56AfkingGasMarginal:68-89)
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 52;            // _subOf mapping root (address => Sub, one packed slot) (was 58)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 55; // mapping(address => uint256) _subscriberIndex (1-indexed) (was 61)
+    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;            // _subOf mapping root (address => Sub, one packed slot) (was 58)
 
     //   dailyQuantity u8 @0 · flags u8 @1 · score u16 @2 · amount u24 @4
     //   lastAutoBoughtDay u24 @7 · lastOpenedDay u24 @10 · afkCoveredThroughDay u24 @13 · afkingStartDay u24 @16
@@ -568,7 +568,7 @@ contract V56SecUnmanipulable is DeployProtocol {
     ///      behind lastAutoBoughtDay (Sub bytes 10..12). No cohort owns this marker, so no read consumer
     ///      opens it; only the STAGE's no-orphan guard sees it.
     function _markBoxPending(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         uint256 bought = (packed >> (OFF_LASTBOUGHT * 8)) & 0xFFFFFF;
         require(bought > 0, "a stamped box exists");
@@ -742,7 +742,7 @@ contract V56SecUnmanipulable is DeployProtocol {
     // ---- Sub-slot reads (_subOf slot 52 + the v56 offsets) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
+        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
         return p & ((uint256(1) << widthBits) - 1);
     }
 
@@ -779,6 +779,6 @@ contract V56SecUnmanipulable is DeployProtocol {
     }
 
     function _subscriberIndexOf(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBSCRIBER_INDEX_SLOT)))));
+        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 224; // Sub.setPosition (1-based)
     }
 }

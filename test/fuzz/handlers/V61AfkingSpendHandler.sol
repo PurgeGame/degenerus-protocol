@@ -8,6 +8,7 @@ import {DegenerusDeityPass} from "../../../contracts/DegenerusDeityPass.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
+import {GameSlots} from "../../helpers/GameSlots.sol";
 
 /// @title V61AfkingSpendHandler — invariant handler driving the v61 afking spend paths for SEC-02 (SOLVENCY-01)
 /// @notice Exercises the NEW v61 spend surfaces in a randomized sequence: (1) an afking-funded buy (the
@@ -36,7 +37,7 @@ contract V61AfkingSpendHandler is Test {
     // -------------------------------------------------------------------------
     // Canonical v61 storage layout (378-01 recalibration key + BitPackingLib)
     // -------------------------------------------------------------------------
-    uint256 private constant MINTPACKED_SLOT = 9;
+    uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED;
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS score bit (subscribe gate)
     uint256 private constant CURSE_COUNT_SHIFT = 215;
     uint256 private constant PRICE_COIN_UNIT = 1000;
@@ -66,7 +67,7 @@ contract V61AfkingSpendHandler is Test {
     uint256 public deityId;
     address internal currentActor;
 
-    bytes32 private constant AFKING_SPENT_SIG = keccak256("AfkingSpent(address,uint256)");
+    bytes32 private constant AFKING_SPENT_SIG = keccak256("AfkingSpent(uint32,uint256)");
 
     modifier useActor(uint256 seed) {
         currentActor = actors[bound(seed, 0, actors.length - 1)];

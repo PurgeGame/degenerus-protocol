@@ -30,11 +30,11 @@ contract JackpotSingleCallHarness is DegenerusGameJackpotModule, BucketSeed {
     // -- read-only accounting views (the credit sinks _processDailyEth writes) --
 
     function claimableOf(address who) external view returns (uint256) {
-        return _claimableOf(who);
+        return _claimableOf(_walletIdOf(who));
     }
 
     function whalePassOf(address who) external view returns (uint256) {
-        return whalePassClaims[who];
+        return _halfPassesOf(who);
     }
 
     function claimablePoolView() external view returns (uint256) {
@@ -112,7 +112,7 @@ contract JackpotSingleCallCorrectness is Test {
 
     /// @dev JackpotEthWin topic0 (for vm.recordLogs filtering).
     bytes32 internal constant JACKPOT_ETH_WIN_TOPIC =
-        keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)");
+        keccak256("JackpotEthWin(uint32,uint24,uint16,uint256,uint256)");
 
     /// @dev A target level whose +1 price tier is a clean 0.04 ETH (unit = 0.01 ETH).
     uint24 internal constant TARGET_LVL = 110;

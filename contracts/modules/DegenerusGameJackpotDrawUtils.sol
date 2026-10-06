@@ -15,12 +15,12 @@ abstract contract DegenerusGameJackpotDrawUtils is DegenerusGameStorage {
         uint8 trait,
         uint256 len,
         uint256 effectiveLen,
-        address deity,
+        uint32 deity,
         uint256 randomWord,
         uint256 salt,
         uint256 pull,
         PackedTicketSampleLib.Cursor memory cursor
-    ) internal view returns (address winner, uint256 index) {
+    ) internal view returns (uint32 winner, uint256 index) {
         if (cursor.used == 0) {
             uint256 base = PackedTicketSampleLib.begin(
                 cursor, effectiveLen, EntropyLib.hash4(randomWord, trait, salt, pull)
@@ -31,7 +31,7 @@ abstract contract DegenerusGameJackpotDrawUtils is DegenerusGameStorage {
         (index, redrawn) = PackedTicketSampleLib.next(cursor, effectiveLen);
         if (index >= len) return (deity, type(uint256).max);
         uint256 word = redrawn ? _bucketWordAtUnchecked(lvl, trait, index) : cursor.word;
-        winner = _bucketOwnerFromWordUnchecked(lvl, word, index);
+        winner = _bucketIdFromWord(word, index);
     }
 
 }

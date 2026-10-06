@@ -8,6 +8,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title FFKeyHarness2 -- Exposes _tqFarFutureKey for far-future slot math.
 contract FFKeyHarness2 is DegenerusGameStorage {
@@ -28,10 +29,10 @@ contract FFKeyHarness2 is DegenerusGameStorage {
 ///      who holds the DGVE supply). ZERO contracts/*.sol behaviour is mocked.
 contract FarFutureVaultFallbackTest is DeployProtocol {
     // --- DegenerusGame storage slots (mirrors the SWAP-08/09 suite) ---
-    uint256 private constant CLAIMABLE_WINNINGS_SLOT = 7;
-    uint256 private constant RNG_WORD_BY_DAY_SLOT = 10;
-    uint256 private constant TICKET_QUEUE_SLOT = 12;
-    uint256 private constant CLAIMABLE_POOL_SLOT = 1;
+    uint256 private constant CLAIMABLE_WINNINGS_SLOT = GameSlots.BALANCES_PACKED;
+    uint256 private constant RNG_WORD_BY_DAY_SLOT = GameSlots.RNG_WORD_BY_DAY;
+    uint256 private constant TICKET_QUEUE_SLOT = GameSlots.TICKET_QUEUE;
+    uint256 private constant CLAIMABLE_POOL_SLOT = GameSlots.CLAIMABLE_POOL;
 
     // --- Coinflip storage: playerState mapping base slot (declaration order: coinflipStakePacked=0,
     //     coinflipDayResultPacked=1, playerState=2). The PlayerCoinflipState struct packs autoRebuyStop
@@ -70,8 +71,8 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
     // Slot helpers
     // =====================================================================================
 
-    function _claimableSlot(address who) internal pure returns (bytes32) {
-        return keccak256(abi.encode(who, CLAIMABLE_WINNINGS_SLOT));
+    function _claimableSlot(address who) internal view returns (bytes32) {
+        return keccak256(abi.encode(uint256(game.walletIdOf(who)), CLAIMABLE_WINNINGS_SLOT));
     }
 
     function _rngWordSlot(uint32 day) internal pure returns (bytes32) {

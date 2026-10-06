@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title FlipRedeemWindow -- regression suite for the FLIP purchase-window gate in
 ///        DegenerusGameMintModule._redeemFlipFor.
@@ -22,7 +23,7 @@ contract FlipRedeemWindowTest is DeployProtocol {
     uint256 private constant JACKPOT_PHASE_SHIFT = 120; // byte 15: jackpotPhaseFlag
     uint256 private constant RNG_LOCKED_SHIFT = 152; // byte 19: rngLockedFlag
     uint256 private constant WINDOW_OPEN_SHIFT = 249; // bit 9 of the uint16 at bytes 30..31: _ticketRedemptionOpen()
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2; // [future:128][next:128]
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED; // [future:128][next:128]
 
     // levelPrizePool[0] = BOOTSTRAP_PRIZE_POOL (DegenerusGame constructor).
     uint128 private constant BOOTSTRAP_PRIZE_POOL = 50 ether;

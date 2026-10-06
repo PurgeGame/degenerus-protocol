@@ -33,19 +33,19 @@ contract EarlyBirdWhaleHarness is DegenerusGameJackpotModule, BucketSeed {
     function seedDistinct(uint24 target, uint8 trait, uint256 n, uint160 base) external {
         _seedBucketDistinct(target, trait, n, base);
     }
-    function deity(uint8 trait, address who) external { deityBySymbol[(trait >> 6) * 8 + (trait & 7)] = who; }
+    function deity(uint8 trait, address who) external { deityBySymbol[(trait >> 6) * 8 + (trait & 7)] = _seedWallet(who); }
     function latch(uint256 entries) external {
         dailyTicketBudgetsPacked = (dailyTicketBudgetsPacked & ((uint256(1) << 144) - 1)) | (entries << 144);
     }
     function packed() external view returns (uint256) { return dailyTicketBudgetsPacked; }
     function pools() external view returns (uint128, uint128) { return _getPrizePools(); }
     function liability() external view returns (uint256) { return claimablePool; }
-    function passes(address who) external view returns (uint256) { return whalePassClaims[who]; }
+    function passes(address who) external view returns (uint256) { return _halfPassesOf(who); }
     function unlock() external { rngLockedFlag = false; }
-    function creditPasses(address who, uint256 halves) external { whalePassClaims[who] += halves; }
+    function creditPasses(address who, uint256 halves) external { _addHalfPasses(_seedWallet(who), halves); }
     function owed(uint24 target, address who) external view returns (uint256) {
         uint24 key = target > _mintCeiling() ? _tqFarFutureKey(target) : _tqWriteKey(target);
-        return uint32(_entriesOwed(key, who) >> 8);
+        return uint32(_owedOf(key, who) >> 8);
     }
     function pickSoloQuadrant(uint8[4] memory traits, uint256 entropy) external pure returns (uint8) {
         return _pickSoloQuadrant(traits, entropy);
@@ -53,8 +53,8 @@ contract EarlyBirdWhaleHarness is DegenerusGameJackpotModule, BucketSeed {
 }
 
 contract EarlyBirdWhalePassTest is Test {
-    bytes32 private constant PASS = keccak256("JackpotWhalePassWin(address,uint256,uint8)");
-    bytes32 private constant TICKET = keccak256("JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)");
+    bytes32 private constant PASS = keccak256("JackpotWhalePassWin(uint32,uint256,uint8)");
+    bytes32 private constant TICKET = keccak256("JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)");
     EarlyBirdWhaleHarness private h;
     uint24 private constant TARGET = 10;
     uint256 private constant FULL_PASS = 4.5 ether;

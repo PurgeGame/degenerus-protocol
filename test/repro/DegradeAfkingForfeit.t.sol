@@ -32,7 +32,7 @@ contract AfkingForfeitSeeder is DegenerusGame {
         // Every ring member is box-clean, so the count has no openable stamp behind it.
         uint256 len = _subscribers.length;
         for (uint256 i; i < len; ++i) {
-            Sub storage sub = _subOf[_subscribers[i]];
+            Sub storage sub = _subOf[uint32(_subscribers[i] >> 160)];
             sub.lastOpenedDay = sub.lastAutoBoughtDay;
         }
         _pendingBoxCount = count;
@@ -45,9 +45,9 @@ contract AfkingForfeitSeeder is DegenerusGame {
 
     function pendingBoxCount() external view returns (uint16) { return _pendingBoxCount; }
     function subscribersLength() external view returns (uint256) { return _subscribers.length; }
-    function subscriberAt(uint256 i) external view returns (address) { return _subscribers[i]; }
+    function subscriberAt(uint256 i) external view returns (address) { return address(uint160(_subscribers[i])); }
     function markers(address who) external view returns (uint24 bought, uint24 opened) {
-        Sub storage sub = _subOf[who];
+        Sub storage sub = _subOf[_walletIdOf(who)];
         return (sub.lastAutoBoughtDay, sub.lastOpenedDay);
     }
 }

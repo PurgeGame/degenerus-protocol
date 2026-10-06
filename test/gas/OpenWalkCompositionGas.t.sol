@@ -9,6 +9,7 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title OpenWalkCompositionGas -- baseline gas measurements for the permissionless box-open
 ///        path: `game.mineFlip()`'s afking stage (`GameAfkingModule.runAfkingWork`) and human-box
@@ -49,10 +50,10 @@ contract OpenWalkCompositionGas is DeployProtocol {
     // Game-resident storage slots (ported verbatim from V56AfkingGasMarginal.t.sol)
     // -------------------------------------------------------------------------
 
-    uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint24 => uint256) — afking box's DAY-keyed word + readiness gate
-    uint256 private constant SUBOF_SLOT = 52;            // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant CURSOR_SLOT = 56;           // packed: _subCursor/_subOpenCursor/.../_pendingBoxCount
-    uint256 private constant SUBSCRIBERS_SLOT = 54;      // address[] _subscribers (slot holds the length; elements at keccak256(slot)+i)
+    uint256 private constant RNG_WORD_BY_DAY_SLOT = GameSlots.RNG_WORD_BY_DAY; // mapping(uint24 => uint256) — afking box's DAY-keyed word + readiness gate
+    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;            // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant CURSOR_SLOT = GameSlots.SUB_CURSOR;           // packed: _subCursor/_subOpenCursor/.../_pendingBoxCount
+    uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS;      // address[] _subscribers (slot holds the length; elements at keccak256(slot)+i)
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol struct Sub, post `validThroughLevel` deletion).
     uint256 private constant OFF_LASTBOUGHT = 7;  // uint24 lastAutoBoughtDay (bytes 7..9)
@@ -341,7 +342,7 @@ contract OpenWalkCompositionGas is DeployProtocol {
     // ---- Sub-slot reads (_subOf at slot 52 + v56 offsets) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
+        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
         return p & ((uint256(1) << widthBits) - 1);
     }
 
@@ -388,7 +389,7 @@ contract OpenWalkCompositionGas is DeployProtocol {
     /// @dev RMW a sub's packed `lastOpenedDay` (uint24 at byte OFF_LASTOPENED) — used to re-arm
     ///      a drained box as pending for the worst-mix fixture.
     function _pokeSubOpenedDay(address who, uint32 d) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT)));
         uint256 w = uint256(vm.load(address(game), slot));
         uint256 shift = OFF_LASTOPENED * 8;
         w = (w & ~(uint256(0xFFFFFF) << shift)) | (uint256(d & 0xFFFFFF) << shift);

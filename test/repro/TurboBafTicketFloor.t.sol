@@ -9,6 +9,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title TurboBafTicketFloor — BAF award tickets rolled onto the floor level under turbo.
 ///
@@ -37,9 +38,9 @@ contract TurboBafTicketFloor is DeployProtocol {
     uint256 private simTime;
 
     bytes32 private constant ADVANCE_SIG = keccak256("Advance(uint8,uint24)");
-    bytes32 private constant ETH_WIN_SIG = keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)");
+    bytes32 private constant ETH_WIN_SIG = keccak256("JackpotEthWin(uint32,uint24,uint16,uint256,uint256)");
     bytes32 private constant TICKET_WIN_SIG =
-        keccak256("JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)");
+        keccak256("JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)");
     uint8 private constant STAGE_JACKPOT_BAF_AWARDS = 19;
     uint256 private constant BAF_TRAIT_SENTINEL = 420;
     uint256 private bafAwardCalls;
@@ -100,7 +101,7 @@ contract TurboBafTicketFloor is DeployProtocol {
             "no BAF award entries may strand at the collapsed level's queue keys"
         );
         assertEq(
-            _entriesOwed(10, buyer) + _entriesOwed(10 | TICKET_SLOT_BIT, buyer),
+            _owedOf(10, buyer) + _owedOf(10 | TICKET_SLOT_BIT, buyer),
             0,
             "no owed entries may strand at the collapsed level"
         );
@@ -122,7 +123,7 @@ contract TurboBafTicketFloor is DeployProtocol {
 
         _buyTickets();
         uint24 currentWriteKey = _ticketWriteSlot() ? 10 | TICKET_SLOT_BIT : 10;
-        uint256 currentOwed = _entriesOwed(currentWriteKey, buyer);
+        uint256 currentOwed = _owedOf(currentWriteKey, buyer);
         assertGt(_queueLen(11 | (uint24(1) << 22)), 0, "the ordinary daily left next-level tickets unminted");
         bool swapped = _middayRequest();
         assertFalse(
@@ -133,9 +134,9 @@ contract TurboBafTicketFloor is DeployProtocol {
             _ticketsFullyProcessed(),
             "the mid-day request starts the isolated next-level batch"
         );
-        assertEq((uint256(vm.load(address(game), bytes32(uint256(33)))) >> 224) & 0xFF, 2,
+        assertEq((uint256(vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED))) >> 224) & 0xFF, 2,
             "only the future pool is committed by this mid-day request");
-        assertEq(_entriesOwed(currentWriteKey, buyer), currentOwed,
+        assertEq(_owedOf(currentWriteKey, buyer), currentOwed,
             "current-level tickets stay in the write buffer for the final daily request");
         _buyTicketsFor(lateBuyer);
 
@@ -157,7 +158,7 @@ contract TurboBafTicketFloor is DeployProtocol {
             "no cohort may strand at the collapsed x0 level's queue keys"
         );
         assertEq(
-            _entriesOwed(10, buyer) + _entriesOwed(10 | TICKET_SLOT_BIT, buyer),
+            _owedOf(10, buyer) + _owedOf(10 | TICKET_SLOT_BIT, buyer),
             0,
             "no owed entries may strand at the collapsed x0 level"
         );
@@ -276,7 +277,7 @@ contract TurboBafTicketFloor is DeployProtocol {
         uint256 v = uint256(
             vm.load(
                 address(game),
-                keccak256(abi.encode(uint256(lvl), uint256(23)))
+                keccak256(abi.encode(uint256(lvl), GameSlots.LEVEL_PRIZE_POOL))
             )
         );
         return v < 50 ether ? 50 ether : v;
@@ -413,7 +414,7 @@ contract TurboBafTicketFloor is DeployProtocol {
     }
 
     function _assertLateTicketsMaterialized() internal view {
-        assertEq(_entriesOwed(10, lateBuyer) + _entriesOwed(10 | TICKET_SLOT_BIT, lateBuyer), 0,
+        assertEq(_owedOf(10, lateBuyer) + _owedOf(10 | TICKET_SLOT_BIT, lateBuyer), 0,
             "late tickets must leave the queue before the turbo jackpot");
         uint256 materialized;
         for (uint16 trait; trait < 256; ++trait) {
@@ -443,8 +444,8 @@ contract TurboBafTicketFloor is DeployProtocol {
         return TicketQueueStorage.length(address(game), key);
     }
 
-    /// @dev _entriesOwed(key, player) >> 8 — the mapping sits at slot 13.
-    function _entriesOwed(
+    /// @dev _owedOf(key, player) >> 8 — the mapping sits at slot 13.
+    function _owedOf(
         uint24 key,
         address player
     ) internal view returns (uint256) {

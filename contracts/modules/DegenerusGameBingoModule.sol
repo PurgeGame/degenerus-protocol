@@ -145,7 +145,9 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         if (gameOver) revert GameOver();
         if (_ticketLevelRetired(lvl)) revert BingoExpired();
         if (symbol >= 32) revert InvalidSymbol();
-        if (_bingoClaimed(lvl, player)) revert AlreadyClaimed();
+        // Bucket lanes hold wallet IDs; an unregistered address owns no slot.
+        uint32 playerId = _requireWalletId(player);
+        if (_bingoClaimed(lvl, playerId)) revert AlreadyClaimed();
 
         uint8 quadrant = symbol >> 3; // bits 7-6 of the trait byte
         uint8 symInQ = symbol & 7; // bits 2-0 of the trait byte
@@ -161,7 +163,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
             uint256 slot = slots[c];
             if (
                 slot >= _bucketLength(lvl, traitId) ||
-                _bucketOwnerAtUnchecked(lvl, traitId, slot) != player
+                _bucketIdAtUnchecked(lvl, traitId, slot) != playerId
             ) {
                 revert NotSlotOwner();
             }
@@ -171,7 +173,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         }
 
         // ---- Per-player/per-level dedup (EFFECT) ----
-        _markBingoClaimed(lvl, player);
+        _markBingoClaimed(lvl, playerId);
 
         // ---- Interactions (after all effects) ----
         // sDGNRS draw: transferFromPool clamps to the available Reward pool and
@@ -216,10 +218,14 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         uint24 currLevel = level;
         if (currLevel == 0) revert NotStarted();
 
-        if (_affiliateDgnrsClaimed(currLevel, player)) revert AlreadyClaimed();
+        uint256 word = mintPacked_[player];
+        uint32 playerId = uint32(word >> BitPackingLib.WALLET_ID_SHIFT);
+        // Every affiliate registered when its code was first used; no ID means no score.
+        if (playerId == 0) revert ScoreTooLow();
+        if (_affiliateDgnrsClaimed(currLevel, playerId)) revert AlreadyClaimed();
 
         uint256 score = affiliate.affiliateScore(currLevel, player);
-        bool isDeityHolder = mintPacked_[player] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0;
+        bool isDeityHolder = word >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0;
         if (!isDeityHolder && score < AFFILIATE_DGNRS_MIN_SCORE) revert ScoreTooLow();
 
         uint256 denominator = affiliate.totalAffiliateScore(currLevel);
@@ -232,7 +238,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
 
         // Mark before interactions. A failed transfer reverts the stamp; a callback cannot
         // replay this claim or be overwritten by a stale copy of the shared bingo word.
-        _markAffiliateDgnrsClaimed(currLevel, player);
+        _markAffiliateDgnrsClaimed(currLevel, playerId);
         uint256 paid = dgnrs.transferFromPool(
             IsDGNRS.Pool.Affiliate,
             player,

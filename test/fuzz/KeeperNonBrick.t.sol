@@ -9,6 +9,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title KeeperNonBrick -- the REVERT-FREE / NON-BRICK corpus, adapted to the v55 game-resident
 ///        afking path (Phase 351, D-351-01). Proves the no-brick guarantee that survives D-348-04's
@@ -48,12 +49,12 @@ contract KeeperNonBrick is DeployProtocol {
     // -------------------------------------------------------------------------
 
     /// @dev lootboxRngPacked at slot 34; lootboxRngIndex is the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = GameSlots.RNG_WORD_CURRENT;
     /// @dev lootboxEth (the single folded box word) mapping root slot. The amount sub-field (low 128
     ///      bits) is the box-owed signal that replaced the removed lootboxEthBase mapping.
-    uint256 private constant LOOTBOX_ETH_SLOT = 15;
+    uint256 private constant LOOTBOX_ETH_SLOT = GameSlots.LOOTBOX_ORDER;
     uint256 private constant LB_AMOUNT_MASK = (uint256(1) << 128) - 1;
     /// @dev rngLockedFlag is bool at slot 0 offset 19 bytes = bit 152.
     uint256 private constant RNG_LOCKED_SHIFT = 152;
@@ -62,14 +63,13 @@ contract KeeperNonBrick is DeployProtocol {
 
     // Game-resident afking storage. The v61 fold removed the separate afkingFunding mapping; the
     // afking balance is now the high 128 bits of balancesPacked (slot 7), claimable the low 128.
-    uint256 private constant CLAIMABLE_POOL_SLOT = 1; // uint128 @ slot 1, byte 16
+    uint256 private constant CLAIMABLE_POOL_SLOT = GameSlots.CLAIMABLE_POOL; // uint128 @ slot 1, byte 16
     uint256 private constant CLAIMABLE_POOL_OFFBYTES = 16;
-    uint256 private constant CLAIMABLE_WINNINGS_SLOT = 7; // balancesPacked root; low 128 bits = claimable
-    uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit @ bit 184)
-    uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint24 => uint256) — the afking box's DAY-keyed word
-    uint256 private constant SUBOF_SLOT = 52; // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 54; // address[] _subscribers
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 55; // mapping(address => uint256) _subscriberIndex (1-indexed)
+    uint256 private constant CLAIMABLE_WINNINGS_SLOT = GameSlots.BALANCES_PACKED; // balancesPacked root; low 128 bits = claimable
+    uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED; // mintPacked_ mapping root (deity bit @ bit 184)
+    uint256 private constant RNG_WORD_BY_DAY_SLOT = GameSlots.RNG_WORD_BY_DAY; // mapping(uint24 => uint256) — the afking box's DAY-keyed word
+    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS; // address[] _subscribers
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol:2341; the AFKing-Coin repack dropped
     // validThroughLevel, shifting every field after it down 3 bytes).
@@ -249,7 +249,7 @@ contract KeeperNonBrick is DeployProtocol {
     ///      351-02 test-infra reality) so a claimable-funded slice's `claimablePool -=` does not underflow.
     ///      `claimableWinnings` is `internal` (no getter) — read/write it via the RE-DERIVED mapping slot.
     function _setClaimable(address who, uint256 amount) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(CLAIMABLE_WINNINGS_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(CLAIMABLE_WINNINGS_SLOT)));
         uint256 cur = uint256(vm.load(address(game), slot));
         vm.store(address(game), slot, bytes32(cur + amount));
         _bumpClaimablePool(amount);
@@ -262,7 +262,7 @@ contract KeeperNonBrick is DeployProtocol {
     // ---- Sub field reads (RE-DERIVED slot 52 + verified offsets) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
+        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
         return p & ((uint256(1) << widthBits) - 1);
     }
 
@@ -279,7 +279,7 @@ contract KeeperNonBrick is DeployProtocol {
     }
 
     function _subscriberIndexOf(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBSCRIBER_INDEX_SLOT)))));
+        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 224; // Sub.setPosition (1-based)
     }
 
     function _subscriberCount() internal view returns (uint256) {
@@ -294,7 +294,7 @@ contract KeeperNonBrick is DeployProtocol {
     ///      the 351-02 round-trip as bytes 1..4 region. We zero it (force the crossing) which is the only
     ///      value this test needs.
     function _setValidThroughLevel(address who, uint32 lvl) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         // validThroughLevel is the uint32 occupying bytes 1..4 (after dailyQuantity at byte 0). Clear+set.
         packed &= ~(uint256(0xFFFFFFFF) << (1 * 8));

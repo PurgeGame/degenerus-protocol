@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title RngRetryLootboxStall — PoC for the phase-blind `isRetry` RNG bug (v60 R2, RNGRETRY).
 /// @notice A mid-day lootbox VRF request and the daily VRF request share one
@@ -25,7 +26,7 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 ///     (level stuck), PASSES once `isRetry` is made phase-aware (`&& rngLockedFlag`).
 contract RngRetryLootboxStallTest is DeployProtocol {
     /// @dev prizePoolsPacked slot (confirmed via the BAF tests): [future:128 | next:128].
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED;
 
     address private buyer;
     address private attacker;

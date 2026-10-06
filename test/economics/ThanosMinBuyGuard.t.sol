@@ -5,6 +5,7 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title ThanosMinBuyGuard — a dust ticket buy the snap divide would zero reverts
 /// @notice Under a thanos declaration a plain ticket's PRICE is unchanged and the accumulated
@@ -33,9 +34,9 @@ contract ThanosMinBuyGuard is DeployProtocol {
     /// @dev snapShift: slot 14, byte 7 — packed with ticketCursor (bytes 0-3) and ticketLevel
     ///      (bytes 4-6). `level`: slot 0, bytes 12-14 (uint24). Both read from
     ///      scripts/layout/golden/DegenerusGame.json; the layout oracle fails the build on a move.
-    uint256 private constant SNAP_SLOT = 14;
+    uint256 private constant SNAP_SLOT = GameSlots.SNAP_SHIFT;
     uint256 private constant SNAP_BYTE = 7;
-    uint256 private constant LEVEL_SLOT = 0;
+    uint256 private constant LEVEL_SLOT = GameSlots.LEVEL;
     uint256 private constant LEVEL_BYTE = 12;
 
     uint256 private constant TICKET_MIN_BUYIN_WEI = 0.0025 ether;

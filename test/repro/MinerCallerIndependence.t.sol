@@ -7,6 +7,7 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {stdStorage, StdStorage} from "forge-std/StdStorage.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @notice Engine work depends on committed game state, never on caller privileges or credits,
 ///         with one intended exception: pending mid-day work below the threshold is requested
@@ -104,7 +105,7 @@ contract MinerCallerIndependenceTest is DeployProtocol {
     function _commitmentDigest() private view returns (bytes32) {
         return keccak256(abi.encode(mockVRF.lastRequestId(), game.extsload(bytes32(0)),
             game.extsload(bytes32(uint256(3))), game.extsload(bytes32(uint256(4))),
-            game.extsload(bytes32(uint256(5))), game.extsload(bytes32(uint256(33))),
+            game.extsload(bytes32(uint256(5))), game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED)),
             RecyclingState.readBuffer(address(game)), RecyclingState.writeBuffer(address(game)),
             game.rngComplete()));
     }

@@ -8,6 +8,7 @@ import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameA
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {ActivityCurveLib} from "../../contracts/libraries/ActivityCurveLib.sol";
 import {FLIP} from "../../contracts/FLIP.sol";
+import {activityScoreOf} from "../helpers/ActivityScoreOf.sol";
 
 /// @dev Expose the production RNG gate; settlement, quests, burn and craps are all real.
 contract AutoDecimatorAdvanceHarness is DegenerusGameAdvanceModule {
@@ -67,7 +68,7 @@ contract AutoDecimatorGameHarness is DegenerusGame {
 
     /// @dev The wallet's entry for `lvl` (zero if its latest entry is another event); whole-FLIP stack.
     function entryFor(uint24 lvl, address owner) public view returns (uint64 id, uint256 stack) {
-        uint256 latest = decBattlePlayers[owner];
+        uint256 latest = decBattlePlayers[_walletIdOf(owner)];
         if (uint24(latest >> 64) != lvl) return (0, 0);
         id = uint64(latest);
         stack = (decBattleEntries[(uint256(lvl) << 64) | id] >> 190);
@@ -156,7 +157,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         address player = makeAddr("manual-decimator");
         _prepare(21, 4, 3, true);
         harness.applyOpeningWord(21);
-        vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScore.selector, player), abi.encode(uint256(500)));
+        vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScore.selector, player), abi.encode(uint256(500), uint32(0)));
         vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScoreCached.selector, player), abi.encode(uint256(500)));
         vm.prank(address(game)); coin.mintForGame(player, 4_000_000);
         vm.recordLogs();
@@ -165,13 +166,13 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         (uint64 id, uint256 first) = harness.entryFor(5, player);
         assertGt(id, 0);
         assertEq(first, firstCredit);
-        assertEq(first, firstBase * ActivityCurveLib.decBattleMultBps(game.playerActivityScore(player)) / 10_000);
+        assertEq(first, firstBase * ActivityCurveLib.decBattleMultBps(activityScoreOf(address(game), player)) / 10_000);
         _warp(23);
         vm.recordLogs();
         vm.prank(player); coin.decimatorBurn(player, 2_000_000, 0);
         (uint256 topupBase,) = _recorded(vm.getRecordedLogs());
         (uint64 again, uint256 total) = harness.entryFor(5, player);
-        uint256 mult = ActivityCurveLib.decBattleMultBps(game.playerActivityScore(player));
+        uint256 mult = ActivityCurveLib.decBattleMultBps(activityScoreOf(address(game), player));
         assertEq(again, id);
         assertEq(total, first + topupBase * mult * 81 / 1_000_000);
         assertEq(coin.balanceOf(player), 0);
@@ -198,7 +199,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         assertGt(questReward, 0, "quest pays a next-day flip credit");
 
         uint256 base = CAP + questReward;
-        uint256 multiplier = ActivityCurveLib.decBattleMultBps(game.playerActivityScore(HOUSE));
+        uint256 multiplier = ActivityCurveLib.decBattleMultBps(activityScoreOf(address(game), HOUSE));
         uint256 expected = base * multiplier / 10_000; // whole FLIP of chips
         (uint256 weight, uint64 id) = harness.entry(5);
         assertEq(weight, expected, "quest reward enters day-zero chip math");

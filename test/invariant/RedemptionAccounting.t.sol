@@ -62,7 +62,7 @@ contract RedemptionAccounting is RedemptionFixture {
             for (uint256 a; a < handler.getActorCount(); ++a) {
                 address actor = handler.getActor(a);
                 if (id != open || !handler.claimed(id, actor)) recorded += handler.submitted(id, actor);
-                (uint128 pending,uint16 score) = sdgnrs.pendingRedemptions(actor, id);
+                (uint128 pending,uint16 score) = sdgnrs.pendingRedemptions(game.walletIdOf(actor), id);
                 if (handler.claimed(id, actor)) { assertEq(pending, 0); assertEq(score, 0); }
                 else {
                     assertEq(pending, handler.submitted(id, actor));

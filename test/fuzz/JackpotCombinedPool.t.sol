@@ -3,20 +3,21 @@ pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 /// @title JackpotCombinedPoolHarness -- Replicates PROPOSED combined pool selection logic
 /// @dev Since _awardFarFutureCoinJackpot is private (not internal), we replicate the
 ///      proposed combined pool selection in a standalone harness extending DegenerusGameStorage.
 ///      This follows the same pattern as TicketRouting.t.sol (Phase 75) and
 ///      TicketProcessingFF.t.sol (Phase 76).
-contract JackpotCombinedPoolHarness is DegenerusGameStorage {
+contract JackpotCombinedPoolHarness is DegenerusGameStorage, WalletSeed {
 
     // -- State setters --
 
     /// @dev Push `count` addresses into ticketQueue[_ticketQueueStorageKey(key)] as address(uint160(i+1))
     function setTicketQueue(uint24 key, uint256 count) external {
         for (uint256 i = 0; i < count; i++) {
-            _tqAppend(key, uint32(_registerEntryOwner(address(uint160(i + 1)), key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT)) >> OWNER_IDX_SHIFT));
+            _tqAppend(key, _seedWallet(address(uint160(i + 1))));
         }
     }
 
@@ -46,7 +47,7 @@ contract JackpotCombinedPoolHarness is DegenerusGameStorage {
     }
 
     function getQueueEntry(uint24 key, uint256 idx) external view returns (address) {
-        return _tqOwnerAt(ticketQueue[_ticketQueueStorageKey(key)], key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT), idx);
+        return _walletKey(_tqPositionAt(ticketQueue[_ticketQueueStorageKey(key)], idx));
     }
 
     // -- Combined pool selection (core under test) --
@@ -71,8 +72,8 @@ contract JackpotCombinedPoolHarness is DegenerusGameStorage {
         if (combinedLen != 0) {
             uint256 idx = (entropy >> 32) % combinedLen;
             winner = idx < readLen
-                ? _tqOwnerAt(readQueue, candidate, idx)
-                : _tqOwnerAt(ffQueue, candidate, idx - readLen);
+                ? _walletKey(_tqPositionAt(readQueue, idx))
+                : _walletKey(_tqPositionAt(ffQueue, idx - readLen));
             found = (winner != address(0));
         }
     }

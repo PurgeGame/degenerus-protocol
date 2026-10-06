@@ -15,6 +15,7 @@ import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {JackpotBattle} from "../../../contracts/JackpotBattle.sol";
 import {MineFlipGas} from "../../../contracts/libraries/MineFlipGas.sol";
 import {CrapsViews} from "../../craps/CrapsViews.sol";
+import {GameSlots} from "../../helpers/GameSlots.sol";
 
 /// @title CrapsRngSealHandler — the craps lane of the RNG-freeze net, driven against the REAL
 ///        protocol (real game, real FLIP burn gate, real Coinflip credit lane, real VRF lifecycle).
@@ -69,9 +70,9 @@ contract CrapsRngSealHandler is Test {
     // -------------------------------------------------------------------------
     // Game storage layout (the RngWindowFreezeHandler constants — same authority)
     // -------------------------------------------------------------------------
-    uint256 private constant RNG_WORD_BY_DAY_SLOT = 10;
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3;
+    uint256 private constant RNG_WORD_BY_DAY_SLOT = GameSlots.RNG_WORD_BY_DAY;
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = GameSlots.RNG_WORD_CURRENT;
     uint256 private constant LR_INDEX_MASK = 0xFFFFFFFFFFFF;
     uint256 private constant LR_MID_DAY_SHIFT = 224;
     uint256 private constant LR_MID_DAY_MASK = 0xFF;

@@ -16,6 +16,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
 /// @title RngLockDeterminism -- Foundry fuzz harness asserting byte-identical
 ///        VRF-derived outputs under mid-rngLock-window state perturbations.
@@ -26,15 +27,15 @@ contract RngLockDeterminism is DeployProtocol {
     // storage-layout`; mirrors LootboxRngLifecycle.t.sol precedent).
     // ────────────────────────────────────────────────────────────────────
     uint256 constant SLOT_PACKED_0 = 0;
-    uint256 constant SLOT_RNG_WORD_CURRENT = 3;
+    uint256 constant SLOT_RNG_WORD_CURRENT = GameSlots.RNG_WORD_CURRENT;
     uint256 constant SLOT_VRF_REQUEST_ID = 4;
     // Via forge inspect (Stage B Game-storage packing shifted these down):
     // lootboxRngPacked = slot 34 (the lootbox RNG index lives in bits[0:47]), lootboxRngWordByIndex = slot 35.
-    uint256 constant SLOT_LOOTBOX_RNG_INDEX = 33;
-    uint256 constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = 34;
+    uint256 constant SLOT_LOOTBOX_RNG_INDEX = GameSlots.LOOTBOX_RNG_PACKED;
+    uint256 constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = GameSlots.RNG_DAY_TAGS;
     // lootboxOrder (the packed box-order word) = slot 15; the whole word is zeroed on open, so
     // nonzero/zero is still the box-owed signal regardless of the internal bit layout.
-    uint256 constant SLOT_LOOTBOX_ETH = 15;
+    uint256 constant SLOT_LOOTBOX_ETH = GameSlots.LOOTBOX_ORDER;
     VRFHandler public vrfHandler;
     uint256 private _lastFulfilledReqId;
     uint256 constant DRAIN_MAX_ITERATIONS = 50;
@@ -773,22 +774,22 @@ contract RngLockDeterminism is DeployProtocol {
     /// @notice Storage slot for the `whalePassClaims` mapping (verified via
     ///         `forge inspect contracts/DegenerusGame.sol:DegenerusGame storage-layout`
     ///         → slot 21). The inner address-keyed slot is keccak256(abi.encode(player, 21)).
-    uint256 constant SLOT_WHALE_PASS_CLAIMS = 20;
 
     /// @dev Pre-loads `whalePassClaims[claimant] = halfPasses` via direct storage write so
     ///      the perturbation has work to do (otherwise `claimWhalePass` reverts on
     ///      `halfPasses == 0` and never reaches the rngLock-gated `_queueEntryRange` body).
     function _preloadWhalePassClaims(address claimant, uint256 halfPasses) internal {
-        bytes32 slot = keccak256(abi.encode(claimant, uint256(SLOT_WHALE_PASS_CLAIMS)));
-        vm.store(address(game), slot, bytes32(halfPasses));
+        // Half passes live in the claimant's wallet-table element, bits 192..255.
+        bytes32 slot = GameSlotKeys.walletElement(game.walletIdOf(claimant));
+        uint256 element = uint256(vm.load(address(game), slot));
+        vm.store(address(game), slot, bytes32((element & ((uint256(1) << 192) - 1)) | (halfPasses << 192)));
     }
 
     /// @dev Reads `whalePassClaims[claimant]` from storage (slot 21) — the post-perturbation
     ///      oracle that the structurally-expected rngLock revert (per WHALE-04 §2 far-future
     ///      band) preserved the pending-claim accumulator untouched.
     function _readWhalePassClaims(address claimant) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(claimant, uint256(SLOT_WHALE_PASS_CLAIMS)));
-        return uint256(vm.load(address(game), slot));
+        return uint256(vm.load(address(game), GameSlotKeys.walletElement(game.walletIdOf(claimant)))) >> 192;
     }
 
     /// @notice TST-01 freeze leg — `claimWhalePass()` during rngLock perturbs ZERO bytes of
@@ -1112,7 +1113,7 @@ contract RngLockDeterminism is DeployProtocol {
 
     /// @dev Park the human-box frontier (humanReadComplete byte 13, boxCursor byte 7 — both in
     ///      slot 56) at `index`'s first entry, as a fresh seal leaves it.
-    uint256 constant SLOT_BOX_CURSORS = 56;
+    uint256 constant SLOT_BOX_CURSORS = GameSlots.BOX_CURSOR;
     function _parkBoxFrontier(uint48 index) internal {
         require(index == RecyclingState.readBuffer(address(game)), "fixture read tag");
         bytes32 slot = bytes32(uint256(SLOT_BOX_CURSORS));

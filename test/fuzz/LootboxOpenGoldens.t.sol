@@ -6,6 +6,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {C1Viewer} from "../repro/C1BoxAutoOpen.t.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title LootboxOpenGoldens -- one fixed word, every reward figure a box open reports
 /// @notice The box rewards are pure functions of the committed word: target level, ticket
@@ -16,10 +17,10 @@ import {C1Viewer} from "../repro/C1BoxAutoOpen.t.sol";
 ///         presale box on one word and pins the exact figures they report.
 contract LootboxOpenGoldens is DeployProtocol {
     address internal actor;
-    uint256 internal constant PRESALE_BOX_CREDIT_SLOT = 17;
+    uint256 internal constant PRESALE_BOX_CREDIT_SLOT = GameSlots.PRESALE_BOX_CREDIT;
 
     bytes32 internal constant OPENED = keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
-    bytes32 internal constant QUEUED = keccak256("EntriesQueued(address,uint24,uint32)");
+    bytes32 internal constant QUEUED = keccak256("EntriesQueued(uint32,uint24,uint32)");
     bytes32 internal constant DGNRS = keccak256("LootBoxDgnrsBatch(address,uint256,uint256)");
     bytes32 internal constant PASSES = keccak256("LootBoxCrapsPasses(address,uint32,uint32,uint24)");
     bytes32 internal constant PRESALE = keccak256("PresaleBoxOpened(address,uint48,uint256,uint256,uint256,uint256,bool,uint32,uint32)");
@@ -172,7 +173,7 @@ contract LootboxOpenGoldens is DeployProtocol {
     /// @dev The figure every plainly-opened box of `who` at `index` reported (all boxes of one
     ///      single-tier order share it); zero if every box drew a spin.
     function _grantPresaleCredit(address buyer, uint256 amount) internal {
-        bytes32 slot = keccak256(abi.encode(buyer, uint256(PRESALE_BOX_CREDIT_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(buyer)), uint256(PRESALE_BOX_CREDIT_SLOT)));
         uint256 existing = uint256(vm.load(address(game), slot));
         vm.store(address(game), slot, bytes32(existing + amount));
     }

@@ -5,6 +5,7 @@ import {JackpotBattleFieldLib} from "../../contracts/libraries/JackpotBattleFiel
 import {Test} from "forge-std/Test.sol";
 import {JackpotBattleDrawHarness} from "../fuzz/JackpotBattleDraw.t.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 contract JackpotBattleDrawGasHarness is JackpotBattleDrawHarness {
     /// @dev Pre-walk implementation, retained only as the gas baseline for the same seeded field.
@@ -35,7 +36,7 @@ contract JackpotBattleDrawGasHarness is JackpotBattleDrawHarness {
             if (len == 0) continue;
             uint256 idx = (entropy >> 128) % len;
             uint256 packed = _tqWordAt(queue, idx);
-            winners[i] = address(uint160(_entryRecord(candidate, uint32(packed >> ((idx & 7) << 5)))));
+            winners[i] = address(uint160(_entryRecordOf(candidate, uint32(packed >> ((idx & 7) << 5)))));
         }
         next = (eligible << 32) | (ordinal + wanted);
     }

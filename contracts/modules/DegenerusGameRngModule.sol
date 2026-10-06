@@ -199,13 +199,29 @@ contract DegenerusGameRngModule is DegenerusGameRngUtils {
         _setRngRequestActive(true);
     }
 
+    /// @notice Mint mid-day RNG credit to a LINK donor (ADMIN only, from the donation hook).
+    /// @dev The donated LINK is banked verbatim, with no reward multiplier applied — a request
+    ///      debits a multiple of what it actually bills, so the price lives at redemption rather
+    ///      than in a stored rate. The donation is the donor's paying action: it registers the
+    ///      donor's wallet ID (no Game spend to quote, so paid admission refuses new donors at
+    ///      PAID_ADMISSION_WALLETS registered wallets).
+    /// @param to Donor to credit.
+    /// @param linkAmount LINK donated, in juels.
+    function creditMiddayRng(address to, uint256 linkAmount) external {
+        if (msg.sender != ContractAddresses.ADMIN) revert OnlyAdmin();
+        (uint32 id, ) = _registerWallet(to, 0);
+        uint256 balance = middayRngCredit[id] + linkAmount;
+        middayRngCredit[id] = balance;
+        emit MiddayRngCredited(to, linkAmount, balance);
+    }
+
     function _tryChargeMiddayCredit(address caller) private returns (bool charged) {
-        (bool covered, uint256 charge, uint256 balance) = _middayCreditCharge(caller);
+        (bool covered, uint256 charge, uint256 balance, uint32 id) = _middayCreditCharge(caller);
         if (!covered) return false;
         unchecked {
             balance -= charge;
         }
-        middayRngCredit[caller] = balance;
+        middayRngCredit[id] = balance;
         emit MiddayRngCreditSpent(caller, charge, balance);
         return true;
     }

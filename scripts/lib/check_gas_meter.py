@@ -48,8 +48,14 @@ DRAINS = set("""_seatEntry _runRound _resolveFoilBuyer _bucketAppendRun _bucketA
 # This entry allocates a permanent ID; it never derives ticket entropy. Pin the
 # exact access-control statement, rather than exempting the whole function.
 TICKET_AUTH_GUARDS = {
-    ("modules/DegenerusGameTicketModule.sol", "registerAffiliateOwner",
-     "if(msg.sender!=ContractAddresses.AFFILIATE)revertE();"),
+    ("modules/DegenerusGameTicketModule.sol", "registerWallet",
+     "if(msg.sender!=ContractAddresses.AFFILIATE&&msg.sender!=ContractAddresses.COINFLIP"),
+    ("modules/DegenerusGameTicketModule.sol", "registerWallet",
+     "&&msg.sender!=ContractAddresses.CRAPS&&msg.sender!=ContractAddresses.JACKPOT_BATTLE"),
+    ("modules/DegenerusGameTicketModule.sol", "registerWallet",
+     "&&msg.sender!=ContractAddresses.PARIMUTUEL&&msg.sender!=ContractAddresses.WWXRP"),
+    ("modules/DegenerusGameTicketModule.sol", "registerWallet",
+     "&&msg.sender!=ContractAddresses.ADMIN&&msg.sender!=ContractAddresses.COIN)revertE();"),
 }
 
 

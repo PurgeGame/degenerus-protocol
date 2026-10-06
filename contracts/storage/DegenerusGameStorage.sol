@@ -159,6 +159,12 @@ interface IAdminLinkValue {
  */
 
 abstract contract DegenerusGameStorage {
+    /// @dev Wallet ID 0 means "none": the table's length starts at 1, so element 0 is never
+    ///      assigned and a zero lane decodes to address(0).
+    constructor() {
+        assembly ("memory-safe") { sstore(wallets.slot, 1) }
+    }
+
     // =========================================================================
     // CONSTANTS
     // =========================================================================
@@ -641,9 +647,12 @@ abstract contract DegenerusGameStorage {
     ///      the two halves; per-player ETH <= total supply (~1.2e26 wei << 2^128), so neither
     ///      half can overflow.
     ///
+    ///      Keyed by wallet ID: every payout already holds the ID; address-only paths (withdraw,
+    ///      deposits, views) read it from mintPacked_ once. ID 0 never holds a balance.
+    ///
     ///      SECURITY: Pull pattern — players and funders withdraw their own funds (the claim
     ///      function / withdrawAfkingFunding), separating credit from transfer.
-    mapping(address => uint256) internal balancesPacked;
+    mapping(uint32 => uint256) internal balancesPacked;
 
     /// @dev Two physical trait buffers, keyed by actualLevel & 1. Each header packs
     ///      a uint32 count and up to seven uint32 owner-index tail lanes above it.
@@ -731,14 +740,17 @@ abstract contract DegenerusGameStorage {
     ///      disjoint far-future key space (bit 22). Raw-level indices above hold only when
     ///      ticketWriteSlot is false.
     ///      The length word counts QUEUED OWNERS. Data word w holds eight uint32 lanes for
-    ///      positions 8w..8w+7, low lane first, each naming ticketOwners[lane - 1].
-    ///      Zero is reserved: every append takes the nonzero ownerIdx+1 field from the owed
-    ///      word. Never use Solidity array indexing, push, pop or delete on this mapping.
+    ///      positions 8w..8w+7, low lane first, each holding a nonzero wallet ID (the wallet
+    ///      table position). Never use Solidity array indexing, push, pop or delete on this mapping.
     ///      Readers are length-gated; append overwrites the selected lane after queue reuse.
     mapping(uint24 => uint256[]) internal ticketQueue;
 
-    /// @dev Permanent one-based uint32 wallet ID, shared by every ticket queue.
-    mapping(address => uint32) internal ticketOwnerId;
+    /// @dev Wallet table: element `id` is the wallet whose permanent ID is `id`. Each element
+    ///      packs the account key (bits 0..159), the smurf owner ID (160..191, zero for an
+    ///      ordinary wallet) and the whale-pass half-pass count (192..255). Element 0 is never
+    ///      assigned. The forward direction is mintPacked_ bits 224..255; _registerWallet is
+    ///      the only writer of both. IDs are never reassigned.
+    uint256[] internal wallets;
 
     /// @dev Cursor for ticket queue processing (dual-purpose).
     ///      - SETUP phase: tracks near-future level progress (1-4), reset to 0 when done.
@@ -792,11 +804,6 @@ abstract contract DegenerusGameStorage {
         uint32 take
     );
 
-    /// @notice Emitted on queue or foil enrollment with the wallet's permanent zero-based index.
-    ///         Packed trait-bucket lanes name these positions; separate queue cohorts and
-    ///         foil purchases may register the same owner more than once at a level.
-    event EntryOwnerRegistered(uint24 indexed lvl, uint32 idx, address indexed owner);
-
     /// @notice Direct entry reveals for up to four players, without a signature topic.
     ///         Each nonzero topic is (uint256(level) << 160) | uint160(player). Query all
     ///         four topic positions separately and deduplicate by transaction/log index.
@@ -817,16 +824,17 @@ abstract contract DegenerusGameStorage {
     /// @notice Emitted when a future level is declared a thanos level.
     event ThanosLevelSet(uint24 targetLevel, uint8 shift);
 
-    /// @notice Emitted when entries are queued for a buyer at a specific level.
+    /// @notice Emitted when entries are queued for a wallet at a specific level. The queue
+    ///         sinks hold only the wallet ID; WalletRegistered maps it to the address.
     event EntriesQueued(
-        address indexed buyer,
+        uint32 indexed walletId,
         uint24 targetLevel,
         uint32 entries
     );
 
-    /// @notice Emitted when scaled entries (entries × QTY_SCALE) are queued for a buyer.
+    /// @notice Emitted when scaled entries (entries × QTY_SCALE) are queued for a wallet.
     event EntriesQueuedScaled(
-        address indexed buyer,
+        uint32 indexed walletId,
         uint24 targetLevel,
         uint32 entriesScaled
     );
@@ -834,7 +842,7 @@ abstract contract DegenerusGameStorage {
     /// @notice Emitted when entries are queued across a range of levels. Covered levels are
     ///         startLevel, startLevel + stride, ... (numLevels of them); stride 1 = contiguous.
     event EntriesQueuedRange(
-        address indexed buyer,
+        uint32 indexed walletId,
         uint24 startLevel,
         uint24 numLevels,
         uint24 stride,
@@ -850,7 +858,7 @@ abstract contract DegenerusGameStorage {
     );
 
     /// @dev Whale pass awarded in place of an ETH, lootbox or early-bird ticket payout — otherwise the
-    ///      `whalePassClaims` increment is silent. Declared once here for JackpotModule and WhaleModule,
+    ///      wallet-table half-pass increment is silent. Declared once here for JackpotModule and WhaleModule,
     ///      which both emit it through GAME's delegatecall. `halfPassCount` is in half-pass claim units.
     ///      The award is a bare half-pass counter binding to no level: claimWhalePass sets the target
     ///      from the level standing at claim time and reports it on WhalePassClaimed. The paying level
@@ -858,7 +866,7 @@ abstract contract DegenerusGameStorage {
     ///      `source`: 2 BAF direct, 3 award tickets (JackpotModule), 4 early bird, 5 quadrant
     ///      conversion (WhaleModule); 1 (the solo-only half-pass conversion) is retired.
     event JackpotWhalePassWin(
-        address indexed winner,
+        uint32 indexed walletId,
         uint256 halfPassCount,
         uint8 source
     );
@@ -892,8 +900,9 @@ abstract contract DegenerusGameStorage {
     /// @notice Emitted when final sweep forfeits unclaimed winnings 30 days post-gameover.
     event FinalSwept(uint256 totalFunds);
 
-    /// @dev Emitted when a player's claimable balance is credited.
-    event PlayerCredited(address indexed player, uint256 amount);
+    /// @dev Emitted when a wallet's claimable balance is credited at a site with no event of its
+    ///      own naming the wallet and amount (see _creditClaimableLogged).
+    event PlayerCredited(uint32 indexed walletId, uint256 amount);
 
     /// @dev Emitted when a VRF word is bound to a lootbox RNG index (mid-day finalize,
     ///      daily apply, or dead-man fallback). Emitted from both the Game callback and
@@ -922,7 +931,7 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Emitted whenever prepaid afking ETH is spent to fund a buy (the afking-as-payment
     ///      waterfall's third tier) — full observability of where afking principal goes.
-    event AfkingSpent(address indexed player, uint256 amount);
+    event AfkingSpent(uint32 indexed walletId, uint256 amount);
 
     /// @dev A mining crank paid in FLIP. The credit itself rides `coinflip.creditFlip`, which
     ///      emits nothing attributable, so without this the whole miner revenue stream is
@@ -943,7 +952,7 @@ abstract contract DegenerusGameStorage {
     ///      redemption reserve (Internal), and game-over sweep (Internal). `amount` is the
     ///      exact claimable wei removed; `newBalance` is the post-debit claimable balance.
     event ClaimableSpent(
-        address indexed player,
+        uint32 indexed walletId,
         uint256 amount,
         uint256 newBalance,
         MintPaymentKind payKind,
@@ -1096,7 +1105,7 @@ abstract contract DegenerusGameStorage {
         (uint96 linkBal,,,,) = vrfCoordinator.getSubscription(vrfSubscriptionId);
         if (linkBal < (crapsWork ? MIN_LINK_FOR_CRAPS_RNG : MIN_LINK_FOR_LOOTBOX_RNG)) return false;
         if (!needsCredit) return true;
-        (bool covered,,) = _middayCreditCharge(caller);
+        (bool covered,,,) = _middayCreditCharge(caller);
         return covered;
     }
 
@@ -1105,13 +1114,14 @@ abstract contract DegenerusGameStorage {
     ///      LINK/ETH price. `covered` is false for a zero balance or an unpriced feed, so the
     ///      selector and the RNG module's charge always agree within a transaction.
     function _middayCreditCharge(address caller)
-        internal view returns (bool covered, uint256 charge, uint256 balance)
+        internal view returns (bool covered, uint256 charge, uint256 balance, uint32 id)
     {
-        balance = middayRngCredit[caller];
+        id = _walletIdOf(caller);
+        balance = middayRngCredit[id];
         // A zero balance never qualifies, even where basefee (and so the charge) is zero.
-        if (balance == 0) return (false, 0, 0);
+        if (balance == 0) return (false, 0, 0, id);
         uint256 weiPerLink = IAdminLinkValue(ContractAddresses.ADMIN).linkAmountToEth(1 ether);
-        if (weiPerLink == 0) return (false, 0, balance);
+        if (weiPerLink == 0) return (false, 0, balance, id);
         charge = (MIDDAY_RNG_BILLED_GAS * block.basefee * MIDDAY_RNG_CHARGE_MULT * 1 ether) / weiPerLink;
         covered = balance >= charge;
     }
@@ -1156,20 +1166,20 @@ abstract contract DegenerusGameStorage {
         return purchaseStartDay + (level == 0 ? uint24(_DEPLOY_IDLE_TIMEOUT_DAYS) : _PURCHASE_TIMEOUT_DAYS);
     }
 
-    /// @dev Queues entries for a buyer at a target level. The `entries` arg is in
+    /// @dev Queues entries for a wallet at a target level. The `entries` arg is in
     ///      entry units (price/4 each), NOT whole tickets — 4 entries per
     ///      whole ticket. `owed` accumulates entries.
-    ///      If buyer has no existing entries at that level, adds them to the queue.
+    ///      If the wallet has no existing entries at that level, adds it to the queue.
     ///      Far-future owed saturates at 2^30-1; normal cohorts retain uint32 owed.
-    /// @param buyer Address to receive entries.
+    /// @param id Wallet ID to receive entries.
     /// @param targetLevel Level for which entries are queued.
     /// @param entries Number of entries to queue (price/4 units).
-    /// @param rngBypass True to skip the RngLocked revert on a new far-future registration.
+    /// @param rngLockExempt True to skip the RngLocked revert on a new far-future lane.
     function _queueEntries(
-        address buyer,
+        uint32 id,
         uint24 targetLevel,
         uint32 entries,
-        bool rngBypass
+        bool rngLockExempt
     ) internal {
         if (entries == 0) return;
         // No liveness gate here: tickets queued during the liveness-timeout window are harmless.
@@ -1180,28 +1190,23 @@ abstract contract DegenerusGameStorage {
         // reverted here, so the gate stays off the shared sink.
         // Levels above _mintCeiling() are unminted: they stay queued in the far-future key space
         // until their level's pool mints. Unminted-level draws sample one queue lane per wallet,
-        // so under the RNG lock only a NEW registration (a new lane) could move them and reverts;
+        // so under the RNG lock only a NEW lane could move them and reverts;
         // a top-up only raises owed.
         bool isFarFuture = targetLevel > _mintCeiling();
         uint24 wk = isFarFuture
             ? _tqFarFutureKey(targetLevel)
             : _tqWriteKey(targetLevel);
-        uint80 packed = _entriesOwed(wk, buyer);
+        uint80 packed = _entryPacked(wk, id);
         uint32 owed = uint32(packed >> 8);
         uint8 rem = uint8(packed);
         if (packed == 0) {
-            if (isFarFuture && rngLockedFlag && !rngBypass) revert RngLocked();
-            packed = _registerEntryOwner(buyer, targetLevel);
-            if (packed == 0) {
-                if (rngBypass) return;
-                revert E();
-            }
-            _tqAppend(wk, uint32(packed >> OWNER_IDX_SHIFT));
+            if (isFarFuture && rngLockedFlag && !rngLockExempt) revert RngLocked();
+            packed = uint80(id) << OWNER_IDX_SHIFT;
+            _tqAppend(wk, id);
         }
-        emit EntriesQueued(buyer, targetLevel, entries);
+        emit EntriesQueued(id, targetLevel, entries);
         owed = _addOwed(owed, entries, isFarFuture);
-        _setEntryOwed(wk, uint32(packed >> OWNER_IDX_SHIFT),
-            (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem));
+        _setEntryOwed(wk, id, (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem));
     }
 
     /// @dev Converts a post-Bernoulli whole-ticket count into the entries unit the
@@ -1230,28 +1235,28 @@ abstract contract DegenerusGameStorage {
     /// @dev Queues scaled entries (2 decimal places) for fractional purchases.
     ///      Handles remainder accumulation and promotes to a whole owed entry when
     ///      remainder >= QTY_SCALE.
-    /// @param buyer Address to receive entries.
+    /// @param id Wallet ID to receive entries.
     /// @param targetLevel Level for which entries are queued.
     /// @param entriesScaled Scaled entries (entries x 100); owed gains entriesScaled / QTY_SCALE entries.
     function _queueEntriesScaled(
-        address buyer,
+        uint32 id,
         uint24 targetLevel,
         uint32 entriesScaled
     ) internal {
         if (entriesScaled == 0) return;
-        _queueEntriesScaledCore(buyer, targetLevel, entriesScaled, targetLevel > _mintCeiling());
+        _queueEntriesScaledCore(id, targetLevel, entriesScaled, targetLevel > _mintCeiling());
     }
 
     /// @dev Purchase callers route through _activeTicketLevel(), which never exceeds level+1.
     ///      These entries are always inside the normal ceiling, including final-jackpot reroutes;
     ///      skip the far-future ceiling's cold earlyTicketLevel read and share the same codec.
-    function _queuePurchaseEntries(address buyer, uint24 targetLevel, uint32 entriesScaled) internal {
+    function _queuePurchaseEntries(uint32 id, uint24 targetLevel, uint32 entriesScaled) internal {
         if (entriesScaled == 0) return;
-        _queueEntriesScaledCore(buyer, targetLevel, entriesScaled, false);
+        _queueEntriesScaledCore(id, targetLevel, entriesScaled, false);
     }
 
     function _queueEntriesScaledCore(
-        address buyer,
+        uint32 id,
         uint24 targetLevel,
         uint32 entriesScaled,
         bool isFarFuture
@@ -1260,16 +1265,15 @@ abstract contract DegenerusGameStorage {
         uint24 wk = isFarFuture
             ? _tqFarFutureKey(targetLevel)
             : _tqWriteKey(targetLevel);
-        uint80 packed = _entriesOwed(wk, buyer);
+        uint80 packed = _entryPacked(wk, id);
         uint32 owed = uint32(packed >> 8);
         uint8 rem = uint8(packed);
         if (packed == 0) {
             if (isFarFuture && rngLockedFlag) revert RngLocked();
-            packed = _registerEntryOwner(buyer, targetLevel);
-            if (packed == 0) revert E();
-            _tqAppend(wk, uint32(packed >> OWNER_IDX_SHIFT));
+            packed = uint80(id) << OWNER_IDX_SHIFT;
+            _tqAppend(wk, id);
         }
-        emit EntriesQueuedScaled(buyer, targetLevel, entriesScaled);
+        emit EntriesQueuedScaled(id, targetLevel, entriesScaled);
 
         uint32 whole = uint32(uint256(entriesScaled) / QTY_SCALE);
         uint8 frac = uint8(uint256(entriesScaled) % QTY_SCALE);
@@ -1288,23 +1292,23 @@ abstract contract DegenerusGameStorage {
         }
         uint80 newPacked = (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem);
         if (newPacked != packed) {
-            _setEntryOwed(wk, uint32(packed >> OWNER_IDX_SHIFT), newPacked);
+            _setEntryOwed(wk, id, newPacked);
         }
     }
 
     /// @dev Queues tickets for a contiguous range of levels with same quantity per level.
-    /// @param buyer Address to receive tickets.
+    /// @param id Wallet ID to receive tickets.
     /// @param startLevel First level in range (inclusive).
     /// @param numLevels Number of consecutive levels.
     /// @param entriesPerLevel Entries to award per level (4 entries = 1 whole ticket).
     function _queueEntryRange(
-        address buyer,
+        uint32 id,
         uint24 startLevel,
         uint24 numLevels,
         uint32 entriesPerLevel
     ) internal {
         _queueEntryRangeStridedCore(
-            buyer, startLevel, numLevels, 1, entriesPerLevel,
+            id, startLevel, numLevels, 1, entriesPerLevel,
             _mintCeiling(), rngLockedFlag, ticketWriteSlot ? TICKET_SLOT_BIT : uint24(0)
         );
     }
@@ -1313,7 +1317,7 @@ abstract contract DegenerusGameStorage {
     ///      (`numLevels` covered levels). Shared walk for contiguous (stride 1) and strided
     ///      whole-ticket awards; far-future routing, RNG-lock revert, and write-slot selection
     ///      are per-level, so skipped levels need no handling.
-    /// @param buyer Address to receive tickets.
+    /// @param id Wallet ID to receive tickets.
     /// @param startLevel First covered level (inclusive).
     /// @param numLevels Number of covered levels.
     /// @param stride Gap between covered levels (1 = contiguous).
@@ -1323,7 +1327,7 @@ abstract contract DegenerusGameStorage {
     /// @param writeSlotBit Caller's cached ticket write-slot bit
     ///        (`ticketWriteSlot ? TICKET_SLOT_BIT : 0`).
     function _queueEntryRangeStridedCore(
-        address buyer,
+        uint32 id,
         uint24 startLevel,
         uint24 numLevels,
         uint24 stride,
@@ -1333,25 +1337,25 @@ abstract contract DegenerusGameStorage {
         uint24 writeSlotBit
     ) internal {
         // No liveness gate (see _queueEntries): post-liveness queued tickets are harmless.
-        emit EntriesQueuedRange(buyer, startLevel, numLevels, stride, entriesPerLevel);
+        emit EntriesQueuedRange(id, startLevel, numLevels, stride, entriesPerLevel);
         // level / rngLockedFlag / ticketWriteSlot are loop-invariant and threaded in by the
         // caller (read once per award, not per stride-leg); none has a writer reachable from
         // this body, so the per-level lock check observes the same value either way.
+        uint80 idBits = uint80(id) << OWNER_IDX_SHIFT;
         uint24 lvl = startLevel;
         for (uint24 i = 0; i < numLevels; ) {
             bool isFarFuture = lvl > mintCeiling;
             uint24 wk = isFarFuture ? _tqFarFutureKey(lvl) : (lvl | writeSlotBit);
-            uint80 packed = _entriesOwed(wk, buyer);
+            uint80 packed = _entryPacked(wk, id);
             uint32 owed = uint32(packed >> 8);
             uint8 rem = uint8(packed);
             if (packed == 0) {
                 if (isFarFuture && rngLockedCached) revert RngLocked();
-                packed = _registerEntryOwner(buyer, lvl);
-                if (packed == 0) revert E();
-                _tqAppend(wk, uint32(packed >> OWNER_IDX_SHIFT));
+                packed = idBits;
+                _tqAppend(wk, id);
             }
             owed = _addOwed(owed, entriesPerLevel, isFarFuture);
-            _setEntryOwed(wk, uint32(packed >> OWNER_IDX_SHIFT),
+            _setEntryOwed(wk, id,
                 (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem));
 
             unchecked {
@@ -1371,12 +1375,12 @@ abstract contract DegenerusGameStorage {
     ///      Covered-level counts round up on odd spans (at most one extra whole ticket
     ///      per leg, in the buyer's favor). Total queued entries = halfPasses × span for
     ///      stride-aligned spans (any span divisible by 4, incl. the 100-level claims).
-    /// @param buyer Address to receive tickets.
+    /// @param id Wallet ID to receive tickets.
     /// @param startLevel First level of the span (inclusive).
     /// @param span Number of levels the award covers.
     /// @param halfPasses Half-pass count (1 half-pass = 1 entry/level equivalent).
     function _queueHalfPassAward(
-        address buyer,
+        uint32 id,
         uint24 startLevel,
         uint24 span,
         uint256 halfPasses
@@ -1388,17 +1392,17 @@ abstract contract DegenerusGameStorage {
         uint24 writeSlotBit = ticketWriteSlot ? TICKET_SLOT_BIT : uint24(0);
         uint32 baseEntries = uint32((halfPasses / 4) * 4);
         if (baseEntries != 0) {
-            _queueEntryRangeStridedCore(buyer, startLevel, span, 1, baseEntries, mintCeiling, rngLockedCached, writeSlotBit);
+            _queueEntryRangeStridedCore(id, startLevel, span, 1, baseEntries, mintCeiling, rngLockedCached, writeSlotBit);
         }
         uint256 rem = halfPasses % 4;
         if (rem == 0) return;
         if (rem >= 2) {
-            _queueEntryRangeStridedCore(buyer, startLevel, (span + 1) / 2, 2, 4, mintCeiling, rngLockedCached, writeSlotBit);
+            _queueEntryRangeStridedCore(id, startLevel, (span + 1) / 2, 2, 4, mintCeiling, rngLockedCached, writeSlotBit);
         }
         if (rem == 1) {
-            _queueEntryRangeStridedCore(buyer, startLevel, (span + 3) / 4, 4, 4, mintCeiling, rngLockedCached, writeSlotBit);
+            _queueEntryRangeStridedCore(id, startLevel, (span + 3) / 4, 4, 4, mintCeiling, rngLockedCached, writeSlotBit);
         } else if (rem == 3) {
-            _queueEntryRangeStridedCore(buyer, startLevel + 1, (span + 2) / 4, 4, 4, mintCeiling, rngLockedCached, writeSlotBit);
+            _queueEntryRangeStridedCore(id, startLevel + 1, (span + 2) / 4, 4, 4, mintCeiling, rngLockedCached, writeSlotBit);
         }
     }
 
@@ -1479,26 +1483,121 @@ abstract contract DegenerusGameStorage {
         }
     }
 
-    /// @dev Lifetime identity ceiling shared by tickets and affiliates. Existing identities
-    ///      remain usable at capacity; IDs are never recycled or reassigned.
-    uint256 internal constant MAX_WALLET_IDS = 3_000_000_000;
+    /// @dev Registered-wallet count at and above which only a Game paying entry of at least
+    ///      PAID_ADMISSION_MIN_SPEND (ETH equivalent) may create a new wallet ID.
+    uint256 internal constant PAID_ADMISSION_WALLETS = 3_000_000_000;
+    uint256 internal constant PAID_ADMISSION_MIN_SPEND = 0.04 ether;
 
-    function _ensureWalletId(address owner) internal returns (uint32 id) {
-        id = ticketOwnerId[owner];
-        if (id != 0) return id;
-        if (owner == address(0) || ticketOwners.length >= MAX_WALLET_IDS) return 0;
-        ticketOwners.push(owner);
-        id = uint32(ticketOwners.length);
-        ticketOwnerId[owner] = id;
+    /// @notice Emitted exactly once per wallet ID, when the wallet is registered.
+    event WalletRegistered(uint32 indexed id, address indexed owner);
+
+    /// @dev The only writer of a wallet's identity. Returns the existing ID or allocates the
+    ///      next table position, publishing both directions (the table element and mintPacked_
+    ///      bits 224..255) in the same call, together with the mint word as it now stands.
+    ///      Callers register before anything else in the transaction loads `owner`'s mint word.
+    ///      `quotedSpend` is the ETH-equivalent total the paying call charges (zero for the
+    ///      external hook); it is read only when a new wallet would be admitted at or above
+    ///      PAID_ADMISSION_WALLETS registered wallets.
+    function _registerWallet(address owner, uint256 quotedSpend) internal returns (uint32 id, uint256 word) {
+        word = mintPacked_[owner];
+        id = uint32(word >> BitPackingLib.WALLET_ID_SHIFT);
+        if (id != 0) return (id, word);
+        if (owner == address(0)) revert E();
+        uint256 position = wallets.length;
+        if (position > PAID_ADMISSION_WALLETS && quotedSpend < PAID_ADMISSION_MIN_SPEND) revert E();
+        if (position > type(uint32).max) revert E();
+        id = uint32(position);
+        wallets.push(uint160(owner));
+        word |= position << BitPackingLib.WALLET_ID_SHIFT;
+        mintPacked_[owner] = word;
+        emit WalletRegistered(id, owner);
     }
 
-    /// @dev Identity allocation is separate from queue discovery: affiliate-only registration
-    ///      emits no fictitious level entry. Automatic ticket awards remain fail-soft at capacity.
-    function _registerEntryOwner(address buyer, uint24 targetLevel) internal returns (uint80) {
-        uint32 id = _ensureWalletId(buyer);
-        if (id == 0) return 0;
-        emit EntryOwnerRegistered(targetLevel, id - 1, buyer);
-        return uint80(id) << OWNER_IDX_SHIFT;
+    /// @dev A registered wallet's ID, or zero.
+    function _walletIdOf(address owner) internal view returns (uint32) {
+        return uint32(mintPacked_[owner] >> BitPackingLib.WALLET_ID_SHIFT);
+    }
+
+    /// @dev An existing wallet ID; reverts for an unregistered address. Non-paying paths never
+    ///      register anyone.
+    function _requireWalletId(address owner) internal view returns (uint32 id) {
+        id = uint32(mintPacked_[owner] >> BitPackingLib.WALLET_ID_SHIFT);
+        if (id == 0) revert E();
+    }
+
+    /// @dev Storage slot of wallet-table element `id`; callers hold a stored, nonzero ID.
+    function _walletSlot(uint32 id) internal pure returns (uint256 slot) {
+        assembly ("memory-safe") {
+            mstore(0, wallets.slot)
+            slot := add(keccak256(0, 32), id)
+        }
+    }
+
+    /// @dev Wallet ID that an overpayment refund credits: the beneficiary's own (just
+    ///      registered) ID when it pays for itself, otherwise the payer's existing ID. A payer
+    ///      other than the beneficiary must already be registered to overpay.
+    function _payerId(address beneficiary, uint32 beneficiaryId) internal view returns (uint32) {
+        return msg.sender == beneficiary ? beneficiaryId : _requireWalletId(msg.sender);
+    }
+
+    /// @dev Raw wallet-table element for a stored, nonzero ID.
+    function _walletElement(uint32 id) internal view returns (uint256 element) {
+        uint256 slot = _walletSlot(id);
+        assembly ("memory-safe") { element := sload(slot) }
+    }
+
+    /// @dev Account key for a stored, nonzero ID (queue and bucket lanes, deity lanes): no bounds
+    ///      check, since only allocated IDs are ever stored.
+    function _walletKey(uint32 id) internal view returns (address) {
+        return address(uint160(_walletElement(id)));
+    }
+
+    /// @dev Account key of a wallet ID: the address whose address-keyed state (mint word,
+    ///      boons, forward caches) belongs to this account. Explicit bounds; zero is invalid.
+    function _walletAddress(uint32 id) internal view returns (address owner) {
+        if (id == 0 || id >= wallets.length) revert E();
+        owner = address(uint160(_walletElement(id)));
+    }
+
+    /// @dev Payout recipient for a wallet-table element: its own key, or for a smurf account the
+    ///      owner's key. Every ETH/stETH/token payout edge that holds an ID resolves through here.
+    function _payee(uint256 element) internal view returns (address) {
+        uint256 owner = (element >> 160) & 0xffffffff;
+        if (owner != 0) element = _walletElement(uint32(owner));
+        return address(uint160(element));
+    }
+
+    // =========================================================================
+    // Whale-pass half-pass count (wallet-table bits 192..255)
+    // =========================================================================
+
+    uint256 private constant HALF_PASS_SHIFT = 192;
+
+    /// @dev Half passes held by a wallet, awaiting claimWhalePass.
+    function _halfPassCount(uint32 id) internal view returns (uint256) {
+        return _walletElement(id) >> HALF_PASS_SHIFT;
+    }
+
+    /// @dev Credit half passes. The count is the element's top field, so a checked add makes an
+    ///      overflow revert instead of reaching the account-key or owner bits.
+    function _addHalfPasses(uint32 id, uint256 halfPasses) internal {
+        // Element 0 must stay empty: an unregistered address claims against it.
+        if (id == 0) revert E();
+        uint256 slot = _walletSlot(id);
+        uint256 element;
+        assembly ("memory-safe") { element := sload(slot) }
+        element += halfPasses << HALF_PASS_SHIFT;
+        assembly ("memory-safe") { sstore(slot, element) }
+    }
+
+    /// @dev Read and clear a wallet's half passes, keeping the account key and owner lane.
+    function _takeHalfPasses(uint32 id) internal returns (uint256 halfPasses) {
+        uint256 slot = _walletSlot(id);
+        assembly ("memory-safe") {
+            let element := sload(slot)
+            halfPasses := shr(HALF_PASS_SHIFT, element)
+            if halfPasses { sstore(slot, and(element, sub(shl(HALF_PASS_SHIFT, 1), 1))) }
+        }
     }
 
     // =========================================================================
@@ -1610,23 +1709,8 @@ abstract contract DegenerusGameStorage {
         }
     }
 
-    function _entriesOwed(uint24 key, address player) internal view returns (uint80) {
-        uint32 id = ticketOwnerId[player];
-        return id == 0 ? 0 : _entryPacked(key, id);
-    }
-
-    /// @dev Stable identity lookup with explicit bounds and shared protocol error.
-    function _ticketOwnerAt(uint32 id) internal view returns (address owner) {
-        if (id == 0 || id > ticketOwners.length) revert E();
-        assembly ("memory-safe") {
-            mstore(0, ticketOwners.slot)
-            owner := and(sload(add(keccak256(0, 32), sub(id, 1))), 0xffffffffffffffffffffffffffffffffffffffff)
-        }
-    }
-
     /// @dev Sum both normal cohorts and the authoritative far-future balance.
-    function _entriesOwedTotal(uint24 lvl, address player) internal view returns (uint32 total) {
-        uint32 id = ticketOwnerId[player];
+    function _entriesOwedTotal(uint24 lvl, uint32 id) internal view returns (uint32 total) {
         if (id == 0) return 0;
         uint256 word = ticketPending[id];
         uint256 futureLane = _farFutureLane(lvl, id);
@@ -1640,11 +1724,6 @@ abstract contract DegenerusGameStorage {
             total := add(total, and(futureLane, 0x3fffffff))
             total := and(total, 0xffffffff)
         }
-    }
-
-    /// @dev Synthesized compatibility record; key MUST name the actual queue domain.
-    function _entryRecord(uint24 key, uint32 id) internal view returns (uint256) {
-        return uint256(uint160(_ticketOwnerAt(id))) | (uint256(_entryPacked(key, id)) << 160);
     }
 
     /// @dev Reload at writeback and mask only this lane, preserving all other cohorts.
@@ -1727,19 +1806,15 @@ abstract contract DegenerusGameStorage {
         }
     }
 
-    /// @dev Resolve one valid lane from an already loaded word; registry index zero is valid.
-    function _bucketOwnerFromWordUnchecked(uint24 lvl, uint256 word, uint256 k) internal view returns (address owner) {
-        address[] storage owners = ticketOwners;
-        assembly ("memory-safe") {
-            let idx := and(shr(shl(5, and(k, 7)), word), 0xffffffff)
-            mstore(0, owners.slot)
-            owner := and(sload(add(keccak256(0, 32), idx)), 0xffffffffffffffffffffffffffffffffffffffff)
-        }
+    /// @dev Wallet ID in lane `k & 7` of an already loaded bucket word.
+    function _bucketIdFromWord(uint256 word, uint256 k) internal pure returns (uint32 id) {
+        assembly ("memory-safe") { id := and(shr(shl(5, and(k, 7)), word), 0xffffffff) }
     }
 
-    /// @dev Gold six has no virtual deity entry; actual purchased entries remain eligible.
-    function _traitDeity(uint8 trait) internal view returns (address) {
-        return trait == GoldSixLib.TRAIT ? address(0) : deityBySymbol[(trait >> 6) * 8 + (trait & 7)];
+    /// @dev Wallet ID of the deity holding a trait's symbol, or zero. Gold six has no virtual
+    ///      deity entry; actual purchased entries remain eligible.
+    function _traitDeity(uint8 trait) internal view returns (uint32) {
+        return trait == GoldSixLib.TRAIT ? 0 : deityBySymbol[(trait >> 6) * 8 + (trait & 7)];
     }
 
     /// @dev Virtual deity entry count for a trait bucket of size `len` (zero
@@ -1750,9 +1825,9 @@ abstract contract DegenerusGameStorage {
     function _deityVirtualCount(
         uint8 trait,
         uint256 len,
-        address deity
+        uint32 deity
     ) internal pure returns (uint256 virtualCount) {
-        if (deity != address(0) && trait != GoldSixLib.TRAIT) {
+        if (deity != 0 && trait != GoldSixLib.TRAIT) {
             uint8 color = (trait >> 3) & 7;
             if (color == 7) {
                 virtualCount = 1;
@@ -1766,10 +1841,10 @@ abstract contract DegenerusGameStorage {
         }
     }
 
-    /// @dev Owner of occurrence `k` in lvlTraitEntry[lvl][trait]. Two reads: the lane word,
-    ///      then the registry element it names. No bound check: callers gate on the length.
-    function _bucketOwnerAtUnchecked(uint24 lvl, uint8 trait, uint256 k) internal view returns (address owner) {
-        return _bucketOwnerFromWordUnchecked(lvl, _bucketWordAtUnchecked(lvl, trait, k), k);
+    /// @dev Wallet ID of occurrence `k` in lvlTraitEntry[lvl][trait]. No bound check: callers
+    ///      gate on the length.
+    function _bucketIdAtUnchecked(uint24 lvl, uint8 trait, uint256 k) internal view returns (uint32) {
+        return _bucketIdFromWord(_bucketWordAtUnchecked(lvl, trait, k), k);
     }
 
 
@@ -1777,7 +1852,7 @@ abstract contract DegenerusGameStorage {
     ///      Only complete words reach data storage. The practical per-level bound is below
     ///      2^32 occurrences per trait; reaching it needs over 536 million word writes.
     ///      Returns physical writes classified by the slot value before each store.
-    ///      Caller has prepared lvl and provides a uint32 registry index.
+    ///      Caller has prepared lvl and provides the nonzero wallet ID.
     function _bucketAppendRun(
         uint256 levelSlot,
         uint8 traitId,
@@ -1836,7 +1911,7 @@ abstract contract DegenerusGameStorage {
         }
     }
 
-    /// @dev Append up to eight packed low-first uint32 owner lanes. Persist the unfinished
+    /// @dev Append up to eight packed low-first uint32 wallet-ID lanes. Persist the unfinished
     ///      word in the header and write at most one complete data word. Slot-value write charges.
     function _bucketAppendLanes(
         uint256 levelSlot,
@@ -1882,7 +1957,7 @@ abstract contract DegenerusGameStorage {
     // Ticket Queue Key Encoding
     // =========================================================================
 
-    /// @dev Append a nonzero registry position plus one. The length counts lanes, like a
+    /// @dev Append a nonzero wallet ID. The length counts lanes, like a
     ///      trait bucket. A mask replaces stale lanes after release or swap-pop; lane zero
     ///      starts a whole word so the fresh tail has no inherited upper lanes.
     function _tqAppend(uint24 key, uint32 ownerPos) internal {
@@ -1902,7 +1977,7 @@ abstract contract DegenerusGameStorage {
         }
     }
 
-    /// @dev Append up to eight nonzero owner positions packed low-lane first. Overwrite
+    /// @dev Append up to eight nonzero wallet IDs packed low-lane first. Overwrite
     ///      stale tail lanes after queue reuse; preserve only the live prefix. Used by
     ///      deity renewal to update the queue length once per packed group.
     function _tqAppendLanes(uint24 key, uint256 lanes, uint256 count) internal {
@@ -1941,12 +2016,6 @@ abstract contract DegenerusGameStorage {
             let word := sload(add(keccak256(0x00, 0x20), shr(3, k)))
             pos := and(shr(shl(5, and(k, 7)), word), 0xffffffff)
         }
-    }
-
-    /// @dev Resolve a length-gated queue lane against the permanent global owner registry.
-    ///      A zero lane is invalid and cannot alias registry element zero.
-    function _tqOwnerAt(uint256[] storage q, uint24 /* lvl */, uint256 k) internal view returns (address owner) {
-        return _ticketOwnerAt(_tqPositionAt(q, k));
     }
 
     /// @dev Remove a verified queue index by replacing it with the last lane. Clear only
@@ -2093,16 +2162,16 @@ abstract contract DegenerusGameStorage {
     ///      when the two tiers together cannot cover the shortfall. Single sink so the sentinel
     ///      + the aggregate debit cannot drift across the ETH-in paths that accept claimable/
     ///      afking shortfall.
-    /// @param buyer Account whose claimable/afking balances cover the shortfall.
+    /// @param id Wallet whose claimable/afking balances cover the shortfall.
     /// @param shortfall Wei still owed after the buyer's direct payment.
     /// @param allowClaimable True to draw claimable balance first; false skips tier 1 entirely.
     /// @return claimableUsed Wei drawn from claimable. @return afkingUsed Wei drawn from afking.
-    function _settleShortfall(address buyer, uint256 shortfall, bool allowClaimable)
+    function _settleShortfall(uint32 id, uint256 shortfall, bool allowClaimable)
         internal
         returns (uint256 claimableUsed, uint256 afkingUsed)
     {
         (claimableUsed, afkingUsed) = _settleShortfallNoPool(
-            buyer,
+            id,
             shortfall,
             allowClaimable
         );
@@ -2116,14 +2185,14 @@ abstract contract DegenerusGameStorage {
     ///      combined ticket+lootbox purchase can fold both legs' pool draws into one RMW. The
     ///      per-player claimable/afking debits and the AfkingSpent emit still run here; the caller
     ///      MUST apply `claimablePool -= (claimableUsed + afkingUsed)` for the returned draw.
-    function _settleShortfallNoPool(address buyer, uint256 shortfall, bool allowClaimable)
+    function _settleShortfallNoPool(uint32 id, uint256 shortfall, bool allowClaimable)
         internal
         returns (uint256 claimableUsed, uint256 afkingUsed)
     {
         if (shortfall == 0) return (0, 0);
         // Single packed load; both halves debited in one combined store below. No external call
         // in this body, so the cache cannot go stale between the reads and the write.
-        uint256 packed = balancesPacked[buyer];
+        uint256 packed = balancesPacked[id];
         if (allowClaimable) {
             uint256 claimable = uint128(packed);
             if (claimable > 1) {
@@ -2131,7 +2200,7 @@ abstract contract DegenerusGameStorage {
                 claimableUsed = shortfall < available ? shortfall : available;
                 if (claimableUsed != 0) {
                     // _debitClaimable's guard is dead here: claimableUsed <= claimable-1 < low half.
-                    emit ClaimableSpent(buyer, claimableUsed, claimable - claimableUsed, MintPaymentKind.Internal, claimableUsed);
+                    emit ClaimableSpent(id, claimableUsed, claimable - claimableUsed, MintPaymentKind.Internal, claimableUsed);
                 }
             }
         }
@@ -2139,60 +2208,69 @@ abstract contract DegenerusGameStorage {
         if (remaining != 0) {
             if ((packed >> 128) < remaining) revert Insolvent();
             afkingUsed = remaining;
-            emit AfkingSpent(buyer, afkingUsed);
+            emit AfkingSpent(id, afkingUsed);
         }
         // One combined store == sequential _debitClaimable + _debitAfking: claimableUsed sits in
         // the low half (< it, no borrow) and afkingUsed in the high half (guarded >= above), so
         // neither borrows across halves. At least one is non-zero past the early return.
         if (claimableUsed != 0 || afkingUsed != 0) {
-            balancesPacked[buyer] = packed - claimableUsed - (afkingUsed << 128);
+            balancesPacked[id] = packed - claimableUsed - (afkingUsed << 128);
         }
     }
 
     // =========================================================================
     // Balance accessors — claimable / afking, the canonical readers/writers of the
-    // shared per-player slot. claimableWinnings and afkingFunding are folded into
-    // one word per player; the few direct packed operations (shortfall settlement,
+    // shared per-wallet slot. claimableWinnings and afkingFunding are folded into
+    // one word per wallet ID; the few direct packed operations (shortfall settlement,
     // combined debits, the claim paths) reproduce this same layout. claimablePool
     // pairing is kept at the call sites (the solvency total is maintained in
     // tandem there).
     // =========================================================================
 
-    /// @dev A player's claimable winnings balance (low 128 bits of the packed slot).
-    function _claimableOf(address player) internal view returns (uint256) {
-        return uint128(balancesPacked[player]);
+    /// @dev A wallet's claimable winnings balance (low 128 bits of the packed slot).
+    function _claimableOf(uint32 id) internal view returns (uint256) {
+        return uint128(balancesPacked[id]);
     }
 
-    /// @dev A player's prepaid afking balance (high 128 bits of the packed slot).
-    function _afkingOf(address player) internal view returns (uint256) {
-        return balancesPacked[player] >> 128;
+    /// @dev A wallet's prepaid afking balance (high 128 bits of the packed slot).
+    function _afkingOf(uint32 id) internal view returns (uint256) {
+        return balancesPacked[id] >> 128;
     }
 
-    /// @dev Credit claimable (the low half). A full-word add is safe: per-player ETH <= total
-    ///      supply (~1.2e26 wei << 2^128), so claimable + amount never carries into the afking half.
-    function _creditClaimable(address beneficiary, uint256 weiAmount) internal {
+    /// @dev Credit claimable (the low half) without a log: the caller's own event names the
+    ///      wallet and amount. A full-word add is safe: per-wallet ETH <= total supply
+    ///      (~1.2e26 wei << 2^128), so claimable + amount never carries into the afking half.
+    function _creditClaimable(uint32 id, uint256 weiAmount) internal {
         if (weiAmount == 0) return;
-        balancesPacked[beneficiary] += weiAmount;
-        emit PlayerCredited(beneficiary, weiAmount);
+        if (id == 0) revert E();
+        balancesPacked[id] += weiAmount;
+    }
+
+    /// @dev Credit claimable at a site that has no event of its own naming the wallet and amount.
+    function _creditClaimableLogged(uint32 id, uint256 weiAmount) internal {
+        if (weiAmount == 0) return;
+        if (id == 0) revert E();
+        balancesPacked[id] += weiAmount;
+        emit PlayerCredited(id, weiAmount);
     }
 
     /// @dev Debit claimable (the low half). Guard low >= amount so the subtraction never borrows
     ///      from the afking half — a low-half borrow would be invisible to 0.8's full-word check.
-    function _debitClaimable(address player, uint256 weiAmount) internal {
+    function _debitClaimable(uint32 id, uint256 weiAmount) internal {
         if (weiAmount == 0) return;
-        if (uint128(balancesPacked[player]) < weiAmount) revert Insolvent();
-        balancesPacked[player] -= weiAmount;
+        if (uint128(balancesPacked[id]) < weiAmount) revert Insolvent();
+        balancesPacked[id] -= weiAmount;
     }
 
     /// @dev Debit afking (the high half). Stands alone, unlike the credit side: the afking
-    ///      delivery debits the player here and applies its own claimablePool move for the
+    ///      delivery debits the wallet here and applies its own claimablePool move for the
     ///      combined afking + claimable draw in the same call, so the pool pairing lives at
     ///      that site rather than in this primitive.
     ///      The full-word subtraction is naturally fail-loud: if afking < amount the whole word
     ///      underflows and 0.8 reverts (no silent low-half borrow).
-    function _debitAfking(address player, uint256 weiAmount) internal {
+    function _debitAfking(uint32 id, uint256 weiAmount) internal {
         if (weiAmount == 0) return;
-        balancesPacked[player] -= weiAmount << 128;
+        balancesPacked[id] -= weiAmount << 128;
     }
 
     /// @dev Debit claimable (low half) and afking (high half) in ONE load + store. Each half is
@@ -2201,26 +2279,26 @@ abstract contract DegenerusGameStorage {
     ///      unchecked-by-construction `<< 128` — the guards close both. Reverts match the
     ///      sequential _debitClaimable + _debitAfking exactly.
     function _debitClaimableAndAfking(
-        address player,
+        uint32 id,
         uint256 claimableAmount,
         uint256 afkingAmount
     ) internal {
-        uint256 packed = balancesPacked[player];
+        uint256 packed = balancesPacked[id];
         if (uint128(packed) < claimableAmount) revert Insolvent();
         if ((packed >> 128) < afkingAmount) revert Insolvent();
-        balancesPacked[player] = packed - claimableAmount - (afkingAmount << 128);
+        balancesPacked[id] = packed - claimableAmount - (afkingAmount << 128);
     }
 
-    /// @notice Emitted when ETH is credited to a player's prepaid afking balance.
-    event AfkingFunded(address indexed player, uint256 amount);
+    /// @notice Emitted when ETH is credited to a wallet's prepaid afking balance.
+    event AfkingFunded(uint32 indexed walletId, uint256 amount);
 
-    /// @dev Credit excess/stray ETH to a player's withdrawable prepaid afking balance,
+    /// @dev Credit excess/stray ETH to a wallet's withdrawable prepaid afking balance,
     ///      preserving the solvency identity (claimablePool tracks the afking half). Used to
     ///      absorb purchase overpay and bare sends instead of reverting, stranding, or routing
     ///      to the prize pool — the ETH is already held by the contract, so this just records
     ///      the liability. Withdrawable via withdrawAfkingFunding (pre final sweep).
     ///
-    ///      This is the ONLY afking credit: the per-player half, the claimablePool half and the
+    ///      This is the ONLY afking credit: the per-wallet half, the claimablePool half and the
     ///      log move together or not at all. No bare credit primitive exists — an unpaired
     ///      credit raises obligations without the pool backing them (the SOLVENCY-01 break) and
     ///      touches no identifier the pool-write gate tracks. The debit twin stands alone only
@@ -2229,11 +2307,12 @@ abstract contract DegenerusGameStorage {
     ///
     ///      The full-word add is safe: afking + amount <= 2*supply << 2^128 (no overflow), and
     ///      amount << 128 leaves the claimable low half untouched.
-    function _creditAfkingValue(address player, uint256 weiAmount) internal {
+    function _creditAfkingValue(uint32 id, uint256 weiAmount) internal {
         if (weiAmount == 0) return;
-        balancesPacked[player] += weiAmount << 128;
+        if (id == 0) revert E();
+        balancesPacked[id] += weiAmount << 128;
         claimablePool += uint128(weiAmount);
-        emit AfkingFunded(player, weiAmount);
+        emit AfkingFunded(id, weiAmount);
     }
 
     // =========================================================================
@@ -2372,10 +2451,10 @@ abstract contract DegenerusGameStorage {
     ///      DGNRS into it. Packs into presaleBoxEthSold's slot (warm at the crossing buy).
     address internal presaleCloser;
 
-    /// @dev Spendable presale-box credit accrued per player from ETH buys while
+    /// @dev Spendable presale-box credit accrued per wallet from ETH buys while
     ///      the presale is open (presaleBoxCredit += 0.25 * purchaseEth). Consumed
     ///      1:1 when a box is bought.
-    mapping(address => uint256) internal presaleBoxCredit;
+    mapping(uint32 => uint256) internal presaleBoxCredit;
 
     /// @dev Presale-box record per RNG index per player. One box per (index, player).
     ///      A box always queues at the current lootbox RNG index and resolves off the
@@ -2433,15 +2512,6 @@ abstract contract DegenerusGameStorage {
     }
 
     // =========================================================================
-    // Whale Pass Claims (Deferred >5 ETH lootboxes)
-    // =========================================================================
-
-    /// @dev Pending whale pass claims from large lootbox wins (>5 ETH).
-    ///      Stores number of half whale passes (100 entries each = 100 levels × 1 entry per half-pass).
-    ///      Unified storage for all deferred half-pass rewards (BAF, jackpot, decimator).
-    mapping(address => uint256) internal whalePassClaims;
-
-    // =========================================================================
     // Degenerette Bet Queue
     // =========================================================================
 
@@ -2450,7 +2520,8 @@ abstract contract DegenerusGameStorage {
     ///      unset; the ordered miner chain resolves the queue after that index's box entries.
     ///      Direct worker calls enforce the same consumer stage. A resolved bet is zeroed.
     ///      Word layout (LSB → MSB):
-    ///      - [0..159]   owner
+    ///      - [0..31]    owner wallet ID
+    ///      - [32..159]  zero
     ///      - [160..164] chosen hero symbol (0..23; hero quadrant = symbol >> 3; Dice excluded)
     ///      - [165..169] spin count (1..25)
     ///      - [170]      currency (0 = ETH, 1 = FLIP)
@@ -2474,28 +2545,28 @@ abstract contract DegenerusGameStorage {
     /// @dev Per-level prize pool snapshot used for affiliate DGNRS weighting.
     mapping(uint24 => uint256) internal levelPrizePool;
 
-    /// @dev One reusable claim word per player. Bits 0..24 and 25..49 hold
+    /// @dev One reusable claim word per wallet. Bits 0..24 and 25..49 hold
     ///      bingo level+1 stamps for even/odd ticket buffers (zero = never claimed).
     ///      Bits 50..73 hold the affiliate claim level (level zero is not claimable).
     ///      A bingo stamp is overwritten only after that parity's old ticket level retires.
-    mapping(address => uint256) internal playerClaimWord;
+    mapping(uint32 => uint256) internal playerClaimWord;
 
-    function _bingoClaimed(uint24 lvl, address player) internal view returns (bool) {
-        return ((playerClaimWord[player] >> ((lvl & 1) * 25)) & 0x1ffffff) == uint256(lvl) + 1;
+    function _bingoClaimed(uint24 lvl, uint32 id) internal view returns (bool) {
+        return ((playerClaimWord[id] >> ((lvl & 1) * 25)) & 0x1ffffff) == uint256(lvl) + 1;
     }
 
-    function _markBingoClaimed(uint24 lvl, address player) internal {
+    function _markBingoClaimed(uint24 lvl, uint32 id) internal {
         uint256 shift = (lvl & 1) * 25;
-        playerClaimWord[player] = (playerClaimWord[player] & ~(uint256(0x1ffffff) << shift))
+        playerClaimWord[id] = (playerClaimWord[id] & ~(uint256(0x1ffffff) << shift))
             | ((uint256(lvl) + 1) << shift);
     }
 
-    function _affiliateDgnrsClaimed(uint24 lvl, address player) internal view returns (bool) {
-        return uint24(playerClaimWord[player] >> 50) == lvl;
+    function _affiliateDgnrsClaimed(uint24 lvl, uint32 id) internal view returns (bool) {
+        return uint24(playerClaimWord[id] >> 50) == lvl;
     }
 
-    function _markAffiliateDgnrsClaimed(uint24 lvl, address player) internal {
-        playerClaimWord[player] = (playerClaimWord[player] & ~(uint256(type(uint24).max) << 50))
+    function _markAffiliateDgnrsClaimed(uint24 lvl, uint32 id) internal {
+        playerClaimWord[id] = (playerClaimWord[id] & ~(uint256(type(uint24).max) << 50))
             | (uint256(lvl) << 50);
     }
 
@@ -2537,23 +2608,62 @@ abstract contract DegenerusGameStorage {
     // Deity Pass (Perma Whale) Grants
     // =========================================================================
 
-    /// @dev ETH paid for a buyer's (single) deity pass. The early-game-over refund is capped at
-    ///      this, so a boon-discounted deity that paid < 20 ETH refunds only what it actually paid.
-    ///      Ownership itself is tracked by the HAS_DEITY_PASS bit in mintPacked_.
-    mapping(address => uint96) internal deityPassPricePaid;
+    /// @dev ETH paid for a buyer's (single) deity pass, by wallet ID. The early-game-over refund
+    ///      is capped at this, so a boon-discounted deity that paid < 20 ETH refunds only what it
+    ///      actually paid. Ownership itself is tracked by the HAS_DEITY_PASS bit in mintPacked_.
+    mapping(uint32 => uint96) internal deityPassPricePaid;
 
-    /// @dev Every soulbound deity, genesis and paid, in registration order. Each holds one
-    ///      perpetual ticket per level: the initial grant covers through level + 100 at
-    ///      registration and every level transition extends every owner by one level
-    ///      (queuePerpetualTickets), which the advance runs exactly once per transition.
-    address[] internal deityPassOwners;
+    /// @dev Every soulbound deity, genesis and paid, in registration order, as wallet IDs packed
+    ///      eight uint32 lanes per word (low lane first). The root's length counts deities (at
+    ///      most 32); data word w holds deities 8w..8w+7. Each deity holds one perpetual ticket
+    ///      per level: the initial grant covers through level + 100 at registration and every
+    ///      level transition extends every owner by one level (queuePerpetualTickets), which the
+    ///      advance runs exactly once per transition. Read and append only through the lane
+    ///      helpers; Solidity indexing would treat every word as one deity.
+    uint256[] internal deityPassIds;
+
+    /// @dev Number of deities.
+    function _deityCount() internal view returns (uint256 count) {
+        assembly ("memory-safe") { count := sload(deityPassIds.slot) }
+    }
+
+    /// @dev Packed word holding deities 8w..8w+7.
+    function _deityWord(uint256 w) internal view returns (uint256 word) {
+        assembly ("memory-safe") {
+            mstore(0, deityPassIds.slot)
+            word := sload(add(keccak256(0, 32), w))
+        }
+    }
+
+    /// @dev Wallet ID of deity `i` (registration order).
+    function _deityIdAt(uint256 i) internal view returns (uint32) {
+        return uint32(_deityWord(i >> 3) >> ((i & 7) << 5));
+    }
+
+    /// @dev Append one deity ID in the next lane and bump the count.
+    function _pushDeityId(uint32 id) internal {
+        assembly ("memory-safe") {
+            let count := sload(deityPassIds.slot)
+            mstore(0, deityPassIds.slot)
+            let slot := add(keccak256(0, 32), shr(3, count))
+            let shift := shl(5, and(count, 7))
+            sstore(slot, or(and(sload(slot), not(shl(shift, 0xffffffff))), shl(shift, id)))
+            sstore(deityPassIds.slot, add(count, 1))
+        }
+    }
+
+    /// @dev Protocol wallet IDs, fixed by registration order: the VAULT and sDGNRS constructors
+    ///      subscribe (registering 1 and 2) and initProtocolDeity registers GNRUS (3), asserting all three.
+    uint32 internal constant VAULT_WALLET_ID = 1;
+    uint32 internal constant SDGNRS_WALLET_ID = 2;
+    uint32 internal constant GNRUS_WALLET_ID = 3;
 
     uint8 internal constant VAULT_DEITY_SYMBOL = 0;
     uint8 internal constant SDGNRS_DEITY_SYMBOL = 6;
     uint32 internal constant DEITY_PERPETUAL_ENTRIES = 4;
 
-    /// @dev Reverse lookup: symbol ID (0-31) → current owner address.
-    mapping(uint8 => address) internal deityBySymbol;
+    /// @dev Reverse lookup: symbol ID (0-31) → the holding deity's wallet ID (0 = unclaimed).
+    mapping(uint8 => uint32) internal deityBySymbol;
 
     // =========================================================================
     // Coin-Presale-Box DGNRS Curve
@@ -2652,9 +2762,9 @@ abstract contract DegenerusGameStorage {
         uint256 packedAfter
     );
 
-    /// @dev Activates a 10-level pass for a player. Shared logic for lazy pass purchases and awards.
-    ///      Updates mintPacked_ (levelCount +10, frozenUntilLevel, passType, lastLevel, day)
-    ///      and queues tickets for the 10-level range.
+    /// @dev Activates a 10-level pass for a registered player. Shared logic for lazy pass purchases
+    ///      and awards. Updates mintPacked_ (levelCount +10, frozenUntilLevel, passType, lastLevel,
+    ///      day) and queues tickets for the 10-level range under the wallet ID the word carries.
     /// @param player Address receiving the pass activation.
     /// @param ticketStartLevel First level of the 10-level range.
     /// @param entriesPerLevel Number of tickets to queue per level.
@@ -2732,7 +2842,7 @@ abstract contract DegenerusGameStorage {
             data,
             day,
             BitPackingLib.DAY_SHIFT,
-            BitPackingLib.MASK_32
+            BitPackingLib.MASK_24
         );
 
         // Front-load the LEVEL mint streak by the same freeze delta (survives pass expiry).
@@ -2745,17 +2855,18 @@ abstract contract DegenerusGameStorage {
 
         mintPacked_[player] = data;
 
-        _queueEntryRange(player, ticketStartLevel, 10, entriesPerLevel);
+        _queueEntryRange(uint32(data >> BitPackingLib.WALLET_ID_SHIFT), ticketStartLevel, 10, entriesPerLevel);
         emit PassActivated(player, false, ticketStartLevel, newFrozenLevel, data);
     }
 
     /// @dev Apply whale pass stats (levelCount/freeze/passType/lastLevel/day) without queueing tickets.
-    /// @param player Address receiving the whale pass stats.
+    /// @param player Registered address receiving the whale pass stats.
     /// @param ticketStartLevel First level of the 100-level range for whale pass tickets.
+    /// @return id The player's wallet ID, read from the same word.
     function _applyWhalePassStats(
         address player,
         uint24 ticketStartLevel
-    ) internal {
+    ) internal returns (uint32 id) {
         uint256 prevData = mintPacked_[player];
 
         uint24 frozenUntilLevel = uint24(
@@ -2813,7 +2924,7 @@ abstract contract DegenerusGameStorage {
             data,
             day,
             BitPackingLib.DAY_SHIFT,
-            BitPackingLib.MASK_32
+            BitPackingLib.MASK_24
         );
         // Front-load the LEVEL mint streak by the same freeze delta (survives pass expiry).
         data = _withPassStreakFrontLoad(
@@ -2825,6 +2936,7 @@ abstract contract DegenerusGameStorage {
 
         mintPacked_[player] = data;
         emit PassActivated(player, true, ticketStartLevel, newFrozenLevel, data);
+        id = uint32(data >> BitPackingLib.WALLET_ID_SHIFT);
     }
 
     /// @dev Returns the current day index.
@@ -3173,11 +3285,11 @@ abstract contract DegenerusGameStorage {
     ///      used slots for that day (bit i = slot i used). A stale day reads its mask
     ///      as irrelevant because every reader gates on the day matching; the day-roll
     ///      write re-stamps the day with a fresh (zero) mask in one store.
-    mapping(address => uint32) internal deityBoonPacked;
+    mapping(uint32 => uint32) internal deityBoonPacked;
 
     /// @dev Day when recipient last received a deity boon (prevents double-receipt
     ///      on the same day, regardless of which deity issues it).
-    mapping(address => uint24) internal deityBoonRecipientDay;
+    mapping(uint32 => uint24) internal deityBoonRecipientDay;
 
     // =========================================================================
     // Degenerette Bets
@@ -3208,7 +3320,7 @@ abstract contract DegenerusGameStorage {
     ///      stamp (24 bits). `used` is clamped to LOOTBOX_EV_BENEFIT_CAP = 10 ether = 1e19
     ///      < 2^64 at every write. A non-matching stamp reads as 0 (a fresh allowance).
     ///      Window A: bits [0:64) used, [64:88) level. Window B: bits [88:152) used, [152:176) level.
-    mapping(address => uint256) internal lootboxEvCapPacked;
+    mapping(uint32 => uint256) internal lootboxEvCapPacked;
 
     uint256 private constant _EV_USED_MASK = (uint256(1) << 64) - 1;
     uint256 private constant _EV_WINDOW_A_MASK = (uint256(1) << 88) - 1;
@@ -3216,12 +3328,12 @@ abstract contract DegenerusGameStorage {
         ((uint256(1) << 88) - 1) << 88;
 
     /// @dev A player's EV benefit used for `level`; 0 if neither window is stamped to it.
-    function _lootboxEvUsedFor(address player, uint24 level)
+    function _lootboxEvUsedFor(uint32 id, uint24 level)
         internal
         view
         returns (uint256)
     {
-        uint256 packed = lootboxEvCapPacked[player];
+        uint256 packed = lootboxEvCapPacked[id];
         if (uint24(packed >> 64) == level) return packed & _EV_USED_MASK;
         if (uint24(packed >> 152) == level) return (packed >> 88) & _EV_USED_MASK;
         return 0;
@@ -3231,28 +3343,28 @@ abstract contract DegenerusGameStorage {
     ///      evict the smaller-level window (the older of the two; never a live key, since
     ///      the live set is {currentLevel, currentLevel+1}).
     function _setLootboxEvUsedFor(
-        address player,
+        uint32 id,
         uint24 level,
         uint256 used
     ) internal {
-        uint256 packed = lootboxEvCapPacked[player];
+        uint256 packed = lootboxEvCapPacked[id];
         uint24 lvlA = uint24(packed >> 64);
         uint24 lvlB = uint24(packed >> 152);
         uint256 windowA = (uint256(level) << 64) | (used & _EV_USED_MASK);
         if (lvlA == level) {
-            lootboxEvCapPacked[player] =
+            lootboxEvCapPacked[id] =
                 (packed & ~_EV_WINDOW_A_MASK) |
                 windowA;
         } else if (lvlB == level) {
-            lootboxEvCapPacked[player] =
+            lootboxEvCapPacked[id] =
                 (packed & ~_EV_WINDOW_B_MASK) |
                 (windowA << 88);
         } else if (lvlA <= lvlB) {
-            lootboxEvCapPacked[player] =
+            lootboxEvCapPacked[id] =
                 (packed & ~_EV_WINDOW_A_MASK) |
                 windowA;
         } else {
-            lootboxEvCapPacked[player] =
+            lootboxEvCapPacked[id] =
                 (packed & ~_EV_WINDOW_B_MASK) |
                 (windowA << 88);
         }
@@ -3280,7 +3392,7 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Four mapping roots replace the four retired bucket-system roots without moving
     ///      unrelated storage. An entry is keyed (level << 64) | id, ids beginning at one, and packs
-    ///      its owner (bits 0..159), its chosen board's thirty chip bits (160..189) and its
+    ///      its owner's wallet ID (bits 0..31; 32..159 zero), its chosen board's thirty chip bits (160..189) and its
     ///      accumulated stack in whole FLIP of virtual chips (190..255). A wallet's slot, reused
     ///      window after window, holds its latest entry's level (bits 64..87) and id (0..63).
     mapping(uint256 => uint256) internal decBattleEntries;
@@ -3290,7 +3402,7 @@ abstract contract DegenerusGameStorage {
     ///      equal scores order by a random tiebreak recomputed from the id. The FIFO settles one
     ///      round at a time, so every round reuses these slots.
     mapping(uint256 => uint256) internal decBattleHeap;
-    mapping(address => uint256) internal decBattlePlayers;
+    mapping(uint32 => uint256) internal decBattlePlayers;
 
     // =========================================================================
     // Degenerette Hero Wager Tracking (Daily)
@@ -3384,20 +3496,20 @@ abstract contract DegenerusGameStorage {
     ///      player is independent: a value stamped to a prior century reads as 0
     ///      (a fresh 20-ETH allowance) with no global reset. Enforces the
     ///      20-ETH-equivalent per-player cap across multiple buys at one level.
-    mapping(address => uint256) internal centuryBonusUsed;
+    mapping(uint32 => uint256) internal centuryBonusUsed;
 
     uint256 private constant _CENTURY_USED_MASK = (uint256(1) << 224) - 1;
 
     /// @dev A player's century-bonus usage for the given x00 level; 0 if the
     ///      stored stamp belongs to a prior century (stale).
-    function _centuryUsedFor(address player, uint256 level) internal view returns (uint256) {
-        uint256 packed = centuryBonusUsed[player];
+    function _centuryUsedFor(uint32 id, uint256 level) internal view returns (uint256) {
+        uint256 packed = centuryBonusUsed[id];
         return (packed >> 224) == level ? (packed & _CENTURY_USED_MASK) : 0;
     }
 
     /// @dev Records a player's century-bonus usage, stamped to the given x00 level.
-    function _setCenturyUsedFor(address player, uint256 level, uint256 used) internal {
-        centuryBonusUsed[player] = (level << 224) | (used & _CENTURY_USED_MASK);
+    function _setCenturyUsedFor(uint32 id, uint256 level, uint256 used) internal {
+        centuryBonusUsed[id] = (level << 224) | (used & _CENTURY_USED_MASK);
     }
 
     // =========================================================================
@@ -3418,10 +3530,10 @@ abstract contract DegenerusGameStorage {
         uint24 day;
     }
 
-    /// @dev 240 bits, one slot. Checked uint64 cumulative weight bounds the pool's
+    /// @dev 112 bits, one slot. Checked uint64 cumulative weight bounds the pool's
     ///      paid ETH below uint112 capacity, including each entry's sub-unit dust.
     struct ProtocolBoonEntry {
-        address player;
+        uint32 playerId;
         uint64 cumulativeWeight;
         uint16 scoreSnapshot;
     }
@@ -3502,10 +3614,6 @@ abstract contract DegenerusGameStorage {
     ///      mapping's slot, BP_WWXRP_LANE_SHIFT and BP_LANE_TIER_MASK): moving any of them
     ///      must move those too (pinned by test/fuzz/WwxrpBoonLaneSkip.t.sol).
     mapping(address => BoonPacked) public boonPacked;
-
-    /// @dev Reserved former bingo mapping root; claim stamps now share playerClaimWord.
-    ///      Keep subsequent raw-slot readers and delegatecall layouts at their existing offsets.
-    uint256 private __reservedBingoClaimRoot;
 
     // ---- Slot 0 shifts ----
     uint256 internal constant BP_COINFLIP_DAY_SHIFT = 0;
@@ -3734,15 +3842,15 @@ abstract contract DegenerusGameStorage {
     // already carried inside `claimablePool` via the `afkingFunding` ledger
     // (declared above); no separate aggregate is introduced.
 
-    /// @notice Per-player AfKing subscription record: the per-buy box stamp plus the
-    ///         in-slot per-sub accumulator.
-    /// @dev Layout (Solidity packs sequentially) — fits in ONE 32-byte slot (224 bits used,
-    ///      32 free at the top), so the whole record reads/writes as a single warm slot with no
-    ///      extra cold slot:
+    /// @notice Per-wallet AfKing subscription record: the per-buy box stamp, the in-slot per-sub
+    ///         accumulator and the wallet's position in the subscriber set.
+    /// @dev Layout (Solidity packs sequentially) — exactly ONE 32-byte slot, so the whole record
+    ///      reads/writes as a single warm slot with no extra cold slot:
     ///        config (16b):  dailyQuantity(8) + flags(8)
     ///        per-sub stamp (40b): score(16) + amount(24, milli-ETH)
     ///        markers (96b): lastAutoBoughtDay(24) + lastOpenedDay(24) + afkCoveredThroughDay(24) + afkingStartDay(24)
     ///        accumulator (72b): affiliateBase(32) + pendingFlip(24) + subStreakLatch(16)
+    ///        set position (32b): 1-indexed position in `_subscribers` (0 = not in the set)
     ///      There is NO per-day epoch: the box resolves at the LIVE level at open (no
     ///      stored roll floor) and uses the active published session word. Every stamped box
     ///      must finish before the next request. The frozen per-sub inputs are
@@ -3851,6 +3959,10 @@ abstract contract DegenerusGameStorage {
         ///      per buy as a mask op, so `affiliateBase`/`pendingFlip` stay unmasked for the hot
         ///      accrue.
         uint16 subStreakLatch;
+        // --- set membership (32 bits) ---
+        /// @dev 1-indexed position in `_subscribers`; 0 = not in the set. Swap-pop rewrites the
+        ///      mover's record; delete clears it with the rest of the record.
+        uint32 setPosition;
     }
 
     /// @dev `subStreakLatch` is the full uint16 — `streakAtAfkingStart` (0..65535). It carries the
@@ -3889,16 +4001,16 @@ abstract contract DegenerusGameStorage {
         return uint32(_streakBaseOf(sub)) + uint32(covered - sub.afkingStartDay);
     }
 
-    /// @dev The live (non-lapsed) afking streak for `player` if they are mid-run; otherwise
+    /// @dev The live (non-lapsed) afking streak for wallet `id` if it is mid-run; otherwise
     ///      (false, 0). A genuinely lapsed run, a sub with no active run, and a non-subscriber all return
     ///      (false, 0) so callers fall back to the manual streak — a lapsed-but-still-minting sub
     ///      is never zeroed. No DegenerusQuests STATICCALL on the live-run path.
-    function _liveAfkingStreak(address player) internal view returns (bool live, uint32 streak) {
+    function _liveAfkingStreak(uint32 id) internal view returns (bool live, uint32 streak) {
         // `afkingStartDay` is set at run start and cleared at finalize (every sub-ending path),
         // and a non-subscriber's Sub slot is zero — so a non-zero start day alone identifies a
-        // live run, off the single Sub-slot SLOAD _afkingStreak needs anyway (no _subscriberIndex
-        // read). A paused/lapsed run keeps a start day but _afkingStreak decays it to 0 below.
-        Sub storage sub = _subOf[player];
+        // live run, off the single Sub-slot SLOAD _afkingStreak needs anyway. A paused/lapsed run
+        // keeps a start day but _afkingStreak decays it to 0 below.
+        Sub storage sub = _subOf[id];
         if (sub.afkingStartDay != 0) {
             uint32 a = _afkingStreak(sub, _simulatedDayIndex());
             if (a != 0) return (true, a);
@@ -3917,28 +4029,27 @@ abstract contract DegenerusGameStorage {
         // run falls back to the manual streak just read.
         (uint32 manualStreak, bool afking) = quests.effectiveBaseStreakAndAfking(player);
         if (!afking) return manualStreak;
-        (bool live, uint32 a) = _liveAfkingStreak(player);
+        (bool live, uint32 a) = _liveAfkingStreak(_walletIdOf(player));
         return live ? a : manualStreak;
     }
 
-    /// @dev Per-subscriber record (the iterable set's value): the per-sub stamp, the
-    ///      day markers (incl. `afkingStartDay` / `afkCoveredThroughDay` for the compute-on-read
-    ///      streak), and the in-slot accumulator (affiliateBase / pendingFlip / subStreakLatch).
-    mapping(address => Sub) internal _subOf;
+    /// @dev Per-subscriber record by wallet ID: the per-sub stamp, the day markers (incl.
+    ///      `afkingStartDay` / `afkCoveredThroughDay` for the compute-on-read streak), the in-slot
+    ///      accumulator (affiliateBase / pendingFlip / subStreakLatch) and the set position.
+    mapping(uint32 => Sub) internal _subOf;
 
-    /// @dev Sparse funder map — the wallet whose `afkingFunding` funds a sub.
-    ///      Absent / address(0) ⇒ self-funded (the common case, which stores NOTHING).
-    ///      Written at subscribe (set-if-nonzero / delete-if-self) and read once per
-    ///      process iteration to resolve `src` (not needed at open — funding is already
-    ///      debited at process).
-    mapping(address => address) internal _fundingSourceOf;
+    /// @dev Sparse funder map keyed by subscriber ID — the wallet whose `afkingFunding` funds a sub,
+    ///      packed as funder address (bits 0..159) | funder wallet ID (160..191). Absent ⇒
+    ///      self-funded (the common case, which stores NOTHING). Written at subscribe
+    ///      (set-if-nonzero / delete-if-self) and read once per process iteration to resolve the
+    ///      source (not needed at open — funding is already debited at process).
+    mapping(uint32 => uint256) internal _fundingSourceOf;
 
-    /// @dev Insertion-ordered iterable subscriber set (swap-pop tombstone on cancel).
-    address[] internal _subscribers;
-
-    /// @dev 1-indexed membership ⟺ packed-index map (0 = not in set); the
-    ///      swap-pop bookkeeping for `_subscribers`.
-    mapping(address => uint256) internal _subscriberIndex;
+    /// @dev Insertion-ordered iterable subscriber set (swap-pop tombstone on cancel). Each element
+    ///      packs the subscriber's address (bits 0..159) and wallet ID (160..191): the process pass
+    ///      needs the address for stETH pulls, mint history and affiliate claims, and the ID for
+    ///      `_subOf` and the balance debit. Swap-pop moves the whole word.
+    uint256[] internal _subscribers;
 
     /// @dev The two uint16 cursors + the uint24 afking reset-day pack into ONE slot
     ///      (16 + 16 + 24 = 56 bits). The cursors index `_subscribers` (the active set
@@ -4014,11 +4125,11 @@ abstract contract DegenerusGameStorage {
     ///      Materialization writes four uint32 lines at bits 56..183, the first
     ///      eligible draw at bits 0..23, generation day at bits 184..207, and ready
     ///      at bit 255. Bit 232 marks gold paid. No historical reveal word is needed after generation.
-    mapping(uint24 => mapping(address => uint256)) internal foilRecord;
+    mapping(uint24 => mapping(uint32 => uint256)) internal foilRecord;
 
     /// @dev Two reusable day lanes per player, set before payout. Each 32-bit lane
     ///      stores its exact day [0..23] and four ticket claim bits [24..27].
-    mapping(address => uint256) internal foilMatchClaimed;
+    mapping(uint32 => uint256) internal foilMatchClaimed;
 
     /// @dev Two reusable draws keyed by day & 1: traits [0..31], level [64..87],
     ///      payout seed [88..215], seed-present flag 216, exact day [217..240].
@@ -4039,7 +4150,7 @@ abstract contract DegenerusGameStorage {
     /// @dev Lifetime count of deity boons issued from a given deity to a given
     ///      recipient, keyed [deity][recipient]. Capped at DEITY_RECIPIENT_BOON_CAP
     ///      in issueDeityBoon.
-    mapping(address => mapping(address => uint8)) internal deityRecipientBoonCount;
+    mapping(uint32 => mapping(uint32 => uint8)) internal deityRecipientBoonCount;
 
     /// @dev 75/25 next/future split for the foil leg (forked from the 90/10
     ///      ticket split's PURCHASE_TO_FUTURE_BPS = 1000).
@@ -4091,12 +4202,12 @@ abstract contract DegenerusGameStorage {
     /// @dev A player's foil record for a cycle level (one SLOAD): the frozen boost
     ///      and the first eligible draw day pinned at materialization. The boost/activity
     ///      fields make a pending purchase present even while its day is zero.
-    function _foilRecordFor(address player, uint256 lvl)
+    function _foilRecordFor(uint32 id, uint256 lvl)
         internal
         view
         returns (bool present, uint16 multBps, uint24 resolveDay, uint16 activityScore)
     {
-        uint256 packed = _foilRecordWord(player, uint24(lvl));
+        uint256 packed = _foilRecordWord(id, uint24(lvl));
         present = packed != 0;
         resolveDay = uint24(packed & _FOIL_RESOLVEDAY_MASK);
         multBps = uint16((packed >> _FOIL_MULT_SHIFT) & _FOIL_MULT_MASK);
@@ -4106,9 +4217,9 @@ abstract contract DegenerusGameStorage {
     /// @dev The frozen activity multiplier from a player's foil record for a cycle
     ///      level (one SLOAD); 0 when the player holds no pack for the cycle. The
     ///      queue drain reads only this field to boost the resolved entries.
-    function _foilMultFor(address player, uint256 lvl) internal view returns (uint16) {
+    function _foilMultFor(uint32 id, uint256 lvl) internal view returns (uint16) {
         return uint16(
-            (_foilRecordWord(player, uint24(lvl)) >> _FOIL_MULT_SHIFT) & _FOIL_MULT_MASK
+            (_foilRecordWord(id, uint24(lvl)) >> _FOIL_MULT_SHIFT) & _FOIL_MULT_MASK
         );
     }
 
@@ -4125,8 +4236,8 @@ abstract contract DegenerusGameStorage {
         return foilCursor < foilQueue[_foilReadKey()].length;
     }
 
-    function _foilStoredLines(address player, uint24 lvl) internal view returns (uint32[4] memory lines) {
-        uint256 packed = _foilRecordWord(player, lvl) >> _FOIL_LINES_SHIFT;
+    function _foilStoredLines(uint32 id, uint24 lvl) internal view returns (uint32[4] memory lines) {
+        uint256 packed = _foilRecordWord(id, lvl) >> _FOIL_LINES_SHIFT;
         for (uint256 i; i < 4; ++i) lines[i] = uint32(packed >> (i * 32));
     }
 
@@ -4138,13 +4249,13 @@ abstract contract DegenerusGameStorage {
     /// @dev The per-cycle one-pack cap: true iff the player already bought a foil
     ///      pack for this cycle. Keyed on the active ticket level — the same cycle
     ///      key the buy's record write and ticket queue use.
-    function _foilBoughtThisLevel(address player, uint256 lvl) internal view returns (bool) {
-        return _foilRecordWord(player, uint24(lvl)) != 0;
+    function _foilBoughtThisLevel(uint32 id, uint256 lvl) internal view returns (bool) {
+        return _foilRecordWord(id, uint24(lvl)) != 0;
     }
 
     /// @dev All logical pack reads authenticate the full level before using a recycled slot.
-    function _foilRecordWord(address player, uint24 lvl) internal view returns (uint256 packed) {
-        packed = foilRecord[lvl & 3][player];
+    function _foilRecordWord(uint32 id, uint24 lvl) internal view returns (uint256 packed) {
+        packed = foilRecord[lvl & 3][id];
         if (uint24(packed >> _FOIL_LEVEL_SHIFT) != lvl) return 0;
     }
 
@@ -4162,22 +4273,22 @@ abstract contract DegenerusGameStorage {
         return oldLevel != todayLevel && oldLevel != yesterdayLevel;
     }
 
-    function _foilMatchAlreadyClaimed(address player, uint24 day, uint256 ticketIndex)
+    function _foilMatchAlreadyClaimed(uint32 id, uint24 day, uint256 ticketIndex)
         internal view returns (bool)
     {
-        uint256 lane = foilMatchClaimed[player] >> (uint256(day & 1) * 32);
+        uint256 lane = foilMatchClaimed[id] >> (uint256(day & 1) * 32);
         return uint24(lane) == day && lane & (uint256(1) << (24 + ticketIndex)) != 0;
     }
 
     /// @dev Expiry is checked before this write. Replacing an old parity lane cannot
     ///      reopen that old day's claims, and preserves the other still-live day.
-    function _markFoilMatchClaimed(address player, uint24 day, uint256 ticketIndex) internal {
+    function _markFoilMatchClaimed(uint32 id, uint24 day, uint256 ticketIndex) internal {
         uint256 shift = uint256(day & 1) * 32;
-        uint256 packed = foilMatchClaimed[player];
+        uint256 packed = foilMatchClaimed[id];
         uint256 lane = uint32(packed >> shift);
         if (uint24(lane) != day) lane = day;
         lane |= uint256(1) << (24 + ticketIndex);
-        foilMatchClaimed[player] = (packed & ~(uint256(type(uint32).max) << shift)) | (lane << shift);
+        foilMatchClaimed[id] = (packed & ~(uint256(type(uint32).max) << shift)) | (lane << shift);
     }
 
     /// @dev Seal the board and payout entropy together. The explicit flag admits a zero
@@ -4218,7 +4329,8 @@ abstract contract DegenerusGameStorage {
     ///      the advance-driven jackpot draw (JackpotModule) off the sealed word —
     ///      no player entrypoint touches it.
     ///      Layout (LSB up):
-    ///      [159:0]   armed winner (solo bucket winner of the arm day)
+    ///      [31:0]    armed winner wallet ID (solo bucket winner of the arm day)
+    ///      [159:32]  zero
     ///      [161:160] armed solo quadrant
     ///      [164:162] armed solo symbol (official, post-hero)
     ///      [188:165] armedIdx — frozen dailyIdx during the arm draw
@@ -4237,7 +4349,7 @@ abstract contract DegenerusGameStorage {
     ///      A redemption debits MIDDAY_RNG_CHARGE_MULT times what the request itself
     ///      bills, priced at redemption rather than banked at a fixed rate — so the
     ///      balance buys fewer requests when gas is expensive and more when it is cheap.
-    mapping(address => uint256) internal middayRngCredit;
+    mapping(uint32 => uint256) internal middayRngCredit;
 
     /// @dev Achieved prize pool of every completed century level (x00) — the pre-skim
     ///      nextPrizePool recorded at each x00 purchase→jackpot transition — in completion
@@ -4254,10 +4366,6 @@ abstract contract DegenerusGameStorage {
     ///      never change.
     uint128[] internal centuryPrizePools;
 
-    /// @dev Stable global owner registry. Queues store ID = index + 1; generated
-    ///      trait lanes store the zero-based index. IDs are never reassigned.
-    address[] internal ticketOwners;
-
     /// @dev The seats a ticket drain left occupied when its write budget ran out: up to
     ///      eight queue indices plus one (lane j = bits 32j..32j+31, zero = empty), in queue
     ///      order, for the queue named by ticketLevel. The next chunk re-seats them and
@@ -4265,11 +4373,6 @@ abstract contract DegenerusGameStorage {
     ///      it is exhausted or seated), so exhausted holes are never rescanned and a
     ///      long-lived seat can never pin the cursor. Cleared at queue release.
     uint256 internal ticketSeats;
-
-    /// @dev The terminal level's leading affiliate, latched with the terminal cohort level in
-    ///      _handleGameOverPath before any terminal word can exist, so no later claim can
-    ///      change the pool the terminal draw receives. Read once by _handleGameOverDrain.
-    address internal terminalAffiliate;
 
     /// @dev Inclusive lower block bound for a level's first generation window. Level 1
     ///      starts at deployment (level 0 never holds tickets); level L+1 starts when level
@@ -4558,9 +4661,10 @@ abstract contract DegenerusGameStorage {
         uint8 mode;
     }
     mapping(uint24 => DecJackpotPlan) internal decJackpotPlans;
-    /// @dev Owners keyed by generated ordinal (1..original count), reused across rounds. Only retained
-    ///      candidates write; every entry runs once and the shared heap has one active round.
-    mapping(uint256 => address) internal decGeneratedOwners;
+    /// @dev Drawn owner wallet IDs keyed by generated ordinal (1..original count), reused across
+    ///      rounds. Only retained candidates write; every entry runs once and the shared heap has
+    ///      one active round.
+    mapping(uint256 => uint32) internal decGeneratedOwners;
 
     function _decAutomaticCap() internal view returns (uint256) {
         return decPreviousCount == 0 ? 8000 : uint256(decPreviousStack) * 4 / decPreviousCount;

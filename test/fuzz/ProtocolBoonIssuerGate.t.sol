@@ -30,7 +30,7 @@ contract ProtocolBoonIssuerGateTest is DeployProtocol {
         (bool ok,) = address(game).call(abi.encodeCall(IssuerGateFixture.grantDeityBit, (deityHolder)));
         require(ok, "fixture");
         vm.etch(address(game), original);
-        vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScore.selector, donor), abi.encode(uint256(0)));
+        vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScore.selector, donor), abi.encode(uint256(0), game.walletIdOf(donor)));
     }
 
     function test_PaidDeityHolderCannotDrainAnotherPlayersFlip() public {

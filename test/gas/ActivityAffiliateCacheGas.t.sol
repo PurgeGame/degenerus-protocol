@@ -2,6 +2,7 @@
 pragma solidity 0.8.34;
 
 import {ActivityAffiliateCacheFixture} from "../fuzz/helpers/ActivityAffiliateCacheFixture.sol";
+import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
 /// @dev Production score helpers and real Affiliate history lookup. Isolate=true
 /// resets transaction warmth, including on the second cache-hit transaction.
@@ -22,7 +23,7 @@ contract ActivityAffiliateCacheGasTest is ActivityAffiliateCacheFixture {
 
     function testGas_UncachedEmptyWord() public { host.seed(PLAYER, 0, 24); _measure("uncached_empty", false); }
     function testGas_CacheMissEmptyWord() public { host.seed(PLAYER, 0, 24); _measure("miss_empty", true); }
-    function testGas_CacheMissCurseOnly() public { host.seed(PLAYER, uint256(2) << 215, 24); _measure("miss_curse_only", true); }
+    function testGas_CacheMissCurseOnly() public { host.seed(PLAYER, uint256(2) << BitPackingLib.CURSE_COUNT_SHIFT, 24); _measure("miss_curse_only", true); }
     function testGas_UncachedExistingWord() public { host.seed(PLAYER, 1, 24); _measure("uncached_existing", false); }
     function testGas_CacheMissExistingWord() public { host.seed(PLAYER, 1, 24); _measure("miss_existing", true); }
     function testGas_CacheHitExistingWord() public {

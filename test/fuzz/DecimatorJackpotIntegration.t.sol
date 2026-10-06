@@ -15,6 +15,7 @@ import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWhaleModule.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 contract DecimatorJackpotEngineProbe {
     function settleSlipBounded(uint256 chips, uint256 chip, uint256 board, uint256 scatter, bytes32,
@@ -29,11 +30,16 @@ contract DecimatorJackpotEngineProbe {
 }
 
 contract DecimatorJackpotPreferenceProbe {
-    mapping(address => uint32) public preferredBoardOf;
-    function set(address owner, uint32 chips) external { preferredBoardOf[owner] = chips; }
+    mapping(uint32 => uint32) public preferredBoardOf;
+    function set(address owner, uint32 chips) external {
+        preferredBoardOf[DecimatorJackpotHarness(ContractAddresses.GAME).registerWallet(owner, true)] = chips;
+    }
 }
 
-contract DecimatorJackpotHarness is DegenerusGameDecimatorModule {
+contract DecimatorJackpotHarness is DegenerusGameDecimatorModule, WalletSeed {
+    function seedProtocolWallets() external { _seedProtocolWallets(); }
+    function keyOf(uint32 id) external view returns (address) { return _walletKey(id); }
+
     function prepare(uint24 lvl, uint40 n, uint96 pot, uint128 ethBudget, uint256 word, bool entries) external {
         level = lvl;
         dailyIdx = _simulatedDayIndex();
@@ -53,14 +59,15 @@ contract DecimatorJackpotHarness is DegenerusGameDecimatorModule {
         jackpotWork.finalDay = true;
         jackpotWork.budget = ethBudget;
         jackpotWork.traits = uint32(0xc0804000);
-        for (uint8 q; q < 4; ++q) deityBySymbol[q * 8] = address(uint160(0xa100 + q));
+        for (uint8 q; q < 4; ++q) deityBySymbol[q * 8] = _seedWallet(address(uint160(0xa100 + q)));
         DecBattleRound storage r = decBattleRounds[lvl];
         r.count = n;
         r.totalCreditedStack = uint64(n) * 2000;
         r.openedDay = dailyIdx;
         if (entries) {
             for (uint64 i = 1; i <= n; ++i) {
-                decBattleEntries[(uint256(lvl) << 64) | i] = (uint256(2000) << 190) | (0x1000 + i);
+                decBattleEntries[(uint256(lvl) << 64) | i] =
+                    (uint256(2000) << 190) | _seedWallet(address(uint160(0x1000 + i)));
             }
         }
         uint256 returned = this.runDecimatorJackpot(pot, lvl, word);
@@ -77,15 +84,17 @@ contract DecimatorJackpotHarness is DegenerusGameDecimatorModule {
 
     function unlock() external { rngLockedFlag = false; }
     function rngLocked() external view returns (bool) { return rngLockedFlag; }
-    function setDeity(uint8 q, address owner) external { deityBySymbol[q * 8] = owner; }
+    function setDeity(uint8 q, address owner) external { deityBySymbol[q * 8] = owner == address(0) ? 0 : _seedWallet(owner); }
     function originalOnly(uint24 lvl) external { decJackpotPlans[lvl].mode = 0; }
     function seedPlan(uint24 lvl, DecJackpotPlan calldata p) external { decJackpotPlans[lvl] = p; }
     function plan(uint24 lvl) external view returns (DecJackpotPlan memory) { return decJackpotPlans[lvl]; }
     function round(uint24 lvl) external view returns (DecBattleRound memory) { return decBattleRounds[lvl]; }
     function node(uint256 index) external view returns (uint256) { return decBattleHeap[index]; }
-    function ownerSlot(uint256 index) external view returns (address) { return decGeneratedOwners[index]; }
-    function balance(address owner) external view returns (uint256) { return _claimableOf(owner); }
-    function passes(address owner) external view returns (uint256) { return whalePassClaims[owner]; }
+    function ownerSlot(uint256 index) external view returns (address) { return _walletKey(decGeneratedOwners[index]); }
+    function registerWallet(address owner, bool) external returns (uint32) { return _seedWallet(owner); }
+    function walletIdOf(address owner) external view returns (uint32) { return _walletIdOf(owner); }
+    function balance(address owner) external view returns (uint256) { return _claimableOf(_walletIdOf(owner)); }
+    function passes(address owner) external view returns (uint256) { return _halfPassesOf(owner); }
     function pools() external view returns (uint256, uint256, uint256) {
         return (_getCurrentPrizePool(), _getFuturePrizePool(), claimablePool);
     }
@@ -99,7 +108,7 @@ contract DecimatorJackpotIntegrationTest is Test {
     DegenerusGameLens private lens;
     uint24 private constant LVL = 5;
     uint256 private constant WORD = 777;
-    bytes32 private constant GENERATED = keccak256("DecimatorGenerated(uint24,uint64,address,uint8,uint32,uint256,uint256)");
+    bytes32 private constant GENERATED = keccak256("DecimatorGenerated(uint24,uint64,uint32,uint8,uint32,uint256,uint256)");
     bytes32 private constant RUN = keccak256("DecimatorRun(uint24,uint64,uint256)");
 
     function setUp() public {
@@ -113,6 +122,7 @@ contract DecimatorJackpotIntegrationTest is Test {
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
         vm.mockCall(ContractAddresses.AFFILIATE, abi.encodeWithSignature("affiliateTop(uint24)"), abi.encode(address(0), uint256(0)));
         h = DecimatorJackpotHarness(ContractAddresses.GAME);
+        h.seedProtocolWallets();
         lens = new DegenerusGameLens();
     }
 
@@ -371,7 +381,7 @@ contract DecimatorJackpotIntegrationTest is Test {
     function test_NoNonSoloCohortCannotGenerateFromSoloExcess() public {
         h.prepare(LVL, 40, 140 ether, 1000 ether, 6, false);
         for (uint8 q; q < 3; ++q) h.setDeity(q, address(0));
-        vm.mockCallRevert(ContractAddresses.CRAPS, abi.encodeWithSignature("preferredBoardOf(address)"), hex"12345678");
+        vm.mockCallRevert(ContractAddresses.CRAPS, abi.encodeWithSignature("preferredBoardOf(uint32)"), hex"12345678");
         _daily(6, 2_000_000);
         assertEq(h.plan(LVL).generatedEntries, 0);
         assertEq(h.plan(LVL).weights, 0);
@@ -454,12 +464,12 @@ contract DecimatorJackpotIntegrationTest is Test {
         vm.prank(address(0xa100));
         vm.expectRevert();
         c.setPreferredBoard(2);
-        assertEq(c.preferredBoardOf(address(0xa100)), 3);
+        assertEq(c.preferredBoardOf(h.walletIdOf(address(0xa100))), 3);
         _daily(WORD, 3_000_000);
         _settle(1_000_000);
         vm.prank(address(0xa100));
         c.setPreferredBoard(2);
-        assertEq(c.preferredBoardOf(address(0xa100)), 2);
+        assertEq(c.preferredBoardOf(h.walletIdOf(address(0xa100))), 2);
     }
 
     function test_OneOriginalGetsFinalCapacityOnlyAfterGeneratedPlan() public {
@@ -535,7 +545,7 @@ contract DecimatorJackpotIntegrationTest is Test {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 receipts;
         for (uint256 i; i < logs.length; ++i) if (logs[i].topics[0] == GENERATED) {
-            assertEq(address(uint160(uint256(logs[i].topics[3]))), owner);
+            assertEq(h.keyOf(uint32(uint256(logs[i].topics[3]))), owner);
             (, uint32 usedChips,,) = abi.decode(logs[i].data,(uint8,uint32,uint256,uint256));
             assertEq(usedChips, chips);
             uint64 actualId = uint64(uint256(logs[i].topics[2]));
@@ -554,7 +564,7 @@ contract DecimatorJackpotIntegrationTest is Test {
         h.prepare(LVL, 100, 10 ether, 100 ether, WORD, false);
         h.daily(LVL, WORD, 1_000_000);
         uint16 beforeCursor = h.plan(LVL).cursor;
-        vm.mockCallRevert(ContractAddresses.CRAPS, abi.encodeWithSignature("preferredBoardOf(address)"), hex"12345678");
+        vm.mockCallRevert(ContractAddresses.CRAPS, abi.encodeWithSignature("preferredBoardOf(uint32)"), hex"12345678");
         vm.expectRevert(bytes4(0x12345678));
         h.daily(LVL, WORD, 3_000_000);
         assertEq(h.plan(LVL).cursor, beforeCursor);
@@ -678,7 +688,7 @@ contract DecimatorJackpotIntegrationTest is Test {
         bool passMode = base >= unit && w > 1;
         uint256 passPositions = (w - 1) / 2;
         uint256 topup = passMode ? passPositions * (base % unit) / (w - 1 - passPositions) : 0;
-        bytes32 claim = keccak256("DecimatorClaimed(address,uint24,uint64,uint256,uint256)");
+        bytes32 claim = keccak256("DecimatorClaimed(uint32,uint24,uint64,uint256,uint256)");
         for (uint256 pos; pos < w; ++pos) {
             uint64 id = uint64(h.node(pos));
             address owner = address(uint160(0x1000 + id));
@@ -687,7 +697,7 @@ contract DecimatorJackpotIntegrationTest is Test {
                 for (uint256 i; i < logs.length; ++i) {
                     if (logs[i].emitter == address(h) && logs[i].topics[0] == GENERATED
                         && uint64(uint256(logs[i].topics[2])) == id) {
-                        owner = address(uint160(uint256(logs[i].topics[3])));
+                        owner = h.keyOf(uint32(uint256(logs[i].topics[3])));
                         break;
                     }
                 }
@@ -704,7 +714,7 @@ contract DecimatorJackpotIntegrationTest is Test {
                     || uint64(uint256(logs[i].topics[3])) != id) continue;
                 (uint256 paidEth, uint256 paidPasses) = abi.decode(logs[i].data, (uint256,uint256));
                 assertFalse(found, "one receipt per winner");
-                assertEq(address(uint160(uint256(logs[i].topics[1]))), owner);
+                assertEq(h.keyOf(uint32(uint256(logs[i].topics[1]))), owner);
                 assertEq(paidEth, eth); assertEq(paidPasses, passes); found = true;
             }
             assertTrue(found, "every retained entry paid");

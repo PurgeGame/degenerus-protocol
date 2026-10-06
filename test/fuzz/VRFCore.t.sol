@@ -7,6 +7,7 @@ import {VRFHandler} from "./helpers/VRFHandler.sol";
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title VRFCore -- Audit tests for VRF request/fulfillment correctness
 /// @notice Covers VRFC-01 (callback revert-safety + gas), VRFC-02 (requestId lifecycle),
@@ -20,7 +21,7 @@ contract VRFCore is DeployProtocol {
     ///      Slot 3: rngWordCurrent (uint256).
     ///      Slot 4: vrfRequestId (uint256).
     uint256 constant SLOT_PACKED_0 = 0;
-    uint256 constant SLOT_RNG_WORD_CURRENT = 3;
+    uint256 constant SLOT_RNG_WORD_CURRENT = GameSlots.RNG_WORD_CURRENT;
     uint256 constant SLOT_VRF_REQUEST_ID = 4;
 
     function setUp() public {
@@ -67,7 +68,7 @@ contract VRFCore is DeployProtocol {
 
     /// @dev Read LR_MID_DAY from lootboxRngPacked (slot 34, bits [224:232]).
     function _lrMidDay() internal view returns (uint8) {
-        return uint8(uint256(vm.load(address(game), bytes32(uint256(33)))) >> 224);
+        return uint8(uint256(vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED))) >> 224);
     }
 
     /// @dev Read rngWordCurrent directly from storage slot 3.

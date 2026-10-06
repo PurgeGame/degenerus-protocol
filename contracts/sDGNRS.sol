@@ -61,14 +61,17 @@ interface IDegenerusGamePlayer {
     function isOperatorApproved(address owner, address operator) external view returns (bool);
     /// @notice Check if the liveness-timeout game-over trigger is active (fires before gameOver latches).
     function livenessTriggered() external view returns (bool);
-    /// @notice Get player's activity score.
-    function playerActivityScore(address player) external view returns (uint256);
+    /// @notice Get player's activity score and permanent Game wallet ID (0 = none).
+    function playerActivityScore(address player) external view returns (uint256 scorePoints, uint32 walletId);
+    /// @notice `player`'s permanent Game wallet ID (0 = none; never allocates).
+    function walletIdOf(address player) external view returns (uint32);
     /// @notice Resolve a redemption lootbox (sDGNRS forwards ETH as msg.value; GAME pulls any stETH remainder).
     function resolveRedemptionLootbox(
-        address player, uint256 amount, uint256 rngWord, uint16 activityScore, uint32 batchId
+        address player, uint32 playerId, uint256 amount, uint256 rngWord, uint16 activityScore, uint32 batchId
     ) external payable;
-    /// @notice Credit a redemption's direct half to `player`'s game claimable (same ETH + stETH-remainder funding).
-    function creditRedemptionDirect(address player, uint256 amount) external payable;
+    /// @notice Credit a redemption's direct half to wallet `playerId`'s game claimable (same ETH +
+    ///         stETH-remainder funding).
+    function creditRedemptionDirect(uint32 playerId, uint256 amount) external payable;
 }
 
 /// @notice Interface for Coinflip contract methods used by sDGNRS.
@@ -152,6 +155,10 @@ contract sDGNRS {
 
     /// @notice Thrown when a gambling burn amount is below the 1-whole-sDGNRS minimum (1e18 raw).
     error BurnTooSmall();
+
+    /// @notice Thrown when a gambling burn's beneficiary has no Game wallet ID (a burn never
+    ///         registers one).
+    error NoWalletId();
 
 
     // =====================================================================
@@ -304,7 +311,8 @@ contract sDGNRS {
     // closes it at one price for every token in it; the miner settles it on the word that
     // request returns. The ending's request closes nothing: a batch still open at game over is
     // unwound at the game-over price. At most one batch is open and at most one is settling, so
-    // the two player lists alternate by batch-id parity.
+    // the two player lists alternate by batch-id parity. Claims are keyed by the beneficiary's
+    // Game wallet ID; the address is needed only to authenticate and to pay.
 
     /// @dev A beneficiary's stake in one batch: raw sDGNRS burned into it and the activity score
     ///      at the beneficiary's first burn in it, plus one (0 = no claim).
@@ -327,8 +335,9 @@ contract sDGNRS {
         uint16 flipReward;
     }
 
-    /// @notice Per-beneficiary-per-batch redemption record, held from burn until its claim clears it.
-    mapping(address => mapping(uint32 => PendingRedemption)) public pendingRedemptions;
+    /// @notice Redemption record by beneficiary wallet ID and batch id, held from burn until its
+    ///         claim clears it. ID 0 never holds a claim.
+    mapping(uint32 => mapping(uint32 => PendingRedemption)) public pendingRedemptions;
     /// @notice Redemption batches by id.
     mapping(uint32 => RedemptionBatch) public redemptionBatches;
 
@@ -493,13 +502,14 @@ contract sDGNRS {
         uint256 batchTokens = batch.tokens;
         uint256 ethBase = batch.ethBase;
         uint16 roll = batch.roll;
-        address[] storage players = _batchPlayers[id & 1];
+        uint256[] storage players = _batchPlayers[id & 1];
         uint256 total = players.length;
         uint256 cursor = _redemptionCursor;
         uint256 initialCursor = cursor;
         while (cursor < total) {
-            address player = players[cursor];
-            uint256 claimTokens = pendingRedemptions[player][id].tokens;
+            uint256 entry = players[cursor];
+            uint32 walletId = uint32(entry >> BATCH_PLAYER_ID_SHIFT);
+            uint256 claimTokens = pendingRedemptions[walletId][id].tokens;
             if (claimTokens == 0) {
                 if (!MineFlipGas.canRun(meter, 15_000, REDEMPTION_TAIL_GAS)) break;
                 _redemptionCursor = uint32(++cursor);
@@ -525,10 +535,11 @@ contract sDGNRS {
             reserveLeft -= rolled;
             // A refusing dependency must not hold every later RNG request: park the claim with
             // its session word and move on. Gas failures still revert the whole transaction.
-            try this.settleRedemptionHead(player, id, word) {
+            address player = address(uint160(entry));
+            try this.settleRedemptionHead(player, walletId, id, word) {
             } catch (bytes memory reason) {
                 MineFlipGas.rethrowGasFailure(reason);
-                _parkedRedemptionWord[player][id] = word;
+                _parkedRedemptionWord[walletId][id] = word;
                 emit RedemptionParked(player, id, reason);
             }
         }
@@ -551,14 +562,17 @@ contract sDGNRS {
         }
         _settlingBatch = 0;
         _redemptionCursor = 0;
-        address[] storage players = _batchPlayers[id & 1];
+        uint256[] storage players = _batchPlayers[id & 1];
         assembly ("memory-safe") { sstore(players.slot, 0) }
     }
 
-    /// @dev Self-call target of the miner drain, so a refused claim rolls back alone.
-    function settleRedemptionHead(address player, uint32 batchId, uint256 word) external returns (bool) {
+    /// @dev Self-call target of the miner drain, so a refused claim rolls back alone. `player` is
+    ///      the address stored beside `walletId` in the batch list.
+    function settleRedemptionHead(address player, uint32 walletId, uint32 batchId, uint256 word)
+        external returns (bool)
+    {
         if (msg.sender != address(this)) revert Unauthorized();
-        return _claimRedemptionFor(player, batchId, false, word);
+        return _claimRedemptionFor(player, walletId, batchId, false, word);
     }
 
     /// @notice Settle a parked claim on its batch's word. Player or approved operator only.
@@ -566,13 +580,14 @@ contract sDGNRS {
     ///      level live at claim time. Terminal claims take the usual direct terminal shape; the
     ///      word is then unused.
     function claimParkedRedemption(address player, uint32 batchId) external {
-        uint256 word = _parkedRedemptionWord[player][batchId];
+        uint32 walletId = _walletIdOf(player);
+        uint256 word = _parkedRedemptionWord[walletId][batchId];
         if (word == 0) revert NoClaim();
         if (player != msg.sender && !game.isOperatorApproved(player, msg.sender)) revert Unauthorized();
         bool isTerminal = game.gameOver();
         if (!isTerminal && game.livenessTriggered()) revert EndingPending();
-        delete _parkedRedemptionWord[player][batchId];
-        if (!_claimRedemptionFor(player, batchId, isTerminal, word)) revert NoClaim();
+        delete _parkedRedemptionWord[walletId][batchId];
+        if (!_claimRedemptionFor(player, walletId, batchId, isTerminal, word)) revert NoClaim();
     }
 
     /// @notice Holder base (supply plus the open batch's escrow) immediately after the last century
@@ -592,14 +607,18 @@ contract sDGNRS {
     ///      settlement calls only. Packed beside the century markers.
     uint96 private _settlingReserveLeft;
 
-    /// @dev Beneficiary lists of the open and the settling batch, by batch-id parity.
-    address[][2] private _batchPlayers;
+    /// @dev Beneficiary lists of the open and the settling batch, by batch-id parity. Each element
+    ///      is one beneficiary: address in bits 0-159, wallet ID in bits 160-191.
+    uint256[][2] private _batchPlayers;
 
-    /// @dev Per-wallet live-burn value on one wall day: (day << 128) | value (wei, live price).
+    /// @dev sDGNRS's forward word per wallet, read and written on every burn: live-burn value on
+    ///      one wall day in bits 0-127 (wei, live price), that day in bits 128-151, and the wallet's
+    ///      Game ID in bits 152-183 (0 = not cached yet; once set it survives every day reset).
     mapping(address => uint256) private _redemptionDayValue;
 
-    /// @dev Session word of a parked live claim, nonzero until it settles.
-    mapping(address => mapping(uint32 => uint256)) private _parkedRedemptionWord;
+    /// @dev Session word of a parked live claim by beneficiary wallet ID and batch id, nonzero
+    ///      until it settles.
+    mapping(uint32 => mapping(uint32 => uint256)) private _parkedRedemptionWord;
 
     // =====================================================================
     //                          CONSTANTS
@@ -647,6 +666,17 @@ contract sDGNRS {
 
     /// @dev Domain for a batch's synthetic flip; batch id and word key each draw.
     bytes32 private constant SYNTH_FLIP_TAG = keccak256("sdgnrs.redemption.synthetic-flip");
+
+    /// @dev `_redemptionDayValue` field offsets: the day above the 128-bit value, the ID above
+    ///      the 24-bit day.
+    uint256 private constant DAY_VALUE_DAY_SHIFT = 128;
+    uint256 private constant DAY_VALUE_ID_SHIFT = 152;
+
+    /// @dev `_batchPlayers` element: wallet ID above the 160-bit address.
+    uint256 private constant BATCH_PLAYER_ID_SHIFT = 160;
+
+    /// @dev This contract's own Game wallet ID; Game pins it at initProtocolDeity.
+    uint32 private constant SDGNRS_WALLET_ID = 2;
 
     /// @dev Minimum ETH size for a redemption lootbox (0.01 ETH). At claim the rolled value splits
     ///      50/50 into a direct-ETH leg and a lootbox leg; if the lootbox half lands below this floor
@@ -1048,7 +1078,7 @@ contract sDGNRS {
 
     /// @notice Claim a gambling-burn redemption for `player` in batch `batchId` once the game is over.
     /// @dev In a live game mineFlip settles every redemption in batch order, so this is the
-    ///      post-gameover door only, and it deletes `pendingRedemptions[player][batchId]`. Only
+    ///      post-gameover door only, and it deletes the claim under `player`'s wallet ID. Only
     ///      `player` or an operator `player` approved on the GAME may call, since the payout is
     ///      pushed straight to `player` (ETH, with stETH covering any ETH shortfall) rather than
     ///      credited to the Game — a game-claimable credit would forfeit in the post-gameover sweep.
@@ -1066,18 +1096,19 @@ contract sDGNRS {
         // before that, it can still read false again, and a terminal settlement taken then would stick.
         if (!game.gameOver()) revert NotGameOver();
         if (player != msg.sender && !game.isOperatorApproved(player, msg.sender)) revert Unauthorized();
+        uint32 walletId = _walletIdOf(player);
         if (open) {
-            _unwindOpenClaim(player, batchId);
+            _unwindOpenClaim(player, walletId, batchId);
             return;
         }
-        if (!_claimRedemptionFor(player, batchId, true, 0)) revert NoClaim();
+        if (!_claimRedemptionFor(player, walletId, batchId, true, 0)) revert NoClaim();
     }
 
     /// @dev Pay a claim in the batch still open at game over its tokens' game-over value. The
     ///      tokens left supply at the burn but stayed in the holder base through the escrow, so
     ///      the value matches a game-over burn of the same count; the escrow then drops by them.
-    function _unwindOpenClaim(address player, uint32 batchId) private {
-        uint256 tokens = pendingRedemptions[player][batchId].tokens;
+    function _unwindOpenClaim(address player, uint32 walletId, uint32 batchId) private {
+        uint256 tokens = pendingRedemptions[walletId][batchId].tokens;
         if (tokens == 0) revert NoClaim();
         uint256 value = _gameOverValue(tokens);
         // The escrow and the batch hold every open claim's tokens, so neither can underflow.
@@ -1085,7 +1116,7 @@ contract sDGNRS {
             _escrowedSupply -= uint128(tokens);
             redemptionBatches[batchId].tokens -= uint128(tokens);
         }
-        delete pendingRedemptions[player][batchId];
+        delete pendingRedemptions[walletId][batchId];
         emit RedemptionClaimed(player, batchId, 0, value, 0, 0);
         _payGameOverValue(player, value);
     }
@@ -1106,13 +1137,15 @@ contract sDGNRS {
 
     /// @dev Shared settle core for the miner's batch settlement, parked claims and the post-game-over
     ///      claim. Callers must have verified the batch is resolved and (in terminal mode) that the
-    ///      caller is `player` or an operator `player` approved on the Game; the pending-claim
-    ///      existence check lives here, returning false on an empty (player, batch) slot.
+    ///      caller is `player` or an operator `player` approved on the Game, and pass `player`'s
+    ///      wallet ID; the pending-claim existence check lives here, returning false on an empty
+    ///      (wallet ID, batch) slot. The claim and Game credits run by ID; `player` receives the
+    ///      FLIP credit, terminal ETH, events and the box resolver's address argument.
     ///      The claim's share of the batch is pro rata by tokens: one close price for every token.
-    function _claimRedemptionFor(address player, uint32 batchId, bool isTerminal, uint256 word)
+    function _claimRedemptionFor(address player, uint32 walletId, uint32 batchId, bool isTerminal, uint256 word)
         private returns (bool)
     {
-        PendingRedemption memory claim = pendingRedemptions[player][batchId];
+        PendingRedemption memory claim = pendingRedemptions[walletId][batchId];
         if (claim.tokens == 0) return false;
         RedemptionBatch memory batch = redemptionBatches[batchId];
 
@@ -1124,8 +1157,8 @@ contract sDGNRS {
         // resolution left at least the batch's rolled total, which bounds every claim's share.
         _pendingRedemptionEthValue = uint96(_pendingRedemptionEthValue - totalRolledEth);
 
-        // Full claim: clear the (player, batch) slot entirely.
-        delete pendingRedemptions[player][batchId];
+        // Full claim: clear the (wallet ID, batch) slot entirely.
+        delete pendingRedemptions[walletId][batchId];
 
         // Contingent FLIP escrow: the claim's share of the whole-FLIP slice removed from sDGNRS's
         // backing at close. The batch's synthetic flip is the first of two flips: a win pays the
@@ -1165,7 +1198,9 @@ contract sDGNRS {
             uint256 entropy = EntropyLib.hash2(word, uint256(uint160(player)));
             uint256 bal = address(this).balance;
             uint256 ethForLootbox = bal < lootboxEth ? bal : lootboxEth;
-            game.resolveRedemptionLootbox{value: ethForLootbox}(player, lootboxEth, entropy, actScore, batchId);
+            game.resolveRedemptionLootbox{value: ethForLootbox}(
+                player, walletId, lootboxEth, entropy, actScore, batchId
+            );
         }
 
         // Direct half: credit into the player's game claimable (a permissionless trigger must
@@ -1173,17 +1208,17 @@ contract sDGNRS {
         if (ethDirect != 0) {
             uint256 bal = address(this).balance;
             uint256 ethForDirect = bal < ethDirect ? bal : ethDirect;
-            game.creditRedemptionDirect{value: ethForDirect}(player, ethDirect);
+            game.creditRedemptionDirect{value: ethForDirect}(walletId, ethDirect);
         }
 
-        // Forfeited dust-lootbox half → sDGNRS's OWN claimable on the Game (player == address(this)),
+        // Forfeited dust-lootbox half → sDGNRS's OWN claimable on the Game (SDGNRS_WALLET_ID),
         // using the same ETH/stETH funding mix as the direct leg. With this leg the full rolled amount
         // leaves the contract (direct half to the player, forfeited half to sDGNRS), so it reconciles
         // exactly with the pendingRedemptionEthValue release — no ETH is stranded in the contract.
         if (forfeitEth != 0) {
             uint256 bal = address(this).balance;
             uint256 ethForForfeit = bal < forfeitEth ? bal : forfeitEth;
-            game.creditRedemptionDirect{value: ethForForfeit}(address(this), forfeitEth);
+            game.creditRedemptionDirect{value: ethForForfeit}(SDGNRS_WALLET_ID, forfeitEth);
         }
         return true;
     }
@@ -1250,7 +1285,9 @@ contract sDGNRS {
     ///      of the holder base until the batch closes, and records it on the beneficiary's claim in
     ///      that batch. No price, reserve or FLIP is fixed here: the batch close prices every token
     ///      in the batch at once. Caps: the batch holds at most half the holder base at its first
-    ///      burn; a wallet burns at most 160 ETH per wall day at the live price.
+    ///      burn; a wallet burns at most 160 ETH per wall day at the live price. The beneficiary
+    ///      must already hold a Game wallet ID: read from its forward word, or on a miss taken with
+    ///      the activity score from one `playerActivityScore` call and cached there.
     function _submitGamblingClaimFrom(address beneficiary, address burnFrom, uint256 amount) private {
         uint256 bal = balanceOf[burnFrom];
         if (amount == 0 || amount > bal) revert Insufficient();
@@ -1268,9 +1305,21 @@ contract sDGNRS {
         // Valued at the live price; the close never re-checks (it cannot revert).
         uint256 day = GameTimeLib.currentDayIndex();
         uint256 dayValue = _redemptionDayValue[beneficiary];
-        uint256 spent = ((dayValue >> 128) == day ? uint128(dayValue) : 0) + (_liveMoney() * amount) / holderBase;
+        uint32 walletId = uint32(dayValue >> DAY_VALUE_ID_SHIFT);
+        // Activity snapshot as stored on a claim (score + 1); 0 = not fetched yet. A cache miss
+        // takes the ID and the score from one Game call.
+        uint16 scoreSnapshot;
+        if (walletId == 0) {
+            uint256 score;
+            (score, walletId) = game.playerActivityScore(beneficiary);
+            if (walletId == 0) revert NoWalletId();
+            scoreSnapshot = uint16(score) + 1;
+        }
+        uint256 spent = (uint24(dayValue >> DAY_VALUE_DAY_SHIFT) == day ? uint128(dayValue) : 0)
+            + (_liveMoney() * amount) / holderBase;
         if (spent > MAX_DAILY_REDEMPTION_EV) revert ExceedsDailyRedemptionCap();
-        _redemptionDayValue[beneficiary] = (day << 128) | spent;
+        _redemptionDayValue[beneficiary] =
+            (uint256(walletId) << DAY_VALUE_ID_SHIFT) | (day << DAY_VALUE_DAY_SHIFT) | spent;
 
         // Burned now; the escrow count keeps the tokens in the holder base until the close.
         unchecked {
@@ -1282,15 +1331,28 @@ contract sDGNRS {
         batch.tokens = uint128(tokens + amount);
         emit Transfer(burnFrom, address(0), amount);
 
-        PendingRedemption storage claim = pendingRedemptions[beneficiary][id];
+        PendingRedemption storage claim = pendingRedemptions[walletId][id];
         if (claim.activityScore == 0) {
-            _batchPlayers[id & 1].push(beneficiary);
+            _batchPlayers[id & 1].push(
+                uint256(uint160(beneficiary)) | (uint256(walletId) << BATCH_PLAYER_ID_SHIFT)
+            );
             // Snapshot on the first burn in the batch (stored as score + 1; 0 = no claim).
-            claim.activityScore = uint16(game.playerActivityScore(beneficiary)) + 1;
+            if (scoreSnapshot == 0) {
+                (uint256 score,) = game.playerActivityScore(beneficiary);
+                scoreSnapshot = uint16(score) + 1;
+            }
+            claim.activityScore = scoreSnapshot;
         }
         claim.tokens += uint128(amount);
 
         emit RedemptionSubmitted(beneficiary, amount, id);
+    }
+
+    /// @dev `player`'s Game wallet ID: the forward word's cached copy, else the Game's answer
+    ///      (0 = none, which holds no claim).
+    function _walletIdOf(address player) private view returns (uint32 walletId) {
+        walletId = uint32(_redemptionDayValue[player] >> DAY_VALUE_ID_SHIFT);
+        if (walletId == 0) walletId = game.walletIdOf(player);
     }
 
     /// @dev ETH + stETH + Game claimable net of every outstanding redemption reserve, floored at 0.

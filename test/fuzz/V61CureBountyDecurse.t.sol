@@ -7,6 +7,8 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {activityScoreOf} from "../helpers/ActivityScoreOf.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title V61CureBountyDecurse — TST-04 proof: the cashout-curse CURE (any buy >= 1 ticket worth clears the
 ///        counter), the sub-ticket mint-day STAMP (DAY_SHIFT, NO cure), the manual-lootbox
@@ -44,10 +46,10 @@ contract V61CureBountyDecurse is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots + mintPacked_ field shifts (378-01 key + BitPackingLib)
     // -------------------------------------------------------------------------
-    uint256 private constant BALANCES_PACKED_SLOT = 7; // [afking:hi128 | claimable:lo128]
-    uint256 private constant CLAIMABLE_POOL_SLOT = 1; // uint128 @ byte 16
+    uint256 private constant BALANCES_PACKED_SLOT = GameSlots.BALANCES_PACKED; // [afking:hi128 | claimable:lo128]
+    uint256 private constant CLAIMABLE_POOL_SLOT = GameSlots.CLAIMABLE_POOL; // uint128 @ byte 16
     uint256 private constant CLAIMABLE_POOL_OFFBYTES = 16;
-    uint256 private constant MINTPACKED_SLOT = 9;
+    uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED;
 
     uint256 private constant DAY_SHIFT = 72; // lastEthDay (32 bits)
     uint256 private constant CURSE_COUNT_SHIFT = 215; // (8 bits)
@@ -213,7 +215,7 @@ contract V61CureBountyDecurse is DeployProtocol {
         vm.prank(cured);
         game.purchase{value: fullCost}(cured, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(game.curseCountOf(cured), 0, "curing buy cleared the curse");
-        uint256 curedScore = game.playerActivityScore(cured);
+        uint256 curedScore = activityScoreOf(address(game), cured);
 
         // Non-curing buyer: an equal-curse sub-ticket buy on an identical deity base does NOT cure.
         address notCured = makeAddr("cbs_notcured");
@@ -227,7 +229,7 @@ contract V61CureBountyDecurse is DeployProtocol {
         vm.prank(notCured);
         game.purchase{value: subCost}(notCured, subUnits, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(game.curseCountOf(notCured), curse, "sub-ticket buy did NOT cure (still cursed)");
-        uint256 notCuredScore = game.playerActivityScore(notCured);
+        uint256 notCuredScore = activityScoreOf(address(game), notCured);
 
         // Both buyers hold the same 80-point deity base; the only difference is the cure. So the cured buyer's
         // post-buy score is HIGHER by exactly the curse penalty (curse points) — proving the cure ran BEFORE the
@@ -396,7 +398,7 @@ contract V61CureBountyDecurse is DeployProtocol {
     // =========================================================================
 
     function _seedClaimable(address who, uint256 amount) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(BALANCES_PACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(BALANCES_PACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         uint256 oldLow = uint128(packed);
         uint256 high = packed >> 128;

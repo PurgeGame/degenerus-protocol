@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title FoilSnapPayout — the foil match payout ignores the level's snap exponent
 /// @notice A thanos declaration multiplies the foil pack's PRICE by 2^s and stops there:
@@ -43,7 +44,7 @@ contract FoilSnapPayout is DeployProtocol {
     ///      proves the poke still lands. That proof is load-bearing: the payout property
     ///      is now an EQUALITY, which a poke that quietly stopped writing would satisfy
     ///      vacuously. The price test is what keeps the pair honest.
-    uint256 private constant SNAP_SLOT = 14;
+    uint256 private constant SNAP_SLOT = GameSlots.SNAP_SHIFT;
     uint256 private constant SNAP_BYTE = 7;
 
     address[FOIL_BUYERS] private _fb;

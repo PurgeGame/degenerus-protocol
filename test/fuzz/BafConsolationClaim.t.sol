@@ -5,6 +5,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BafViews} from "../helpers/BafViews.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title BafConsolationClaimTest -- Skipped-BAF WWXRP consolation claims.
 ///
@@ -24,7 +25,7 @@ import {BafViews} from "../helpers/BafViews.sol";
 ///         forced even (bit 0 = 0), so the level-10 BAF skips through the real
 ///         mineFlip path; then claim and verify minted WWXRP.
 contract BafConsolationClaimTest is DeployProtocol {
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED;
 
     event BafConsolationClaimed(
         address indexed player,

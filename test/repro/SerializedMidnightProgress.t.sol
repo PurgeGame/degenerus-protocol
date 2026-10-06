@@ -6,13 +6,14 @@ import {MiddayFrozenPoolLatch} from "./MiddayFrozenPoolLatch.t.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @dev Real request, fulfilment and unaided production keeper routing across midnight.
 contract SerializedMidnightProgressTest is MiddayFrozenPoolLatch {
     address private constant MINER = address(0xC4A9);
     uint256 private constant SUBSCRIBERS_LOW_GAS = 2000;
     /// @dev lootboxRngPacked (scripts/layout/golden/DegenerusGame.json); low 48 bits = miner clock.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
 
     /// @dev Latch the frozen pool mid-day, deliver its word, fill the subscriber ring and cross
     ///      midnight; returns the identity of the committed cohort the crossing must retain.
@@ -66,7 +67,7 @@ contract SerializedMidnightProgressTest is MiddayFrozenPoolLatch {
         assertTrue(game.rngLocked(), "the fresh daily request reached its lock");
         assertFalse(game.rngComplete(), "a fresh request clears the completion marker");
         assertFalse(game.boxIndexComplete(RecyclingState.readBuffer(address(game))), "fresh read buffer needs its new word");
-        assertEq(uint256(game.extsload(keccak256(abi.encode(RecyclingState.writeBuffer(address(game)), uint256(57))))), 0, "old read header reset once at seal");
+        assertEq(uint256(game.extsload(keccak256(abi.encode(RecyclingState.writeBuffer(address(game)), GameSlots.BOX_PLAYERS)))), 0, "old read header reset once at seal");
     }
 
     function _crossMidnight(uint256 subscribers) private {

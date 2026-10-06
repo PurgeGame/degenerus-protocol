@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {Vm} from "forge-std/Vm.sol";
+import {GameSlots} from "./GameSlots.sol";
 
 /// @title DegeneretteQueue -- test-side readers for queued Degenerette bets.
 /// @notice A bet is one word in the Game's degeneretteQueue[index & 1] (mapping root slot 21); its
@@ -11,7 +12,7 @@ import {Vm} from "forge-std/Vm.sol";
 ///         whole). DegeneretteResolved carries five bytes per spin: player traits (big-endian)
 ///         then score | house wilds << 4.
 library DegeneretteQueue {
-    uint256 internal constant QUEUE_SLOT = 21;
+    uint256 internal constant QUEUE_SLOT = GameSlots.DEGENERETTE_QUEUE;
     bytes32 internal constant PLACED_SIG = keccak256("DegeneretteBetPlaced(address,uint32,uint64,uint256)");
     bytes32 internal constant RESOLVED_SIG =
         keccak256("DegeneretteResolved(address,uint32,uint64,uint256,uint32,bytes)");

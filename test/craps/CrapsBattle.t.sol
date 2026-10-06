@@ -2913,7 +2913,7 @@ contract CrapsBattleTest is CrapsPins {
         assertEq(craps.betOf((daySlot << 64) | 1).chips, 0, "house must stay random");
         assertEq(craps.betOf((daySlot << 64) | 2).player, ContractAddresses.VAULT);
         assertEq(craps.betOf((daySlot << 64) | 2).chips, board, "vault preference was ignored");
-        assertEq(craps.preferredBoardOf(vaultOwner), 1, "owner preference changed");
+        assertEq(craps.preferredBoardOf(game.walletIdOf(vaultOwner)), 1, "owner preference changed");
     }
 
     /// @dev Clearing the shared board keeps automatic participation and only changes future seats.
@@ -2992,7 +2992,7 @@ contract CrapsBattleTest is CrapsPins {
         vm.expectRevert(CrapsBattleStorage.BetLocked.selector);
         craps.setPreferredBoard(0);
         vm.stopPrank();
-        assertEq(craps.preferredBoardOf(ContractAddresses.VAULT), SEVEN_PACKED);
+        assertEq(craps.preferredBoardOf(game.walletIdOf(ContractAddresses.VAULT)), SEVEN_PACKED);
     }
 
     /// @dev A STARVED HOUSE IS COMPED, BOUNTY AND ALL; THE VAULT IS NOT. A bonus that waits on the

@@ -7,6 +7,7 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title MiddaySwapJackpotCohort — the mid-day lootbox freeze against a jackpot-phase cohort.
 ///
@@ -148,8 +149,8 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
 
         uint256 strandedA = _queueLen(L);
         uint256 strandedB = _queueLen(L | TICKET_SLOT_BIT);
-        uint256 owedA = _entriesOwed(L, buyer);
-        uint256 owedB = _entriesOwed(L | TICKET_SLOT_BIT, buyer);
+        uint256 owedA = _owedOf(L, buyer);
+        uint256 owedB = _owedOf(L | TICKET_SLOT_BIT, buyer);
 
         emit log_named_uint("stranded queue addresses (slot A)", strandedA);
         emit log_named_uint("stranded queue addresses (slot B)", strandedB);
@@ -222,7 +223,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             "no queue entries may remain at the retired level"
         );
         assertEq(
-            _entriesOwed(L, buyer) + _entriesOwed(L | TICKET_SLOT_BIT, buyer),
+            _owedOf(L, buyer) + _owedOf(L | TICKET_SLOT_BIT, buyer),
             0,
             "no owed entries may remain at the retired level"
         );
@@ -244,8 +245,8 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         assertTrue(swapped, "harness: an early-day request must commit the buffer");
 
         uint256 stranded = _queueLen(L) + _queueLen(L | TICKET_SLOT_BIT);
-        uint256 owed = _entriesOwed(L, buyer) +
-            _entriesOwed(L | TICKET_SLOT_BIT, buyer);
+        uint256 owed = _owedOf(L, buyer) +
+            _owedOf(L | TICKET_SLOT_BIT, buyer);
         emit log_named_uint("first-day: stranded addresses", stranded);
         emit log_named_uint("first-day: buyer entries owed", owed);
         emit log_named_uint(
@@ -277,8 +278,8 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         );
 
         uint256 stranded = _queueLen(L) + _queueLen(L | TICKET_SLOT_BIT);
-        uint256 owed = _entriesOwed(L, buyer) +
-            _entriesOwed(L | TICKET_SLOT_BIT, buyer);
+        uint256 owed = _owedOf(L, buyer) +
+            _owedOf(L | TICKET_SLOT_BIT, buyer);
         emit log_named_uint("promotion: stranded addresses", stranded);
         emit log_named_uint("promotion: buyer entries owed", owed);
         emit log_named_uint(
@@ -311,8 +312,8 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         assertTrue(swapped, "harness: the non-penultimate flip must fire");
 
         uint256 stranded = _queueLen(L) + _queueLen(L | TICKET_SLOT_BIT);
-        uint256 owed = _entriesOwed(L, buyer) +
-            _entriesOwed(L | TICKET_SLOT_BIT, buyer);
+        uint256 owed = _owedOf(L, buyer) +
+            _owedOf(L | TICKET_SLOT_BIT, buyer);
         emit log_named_uint("crossing: stranded addresses", stranded);
         emit log_named_uint("crossing: buyer entries owed", owed);
         emit log_named_uint(
@@ -492,8 +493,8 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             "no cohort may strand at the building level after a turbo-arm crossing"
         );
         assertEq(
-            _entriesOwed(building, buyer) +
-                _entriesOwed(building | TICKET_SLOT_BIT, buyer),
+            _owedOf(building, buyer) +
+                _owedOf(building | TICKET_SLOT_BIT, buyer),
             0,
             "no owed entries may strand at the building level"
         );
@@ -569,7 +570,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             "harness: the stall-window cohort must stage on the write side"
         );
 
-        uint256 owedBefore = _entriesOwed(L + 1, buyer) + _entriesOwed((L + 1) | TICKET_SLOT_BIT, buyer);
+        uint256 owedBefore = _owedOf(L + 1, buyer) + _owedOf((L + 1) | TICKET_SLOT_BIT, buyer);
         assertGt(owedBefore, 0, "harness: the buyer holds queued entries at the payout key");
 
         // Dead VRF: never fulfill again; past the 14-day window the ending is deterministic.
@@ -591,7 +592,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             "dead ending: no drain, the cohorts stay queued"
         );
         assertEq(
-            _entriesOwed(L + 1, buyer) + _entriesOwed((L + 1) | TICKET_SLOT_BIT, buyer),
+            _owedOf(L + 1, buyer) + _owedOf((L + 1) | TICKET_SLOT_BIT, buyer),
             owedBefore,
             "dead ending: every queued entry is left for its claim"
         );
@@ -612,8 +613,8 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             "terminal: payout alt-parity queue must be empty"
         );
         assertEq(
-            _entriesOwed(payoutKey, buyer) +
-                _entriesOwed(payoutKey | TICKET_SLOT_BIT, buyer),
+            _owedOf(payoutKey, buyer) +
+                _owedOf(payoutKey | TICKET_SLOT_BIT, buyer),
             0,
             "terminal: the payout key's owed must be fully materialized"
         );
@@ -981,7 +982,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         uint256 v = uint256(
             vm.load(
                 address(game),
-                keccak256(abi.encode(uint256(lvl), uint256(23)))
+                keccak256(abi.encode(uint256(lvl), GameSlots.LEVEL_PRIZE_POOL))
             )
         );
         return v < 50 ether ? 50 ether : v;
@@ -1014,8 +1015,8 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         return TicketQueueStorage.length(address(game), key);
     }
 
-    /// @dev _entriesOwed(key, player) >> 8 — the mapping sits at slot 13.
-    function _entriesOwed(
+    /// @dev _owedOf(key, player) >> 8 — the mapping sits at slot 13.
+    function _owedOf(
         uint24 key,
         address player
     ) internal view returns (uint256) {

@@ -494,7 +494,8 @@ describe("DegenerusGame", function () {
 
     it("playerActivityScore returns 0 for new player", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
-      expect(await game.playerActivityScore(alice.address)).to.equal(0n);
+      const [score] = await game.playerActivityScore(alice.address); // (scorePoints, walletId)
+      expect(score).to.equal(0n);
     });
 
     it("entriesOwedView returns 0 for player with no tickets", async function () {

@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title ThanosNoticeBound — setThanosLevel's 3-level notice and lock
 /// @notice A level X first materializes at level X-1's last-purchase seal, while `level == X-2`:
@@ -14,9 +15,9 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///      the offsets in scripts/layout/golden/DegenerusGame.json; the layout oracle fails the
 ///      build on a move.
 contract ThanosNoticeBound is DeployProtocol {
-    uint256 private constant LEVEL_SLOT = 0;
+    uint256 private constant LEVEL_SLOT = GameSlots.LEVEL;
     uint256 private constant LEVEL_BYTE = 12;
-    uint256 private constant SNAP_SLOT = 14;
+    uint256 private constant SNAP_SLOT = GameSlots.SNAP_SHIFT;
     uint256 private constant SNAP_LEVEL_BYTE = 8;
 
     uint24 private constant L = 20;

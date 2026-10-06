@@ -32,8 +32,8 @@ contract StateEngineIntegrationTest is RedemptionCloseTools {
     uint256 private constant LOW_GAS = 9_500_000;
     // Admits one fixed ticket-award chunk (6.53M declared) through the miner frames.
     uint256 private constant TICKET_CHUNK_GAS = 7_700_000;
-    bytes32 private constant JACKPOT_ETH = keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)");
-    bytes32 private constant JACKPOT_TICKET = keccak256("JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)");
+    bytes32 private constant JACKPOT_ETH = keccak256("JackpotEthWin(uint32,uint24,uint16,uint256,uint256)");
+    bytes32 private constant JACKPOT_TICKET = keccak256("JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)");
     bytes32 private jackpotTranscript;
     uint256 private payoutCalls;
     uint256 private largestCall;

@@ -8,6 +8,7 @@ import {DegenerusDeityPass} from "../../../contracts/DegenerusDeityPass.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
+import {GameSlots} from "../../helpers/GameSlots.sol";
 
 /// @title BoxCreationHandler — drives every box-creating entrypoint for the FUZZ-04 ENQUEUE invariant
 /// @notice The box-creating family the ASYM-02 sweep enumerates has FOUR enqueue sites, each guarded by a
@@ -40,13 +41,13 @@ contract BoxCreationHandler is Test {
     // -------------------------------------------------------------------------
     // Canonical c4d48008 storage layout (380-01 LAYOUT-KEY, confirmed via forge inspect)
     // -------------------------------------------------------------------------
-    uint256 private constant MINTPACKED_SLOT = 9;
+    uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED;
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS score bit (subscribe/pass gate)
-    uint256 private constant LR_PACKED_SLOT = 33; // lootboxRngPacked; LR_INDEX = low 48 bits (post Stage B pack: was 35)
+    uint256 private constant LR_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED; // lootboxRngPacked; LR_INDEX = low 48 bits (post Stage B pack: was 35)
     uint256 private constant LR_INDEX_MASK = 0xFFFFFFFFFFFF;
-    uint256 private constant PRESALE_BOX_CREDIT_SLOT = 17; // mapping(address => uint256)
+    uint256 private constant PRESALE_BOX_CREDIT_SLOT = GameSlots.PRESALE_BOX_CREDIT; // mapping(address => uint256)
     // The folded lootboxEth word: amount[0:128] | adj[128:192] | scorePlus1[192:208] | distress[208:256].
-    uint256 private constant LOOTBOX_ETH_SLOT = 15; // mapping(uint48 => mapping(address => uint256))
+    uint256 private constant LOOTBOX_ETH_SLOT = GameSlots.LOOTBOX_ORDER; // mapping(uint48 => mapping(address => uint256))
     uint256 private constant LOOTBOX_AMOUNT_MASK = (uint256(1) << 128) - 1; // amount sub-field [0:128]
 
     // -------------------------------------------------------------------------
@@ -348,7 +349,7 @@ contract BoxCreationHandler is Test {
     /// @dev Seed spendable presale-box credit (slot 17) — a credit ALLOWANCE, not a box record. The box itself
     ///      is created by the real buyPresaleBox entrypoint. Mirrors PresaleBoxDrain._grantCredit.
     function _grantCredit(address buyer, uint256 amount) internal {
-        bytes32 slot = keccak256(abi.encode(buyer, uint256(PRESALE_BOX_CREDIT_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(buyer)), uint256(PRESALE_BOX_CREDIT_SLOT)));
         uint256 existing = uint256(vm.load(address(game), slot));
         vm.store(address(game), slot, bytes32(existing + amount));
     }

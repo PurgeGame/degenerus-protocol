@@ -4,6 +4,7 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title DegeneretteBoonStake -- the degenerette stake boon (+4/8/12%, per currency)
 /// @notice The boon inflates the PACKED bet's per-spin stake and nothing else. The four
@@ -28,9 +29,9 @@ import {Vm} from "forge-std/Vm.sol";
 ///      is covered by BoonStaticDiscard; this suite owns the consume path.
 contract DegeneretteBoonStake is DeployProtocol {
     // --- Storage slots (mirror BoonStaticDiscard / DegeneretteHeroScore) ---
-    uint256 private constant SLOT_BOON_PACKED = 50;
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
+    uint256 private constant SLOT_BOON_PACKED = GameSlots.BOON_PACKED;
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED;
 
     // --- BoonPacked slot1: ETH and FLIP use independent 24-bit lanes at 184/208.
     // The WWXRP ecosystem lane at 232 is spent through the token, never by a bet.

@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title BafDrawGas — gas envelope of the BAF weighted draw.
 ///
@@ -170,7 +171,7 @@ contract BafDrawGas is DeployProtocol {
     // appended at slot 8. Installs are proven by reading back through the
     // contract's own getters, so layout drift fails loudly.
     uint256 internal constant HEADER_SLOT = 5;
-    uint256 internal constant ENTRY_SLOT = 8;
+    uint256 internal constant ENTRY_SLOT = GameSlots.LVL_TRAIT_ENTRY;
 
     function _installEntries(uint24 day, uint32 n) internal {
         uint256 cum;

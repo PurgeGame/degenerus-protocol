@@ -2,8 +2,9 @@
 pragma solidity 0.8.34;
 
 import {DegenerusGameDecimatorModule} from "../../../contracts/modules/DegenerusGameDecimatorModule.sol";
+import {WalletSeed} from "../../helpers/WalletSeed.sol";
 
-contract DecimatorBattleHarness is DegenerusGameDecimatorModule {
+contract DecimatorBattleHarness is DegenerusGameDecimatorModule, WalletSeed {
     function extsload(bytes32 slot) external view returns (bytes32 value) {
         assembly { value := sload(slot) }
     }
@@ -69,11 +70,11 @@ contract DecimatorBattleHarness is DegenerusGameDecimatorModule {
     }
 
     function passesOf(address p) external view returns (uint256) {
-        return whalePassClaims[p];
+        return _halfPassesOf(p);
     }
 
     function balanceOf(address p) external view returns (uint256) {
-        return _claimableOf(p);
+        return _claimableOf(_walletIdOf(p));
     }
 
     function reserved() external view returns (uint256) {

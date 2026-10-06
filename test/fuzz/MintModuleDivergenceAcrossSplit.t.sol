@@ -32,6 +32,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {IDegenerusGameTicketModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
     // -------------------------------------------------------------------------
@@ -44,11 +45,11 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
 
     /// @dev packed slot 14: ticketCursor (uint32) offset 0; ticketLevel (uint24) offset 4;
     ///      ticketSoloOffset (uint32) offset 16.
-    uint256 private constant SLOT_TICKET_CURSOR_LEVEL = 14;
+    uint256 private constant SLOT_TICKET_CURSOR_LEVEL = GameSlots.TICKET_CURSOR;
     uint256 private constant SOLO_OFFSET_SHIFT = 128;
 
-    /// @dev Permanent ticketOwners array — slot 67; bucket lanes hold zero-based global IDs.
-    uint256 private constant SLOT_TICKET_OWNERS = 67;
+    /// @dev Wallet table root; bucket lanes hold wallet IDs (element `id`, low 160 bits = key).
+    uint256 private constant SLOT_TICKET_OWNERS = GameSlots.WALLETS;
 
     /// @dev TICKET_SLOT_BIT mirror. With ticketWriteSlot=false (default),
     ///      _tqReadKey(lvl) returns lvl | TICKET_SLOT_BIT.

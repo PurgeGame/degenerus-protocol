@@ -23,8 +23,8 @@ contract DailyEthBucketTable is Test {
     uint128 internal constant FUT_POOL = 40_123 ether;
     uint256 internal constant SEATS = 80;
 
-    bytes32 internal constant ETH_WIN = keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)");
-    bytes32 internal constant TICKET_WIN = keccak256("JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)");
+    bytes32 internal constant ETH_WIN = keccak256("JackpotEthWin(uint32,uint24,uint16,uint256,uint256)");
+    bytes32 internal constant TICKET_WIN = keccak256("JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)");
 
     function setUp() public {
         h = new GoldenTicketHarness();

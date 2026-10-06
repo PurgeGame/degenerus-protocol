@@ -35,10 +35,9 @@ contract SnapValveHarness is MintBucketSeed {
         uint24 rk = _tqReadKey(lvl);
         uint256[] storage queue = ticketQueue[_ticketQueueStorageKey(rk)];
 
-        if (ticketOwners.length == 0) _registerEntryOwner(address(1), lvl);
         for (uint256 i; i < n; ++i) {
             address p = address(base + uint160(i + 1));
-            uint80 ownerBits = _registerEntryOwner(p, lvl);
+            uint80 ownerBits = (uint80(_seedWallet(p)) << OWNER_IDX_SHIFT);
             _tqAppend(rk, uint32(ownerBits >> OWNER_IDX_SHIFT));
             _seedOwedAt(rk, p, ownerBits | (uint80(owedEach) << 8) | uint80(remEach));
         }
@@ -94,7 +93,7 @@ contract SnapValveHarness is MintBucketSeed {
     }
 
     function owedPacked(uint24 lvl, address p) external view returns (uint80) {
-        return _entriesOwed(_tqReadKey(lvl), p);
+        return _owedOf(_tqReadKey(lvl), p);
     }
 
     function snapDoneBit() external pure returns (uint80) {
@@ -115,7 +114,7 @@ contract SnapValveHarness is MintBucketSeed {
 
         for (uint256 i; i < n; ++i) {
             address p = address(base + uint160(i + 1));
-            uint80 ownerBits = _registerEntryOwner(p, lvl);
+            uint80 ownerBits = (uint80(_seedWallet(p)) << OWNER_IDX_SHIFT);
             _tqAppend(ffk, uint32(ownerBits >> OWNER_IDX_SHIFT));
             _seedOwedAt(ffk, p, ownerBits | (uint80(owedEach) << 8));
         }

@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {Test} from "forge-std/Test.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {SettleClaimableShortfallTester} from "../../contracts/test/SettleClaimableShortfallTester.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title V61Pack — TST-02 proof: the claimable/afking slot-packing accessors round-trip, never cross-bleed,
 ///        keep the claimablePool == Sigma(claimable + afking) identity, preserve the infra afking half during
@@ -30,7 +31,7 @@ import {SettleClaimableShortfallTester} from "../../contracts/test/SettleClaimab
 contract V61Pack is Test {
     /// @dev balancesPacked mapping root (slot 7 per the 378-01 recalibration key). The tester inherits the
     ///      canonical DegenerusGameStorage layout, so this is the same slot on the tester instance.
-    uint256 private constant BALANCES_PACKED_SLOT = 7;
+    uint256 private constant BALANCES_PACKED_SLOT = GameSlots.BALANCES_PACKED;
 
     SettleClaimableShortfallTester private t;
 
@@ -230,7 +231,7 @@ contract V61Pack is Test {
         assertEq(_rawLow(p), maxLow, "no-carry: low half holds the max-realistic claimable exactly");
         assertEq(_rawHigh(p), highCredit, "no-carry: high half holds the afking credit exactly (no bleed from low)");
         // Reconstruct the full word and confirm it splits back to the two inputs with no overlap.
-        uint256 raw = uint256(vm.load(address(t), keccak256(abi.encode(p, uint256(BALANCES_PACKED_SLOT)))));
+        uint256 raw = uint256(vm.load(address(t), keccak256(abi.encode(uint256(uint32(uint160(p))), uint256(BALANCES_PACKED_SLOT)))));
         assertEq(uint128(raw), maxLow, "split: low 128 bits == claimable");
         assertEq(raw >> 128, highCredit, "split: high 128 bits == afking");
     }
@@ -280,7 +281,7 @@ contract V61Pack is Test {
     // =========================================================================
 
     function _rawWord(address p) internal view returns (uint256) {
-        return uint256(vm.load(address(t), keccak256(abi.encode(p, uint256(BALANCES_PACKED_SLOT)))));
+        return uint256(vm.load(address(t), keccak256(abi.encode(uint256(uint32(uint160(p))), uint256(BALANCES_PACKED_SLOT)))));
     }
 
     function _rawLow(address p) internal view returns (uint256) {

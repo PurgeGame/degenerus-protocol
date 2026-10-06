@@ -66,24 +66,23 @@ import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
  * Bits 0-23:    lastLevel          - Last level with ETH mint
  * Bits 24-47:   levelCount         - Total levels minted (lifetime) [Activity Score]
  * Bits 48-71:   levelStreak        - Consecutive levels minted [Activity Score]
- * Bits 72-103:  lastMintDay        - Day index of last mint
- * Bits 104-127: unitsLevel         - Level index for levelUnits tracking
- * Bits 128-151: frozenUntilLevel   - Whale pass: freeze stats until this level (0 = not frozen)
- * Bits 152-153: whalePassType    - Active pass type (0=none, 1=lazy/10-lvl, 3=whale/100-lvl) [Activity Score]
- * Bit  154:     seatClaimed        - AFKing seat mint latch
- * Bits 155-159: (unused)
- * Bits 160-183: mintStreakLast      - Last level credited for mint streak
- * Bit  184:     hasDeityPass        - Deity pass flag
- * Bits 185-208: affBonusLevel       - Cached affiliate bonus level
- * Bits 209-214: affBonusPoints      - Cached affiliate bonus points (0-50)
- * Bits 215-222: curseCount          - Cashout/smite curse counter (0-20)
- * Bits 223-227: (unused)
- * Bits 228-243: levelUnits         - Units minted this level
- * Bits 244-255: (reserved)
+ * Bits 72-95:   lastMintDay        - Day index of last mint
+ * Bits 96-119:  unitsLevel         - Level index for levelUnits tracking
+ * Bits 120-143: frozenUntilLevel   - Whale pass: freeze stats until this level (0 = not frozen)
+ * Bits 144-145: whalePassType      - Active pass type (0=none, 1=lazy/10-lvl, 3=whale/100-lvl) [Activity Score]
+ * Bit  146:     seatClaimed        - AFKing seat mint latch
+ * Bit  147:     seatEncumbered     - AFKing seat encumbrance latch
+ * Bits 148-171: mintStreakLast     - Last level credited for mint streak
+ * Bit  172:     hasDeityPass       - Deity pass flag
+ * Bits 173-196: affBonusLevel      - Cached affiliate bonus level
+ * Bits 197-202: affBonusPoints     - Cached affiliate bonus points (0-50)
+ * Bits 203-207: curseCount         - Cashout/smite curse counter (0-20)
+ * Bits 208-223: levelUnits         - Units minted this level
+ * Bits 224-255: walletId           - Permanent wallet ID (registration only)
  * ```
  *
  * Note: Quest Streak is tracked in DegenerusQuests.questPlayerState.
- * Affiliate Points are tracked in DegenerusAffiliate and cached in mintPacked_ bits 185-214 during that player's own mint (_recordMintData).
+ * Affiliate Points are tracked in DegenerusAffiliate and cached in mintPacked_ bits 173-202 during that player's own mint (_recordMintData).
  *
  * Ticket materialization and its deterministic checkpoints live in DegenerusGameTicketModule.
  */
@@ -197,7 +196,7 @@ contract DegenerusGameMintModule is
     /// @return claimableUsed Recycled winnings drawn, excluding afking principal.
     /// @custom:reverts E If payment validation fails or the funding tiers fall short.
     function _recordMintPayment(
-        address player,
+        uint32 player,
         uint256 costWei,
         MintPaymentKind payKind,
         uint256 ethForLeg
@@ -232,7 +231,7 @@ contract DegenerusGameMintModule is
     /// @return claimableDraw Per-player claimable + afking drawn; caller subtracts it from claimablePool.
     /// @return claimableUsed Recycled winnings drawn, excluding afking principal.
     function _processMintPayment(
-        address player,
+        uint32 player,
         uint256 amount,
         MintPaymentKind payKind,
         uint256 ethForLeg
@@ -399,6 +398,7 @@ contract DegenerusGameMintModule is
                 ,
             ) = _callTicketPurchase(
                     buyer,
+                    0,
                     entryQuantityScaled,
                     MintPaymentKind.DirectEth,
                     true,
@@ -428,9 +428,10 @@ contract DegenerusGameMintModule is
                 }
             }
 
-            // Queue tickets on the captured adjusted quantity.
+            // Queue tickets on the captured adjusted quantity (the buyer registered when the
+            // FLIP leg priced the purchase).
             if (adjustedQty32 != 0) {
-                _queuePurchaseEntries(buyer, targetLevel, adjustedQty32);
+                _queuePurchaseEntries(_walletIdOf(buyer), targetLevel, adjustedQty32);
             }
         }
     }
@@ -572,11 +573,13 @@ contract DegenerusGameMintModule is
         // full sell-out) and credit the buyer the same entries. Distances were validated by
         // _quoteFarFutureSwap; sequential processing handles duplicate levels (a later same-level line reads
         // the decremented balance and reverts if it over-sells; only the line that zeroes the packed slot pops).
+        uint32 sellerId = _walletIdOf(player);
+        uint32 buyerId = buyer == ContractAddresses.VAULT ? VAULT_WALLET_ID : SDGNRS_WALLET_ID;
         for (uint256 i; i < len; ) {
             uint24 L = uint24(levels[i]);
             uint32 entries = uint32(quantities[i]);
-            _removeFarFutureEntries(player, L, entries, queueIndices[i]);
-            _queueEntries(buyer, L, entries, false);
+            _removeFarFutureEntries(sellerId, L, entries, queueIndices[i]);
+            _queueEntries(buyerId, L, entries, false);
             unchecked {
                 ++i;
             }
@@ -587,8 +590,8 @@ contract DegenerusGameMintModule is
         // so the move is total-preserving (claimablePool unchanged). The FLIP part never touches
         // claimable. Solvency-positive: ethRelabel <= totalBudget.
         uint256 ethRelabel = ticketWei + ethCashWei;
-        _debitSalvageEth(buyer, ethRelabel);
-        _creditClaimable(player, ethRelabel);
+        _debitSalvageEth(buyerId, ethRelabel);
+        _creditClaimableLogged(sellerId, ethRelabel);
         // FLIP part: drain the buyer's FLIP (held first, then claimable coinflip stake, then the
         // auto-rebuy carry — the full salvage waterfall, symmetric with the redemption desk) and pay the
         // player as flip credit, not a token transfer. flipTokens <= the buyer's spendable (quote cap),
@@ -611,21 +614,21 @@ contract DegenerusGameMintModule is
     ///      sDGNRS funds purely from its claimable. The vault funds from claimable FIRST, then its prepaid
     ///      afking half (both are claimablePool-backed, so the buyer->seller move is total-preserving and
     ///      leaves claimablePool unchanged). The caller guarantees the resolved buyer covers `amount`.
-    function _debitSalvageEth(address buyer, uint256 amount) private {
-        if (buyer == ContractAddresses.VAULT) {
-            uint256 fromClaimable = _claimableOf(buyer);
+    function _debitSalvageEth(uint32 buyerId, uint256 amount) private {
+        if (buyerId == VAULT_WALLET_ID) {
+            uint256 fromClaimable = _claimableOf(buyerId);
             if (fromClaimable >= amount) {
-                _debitClaimable(buyer, amount);
-                if (amount != 0) emit ClaimableSpent(buyer, amount, fromClaimable - amount, MintPaymentKind.Internal, amount);
+                _debitClaimable(buyerId, amount);
+                if (amount != 0) emit ClaimableSpent(buyerId, amount, fromClaimable - amount, MintPaymentKind.Internal, amount);
             } else {
-                _debitClaimableAndAfking(buyer, fromClaimable, amount - fromClaimable);
-                if (fromClaimable != 0) emit ClaimableSpent(buyer, fromClaimable, 0, MintPaymentKind.Internal, fromClaimable);
+                _debitClaimableAndAfking(buyerId, fromClaimable, amount - fromClaimable);
+                if (fromClaimable != 0) emit ClaimableSpent(buyerId, fromClaimable, 0, MintPaymentKind.Internal, fromClaimable);
                 uint256 afkingPart = amount - fromClaimable;
-                if (afkingPart != 0) emit AfkingSpent(buyer, afkingPart);
+                if (afkingPart != 0) emit AfkingSpent(buyerId, afkingPart);
             }
         } else {
-            _debitClaimable(buyer, amount);
-            if (amount != 0) emit ClaimableSpent(buyer, amount, _claimableOf(buyer), MintPaymentKind.Internal, amount);
+            _debitClaimable(buyerId, amount);
+            if (amount != 0) emit ClaimableSpent(buyerId, amount, _claimableOf(buyerId), MintPaymentKind.Internal, amount);
         }
     }
 
@@ -635,21 +638,20 @@ contract DegenerusGameMintModule is
     ///      (so the far-future jackpot samplers need no change and gain no hot-path read). Partial sells
     ///      and sells that leave `rem` do not pop.
     function _removeFarFutureEntries(
-        address player,
+        uint32 ownerPos,
         uint24 L,
         uint32 entries,
         uint256 idx
     ) internal {
         uint24 ffk = _tqFarFutureKey(L);
-        uint32 ownerPos = ticketOwnerId[player];
-        uint80 packed = ownerPos == 0 ? 0 : uint80(_entryRecord(ffk, ownerPos) >> 160);
+        uint80 packed = ownerPos == 0 ? 0 : _entryPacked(ffk, ownerPos);
         uint32 owed = uint32(packed >> 8);
         if (owed < entries) revert E(); // ownership / over-sell guard
         uint8 rem = uint8(packed);
         uint32 newOwed = owed - entries;
         if (newOwed == 0 && rem == 0) {
             uint256[] storage q = ticketQueue[_ticketQueueStorageKey(ffk)];
-            if (idx >= _ticketQueueLength(ffk) || _tqOwnerAt(q, L, idx) != player) revert E();
+            if (idx >= _ticketQueueLength(ffk) || _tqPositionAt(q, idx) != ownerPos) revert E();
             _tqSwapPop(q, idx);
             _setEntryOwed(ffk, ownerPos, 0);
         } else {
@@ -676,10 +678,11 @@ contract DegenerusGameMintModule is
         // payer's withdrawable afking, so excess never reverts or strands. The afking
         // ticket-buy path (purchaseWith) bypasses this, so it is unaffected.
         uint256 cost = ticketCost + _quoteBoxOrder(buyer, boxOrder);
+        (uint32 buyerId, ) = _registerWallet(buyer, cost);
         uint256 fresh = payKind == MintPaymentKind.Claimable
             ? 0
             : (msg.value < cost ? msg.value : cost);
-        if (msg.value > fresh) _creditAfkingValue(msg.sender, msg.value - fresh);
+        if (msg.value > fresh) _creditAfkingValue(_payerId(buyer, buyerId), msg.value - fresh);
         _purchaseForWithCached(
             buyer,
             entryQuantityScaled,
@@ -786,6 +789,8 @@ contract DegenerusGameMintModule is
         uint256 ticketCost
     ) private {
         if (_livenessTriggered()) revert E();
+        // Every caller registered the buyer before this frame; the mint word is warm.
+        uint32 buyerId = _walletIdOf(buyer);
 
         // Biggest-buy record, armed up front so any claim seeds the flip credit this
         // purchase already pays out below — the bounty rides the buy's own credit
@@ -865,7 +870,7 @@ contract DegenerusGameMintModule is
                 // here; the mint leg has not run yet) then afking. afking is fresh-ETH-
                 // equivalent for routing; claimable is recycled. DirectEth skips claimable.
                 (uint256 cUsed, uint256 aUsed) = _settleShortfallNoPool(
-                    buyer,
+                    buyerId,
                     shortfall,
                     payKind != MintPaymentKind.DirectEth
                 );
@@ -905,6 +910,7 @@ contract DegenerusGameMintModule is
                 ticketClaimableUsed
             ) = _callTicketPurchase(
                     buyer,
+                    buyerId,
                     entryQuantityScaled,
                     payKind,
                     false,
@@ -989,7 +995,7 @@ contract DegenerusGameMintModule is
             // Ordinary ticket buys need no score; non-afkers need no Sub lookup even
             // when buying boxes/century tickets. Lapsed runs retain the manual fallback.
             if (questAfking) {
-                (bool afkLive, uint32 afkStreak) = _liveAfkingStreak(buyer);
+                (bool afkLive, uint32 afkStreak) = _liveAfkingStreak(buyerId);
                 if (afkLive) questStreak = afkStreak;
             }
             cachedScore = _playerActivityScore(buyer, questStreak);
@@ -1004,11 +1010,11 @@ contract DegenerusGameMintModule is
                 // 20-ETH allowance in the bonus lane's scaled-entry units
                 // (4 * QTY_SCALE units = 1 whole ticket = priceWei).
                 uint256 maxBonus = (20 ether * 4 * QTY_SCALE) / priceWei;
-                uint256 used = _centuryUsedFor(buyer, targetLevel);
+                uint256 used = _centuryUsedFor(buyerId, targetLevel);
                 uint256 remaining = maxBonus > used ? maxBonus - used : 0;
                 if (bonusQty > remaining) bonusQty = remaining;
                 if (bonusQty != 0) {
-                    _setCenturyUsedFor(buyer, targetLevel, used + bonusQty);
+                    _setCenturyUsedFor(buyerId, targetLevel, used + bonusQty);
                     adjustedQty += uint32(bonusQty);
                 }
             }
@@ -1016,7 +1022,7 @@ contract DegenerusGameMintModule is
 
         // --- Queue tickets ---
         if (adjustedQty != 0) {
-            _queuePurchaseEntries(buyer, targetLevel, adjustedQty);
+            _queuePurchaseEntries(buyerId, targetLevel, adjustedQty);
         }
 
         // --- Box-order EV lane (delegatecalled; needs the post-action score) ---
@@ -1066,7 +1072,7 @@ contract DegenerusGameMintModule is
         // ticket + lootbox spend (fresh + recycled) earns 25% spendable box credit.
         // Covers the afking ticket buy, which routes through this path.
         if (!presaleOver) {
-            presaleBoxCredit[buyer] += totalCost / 4;
+            presaleBoxCredit[buyerId] += totalCost / 4;
         }
 
         // Recycle bonus: spending at least 3 whole tickets' worth of claimable
@@ -1103,7 +1109,8 @@ contract DegenerusGameMintModule is
         // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
         // deployed module would trap the in-flight msg.value against empty local state.
         if (address(this) != ContractAddresses.GAME) revert E();
-        _buyPresaleBoxFor(buyer, boxAmount, msg.value);
+        (uint32 buyerId, ) = _registerWallet(buyer, boxAmount);
+        _buyPresaleBoxFor(buyer, buyerId, boxAmount, msg.value);
     }
 
     /// @notice Buy tickets/lootbox (earning 25% presale-box credit) AND a presale box
@@ -1139,6 +1146,7 @@ contract DegenerusGameMintModule is
             uint256 ticketCost
         ) = _purchaseCostInputs(entryQuantityScaled);
         uint256 mintCost = ticketCost + _quoteBoxOrder(buyer, boxOrder);
+        (uint32 buyerId, ) = _registerWallet(buyer, mintCost + boxAmount);
         uint256 mintFresh = payKind == MintPaymentKind.Claimable
             ? 0
             : (msg.value < mintCost ? msg.value : mintCost);
@@ -1156,7 +1164,7 @@ contract DegenerusGameMintModule is
             ticketCost
         );
         // Both box legs use the write buffer; no request swaps it within this purchase.
-        _buyPresaleBoxFor(buyer, boxAmount, msg.value - mintFresh);
+        _buyPresaleBoxFor(buyer, buyerId, boxAmount, msg.value - mintFresh);
     }
 
     /// @dev Core credit-gated presale-box buy: clamp-to-50 close, 1:1 credit consume,
@@ -1167,6 +1175,7 @@ contract DegenerusGameMintModule is
     /// @param valueForBox The fresh-ETH (msg.value) portion available to fund the box.
     function _buyPresaleBoxFor(
         address buyer,
+        uint32 buyerId,
         uint256 boxAmount,
         uint256 valueForBox
     ) private {
@@ -1177,7 +1186,7 @@ contract DegenerusGameMintModule is
         if (boxAmount < PRESALE_BOX_MIN) revert E();
         // Overpay vs the requested amount is credited to the payer's afking, not reverted.
         if (valueForBox > boxAmount) {
-            _creditAfkingValue(msg.sender, valueForBox - boxAmount);
+            _creditAfkingValue(_payerId(buyer, buyerId), valueForBox - boxAmount);
             valueForBox = boxAmount;
         }
 
@@ -1191,9 +1200,9 @@ contract DegenerusGameMintModule is
 
         // Credit gate: consume spendable presale-box credit 1:1 (no clamp-to-credit;
         // an over-credit request reverts — the caller sizes the box to their credit).
-        if (applied > presaleBoxCredit[buyer]) revert E();
+        if (applied > presaleBoxCredit[buyerId]) revert E();
         unchecked {
-            presaleBoxCredit[buyer] -= applied;
+            presaleBoxCredit[buyerId] -= applied;
         }
 
         // Payment: msg.value first (capped at the applied amount; clamp excess -> afking),
@@ -1201,7 +1210,7 @@ contract DegenerusGameMintModule is
         uint256 freshUsed = valueForBox > applied ? applied : valueForBox;
         uint256 refund = valueForBox - freshUsed;
         uint256 shortfall = applied - freshUsed;
-        _settleShortfall(buyer, shortfall, true);
+        _settleShortfall(buyerId, shortfall, true);
 
         // 80/20 routing: claimablePool += applied; VAULT 80% + SDGNRS 20% claimable.
         // The claimable-funded portion (shortfall) nets pool delta 0 (debited above,
@@ -1243,7 +1252,7 @@ contract DegenerusGameMintModule is
 
         // Fresh ETH the clamp-to-50 left unused is credited to the payer's afking, not
         // sent back via a value call (no reentrancy surface, consistent with overpay).
-        _creditAfkingValue(msg.sender, refund);
+        if (refund != 0) _creditAfkingValue(_payerId(buyer, buyerId), refund);
     }
 
     /// @dev Bubble up revert reason from delegatecall failure.
@@ -1267,6 +1276,7 @@ contract DegenerusGameMintModule is
     /// @return ticketRecycledFlip Ticket recycled-rate FLIP basis for the caller's combined affiliate call
     function _callTicketPurchase(
         address buyer,
+        uint32 buyerId,
         uint256 quantity,
         MintPaymentKind payKind,
         bool payInCoin,
@@ -1341,6 +1351,9 @@ contract DegenerusGameMintModule is
         adjustedQty32 = uint32(adjustedQuantity);
 
         if (payInCoin) {
+            // The FLIP leg is a paying entry: register the buyer at its ETH-equivalent price
+            // before anything else in this purchase loads the buyer's mint word.
+            _registerWallet(buyer, costWei);
             // Token debits round up: a fractional ticket price must not undercharge.
             uint256 coinCost = (quantity * (PRICE_COIN_UNIT / 4) + QTY_SCALE - 1) /
                 QTY_SCALE;
@@ -1362,7 +1375,7 @@ contract DegenerusGameMintModule is
                 ticketFutureShare,
                 ticketClaimableDraw,
                 ticketClaimableUsed
-            ) = _recordMintPayment(buyer, costWei, payKind, value);
+            ) = _recordMintPayment(buyerId, costWei, payKind, value);
             // Mint-data recording runs after payment, before quest eligibility is checked.
             _recordMintData(buyer, targetLevel, mintUnits);
 

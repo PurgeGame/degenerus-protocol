@@ -12,6 +12,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IGameAfkingModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title TLKeyComputer -- Exposes internal key computation and queue inspection helpers
 contract TLKeyComputer is DegenerusGameStorage {
@@ -92,9 +93,9 @@ contract TicketLifecycleTest is DeployProtocol {
     /// @dev EVM slot 1: packed price/buffer fields
     uint256 private constant SLOT_1 = 1;
 
-    uint256 private constant TICKET_QUEUE_SLOT = 12;
+    uint256 private constant TICKET_QUEUE_SLOT = GameSlots.TICKET_QUEUE;
     uint256 private constant TICKETS_OWED_PACKED_SLOT = 13;
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED;
 
     /// @dev Low 128 bits of the packed pool slots: the next half. Layout is
     ///      [future:128 | next:128].
@@ -2339,16 +2340,16 @@ contract TicketLifecycleTest is DeployProtocol {
     // (tag 0 or 1, so 0 is a valid tag) and resolves on the word of the session that seals it.
 
     /// @dev lootboxOrder: mapping(uint48 => mapping(address => uint256)) at slot 15 (golden layout).
-    uint256 private constant LOOTBOX_ORDER_SLOT = 15;
+    uint256 private constant LOOTBOX_ORDER_SLOT = GameSlots.LOOTBOX_ORDER;
     /// @dev Resolved-order marker (Storage BOX_PROCESSED).
     uint256 private constant BOX_PROCESSED = uint256(1) << 255;
     /// @dev Seed domain of the entry sweep's per-box roll (LootboxModule BOX_OPEN_TAG, "BoxOpen").
     uint256 private constant BOX_OPEN_TAG = 0x426f784f70656e;
     /// @dev vrfSubscriptionId at slot 32 (golden layout).
-    uint256 private constant VRF_SUB_ID_SLOT = 32;
+    uint256 private constant VRF_SUB_ID_SLOT = GameSlots.VRF_SUBSCRIPTION_ID;
     /// @dev ticketBufferLevels (uint48) at slot 5 byte 10: even-parity level stamp in its low 24
     ///      bits, odd-parity stamp in its high 24 bits.
-    uint256 private constant TICKET_BUFFER_LEVELS_SLOT = 5;
+    uint256 private constant TICKET_BUFFER_LEVELS_SLOT = GameSlots.TICKET_BUFFER_LEVELS;
     uint256 private constant TICKET_BUFFER_LEVELS_SHIFT = 80;
 
     /// @dev The raw packed order word of `who` at physical buffer `buffer`.
@@ -2508,7 +2509,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
     // ==================== Storage Inspection Helpers ====================
 
-    /// @notice Read _entriesOwed(key, who) from game contract storage.
+    /// @notice Read the entry-owed record (key, who) from game contract storage.
     ///         Returns the raw uint40 packed value: upper 32 bits = tickets owed, lower 8 = remainder.
     function _ticketsOwed(uint24 key, address who) internal view returns (uint32 owed) {
         return uint32(TicketQueueStorage.owed(address(game), key, who) >> 8);

@@ -26,7 +26,7 @@ import {
  * treats a dead lane as tier 0 before the upgrade comparison.
  *
  * Storage is seeded directly via hardhat_setStorageAt into boonPacked[recipient].slot0
- * -- SLOT_BOON_PACKED = 50, the same mapping slot documented in
+ * -- SLOT_BOON_PACKED = 49, the same mapping slot documented in
  * test/fuzz/LootboxBoonCoexistence.t.sol and test/fuzz/WhaleBoonExpiry.t.sol (both
  * `forge inspect DegenerusGame storage-layout` on the working tree). The whale lane
  * occupies bits 200-255 of slot0: whaleDay[24] | deityWhaleDay[24] | whaleTier[8].
@@ -49,7 +49,7 @@ describe("WhaleBoonDeityLapse", function () {
 
   const DEITY_BOON_WHALE_10 = 16; // 10% discount -> tier 1
 
-  const SLOT_BOON_PACKED = 50n;
+  const SLOT_BOON_PACKED = 49n;
   const BP_WHALE_DAY_SHIFT = 200n;
   const BP_DEITY_WHALE_DAY_SHIFT = 224n;
   const BP_WHALE_TIER_SHIFT = 248n;

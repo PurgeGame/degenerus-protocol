@@ -4,12 +4,13 @@ pragma solidity 0.8.34;
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-contract ClaimPackingHarness is DegenerusGameStorage {
-    function bingo(uint24 lvl, address player) external { _markBingoClaimed(lvl, player); }
-    function markAffiliate(uint24 lvl, address player) external { _markAffiliateDgnrsClaimed(lvl, player); }
-    function bingoClaimed(uint24 lvl, address player) external view returns (bool) { return _bingoClaimed(lvl, player); }
-    function affiliateClaimed(uint24 lvl, address player) external view returns (bool) { return _affiliateDgnrsClaimed(lvl, player); }
+contract ClaimPackingHarness is DegenerusGameStorage, WalletSeed {
+    function bingo(uint24 lvl, address player) external { _markBingoClaimed(lvl, _seedWallet(player)); }
+    function markAffiliate(uint24 lvl, address player) external { _markAffiliateDgnrsClaimed(lvl, _seedWallet(player)); }
+    function bingoClaimed(uint24 lvl, address player) external view returns (bool) { return _bingoClaimed(lvl, _walletIdOf(player)); }
+    function affiliateClaimed(uint24 lvl, address player) external view returns (bool) { return _affiliateDgnrsClaimed(lvl, _walletIdOf(player)); }
 }
 
 contract CrapsPackingHarness is CrapsBattleStorage {

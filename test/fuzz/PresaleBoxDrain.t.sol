@@ -5,14 +5,15 @@ import {Vm} from "forge-std/Vm.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @notice Presale payout regression: real buys and FIFO engine opens, with one immutable
 ///         word per session. Only earned credit, completed ticket prerequisites and entropy
 ///         are seeded. Tests preserve the tier ratio, live-pool clamp and closing-dust bounds.
 contract PresaleBoxDrain is DeployProtocol {
-    uint256 constant SLOT_PRESALE_BOX_ETH_SOLD = 16;
-    uint256 constant SLOT_PRESALE_BOX_CREDIT = 17;
-    uint256 constant SLOT_PRESALE_BOX_ETH = 18;
+    uint256 constant SLOT_PRESALE_BOX_ETH_SOLD = GameSlots.PRESALE_BOX_ETH_SOLD;
+    uint256 constant SLOT_PRESALE_BOX_CREDIT = GameSlots.PRESALE_BOX_CREDIT;
+    uint256 constant SLOT_PRESALE_BOX_ETH = GameSlots.PRESALE_BOX_ETH;
     uint256 constant PRESALE_BOX_ETH_CAP = 50 ether;
     bytes32 constant OPENED = keccak256("PresaleBoxOpened(address,uint48,uint256,uint256,uint256,uint256,bool,uint32,uint32)");
     bytes32 constant SWEPT = keccak256("PresaleBoxRemainderSwept(address,uint256)");
@@ -32,7 +33,9 @@ contract PresaleBoxDrain is DeployProtocol {
     }
 
     function _buyBox(address buyer, uint256 amount) private {
-        vm.store(address(game), keccak256(abi.encode(buyer, SLOT_PRESALE_BOX_CREDIT)), bytes32(amount));
+        uint32 id = game.walletIdOf(buyer);
+        if (id == 0) id = _giveWalletId(buyer);
+        vm.store(address(game), keccak256(abi.encode(uint256(id), SLOT_PRESALE_BOX_CREDIT)), bytes32(amount));
         vm.deal(buyer, amount);
         vm.prank(buyer);
         game.buyPresaleBox{value: amount}(buyer, amount);

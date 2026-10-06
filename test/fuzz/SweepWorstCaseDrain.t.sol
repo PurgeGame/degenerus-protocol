@@ -10,6 +10,7 @@ import {MineFlipGasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IGameAfkingModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @dev View/seed overlay etched onto the live game to inspect internal box-queue state.
 ///      A DegenerusGame subclass: etching type().runtimeCode (no constructor) gives the reads access
@@ -119,7 +120,7 @@ contract SweepViewer is DegenerusGame {
 ///      through an etched overlay that runs the storage contract's own swap/reset routines.
 contract SweepWorstCaseDrain is DeployProtocol {
     // boxPlayers: mapping(uint48 => address[]) at slot 57 (scripts/layout/golden/DegenerusGame.json).
-    uint256 private constant SLOT_BOX_PLAYERS = 57;
+    uint256 private constant SLOT_BOX_PLAYERS = GameSlots.BOX_PLAYERS;
 
     // A realistic keeper/door allowance: one call admits work only while the remaining gas covers
     // the next entry's declared bound.

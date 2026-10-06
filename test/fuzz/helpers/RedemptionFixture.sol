@@ -37,6 +37,10 @@ abstract contract RedemptionFixture is DeployProtocol {
         vm.deal(address(sdgnrs), 10_000 ether);
         // The Reward pool holds 10% of supply: 3% to each holder.
         uint256 share = sdgnrs.totalSupply() * 3 / 100;
+        // Reward recipients are game players, so each holds a wallet ID (a burn requires one).
+        _giveWalletId(alice);
+        _giveWalletId(bob);
+        _giveWalletId(carol);
         vm.startPrank(address(game));
         assertEq(sdgnrs.transferFromPool(sDGNRS.Pool.Reward, alice, share), share);
         assertEq(sdgnrs.transferFromPool(sDGNRS.Pool.Reward, bob, share), share);
@@ -121,7 +125,7 @@ abstract contract RedemptionFixture is DeployProtocol {
     }
 
     function _claimTokens(address player, uint32 id) internal view returns (uint256 tokens) {
-        (tokens,) = sdgnrs.pendingRedemptions(player, id);
+        (tokens,) = sdgnrs.pendingRedemptions(game.walletIdOf(player), id);
     }
 
     function _batch(uint32 id)

@@ -6,6 +6,7 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title FoilDrainMiddaySwap — the foil pack's sixteen entries against the queue swaps.
 ///
@@ -22,11 +23,11 @@ contract FoilDrainMiddaySwap is DeployProtocol {
     bytes32 private constant FOIL_SEED_TAG = keccak256("foil-seed");
 
     // Storage slots (forge inspect DegenerusGame storage-layout).
-    uint256 private constant SLOT_LVL_TRAIT_ENTRY = 8;
-    uint256 private constant SLOT_RNG_WORD_BY_DAY = 10;
-    uint256 private constant SLOT_FOIL_RECORD = 58;
-    uint256 private constant SLOT_FOIL_BUYERS = 61;
-    uint256 private constant SLOT_FOIL_CURSORS = 62;
+    uint256 private constant SLOT_LVL_TRAIT_ENTRY = GameSlots.LVL_TRAIT_ENTRY;
+    uint256 private constant SLOT_RNG_WORD_BY_DAY = GameSlots.RNG_WORD_BY_DAY;
+    uint256 private constant SLOT_FOIL_RECORD = GameSlots.FOIL_RECORD;
+    uint256 private constant SLOT_FOIL_BUYERS = GameSlots.FOIL_QUEUE;
+    uint256 private constant SLOT_FOIL_CURSORS = GameSlots.FOIL_CURSOR;
 
     struct Pack {
         address buyer;
@@ -422,7 +423,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
     // =====================================================================
 
     function _packedFoilRecord(uint24 lvl, address who) internal view returns (uint256) {
-        uint256 packed = uint256(vm.load(address(game), keccak256(abi.encode(who, keccak256(abi.encode(uint256(lvl & 3), SLOT_FOIL_RECORD))))));
+        uint256 packed = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), keccak256(abi.encode(uint256(lvl & 3), SLOT_FOIL_RECORD))))));
         return uint24(packed >> 208) == lvl ? packed : 0;
     }
 
@@ -487,7 +488,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
         bytes32 elem = bytes32(uint256(levelSlot) + uint256(traitId));
         uint256 header = uint256(vm.load(address(game), elem));
         uint48 stamps = uint48(uint256(vm.load(address(game), bytes32(uint256(5)))) >> 80);
-        uint256 bits = uint256(vm.load(address(game), bytes32(uint256(75) + (lvl & 1))));
+        uint256 bits = uint256(vm.load(address(game), bytes32(GameSlots.TRAIT_BUCKET_LIVE + (lvl & 1))));
         if (uint24(stamps >> ((lvl & 1) * 24)) != lvl || ((bits >> traitId) & 1) == 0) return 0;
         uint256 len = uint32(header);
         if (len == 0) return 0;

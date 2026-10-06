@@ -15,6 +15,7 @@ import {
     CenturyBafScores,
     CenturyConsolidationSeeder
 } from "./AdvanceCenturyConsolidationGas.t.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 /// @dev Production game facade plus a native runDailyPhase seam. `seedBafStage` writes the state
 ///      the x00 consolidation leaves behind, positioned at a group boundary: a kind-7 work record
@@ -22,7 +23,7 @@ import {
 ///      claimablePool), the daily lock of a published session with the day's word recorded, and the
 ///      prize pools frozen as the daily lock leaves them (one hundredth of futurePool opening the
 ///      pending buffer).
-contract BafGroupGasHost is DegenerusGame {
+contract BafGroupGasHost is DegenerusGame, WalletSeed {
     function seedBafStage(uint256 word, uint128 pool, uint32 positions, uint16 cursor, uint128 reserved) external {
         uint24 day = _simulatedDayIndex();
         level = 100;
@@ -67,7 +68,7 @@ contract BafGroupGasHost is DegenerusGame {
 
     /// @dev Reference seam: the production queue sink with one logged ticket roll's arguments.
     function replayQueued(address buyer, uint24 targetLevel, uint32 entries) external {
-        _queueEntries(buyer, targetLevel, entries, true);
+        _queueEntries(_seedWallet(buyer), targetLevel, entries, true);
     }
 
     /// @dev Re-points the armed stage at `cursor` under `word`; the reservation is left as seeded.
@@ -83,7 +84,7 @@ contract BafGroupGasHost is DegenerusGame {
     }
 
     function claimableOfProbe(address player) external view returns (uint256) {
-        return uint128(balancesPacked[player]);
+        return uint128(balancesPacked[_walletIdOf(player)]);
     }
 
     /// @dev claimablePool and futurePool plus the pending future share a frozen pool accumulates.

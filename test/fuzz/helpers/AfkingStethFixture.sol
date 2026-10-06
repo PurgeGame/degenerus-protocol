@@ -7,10 +7,11 @@ import {MockStETH} from "../../../contracts/mocks/MockStETH.sol";
 import {MineFlipGas} from "../../../contracts/libraries/MineFlipGas.sol";
 import {BitPackingLib} from "../../../contracts/libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../../../contracts/libraries/PriceLookupLib.sol";
+import {WalletSeed} from "../../helpers/WalletSeed.sol";
 
 /// @dev Only setup/read helpers are synthetic; subscription, pull, delivery and eviction
 ///      all use the production facade and delegatecalled AFKing worker.
-contract AfkingStethHost is DegenerusGame {
+contract AfkingStethHost is DegenerusGame, WalletSeed {
     function prepare() external {
         uint24 day = _simulatedDayIndex();
         level = 4;
@@ -49,12 +50,17 @@ contract AfkingStethHost is DegenerusGame {
         uint256 prepaid,
         uint256 claimable
     ) external {
-        _subscribers.push(player);
-        _subscriberIndex[player] = _subscribers.length;
-        Sub storage sub = _subOf[player];
+        (uint32 id, ) = _registerWallet(player, 0);
+        _subscribers.push(uint256(uint160(player)) | (uint256(id) << 160));
+        Sub storage sub = _subOf[id];
+        sub.setPosition = uint32(_subscribers.length);
         sub.dailyQuantity = quantity;
         sub.flags = (source == address(0) ? 0 : 1) | (drainFirst ? 2 : 0) | (tickets ? 4 : 0);
-        _fundingSourceOf[player] = source;
+        uint32 sourceId;
+        if (source != address(0)) {
+            (sourceId, ) = _registerWallet(source, 0);
+            _fundingSourceOf[id] = uint256(uint160(source)) | (uint256(sourceId) << 160);
+        }
         sub.lastAutoBoughtDay = _afkingResetDay - 1;
         sub.lastOpenedDay = _afkingResetDay - 1;
         sub.afkingStartDay = _afkingResetDay - 1;
@@ -63,9 +69,9 @@ contract AfkingStethHost is DegenerusGame {
         sub.pendingFlip = 17;
         sub.subStreakLatch = 9;
         mintPacked_[player] |= uint256(1) << BitPackingLib.SEAT_ENCUMBERED_SHIFT;
-        if (prepaid != 0) _creditAfkingValue(source == address(0) ? player : source, prepaid);
+        if (prepaid != 0) _creditAfkingValue(source == address(0) ? id : sourceId, prepaid);
         if (claimable != 0) {
-            _creditClaimable(player, claimable);
+            _creditClaimable(id, claimable);
             claimablePool += uint128(claimable);
         }
     }
@@ -85,15 +91,15 @@ contract AfkingStethHost is DegenerusGame {
     }
 
     function stateOf(address player) external view returns (Sub memory) {
-        return _subOf[player];
+        return _subOf[_walletIdOf(player)];
     }
 
     function sourceOf(address player) external view returns (address) {
-        return _fundingSourceOf[player];
+        return address(uint160(_fundingSourceOf[_walletIdOf(player)]));
     }
 
     function memberOf(address player) external view returns (uint256) {
-        return _subscriberIndex[player];
+        return _subOf[_walletIdOf(player)].setPosition;
     }
 
     function pendingBoxes() external view returns (uint256) {
@@ -105,26 +111,27 @@ contract AfkingStethHost is DegenerusGame {
     }
 
     function claimableOf(address player) external view returns (uint256) {
-        return _claimableOf(player);
+        return _claimableOf(_walletIdOf(player));
     }
 
     function entries(address player) external view returns (uint256) {
-        return _entriesOwedTotal(level + 1, player);
+        return _entriesOwedTotal(level + 1, _walletIdOf(player));
     }
 
     function setMarkers(address player, uint24 bought, uint24 opened) external {
-        _subOf[player].lastAutoBoughtDay = bought;
-        _subOf[player].lastOpenedDay = opened;
+        _subOf[_seedWallet(player)].lastAutoBoughtDay = bought;
+        _subOf[_seedWallet(player)].lastOpenedDay = opened;
     }
 
     function setQuantity(address player, uint8 quantity) external {
-        _subOf[player].dailyQuantity = quantity;
+        _subOf[_seedWallet(player)].dailyQuantity = quantity;
     }
 
     function setSource(address player, address source) external {
-        _fundingSourceOf[player] = source;
-        if (source == address(0)) _subOf[player].flags &= ~uint8(1);
-        else _subOf[player].flags |= 1;
+        _fundingSourceOf[_seedWallet(player)] =
+            source == address(0) ? 0 : uint256(uint160(source)) | (uint256(_seedWallet(source)) << 160);
+        if (source == address(0)) _subOf[_seedWallet(player)].flags &= ~uint8(1);
+        else _subOf[_seedWallet(player)].flags |= 1;
     }
 
     function setLock(bool locked) external {
@@ -136,7 +143,7 @@ contract AfkingStethHost is DegenerusGame {
     }
 
     function setBalances(address player, uint128 prepaid, uint128 claimable) external {
-        balancesPacked[player] = (uint256(prepaid) << 128) | claimable;
+        balancesPacked[_seedWallet(player)] = (uint256(prepaid) << 128) | claimable;
     }
 
     function setPool(uint128 value) external {

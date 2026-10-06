@@ -359,23 +359,23 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Apply EV multiplier with per-account per-level cap of 10 ETH.
     ///      Tracks how much benefit has been used and only applies EV adjustment
     ///      to the uncapped portion. Remainder gets 100% EV (neutral).
-    /// @param player Player address
+    /// @param id Wallet ID whose cap is drawn
     /// @param lvl Current game level
     /// @param amount Lootbox ETH amount
     /// @param evMultiplierBps EV multiplier in basis points (9000-14500)
     /// @return scaledAmount Amount after EV adjustment
-    function _applyEvMultiplierWithCap(address player, uint24 lvl, uint256 amount, uint256 evMultiplierBps)
+    function _applyEvMultiplierWithCap(uint32 id, uint24 lvl, uint256 amount, uint256 evMultiplierBps)
         private
         returns (uint256 scaledAmount)
     {
-        return _applyEvMultiplierWithCap(player, lvl, amount, evMultiplierBps, LOOTBOX_EV_BENEFIT_CAP);
+        return _applyEvMultiplierWithCap(id, lvl, amount, evMultiplierBps, LOOTBOX_EV_BENEFIT_CAP);
     }
 
     /// @dev `ceiling` bounds this box's adjustment, while recorded usage always stays within
     ///      the shared 10 ETH allowance (and its 64-bit storage lane). Eligibility is read once
     ///      at settlement: an exhausted allowance cannot receive the exceptional extension.
     function _applyEvMultiplierWithCap(
-        address player, uint24 lvl, uint256 amount, uint256 evMultiplierBps, uint256 ceiling
+        uint32 id, uint24 lvl, uint256 amount, uint256 evMultiplierBps, uint256 ceiling
     ) private returns (uint256 scaledAmount)
     {
         // Bonus-only cap: penalty (< NEUTRAL) and neutral (== NEUTRAL) boxes apply the
@@ -386,7 +386,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
 
         // Check how much EV benefit capacity remains for this level
-        uint256 usedBenefit = _lootboxEvUsedFor(player, lvl);
+        uint256 usedBenefit = _lootboxEvUsedFor(id, lvl);
         if (usedBenefit >= LOOTBOX_EV_BENEFIT_CAP) {
             // Cap exhausted: apply 100% EV (neutral)
             return amount;
@@ -400,7 +400,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // Update tracking
         uint256 usedAfter = usedBenefit + adjustedPortion;
         if (usedAfter > LOOTBOX_EV_BENEFIT_CAP) usedAfter = LOOTBOX_EV_BENEFIT_CAP;
-        _setLootboxEvUsedFor(player, lvl, usedAfter);
+        _setLootboxEvUsedFor(id, lvl, usedAfter);
 
         // Calculate scaled amount:
         // - adjustedPortion gets the full EV multiplier
@@ -785,10 +785,13 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // EV-cap draw against the shared per-(player, level) accumulator, same as a bought box.
         uint256 evExtra;
         if (_lootboxEvMultiplierFromScore(_lbGet(word, LB_SCORE_SHIFT, LB_SCORE_MASK)) > LOOTBOX_EV_NEUTRAL_BPS) {
-            uint256 used = _lootboxEvUsedFor(player, capKey);
+            // The grant's caller already loaded this wallet's mint word (registered buyer or
+            // scored subscriber), so the ID read is warm.
+            uint32 id = _walletIdOf(player);
+            uint256 used = _lootboxEvUsedFor(id, capKey);
             uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP ? 0 : LOOTBOX_EV_BENEFIT_CAP - used;
             evExtra = amountWei < remaining ? amountWei : remaining;
-            if (evExtra != 0) _setLootboxEvUsedFor(player, capKey, used + evExtra);
+            if (evExtra != 0) _setLootboxEvUsedFor(id, capKey, used + evExtra);
         }
         word = _lbSet(
             word,
@@ -891,7 +894,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             );
         }
 
-        uint256 evExtra = _drawEvBenefit(buyer, capLevel, costWei, _lbGet(word, LB_SCORE_SHIFT, LB_SCORE_MASK));
+        uint256 evExtra = _drawEvBenefit(_walletIdOf(buyer), capLevel, costWei, _lbGet(word, LB_SCORE_SHIFT, LB_SCORE_MASK));
         word = _lbSet(
             word,
             LB_ADJ_SHIFT,
@@ -906,15 +909,15 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      draws min(spend, CAP - used) from the shared per-(player, level) accumulator; neutral
     ///      and sub-neutral scores draw nothing. Shared by the buy path and the sDGNRS redemption
     ///      order, which draws at resolution.
-    function _drawEvBenefit(address player, uint24 capLevel, uint256 spend, uint256 score)
+    function _drawEvBenefit(uint32 id, uint24 capLevel, uint256 spend, uint256 score)
         private
         returns (uint256 evExtra)
     {
         if (_lootboxEvMultiplierFromScore(score) > LOOTBOX_EV_NEUTRAL_BPS) {
-            uint256 used = _lootboxEvUsedFor(player, capLevel);
+            uint256 used = _lootboxEvUsedFor(id, capLevel);
             uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP ? 0 : LOOTBOX_EV_BENEFIT_CAP - used;
             evExtra = spend < remaining ? spend : remaining;
-            if (evExtra != 0) _setLootboxEvUsedFor(player, capLevel, used + evExtra);
+            if (evExtra != 0) _setLootboxEvUsedFor(id, capLevel, used + evExtra);
         }
     }
 
@@ -1034,8 +1037,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
         // Final settlement for the whole entry: one call per remaining fungible lane, one ticket
         // write per distinct level. DGNRS may already be checkpointed at an ETH-spin boundary.
-        // Boon draws have completed before this remaining fungible/ticket flush.
-        _flushBoxAcc(player, c.acc, currentLevel);
+        // Boon draws have completed before this remaining fungible/ticket flush. Until the box
+        // queue carries IDs, a human entry reads its owner's ID from the mint word here.
+        _flushBoxAcc(player, _walletIdOf(player), c.acc, currentLevel);
     }
 
     /// @dev One box's boon draw, for the resolvers that settle a single box outside the
@@ -1062,7 +1066,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Settle an entry's remaining accumulated rewards: one call per fungible lane, one
     ///      ticket write per distinct target level. DGNRS may already have been checkpointed at
     ///      an ETH-spin recursion boundary; every other lane settles only here.
-    function _flushBoxAcc(address player, BoxAcc memory acc, uint24 currentLevel) private {
+    function _flushBoxAcc(address player, uint32 id, BoxAcc memory acc, uint24 currentLevel) private {
         uint256 touched = acc.ticketTouched;
         while (touched != 0) {
             // Find the least-significant set bit in six bounded steps (all lanes are 0..50),
@@ -1092,7 +1096,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             if ((scan & 1) == 0) offset += 1;
 
             uint32 whole = acc.tickets[offset];
-            _queueEntries(player, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false);
+            _queueEntries(id, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false);
             unchecked {
                 touched &= touched - 1;
             }
@@ -1435,26 +1439,26 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // payable: reachable from the payable redemption path via an ETH-spin's recirc
     // (`resolveEthSpinFromBox` -> `_resolveLootboxDirect`); delegatecall preserves the
     // in-flight msg.value, so a non-payable callvalue guard here would revert the claim.
-    function resolveLootboxDirect(address player, uint256 amount, uint256 rngWord, uint16 activityScore)
+    function resolveLootboxDirect(address player, uint32 id, uint256 amount, uint256 rngWord, uint16 activityScore)
         external
         payable
     {
-        _resolveLootboxDirectCore(player, amount, rngWord, activityScore, LOOTBOX_EV_BENEFIT_CAP);
+        _resolveLootboxDirectCore(player, id, amount, rngWord, activityScore, LOOTBOX_EV_BENEFIT_CAP);
     }
 
     /// @notice Resolve one purchased Degenerette bet's combined win box.
     /// @dev Remaining allowance is checked at settlement. A qualifying box gets a 50 ETH
     ///      ceiling less prior usage, then exhausts the normal allowance if it crosses 10 ETH.
     ///      The activity score and RNG seed remain frozen; no purchase bookkeeping is added.
-    function resolveDegeneretteLootboxDirect(address player, uint256 amount, uint256 rngWord, uint16 activityScore)
+    function resolveDegeneretteLootboxDirect(address player, uint32 id, uint256 amount, uint256 rngWord, uint16 activityScore)
         external
         payable
     {
-        _resolveLootboxDirectCore(player, amount, rngWord, activityScore, DEGENERETTE_WIN_EV_CAP);
+        _resolveLootboxDirectCore(player, id, amount, rngWord, activityScore, DEGENERETTE_WIN_EV_CAP);
     }
 
     function _resolveLootboxDirectCore(
-        address player, uint256 amount, uint256 rngWord, uint16 activityScore, uint256 ceiling
+        address player, uint32 id, uint256 amount, uint256 rngWord, uint16 activityScore, uint256 ceiling
     ) private
     {
         // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
@@ -1472,7 +1476,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
 
         uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(activityScore));
-        uint256 scaledAmount = _applyEvMultiplierWithCap(player, currentLevel, amount, evMultiplierBps, ceiling);
+        uint256 scaledAmount = _applyEvMultiplierWithCap(id, currentLevel, amount, evMultiplierBps, ceiling);
 
         // allowEthSpin=false: this is the recirc entry, called inside sweepDegeneretteBets' deferred
         // ETH-pool flush window — an ETH-spin RMW here would be clobbered by that flush. Roll
@@ -1484,7 +1488,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         );
         // Single-box entry: the accumulator exists for uniformity, and flushing it
         // here keeps every reward credit on one path.
-        _flushBoxAcc(player, acc, currentLevel);
+        _flushBoxAcc(player, id, acc, currentLevel);
         // The boon draw the box's 10% haircut paid for. The common resolver takes the
         // haircut for EVERY caller, so every caller must also draw — the entry sweep does
         // it per tier; the single-box resolvers do it here.
@@ -1516,7 +1520,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param activityScore Snapshotted activity score (whole points) from burn submission
     /// @param batchId The redemption batch the claim belongs to (seed and event tag)
     function resolveRedemptionLootbox(
-        address player, uint256 amount, uint256 rngWord, uint16 activityScore, uint32 batchId
+        address player, uint32 id, uint256 amount, uint256 rngWord, uint16 activityScore, uint32 batchId
     ) external payable {
         if (msg.sender != ContractAddresses.SDGNRS) revert OnlySDGNRS();
         if (amount == 0) return;
@@ -1555,7 +1559,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 word = _lbSet(0, LB_LEVEL_SHIFT, LB_LEVEL_MASK, currentLevel);
         word = _lbSet(word, LB_SCORE_SHIFT, LB_SCORE_MASK, score);
         word = _lbSet(
-            word, LB_ADJ_SHIFT, LB_BPS_MASK, _blendBps(0, 0, _drawEvBenefit(player, currentLevel, nominal, score), nominal)
+            word, LB_ADJ_SHIFT, LB_BPS_MASK, _blendBps(0, 0, _drawEvBenefit(id, currentLevel, nominal, score), nominal)
         );
         word = _lbSet(word, LB_CUSTOM_COUNT_SHIFT, LB_COUNT_MASK, boxes);
         word = _lbSet(word, LB_CUSTOM_SIZE_SHIFT, LB_CUSTOM_SIZE_MASK, sizeScaled);
@@ -1569,9 +1573,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      pulled as stETH (sDGNRS pre-approves GAME for max) — so a mid-game ETH-depleted sDGNRS
     ///      still settles. The credit rides the claimable reserve (claimablePool in tandem); the
     ///      arriving value backs it and the player withdraws via the access-gated claimWinnings.
-    /// @param player Claimant credited.
+    /// @param id Claimant wallet ID credited.
     /// @param amount Total direct-half value (msg.value ETH + the stETH remainder pulled here).
-    function creditRedemptionDirect(address player, uint256 amount) external payable {
+    function creditRedemptionDirect(uint32 id, uint256 amount) external payable {
         if (msg.sender != ContractAddresses.SDGNRS) revert OnlySDGNRS();
         if (msg.value > amount) revert MsgValueExceedsAmount();
         if (amount == 0) return;
@@ -1582,7 +1586,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (stethPortion != 0) {
             if (!steth.transferFrom(msg.sender, address(this), stethPortion)) revert TransferFailed();
         }
-        _creditClaimable(player, amount);
+        _creditClaimableLogged(id, amount);
         claimablePool += uint128(amount);
     }
 
@@ -1639,7 +1643,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param day The boundary-pinned PROCESS day stamped at process (frozen in the seed).
     /// @param rngWord The active published session word, retained until all pending boxes finish.
     /// @param activityScore The stamped activity score in whole points (the FROZEN EV input).
-    function resolveAfkingBox(address player, uint256 amount, uint24 day, uint256 rngWord, uint16 activityScore)
+    function resolveAfkingBox(address player, uint32 id, uint256 amount, uint24 day, uint256 rngWord, uint16 activityScore)
         external
     {
         if (amount == 0) return;
@@ -1665,7 +1669,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(activityScore));
         uint256 scaledAmount = player == ContractAddresses.SDGNRS
             ? (amount * evMultiplierBps) / 10_000
-            : _applyEvMultiplierWithCap(player, currentLevel, amount, evMultiplierBps);
+            : _applyEvMultiplierWithCap(id, currentLevel, amount, evMultiplierBps);
 
         BoxAcc memory acc;
         _resolveLootboxCommon(
@@ -1673,7 +1677,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         );
         // Single-box entry: the accumulator exists for uniformity, and flushing it
         // here keeps every reward credit on one path.
-        _flushBoxAcc(player, acc, currentLevel);
+        _flushBoxAcc(player, id, acc, currentLevel);
         // The boon draw the box's 10% haircut paid for. The common resolver takes the
         // haircut for EVERY caller, so every caller must also draw — the entry sweep does
         // it per tier; the single-box resolvers do it here.

@@ -4,19 +4,20 @@ pragma solidity ^0.8.33;
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {TicketLevelPrep} from "../helpers/TicketLevelPrep.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-contract TicketRecyclingHarness is TicketLevelPrep {
+contract TicketRecyclingHarness is TicketLevelPrep, WalletSeed {
     function completed(uint24 lvl) external { level = lvl; jackpotPhaseFlag = false; }
     function prepare(uint24 lvl) external returns (bool) { return _prepareTicketLevel(lvl); }
     function append(uint24 lvl, uint8 trait, address owner, uint256 n) external {
         require(_ticketBufferLevel(lvl) == lvl, "unprepared");
-        uint256 idx = uint256(_registerEntryOwner(owner, lvl) >> OWNER_IDX_SHIFT) - 1;
+        uint256 idx = uint256(_seedWallet(owner));
         _bucketAppendRun(_traitBufferBase(lvl), trait, idx, n, lvl);
     }
     function count(uint24 lvl, uint8 trait) external view returns (uint256) { return _bucketLength(lvl, trait); }
     function ownerAt(uint24 lvl, uint8 trait, uint256 i) external view returns (address) {
         require(i < _bucketLength(lvl, trait));
-        return _bucketOwnerAtUnchecked(lvl, trait, i);
+        return _bucketOwnerAt(lvl, trait, i);
     }
     function retired(uint24 lvl) external view returns (bool) { return _ticketLevelRetired(lvl); }
     function pending(uint24 lvl, bool write, uint256 n) external {

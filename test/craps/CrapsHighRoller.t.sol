@@ -9,6 +9,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {CrapsViews} from "./CrapsViews.sol";
 import {CrapsPins} from "./CrapsPins.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {CrapsSlots} from "../helpers/GameSlots.sol";
 
 /// @title The high-roller lane
 /// @notice One optional lane per battle. A seat takes it by paying the field's multiple on the
@@ -756,13 +757,13 @@ contract CrapsHighRollerGasTest is CrapsPins {
     ///      So what §11.1 actually asks for is asserted DIRECTLY, against the storage the batch
     ///      touched. That is the property the gas budget was a proxy for: the lane adds ONE word
     ///      per battle and ONE packed action accumulator per day, and no per-entrant storage at all.
-    ///      PINNED slot numbers, so they go stale the moment a mapping is added or removed above
-    ///      them. The pair of tests below is what catches that: the negative one asserts the lane
+    ///      Slot numbers come from `CrapsSlots`, which `StorageSlotPins` checks against the compiled
+    ///      layout. The pair of tests below also catches a stale pin: the negative one asserts the lane
     ///      slots are never written and would pass against any wrong slot, while the positive one
     ///      asserts they ARE — so a stale pin turns the positive test red rather than quietly
     ///      hollowing out the negative. Keep them together.
-    uint256 internal constant _HIGH_FIELD_SLOT = 12;
-    uint256 internal constant _DAY_STAKED_SLOT = 10;
+    uint256 internal constant _HIGH_FIELD_SLOT = CrapsSlots.HIGH_FIELD;
+    uint256 internal constant _DAY_STAKED_SLOT = CrapsSlots.DAY_STAKED;
 
     function _slotOfMapping(bytes32 key, uint256 base) internal pure returns (bytes32) {
         return keccak256(abi.encode(key, base));

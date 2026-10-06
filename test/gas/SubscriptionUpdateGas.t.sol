@@ -9,21 +9,23 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {Vm} from "forge-std/Vm.sol";
 
 contract SubscriptionUpdateSeeder is DegenerusGameStorage {
-    function sourceOf(address player) external view returns (address) { return _fundingSourceOf[player]; }
-    function flagsOf(address player) external view returns (uint8) { return _subOf[player].flags; }
+    function sourceOf(address player) external view returns (address) {
+        return address(uint160(_fundingSourceOf[_walletIdOf(player)]));
+    }
+    function flagsOf(address player) external view returns (uint8) { return _subOf[_walletIdOf(player)].flags; }
 
     /// @dev Reproduce the worker's call-free tombstone removal after a real cancel.
     /// The sparse funding source intentionally survives, as in production.
     function reclaimCanceled(address player) external {
-        require(_subOf[player].dailyQuantity == 0);
-        require(_subOf[player].lastOpenedDay >= _subOf[player].lastAutoBoughtDay);
-        uint256 index = _subscriberIndex[player] - 1;
-        address tail = _subscribers[_subscribers.length - 1];
+        uint32 id = _walletIdOf(player);
+        require(_subOf[id].dailyQuantity == 0);
+        require(_subOf[id].lastOpenedDay >= _subOf[id].lastAutoBoughtDay);
+        uint256 index = _subOf[id].setPosition - 1;
+        uint256 tail = _subscribers[_subscribers.length - 1];
         _subscribers[index] = tail;
-        _subscriberIndex[tail] = index + 1;
+        _subOf[uint32(tail >> 160)].setPosition = uint32(index + 1);
         _subscribers.pop();
-        delete _subscriberIndex[player];
-        delete _subOf[player];
+        delete _subOf[id];
     }
 }
 

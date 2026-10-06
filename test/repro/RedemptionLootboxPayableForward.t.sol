@@ -5,6 +5,7 @@ import {RedemptionCloseTools} from "../fuzz/helpers/RedemptionCloseTools.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @notice Coinflip surface mirror (interface-only) so the submit FLIP leg (settled backing read
 ///         + backing withdraw) is mockable without importing the coinflip contract. With
@@ -45,11 +46,11 @@ contract RedemptionLootboxPayableForward is RedemptionCloseTools {
     // =====================================================================
 
     /// @dev balancesPacked (DegenerusGame) at slot 7 (v61 PACK fold). Low 128 bits = claimable.
-    uint256 internal constant GAME_CLAIMABLE_SLOT = 7;
+    uint256 internal constant GAME_CLAIMABLE_SLOT = GameSlots.BALANCES_PACKED;
     /// @dev claimablePool in the upper 128 bits of slot 1.
     uint256 internal constant GAME_SLOT1 = 1;
     /// @dev boonPacked (DegenerusGame) mapping(address => BoonPacked{slot0, slot1}) at slot 51.
-    uint256 internal constant SLOT_BOON_PACKED = 50;
+    uint256 internal constant SLOT_BOON_PACKED = GameSlots.BOON_PACKED;
     /// @dev BoonPacked.slot0 bit layout (coinflip fields).
     uint256 internal constant BP_COINFLIP_DAY_SHIFT = 0;
     uint256 internal constant BP_COINFLIP_TIER_SHIFT = 48;
@@ -105,7 +106,7 @@ contract RedemptionLootboxPayableForward is RedemptionCloseTools {
     // =====================================================================
 
     function _setGameClaimableSdgnrs(uint256 amount) internal {
-        bytes32 slot = keccak256(abi.encode(address(sdgnrs), GAME_CLAIMABLE_SLOT));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(address(sdgnrs))), GAME_CLAIMABLE_SLOT));
         uint256 word = uint256(vm.load(address(game), slot));
         word = (word & (type(uint256).max << 128)) | uint128(amount);
         vm.store(address(game), slot, bytes32(word));
@@ -208,7 +209,7 @@ contract RedemptionLootboxPayableForward is RedemptionCloseTools {
 
         uint256 gameValueBefore = address(game).balance + mockStETH.balanceOf(address(game));
         _settleCohort();
-        (uint128 owed,) = sdgnrs.pendingRedemptions(player, dayD);
+        (uint128 owed,) = sdgnrs.pendingRedemptions(game.walletIdOf(player), dayD);
         assertEq(uint256(owed), 0, "the claim settled rather than parking");
 
         // Direct half lands as a game-claimable credit; the full rolled value reaches the game
@@ -236,7 +237,7 @@ contract RedemptionLootboxPayableForward is RedemptionCloseTools {
 
         uint256 gameValueBefore = address(game).balance + mockStETH.balanceOf(address(game));
         _settleCohort();
-        (uint128 owed,) = sdgnrs.pendingRedemptions(player, dayD);
+        (uint128 owed,) = sdgnrs.pendingRedemptions(game.walletIdOf(player), dayD);
         assertEq(uint256(owed), 0, "the claim settled rather than parking");
 
         assertEq(

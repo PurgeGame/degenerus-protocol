@@ -7,6 +7,7 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
+import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
 contract AfkingStethFundingTest is DeployProtocol {
     AfkingStethHost internal host;
@@ -76,7 +77,7 @@ contract AfkingStethFundingTest is DeployProtocol {
         assertEq(sub.affiliateBase, 0, "unclaimed affiliate accrual forfeited");
         assertEq(sub.pendingFlip, 0, "unclaimed FLIP forfeited");
         assertEq(host.entries(player), 0, "no tickets delivered");
-        assertEq((game.mintPackedFor(player) >> 155) & 1, 1, "seat remains forfeit");
+        assertEq((game.mintPackedFor(player) >> BitPackingLib.SEAT_ENCUMBERED_SHIFT) & 1, 1, "seat remains forfeit");
     }
 
     function testFuzz_OnlyResidualPaidBothOrdersAndSources(

@@ -5,6 +5,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IGameAfkingModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title V56SubHardening -- the D-14 positive proofs for the 357-00 subscribe-hardening gates
 ///        (D-11 coin-required / D-12 purchase-grounded / D-13 VAULT/sDGNRS bootstrap exemption) and the
@@ -50,9 +51,8 @@ contract V56SubHardening is DeployProtocol {
     // Game-resident storage slots + the Sub-slot offset block (post-coin-gate layout;
     // validThroughLevel deleted, every later field shifted down 3 bytes)
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 52;            // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 55; // mapping(address => uint256) _subscriberIndex (1-indexed)
-    uint256 private constant MINTPACKED_SLOT = 9;        // mintPacked_ mapping root (deity bit @ 184)
+    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;            // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED;        // mintPacked_ mapping root (deity bit @ 184)
 
     //   dailyQuantity u8 @0 · flags u8 @1 · score u16 @2 · amount u24 @4
     //   lastAutoBoughtDay u24 @7 · lastOpenedDay u24 @10 · afkCoveredThroughDay u24 @13 · afkingStartDay u24 @16
@@ -647,7 +647,7 @@ contract V56SubHardening is DeployProtocol {
     // ---- Sub-slot reads (_subOf slot 52 + the post-coin-gate offsets) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
+        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
         return p & ((uint256(1) << widthBits) - 1);
     }
 
@@ -668,6 +668,6 @@ contract V56SubHardening is DeployProtocol {
     }
 
     function _subscriberIndexOf(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBSCRIBER_INDEX_SLOT)))));
+        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 224; // Sub.setPosition (1-based)
     }
 }

@@ -17,6 +17,8 @@ import {FreshWordLeg} from "./PurchaseDailyWorstCase.t.sol";
 import {ProtocolBoonDrawSeeder} from "./helpers/ProtocolBoonDrawSeeder.sol";
 import {VaultHistorySeeder} from "./AdvanceNestedSettlementGas.t.sol";
 import {BafViews} from "../helpers/BafViews.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
+import {CrapsSlots} from "../helpers/GameSlots.sol";
 
 /// @dev The level-100 BAF award schedule and its award events. With R scatter rounds (48 below a
 ///      500 ETH pool) positions 0..2R-1 are the rounds in (best, second) pairs, a round pair's four
@@ -31,10 +33,10 @@ library BafSchedule {
     uint256 private constant CLAIM_THRESHOLD = 5 ether;
     uint256 private constant SMALL_THRESHOLD = 0.5 ether;
     uint256 private constant TRAIT_SENTINEL = 420;
-    bytes32 internal constant ETH_SIG = keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)");
+    bytes32 internal constant ETH_SIG = keccak256("JackpotEthWin(uint32,uint24,uint16,uint256,uint256)");
     bytes32 internal constant TICKET_SIG =
-        keccak256("JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)");
-    bytes32 internal constant WHALE_SIG = keccak256("JackpotWhalePassWin(address,uint256,uint8)");
+        keccak256("JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)");
+    bytes32 internal constant WHALE_SIG = keccak256("JackpotWhalePassWin(uint32,uint256,uint8)");
 
     /// @dev One award event: signature, recipient, the ETH amount (ETH credit) or half-pass count
     ///      (whale pass), zero for a ticket roll; `level` and `entries` are a ticket roll's target
@@ -351,8 +353,8 @@ contract CenturyConsolidationSeeder is DegenerusGame, BucketSeed {
         uint24 day = _simulatedDayIndex();
         level = 99;
         // Real maximum supply, with prior transition coverage committed.
-        for (uint256 i = deityPassOwners.length; i < 32; ++i) {
-            deityPassOwners.push(address(uint160(0xDE170000 + i)));
+        for (uint256 i = _deityCount(); i < 32; ++i) {
+            _seedDeity(address(uint160(0xDE170000 + i)));
         }
         purchaseStartDay = day - 8; // accelerated skim trough; preserve the fixture's minimum-rate shape
         dailyIdx = day - 1;
@@ -426,7 +428,7 @@ contract CenturyConsolidationSeeder is DegenerusGame, BucketSeed {
 
 /// @dev Complete production facade plus exact native worker seams. The seams do
 /// not seed progress or replace any production work inside the measured phase.
-contract CenturyNativeGasHost is DegenerusGame {
+contract CenturyNativeGasHost is DegenerusGame, WalletSeed {
     function publishOnly() external {
         _native(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("publishRng()"));
     }
@@ -465,7 +467,7 @@ contract CenturyNativeGasHost is DegenerusGame {
     }
     /// @dev Reference seam: the production queue sink with one logged ticket roll's arguments.
     function replayQueued(address buyer, uint24 targetLevel, uint32 entries) external {
-        _queueEntries(buyer, targetLevel, entries, true);
+        _queueEntries(_seedWallet(buyer), targetLevel, entries, true);
     }
     function _native(address target, bytes memory data) private returns (bytes memory result) {
         (bool ok, bytes memory reason) = target.delegatecall(data);
@@ -583,6 +585,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         vm.deal(address(sdgnrs), 10_000 ether);
         uint256 burn = sdgnrs.totalSupply() / 1000;
         address burner = address(0xCE470);
+        _giveWalletId(burner); // reward recipients are game players with wallet IDs
         vm.prank(address(game)); sdgnrs.transferFromPool(sDGNRS.Pool.Reward, burner, burn);
         vm.prank(burner); sdgnrs.burn(burn);
         uint256 claimable = game.claimableWinningsOf(address(sdgnrs));
@@ -597,7 +600,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
             vm.etch(address(coinflip), type(VaultHistorySeeder).runtimeCode);
             VaultHistorySeeder(address(coinflip)).seedVaultHistory(historyMode == 1);
             vm.etch(address(coinflip), original);
-            vm.store(address(crapsBattle), keccak256(abi.encode(ContractAddresses.VAULT, uint256(15))), bytes32(0));
+            vm.store(address(crapsBattle), keccak256(abi.encode(ContractAddresses.VAULT, CrapsSlots.PASS_CREDITS)), bytes32(0));
             vm.store(address(coin), bytes32(0), bytes32(uint256(uint128(uint256(vm.load(address(coin), bytes32(0)))))));
         }
         _predictAwards(word, s);

@@ -5,14 +5,15 @@ import {Test} from "forge-std/Test.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-contract BafSingleLevelHarness is DegenerusGame {
+contract BafSingleLevelHarness is DegenerusGame, WalletSeed {
     function seed(uint24 target, uint256 count) public {
         level = 100;
         _releaseTicketQueue(_tqFarFutureKey(target));
         for (uint256 i; i < count; ++i) {
             address player = address(uint160((uint256(target) << 32) + i + 1));
-            _tqAppend(_tqFarFutureKey(target), uint32(_registerEntryOwner(player, target) >> OWNER_IDX_SHIFT));
+            _tqAppend(_tqFarFutureKey(target), _seedWallet(player));
         }
     }
 
@@ -23,8 +24,8 @@ contract BafSingleLevelHarness is DegenerusGame {
     function seedProtocolRange(uint24 fromLevel, uint24 toLevel) external {
         level = 100;
         for (uint24 target = fromLevel; target <= toLevel; ++target) {
-            _tqAppend(_tqFarFutureKey(target), uint32(_registerEntryOwner(ContractAddresses.SDGNRS, target) >> OWNER_IDX_SHIFT));
-            _tqAppend(_tqFarFutureKey(target), uint32(_registerEntryOwner(ContractAddresses.VAULT, target) >> OWNER_IDX_SHIFT));
+            _tqAppend(_tqFarFutureKey(target), _seedWallet(ContractAddresses.SDGNRS));
+            _tqAppend(_tqFarFutureKey(target), _seedWallet(ContractAddresses.VAULT));
         }
     }
 }

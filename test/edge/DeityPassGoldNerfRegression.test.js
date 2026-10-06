@@ -240,8 +240,9 @@ function computeDynamicArrayElementSlot(lengthSlot, i) {
 async function seedDeityBySymbol(gameAddr, fullSymId, deity, baseSlot) {
   const slot = computeDeityBySymbolSlot(fullSymId, baseSlot);
   const slotHex = "0x" + slot.toString(16).padStart(64, "0");
-  const addrBn = BigInt(deity) & ((1n << 160n) - 1n);
-  const valueHex = "0x" + addrBn.toString(16).padStart(64, "0");
+  // deityBySymbol holds the deity's wallet ID (0 = unowned).
+  const idBn = BigInt(deity) === 0n ? 0n : await bucketSeed.registerOwner(gameAddr, deity);
+  const valueHex = "0x" + idBn.toString(16).padStart(64, "0");
   await hre.network.provider.send("hardhat_setStorageAt", [
     gameAddr,
     slotHex,
@@ -283,9 +284,7 @@ async function readDeityBySymbol(gameAddr, fullSymId, baseSlot) {
   const slot = computeDeityBySymbolSlot(fullSymId, baseSlot);
   const slotHex = "0x" + slot.toString(16).padStart(64, "0");
   const word = await hre.ethers.provider.getStorage(gameAddr, slotHex);
-  const addr =
-    "0x" + (BigInt(word) & ((1n << 160n) - 1n)).toString(16).padStart(40, "0");
-  return hre.ethers.getAddress(addr);
+  return bucketSeed.walletAddressOf(gameAddr, BigInt(word) & 0xffffffffn);
 }
 
 // Wilson-Hilferty normal approximation of the chi² distribution; used for

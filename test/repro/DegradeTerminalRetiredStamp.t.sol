@@ -46,7 +46,7 @@ contract DegradeTerminalRetiredStampTest is DeployProtocol {
     uint256 private constant WORD = 0x987654321;
     address private constant HOLDER = address(0x715E7);
     address private constant TOP = address(0xAFF1);
-    bytes32 private constant ETH_WIN = keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)");
+    bytes32 private constant ETH_WIN = keccak256("JackpotEthWin(uint32,uint24,uint16,uint256,uint256)");
 
     bytes private realCode;
 

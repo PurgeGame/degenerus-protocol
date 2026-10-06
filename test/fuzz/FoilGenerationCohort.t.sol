@@ -10,6 +10,7 @@ import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {IDegenerusGameDegeneretteModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 contract FoilHeroSpinStub {
     event FoilHeroSpin(bytes4 selector, uint8 symbol);
@@ -27,10 +28,10 @@ contract FoilCohortCreditStub {
 }
 
 /// @dev Seed commitment state only; generation, storage and gold claims are production code.
-contract FoilCohortHarness is DegenerusGameFoilPackModule {
+contract FoilCohortHarness is DegenerusGameFoilPackModule, WalletSeed {
     function seedTaken(address who) external {
         _setTicketBufferLevel(1);
-        uint256 owner = uint256(_registerEntryOwner(who, 1) >> OWNER_IDX_SHIFT) - 1;
+        uint256 owner = uint256(_seedWallet(who));
         _bucketAppendRun(_traitBufferBase(1), 253, owner, 1, 1);
     }
     function retire() external { _setTicketBufferLevel(3); }
@@ -47,9 +48,9 @@ contract FoilCohortHarness is DegenerusGameFoilPackModule {
     }
     function enqueue(address player) external {
         uint24 lvl = 1;
-        require(_foilRecordWord(player, lvl) == 0);
-        foilRecord[lvl & 3][player] = (uint256(20_000) << _FOIL_MULT_SHIFT) | (uint256(lvl) << _FOIL_LEVEL_SHIFT);
-        uint256 pos = uint256(_registerEntryOwner(player, lvl) >> OWNER_IDX_SHIFT) - 1;
+        require(_foilRecordWord(_seedWallet(player), lvl) == 0);
+        foilRecord[lvl & 3][_seedWallet(player)] = (uint256(20_000) << _FOIL_MULT_SHIFT) | (uint256(lvl) << _FOIL_LEVEL_SHIFT);
+        uint256 pos = uint256(_seedWallet(player));
         foilQueue[_foilWriteKey()].push(((pos + 1) << 192) | (uint256(lvl) << 160) | uint160(player));
     }
     function commit(uint256 word) external {
@@ -62,8 +63,8 @@ contract FoilCohortHarness is DegenerusGameFoilPackModule {
         rngWordCurrent = word;
         _setRngSessionPublished(true);
     }
-    function record(address player) external view returns (uint256) { return _foilRecordWord(player, 1); }
-    function lines(address player) external view returns (uint32[4] memory) { return _foilStoredLines(player, 1); }
+    function record(address player) external view returns (uint256) { return _foilRecordWord(_walletIdOf(player), 1); }
+    function lines(address player) external view returns (uint32[4] memory) { return _foilStoredLines(_walletIdOf(player), 1); }
     function pending() external view returns (bool) { return _foilDrainPending(); }
     function length(bool read) external view returns (uint256) {
         return foilQueue[read ? _foilReadKey() : _foilWriteKey()].length;
@@ -73,7 +74,7 @@ contract FoilCohortHarness is DegenerusGameFoilPackModule {
     function retained(uint24 day) external view returns (uint256) { return _retainedDailyWord(day); }
     function seedGold(address player, uint24 day) external {
         // Three gold quadrants qualify for the first ladder rung, no all-gold ticket.
-        foilRecord[1][player] = uint256(day) | (uint256(20_000) << _FOIL_MULT_SHIFT)
+        foilRecord[1][_seedWallet(player)] = uint256(day) | (uint256(20_000) << _FOIL_MULT_SHIFT)
             | (uint256(0x0038_3838) << _FOIL_LINES_SHIFT)
             | (uint256(day) << _FOIL_GENERATED_DAY_SHIFT) | (uint256(1) << _FOIL_LEVEL_SHIFT) | _FOIL_READY;
     }
@@ -82,7 +83,7 @@ contract FoilCohortHarness is DegenerusGameFoilPackModule {
         day = _simulatedDayIndex();
         uint32 line = 0xC5824100; // Crypto 0, Zodiac 1, Cards 2, Dice 6.
         dailyFoilDraw[day & 1] = _packFoilDraw(line, 1, day, word);
-        foilRecord[1][player] = uint256(day) | (uint256(line) << _FOIL_LINES_SHIFT)
+        foilRecord[1][_seedWallet(player)] = uint256(day) | (uint256(line) << _FOIL_LINES_SHIFT)
             | (uint256(1) << _FOIL_LEVEL_SHIFT) | _FOIL_READY;
     }
 }

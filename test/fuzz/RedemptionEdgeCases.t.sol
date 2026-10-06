@@ -93,12 +93,12 @@ contract RedemptionEdgeCasesTest is RedemptionFixture {
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }
     function test_ActivityScoreFrozenOnFirstBurn() public {
-        vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScore.selector, alice), abi.encode(uint256(100)));
+        vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScore.selector, alice), abi.encode(uint256(100), game.walletIdOf(alice)));
         uint32 id = _openBatchId();
         _burn(alice, 1 ether);
-        vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScore.selector, alice), abi.encode(uint256(200)));
+        vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScore.selector, alice), abi.encode(uint256(200), game.walletIdOf(alice)));
         _burn(alice, 1 ether);
-        (,uint16 score) = sdgnrs.pendingRedemptions(alice, id);
+        (,uint16 score) = sdgnrs.pendingRedemptions(game.walletIdOf(alice), id);
         assertEq(score, 101);
     }
     function testFuzz_TerminalClaimPaysExactlyOnce(uint16 seed) public {

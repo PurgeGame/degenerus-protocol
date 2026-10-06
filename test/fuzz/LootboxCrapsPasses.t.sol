@@ -4,6 +4,7 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title The lootbox's craps day-pass lane, end to end
 /// @notice Drives the REAL production path: a box is set up in Game storage, `mineFlip` resolves it
@@ -11,11 +12,11 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 ///         craps table. Nothing about the conversion is mirrored or restated — a mirror could agree
 ///         with itself while the shipped arithmetic drifted underneath it.
 contract LootboxCrapsPasses is DeployProtocol {
-    uint256 constant SLOT_LOOTBOX_ETH = 15;
-    uint256 constant SLOT_LOOTBOX_WORD = 34;
-    uint256 constant SLOT_LOOTBOX_RNG_IDX = 33; // lootboxRngPacked (low 48 bits = lootboxRngIndex)
-    uint256 constant SLOT_BOX_PLAYERS = 57;     // mapping(uint48 => address[]) boxPlayers (sweep's discovery queue)
-    uint256 constant SLOT_BOX_CURSORS = 56;     // packed (boxCursor @ byte 7, humanReadComplete @ byte 13)
+    uint256 constant SLOT_LOOTBOX_ETH = GameSlots.LOOTBOX_ORDER;
+    uint256 constant SLOT_LOOTBOX_WORD = GameSlots.RNG_DAY_TAGS;
+    uint256 constant SLOT_LOOTBOX_RNG_IDX = GameSlots.LOOTBOX_RNG_PACKED; // lootboxRngPacked (low 48 bits = lootboxRngIndex)
+    uint256 constant SLOT_BOX_PLAYERS = GameSlots.BOX_PLAYERS;     // mapping(uint48 => address[]) boxPlayers (sweep's discovery queue)
+    uint256 constant SLOT_BOX_CURSORS = GameSlots.BOX_CURSOR;     // packed (boxCursor @ byte 7, humanReadComplete @ byte 13)
     uint256 constant LB_SCORE_SHIFT = 24;
     uint256 constant LB_CUSTOM_COUNT_SHIFT = 105;
     uint256 constant LB_CUSTOM_SIZE_SHIFT = 113;
@@ -128,6 +129,8 @@ contract LootboxCrapsPasses is DeployProtocol {
         vm.warp(block.timestamp + 1 days);
         _completeDay(0xBEEF0002);
         player = makeAddr("boxer");
+        // Box buyers are registered at the purchase door; the seeded order skips that door.
+        _giveWalletId(player);
         vm.deal(player, 1000 ether);
     }
 

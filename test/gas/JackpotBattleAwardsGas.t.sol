@@ -4,6 +4,7 @@ pragma solidity 0.8.34;
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {JackpotBattleViews} from "../craps/JackpotBattleViews.sol";
+import {CrapsSlots} from "../helpers/GameSlots.sol";
 
 /// @dev The jackpot slot winner's progressive award against the real Coinflip and Game, driven
 ///      through the harness tap on the table so a controlled qualifying score isolates its cost
@@ -24,7 +25,7 @@ contract JackpotBattleAwardsGasTest is DeployProtocol {
         emit log_named_uint("REAL_BATTLE_RIU_AWARD_GAS", used);
         assertEq(crapsBattle.progressivePool(), 450_000_000 ether);
         assertGt(coinflip.coinflipAmount(WINNER), 0);
-        uint256 passes = uint256(vm.load(ContractAddresses.CRAPS, keccak256(abi.encode(WINNER, uint256(15)))));
+        uint256 passes = uint256(vm.load(ContractAddresses.CRAPS, keccak256(abi.encode(WINNER, CrapsSlots.PASS_CREDITS))));
         assertGt(uint64(passes), 0);
         assertLt(used, 400_000, "battle award path exceeded its gas allowance");
     }

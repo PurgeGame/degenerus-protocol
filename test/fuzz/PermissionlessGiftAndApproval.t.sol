@@ -4,6 +4,7 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegeneretteQueue as DQ} from "../helpers/DegeneretteQueue.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title PermissionlessGiftAndApproval
 /// @notice Covers the permissionless-settlement behaviors added in the permissionless work:
@@ -13,7 +14,7 @@ import {DegeneretteQueue as DQ} from "../helpers/DegeneretteQueue.sol";
 ///         security property under test is NO DRAIN: a gift never debits a non-consenting target.
 contract PermissionlessGiftAndApproval is DeployProtocol {
     // Storage slots (game) — mirror DegeneretteResolveRepeg.t.sol.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
     uint48 private constant BET_INDEX = 1;
 
     uint8 private constant CURRENCY_ETH = 0;

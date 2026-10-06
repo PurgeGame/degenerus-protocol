@@ -4,10 +4,11 @@ pragma solidity 0.8.34;
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGameGameOverModule} from "../../contracts/modules/DegenerusGameGameOverModule.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 /// @dev The independent reference below is the tally at 20a0e892, before gas changes.
 ///      Compare the production terminal worker against it from the same seeded storage snapshot.
-contract DeadVrfTallyParityHarness is DegenerusGameGameOverModule {
+contract DeadVrfTallyParityHarness is DegenerusGameGameOverModule, WalletSeed {
     /// @dev The deterministic ending is latched on the passed terminal level and its payout is
     ///      marked settled, so each terminal call (`runGameOverAdvance`, mineFlip's Terminal stage)
     ///      runs exactly the tally and stops at its boundary instead of continuing into the payout.
@@ -28,7 +29,7 @@ contract DeadVrfTallyParityHarness is DegenerusGameGameOverModule {
         snapShift = shift;
         for (uint256 i; i < count; ++i) {
             uint80 packed = uint80(uint256(keccak256(abi.encode(salt, i))));
-            uint80 bits = _registerEntryOwner(address(uint160(i + 1)), 5);
+            uint80 bits = (uint80(_seedWallet(address(uint160(i + 1)))) << OWNER_IDX_SHIFT);
             _tqAppend(_tqReadKey(5), uint32(bits >> OWNER_IDX_SHIFT));
             _setEntryOwed(_tqReadKey(5), uint32(bits >> OWNER_IDX_SHIFT), bits | (packed & ((uint80(1) << 41) - 1)));
         }
@@ -53,7 +54,7 @@ contract DeadVrfTallyParityHarness is DegenerusGameGameOverModule {
 
     function seedOne(uint80 packed, uint8 shift) external {
         snapShift = shift;
-        uint80 bits = _registerEntryOwner(address(1), 5);
+        uint80 bits = (uint80(_seedWallet(address(1))) << OWNER_IDX_SHIFT);
         _tqAppend(_tqReadKey(5), uint32(bits >> OWNER_IDX_SHIFT));
         _setEntryOwed(_tqReadKey(5), uint32(bits >> OWNER_IDX_SHIFT), bits | (packed & ((uint80(1) << 41) - 1)));
     }
@@ -86,7 +87,7 @@ contract DeadVrfTallyParityHarness is DegenerusGameGameOverModule {
                     ++pos;
                 }
                 // pos is now the registry position plus one, the form _entryRecord takes.
-                uncreated += _legacyWeight(uint80(_entryRecord(_tqReadKey(lvl), uint32(pos)) >> 160), shift);
+                uncreated += _legacyWeight(uint80(_entryRecordOf(_tqReadKey(lvl), uint32(pos)) >> 160), shift);
             }
             deadTallyPos = 0;
             stage = 1;

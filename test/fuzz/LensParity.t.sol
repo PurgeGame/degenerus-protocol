@@ -9,6 +9,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IDegenerusQuests} from "../../contracts/interfaces/IDegenerusQuests.sol";
 import {IDegenerusAffiliate} from "../../contracts/interfaces/IDegenerusAffiliate.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 /// @title LensParity — DegenerusGameLens slot-math + decode parity proof
 /// @notice The lens reads the game's storage through `extsload` with hand-derived
@@ -19,7 +20,7 @@ import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 ///         the COMPILER's own layout/packing, and asserts the lens reads back exactly
 ///         what was written. Any drift between the lens's slot arithmetic / bit
 ///         shifts and the real layout fails here.
-contract LensStorageHarness is DegenerusGameMintStreakUtils {
+contract LensStorageHarness is DegenerusGameMintStreakUtils, WalletSeed {
     /// @dev Same body as DegenerusGame.extsload — the lens's read path.
     function extsload(bytes32 slot) external view returns (bytes32 value) {
         assembly {
@@ -41,7 +42,7 @@ contract LensStorageHarness is DegenerusGameMintStreakUtils {
         return _activeTicketLevel();
     }
 
-    function queue(address player, uint24 lvl) external { _queueEntries(player, lvl, 7, false); }
+    function queue(address player, uint24 lvl) external { _queueEntries(_seedWallet(player), lvl, 7, false); }
 
     // -- setters: write through the compiler's layout ------------------------
 
@@ -59,7 +60,7 @@ contract LensStorageHarness is DegenerusGameMintStreakUtils {
         uint24 pendingFlip,
         uint16 subStreakLatch
     ) external {
-        Sub storage s = _subOf[p];
+        Sub storage s = _subOf[_seedWallet(p)];
         s.dailyQuantity = dailyQuantity;
         s.flags = flags;
         s.score = score;
@@ -104,7 +105,7 @@ contract LensStorageHarness is DegenerusGameMintStreakUtils {
     }
 
     function setDecEntry(uint24 lvl, uint64 id, address owner, uint64 stackFlip, uint32 chips) external {
-        decBattlePlayers[owner] = (uint256(lvl) << 64) | id;
+        decBattlePlayers[_seedWallet(owner)] = (uint256(lvl) << 64) | id;
         decBattleEntries[(uint256(lvl) << 64) | id] =
             (uint256(stackFlip) << 190) | (uint256(chips) << 160) | uint256(uint160(owner));
     }
@@ -118,7 +119,7 @@ contract LensStorageHarness is DegenerusGameMintStreakUtils {
     }
 
     function setDecGeneratedOwner(uint64 ordinal, address owner) external {
-        decGeneratedOwners[ordinal] = owner;
+        decGeneratedOwners[ordinal] = _seedWallet(owner);
     }
 
     function setDecQueue(uint24 head, uint24 tail) external {
@@ -131,7 +132,7 @@ contract LensStorageHarness is DegenerusGameMintStreakUtils {
     }
 
     function setFoilRecord(uint24 lvl, address p, uint256 w) external {
-        foilRecord[lvl & 3][p] = w == 0 ? 0 : w | (uint256(lvl) << _FOIL_LEVEL_SHIFT);
+        foilRecord[lvl & 3][_seedWallet(p)] = w == 0 ? 0 : w | (uint256(lvl) << _FOIL_LEVEL_SHIFT);
     }
 }
 

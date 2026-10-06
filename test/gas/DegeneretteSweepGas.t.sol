@@ -8,6 +8,7 @@ import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 import {DegeneretteQueue as DQ} from "../helpers/DegeneretteQueue.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title DegeneretteSweepGas -- measured resolve cost per queued bet against its declared bound.
 /// @notice Places N identical bets, lands the word, and measures the cold mineFlip that resolves
@@ -16,9 +17,9 @@ import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlip
 ///         N=0) and the per-bet marginal (N=11 minus N=1, over 10) must each stay inside the
 ///         declared DEGENERETTE_* bound for their shape, the admission the engine charges.
 contract DegeneretteSweepGas is DeployProtocol {
-    uint256 private constant LR_PACKED_SLOT = 33;
-    uint256 private constant LR_WORD_SLOT = 3;
-    uint256 private constant PRIZE_POOLS_SLOT = 2;
+    uint256 private constant LR_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
+    uint256 private constant LR_WORD_SLOT = GameSlots.RNG_WORD_CURRENT;
+    uint256 private constant PRIZE_POOLS_SLOT = GameSlots.PRIZE_POOLS_PACKED;
     uint48 private constant IDX = 1;
     uint8 private constant SYMBOL = 9;
 

@@ -12,15 +12,15 @@ import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTi
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-contract DeityTransitionQueueSeeder is DegenerusGameStorage {
+contract DeityTransitionQueueSeeder is DegenerusGameStorage, WalletSeed {
     function seedSurvivors(uint24 target) external {
         uint24 key = _tqFarFutureKey(target);
         for (uint160 i; i < 8; ++i) {
             address who = address(0xF0100000 + i);
-            uint80 packed = _registerEntryOwner(who, target);
+            uint80 packed = (uint80(_seedWallet(who)) << OWNER_IDX_SHIFT);
             uint32 pos = uint32(packed >> OWNER_IDX_SHIFT);
-            ticketOwnerId[who] = pos;
             _tqAppend(key, pos);
             _setEntryOwed(key, pos, packed | (uint80(1_000_000) << 8));
         }

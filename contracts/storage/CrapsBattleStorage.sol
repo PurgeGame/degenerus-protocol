@@ -89,6 +89,9 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///         it named no period at all.
     error NothingToUpgrade();
 
+    /// @notice A board save that pays nothing needs the caller's existing Game wallet ID.
+    error NoWalletId();
+
     /// @notice Six windows per day: five ordinary battles, then the daily jackpot battle (period 5).
     uint256 internal constant _BONUS_PERIODS_PER_DAY = 6;
     /// @notice Width of one day in the bonus slot namespace. Remainder zero holds the day tickets;
@@ -562,9 +565,6 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      A closed field reuses its binding word as seats settle. No day identifier is recycled.
     mapping(uint256 => uint256) internal _slotState;
 
-    /// @dev Reserve the former cursor root to preserve subsequent delegatecall/raw-slot offsets.
-    uint256 private __reservedBonusCursorRoot;
-
     function _slotIndexOf(uint256 slot) internal view returns (uint48) {
         return uint48(_slotState[slot]);
     }
@@ -655,9 +655,17 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///
     ///      Credits never expire and are not transferable. They are AWARDED only by the pinned
     ///      game and spent only by their owner. Bits 64..83 hold the preferred board (two bits
-    ///      per leg); bit 84 is set on its first save and never cleared. Balance updates preserve
-    ///      these fields. CrapsPreferenceLib pins this mapping's slot for the Game's jackpot battle batch read.
+    ///      per leg); bit 84 is set on its first save and never cleared. Bits 85..116 cache the
+    ///      holder's Game wallet ID, filled once from the Game by the first save and never
+    ///      changed. Balance updates preserve these fields. CrapsPreferenceLib pins this
+    ///      mapping's slot for the Game's jackpot battle batch read.
     mapping(address => uint256) internal _passCredits;
+
+    /// @dev The same word keyed by Game wallet ID, with the same lanes: normal passes in bits
+    ///      0..31, high passes in bits 32..63, the board in bits 64..83 and its initialized bit
+    ///      84. Only the board lanes are written, and only when a save changes the board; the
+    ///      pass lanes stay zero for the ID-keyed balances, and board writes preserve them.
+    mapping(uint32 => uint256) internal _passCreditsById;
 
     /// @dev THE PROGRESSIVE. One balance, shared by every scheduled window of every day.
     ///      Funded once when a protocol day opens — half of what that day's main allocation
@@ -682,9 +690,6 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      and the cursor hands each of those its pass credit back before crossing. Late work is
     ///      finished; dead days are refunded in kind; nothing is stranded either way.
     uint64 internal _keeperSlot;
-
-    /// @dev Retired: nothing writes or reads it. Kept so the slots declared after it do not move.
-    mapping(address => uint256) internal _routineGoalDay;
 
     /// @dev What a future day costs bought outright, per day. FIXED constants, deliberately not
     ///      derived from the pass denominations or from each other: the pass is a lootbox award

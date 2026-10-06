@@ -57,6 +57,6 @@ contract DelegateOnlyGuards is DeployProtocol {
 
     function test_resolveLootboxDirect_directCallReverts() public {
         vm.expectRevert();
-        lootboxModule.resolveLootboxDirect(address(this), 1 ether, 1, 1);
+        lootboxModule.resolveLootboxDirect(address(this), 1, 1 ether, 1, 1);
     }
 }

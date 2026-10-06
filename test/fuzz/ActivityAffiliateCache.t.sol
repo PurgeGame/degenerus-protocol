@@ -8,6 +8,8 @@ import {GameAfkingModule} from "../../contracts/modules/GameAfkingModule.sol";
 import {DegenerusQuests} from "../../contracts/DegenerusQuests.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {activityScoreOf} from "../helpers/ActivityScoreOf.sol";
+import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
 contract ActivityCacheQuestStub {
     function effectiveBaseStreakAndAfking(address) external pure returns (uint32, bool) { return (17, false); }
@@ -96,9 +98,10 @@ contract ActivityAffiliateCacheTest is ActivityAffiliateCacheFixture {
         vm.etch(ContractAddresses.QUESTS, type(ActivityCacheQuestStub).runtimeCode);
         _seedEarnings(23, PLAYER, 100);
         DegenerusGame game = DegenerusGame(payable(ContractAddresses.GAME));
-        uint256 expected = game.playerActivityScore(PLAYER);
+        (uint256 expected,) = game.playerActivityScore(PLAYER);
         assertEq(game.playerActivityScoreCached(PLAYER), expected);
-        assertEq(game.playerActivityScore(PLAYER), expected);
+        (uint256 score,) = game.playerActivityScore(PLAYER);
+        assertEq(score, expected);
         vm.startStateDiffRecording();
         assertEq(game.playerActivityScoreCached(PLAYER), expected);
         (uint256 calls, uint256 stores) = _cacheAccesses(vm.stopAndReturnStateDiff(), address(game));
@@ -117,11 +120,11 @@ contract ActivityAffiliateCacheTest is ActivityAffiliateCacheFixture {
     }
 
     function testFuzz_PermissionlessCacheCannotOpenGrowthGate(uint8 curse) public {
-        uint256 packed = uint256(curse) << 215;
+        uint256 packed = uint256(curse) << BitPackingLib.CURSE_COUNT_SHIFT;
         (DegenerusGame game, DegenerusQuests quests) = _productionGame(packed);
         (bool mayBet, bool rewarded) = quests.marketBetGates(PLAYER, 24);
         assertFalse(mayBet); assertFalse(rewarded);
-        uint256 expected = game.playerActivityScore(PLAYER);
+        (uint256 expected,) = game.playerActivityScore(PLAYER);
         vm.startStateDiffRecording();
         vm.prank(address(0xBAD));
         assertEq(game.playerActivityScoreCached(PLAYER), expected);
@@ -147,7 +150,7 @@ contract ActivityAffiliateCacheTest is ActivityAffiliateCacheFixture {
     }
 
     function testFuzz_MutableOnlyWordsNeverPersistCache(uint8 curse, bool seat) public {
-        uint256 packed = (uint256(curse) << 215) | (seat ? uint256(1) << 155 : 0);
+        uint256 packed = (uint256(curse) << BitPackingLib.CURSE_COUNT_SHIFT) | (seat ? uint256(1) << BitPackingLib.SEAT_ENCUMBERED_SHIFT : 0);
         host.seed(PLAYER, packed, 24);
         uint256 expected = host.score(PLAYER, 17, 25);
         vm.startStateDiffRecording();
@@ -158,10 +161,10 @@ contract ActivityAffiliateCacheTest is ActivityAffiliateCacheFixture {
     function test_HitsAndHistoryFreeWalletsSkipMinerDispatch() public {
         (DegenerusGame game,) = _productionGame(1 | (uint256(24) << 185));
         vm.etch(ContractAddresses.GAME_MINER_MODULE, hex"5f5ffd");
-        assertEq(game.playerActivityScoreCached(PLAYER), game.playerActivityScore(PLAYER));
+        assertEq(game.playerActivityScoreCached(PLAYER), activityScoreOf(address(game), PLAYER));
         (game,) = _productionGame(0);
         vm.etch(ContractAddresses.GAME_MINER_MODULE, hex"5f5ffd");
-        assertEq(game.playerActivityScoreCached(PLAYER), game.playerActivityScore(PLAYER));
+        assertEq(game.playerActivityScoreCached(PLAYER), activityScoreOf(address(game), PLAYER));
         assertEq(game.mintPackedFor(PLAYER), 0);
     }
 

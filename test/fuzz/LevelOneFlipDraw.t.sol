@@ -112,7 +112,7 @@ contract LevelOneFlipDrawTest is Test {
     uint256 internal constant UNIT = 100;
     uint256 internal constant CAP_MAX = 50;
 
-    bytes32 internal constant FLIP_WIN_SIG = keccak256("JackpotFlipWin(address,uint24,uint8,uint256,uint256)");
+    bytes32 internal constant FLIP_WIN_SIG = keccak256("JackpotFlipWin(uint32,uint24,uint8,uint256,uint256)");
     bytes32 internal constant CRAPS_PASSES_CREDITED_SIG = keccak256("CrapsPassesCredited(address,bool,uint256)");
     bytes32 internal constant CRAPS_SLIP_PLACED_SIG = keccak256("CrapsSlipPlaced(address,uint256)");
 

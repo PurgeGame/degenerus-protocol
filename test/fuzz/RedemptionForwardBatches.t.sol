@@ -410,7 +410,7 @@ contract RedemptionForwardBatchesTest is RedemptionFixture {
         vm.prank(address(sdgnrs));
         uint256 g0 = gasleft();
         game.resolveRedemptionLootbox{value: amount}(
-            alice, amount, uint256(keccak256(abi.encode("leg", amount))), 300, batchId
+            alice, game.walletIdOf(alice), amount, uint256(keccak256(abi.encode("leg", amount))), 300, batchId
         );
         gasUsed = g0 - gasleft();
         Vm.Log[] memory logs = vm.getRecordedLogs();

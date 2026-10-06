@@ -6,10 +6,11 @@ import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTi
 import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 /// @dev Extends the production ticket module so the live `runTicketWork` drains into THIS
 ///      contract's packed buckets; adds lane-level seeders and decoders only.
-contract BucketLaneHarness is DegenerusGameTicketModule {
+contract BucketLaneHarness is DegenerusGameTicketModule, WalletSeed {
     /// @dev The ticket module answers the liveness tail through the Game's view; this harness is
     ///      not deployed at the Game's address, so it evaluates the tail in place.
     function _pastDeadlineTriggered(uint24 today, uint24 idx)
@@ -23,9 +24,8 @@ contract BucketLaneHarness is DegenerusGameTicketModule {
 
     /// @dev Seed a queue owner's locator and positional owed field without weakening owner identity.
     function _seedOwedAt(uint24 key, address player, uint80 packed) internal {
-        uint32 pos = uint32(packed >> OWNER_IDX_SHIFT);
-        if (pos != 0) ticketOwnerId[player] = pos;
-        else pos = ticketOwnerId[player];
+        uint32 pos = _walletIdOf(player);
+        require(uint32(packed >> OWNER_IDX_SHIFT) == 0 || uint32(packed >> OWNER_IDX_SHIFT) == pos, "owner ID mismatch");
         require(pos != 0, "queue owner must be registered");
         _setEntryOwed(key, pos, packed);
     }
@@ -33,7 +33,7 @@ contract BucketLaneHarness is DegenerusGameTicketModule {
     /// @dev Registry position for `player` at `lvl`: the last position when it is already
     ///      this player, otherwise a fresh push (test-side lookup-or-push).
     function _ownerIdxFor(uint24 lvl, address player) internal returns(uint256) {
-        return uint256(_registerEntryOwner(player,lvl)>>OWNER_IDX_SHIFT)-1;
+        return uint256(_seedWallet(player));
     }
 
     /// @dev Append `n` occurrences of `player` to lvlTraitEntry[lvl][trait].
@@ -45,10 +45,7 @@ contract BucketLaneHarness is DegenerusGameTicketModule {
     /// @dev Queue `player` on key `rk` for level `lvl` owing `packedOwedRem` (owed << 8 | rem),
     ///      registered the way every production sink registers.
     function _seedQueued(uint24 rk, uint24 lvl, address player, uint80 packedOwedRem) internal {
-        // Keep position zero out of the seeded set: a zero lane index makes every word store a
-        // no-op and understates gas.
-        if (ticketOwners.length == 0) _registerEntryOwner(address(1), lvl);
-        uint80 ownerBits = _registerEntryOwner(player, lvl);
+        uint80 ownerBits = (uint80(_seedWallet(player)) << OWNER_IDX_SHIFT);
         _tqAppend(rk, uint32(ownerBits >> OWNER_IDX_SHIFT));
         _seedOwedAt(rk, player, ownerBits | packedOwedRem);
     }
@@ -58,7 +55,7 @@ contract BucketLaneHarness is DegenerusGameTicketModule {
     }
 
     function ownerAt(uint24 lvl, uint8 trait, uint256 k) external view returns (address) {
-        return _bucketOwnerAtUnchecked(lvl, trait, k);
+        return _bucketOwnerAt(lvl, trait, k);
     }
 
     function bucketLen(uint24 lvl, uint8 trait) external view returns (uint256) {
@@ -66,7 +63,7 @@ contract BucketLaneHarness is DegenerusGameTicketModule {
     }
 
     function ownerCount(uint24 lvl) external view returns (uint256) {
-        return ticketOwners.length;
+        return (wallets.length - 1);
     }
 
     function laneWord(uint24 lvl, uint8 trait, uint256 w) external view returns (uint256 word) {

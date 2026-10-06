@@ -5,6 +5,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {C1Viewer} from "../repro/C1BoxAutoOpen.t.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title Whale pass boxes: one custom box per pass bought
 /// @notice A whale purchase records its 10% lootbox spend in the custom lane as one box per
@@ -15,7 +16,7 @@ import {C1Viewer} from "../repro/C1BoxAutoOpen.t.sol";
 ///         A lazy pass records one box; purchases in the same index add their counts; the
 ///         bulk-buy bonus passes never add a box, the count keys on money in.
 contract WhaleCoverBoxPerPass is DeployProtocol {
-    uint256 private constant LOOTBOX_ORDER_SLOT = 15;
+    uint256 private constant LOOTBOX_ORDER_SLOT = GameSlots.LOOTBOX_ORDER;
     uint256 private constant LB_COVER_SHIFT = 161;
     uint256 private constant LB_COVER_MASK = 0xFFFFFFFFFFFF;
     uint256 private constant LB_CUSTOM_COUNT_SHIFT = 105;

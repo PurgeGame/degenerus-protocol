@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {QuestInfo} from "../../contracts/interfaces/IDegenerusQuests.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title QuestForcedTypesReachableTest -- FOIL and DECIMATOR quests actually roll.
 ///
@@ -22,7 +23,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///      the rolled quest types every day, so it exercises the game loop's own
 ///      gate decisions rather than calling the roll with hand-supplied flags.
 contract QuestForcedTypesReachableTest is DeployProtocol {
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED;
 
     uint8 private constant QUEST_TYPE_FOIL = 4;
     uint8 private constant QUEST_TYPE_DECIMATOR = 5;

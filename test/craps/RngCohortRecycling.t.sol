@@ -9,6 +9,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 interface ICohortTableFixture {
     function rngCohortComplete(uint48 index) external view returns (bool);
@@ -69,7 +70,7 @@ contract CustomCohortRecyclingTest is CrapsPins {
         assertTrue(cohort.rngCohortComplete(index));
     }
     function _pendingBit(uint48 index) private view returns (bool) {
-        return uint256(game.slots(bytes32(uint256(33)))) & (uint256(1) << (250 + (index & 1))) != 0;
+        return uint256(game.slots(bytes32(GameSlots.LOOTBOX_RNG_PACKED))) & (uint256(1) << (250 + (index & 1))) != 0;
     }
     function test_GameMirrorClearsOnlyAfterEveryFieldAtIndexSettles() public {
         uint64 a = _create(); uint64 b = _create();

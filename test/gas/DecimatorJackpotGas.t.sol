@@ -75,7 +75,7 @@ contract DecimatorGasHost is DecimatorJackpotHarness, BucketSeed {
     }
     function seedRecipients(uint256 n) external {
         for (uint8 q; q < 4; ++q) {
-            deityBySymbol[q * 8] = address(0);
+            deityBySymbol[q * 8] = 0;
             for (uint256 i; i < n; ++i) _seedBucket(5, q * 64, address(uint160(0xb000 + q * n + i)), 1);
         }
     }
@@ -88,7 +88,7 @@ contract DecimatorGasHost is DecimatorJackpotHarness, BucketSeed {
     function readySoloWithGoldBuckets() external {
         jackpotWork.traits = 0xf8b87838;
         for (uint8 q; q < 4; ++q) {
-            deityBySymbol[q * 8] = address(0);
+            deityBySymbol[q * 8] = 0;
             _seedBucket(5, q * 64 + 56, address(uint160(0xc000 + q)), 1);
             _seedBucket(5, q * 64 + 56, address(uint160(0xd000 + q)), 1);
         }
@@ -102,7 +102,10 @@ contract DecimatorGasHost is DecimatorJackpotHarness, BucketSeed {
         uint256 total = n + generated;
         for (uint256 i; i < Sample.count(total); ++i) {
             uint64 id = Sample.at(word, 5, total, i);
-            if (id <= n) decBattleEntries[(uint256(5) << 64) | id] = (uint256(2000) << 190) | (0x1000 + id);
+            if (id <= n) {
+                decBattleEntries[(uint256(5) << 64) | id] =
+                    (uint256(2000) << 190) | _seedWallet(address(uint160(0x1000 + id)));
+            }
         }
     }
     function lastEntry() external { decJackpotPlans[5].cursor = 999; }
@@ -158,6 +161,7 @@ contract DecimatorJackpotGasTest is Test {
         vm.mockCall(ContractAddresses.STETH_TOKEN, abi.encodeWithSignature("balanceOf(address)"), abi.encode(uint256(0)));
         vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending()"), abi.encode(false));
         h = DecimatorGasHost(ContractAddresses.GAME);
+        h.seedProtocolWallets();
         vm.etch(address(0xDEC18), type(DecimatorGeneratedWorkMeter).runtimeCode);
         workMeter = DecimatorGeneratedWorkMeter(address(0xDEC18));
     }
@@ -232,7 +236,7 @@ contract DecimatorJackpotGasTest is Test {
         uint256 passEvents;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics[0] == keccak256("JackpotWhalePassWin(address,uint256,uint8)")) ++passEvents;
+            if (logs[i].topics[0] == keccak256("JackpotWhalePassWin(uint32,uint256,uint8)")) ++passEvents;
         }
         assertEq(passEvents, 1, "checkpoint awards the solo pass once");
         uint256 passes;
@@ -275,7 +279,7 @@ contract DecimatorJackpotGasTest is Test {
         DecimatorJackpotTerms memory terms;
         terms.word = word;
         vm.cool(address(h)); vm.cool(ContractAddresses.CRAPS);
-        vm.mockCallRevert(ContractAddresses.CRAPS, abi.encodeWithSignature("preferredBoardOf(address)"), hex"12345678");
+        vm.mockCallRevert(ContractAddresses.CRAPS, abi.encodeWithSignature("preferredBoardOf(uint32)"), hex"12345678");
         vm.recordLogs();
         (uint256 used, MineFlipGas.Result memory r) = workMeter.run(h, terms, 150_000);
         assertEq(vm.getRecordedLogs().length, 0, "natural strata do not emit generated receipts");
@@ -415,7 +419,7 @@ contract DecimatorJackpotGasTest is Test {
             Vm.Log[] memory logs = vm.getRecordedLogs();
             bool metered;
             for (uint256 j; j < logs.length; ++j) {
-                if (logs[j].topics[0] == keccak256("DecimatorGenerated(uint24,uint64,address,uint8,uint32,uint256,uint256)")
+                if (logs[j].topics[0] == keccak256("DecimatorGenerated(uint24,uint64,uint32,uint8,uint32,uint256,uint256)")
                     || logs[j].topics[0] == keccak256("DecimatorRun(uint24,uint64,uint256)")) {
                     uint64 id = uint64(uint256(logs[j].topics[2]));
                     assertFalse(seen[id], "no survivor runs twice");
@@ -423,11 +427,11 @@ contract DecimatorJackpotGasTest is Test {
                     assertTrue(Sample.contains(777, 5, uint256(originals) * 2, id));
                     if (id <= originals) ++naturalRuns;
                 }
-                if (logs[j].topics[0] == keccak256("DecimatorGenerated(uint24,uint64,address,uint8,uint32,uint256,uint256)")) {
+                if (logs[j].topics[0] == keccak256("DecimatorGenerated(uint24,uint64,uint32,uint8,uint32,uint256,uint256)")) {
                     (uint8 q,,,) = abi.decode(logs[j].data, (uint8,uint32,uint256,uint256));
                     uint64 id = uint64(uint256(logs[j].topics[2]));
                     uint256 index = uint256(keccak256(abi.encode(keccak256("decimator.battle.generated.recipient.v1"), uint256(777), uint24(5), id, q, uint8(q * 64)))) % 250;
-                    assertEq(address(uint160(uint256(logs[j].topics[3]))), address(uint160(0xb000 + uint256(q) * 250 + index)));
+                    assertEq(h.keyOf(uint32(uint256(logs[j].topics[3]))), address(uint160(0xb000 + uint256(q) * 250 + index)));
                     ++receivedEntries;
                 }
                 if (logs[j].topics[0] != WORK) continue;

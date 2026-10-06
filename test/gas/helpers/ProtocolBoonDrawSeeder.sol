@@ -3,9 +3,10 @@ pragma solidity ^0.8.26;
 
 import {DegenerusGameStorage} from "../../../contracts/storage/DegenerusGameStorage.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
+import {WalletSeed} from "../../helpers/WalletSeed.sol";
 
 /// @dev Sparse but exact reference state for six maximum-depth cumulative-weight searches.
-contract ProtocolBoonDrawSeeder is DegenerusGameStorage {
+contract ProtocolBoonDrawSeeder is DegenerusGameStorage, WalletSeed {
     function seedPools(uint24 day, uint256 winnerWord) external {
         _recordDailyRng(day - 1, 12345);
         for (uint256 i; i < 2; ++i) {
@@ -26,7 +27,7 @@ contract ProtocolBoonDrawSeeder is DegenerusGameStorage {
                     uint32 mid = lo + (hi - lo) / 2;
                     uint64 cumulative = (uint64(mid) + 1) * 40_000;
                     protocolBoonEntries[issuer][(day - 1) & 1][mid] = ProtocolBoonEntry(
-                        address(uint160(0xB000000000 + i * 0x100000000 + mid)), cumulative, 0
+                        _seedWallet(address(uint160(0xB000000000 + i * 0x100000000 + mid))), cumulative, 0
                     );
                     if (cumulative <= roll) lo = mid + 1;
                     else hi = mid;

@@ -45,7 +45,7 @@ contract TerminalSinkStub {
 /// @dev Module harness: the normal ending with its terminal word applied and published, except
 ///      that the word itself is missing. Seeds the state no chain path produces.
 contract MissingWordDrainHarness is DegenerusGameGameOverModule, BucketSeed {
-    function seed(uint24 lvl, address affiliateWinner) external returns (uint24 day) {
+    function seed(uint24 lvl) external returns (uint24 day) {
         day = _simulatedDayIndex();
         level = lvl;
         jackpotPhaseFlag = true;
@@ -59,7 +59,6 @@ contract MissingWordDrainHarness is DegenerusGameGameOverModule, BucketSeed {
         _setRngSessionPublished(true);
         rngLockedFlag = true;
         rngWordCurrent = RNG_WORD_WAITING;
-        terminalAffiliate = affiliateWinner;
         for (uint8 q; q < 4; ++q) _seedBucketDistinct(lvl, uint8(q * 64 + 7), 512, uint160(0x10000 + uint256(q) * 0x10000));
     }
 
@@ -81,7 +80,7 @@ contract MissingWordDrainHarness is DegenerusGameGameOverModule, BucketSeed {
         return (deadPot, deadTotal, deadCreated, deadTraitCount);
     }
 
-    function claimed(address who) external view returns (uint256) { return _claimableOf(who); }
+    function claimed(address who) external view returns (uint256) { return _claimableOf(_walletIdOf(who)); }
 }
 
 /// @notice The normal ending's drain needs the terminal word. With distributable funds and no
@@ -92,8 +91,7 @@ contract DegradeTerminalMissingWordTest is DeployProtocol {
     uint256 private constant WORD = 0x987654321;
     address private constant HOLDER = address(0x715E7);
     address private constant TOP = address(0xAFF1);
-    bytes32 private constant AFFILIATE_PAID = keccak256("TerminalAffiliatePaid(address,uint24,uint256)");
-    bytes32 private constant ETH_WIN = keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)");
+    bytes32 private constant ETH_WIN = keccak256("JackpotEthWin(uint32,uint24,uint16,uint256,uint256)");
 
     bytes private realCode;
 
@@ -141,7 +139,7 @@ contract DegradeTerminalMissingWordTest is DeployProtocol {
         assertTrue(game.gameOver(), "dead ending reached game over");
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
-            assertTrue(logs[i].topics[0] != AFFILIATE_PAID && logs[i].topics[0] != ETH_WIN, "no drawn award");
+            assertTrue(logs[i].topics[0] != ETH_WIN, "no drawn award");
         }
         (uint256 dead, uint256 paid, uint256 pot, uint256 total, uint256 created) = _endingState();
         assertEq(dead, 1);
@@ -168,7 +166,7 @@ contract DegradeTerminalMissingWordTest is DeployProtocol {
         vm.etch(ContractAddresses.SDGNRS, type(TerminalSinkStub).runtimeCode);
         vm.etch(ContractAddresses.COIN, type(TerminalSinkStub).runtimeCode);
         vm.mockCall(ContractAddresses.STETH_TOKEN, abi.encodeWithSignature("balanceOf(address)", address(h)), abi.encode(uint256(0)));
-        uint24 day = h.seed(110, TOP);
+        uint24 day = h.seed(110);
         vm.deal(address(h), 1000 ether);
         // The stubs sit over deployed contracts whose slot 0 is live state: compare deltas.
         uint256 gnrusBurns = TerminalSinkStub(ContractAddresses.GNRUS).burns();
@@ -185,7 +183,6 @@ contract DegradeTerminalMissingWordTest is DeployProtocol {
         assertFalse(active, "callback authority revoked");
         assertFalse(published, "stale publication cleared");
         assertEq(liabilities, 0, "nothing credited");
-        assertEq(h.claimed(TOP), 0, "no affiliate share without a draw");
         assertEq(TerminalSinkStub(ContractAddresses.GNRUS).burns(), gnrusBurns, "no side effect before the latch");
 
         uint256 calls;
@@ -201,7 +198,6 @@ contract DegradeTerminalMissingWordTest is DeployProtocol {
         assertEq(traits, 4);
         assertEq(total, 2048 * 100);
         assertEq(liabilities, 0, "the pot is claimed, never pushed");
-        assertEq(h.claimed(TOP), 0, "the dead ending pays no affiliate");
         assertEq(TerminalSinkStub(ContractAddresses.GNRUS).burns(), gnrusBurns + 1);
         assertEq(TerminalSinkStub(ContractAddresses.SDGNRS).burns(), sdgnrsBurns + 1);
         assertEq(TerminalSinkStub(ContractAddresses.COIN).burns(), coinBurns + 1);

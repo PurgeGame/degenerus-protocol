@@ -32,7 +32,7 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         uint256 word = uint256(keccak256(abi.encode(seed))) | 2;
         uint256 before = gasleft();
         vm.prank(address(sdgnrs));
-        game.resolveRedemptionLootbox{value: stethOnly ? 0 : amount}(alice, amount, word, 3000, 1);
+        game.resolveRedemptionLootbox{value: stethOnly ? 0 : amount}(alice, game.walletIdOf(alice), amount, word, 3000, 1);
         uint256 used = before - gasleft() + 21_000;
         assertLe(used, GasBounds.HUMAN_ENTRY_GAS + 20 * GasBounds.HUMAN_BOX_GAS);
     }
@@ -180,7 +180,7 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         _resolve(day, 175, 99);
         // A 4M allowance admits two maximum beneficiaries; the third's admission no longer fits.
         emit log_named_uint("cold_two_maximum_router_gas", _coldRouterGasWith(4_000_000));
-        (uint128 base,) = sdgnrs.pendingRedemptions(players[2], day);
+        (uint128 base,) = sdgnrs.pendingRedemptions(game.walletIdOf(players[2]), day);
         assertGt(base, 0, "next beneficiary remains whole");
         assertTrue(sdgnrs.redemptionSettlementPending());
         emit log_named_uint("cold_maximum_continuation_router_gas", _coldRouterGas());

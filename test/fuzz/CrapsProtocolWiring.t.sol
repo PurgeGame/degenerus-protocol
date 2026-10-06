@@ -225,23 +225,23 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         vm.prank(STRANGER);
         vm.expectRevert(bytes4(keccak256("NotVaultOwner()")));
         vault.crapsSetPreferredBoard(board);
-        assertEq(crapsBattle.preferredBoardOf(address(vault)), 0);
+        assertEq(crapsBattle.preferredBoardOf(game.walletIdOf(address(vault))), 0);
 
         vm.prank(ContractAddresses.CREATOR);
         vault.crapsSetPreferredBoard(board);
-        assertEq(crapsBattle.preferredBoardOf(address(vault)), board);
-        assertEq(crapsBattle.preferredBoardOf(ContractAddresses.CREATOR), 0);
+        assertEq(crapsBattle.preferredBoardOf(game.walletIdOf(address(vault))), board);
+        assertEq(crapsBattle.preferredBoardOf(game.walletIdOf(ContractAddresses.CREATOR)), 0);
 
         vm.mockCall(address(game), abi.encodeWithSignature("rngLocked()"), abi.encode(true));
         vm.prank(ContractAddresses.CREATOR);
         vm.expectRevert(CrapsBattleStorage.BetLocked.selector);
         vault.crapsSetPreferredBoard(0);
-        assertEq(crapsBattle.preferredBoardOf(address(vault)), board);
+        assertEq(crapsBattle.preferredBoardOf(game.walletIdOf(address(vault))), board);
         vm.clearMockedCalls();
 
         vm.prank(ContractAddresses.CREATOR);
         vault.crapsSetPreferredBoard(0);
-        assertEq(crapsBattle.preferredBoardOf(address(vault)), 0);
+        assertEq(crapsBattle.preferredBoardOf(game.walletIdOf(address(vault))), 0);
     }
 
     /// @dev THE CRANK REACHES THE TABLE. The table's scheduled work runs only inside `mineFlip`,

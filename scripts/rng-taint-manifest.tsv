@@ -302,7 +302,7 @@ PURE-DERIVE	ARG	CrapsPriceLib.highMultiple	_highMultOf	storage/CrapsBattleStorag
 PURE-DERIVE	PARAM	word	_highMultOf	storage/CrapsBattleStorage.sol	Shared pure decoder: hash2(word,HIGH_TAG) draws 10x in 79/90 buckets and 100x in 11/90; zero word means no lane; no caller-selected salt
 NOT-RNG	PARAM	word	_boxOrderCount	storage/DegenerusGameStorage.sol	counts the tiers of a packed box-order word; not a VRF value
 NOT-RNG	PARAM	lanesWord	_bucketAppendLanes	storage/DegenerusGameStorage.sol	packed owner-registry indices (eight uint32 lanes), not an RNG word
-NOT-RNG	PARAM	word	_bucketOwnerFromWordUnchecked	storage/DegenerusGameStorage.sol	packed uint32 owner registry references loaded from a trait bucket, not an entropy word
+NOT-RNG	PARAM	word	_bucketIdFromWord	storage/DegenerusGameStorage.sol	packed uint32 wallet IDs loaded from a trait bucket, not an entropy word
 NOT-RNG	PARAM	word	_lbGet	storage/DegenerusGameStorage.sol	packed box-order field reader; `word` is the order word, not a VRF value
 NOT-RNG	PARAM	word	_lbSet	storage/DegenerusGameStorage.sol	packed box-order field writer; not a VRF value
 PURE-DERIVE	PARAM	rngWord	_packFoilDraw	storage/DegenerusGameStorage.sol	domain-separated 128-bit payout seed from the exact committed word and logical draw day, packed with board/level and explicit format flag

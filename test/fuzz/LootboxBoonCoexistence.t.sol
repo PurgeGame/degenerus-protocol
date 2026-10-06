@@ -4,6 +4,7 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title LootboxBoonCoexistence -- Tests that lootbox-rolled boons coexist with existing boons
 /// @notice Validates the change in commit 004a9065 that removed the single-category exclusivity
@@ -27,12 +28,12 @@ contract LootboxBoonCoexistence is DeployProtocol {
     // customCount[105:113] | customSize[113:161]@1e12 | coverWei[161:209]@1e12) and removed the
     // dead lootboxFlip mapping; the Stage B packing further folded deity/VRF/boon fields, shifting
     // lootboxRngPacked, lootboxRngWordByIndex, and boonPacked down.
-    uint256 constant SLOT_BOON_PACKED     = 50;   // mapping(address => BoonPacked)
-    uint256 constant SLOT_LOOTBOX_ETH     = 15;   // mapping(uint48 => mapping(address => uint256)) (packed order word)
-    uint256 constant SLOT_LOOTBOX_RNG_IDX = 33;   // lootboxRngPacked (low 48 bits = lootboxRngIndex)
-    uint256 constant SLOT_LOOTBOX_WORD    = 34;   // mapping(uint48 => uint256) lootboxRngWordByIndex
-    uint256 constant SLOT_BOX_PLAYERS     = 57;   // mapping(uint48 => address[]) boxPlayers (queue the sweep walks)
-    uint256 constant SLOT_BOX_CURSORS     = 56;   // packed (boxCursor @ byte 7, humanReadComplete @ byte 13)
+    uint256 constant SLOT_BOON_PACKED     = GameSlots.BOON_PACKED;   // mapping(address => BoonPacked)
+    uint256 constant SLOT_LOOTBOX_ETH     = GameSlots.LOOTBOX_ORDER;   // mapping(uint48 => mapping(address => uint256)) (packed order word)
+    uint256 constant SLOT_LOOTBOX_RNG_IDX = GameSlots.LOOTBOX_RNG_PACKED;   // lootboxRngPacked (low 48 bits = lootboxRngIndex)
+    uint256 constant SLOT_LOOTBOX_WORD    = GameSlots.RNG_DAY_TAGS;   // mapping(uint48 => uint256) lootboxRngWordByIndex
+    uint256 constant SLOT_BOX_PLAYERS     = GameSlots.BOX_PLAYERS;   // mapping(uint48 => address[]) boxPlayers (queue the sweep walks)
+    uint256 constant SLOT_BOX_CURSORS     = GameSlots.BOX_CURSOR;   // packed (boxCursor @ byte 7, humanReadComplete @ byte 13)
 
     // Packed lootboxOrder bit layout (mirrors DegenerusGameStorage lootboxOrder — see LB_* there).
     uint256 constant LB_SCORE_SHIFT       = 24;   // score        [24:39]

@@ -21,11 +21,11 @@ contract WordJackpotHarness is DegenerusGameJackpotModule, BucketSeed {
             JackpotBucketLib.packWinningTraits(traits), level, dailyIdx + 1, word);
         dailyTicketBudgetsPacked = (awards * 4) << 144;
         _seedBucketDistinct(42, trait, len, 0x10000);
-        deityBySymbol[(trait >> 6) * 8 + (trait & 7)] = deity;
+        deityBySymbol[(trait >> 6) * 8 + (trait & 7)] = _seedWallet(deity);
     }
 
     function owed(address player) external view returns (uint32) {
-        return uint32(_entriesOwed(_tqWriteKey(42), player) >> 8);
+        return uint32(_owedOf(_tqWriteKey(42), player) >> 8);
     }
 }
 
@@ -37,7 +37,7 @@ contract WordScatterHarness is DegenerusGame, BucketSeed {
 }
 
 contract JackpotWordSamplingTest is Test {
-    bytes32 private constant WIN = keccak256("JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)");
+    bytes32 private constant WIN = keccak256("JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)");
     WordJackpotHarness private h;
     WordScatterHarness private scatter;
 

@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {VmSafe} from "forge-std/Vm.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title RecycleBonusClaimablePurchase — the 10% claimable-recycle FLIP bonus, by payment kind
 /// @notice The purchase path pays a recycle bonus (10% of the recycled claimable value, in FLIP)
@@ -16,7 +17,7 @@ import {VmSafe} from "forge-std/Vm.sol";
 ///      plus the matching claimablePool (slot 1, high half) and contract ETH, preserving the
 ///      solvency identity the purchase's pool decrement relies on.
 contract RecycleBonusClaimablePurchase is DeployProtocol {
-    uint256 private constant BALANCES_PACKED_SLOT = 7;
+    uint256 private constant BALANCES_PACKED_SLOT = GameSlots.BALANCES_PACKED;
     uint256 private constant POOL_SLOT = 1; // claimablePool = bits [128,256)
     uint256 private constant PRICE_COIN_UNIT = 1000;
     uint256 private constant QTY_SCALE = 100;
@@ -87,7 +88,7 @@ contract RecycleBonusClaimablePurchase is DeployProtocol {
     }
 
     function _pokeClaimable(address who, uint256 amount) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(BALANCES_PACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(BALANCES_PACKED_SLOT)));
         uint256 w = uint256(vm.load(address(game), slot));
         w = (w & ~uint256(type(uint128).max)) | amount;
         vm.store(address(game), slot, bytes32(w));

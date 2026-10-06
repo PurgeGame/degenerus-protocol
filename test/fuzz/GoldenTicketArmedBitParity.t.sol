@@ -62,7 +62,7 @@ contract GoldenTicketArmedBitParity is Test {
         vm.recordLogs();
         h.runDailyJackpot(true, LVL, _word([1, 2, 3, 4], [1, 2, 3, 4], 0xBEEF), gasleft());
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        bytes32 topic = keccak256("GoldenTicketWin(address,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)");
+        bytes32 topic = keccak256("GoldenTicketWin(uint32,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)");
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] == topic) found = true;
         }

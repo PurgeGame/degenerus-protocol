@@ -3,20 +3,21 @@ pragma solidity 0.8.34;
 
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 /// @title QueueHarness -- Exposes internal queue functions and mappings for double-buffer tests.
-contract QueueHarness is DegenerusGameAdvanceModule {
+contract QueueHarness is DegenerusGameAdvanceModule, WalletSeed {
     // --- Queue write functions ---
     function exposed_queueEntries(address buyer, uint24 targetLevel, uint32 quantity) external {
-        _queueEntries(buyer, targetLevel, quantity, false);
+        _queueEntries(_seedWallet(buyer), targetLevel, quantity, false);
     }
 
     function exposed_queueEntriesScaled(address buyer, uint24 targetLevel, uint32 quantityScaled) external {
-        _queueEntriesScaled(buyer, targetLevel, quantityScaled);
+        _queueEntriesScaled(_seedWallet(buyer), targetLevel, quantityScaled);
     }
 
     function exposed_queueEntryRange(address buyer, uint24 startLevel, uint24 numLevels, uint32 ticketsPerLevel) external {
-        _queueEntryRange(buyer, startLevel, numLevels, ticketsPerLevel);
+        _queueEntryRange(_seedWallet(buyer), startLevel, numLevels, ticketsPerLevel);
     }
 
     // --- Swap ---
@@ -47,15 +48,15 @@ contract QueueHarness is DegenerusGameAdvanceModule {
     }
 
     function getQueueEntry(uint24 key, uint256 idx) external view returns (address) {
-        return _tqOwnerAt(ticketQueue[_ticketQueueStorageKey(key)], key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT), idx);
+        return _walletKey(_tqPositionAt(ticketQueue[_ticketQueueStorageKey(key)], idx));
     }
 
     function getTicketsOwedPacked(uint24 key, address buyer) external view returns (uint80) {
-        return _entriesOwed(key, buyer);
+        return _owedOf(key, buyer);
     }
 
     function getTicketsOwed(uint24 key, address buyer) external view returns (uint32) {
-        return uint32(_entriesOwed(key, buyer) >> 8);
+        return uint32(_owedOf(key, buyer) >> 8);
     }
 
     function setLock(bool locked) external { rngLockedFlag = locked; }
@@ -67,7 +68,7 @@ contract QueueHarness is DegenerusGameAdvanceModule {
     function positionAt(uint24 key, uint256 i) external view returns (uint32) {
         return _tqPositionAt(ticketQueue[_ticketQueueStorageKey(key)], i);
     }
-    function recordAt(uint24 lvl, uint32 pos) external view returns (uint256) { return _entryRecord(lvl, pos); }
+    function recordAt(uint24 lvl, uint32 pos) external view returns (uint256) { return _entryRecordOf(lvl, pos); }
     function retire(uint24 key) external {
         uint24 lvl = key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT);
         for (uint256 i; i < _ticketQueueLength(key); ++i) _setEntryOwed(key, _tqPositionAt(ticketQueue[_ticketQueueStorageKey(key)], i), 0);

@@ -130,7 +130,7 @@ contract GameSeeder is DegenerusGame, BucketSeed {
 
     function _seedSlot(uint24 key, uint160 base, uint256 owed) private {
         address p = address(base + 1);
-        uint80 ownerBits = _registerEntryOwner(p, uint24(key & ((uint24(1) << 22) - 1)));
+        uint80 ownerBits = (uint80(_seedWallet(p)) << OWNER_IDX_SHIFT);
         _tqAppend(key, uint32(ownerBits >> OWNER_IDX_SHIFT));
         // packed layout: owed in bits [8:], remainder in bits [0:8].
         _seedOwedAt(key, p, ownerBits | (uint80(owed) << 8));
@@ -235,7 +235,7 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
             uint256 used = g0 - gasleft() + TX_INTRINSIC;
             Vm.Log[] memory logs = vm.getRecordedLogs();
             for (uint256 j; j < logs.length; ++j) {
-                if (logs[j].topics[0] == keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)")) ++winners;
+                if (logs[j].topics[0] == keccak256("JackpotEthWin(uint32,uint24,uint16,uint256,uint256)")) ++winners;
             }
             emit log_named_uint("advance_tx_gas[i]", used);
             if (used > maxTxGas) maxTxGas = used;

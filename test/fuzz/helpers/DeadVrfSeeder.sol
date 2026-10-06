@@ -37,20 +37,20 @@ contract DeadVrfSeeder is DegenerusGame, BucketSeed {
     {
         uint24 rk = writeSide ? _tqWriteKey(lvl) : _tqReadKey(lvl);
         _seedQueued(rk, lvl, player, (uint80(entries) << 8) | uint80(rem));
-        posPlusOne = ticketOwnerId[player];
+        posPlusOne = _walletIdOf(player);
     }
 
     function seedFuture(uint24 lvl, address player, uint32 entries) external returns (uint32) {
         _seedQueued(_tqFarFutureKey(lvl), lvl, player, uint80(entries) << 8);
-        return ticketOwnerId[player];
+        return _walletIdOf(player);
     }
 
     function pendingWord(uint24 lvl, address player) external view returns (uint256) {
-        return ticketPending[ticketOwnerId[player]];
+        return ticketPending[_walletIdOf(player)];
     }
 
     function seedFoil(uint24 lvl, uint24 resolveDay, address player) external returns (uint256 index) {
-        uint256 ownerIdx = uint256(_registerEntryOwner(player, lvl) >> OWNER_IDX_SHIFT) - 1;
+        uint256 ownerIdx = uint256(_seedWallet(player));
         foilQueue[resolveDay & 1].push(((ownerIdx + 1) << 192) | (uint256(lvl) << 160) | uint256(uint160(player)));
         index = foilQueue[resolveDay & 1].length - 1;
 

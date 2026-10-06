@@ -11,6 +11,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {FFKeyHarness} from "./FarFutureSalvageSwap.t.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {SolvencyObligations} from "./helpers/SolvencyObligations.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title Exact-cost salvage boundary: an unfunded seller needs 1 wei of afking.
 /// @dev At active level 90, selling 40 entries at level 110 with 100% jitter quotes
@@ -22,10 +23,10 @@ import {SolvencyObligations} from "./helpers/SolvencyObligations.sol";
 ///      nothing to avoid (fund 1 wei of afking first, or hold any nonzero claimable) and is
 ///      trivially recoverable by retrying with that 1 wei funded — not a defect.
 contract FarFutureSalvageSentinelEdgeTest is DeployProtocol {
-    uint256 private constant BALANCES_PACKED_SLOT = 7; // claimable (low128) | afking (high128)
-    uint256 private constant RNG_WORD_BY_DAY_SLOT = 10;
-    uint256 private constant TICKET_QUEUE_SLOT = 12;
-    uint256 private constant CLAIMABLE_POOL_SLOT = 1;
+    uint256 private constant BALANCES_PACKED_SLOT = GameSlots.BALANCES_PACKED; // claimable (low128) | afking (high128)
+    uint256 private constant RNG_WORD_BY_DAY_SLOT = GameSlots.RNG_WORD_BY_DAY;
+    uint256 private constant TICKET_QUEUE_SLOT = GameSlots.TICKET_QUEUE;
+    uint256 private constant CLAIMABLE_POOL_SLOT = GameSlots.CLAIMABLE_POOL;
 
     FFKeyHarness private ffk;
     address private seller;
@@ -120,8 +121,8 @@ contract FarFutureSalvageSentinelEdgeTest is DeployProtocol {
         vm.store(address(game), bytes32(uint256(0)), bytes32((slot0 & ~mask) | (uint256(lvl) << 96)));
     }
 
-    function _packedSlot(address who) internal pure returns (bytes32) {
-        return keccak256(abi.encode(who, BALANCES_PACKED_SLOT));
+    function _packedSlot(address who) internal view returns (bytes32) {
+        return keccak256(abi.encode(uint256(game.walletIdOf(who)), BALANCES_PACKED_SLOT));
     }
 
     function _seedClaimable(address who, uint256 amt) internal {

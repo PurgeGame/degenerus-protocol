@@ -5,6 +5,7 @@ import {RedemptionCloseTools} from "../fuzz/helpers/RedemptionCloseTools.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @notice Local mirror of the coinflip player surface for vm.mockCall selectors. The submit FLIP
 ///         leg (the settled backing read redeemableFlipBacking and the backing withdraw
@@ -53,7 +54,7 @@ contract V62RedemptionReentrancy is RedemptionCloseTools {
     // =====================================================================
 
     /// @dev balancesPacked (DegenerusGame) at slot 7 (v61 PACK fold). Low 128 bits = claimable.
-    uint256 internal constant GAME_CLAIMABLE_SLOT = 7;
+    uint256 internal constant GAME_CLAIMABLE_SLOT = GameSlots.BALANCES_PACKED;
     /// @dev claimablePool in the upper 128 bits of slot 1.
     uint256 internal constant GAME_SLOT1 = 1;
 
@@ -116,7 +117,7 @@ contract V62RedemptionReentrancy is RedemptionCloseTools {
     // =====================================================================
 
     function _setGameClaimableSdgnrs(uint256 amount) internal {
-        bytes32 slot = keccak256(abi.encode(address(sdgnrs), GAME_CLAIMABLE_SLOT));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(address(sdgnrs))), GAME_CLAIMABLE_SLOT));
         uint256 word = uint256(vm.load(address(game), slot));
         word = (word & (type(uint256).max << 128)) | uint128(amount);
         vm.store(address(game), slot, bytes32(word));
@@ -212,7 +213,7 @@ contract V62RedemptionReentrancy is RedemptionCloseTools {
         attacker.claim(dayD);
         vm.prank(address(game));
         assertTrue(sdgnrs.runRedemptionWork(batchWord, 9_000_000).done, "V62-03 L1: keeper drained the cohort");
-        (uint128 owedAfter,) = sdgnrs.pendingRedemptions(address(attacker), dayD);
+        (uint128 owedAfter,) = sdgnrs.pendingRedemptions(game.walletIdOf(address(attacker)), dayD);
         assertEq(uint256(owedAfter), 0, "V62-03 L1: the claim settled rather than parking");
 
         // ---- HEADLINE: no claimant code ran — the re-entry surface is gone by construction. ----

@@ -6,6 +6,7 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {TicketQueueStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title IncineratorStallAwardGuard -- does the incinerator pay against a WINNING armed day?
 ///
@@ -40,7 +41,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 contract IncineratorStallAwardGuard is DeployProtocol {
     uint256 private constant SLOT_0 = 0;
     uint256 private constant LEVEL_SHIFT = 96; // slot 0 bytes [12:15): level (uint24)
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2; // [future:128][next:128]
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED; // [future:128][next:128]
 
     bytes32 private constant DOM_INCIN_WINNER = "WWXRP_INCIN_WINNER";
     uint256 private constant BPS = 10_000;

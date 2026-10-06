@@ -68,9 +68,10 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
     /// @notice Registered deity by owner-list index (genesis first, then paid, in order).
     function deityOwnerAt(address game, uint256 index) external view returns (address owner) {
         uint256 base;
-        assembly { base := deityPassOwners.slot }
+        assembly { base := deityPassIds.slot }
         if (index >= _sload(game, bytes32(base))) revert E();
-        owner = address(uint160(_sload(game, bytes32(uint256(keccak256(abi.encode(base))) + index))));
+        uint256 lanes = _sload(game, bytes32(uint256(keccak256(abi.encode(base))) + (index >> 3)));
+        owner = _walletAddress(game, uint32(lanes >> ((index & 7) << 5)));
     }
 
     /// @notice Paid deity sales, excluding genesis, used by the public price curve.
@@ -111,9 +112,9 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         assembly { base := protocolBoonEntries.slot }
         bytes32 daySlot = _mapSlot(uint256(day & 1), uint256(_mapSlot(issuer, base)));
         uint256 word = _sload(game, _mapSlot(uint256(index), uint256(daySlot)));
-        entry.player = address(uint160(word));
-        entry.cumulativeWeight = uint64(word >> 160);
-        entry.scoreSnapshot = uint16(word >> 224);
+        entry.playerId = uint32(word);
+        entry.cumulativeWeight = uint64(word >> 32);
+        entry.scoreSnapshot = uint16(word >> 96);
     }
 
     /// @notice Preview paid ETH weight using the player's canonical pre-bet activity score.
@@ -159,7 +160,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
             }
             indices[slot] = lo;
             rolls[slot] = roll;
-            winners[slot] = protocolBoonEntryAt(game, issuer, day, lo).player;
+            winners[slot] = _walletAddress(game, protocolBoonEntryAt(game, issuer, day, lo).playerId);
         }
         ready = true;
     }
@@ -238,6 +239,22 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         return uint256(IDegenerusGameLensSource(game).extsload(slot));
     }
 
+    /// @dev Wallet ID from the player's mint word; zero before registration.
+    function _walletId(address game, address player) private view returns (uint32) {
+        uint256 base;
+        assembly { base := mintPacked_.slot }
+        return uint32(_sload(game, _mapSlot(player, base)) >> BitPackingLib.WALLET_ID_SHIFT);
+    }
+
+    /// @dev Account key of wallet-table element `id`; zero for id 0 or beyond the table.
+    function _walletAddress(address game, uint32 id) private view returns (address) {
+        if (id == 0) return address(0);
+        uint256 base;
+        assembly { base := wallets.slot }
+        if (id >= _sload(game, bytes32(base))) return address(0);
+        return address(uint160(_sload(game, bytes32(uint256(keccak256(abi.encode(base))) + id))));
+    }
+
     /// @dev Value slot of mapping(addressKey => v) at base `base`.
     function _mapSlot(address key, uint256 base) private pure returns (bytes32) {
         return keccak256(abi.encode(key, base));
@@ -260,7 +277,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         assembly {
             base := _subOf.slot
         }
-        uint256 w = _sload(game, _mapSlot(player, base));
+        uint256 w = _sload(game, _mapSlot(uint256(_walletId(game, player)), base));
         s.dailyQuantity = uint8(w);
         s.active = s.dailyQuantity != 0;
         s.flags = uint8(w >> 8);
@@ -422,7 +439,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
             subBase := _subOf.slot
         }
         uint256 packed = _sload(game, _mapSlot(player, packedBase));
-        uint256 subWord = _sload(game, _mapSlot(player, subBase));
+        uint256 subWord = _sload(game, _mapSlot(uint256(uint32(packed >> BitPackingLib.WALLET_ID_SHIFT)), subBase));
         uint256 w = _levelWord(game);
         uint24 currLevel;
         {
@@ -480,7 +497,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
             }
         }
 
-        b.cursePoints = (packed >> BitPackingLib.CURSE_COUNT_SHIFT) & BitPackingLib.MASK_8;
+        b.cursePoints = (packed >> BitPackingLib.CURSE_COUNT_SHIFT) & BitPackingLib.MASK_5;
     }
 
     /*+======================================================================+
@@ -512,7 +529,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
     {
         uint256 root;
         assembly { root := decBattlePlayers.slot }
-        uint256 latest = _sload(game, _mapSlot(player, root));
+        uint256 latest = _sload(game, _mapSlot(uint256(_walletId(game, player)), root));
         if (uint24(latest >> 64) != lvl) return e;
         e.entryId = uint64(latest);
         (e.owner, e.stack, e.chips) = decEntryAt(game, lvl, e.entryId);
@@ -524,7 +541,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         uint256 root;
         assembly { root := decBattleEntries.slot }
         uint256 entry = _sload(game, _mapSlot((uint256(lvl) << 64) | id, root));
-        return (address(uint160(entry)), (entry >> 190), uint32((entry >> 160) & 0x3FFFFFFF));
+        return (_walletAddress(game, uint32(entry)), (entry >> 190), uint32((entry >> 160) & 0x3FFFFFFF));
     }
 
     function decBattleRoundOf(address game, uint24 lvl)
@@ -587,7 +604,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
             & ~uint256(type(uint64).max)) | id;
         if (id > r.count) {
             assembly { root := decGeneratedOwners.slot }
-            node.owner = address(uint160(_sload(game, _mapSlot(uint256(id - r.count), root))));
+            node.owner = _walletAddress(game, uint32(_sload(game, _mapSlot(uint256(id - r.count), root))));
         } else {
             (node.owner,,) = decEntryAt(game, lvl, id);
         }
@@ -640,8 +657,8 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         return (uint24(word), uint24(word >> 24));
     }
 
-    /// @notice Find the first matching owner index in a bounded page of a trait bucket.
-    /// @dev View-only periphery: no Game write or hot-path cost. `ownerIndices` must
+    /// @notice Find the first matching wallet ID in a bounded page of a trait bucket.
+    /// @dev View-only periphery: no Game write or hot-path cost. `ownerIndices` (wallet IDs) must
     ///      be sorted ascending. A result is a discovery hint; claimBingo checks
     ///      actual ownership itself. Limit both calldata and the cold-read budget.
     function findTraitEntry(
@@ -668,22 +685,16 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
 
     /// @notice Permanent wallet ID, or zero before its first registration.
     function walletIdOf(address game, address player) external view returns (uint32) {
-        uint256 base;
-        assembly { base := ticketOwnerId.slot }
-        return uint32(_sload(game, _mapSlot(player, base)));
+        return _walletId(game, player);
     }
 
     /// @notice Wallet owning an ID; zero for an unallocated or zero ID.
     function walletOfId(address game, uint32 id) external view returns (address) {
-        if (id == 0) return address(0);
-        uint256 base;
-        assembly { base := ticketOwners.slot }
-        if (id > uint256(_sload(game, bytes32(base)))) return address(0);
-        return address(uint160(uint256(_sload(game, bytes32(uint256(keccak256(abi.encode(base))) + id - 1)))));
+        return _walletAddress(game, id);
     }
 
-    /// @notice Find a registry position in a bounded page of a packed ticket queue.
-    /// @dev Queue lanes store position+1; trait lanes store zero-based indices.
+    /// @notice Find a wallet ID position in a bounded page of a packed ticket queue.
+    /// @dev Queue and trait lanes both store the wallet ID.
     function findQueueEntry(
         address game, uint24 key, uint32 ownerPosition, uint32 offset, uint16 maxWords
     ) external view returns (bool found, uint32 position, uint32 nextOffset, uint32 total) {
@@ -747,7 +758,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         }
         uint256 w = _sload(
             game,
-            _mapSlot(player, uint256(_mapSlot(uint256(lvl & 3), base)))
+            _mapSlot(uint256(_walletId(game, player)), uint256(_mapSlot(uint256(lvl & 3), base)))
         );
         if (w == 0 || uint24(w >> _FOIL_LEVEL_SHIFT) != lvl) return f;
         f.present = true;

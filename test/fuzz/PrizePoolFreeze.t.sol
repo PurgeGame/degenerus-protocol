@@ -4,9 +4,10 @@ pragma solidity 0.8.34;
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 /// @title FreezeHarness -- Exposes freeze-related internal helpers for testing.
-contract FreezeHarness is DegenerusGameAdvanceModule {
+contract FreezeHarness is DegenerusGameAdvanceModule, WalletSeed {
     // --- Freeze / Unfreeze ---
     function exposed_swapAndFreeze(uint24 /* purchaseLevel */) external {
         _swapTicketSlot();
@@ -45,7 +46,7 @@ contract FreezeHarness is DegenerusGameAdvanceModule {
 
     // --- Ticket queue helper (needed for swapAndFreeze which calls _swapTicketSlot) ---
     function pushToTicketQueue(uint24 key, address addr) external {
-        _tqAppend(key, uint32(_registerEntryOwner(addr, key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT)) >> OWNER_IDX_SHIFT));
+        _tqAppend(key, _seedWallet(addr));
     }
 }
 

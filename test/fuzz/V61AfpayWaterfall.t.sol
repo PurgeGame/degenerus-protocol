@@ -8,6 +8,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {SettleClaimableShortfallTester} from "../../contracts/test/SettleClaimableShortfallTester.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title V61AfpayWaterfall — TST-01 proof: the AfKing-as-payment waterfall (msg.value → claimable → afking).
 ///
@@ -42,14 +43,14 @@ contract V61AfpayWaterfall is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots (378-01 recalibration key)
     // -------------------------------------------------------------------------
-    uint256 private constant BALANCES_PACKED_SLOT = 7; // mapping(address=>uint256) [afking:hi128 | claimable:lo128]
-    uint256 private constant CLAIMABLE_POOL_SLOT = 1; // uint128 @ slot 1, byte 16
+    uint256 private constant BALANCES_PACKED_SLOT = GameSlots.BALANCES_PACKED; // mapping(address=>uint256) [afking:hi128 | claimable:lo128]
+    uint256 private constant CLAIMABLE_POOL_SLOT = GameSlots.CLAIMABLE_POOL; // uint128 @ slot 1, byte 16
     uint256 private constant CLAIMABLE_POOL_OFFBYTES = 16;
-    uint256 private constant PRIZE_POOLS_SLOT = 2; // prizePoolsPacked [future:128 | next:128]
-    uint256 private constant PRIZE_POOL_PENDING_SLOT = 11; // prizePoolPendingPacked (frozen-phase sink)
+    uint256 private constant PRIZE_POOLS_SLOT = GameSlots.PRIZE_POOLS_PACKED; // prizePoolsPacked [future:128 | next:128]
+    uint256 private constant PRIZE_POOL_PENDING_SLOT = GameSlots.PRIZE_POOL_PENDING_PACKED; // prizePoolPendingPacked (frozen-phase sink)
 
     /// @dev AfkingSpent(address indexed player, uint256 amount) — the headline transparency signal.
-    bytes32 private constant AFKING_SPENT_SIG = keccak256("AfkingSpent(address,uint256)");
+    bytes32 private constant AFKING_SPENT_SIG = keccak256("AfkingSpent(uint32,uint256)");
     bytes32 private constant CLAIMABLE_SPENT_SIG = keccak256("ClaimableSpent(address,uint256,uint256,uint8,uint256)");
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
@@ -440,7 +441,7 @@ contract V61AfpayWaterfall is DeployProtocol {
     /// @dev Seed `who`'s claimable (low half of balancesPacked slot 7) to `amount` and credit claimablePool
     ///      so the solvency identity stays intact. Preserves the afking high half.
     function _seedClaimable(address who, uint256 amount) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(BALANCES_PACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(BALANCES_PACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         uint256 oldLow = uint128(packed);
         uint256 high = packed >> 128;
@@ -451,7 +452,7 @@ contract V61AfpayWaterfall is DeployProtocol {
 
     /// @dev Seed `who`'s afking (high half) to `amount`, preserve the claimable low half, keep the pool.
     function _seedAfking(address who, uint256 amount) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(BALANCES_PACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(BALANCES_PACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         uint256 low = uint128(packed);
         uint256 oldHigh = packed >> 128;

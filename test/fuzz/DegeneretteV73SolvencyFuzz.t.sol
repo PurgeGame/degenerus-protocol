@@ -10,6 +10,7 @@ import {IDegenerusGameDegeneretteModule} from "../../contracts/interfaces/IDegen
 import {Vm} from "forge-std/Vm.sol";
 import {DegeneretteQueue as DQ} from "../helpers/DegeneretteQueue.sol";
 import {DegeneretteMathHarness} from "../../contracts/mocks/DegeneretteMathHarness.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title DegeneretteV73SolvencyFuzz — stateless property fuzz over single-symbol bets.
 ///
@@ -25,9 +26,9 @@ import {DegeneretteMathHarness} from "../../contracts/mocks/DegeneretteMathHarne
 ///
 /// @dev Run: forge test --match-path test/fuzz/DegeneretteV73SolvencyFuzz.t.sol
 contract DegeneretteV73SolvencyFuzz is DeployProtocol {
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3;
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = GameSlots.RNG_WORD_CURRENT;
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
 
     bytes1 private constant QUICK_PLAY_SALT = 0x51;
     uint8 private constant CURRENCY_FLIP = 1;

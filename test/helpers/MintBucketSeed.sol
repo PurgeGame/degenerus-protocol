@@ -1,25 +1,25 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.33;
 
-import {DegenerusGameMintModule} from "../../contracts/modules/DegenerusGameMintModule.sol";
+import {MintWalletSeed} from "./MintWalletSeed.sol";
 
 /// @title MintBucketSeed — test-side seeding and decoding of the packed trait buckets
 /// @notice Harnesses that extend a production module mix this in to seed
 ///         `lvlTraitEntry[lvl][trait]` the way the drains do: register the owner in
-///         the global owner registry, then append packed lanes naming that position.
+///         the wallet table, then append packed lanes naming its wallet ID.
 /// @dev Test-only Mint branch of BucketSeed, avoiding a diamond with its final
 ///      ticket-preparation override. Keep seed operations aligned with BucketSeed.
-abstract contract MintBucketSeed is DegenerusGameMintModule {
+abstract contract MintBucketSeed is MintWalletSeed {
     /// @dev Seed a queue owner's locator and positional owed field without weakening owner identity.
     function _seedOwedAt(uint24 key, address player, uint80 packed) internal {
-        uint32 pos = ticketOwnerId[player];
-        require(pos != 0 && (uint32(packed >> OWNER_IDX_SHIFT) == 0 || uint32(packed >> OWNER_IDX_SHIFT) == pos), "owner ID mismatch");
-        _setEntryOwed(key, pos, packed);
+        uint32 id = _walletIdOf(player);
+        require(id != 0 && (uint32(packed >> OWNER_IDX_SHIFT) == 0 || uint32(packed >> OWNER_IDX_SHIFT) == id), "owner ID mismatch");
+        _setEntryOwed(key, id, packed);
     }
 
-    /// @dev Resolve the stable owner index without creating another registry position.
-    function _ownerIdxFor(uint24 lvl, address player) internal returns (uint256) {
-        return uint256(_registerEntryOwner(player, lvl) >> OWNER_IDX_SHIFT) - 1;
+    /// @dev Register `player` (idempotent) and return its wallet ID, the value a bucket lane holds.
+    function _ownerIdxFor(uint24, address player) internal returns (uint256) {
+        return _seedWallet(player);
     }
 
     /// @dev Append `n` occurrences of `player` to lvlTraitEntry[lvl][trait].
@@ -31,12 +31,9 @@ abstract contract MintBucketSeed is DegenerusGameMintModule {
     /// @dev Queue `player` on key `rk` for level `lvl` owing `packedOwedRem` (owed << 8 | rem),
     ///      registered the way every production sink registers.
     function _seedQueued(uint24 rk, uint24 lvl, address player, uint80 packedOwedRem) internal {
-        // Keep position zero out of the seeded set: a zero lane index makes every word store a
-        // no-op and understates gas.
-        if (ticketOwners.length == 0) _registerEntryOwner(address(1), lvl);
-        uint80 ownerBits = _registerEntryOwner(player, lvl);
-        _tqAppend(rk, uint32(ownerBits >> OWNER_IDX_SHIFT));
-        _seedOwedAt(rk, player, ownerBits | packedOwedRem);
+        uint32 id = uint32(_ownerIdxFor(lvl, player));
+        _tqAppend(rk, id);
+        _seedOwedAt(rk, player, (uint80(id) << OWNER_IDX_SHIFT) | packedOwedRem);
     }
 
     /// @dev Append `count` distinct, non-zero holders `base+1 .. base+count`, one occurrence each.

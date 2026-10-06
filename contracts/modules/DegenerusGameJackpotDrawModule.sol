@@ -34,9 +34,9 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
     /// @dev Scatter rounds double at each fourfold step of the BAF pool above this anchor.
     uint256 private constant BAF_ROUNDS_ANCHOR = 125 ether;
     uint256 private constant BAF_ROUNDS_MAX_MULTIPLIER = 32;
-    event JackpotEthWin(address indexed winner, uint24 indexed level, uint16 indexed traitId,
+    event JackpotEthWin(uint32 indexed walletId, uint24 indexed level, uint16 indexed traitId,
         uint256 amount, uint256 entryIndex);
-    event JackpotTicketWin(address indexed winner, uint24 indexed entryLevel, uint16 indexed traitId,
+    event JackpotTicketWin(uint32 indexed walletId, uint24 indexed entryLevel, uint16 indexed traitId,
         uint32 entryCount, uint24 sourceLevel, uint256 entryIndex, bool roundedUp);
 
     bytes32 private constant FLIP_LEVEL_TAG = keccak256("coin-level");
@@ -44,7 +44,7 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
     uint256 private constant JACKPOT_BATTLE_ENTRANTS = JackpotBattleFieldLib.MAX_CHUNK;
     uint256 private constant COIN_DRAW_SHARES = 50;
 
-    event JackpotFlipWin(address indexed winner, uint24 indexed level, uint8 indexed traitId,
+    event JackpotFlipWin(uint32 indexed walletId, uint24 indexed level, uint8 indexed traitId,
         uint256 amount, uint256 entryIndex);
 
     function awardDailyFlipJackpot(uint24 minLevel, uint24 maxLevel, uint32 traits, uint256 budget, uint256 word) external {
@@ -82,7 +82,7 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
 
         // Per-trait deity cache: deityBySymbol is level-independent, so one read per trait
         // serves every pull of that trait.
-        address[4] memory deityCache;
+        uint32[4] memory deityCache;
         for (uint8 t; t < 4; ) {
             uint8 trait = traitIds[t];
             deityCache[t] = _traitDeity(trait);
@@ -98,12 +98,12 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
         for (uint256 i; i < cap; ) {
             uint8 traitIdx = uint8(i & 3);
             uint8 trait_i = traitIds[traitIdx];
-            (address winner, uint24 lvlPrime, uint256 ticketIdx) = _drawCoinEntry(
+            (uint32 winner, uint24 lvlPrime, uint256 ticketIdx) = _drawCoinEntry(
                 minLevel, range, trait_i, deityCache[traitIdx], randomWord, i, cursors
             );
-            if (winner != address(0)) {
+            if (winner != 0) {
                 emit JackpotFlipWin(winner, lvlPrime, trait_i, amount, ticketIdx);
-                players[paid] = winner;
+                players[paid] = _payee(_walletElement(winner));
                 amounts[paid] = amount;
                 unchecked { ++paid; }
             }
@@ -124,11 +124,11 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
         uint24 minLevel,
         uint24 range,
         uint8 trait,
-        address deity,
+        uint32 deity,
         uint256 randomWord,
         uint256 pull,
         PackedTicketSampleLib.Cursor[] memory cursors
-    ) private view returns (address winner, uint24 lvl, uint256 index) {
+    ) private view returns (uint32 winner, uint24 lvl, uint256 index) {
         uint24 offset = uint24(uint256(keccak256(abi.encode(randomWord, FLIP_LEVEL_TAG, pull))) % range);
         lvl = minLevel + offset;
         uint256 len = _bucketLength(lvl, trait);
@@ -268,7 +268,7 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
             }
             // A singleton completes its visit immediately; it needs no circular-walk setup.
             if (len == 1) {
-                winners[i++] = _ticketOwnerAt(uint32(_tqWordAt(queue, 0)));
+                winners[i++] = _walletKey(uint32(_tqWordAt(queue, 0)));
                 walk.position = 0;
                 walk.left = 0;
                 continue;
@@ -286,7 +286,7 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
                 if (lanes > len - walk.position) lanes = len - walk.position;
                 if (lanes > take) lanes = take;
                 for (uint256 j; j < lanes; ++j) {
-                    winners[i++] = _ticketOwnerAt(uint32(packed));
+                    winners[i++] = _walletKey(uint32(packed));
                     packed >>= 32;
                 }
                 walk.position += lanes;
@@ -447,9 +447,11 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
     }
 
     /// @dev Pays one drawn award. Returns the ETH credited to claimable, equal to `_bafEthTerm`
-    ///      for the award; an empty slot or a zero amount pays nothing.
+    ///      for the award; an empty slot or a zero amount pays nothing. BAF awards go only to an
+    ///      existing wallet ID: a winner with none forfeits the whole award (every component),
+    ///      is not registered, and its reserved ETH returns through _releaseBafReserve.
     function _payBafAward(
-        address winner,
+        address winnerAddress,
         uint256 amount,
         uint256 i,
         uint24 lvl,
@@ -457,7 +459,9 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
         uint24 floorLvl,
         uint256 word
     ) private returns (uint256 credited) {
-        if (winner == address(0) || amount == 0) return 0;
+        if (winnerAddress == address(0) || amount == 0) return 0;
+        uint32 winner = _walletIdOf(winnerAddress);
+        if (winner == 0) return 0;
         if (amount >= threshold) {
             uint256 ethPortion = amount / 2;
             uint256 lootboxPortion = amount - ethPortion;
@@ -502,7 +506,7 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
      *      per half-pass); the sub-half-pass remainder is credited as claimable ETH
      *      Uses actual game ticket pricing for target levels.
      *
-     * @param winner Address to receive rewards.
+     * @param winner Wallet ID to receive rewards.
      * @param amount ETH amount for ticket conversion.
      * @param minTargetLevel Minimum target level for tickets.
      * @param entropy RNG state.
@@ -511,7 +515,7 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
      *         (0 on the ticket-roll legs), folded by the caller into futurePool→claimablePool.
      */
     function _awardJackpotTickets(
-        address winner,
+        uint32 winner,
         uint256 amount,
         uint24 minTargetLevel,
         uint256 entropy
@@ -578,7 +582,7 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
      * @return Updated entropy state.
      */
     function _jackpotTicketRoll(
-        address winner,
+        uint32 winner,
         uint256 amount,
         uint24 minTargetLevel,
         uint256 entropy

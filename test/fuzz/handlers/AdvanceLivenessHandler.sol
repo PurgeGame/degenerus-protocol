@@ -11,6 +11,7 @@ import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 import {MockLinkEthFeed} from "../../../contracts/mocks/MockLinkEthFeed.sol";
 import {TicketQueueStorage as TQ} from "../helpers/TicketQueueStorage.sol";
 import {IDegenerusGameRngModule} from "../../../contracts/interfaces/IDegenerusGameModules.sol";
+import {GameSlots} from "../../helpers/GameSlots.sol";
 
 /// @dev The RNG module's mid-day request worker (the one mineFlip's RequestMidday stage
 ///      dispatches), called alone in the Game's context so a check can read its own gates.
@@ -58,12 +59,12 @@ contract AdvanceLivenessHandler is Test {
 
     // ---- storage layout (forge inspect DegenerusGame storageLayout) ----
     uint256 private constant SLOT0 = 0;
-    uint256 private constant PRIZE_POOLS_SLOT = 2;
-    uint256 private constant RNG_WORD_BY_DAY_SLOT = 10;
-    uint256 private constant TICKET_QUEUE_SLOT = 12;
-    uint256 private constant LEVEL_PRIZE_POOL_SLOT = 23;
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
-    uint256 private constant FOIL_CURSOR_SLOT = 62; // foilGenerationDay @4 (3B), foilFirstDrawDay @7 (3B)
+    uint256 private constant PRIZE_POOLS_SLOT = GameSlots.PRIZE_POOLS_PACKED;
+    uint256 private constant RNG_WORD_BY_DAY_SLOT = GameSlots.RNG_WORD_BY_DAY;
+    uint256 private constant TICKET_QUEUE_SLOT = GameSlots.TICKET_QUEUE;
+    uint256 private constant LEVEL_PRIZE_POOL_SLOT = GameSlots.LEVEL_PRIZE_POOL;
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
+    uint256 private constant FOIL_CURSOR_SLOT = GameSlots.FOIL_CURSOR; // foilGenerationDay @4 (3B), foilFirstDrawDay @7 (3B)
     uint256 private constant LR_MID_DAY_SHIFT = 224;
     uint24 private constant TICKET_SLOT_BIT = uint24(1) << 23;
     uint24 private constant TICKET_FAR_FUTURE_BIT = uint24(1) << 22;

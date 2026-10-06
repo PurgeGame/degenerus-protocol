@@ -46,11 +46,13 @@ async function giveSDGNRS(sdgnrs, game, recipient, amount) {
 async function fundGameClaimableForSdgnrs(gameAddr, sdgnrsAddr, amount) {
   const CLAIMABLE_WINNINGS_SLOT = 7n;
   const CLAIMABLE_POOL_SLOT = 1n;
-  // claimableWinnings[SDGNRS] = keccak256(abi.encode(sdgnrsAddr, slot 7))
+  // balancesPacked[SDGNRS_ID] = keccak256(abi.encode(uint256(2), slot 7)); balances are keyed by
+  // the uint32 wallet ID (protocol ids: VAULT 1, SDGNRS 2, GNRUS 3), claimable in the low 128 bits.
+  const SDGNRS_WALLET_ID = 2n;
   const key = hre.ethers.keccak256(
     hre.ethers.AbiCoder.defaultAbiCoder().encode(
-      ["address", "uint256"],
-      [sdgnrsAddr, CLAIMABLE_WINNINGS_SLOT]
+      ["uint256", "uint256"],
+      [SDGNRS_WALLET_ID, CLAIMABLE_WINNINGS_SLOT]
     )
   );
   await hre.network.provider.send("hardhat_setStorageAt", [
@@ -522,7 +524,7 @@ describe("DGNRS", function () {
       expect(ev.args.sdgnrsAmount).to.equal(sdgnrsAmount);
       // Pricing and reservation happen when the next live request closes this batch.
       expect(ev.args.batchId).to.equal((await sdgnrs.redemptionBatchState()).openBatch);
-      const pending = await sdgnrs.pendingRedemptions(alice.address, ev.args.batchId);
+      const pending = await sdgnrs.pendingRedemptions(await game.walletIdOf(alice.address), ev.args.batchId);
       expect(pending.tokens).to.equal(sdgnrsAmount);
       expect(await sdgnrs.pendingRedemptionEthValue()).to.equal(0n);
     });
@@ -591,7 +593,7 @@ describe("DGNRS", function () {
       expect(ev.args.sdgnrsAmount).to.equal(sdgnrsAmount);
       // The burn retains its holder share until request close.
       expect(ev.args.batchId).to.equal((await sdgnrs.redemptionBatchState()).openBatch);
-      const pending = await sdgnrs.pendingRedemptions(alice.address, ev.args.batchId);
+      const pending = await sdgnrs.pendingRedemptions(await game.walletIdOf(alice.address), ev.args.batchId);
       expect(pending.tokens).to.equal(sdgnrsAmount);
       expect(await sdgnrs.pendingRedemptionEthValue()).to.equal(0n);
       // No immediate stETH transfer on the gambling path

@@ -137,6 +137,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         for (uint256 i; i < n; ++i) {
             address sub = address(uint160(0x5AB000 + i));
             _grantSeat(sub);
+            _giveWalletId(sub); // a third-party deposit needs the beneficiary's wallet ID
             vm.deal(address(this), 10 ether);
             game.depositAfkingFunding{value: 10 ether}(sub);
             vm.prank(sub);

@@ -9,6 +9,7 @@ import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGame
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {TicketEntropy} from "../../contracts/libraries/TicketEntropy.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 /// @dev The round drain's queue-word cache: adjacent seats share one loaded queue word, so each
 ///      queue word is loaded at most once per call. The uncached differential reference
@@ -16,17 +17,17 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 ///      layout (unrecycled queue keys, level-keyed trait buffers, no queue rotation, unit
 ///      budgets) and cannot run against current storage, so these tests check the cache against
 ///      an uncached oracle computed here from raw queue lanes and the canonical queue rotation.
-contract QueueWordCacheHarness is DegenerusGameStorage {
+contract QueueWordCacheHarness is DegenerusGameStorage, WalletSeed {
     uint24 private constant FAR_FUTURE_BIT = uint24(1) << 22;
 
     /// @dev Far-future lanes hold whole entries only (no remainder field), so far-future seeds
     ///      carry no remainder.
     function seed(uint24 key, uint24 lvl, uint256 n, uint32 ownerStart, uint256 entropy, uint8 shape) external {
-        address[] storage owners = ticketOwners;
-        assembly ("memory-safe") { sstore(owners.slot, ownerStart) }
+        uint256[] storage owners = wallets;
+        assembly ("memory-safe") { sstore(owners.slot, add(ownerStart, 1)) }
         bool farFuture = key & FAR_FUTURE_BIT != 0;
         for (uint256 i; i < n; ++i) {
-            uint80 bits = _registerEntryOwner(address(uint160(0x123400 + i)), lvl);
+            uint80 bits = (uint80(_seedWallet(address(uint160(0x123400 + i)))) << OWNER_IDX_SHIFT);
             uint32 pos = uint32(bits >> OWNER_IDX_SHIFT);
             _tqAppend(key, pos);
             uint256 random = uint256(keccak256(abi.encode(entropy, i)));
@@ -42,7 +43,7 @@ contract QueueWordCacheHarness is DegenerusGameStorage {
     ///      ones, so the walk never exhausts the queue and the worker never leaves the round phase.
     function seedPadding(uint24 key, uint24 lvl, uint256 count) external {
         for (uint256 i; i < count; ++i) {
-            uint80 bits = _registerEntryOwner(address(uint160(0x567800 + i)), lvl);
+            uint80 bits = (uint80(_seedWallet(address(uint160(0x567800 + i)))) << OWNER_IDX_SHIFT);
             uint32 pos = uint32(bits >> OWNER_IDX_SHIFT);
             _tqAppend(key, pos);
             _setEntryOwed(key, pos, bits | (uint80(60_000) << 8));
@@ -63,7 +64,7 @@ contract QueueWordCacheHarness is DegenerusGameStorage {
 
     /// @dev Uncached oracle: the owner of one physical queue position, read lane by lane.
     function ownerAtPhysical(uint24 key, uint256 physical) external view returns (address) {
-        return _ticketOwnerAt(_tqPositionAt(ticketQueue[_ticketQueueStorageKey(key)], physical));
+        return _walletKey(_tqPositionAt(ticketQueue[_ticketQueueStorageKey(key)], physical));
     }
 
     /// @dev Put the game in the state where the ticket worker drains `key` from logical `idx`:

@@ -39,7 +39,7 @@ contract DecimatorAdvanceFlowTest is DeployProtocol {
     DegenerusGameLens private lens;
     uint256 private constant WORD = 777;
     uint24 private constant DAY = 20;
-    bytes32 private constant GENERATED = keccak256("DecimatorGenerated(uint24,uint64,address,uint8,uint32,uint256,uint256)");
+    bytes32 private constant GENERATED = keccak256("DecimatorGenerated(uint24,uint64,uint32,uint8,uint32,uint256,uint256)");
     bytes32 private constant RUN = keccak256("DecimatorRun(uint24,uint64,uint256)");
     bytes32 private constant SEALED = keccak256("DecimatorResolved(uint24,uint256,uint256,uint64)");
 

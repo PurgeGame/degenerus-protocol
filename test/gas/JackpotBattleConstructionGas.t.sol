@@ -14,6 +14,7 @@ import {CrapsPreferenceLib} from "../../contracts/libraries/CrapsPreferenceLib.s
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 import {DegenerusGameJackpotDrawModule} from "../../contracts/modules/DegenerusGameJackpotDrawModule.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 /// @dev Foundry isolation resets basefee to zero for a promoted non-static call.
 /// Set it inside that transaction, then measure only the nested, unmodified Game
@@ -33,7 +34,7 @@ contract BattlePaidMinerProbe {
 
 /// @dev Test-only storage construction. Every measured worker is the deployed production
 /// bytecode, including Game -> Miner -> Advance -> Jackpot -> Draw -> Craps -> JackpotBattle.
-contract BattleConstructionGameSeed is DegenerusGameStorage {
+contract BattleConstructionGameSeed is DegenerusGameStorage, WalletSeed {
     function seedMinerPass(address miner, uint256 packed) external { mintPacked_[miner] = packed; }
 
     function seedSession(uint24 ceiling, uint24 day, uint256 word) external {
@@ -55,7 +56,7 @@ contract BattleConstructionGameSeed is DegenerusGameStorage {
     }
 
     function seedQueue(uint24 target, address[] calldata players) external {
-        for (uint256 i; i < players.length; ++i) _queueEntries(players[i], target, 4, true);
+        for (uint256 i; i < players.length; ++i) _queueEntries(_seedWallet(players[i]), target, 4, true);
     }
 
     function runDraw(uint24 ceiling, uint256 word, uint256 allowance)

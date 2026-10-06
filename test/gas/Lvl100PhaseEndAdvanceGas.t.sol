@@ -10,6 +10,7 @@ import {GoldSixLib} from "../../contracts/libraries/GoldSixLib.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 import {AdvanceStageStream} from "../helpers/AdvanceStageStream.sol";
 import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title Lvl100PhaseEndAdvanceGas — the x00 level boundary's two daily stages.
 /// @notice A level boundary is a CHAIN of checkpoints. Two of them are exercised here:
@@ -70,7 +71,7 @@ contract PhaseEndSeeder is DegenerusGame, BucketSeed {
         for (uint24 c = lvl + 2; c <= lvl + 100; ++c) {
             uint160 b = base + 0x4000000 + uint160(c - lvl - 2) * 0x1000;
             for (uint256 i; i < 8; ++i) {
-                _tqAppend(_tqFarFutureKey(c), uint32(_registerEntryOwner(address(b + uint160(i + 1)), c) >> OWNER_IDX_SHIFT));
+                _tqAppend(_tqFarFutureKey(c), _seedWallet(address(b + uint160(i + 1))));
             }
         }
     }
@@ -81,8 +82,8 @@ contract PhaseEndSeeder is DegenerusGame, BucketSeed {
         uint24 day = _simulatedDayIndex();
 
         _seedJackpotDay(lvl, day);
-        for (uint256 i = deityPassOwners.length; i < 32; ++i) {
-            deityPassOwners.push(address(uint160(0xDE170000 + i)));
+        for (uint256 i = _deityCount(); i < 32; ++i) {
+            _seedDeity(address(uint160(0xDE170000 + i)));
         }
         jackpotCounter = 0; // _endPhase zeroed it on the previous advance
         phaseTransitionActive = true;
@@ -142,7 +143,7 @@ abstract contract BoundaryGasFixture is AdvanceStageStream {
 
     bytes32 internal constant TICKET_WIN_SIG =
         keccak256(
-            "JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)"
+            "JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)"
         );
     bytes32 internal constant TICKET_BATCH_SIG =
         keccak256("JackpotTicketBatchWin(uint24,uint24,uint16,uint16,uint8,uint32,uint256[4],uint256[4])");
@@ -193,7 +194,7 @@ abstract contract BoundaryGasFixture is AdvanceStageStream {
 
     /// @dev Registry owner of zero-based index `idx` (ticketOwners, slot 67).
     function _ownerAt(uint256 idx) internal view returns (address) {
-        return address(uint160(uint256(vm.load(address(game), bytes32(uint256(keccak256(abi.encode(uint256(67)))) + idx)))));
+        return address(uint160(uint256(vm.load(address(game), bytes32(uint256(keccak256(abi.encode(GameSlots.WALLETS))) + idx)))));
     }
 
     /// @dev The next stage from the stream. A coin+tickets leg's partial calls mark stage 8 and its

@@ -12,6 +12,7 @@ import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {GoldSixLib} from "../../contracts/libraries/GoldSixLib.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 abstract contract DirectTicketFixture is BucketSeed {
     function seed(uint256 word, uint256 tickets, uint256 holders, bool repeated, bool prepared) external {
@@ -20,7 +21,7 @@ abstract contract DirectTicketFixture is BucketSeed {
         dailyIdx = 100;
         rngLockedFlag = true;
         // Keep zero-valued owner lanes out of the cold-write gas fixture.
-        _registerEntryOwner(address(1), 41);
+        _seedWallet(address(1));
         uint8[4] memory traits = JackpotBucketLib.getRandomTraits(word);
         traits[3] = GoldSixLib.daily(traits[3], word);
         dailyFoilDraw[(dailyIdx + 1) & 1] = _packFoilDraw(
@@ -37,15 +38,15 @@ abstract contract DirectTicketFixture is BucketSeed {
         // Real deity purchases always register a permanent ID in their initial grant.
         for (uint8 i; i < 32; ++i) {
             address player = address(uint160(0xD000 + i));
-            _registerEntryOwner(player, 42);
-            deityBySymbol[i] = player;
+            _seedWallet(player);
+            deityBySymbol[i] = _seedWallet(player);
         }
     }
     function setSnap(uint8 shift, bool pending) external {
         if (pending) { snapLevel = 42; snapPendingShift = shift; }
         else snapShift = shift;
     }
-    function addExistingOwed(address player, uint32 entries) external { _queueEntries(player, 42, entries, true); }
+    function addExistingOwed(address player, uint32 entries) external { _queueEntries(_seedWallet(player), 42, entries, true); }
     function prefillTarget() external {
         for (uint256 t; t < 256; ++t) {
             // Existing partial tails exercise appending across word boundaries.
@@ -68,18 +69,18 @@ abstract contract DirectTicketFixture is BucketSeed {
             jackpotWork.directTickets, jackpotCounter, dailyTicketBudgetsPacked);
     }
     function queueLength() external view returns (uint256) { return _ticketQueueLength(_tqWriteKey(42)); }
-    function owed(address player) external view returns (uint80) { return _entriesOwed(_tqWriteKey(42), player); }
-    function ownerAt(uint32 idx) external view returns (address) { return _ticketOwnerAt(idx + 1); }
+    function owed(address player) external view returns (uint80) { return _owedOf(_tqWriteKey(42), player); }
+    function ownerAt(uint32 idx) external view returns (address) { return _walletKey(idx + 1); }
     function bucket(uint24 lvl, uint8 trait) external view returns (address[] memory owners) {
         owners = new address[](_bucketLength(lvl, trait));
-        for (uint256 i; i < owners.length; ++i) owners[i] = _bucketOwnerAtUnchecked(lvl, trait, i);
+        for (uint256 i; i < owners.length; ++i) owners[i] = _bucketOwnerAt(lvl, trait, i);
     }
     function digest(uint24 lvl) external view returns (bytes32 out, uint256 count) {
         for (uint256 t; t < 256; ++t) {
             uint256 n = _bucketLength(lvl, t);
             count += n;
             out = keccak256(abi.encode(out, t, n));
-            for (uint256 i; i < n; ++i) out = keccak256(abi.encode(out, _bucketOwnerAtUnchecked(lvl, uint8(t), i)));
+            for (uint256 i; i < n; ++i) out = keccak256(abi.encode(out, _bucketOwnerAt(lvl, uint8(t), i)));
         }
     }
 }
@@ -87,7 +88,7 @@ contract DirectJackpotHarness is DegenerusGameJackpotModule, DirectTicketFixture
 contract QueuedJackpotHarness is QueuedJackpotReference, DirectTicketFixture {}
 
 contract DirectJackpotTicketsTest is Test {
-    bytes32 private constant WIN = keccak256("JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)");
+    bytes32 private constant WIN = keccak256("JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)");
     bytes32 private constant BATCH = keccak256("JackpotTicketBatchWin(uint24,uint24,uint16,uint16,uint8,uint32,uint256[4],uint256[4])");
     uint256 private constant WORD = 0xAC4DE45EDBEEF;
     DirectJackpotHarness private h;
@@ -312,12 +313,12 @@ contract DirectJackpotTicketsTest is Test {
 /// @dev Exposes one direct round over a target level whose common-colour headers are empty
 ///      (an eight-lane append writes a fresh header and a fresh word) and whose rare-colour
 ///      headers hold seven lanes with a zero next word (every split append completes a word).
-contract DirectRoundGasHarness is DegenerusGameTicketModule {
+contract DirectRoundGasHarness is DegenerusGameTicketModule, WalletSeed {
     function prepare(uint24 lvl, uint256 owners) external {
         _setTicketBufferLevel(lvl);
         traitBucketLive[lvl & 1] = type(uint256).max;
-        _registerEntryOwner(address(1), lvl);
-        for (uint256 i; i < owners; ++i) _registerEntryOwner(address(uint160(0x10000 + i + 1)), lvl);
+        _seedWallet(address(1));
+        for (uint256 i; i < owners; ++i) (uint80(_seedWallet(address(uint160(0x10000 + i + 1)))) << OWNER_IDX_SHIFT);
         uint256 base = _traitBufferBase(lvl);
         uint256 head = 7 | (uint256(0x00000001000000010000000100000001000000010000000100000001) << 32);
         for (uint256 t; t < 256; ++t) {

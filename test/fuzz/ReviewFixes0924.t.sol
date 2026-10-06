@@ -16,6 +16,8 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IDegenerusGameDecimatorModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 // ReviewFixes0924 — regression tests for the 2026-09-24 review fixes.
 //
@@ -194,7 +196,7 @@ contract RecoveredStallIntegrationTest is RedemptionCloseTools {
 // T2 — terminal routing waits for game over
 // =====================================================================================
 
-contract ReviewClaimSeeder is DegenerusGame {
+contract ReviewClaimSeeder is DegenerusGame, WalletSeed {
     /// @dev Past the purchase deadline, caught up, target unmet: liveness reads true, !gameOver.
     function seedLiveness() external {
         uint24 day = _simulatedDayIndex();
@@ -218,8 +220,8 @@ contract ReviewClaimSeeder is DegenerusGame {
         decBattleRounds[lvl].capacity = 1;
         decBattleRounds[lvl].winners = 1;
         decBattleRounds[lvl].champion = 1;
-        decBattlePlayers[player] = (uint256(lvl) << 64) | 1;
-        decBattleEntries[(uint256(lvl) << 64) | 1] = (uint256(1) << 190) | uint256(uint160(player));
+        decBattlePlayers[_seedWallet(player)] = (uint256(lvl) << 64) | 1;
+        decBattleEntries[(uint256(lvl) << 64) | 1] = (uint256(1) << 190) | uint256(_seedWallet(player));
         decBattleHeap[0] = 1;
         decBattleQueue = uint256(lvl) | uint256(lvl) << 24;
         // Back the credit a settle would write (claimablePool is the ledger total).
@@ -402,6 +404,7 @@ contract RedemptionEndingPendingTest is RedemptionCloseTools {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
         vm.deal(playerA, 1 ether);
+        _giveWalletId(playerA);
         vm.prank(address(game));
         sdgnrs.transferFromPool(sDGNRS.Pool.Reward, playerA, 1_000_000 ether);
         vm.mockCall(
@@ -417,7 +420,7 @@ contract RedemptionEndingPendingTest is RedemptionCloseTools {
 
         // Game ETH + sDGNRS claimable back the reservation (RedemptionStethFallback (a) shape).
         vm.deal(address(game), 100 ether);
-        bytes32 slot = keccak256(abi.encode(address(sdgnrs), uint256(7)));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(address(sdgnrs))), GameSlots.BALANCES_PACKED));
         uint256 word = uint256(vm.load(address(game), slot));
         vm.store(address(game), slot, bytes32((word & (type(uint256).max << 128)) | uint256(100 ether)));
         uint256 s1 = uint256(vm.load(address(game), bytes32(uint256(1))));
@@ -440,14 +443,14 @@ contract RedemptionEndingPendingTest is RedemptionCloseTools {
     }
 
     function test_claimWaitsWhileLivenessReadsTrueThenSettlesTerminal() public {
-        (uint128 owed,) = sdgnrs.pendingRedemptions(playerA, burnDay);
+        (uint128 owed,) = sdgnrs.pendingRedemptions(game.walletIdOf(playerA), burnDay);
         assertGt(owed, 0, "harness: a claim is pending");
 
         _mockEnding(false);
         vm.prank(playerA);
         vm.expectRevert(NOT_GAME_OVER);
         sdgnrs.claimRedemption(playerA, burnDay);
-        (uint128 still,) = sdgnrs.pendingRedemptions(playerA, burnDay);
+        (uint128 still,) = sdgnrs.pendingRedemptions(game.walletIdOf(playerA), burnDay);
         assertEq(still, owed, "nothing settled while pending");
 
         _mockEnding(true);
@@ -458,17 +461,17 @@ contract RedemptionEndingPendingTest is RedemptionCloseTools {
         sdgnrs.claimRedemption(playerA, burnDay);
         uint256 got = (playerA.balance - eth0) + (mockStETH.balanceOf(playerA) - st0);
         assertApproxEqAbs(got, expected, 2, "terminal after game over: the whole flat-roll value paid direct");
-        (uint128 cleared,) = sdgnrs.pendingRedemptions(playerA, burnDay);
+        (uint128 cleared,) = sdgnrs.pendingRedemptions(game.walletIdOf(playerA), burnDay);
         assertEq(cleared, 0, "claim consumed");
     }
 }
 
 /// @dev Foil module etched at GAME: the drain runs in this storage.
-contract ReviewFoilHarness is DegenerusGameFoilPackModule {
+contract ReviewFoilHarness is DegenerusGameFoilPackModule, WalletSeed {
     function setFoilPack(uint24 day, uint24 lvl, address buyer, uint16 multBps) external {
-        foilRecord[lvl & 3][buyer] = uint256(day) | (uint256(multBps) << _FOIL_MULT_SHIFT)
+        foilRecord[lvl & 3][_seedWallet(buyer)] = uint256(day) | (uint256(multBps) << _FOIL_MULT_SHIFT)
             | (uint256(lvl) << _FOIL_LEVEL_SHIFT);
-        uint256 ownerIdx = uint256(_registerEntryOwner(buyer, lvl) >> OWNER_IDX_SHIFT) - 1;
+        uint256 ownerIdx = uint256(_seedWallet(buyer));
         foilQueue[_foilReadKey()].push(((ownerIdx + 1) << 192) | (uint256(lvl) << 160) | uint256(uint160(buyer)));
     }
 
@@ -609,11 +612,11 @@ contract ReviewTerminalHarness is DegenerusGameJackpotModule, BucketSeed {
     }
 
     function claimableOf(address who) external view returns (uint256) {
-        return _claimableOf(who);
+        return _claimableOf(_walletIdOf(who));
     }
 
     function whalePassOf(address who) external view returns (uint256) {
-        return whalePassClaims[who];
+        return _halfPassesOf(who);
     }
 }
 

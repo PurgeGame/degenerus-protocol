@@ -9,8 +9,9 @@ import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
 import {FLIP} from "../../contracts/FLIP.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-contract CustomerHotPathSeeder is DegenerusGameStorage {
+contract CustomerHotPathSeeder is DegenerusGameStorage, WalletSeed {
     function heroStorageSlots() external pure returns (uint256 hero, uint256 meta) {
         assembly { hero := dailyHeroWagers.slot meta := lootboxRngPacked.slot }
     }
@@ -29,7 +30,7 @@ contract CustomerHotPathSeeder is DegenerusGameStorage {
         jackpotPhaseFlag = false;
         presaleOver = true;
         _setPrizePools(10 ether, 10 ether);
-        balancesPacked[player] = uint256(10 ether) | (uint256(10 ether) << 128);
+        balancesPacked[_seedWallet(player)] = uint256(10 ether) | (uint256(10 ether) << 128);
         claimablePool = 20 ether;
     }
 }

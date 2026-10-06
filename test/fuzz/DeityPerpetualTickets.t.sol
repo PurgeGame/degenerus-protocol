@@ -7,8 +7,9 @@ import {TicketQueueStorage as TQ} from "./helpers/TicketQueueStorage.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {IDegenerusGameFoilPackModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-contract PerpetualFixture is DegenerusGameStorage {
+contract PerpetualFixture is DegenerusGameStorage, WalletSeed {
     function setLevel(uint24 lvl) external {
         // This fixture jumps over completed levels. Consume their pending queues
         // before reusing those roots for the new future-ticket horizon.
@@ -35,10 +36,10 @@ contract PerpetualFixture is DegenerusGameStorage {
         if (!ok) assembly { revert(add(data, 32), mload(data)) }
     }
     function fillOwners() external {
-        for (uint160 i = 2; i < 32; ++i) deityPassOwners.push(address(1000 + i));
+        for (uint160 i = 2; i < 32; ++i) _seedDeity(address(1000 + i));
     }
     function queue(address owner, uint24 lvl, uint32 count) external {
-        _queueEntries(owner, lvl, count, false);
+        _queueEntries(_seedWallet(owner), lvl, count, false);
     }
 }
 

@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title FoilAfkingFunding — the foil premium is funded by the same mix as every other purchase
 /// @notice The foil leg used to stop the spend waterfall after claimable and revert, so a player
@@ -28,8 +29,8 @@ contract FoilAfkingFunding is DeployProtocol {
     ///      if either moves. The afking half is seeded through the production
     ///      `depositAfkingFunding` entrypoint — only claimable, which has no permissionless
     ///      credit path, is poked, and the poke is read-modify-write so it cannot clobber it.
-    uint256 private constant BALANCES_PACKED_SLOT = 7;
-    uint256 private constant CLAIMABLE_POOL_SLOT = 1;
+    uint256 private constant BALANCES_PACKED_SLOT = GameSlots.BALANCES_PACKED;
+    uint256 private constant CLAIMABLE_POOL_SLOT = GameSlots.CLAIMABLE_POOL;
 
     function setUp() public {
         _deployProtocol();
@@ -47,7 +48,7 @@ contract FoilAfkingFunding is DeployProtocol {
     /// @dev Set `who`'s claimable winnings to `amt`, keeping the afking half, the `claimablePool`
     ///      total and the contract's ETH backing in step so the solvency identity still holds.
     function _seedClaimable(address who, uint256 amt) internal {
-        bytes32 slot = keccak256(abi.encode(who, BALANCES_PACKED_SLOT));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), BALANCES_PACKED_SLOT));
         uint256 packed = uint256(vm.load(address(game), slot));
         uint256 prev = uint128(packed);
         vm.store(

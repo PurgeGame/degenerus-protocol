@@ -39,31 +39,31 @@ abstract contract DegenerusGamePayoutUtils is DegenerusGameStorage {
         if (boxEth == 0) return;
         uint256 sdgnrsShare = boxEth / 5;
         claimablePool += uint128(boxEth);
-        _creditClaimable(ContractAddresses.VAULT, boxEth - sdgnrsShare);
-        _creditClaimable(ContractAddresses.SDGNRS, sdgnrsShare);
+        _creditClaimableLogged(VAULT_WALLET_ID, boxEth - sdgnrsShare);
+        _creditClaimableLogged(SDGNRS_WALLET_ID, sdgnrsShare);
     }
 
     /// @dev Queue deferred whale pass claims for large payouts. Credits the sub-half-pass
     ///      remainder to claimableWinnings and returns it (mirrors _addClaimableEth): the
     ///      caller folds it into its claimableDelta so the single claimablePool bump and the
     ///      source-pool debit both cover it exactly once, preserving the solvency identity.
-    /// @param winner Address credited with whole half-passes and any sub-half-pass remainder.
+    /// @param winner Wallet ID credited with whole half-passes and any sub-half-pass remainder.
     /// @param amount Payout amount in wei to convert into half-passes plus remainder.
     /// @return remainderCredited Wei credited to claimableWinnings (0 if none) for the caller to fold.
     function _queueWhalePassClaimCore(
-        address winner,
+        uint32 winner,
         uint256 amount
     ) internal returns (uint256 remainderCredited) {
-        if (winner == address(0) || amount == 0) return 0;
+        if (winner == 0 || amount == 0) return 0;
 
         uint256 fullHalfPasses = amount / HALF_WHALE_PASS_PRICE;
         uint256 remainder = amount % HALF_WHALE_PASS_PRICE;
 
         if (fullHalfPasses != 0) {
-            whalePassClaims[winner] += fullHalfPasses;
+            _addHalfPasses(winner, fullHalfPasses);
         }
         if (remainder != 0) {
-            _creditClaimable(winner, remainder);
+            _creditClaimableLogged(winner, remainder);
         }
         return remainder;
     }

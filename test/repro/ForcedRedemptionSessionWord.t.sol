@@ -62,7 +62,7 @@ contract ForcedRedemptionSessionWordTest is RedemptionCloseTools {
     ///      leaves two claims pending).
     function _unsettled(uint32 day) private view returns (uint256 n) {
         for (uint256 i; i < OWNERS; ++i) {
-            (uint128 base,) = sdgnrs.pendingRedemptions(_owner(i), day);
+            (uint128 base,) = sdgnrs.pendingRedemptions(game.walletIdOf(_owner(i)), day);
             if (base != 0) ++n;
         }
     }
@@ -101,7 +101,7 @@ contract ForcedRedemptionSessionWordTest is RedemptionCloseTools {
             vm.prank(owner);
             sdgnrs.burn(500_000_000 ether);
             burnDay = _openBatch();
-            (, uint16 score) = sdgnrs.pendingRedemptions(owner, burnDay);
+            (, uint16 score) = sdgnrs.pendingRedemptions(game.walletIdOf(owner), burnDay);
             scores[i] = score;
         }
         vm.warp(vm.getBlockTimestamp() + 1 days);
@@ -125,7 +125,7 @@ contract ForcedRedemptionSessionWordTest is RedemptionCloseTools {
         // FIFO: the first unsettled owner heads the queue; at least one more follows it.
         uint256 head = OWNERS;
         for (uint256 i; i < OWNERS && head == OWNERS; ++i) {
-            (uint128 base,) = sdgnrs.pendingRedemptions(_owner(i), burnDay);
+            (uint128 base,) = sdgnrs.pendingRedemptions(game.walletIdOf(_owner(i)), burnDay);
             if (base != 0) head = i;
         }
         assertLt(head + 1, OWNERS, "harness: a head and a later claim remain");
@@ -134,7 +134,7 @@ contract ForcedRedemptionSessionWordTest is RedemptionCloseTools {
         for (uint256 i = head; i < OWNERS; ++i) {
             if (!terminal || i == head) {
                 vm.expectCall(address(game), abi.encodeWithSelector(
-                    game.resolveRedemptionLootbox.selector, _owner(i), boxes[i],
+                    game.resolveRedemptionLootbox.selector, _owner(i), game.walletIdOf(_owner(i)), boxes[i],
                     uint256(keccak256(abi.encode(WORD, uint256(uint160(_owner(i)))))), scores[i] - 1, burnDay
                 ));
             }
@@ -142,9 +142,9 @@ contract ForcedRedemptionSessionWordTest is RedemptionCloseTools {
         if (terminal) {
             // The engine settles the head live; the other paid claims survive terminal cutover.
             _mineOneClaim();
-            (uint128 settled,) = sdgnrs.pendingRedemptions(_owner(head), burnDay);
+            (uint128 settled,) = sdgnrs.pendingRedemptions(game.walletIdOf(_owner(head)), burnDay);
             assertEq(settled, 0, "the head settled live");
-            (uint128 waiting,) = sdgnrs.pendingRedemptions(_owner(head + 1), burnDay);
+            (uint128 waiting,) = sdgnrs.pendingRedemptions(game.walletIdOf(_owner(head + 1)), burnDay);
             assertGt(waiting, 0, "later claims wait for the ending");
             vm.warp(vm.getBlockTimestamp() + 1001 days);
             assertTrue(game.livenessTriggered(), "ending disables live settlement");
@@ -166,7 +166,7 @@ contract ForcedRedemptionSessionWordTest is RedemptionCloseTools {
                 vm.prank(owner);
                 sdgnrs.claimRedemption(owner, burnDay);
                 assertGt(mockStETH.balanceOf(owner), beforeSteth, "late terminal withdrawal paid");
-                (uint128 base,) = sdgnrs.pendingRedemptions(owner, burnDay);
+                (uint128 base,) = sdgnrs.pendingRedemptions(game.walletIdOf(owner), burnDay);
                 assertEq(base, 0, "late entitlement consumed once");
             }
             assertGt(reserved, 0);
@@ -176,7 +176,7 @@ contract ForcedRedemptionSessionWordTest is RedemptionCloseTools {
         _complete();
         assertFalse(sdgnrs.redemptionSettlementPending(), "no retained obligation");
         for (uint256 i; i < OWNERS; ++i) {
-            (uint128 base,) = sdgnrs.pendingRedemptions(_owner(i), burnDay);
+            (uint128 base,) = sdgnrs.pendingRedemptions(game.walletIdOf(_owner(i)), burnDay);
             assertEq(base, 0, "all paid claims consumed");
         }
     }

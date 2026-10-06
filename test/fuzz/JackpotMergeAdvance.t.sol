@@ -11,8 +11,9 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IJackpotBattle} from "../../contracts/interfaces/IJackpotBattle.sol";
 import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-contract JackpotMergeSeeder is DegenerusGame {
+contract JackpotMergeSeeder is DegenerusGame, WalletSeed {
     function seed(bool phase, bool transition, bool last, uint256 holders) external {
         // The synthetic jump to level 6 models levels 1..6 as drained: free their recycled roots.
         TQ.retireCompleted(address(this), 6);
@@ -44,7 +45,7 @@ contract JackpotMergeSeeder is DegenerusGame {
         for (uint24 lv = 9; lv < 107; ++lv) {
             for (uint256 i; i < holders; ++i) {
                 address player = address(uint160(0x1000000 + uint256(lv) * 256 + i));
-                _tqAppend(_tqFarFutureKey(lv), uint32(_registerEntryOwner(player, lv) >> OWNER_IDX_SHIFT));
+                _tqAppend(_tqFarFutureKey(lv), _seedWallet(player));
             }
         }
     }
@@ -60,7 +61,7 @@ contract JackpotMergeSeeder is DegenerusGame {
         for (uint24 lv = 9; lv < 107; ++lv) {
             for (uint256 i; i < holders; ++i) {
                 address player = address(uint160((0x2000000 + uint256(lv) * 256 + i) << 8));
-                _tqAppend(_tqFarFutureKey(lv), uint32(_registerEntryOwner(player, lv) >> OWNER_IDX_SHIFT));
+                _tqAppend(_tqFarFutureKey(lv), _seedWallet(player));
             }
         }
     }

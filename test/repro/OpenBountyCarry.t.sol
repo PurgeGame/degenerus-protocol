@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {VmSafe} from "forge-std/Vm.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title OpenBountyCarry — splitting an AFKing backlog across calls never out-earns one call
 /// @notice The knee bounty and its `_openBountyCarry` netting are gone (60d31f775 / 72fc06f6c):
@@ -16,9 +17,9 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 ///             first million earns a bounty — nothing nets a real chunk down to zero.
 ///         Organically stamped AFKing boxes from one daily cohort are the backlog.
 contract OpenBountyCarry is DeployProtocol {
-    uint256 private constant SUBOF_SLOT = 52;
-    uint256 private constant SUBSCRIBERS_SLOT = 54;
-    uint256 private constant CURSOR_SLOT = 56;
+    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;
+    uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS;
+    uint256 private constant CURSOR_SLOT = GameSlots.SUB_CURSOR;
     uint256 private constant PENDING_SHIFT = 184;
     uint256 private _lastFulfilledReqId;
 

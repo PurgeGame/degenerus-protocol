@@ -7,6 +7,7 @@ import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {DegenerusAdmin} from "../../../contracts/DegenerusAdmin.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
+import {GameSlots} from "../../helpers/GameSlots.sol";
 
 /// @dev Independent receipt-to-storage oracle for the ordinary, per-entry ticket consumer.
 /// It reconstructs traits from the committed lootbox word; the event supplies only its
@@ -14,11 +15,11 @@ import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol"
 /// Seated rounds and foil packs have different derivations and are excluded by this
 /// campaign's ticket-only, one-buyer fixture. Encountering either fails the oracle.
 abstract contract RngIndexDrainOracle is Test {
-    uint256 internal constant SLOT_LOOTBOX_MAPPING = 34;
-    uint256 internal constant SLOT_LR_INDEX = 33;
+    uint256 internal constant SLOT_LOOTBOX_MAPPING = GameSlots.RNG_DAY_TAGS;
+    uint256 internal constant SLOT_LR_INDEX = GameSlots.LOOTBOX_RNG_PACKED;
     uint256 private constant SLOT_BUCKETS = 8;
-    uint256 private constant SLOT_OWNERS = 67;
-    uint256 private constant SLOT_TICKET_CURSOR = 14;
+    uint256 private constant SLOT_OWNERS = GameSlots.WALLETS;
+    uint256 private constant SLOT_TICKET_CURSOR = GameSlots.TICKET_CURSOR;
     bytes32 internal constant TOPIC_TRAITS_GENERATED = keccak256("TraitsGenerated(address,uint256,uint32)");
     /// @dev Receipt key = stream | startOffset | goldSixTakenFlag (TicketModule._solo): the stream
     ///      is domain(8) | level(24) | queueIndex(32) | player(160) | 0(32); the low 32 bits carry
@@ -92,7 +93,7 @@ abstract contract RngIndexDrainOracle is Test {
             ? uint256(vm.load(address(subject), slot)) >> 32
             : uint256(vm.load(address(subject), bytes32(uint256(keccak256(abi.encode(slot))) + occurrence / 8)));
         uint32 ownerIndex = uint32(lanes >> (32 * (occurrence % 8)));
-        // Bucket lanes hold zero-based indices into the append-only global array.
+        // Bucket lanes hold wallet IDs (wallet-table positions; element 0 is never assigned).
         bytes32 owners = bytes32(SLOT_OWNERS);
         if (ownerIndex >= uint256(vm.load(address(subject), owners))) return address(0);
         return address(uint160(uint256(vm.load(address(subject), bytes32(uint256(keccak256(abi.encode(owners))) + ownerIndex)))));

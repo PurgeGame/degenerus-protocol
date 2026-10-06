@@ -3,26 +3,27 @@ pragma solidity ^0.8.33;
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
-contract StableOwnersHarness is DegenerusGameStorage {
+import {WalletSeed} from "../helpers/WalletSeed.sol";
+contract StableOwnersHarness is DegenerusGameStorage, WalletSeed {
     constructor() { level = 3; }
-    function credit(address p, uint24 lvl, uint32 n) external { _queueEntries(p, lvl, n, false); }
-    function creditScaled(address p, uint24 lvl, uint32 n) external { _queueEntriesScaled(p, lvl, n); }
+    function credit(address p, uint24 lvl, uint32 n) external { _queueEntries(_seedWallet(p), lvl, n, false); }
+    function creditScaled(address p, uint24 lvl, uint32 n) external { _queueEntriesScaled(_seedWallet(p), lvl, n); }
     function flip() external { ticketWriteSlot = !ticketWriteSlot; }
-    function owed(uint24 key, address p) external view returns (uint80) { return _entriesOwed(key,p); }
+    function owed(uint24 key, address p) external view returns (uint80) { return _owedOf(key,p); }
     function keys(uint24 lvl) external view returns(uint24,uint24,uint24) { return(_tqReadKey(lvl),_tqWriteKey(lvl),_tqFarFutureKey(lvl)); }
-    function consume(uint24 key, address p) external { _setEntryOwed(key,ticketOwnerId[p],0); _releaseTicketQueue(key); }
+    function consume(uint24 key, address p) external { _setEntryOwed(key,_walletIdOf(p),0); _releaseTicketQueue(key); }
     function release(uint24 key) external { _releaseTicketQueue(key); }
     function physical(uint24 key) external pure returns(uint24) { return _ticketQueueStorageKey(key); }
-    function total(uint24 lvl,address p) external view returns(uint32) { return _entriesOwedTotal(lvl,p); }
+    function total(uint24 lvl,address p) external view returns(uint32) { return _entriesOwedTotal(lvl,_walletIdOf(p)); }
     function extsload(bytes32 slot) external view returns(bytes32 value) { assembly ("memory-safe") { value := sload(slot) } }
-    function id(address p) external view returns(uint32) { return ticketOwnerId[p]; }
-    function count() external view returns(uint256) { return ticketOwners.length; }
-    function word(uint24, address p) external view returns(uint256) { return ticketPending[ticketOwnerId[p]]; }
+    function id(address p) external view returns(uint32) { return _walletIdOf(p); }
+    function count() external view returns(uint256) { return (wallets.length - 1); }
+    function word(uint24, address p) external view returns(uint256) { return ticketPending[_walletIdOf(p)]; }
     function len(uint24 key) external view returns(uint256) { return _ticketQueueLength(key); }
     function setLevel(uint24 n) external { level = n; }
-    function fill(uint256 n) external { assembly ("memory-safe") { sstore(ticketOwners.slot,n) } }
-    function bucket(uint24 lvl, address p) external { _setTicketBufferLevel(lvl); uint256 idx=uint256(_registerEntryOwner(p,lvl)>>OWNER_IDX_SHIFT)-1; _bucketAppendRun(_traitBufferBase(lvl),0,idx,8,lvl); }
-    function bucketOwner(uint24 lvl,uint256 i) external view returns(address) { return _bucketOwnerAtUnchecked(lvl,0,i); }
+    function fill(uint256 n) external { assembly ("memory-safe") { sstore(wallets.slot, add(n, 1)) } }
+    function bucket(uint24 lvl, address p) external { _setTicketBufferLevel(lvl); uint256 idx=uint256(_seedWallet(p)); _bucketAppendRun(_traitBufferBase(lvl),0,idx,8,lvl); }
+    function bucketOwner(uint24 lvl,uint256 i) external view returns(address) { return _bucketOwnerAt(lvl,0,i); }
 }
 contract StableEntryOwnersTest is Test {
     StableOwnersHarness h;
@@ -48,7 +49,7 @@ contract StableEntryOwnersTest is Test {
         (,uint24 wk,)=h.keys(3);h.creditScaled(A,3,1);h.creditScaled(A,3,2);
         assertEq(h.len(wk),1);assertEq(uint8(h.owed(wk,A)),3);assertEq(h.count(),1);
     }
-    function test_ZeroCreditDoesNotAllocate() public { h.credit(A,3,0);h.creditScaled(A,3,0);assertEq(h.count(),0);assertEq(h.id(A),0); }
+    function test_ZeroCreditQueuesNothing() public { h.credit(A,3,0);h.creditScaled(A,3,0);(,uint24 wk,)=h.keys(3);assertEq(h.len(wk),0);assertEq(h.owed(wk,A),0); }
     function test_BucketOwnerSurvivesOtherLevelsAndPendingClears() public {
         h.credit(A,3,4);h.bucket(3,A);h.credit(B,4,4);h.bucket(4,B);
         (,uint24 wk,)=h.keys(3);h.consume(wk,A);h.credit(B,5,4);

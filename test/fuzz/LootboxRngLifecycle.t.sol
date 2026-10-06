@@ -9,6 +9,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title LootboxRngLifecycle -- Audit tests for lootbox RNG index lifecycle
 /// @notice Covers LBOX-01 (index mutations), LBOX-02 (word writes), LBOX-03 (zero guards),
@@ -22,7 +23,7 @@ contract LootboxRngLifecycle is DeployProtocol {
     ///      Slot 3: rngWordCurrent (uint256).
     ///      Slot 4: vrfRequestId (uint256).
     uint256 constant SLOT_PACKED_0 = 0;
-    uint256 constant SLOT_RNG_WORD_CURRENT = 3;
+    uint256 constant SLOT_RNG_WORD_CURRENT = GameSlots.RNG_WORD_CURRENT;
     uint256 constant SLOT_VRF_REQUEST_ID = 4;
 
     function setUp() public {

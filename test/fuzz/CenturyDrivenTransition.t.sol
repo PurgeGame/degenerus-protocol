@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title CenturyDrivenTransition -- driven end-to-end proof of the century (x00)
 ///        prize-pool doubling floor through the REAL advance path.
@@ -24,8 +25,8 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
     uint256 private constant SLOT_0 = 0;
     uint256 private constant JACKPOT_PHASE_SHIFT = 120; // byte 15: jackpotPhaseFlag
     uint256 private constant RNG_LOCKED_SHIFT = 152; // byte 19: rngLockedFlag
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2; // [future:128][next:128]
-    uint256 private constant LEVEL_PRIZE_POOL_SLOT = 23; // mapping(uint24 => uint256)
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED; // [future:128][next:128]
+    uint256 private constant LEVEL_PRIZE_POOL_SLOT = GameSlots.LEVEL_PRIZE_POOL; // mapping(uint24 => uint256)
 
     uint256 private simTime;
 

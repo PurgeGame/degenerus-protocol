@@ -237,7 +237,7 @@ describe("Paper Parity (Phase 46)", function () {
 
     it("contract returns 0 for zero-address player", async function () {
       const { game } = await loadFixture(deployWithTester);
-      const score = await game.playerActivityScore(ZERO_ADDRESS);
+      const [score] = await game.playerActivityScore(ZERO_ADDRESS); // (scorePoints, walletId)
       expect(score).to.equal(0);
     });
 
@@ -256,7 +256,7 @@ describe("Paper Parity (Phase 46)", function () {
       const { game, alice } = await loadFixture(deployWithTester);
 
       // Before purchase: score should be 0
-      const scoreBefore = await game.playerActivityScore(alice.address);
+      const [scoreBefore] = await game.playerActivityScore(alice.address);
       expect(scoreBefore).to.equal(0, "No activity before purchase");
 
       // Purchase whale bundle (100-level, bundleType=3)
@@ -267,7 +267,7 @@ describe("Paper Parity (Phase 46)", function () {
         });
 
       // After purchase: score should reflect pass floor bonuses + whale bonus
-      const scoreAfter = await game.playerActivityScore(alice.address);
+      const [scoreAfter] = await game.playerActivityScore(alice.address);
       expect(scoreAfter).to.equal(
         115,
         "Whale bundle holder: 50 streak floor + 25 count floor + 40 whale(100-lvl) bonus = 115 points"

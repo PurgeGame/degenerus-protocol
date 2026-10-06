@@ -4,6 +4,7 @@ pragma solidity 0.8.34;
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DeadVrfSeeder} from "../fuzz/helpers/DeadVrfSeeder.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 contract DeadVrfGasSeeder is DeadVrfSeeder {
     function seedRegistry(uint24 lvl, uint256 count) external {
@@ -16,13 +17,13 @@ contract DeadVrfGasSeeder is DeadVrfSeeder {
     function seedFoilBatch(uint24 lvl, uint24 day, uint256 count) external {
         for (uint256 i; i < count; ++i) {
             address owner = address(uint160(0xF0110000 + i));
-            uint256 id = uint256(_registerEntryOwner(owner, lvl) >> OWNER_IDX_SHIFT);
+            uint256 id = uint256(_seedWallet(owner));
         foilQueue[day & 1].push((id << 192) | (uint256(lvl) << 160) | uint160(owner));
         }
         foilGenerationDay = day;
         foilFirstDrawDay = day;
         // Reachable continuation after the registry (all zero owed) has been tallied.
-        deadTallyPos = uint32(ticketOwners.length);
+        deadTallyPos = uint32((wallets.length - 1));
         deadTallyStage = 1;
         deadTallyFoilDay = (day & 1) + 1;
     }
@@ -55,8 +56,8 @@ contract DeadVrfGasSeeder is DeadVrfSeeder {
         }
         for (uint256 i; i < 30; ++i) {
             address owner = address(uint160(0xD3170000 + i));
-            deityPassOwners.push(owner);
-            deityPassPricePaid[owner] = 20 ether;
+            _seedDeity(owner);
+            deityPassPricePaid[_seedWallet(owner)] = 20 ether;
         }
     }
 

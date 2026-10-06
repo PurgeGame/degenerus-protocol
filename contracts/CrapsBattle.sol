@@ -59,13 +59,16 @@ interface IVaultOwnership {
     function isVaultOwner(address account) external view returns (bool);
 }
 
-/// @dev Mint-history entry pricing and the daily RNG lock.
+/// @dev Mint-history entry pricing, the daily RNG lock and wallet IDs.
 interface IGameCraps {
     /// @notice Raw mint history: lifetime count, last mint level and deity ownership.
     function mintPackedFor(address player) external view returns (uint256);
     function level() external view returns (uint24);
     /// @notice Daily request through final day seal, including a fulfilled, pending jackpot battle.
     function rngLocked() external view returns (bool);
+    /// @notice `owner`'s Game wallet ID; with `allocate`, a new wallet is registered, otherwise
+    ///         an unregistered one returns zero.
+    function registerWallet(address owner, bool allocate) external returns (uint32);
 }
 
 interface IHighRollerReserve {
@@ -362,11 +365,16 @@ contract CrapsBattle is CrapsBattleStorage {
         }
     }
 
+    /// @dev Marks a paid door above the thirty-bit board in `_rememberBoard`'s argument. Riding
+    ///      inside the board rather than as a literal flag keeps one compiled copy of the save.
+    uint256 private constant _PAID_DOOR = 1 << 32;
+
     /// @dev Remember only a successful player-submitted board, once per call. The entry still
-    ///      uses its explicit board when the daily draw has frozen the saved preference.
-    modifier rememberBoard(uint32 chips) {
+    ///      uses its explicit board when the daily draw has frozen the saved preference. `paid`
+    ///      marks a door that charges the caller, so a first save may register its wallet.
+    modifier rememberBoard(uint32 chips, bool paid) {
         _;
-        _rememberBoard(chips);
+        _rememberBoard(paid ? chips | _PAID_DOOR : chips);
     }
 
     /// @notice Save your board for comped tickets and the jackpot battle. Zero restores random.
@@ -374,29 +382,51 @@ contract CrapsBattle is CrapsBattleStorage {
     /// @dev Input is the same canonical thirty-bit board paid entries accept. First save sets
     ///      a permanent sentinel, including for zero; identical initialized boards are no-ops.
     /// @custom:reverts BetLocked If initialization or a change would move a committed daily draw.
+    /// @custom:reverts NoWalletId If the board changes for a caller the Game has no wallet ID for.
     function setPreferredBoard(uint32 chips) external {
         _upToSeven(chips);
         if (!_rememberBoard(chips)) revert BetLocked();
     }
 
-    /// @notice Your saved board in the paid-entry encoding; unset and explicit random return zero.
-    function preferredBoardOf(address player) public view returns (uint32 chips) {
+    /// @notice A wallet's saved board in the paid-entry encoding, by Game wallet ID; unset and
+    ///         explicit random return zero.
+    function preferredBoardOf(uint32 walletId) external view returns (uint32 chips) {
+        (chips,) = CrapsPreferenceLib.decode(_passCreditsById[walletId]);
+    }
+
+    /// @dev The board saved for an address, read from its address word.
+    function _boardOf(address player) private view returns (uint32 chips) {
         (chips,) = CrapsPreferenceLib.decode(_passCredits[player]);
     }
 
-    /// @dev Only accepts already-validated chips. All external placement calls have completed
-    ///      before reading the word; the subsequent Game call is STATICCALL and cannot change it.
-    /// @return False only when the daily lock prevents a first save or a changed board.
-    function _rememberBoard(uint32 chips) private returns (bool) {
+    /// @dev Only accepts already-validated chips, plus `_PAID_DOOR` from a paid door. All
+    ///      external placement calls have completed before reading the word, and neither Game
+    ///      call that follows writes Craps state. A missing wallet ID is filled once from the Game,
+    ///      registering a new wallet only for a paid door; a free door reverts without one. A
+    ///      saved change is copied to the ID word.
+    /// @return saved False only when the daily lock prevents a first save or a changed board.
+    function _rememberBoard(uint256 entry) private returns (bool saved) {
+        uint32 chips = uint32(entry);
         uint256 field = CrapsPreferenceLib.compress(chips)
             | (CrapsPreferenceLib.INITIALIZED >> CrapsPreferenceLib.SHIFT);
         uint256 word = _passCredits[msg.sender];
-        // Compare the twenty board bits and the adjacent initialized bit together.
+        // Compare the twenty board bits and the adjacent initialized bit together. An initialized
+        // word always holds its wallet ID, so an unchanged board touches nothing else.
         if ((word >> CrapsPreferenceLib.SHIFT) & 0x1FFFFF == field) return true;
-        if (IGameCraps(_GAME).rngLocked()) return false;
-        _passCredits[msg.sender] = (word & ~CrapsPreferenceLib.MASK) | (field << CrapsPreferenceLib.SHIFT);
-        emit CrapsPreferredBoardSet(msg.sender, chips);
-        return true;
+        uint256 id = uint32(word >> CrapsPreferenceLib.ID_SHIFT);
+        if (id == 0) {
+            id = IGameCraps(_GAME).registerWallet(msg.sender, entry & _PAID_DOOR != 0);
+            if (id == 0) revert NoWalletId();
+            word |= id << CrapsPreferenceLib.ID_SHIFT;
+        }
+        saved = !IGameCraps(_GAME).rngLocked();
+        if (saved) {
+            word = (word & ~CrapsPreferenceLib.MASK) | (field << CrapsPreferenceLib.SHIFT);
+            uint256 byId = _passCreditsById[uint32(id)];
+            _passCreditsById[uint32(id)] = (byId & ~CrapsPreferenceLib.MASK) | (field << CrapsPreferenceLib.SHIFT);
+            emit CrapsPreferredBoardSet(msg.sender, chips);
+        }
+        _passCredits[msg.sender] = word;
     }
 
     /// @notice Name or re-spread zero through seven chips on an open slip.
@@ -415,7 +445,8 @@ contract CrapsBattle is CrapsBattleStorage {
     ///         table is already bound, or a custom battle's close time has passed.
     /// @custom:reverts BadRandomCount If the new board names more than seven chips.
     /// @custom:reverts BoardPlaysBothSides If it names both the pass line and don't pass.
-    function amendSlip(uint256 betId, uint32 chips) public rememberBoard(chips) {
+    /// @custom:reverts NoWalletId If the board changes for a caller the Game has no wallet ID for.
+    function amendSlip(uint256 betId, uint32 chips) public rememberBoard(chips, false) {
         uint256 header = _loadBet(betId);
         if (address(uint160(header)) != msg.sender) revert NotYourBet();
         uint256 slot = betId >> 64;
@@ -774,7 +805,7 @@ contract CrapsBattle is CrapsBattleStorage {
     /// @notice Join a custom battle, placing zero through seven chips and leaving the rest of the
     ///         ten-chip round to the dice. Custom tickets receive no shooter-profit boost.
     /// @custom:reverts BoardPlaysBothSides If the ticket names both the pass line and don't pass.
-    function enterBattle(uint64 slot, uint32 chips, uint16 multiple) public rememberBoard(chips) returns (uint256 betId) {
+    function enterBattle(uint64 slot, uint32 chips, uint16 multiple) public rememberBoard(chips, true) returns (uint256 betId) {
         return _enterWindow(_joinableSlot(slot), chips, multiple, msg.sender, 0);
     }
 
@@ -1057,7 +1088,7 @@ contract CrapsBattle is CrapsBattleStorage {
             if (tomorrow <= type(uint24).max && (normal | high) != 0) {
                 bool takeHigh = high != 0;
                 // Automatic award: snapshot the saved board; later preference changes cannot move it.
-                if (_reserveDay(player, uint24(tomorrow), takeHigh, preferredBoardOf(player), 0)) {
+                if (_reserveDay(player, uint24(tomorrow), takeHigh, _boardOf(player), 0)) {
                     day = uint24(tomorrow);
                     if (takeHigh) --high;
                     else --normal;
@@ -1208,7 +1239,8 @@ contract CrapsBattle is CrapsBattleStorage {
     /// @custom:reverts BadRandomCount If `chips` names more than seven chips.
     /// @custom:reverts TooManyChipsOnALeg If any leg stacks more than three chips.
     /// @custom:reverts BoardPlaysBothSides If it names both the pass line and don't pass.
-    function applyCrapsPasses(uint24 startDay, uint8 count, bool high, uint32 chips) public rememberBoard(chips) {
+    /// @custom:reverts NoWalletId If the board changes for a caller the Game has no wallet ID for.
+    function applyCrapsPasses(uint24 startDay, uint8 count, bool high, uint32 chips) public rememberBoard(chips, false) {
         _takeCredits(msg.sender, high, count);
         _reserveRun(startDay, count, high, chips, 0, msg.sender);
     }
@@ -1234,7 +1266,7 @@ contract CrapsBattle is CrapsBattleStorage {
     /// @custom:reverts BadRandomCount If `chips` names more than seven chips.
     /// @custom:reverts TooManyChipsOnALeg If any leg stacks more than three chips.
     /// @custom:reverts BoardPlaysBothSides If it names both the pass line and don't pass.
-    function buyFutureCrapsDays(uint24 startDay, uint8 count, bool high, uint32 chips) public rememberBoard(chips) {
+    function buyFutureCrapsDays(uint24 startDay, uint8 count, bool high, uint32 chips) public rememberBoard(chips, true) {
         if (count == 0) revert BadPassCount();
         uint8 boonMask;
         unchecked {
@@ -1484,7 +1516,7 @@ contract CrapsBattle is CrapsBattleStorage {
         bool high = code & _COMP_HIGH_BIT != 0;
         uint24 arg = uint24(code >> _COMP_ARG_SHIFT);
         uint8 count = uint8(code >> _COMP_COUNT_SHIFT);
-        uint32 chips = preferredBoardOf(to);
+        uint32 chips = _boardOf(to);
         if (kind == _COMP_WINDOW) {
             Window memory w = _joinableWindow(arg);
             uint256 multiple = high ? w.highMult : 1;
@@ -1692,7 +1724,7 @@ contract CrapsBattle is CrapsBattleStorage {
     ///
     ///         The dice scatter the rest of the ten: an all-zero `chips` leaves the whole board
     ///         to the draw.
-    function enterBonusBattle(uint256 period, uint32 chips, uint16 multiple) public rememberBoard(chips) returns (uint256 betId) {
+    function enterBonusBattle(uint256 period, uint32 chips, uint16 multiple) public rememberBoard(chips, true) returns (uint256 betId) {
         Window memory w = _joinableWindow(period);
         return _enterWindow(w, chips, multiple, msg.sender, 0);
     }
@@ -1711,7 +1743,7 @@ contract CrapsBattle is CrapsBattleStorage {
     /// @param multiple The day's high-roller multiple to enter at, or 1 for the ordinary lane.
     /// @return placed How many windows took the entry.
     /// @custom:reverts BonusPeriodSpent If the day's first window has already closed.
-    function enterBonusDay(uint32 chips, uint16 multiple) public rememberBoard(chips) returns (uint256 placed) {
+    function enterBonusDay(uint32 chips, uint16 multiple) public rememberBoard(chips, true) returns (uint256 placed) {
         (placed,) = _enterToday(chips, multiple, msg.sender, 0);
     }
 
@@ -1809,15 +1841,16 @@ contract CrapsBattle is CrapsBattleStorage {
         // Already sitting: a pass spent on this day wrote the seat the moment it was spent, so
         // there is nothing here to buy.
         if (_loadDaySeat(daySlot, body) != 0) return;
-        // Automatic seats use the body's saved board; an unset preference is fully random.
-        uint256 chips = preferredBoardOf(body);
+        // Automatic seats use the body's saved board, read from the same word as its credits; an
+        // unset preference is fully random.
+        uint256 credits = _passCredits[body];
+        (uint32 chips,) = CrapsPreferenceLib.decode(credits);
         // THE BANK FIRST, FLIP SECOND. A pass is a claim on a day that is already bought and
         // cannot be spent on anything else, so it is what the seat reaches for; FLIP is liquid and
         // is only burned for a day the bank cannot cover. The burn pays the whole day — every
         // window's bankroll AND its bounty.
         bool high;
         bool funded;
-        uint256 credits = _passCredits[body];
         if ((credits >> _PASS_HIGH_SHIFT) & _PASS_MAX != 0) {
             (high, funded) = (true, true);
         } else if (credits & _PASS_MAX != 0) {

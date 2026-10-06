@@ -9,6 +9,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title V55SetMutationOpenE -- The dedicated TST-04 proof: the v55.0 two-path open coexistence
 ///        (BOX-05, no shared mutable-state hazard), the NO-ORPHAN guard (a sub removed between stamp and
@@ -48,9 +49,8 @@ contract V55SetMutationOpenE is DeployProtocol {
     // Game-resident storage slots (RE-DERIVED via `forge inspect DegenerusGame storageLayout`, post
     // Stage B Game-storage packing — corrected to authoritative values).
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 52; // _subOf mapping root
-    uint256 private constant SUBSCRIBERS_SLOT = 54; // _subscribers address[] (length here; data at keccak(54))
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 55; // _subscriberIndex mapping root (1-indexed)
+    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF; // _subOf mapping root
+    uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS; // _subscribers address[] (length here; data at keccak(54))
 
     // Sub packed-field byte offsets — the v56 compute-on-read re-pack (single 256-bit slot); the
     // validThroughLevel field is deleted (the AFKing Subscription Token replaced the pass-horizon credential), so
@@ -129,7 +129,7 @@ contract V55SetMutationOpenE is DeployProtocol {
     }
 
     /// @dev Forcibly remove `who` from `_subscribers` (the orphan condition): zero its
-    ///      `_subscriberIndex` and shrink the array length by 1 (a test-only simulation of a removal
+    ///      Sub.setPosition and shrink the array length by 1 (a test-only simulation of a removal
     ///      between stamp and open; the contract's own STAGE never does this to a pending-box sub).
     function _forceRemoveFromSubscribers(address who) internal {
         uint256 idxPlus1 = _subscriberIndexOf(who);
@@ -138,20 +138,28 @@ contract V55SetMutationOpenE is DeployProtocol {
         bytes32 lenSlot = bytes32(uint256(SUBSCRIBERS_SLOT));
         uint256 len = uint256(vm.load(address(game), lenSlot));
         bytes32 dataBase = keccak256(abi.encode(uint256(SUBSCRIBERS_SLOT)));
-        // Swap-pop: move the last element into `idx`, fix its index, shrink length, clear `who`'s index.
+        // Swap-pop: move the last element (address | id << 160) into `idx`, fix the mover's
+        // Sub.setPosition, shrink length, clear `who`'s setPosition.
         if (idx != len - 1) {
-            address mover = address(uint160(uint256(vm.load(address(game), bytes32(uint256(dataBase) + (len - 1))))));
-            vm.store(address(game), bytes32(uint256(dataBase) + idx), bytes32(uint256(uint160(mover))));
-            vm.store(address(game), keccak256(abi.encode(mover, uint256(SUBSCRIBER_INDEX_SLOT))), bytes32(idxPlus1));
+            uint256 moverElement = uint256(vm.load(address(game), bytes32(uint256(dataBase) + (len - 1))));
+            vm.store(address(game), bytes32(uint256(dataBase) + idx), bytes32(moverElement));
+            _setSubPosition(uint32(moverElement >> 160), idxPlus1);
         }
         vm.store(address(game), lenSlot, bytes32(len - 1));
-        vm.store(address(game), keccak256(abi.encode(who, uint256(SUBSCRIBER_INDEX_SLOT))), bytes32(uint256(0)));
+        _setSubPosition(game.walletIdOf(who), 0);
+    }
+
+    /// @dev Overwrite Sub.setPosition (bits 224..255 of the one-slot Sub) for wallet `id`.
+    function _setSubPosition(uint32 id, uint256 position) internal {
+        bytes32 slot = keccak256(abi.encode(uint256(id), uint256(SUBOF_SLOT)));
+        uint256 word = uint256(vm.load(address(game), slot));
+        vm.store(address(game), slot, bytes32((word & ((uint256(1) << 224) - 1)) | (position << 224)));
     }
 
     // ---- Sub field reads (RE-DERIVED slot 52 + verified offsets) ----
 
-    function _subSlot(address who) internal pure returns (bytes32) {
-        return keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
+    function _subSlot(address who) internal view returns (bytes32) {
+        return keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT)));
     }
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
@@ -185,11 +193,11 @@ contract V55SetMutationOpenE is DeployProtocol {
     }
 
     function _subscriberIndexOf(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBSCRIBER_INDEX_SLOT)))));
+        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 224; // Sub.setPosition (1-based)
     }
 
     function _fundingSourceOf(address who) internal view returns (address) {
-        return address(uint160(uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(54)))))));
+        return address(uint160(uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.FUNDING_SOURCE_OF))))));
     }
 
     // ---- Event drain (emitter == address(game) — the game-resident module emits via delegatecall) ----

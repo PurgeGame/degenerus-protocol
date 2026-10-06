@@ -7,8 +7,9 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IDegenerusGameLootboxModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {TicketQueueStorage as TQ} from "./helpers/TicketQueueStorage.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-contract SeedInputSeeder is DegenerusGame {
+contract SeedInputSeeder is DegenerusGame, WalletSeed {
     function seed(address player, uint256 word, uint256 amount, bool presale) external {
         // Reaching level 10 means every earlier level's queues materialized. Queue slots recycle
         // 1..100 under a level tag (c729ecfc9): an unretired genesis queue would refuse the
@@ -37,7 +38,7 @@ contract SeedInputSeeder is DegenerusGame {
 
     function afking(address player, uint256 amount, uint256 word) external {
         (bool ok, bytes memory result) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
-            abi.encodeCall(IDegenerusGameLootboxModule.resolveAfkingBox, (player, amount, uint24(100), word, uint16(0)))
+            abi.encodeCall(IDegenerusGameLootboxModule.resolveAfkingBox, (player, _seedWallet(player), amount, uint24(100), word, uint16(0)))
         );
         if (!ok) assembly { revert(add(result, 32), mload(result)) }
     }
@@ -66,7 +67,7 @@ contract RandomnessSeedInputsTest is DeployProtocol {
         else if (route == 1) host.afking(PLAYER, amount, word);
         else {
             vm.prank(address(sdgnrs));
-            game.resolveRedemptionLootbox{value: amount}(PLAYER, amount, word, 0, 1);
+            game.resolveRedemptionLootbox{value: amount}(PLAYER, game.walletIdOf(PLAYER), amount, word, 0, 1);
         }
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool found;

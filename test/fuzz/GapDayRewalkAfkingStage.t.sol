@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title GapDayRewalkAfkingStage — skipped days never stage subscriptions or draw seats.
 /// @notice A request committed on R is fulfilled on W = R+3. The engine completes R's
@@ -12,12 +13,12 @@ import {Vm} from "forge-std/Vm.sol";
 contract GapDayRewalkAfkingStage is DeployProtocol {
     // forge inspect DegenerusGame storage: _subOf@52 (address => Sub, one packed slot); slot 0 packs
     // purchaseStartDay u24 @0 · dailyIdx u24 @3 · ...
-    uint256 private constant SUBOF_SLOT = 52;
+    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;
     uint256 private constant OFF_DAILY = 0; // uint8  dailyQuantity
     uint256 private constant OFF_AMOUNT = 4; // uint24 amount (milli-ETH)
     uint256 private constant OFF_LASTBOUGHT = 7; // uint24 lastAutoBoughtDay
     uint256 private constant OFF_LASTOPENED = 10; // uint24 lastOpenedDay
-    uint256 private constant AFKING_RESET_SLOT = 56; // uint24 _afkingResetDay
+    uint256 private constant AFKING_RESET_SLOT = GameSlots.AFKING_RESET_DAY; // uint24 _afkingResetDay
     uint256 private constant AFKING_RESET_OFF = 4;
 
     bytes32 private constant AFKING_DELIVERED_SIG = keccak256("AfkingDelivered(address,uint256)");
@@ -254,7 +255,7 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
     }
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
+        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
         return p & ((uint256(1) << widthBits) - 1);
     }
 

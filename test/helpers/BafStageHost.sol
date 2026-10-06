@@ -135,7 +135,7 @@ contract BafStageHost is DegenerusGame, BucketSeed {
 
     /// @dev The production queue sink with the arguments one logged `EntriesQueued` reports.
     function replayQueued(address buyer, uint24 targetLevel, uint32 entries) external {
-        _queueEntries(buyer, targetLevel, entries, true);
+        _queueEntries(_seedWallet(buyer), targetLevel, entries, true);
     }
 
     function daily(uint256 allowance) external returns (MineFlipGas.Result memory) {
@@ -190,12 +190,16 @@ contract BafStageHost is DegenerusGame, BucketSeed {
         return _ticketQueueLength(lvl) + _ticketQueueLength(lvl | TICKET_SLOT_BIT);
     }
 
+    function seedWallet(address owner) external returns (uint32) {
+        return _seedWallet(owner);
+    }
+
     function whalePassesOf(address player) external view returns (uint256) {
-        return whalePassClaims[player];
+        return _halfPassesOf(player);
     }
 
     function claimableOf(address player) external view returns (uint256) {
-        return _claimableOf(player);
+        return _claimableOf(_walletIdOf(player));
     }
 
     function liabilities() external view returns (uint256) {
@@ -239,12 +243,12 @@ abstract contract BafBracketFixture is DeployProtocol {
     uint24 internal constant DRAW_DAY = 41;
 
     bytes32 internal constant ADVANCE_SIG = keccak256("Advance(uint8,uint24)");
-    bytes32 internal constant ETH_SIG = keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)");
+    bytes32 internal constant ETH_SIG = keccak256("JackpotEthWin(uint32,uint24,uint16,uint256,uint256)");
     bytes32 internal constant TICKET_SIG =
-        keccak256("JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)");
-    bytes32 internal constant WHALE_SIG = keccak256("JackpotWhalePassWin(address,uint256,uint8)");
-    bytes32 internal constant CREDIT_SIG = keccak256("PlayerCredited(address,uint256)");
-    bytes32 internal constant QUEUED_SIG = keccak256("EntriesQueued(address,uint24,uint32)");
+        keccak256("JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)");
+    bytes32 internal constant WHALE_SIG = keccak256("JackpotWhalePassWin(uint32,uint256,uint8)");
+    bytes32 internal constant CREDIT_SIG = keccak256("PlayerCredited(uint32,uint256)");
+    bytes32 internal constant QUEUED_SIG = keccak256("EntriesQueued(uint32,uint24,uint32)");
 
     /// @dev One award event: ETH legs carry the amount, ticket rolls the source floor, whale
     ///      legs `halves << 8 | source`.
@@ -481,12 +485,19 @@ abstract contract BafBracketFixture is DeployProtocol {
     }
 
     /// @dev The ETH credited to claimable in `logs` (every credit the stage makes emits one).
+    /// @dev Claimable ETH credited in `logs`: each ETH leg's `JackpotEthWin` amount plus each
+    ///      logged remainder credit (`PlayerCredited`, whale-pass remainders).
     function _creditedIn(Vm.Log[] memory logs) internal view returns (uint256 total) {
         for (uint256 j; j < logs.length; ++j) {
             if (logs[j].emitter != address(game) || logs[j].topics.length == 0) continue;
-            if (logs[j].topics[0] != CREDIT_SIG) continue;
-            total += abi.decode(logs[j].data, (uint256));
+            bytes32 sig = logs[j].topics[0];
+            if (sig == CREDIT_SIG) total += abi.decode(logs[j].data, (uint256));
+            else if (sig == ETH_SIG) total += _firstWord(logs[j].data);
         }
+    }
+
+    function _firstWord(bytes memory data) private pure returns (uint256 w) {
+        assembly ("memory-safe") { w := mload(add(data, 32)) }
     }
 
     /// @dev Advance(19) markers in `logs`; any other stage fails.

@@ -7,10 +7,11 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 /// @dev A full production facade with controlled, committed native-worker inputs.
 ///      The measured calls delegate to the unmodified production AFKing module.
-contract SubscriberNativeGasHost is DegenerusGame {
+contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
     function prepare(bool whale) external {
         uint24 day = _simulatedDayIndex();
         level = 4;
@@ -41,10 +42,10 @@ contract SubscriberNativeGasHost is DegenerusGame {
         }
         // The genesis holders' near cohorts of the skipped levels retire with those queues: a
         // parity lane still holding level-1/2 balances refuses a level-5/6 write with E().
-        delete ticketPending[ticketOwnerId[ContractAddresses.SDGNRS]];
-        delete ticketPending[ticketOwnerId[ContractAddresses.VAULT]];
+        delete ticketPending[_walletIdOf(ContractAddresses.SDGNRS)];
+        delete ticketPending[_walletIdOf(ContractAddresses.VAULT)];
         if (whale) {
-            _creditClaimable(ContractAddresses.SDGNRS, 2_000 ether);
+            _creditClaimable(_seedWallet(ContractAddresses.SDGNRS), 2_000 ether);
             claimablePool += 2_000 ether;
         }
     }
@@ -52,9 +53,10 @@ contract SubscriberNativeGasHost is DegenerusGame {
     /// @param mode 0=self funded ticket,1=claimable ticket,2=external mixed funding,
     ///             3=unfunded expiry,4=cancelled tombstone,5=maximum box stamp.
     function add(address player, uint8 mode) external {
-        _subscribers.push(player);
-        _subscriberIndex[player] = _subscribers.length;
-        Sub storage sub = _subOf[player];
+        uint32 id = _seedWallet(player);
+        _subscribers.push(uint256(uint160(player)) | (uint256(id) << 160));
+        Sub storage sub = _subOf[id];
+        sub.setPosition = uint32(_subscribers.length);
         uint24 yesterday = _afkingResetDay - 1;
         sub.dailyQuantity = mode == 4 ? 0 : 255;
         sub.flags = mode == 5 ? 0 : 4;
@@ -62,18 +64,18 @@ contract SubscriberNativeGasHost is DegenerusGame {
         sub.lastOpenedDay = yesterday;
         sub.afkingStartDay = yesterday;
         sub.afkCoveredThroughDay = yesterday;
-        if (mode == 0 || mode == 5) _creditAfkingValue(player, 100 ether);
+        if (mode == 0 || mode == 5) _creditAfkingValue(_seedWallet(player), 100 ether);
         if (mode == 1) {
             sub.flags |= 2;
-            _creditClaimable(player, 100 ether);
+            _creditClaimable(_seedWallet(player), 100 ether);
             claimablePool += 100 ether;
         }
         if (mode == 2) {
             address funder = address(uint160(player) + 0x100000);
             sub.flags |= 1;
-            _fundingSourceOf[player] = funder;
-            _creditAfkingValue(funder, 1 ether);
-            _creditClaimable(player, 100 ether);
+            _fundingSourceOf[id] = uint256(uint160(funder)) | (uint256(_seedWallet(funder)) << 160);
+            _creditAfkingValue(_seedWallet(funder), 1 ether);
+            _creditClaimable(_seedWallet(player), 100 ether);
             claimablePool += 100 ether;
         }
     }
@@ -91,11 +93,13 @@ contract SubscriberNativeGasHost is DegenerusGame {
         ticketsFullyProcessed = true;
         humanReadComplete = true;
         subsFullyProcessed = true;
+        uint32 id = _seedWallet(player);
         delete _subscribers;
-        _subscribers.push(player);
+        _subscribers.push(uint256(uint160(player)) | (uint256(id) << 160));
         _subOpenCursor = 0;
         _pendingBoxCount = 1;
-        Sub storage sub = _subOf[player];
+        Sub storage sub = _subOf[id];
+        sub.setPosition = 1;
         sub.lastAutoBoughtDay = day;
         sub.lastOpenedDay = day - 1;
         sub.amount = 61_200; //255 tickets at the maximum0.24ETH price.
@@ -117,11 +121,11 @@ contract SubscriberNativeGasHost is DegenerusGame {
     function pendingBoxes() external view returns (uint256) { return _pendingBoxCount; }
     function memberCount() external view returns (uint256) { return _subscribers.length; }
     function delivered(address player) external view returns (uint24, uint24) {
-        return (_subOf[player].lastAutoBoughtDay, _subOf[player].lastOpenedDay);
+        return (_subOf[_walletIdOf(player)].lastAutoBoughtDay, _subOf[_walletIdOf(player)].lastOpenedDay);
     }
-    function claimableOf(address player) external view returns (uint256) { return _claimableOf(player); }
+    function claimableOf(address player) external view returns (uint256) { return _claimableOf(_walletIdOf(player)); }
     function pendingEntries(address player, uint24 lvl) external view returns (uint256) {
-        return _entriesOwedTotal(lvl, player);
+        return _entriesOwedTotal(lvl, _walletIdOf(player));
     }
     function _work(bytes memory data) private returns (MineFlipGas.Result memory) {
         (bool ok, bytes memory result) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(data);

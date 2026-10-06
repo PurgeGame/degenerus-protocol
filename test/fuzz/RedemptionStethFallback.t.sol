@@ -3,6 +3,7 @@ pragma solidity 0.8.34;
 import {RedemptionFixture} from "./helpers/RedemptionFixture.sol";
 import {RedemptionCloseHarness} from "./helpers/RedemptionCloseTools.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @notice Exercises _closeRedemptionBatch funding and real ETH/stETH claim forwarding.
 contract RedemptionStethFallbackTest is RedemptionFixture {
@@ -10,7 +11,7 @@ contract RedemptionStethFallbackTest is RedemptionFixture {
         vm.deal(address(sdgnrs), 0);
         vm.deal(address(game), liquid);
         mockStETH.mint(address(game), 1000 ether - liquid);
-        bytes32 slot = keccak256(abi.encode(address(sdgnrs), uint256(7)));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(address(sdgnrs))), GameSlots.BALANCES_PACKED));
         uint256 packed = uint256(vm.load(address(game), slot));
         vm.store(address(game), slot, bytes32((packed & (type(uint256).max << 128)) | uint128(1000 ether + 1)));
         uint256 pools = uint256(vm.load(address(game), bytes32(uint256(1))));

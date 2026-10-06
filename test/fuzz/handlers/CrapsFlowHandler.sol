@@ -10,6 +10,7 @@ import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {CrapsPriceLib} from "../../../contracts/libraries/CrapsPriceLib.sol";
 import {JackpotBattle} from "../../../contracts/JackpotBattle.sol";
 import {MineFlipGas} from "../../../contracts/libraries/MineFlipGas.sol";
+import {GameSlots} from "../../helpers/GameSlots.sol";
 
 /// @title CrapsFlowHandler — the action surface CrapsConservation.inv drives.
 ///
@@ -139,7 +140,7 @@ contract CrapsFlowHandler {
         uint48 read = uint48((flags >> 252) & 1) ^ 1;
         if (index != read) {
             // A pending read field owns the shared word until its actual settlement finishes.
-            if (uint256(game.slots(bytes32(uint256(33)))) & (uint256(1) << (250 + read)) != 0) return;
+            if (uint256(game.slots(bytes32(GameSlots.LOOTBOX_RNG_PACKED))) & (uint256(1) << (250 + read)) != 0) return;
             game.requestRng();
             flags = uint256(game.slots(bytes32(0)));
             require(index == (uint48((flags >> 252) & 1) ^ 1), "mock seal did not swap");
@@ -151,8 +152,8 @@ contract CrapsFlowHandler {
 
     function _setDailyWord(uint24 day, uint256 word) internal {
         uint256 shift = (day & 1) * 24;
-        uint256 tags = uint256(game.slots(bytes32(uint256(34))));
-        game.set(bytes32(uint256(34)), bytes32((tags & ~(uint256(type(uint24).max) << shift)) | (uint256(day) << shift)));
+        uint256 tags = uint256(game.slots(bytes32(GameSlots.RNG_DAY_TAGS)));
+        game.set(bytes32(GameSlots.RNG_DAY_TAGS), bytes32((tags & ~(uint256(type(uint24).max) << shift)) | (uint256(day) << shift)));
         game.set(keccak256(abi.encode(uint256(day & 1), DAY_WORD_SLOT)), bytes32(word));
     }
 

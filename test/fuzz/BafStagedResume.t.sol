@@ -176,6 +176,41 @@ abstract contract BafStagedResumeFixture is BafBracketFixture {
         _checkResidue(_bafEthTerm(pool, _bafPositions(pool) - 2));
     }
 
+    /// @dev A head winner without a wallet ID forfeits its whole award: nothing is credited to it,
+    ///      no ID is allocated, and exactly what a registered winner would have been credited
+    ///      returns with the residue.
+    function test_HeadWinnerWithoutWalletIdForfeitsItsAward() public {
+        address stranger = address(0x5157A9);
+        vm.mockCall(
+            address(jackpots),
+            abi.encodeWithSelector(jackpots.bafHeadWinner.selector, LVL, word, uint8(0)),
+            abi.encode(stranger)
+        );
+        uint256 snap = vm.snapshotState();
+        host.seedWallet(stranger);
+        (uint256 creditedPaid, uint256 residuePaid) = _drainAll();
+        assertGt(host.claimableOf(stranger), 0, "a registered head winner is paid");
+        vm.revertToState(snap);
+        (uint256 creditedSkipped, uint256 residueSkipped) = _drainAll();
+        assertEq(host.walletIdOf(stranger), 0, "a BAF award never registers");
+        assertGt(creditedPaid, creditedSkipped, "the forfeited award is not credited");
+        assertEq(residueSkipped - residuePaid, creditedPaid - creditedSkipped, "the forfeit joins the residue");
+    }
+
+    function _drainAll() private returns (uint256 credited, uint256 residue) {
+        _arm(0);
+        uint256 pending = host.poolView().pendingFuture;
+        MineFlipGas.Result memory r;
+        for (uint256 k; k < 32 && !r.done; ++k) {
+            vm.recordLogs();
+            r = host.daily{gas: CALL_GAS}(ONE_GROUP);
+            credited += _creditedIn(vm.getRecordedLogs());
+        }
+        assertTrue(r.done);
+        residue = host.poolView().pendingFuture - pending;
+        assertEq(credited + residue, reserve, "credits plus residue equal the reservation");
+    }
+
     /// @dev A bracket without a live score or board and no depositor draw: every slot is empty,
     ///      no group credits anything and the whole reservation returns.
     function test_EmptyBracketReturnsTheWholeReservation() public {

@@ -13,6 +13,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 // CURRENT ENGINE (60d31f775 / 72fc06f6c): the two-category router below is retired. `mineFlip()`
 //      (DegenerusGameMinerModule) selects one action at a time from storage, composes as many as its
@@ -85,25 +86,25 @@ contract KeeperRouterOneCategory is DeployProtocol {
     // pins are now stale; corrected to the authoritative values below.)
     // -------------------------------------------------------------------------
 
-    uint256 private constant SUBOF_SLOT = 52; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF; // _subOf mapping root (address => Sub, one packed slot)
     uint256 private constant OFF_LASTBOUGHT = 7; // uint24 lastAutoBoughtDay (bytes 7..9; Sub: u8 qty, u8 flags, u16 score, u24 amount)
     uint256 private constant OFF_LASTOPENED = 10; // uint24 lastOpenedDay     (bytes 10..12)
-    uint256 private constant SUBSCRIBERS_SLOT = 54; // _subscribers address[] (length here)
-    uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit)
+    uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS; // _subscribers address[] (length here)
+    uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED; // mintPacked_ mapping root (deity bit)
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS_SHIFT in mintPacked_
 
     /// @dev lootboxRngPacked at slot 34; index = low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = GameSlots.RNG_WORD_CURRENT;
     /// @dev lootboxOrder (the packed box-order word) mapping root slot. The whole word is the
     ///      first-deposit / box-owed signal that replaced the removed lootboxEthBase (zeroed in
     ///      one SSTORE on open).
-    uint256 private constant LOOTBOX_ETH_SLOT = 15;
+    uint256 private constant LOOTBOX_ETH_SLOT = GameSlots.LOOTBOX_ORDER;
 
     /// @dev ticketQueue mapping root (uint24 => address[]) + entriesOwedPacked
     ///      (uint24 => address => uint40) — for forcing advanceDue via a read-slot backlog.
-    uint256 private constant TICKET_QUEUE_SLOT = 12;
+    uint256 private constant TICKET_QUEUE_SLOT = GameSlots.TICKET_QUEUE;
     uint256 private constant TICKETS_OWED_PACKED_SLOT = 13;
     uint24 private constant TICKET_SLOT_BIT = 1 << 23; // mirrors DegenerusGameStorage.TICKET_SLOT_BIT
 
@@ -163,7 +164,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
     function _quietCrapsTableAndRng(uint256 vrfWord) internal {
         _quietCrapsTable();
         for (uint256 i; i < 4; ++i) {
-            uint256 packed = uint256(vm.load(address(game), bytes32(uint256(33))));
+            uint256 packed = uint256(vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED)));
             if (packed & (uint256(1) << (250 + RecyclingState.writeBuffer(address(game)))) == 0) break;
             // A shut window waives the mid-day value gates, so the engine requests its word.
             game.mineFlip();
@@ -590,7 +591,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
     // ---- Sub field reads (_subOf slot 52 + verified offsets) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
+        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
         return p & ((uint256(1) << widthBits) - 1);
     }
 
@@ -613,8 +614,8 @@ contract KeeperRouterOneCategory is DeployProtocol {
         uint256 packed = uint256(vm.load(address(game), slot));
         packed |= (uint256(1) << (21 * 8));
         vm.store(address(game), slot, bytes32(packed));
-        uint256 goState = uint256(vm.load(address(game), bytes32(uint256(19))));
-        vm.store(address(game), bytes32(uint256(19)), bytes32(goState | (uint256(1) << 48)));
+        uint256 goState = uint256(vm.load(address(game), bytes32(GameSlots.GAME_OVER_STATE_PACKED)));
+        vm.store(address(game), bytes32(GameSlots.GAME_OVER_STATE_PACKED), bytes32(goState | (uint256(1) << 48)));
         require(game.gameOver(), "_latchGameOver: gameOver did not flip (slot 0 byte 21)");
     }
 

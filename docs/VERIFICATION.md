@@ -60,7 +60,7 @@ make test-hardhat
 # Inspect selections or run a focused regression:
 python3 scripts/test-foundry-groups.py --list
 python3 scripts/test-hardhat-groups.py --list
-python3 scripts/test-foundry-groups.py --file test/repro/TerminalAffiliateKnownWord.t.sol
+python3 scripts/test-foundry-groups.py --file test/repro/TerminalPayoutCheckpoints.t.sol
 python3 scripts/test-hardhat-groups.py --file test/edge/BackfillIdempotency.test.js
 ```
 

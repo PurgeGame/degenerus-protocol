@@ -73,7 +73,7 @@ contract RedemptionHandler is Test {
         try sdgnrs.burn(amount) {
             if (!batchSeen[id]) { batchSeen[id] = true; batches.push(id); }
             submitted[id][actor] += amount;
-            (, uint16 score) = sdgnrs.pendingRedemptions(actor, id);
+            (, uint16 score) = sdgnrs.pendingRedemptions(game.walletIdOf(actor), id);
             if (frozenScore[id][actor] == 0) frozenScore[id][actor] = score;
             dayValue[day][actor] += quoted;
             assertLe(dayValue[day][actor], 160 ether, "wall-day admission cap");

@@ -50,7 +50,7 @@ library JackpotBattleFieldLib {
         }
 
         // Exactly one read per distinct PLAYED wallet, in one external call. Pass balances,
-        // the initialized sentinel and reserved bits must never enter the battle payload.
+        // the initialized sentinel and the cached wallet ID must never enter the battle payload.
         bytes32[] memory saved = ICrapsPreferenceReader(ContractAddresses.CRAPS).extsload(slots);
         for (uint256 i; i < units; ++i) {
             field[i] = uint160(entrants[i]) | (uint256(1) << UNITS_SHIFT)

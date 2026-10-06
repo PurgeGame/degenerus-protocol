@@ -22,12 +22,12 @@ abstract contract DegenerusGameRngUtils is DegenerusGameStorage {
     ///      first; any ETH shortfall is sent as stETH. The ending's request closes nothing.
     function _closeRedemptionBatch() internal {
         address sdgnrs = ContractAddresses.SDGNRS;
-        uint256 claimable = _claimableOf(sdgnrs);
+        uint256 claimable = _claimableOf(SDGNRS_WALLET_ID);
         uint256 pull = IsDGNRS(sdgnrs).closeRedemptionBatch(claimable);
         if (pull == 0) return;
-        _debitClaimable(sdgnrs, pull);
+        _debitClaimable(SDGNRS_WALLET_ID, pull);
         claimablePool -= uint128(pull);
-        emit ClaimableSpent(sdgnrs, pull, claimable - pull, MintPaymentKind.Internal, pull);
+        emit ClaimableSpent(SDGNRS_WALLET_ID, pull, claimable - pull, MintPaymentKind.Internal, pull);
         uint256 ethOut = address(this).balance;
         if (ethOut > pull) ethOut = pull;
         if (ethOut != 0) {

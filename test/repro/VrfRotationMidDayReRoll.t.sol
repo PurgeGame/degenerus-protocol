@@ -6,6 +6,7 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title VrfRotationMidDayReRoll -- regression for finding C1 (VRF-rotation lootbox entropy re-roll).
 ///
@@ -15,7 +16,7 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 ///         remains nonzero, so the active flag and waiting payload decide authority.
 /// @dev TEST-ONLY. Callback landing is observed before mandatory keeper publication.
 contract VrfRotationMidDayReRoll is DeployProtocol {
-    uint256 private constant SLOT_LOOTBOX_PACKED = 33;
+    uint256 private constant SLOT_LOOTBOX_PACKED = GameSlots.LOOTBOX_RNG_PACKED;
     uint256 private constant LR_MID_DAY_BIT = 224;
     uint256 private _lastFulfilledReqId;
 

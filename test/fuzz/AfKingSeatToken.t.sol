@@ -5,6 +5,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {AFKingSubscriptionToken} from "../../contracts/AFKingSubscriptionToken.sol";
 import {GameAfkingModule} from "../../contracts/modules/GameAfkingModule.sol";
+import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
 /// @title AfKingSeatToken — integration tests for the AFKing seat ERC721
 ///        (sub <=> seat): the pass-purchase seat latch (whale
@@ -79,7 +80,7 @@ contract AfKingSeatToken is DeployProtocol {
     }
 
     function _isEligible(address who) internal view returns (bool) {
-        return (game.mintPackedFor(who) >> 154) & 1 == 1;
+        return (game.mintPackedFor(who) >> BitPackingLib.SEAT_CLAIMED_SHIFT) & 1 == 1;
     }
 
     // ──────────────────────────────────────────────────────────────────────

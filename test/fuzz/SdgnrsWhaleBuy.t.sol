@@ -8,6 +8,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IDegenerusGameWhaleModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @dev Test-only stand-in for the Game facade's code at the pinned GAME address: forwards every
 ///      call by delegatecall into the real whale module, so `purchaseWhalePassForSdgnrs` runs in
@@ -37,17 +38,17 @@ contract WhaleModuleForwarder {
 ///         recordCoverBox / mintSeatFor) under the adversarial states the STAGE can meet.
 ///         Test-only: ZERO contracts/*.sol mutation.
 contract SdgnrsWhaleBuy is DeployProtocol {
-    uint256 private constant GAME_CLAIMABLE_SLOT = 7; // balancesPacked root (low-128 = claimable)
-    uint256 private constant CLAIMABLE_POOL_SLOT = 1; // claimablePool uint128 @ slot 1, high-128
-    uint256 private constant CURSOR_SLOT = 56; // cursor slot; _sdgnrsBonusLevel uint24 @ byte 20
+    uint256 private constant GAME_CLAIMABLE_SLOT = GameSlots.BALANCES_PACKED; // balancesPacked root (low-128 = claimable)
+    uint256 private constant CLAIMABLE_POOL_SLOT = GameSlots.CLAIMABLE_POOL; // claimablePool uint128 @ slot 1, high-128
+    uint256 private constant CURSOR_SLOT = GameSlots.SUB_CURSOR; // cursor slot; _sdgnrsBonusLevel uint24 @ byte 20
     uint256 private constant SDGNRS_BONUS_OFFBYTES = 20;
     uint256 private constant LEVEL_OFFBYTES = 12; // `level` uint24 @ slot 0, byte 12
     uint256 private constant RNG_LOCKED_OFFBYTES = 19; // `rngLockedFlag` bool @ slot 0, byte 19
-    uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint32 => uint256)
-    uint256 private constant LOOTBOX_ORDER_SLOT = 15; // mapping(uint48 => mapping(address => uint256))
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33; // low 48 bits = live index
+    uint256 private constant RNG_WORD_BY_DAY_SLOT = GameSlots.RNG_WORD_BY_DAY; // mapping(uint32 => uint256)
+    uint256 private constant LOOTBOX_ORDER_SLOT = GameSlots.LOOTBOX_ORDER; // mapping(uint48 => mapping(address => uint256))
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED; // low 48 bits = live index
     uint256 private constant LB_SMALL_SHIFT = 81; // packed order word: small count [81:89]
-    uint256 private constant BOON_SLOT = 50; // mapping(address => BoonPacked), slot0 first
+    uint256 private constant BOON_SLOT = GameSlots.BOON_PACKED; // mapping(address => BoonPacked), slot0 first
     uint256 private constant BP_WHALE_DAY_SHIFT = 200;
     uint256 private constant BP_WHALE_TIER_SHIFT = 248;
     uint256 private constant BP_WHALE_CLEAR = ~(uint256(type(uint56).max) << BP_WHALE_DAY_SHIFT);
@@ -484,7 +485,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
     ///      move `claimablePool` (slot 1, high-128) in tandem so the solvency invariant holds.
     function _setClaimable(address who, uint256 amount) internal {
         uint256 mask128 = (uint256(1) << 128) - 1;
-        bytes32 cwSlot = keccak256(abi.encode(who, uint256(GAME_CLAIMABLE_SLOT)));
+        bytes32 cwSlot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(GAME_CLAIMABLE_SLOT)));
         uint256 packed = uint256(vm.load(address(game), cwSlot));
         uint256 prev = packed & mask128;
         uint256 high = packed & ~mask128;
@@ -524,7 +525,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
     }
 
     function _claimableOf(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(GAME_CLAIMABLE_SLOT))))) & ((uint256(1) << 128) - 1);
+        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(GAME_CLAIMABLE_SLOT))))) & ((uint256(1) << 128) - 1);
     }
 
     function _sdgnrsBonusLevel() internal view returns (uint24) {

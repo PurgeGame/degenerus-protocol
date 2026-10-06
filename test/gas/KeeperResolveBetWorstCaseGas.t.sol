@@ -8,6 +8,7 @@ import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 import {DegeneretteQueue as DQ} from "../helpers/DegeneretteQueue.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title Keeper resolve gas stress cases at the per-currency spin caps.
 /// @notice Searches 2,000 rounds for a high count of paying spins, then injects a
@@ -22,11 +23,11 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
 
     /// @dev lootboxRngPacked at slot 34 (forge inspect DegenerusGame storageLayout, Stage-B POST); lootboxRngIndex is
     ///      the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33; // post Stage-B game-storage repack: was 35
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED; // post Stage-B game-storage repack: was 35
     /// @dev lootboxRngWordByIndex mapping root slot (uint48 index => word) (post Stage-B game-storage repack: was 36).
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = GameSlots.RNG_WORD_CURRENT;
     /// @dev prizePoolsPacked at slot 2 ([future:128 | next:128]).
-    uint256 private constant PRIZE_POOLS_SLOT = 2;
+    uint256 private constant PRIZE_POOLS_SLOT = GameSlots.PRIZE_POOLS_PACKED;
 
     // -------------------------------------------------------------------------
     // Worst-case / measurement constants
@@ -564,12 +565,12 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         RecyclingState.seedWord(address(game), uint48(index), bytes32(rngWord));
         // What the request's seal also does: the consumer cursors restart and the new write tag's
         // queues are emptied, so a later cohort's bets sit at positions the Degenerette cursor reads.
-        uint256 s14 = uint256(vm.load(address(game), bytes32(uint256(14))));
-        vm.store(address(game), bytes32(uint256(14)), bytes32(s14 & ~(uint256(type(uint48).max) << 160)));
-        uint256 s56 = uint256(vm.load(address(game), bytes32(uint256(56))));
-        vm.store(address(game), bytes32(uint256(56)), bytes32(s56 & ~(uint256(type(uint48).max) << 56)));
+        uint256 s14 = uint256(vm.load(address(game), bytes32(GameSlots.TICKET_CURSOR)));
+        vm.store(address(game), bytes32(GameSlots.TICKET_CURSOR), bytes32(s14 & ~(uint256(type(uint48).max) << 160)));
+        uint256 s56 = uint256(vm.load(address(game), bytes32(GameSlots.SUB_CURSOR)));
+        vm.store(address(game), bytes32(GameSlots.SUB_CURSOR), bytes32(s56 & ~(uint256(type(uint48).max) << 56)));
         vm.store(address(game), keccak256(abi.encode(uint256((index ^ 1) & 1), DQ.QUEUE_SLOT)), bytes32(0));
-        vm.store(address(game), keccak256(abi.encode(uint256((index ^ 1) & 1), uint256(57))), bytes32(0));
+        vm.store(address(game), keccak256(abi.encode(uint256((index ^ 1) & 1), GameSlots.BOX_PLAYERS)), bytes32(0));
         // The day itself is sealed, as after a mid-day request: the delivered cohort's read
         // consumers are the engine's only work, so a measured call ends when the cohort completes.
         uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));

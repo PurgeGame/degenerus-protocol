@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title WhaleBoonExpiry -- Regression test for the whale-boon time-expiry fix in
 ///        checkAndClearExpiredBoon (DegenerusGameBoonModule, whale section, ~line 303-318).
@@ -36,12 +37,12 @@ contract WhaleBoonExpiry is DeployProtocol {
     // from `forge inspect DegenerusGame storage-layout` on the working tree,
     // post Stage B Game-storage packing).
     // ──────────────────────────────────────────────────────────────────────
-    uint256 constant SLOT_BOON_PACKED  = 50;   // mapping(address => BoonPacked)
-    uint256 constant SLOT_LOOTBOX_ETH  = 15;   // mapping(uint48 => mapping(address => uint256)) (packed order word)
-    uint256 constant SLOT_LOOTBOX_WORD = 34;   // mapping(uint48 => uint256) lootboxRngWordByIndex
-    uint256 constant SLOT_LOOTBOX_RNG_IDX = 33; // lootboxRngPacked (low 48 bits = lootboxRngIndex)
-    uint256 constant SLOT_BOX_PLAYERS = 57;     // mapping(uint48 => address[]) boxPlayers (sweep's discovery queue)
-    uint256 constant SLOT_BOX_CURSORS = 56;     // packed (boxCursor @ byte 7, humanReadComplete @ byte 13)
+    uint256 constant SLOT_BOON_PACKED  = GameSlots.BOON_PACKED;   // mapping(address => BoonPacked)
+    uint256 constant SLOT_LOOTBOX_ETH  = GameSlots.LOOTBOX_ORDER;   // mapping(uint48 => mapping(address => uint256)) (packed order word)
+    uint256 constant SLOT_LOOTBOX_WORD = GameSlots.RNG_DAY_TAGS;   // mapping(uint48 => uint256) lootboxRngWordByIndex
+    uint256 constant SLOT_LOOTBOX_RNG_IDX = GameSlots.LOOTBOX_RNG_PACKED; // lootboxRngPacked (low 48 bits = lootboxRngIndex)
+    uint256 constant SLOT_BOX_PLAYERS = GameSlots.BOX_PLAYERS;     // mapping(uint48 => address[]) boxPlayers (sweep's discovery queue)
+    uint256 constant SLOT_BOX_CURSORS = GameSlots.BOX_CURSOR;     // packed (boxCursor @ byte 7, humanReadComplete @ byte 13)
 
     // Packed lootboxOrder bit layout (mirrors DegenerusGameStorage lootboxOrder -- see LB_* there).
     uint256 constant LB_SCORE_SHIFT        = 24;  // score        [24:39]

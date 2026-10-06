@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @notice A multi-day VRF stall resolves the day that requested the word with that word,
 ///         settles the skipped days' coinflips from derived words, and then resumes at the
@@ -12,7 +13,7 @@ contract StallDaysNeverHappened is DeployProtocol {
     uint256 private constant WORD_NORMAL = 0xA11CE;
     uint256 private constant WORD_LATE = 0xBEEF_0001;
     uint256 private constant WORD_FRESH = 0xC0FFEE_0002;
-    uint256 private constant FOIL_DRAW_SLOT = 60;
+    uint256 private constant FOIL_DRAW_SLOT = GameSlots.DAILY_FOIL_DRAW;
 
     uint256 private _t;
     uint256 private _lastFulfilledReqId;

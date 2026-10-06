@@ -5,10 +5,11 @@ import {Test} from "forge-std/Test.sol";
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-contract DrainPrices is DegenerusGameTicketModule {
+contract DrainPrices is DegenerusGameTicketModule, WalletSeed {
     function recordAtQueueIndex(uint24 lvl, uint256 index) external view returns (uint256) {
-        return _entryRecord(lvl, _tqPositionAt(ticketQueue[_ticketQueueStorageKey(lvl)], index));
+        return _entryRecordOf(lvl, _tqPositionAt(ticketQueue[_ticketQueueStorageKey(lvl)], index));
     }
     function roundMax() external pure returns (uint256) { return ROUND_MAX; }
     function entryMax() external pure returns (uint256) { return ENTRY_MAX; }

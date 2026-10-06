@@ -3,6 +3,7 @@ pragma solidity 0.8.34;
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {IJackpotBattle} from "../../contracts/interfaces/IJackpotBattle.sol";
 import {PurchaseDailyFixture, FreshWordLeg, PurchaseDailySeeder} from "./PurchaseDailyWorstCase.t.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 /// @dev Distinct wallets that all share low byte zero.
 function fieldWallet(uint256 offset, uint256 i) pure returns (address) {
@@ -11,12 +12,12 @@ function fieldWallet(uint256 offset, uint256 i) pure returns (address) {
 
 /// @dev Seeds every unminted queue the award draw reads with low-byte-sharing wallets, so each draw
 ///      chunk's field preparation takes its exact duplicate scan.
-contract PreferredFieldSeeder is DegenerusGame {
+contract PreferredFieldSeeder is DegenerusGame, WalletSeed {
     function seedLowByteField(uint24 purchaseLevel, uint256 holders) external {
         for (uint24 c = purchaseLevel + 1; c <= purchaseLevel + 99; ++c) {
             for (uint256 i; i < holders; ++i) {
                 address p = fieldWallet(c - purchaseLevel - 1, i);
-                _tqAppend(_tqFarFutureKey(c), uint32(_registerEntryOwner(p, c) >> OWNER_IDX_SHIFT));
+                _tqAppend(_tqFarFutureKey(c), _seedWallet(p));
             }
         }
     }

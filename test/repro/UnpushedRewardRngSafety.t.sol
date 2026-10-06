@@ -9,10 +9,12 @@ import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {IDegenerusGameLootboxModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @dev Seed boundary states only; all opening, publication and request transitions use
 ///      the deployed production modules. Clean entries represent an already-opened prefix.
-contract RewardRngBoundaryFixture is DegenerusGame {
+contract RewardRngBoundaryFixture is DegenerusGame, WalletSeed {
     function seedStampedRead(
         address player, uint24 sealedDay, uint24 stampDay, uint256 word, uint256 cleanPrefix, bool complete
     ) external {
@@ -26,10 +28,16 @@ contract RewardRngBoundaryFixture is DegenerusGame {
         humanReadComplete = complete;
         _recordDailyRng(sealedDay, word);
         delete _subscribers;
-        for (uint256 i; i < cleanPrefix; ++i) _subscribers.push(address(uint160(0x100000 + i)));
-        _subscribers.push(player);
-        _subscriberIndex[player] = _subscribers.length;
-        Sub storage sub = _subOf[player];
+        for (uint256 i; i < cleanPrefix; ++i) {
+            address member = address(uint160(0x100000 + i));
+            uint32 memberId = _seedWallet(member);
+            _subscribers.push(uint256(uint160(member)) | (uint256(memberId) << 160));
+            _subOf[memberId].setPosition = uint32(_subscribers.length);
+        }
+        uint32 subId = _seedWallet(player);
+        _subscribers.push(uint256(uint160(player)) | (uint256(subId) << 160));
+        _subOf[subId].setPosition = uint32(_subscribers.length);
+        Sub storage sub = _subOf[subId];
         sub.amount = 10;
         sub.score = 1200;
         sub.lastAutoBoughtDay = stampDay;
@@ -64,15 +72,15 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
     }
 
     function _pending() private view returns (uint256) {
-        return (uint256(game.extsload(bytes32(uint256(56)))) >> 184) & 0xFFFF;
+        return (uint256(game.extsload(bytes32(GameSlots.PENDING_BOX_COUNT))) >> (GameSlots.PENDING_BOX_COUNT_OFFSET * 8)) & 0xFFFF;
     }
 
     function _openedDay() private view returns (uint24) {
-        return uint24(uint256(game.extsload(keccak256(abi.encode(PLAYER, uint256(52))))) >> 80);
+        return uint24(uint256(game.extsload(keccak256(abi.encode(uint256(game.walletIdOf(PLAYER)), GameSlots.SUB_OF)))) >> 80);
     }
 
     function _humanComplete() private view returns (bool) {
-        return uint8(uint256(game.extsload(bytes32(uint256(56)))) >> 104) != 0;
+        return uint8(uint256(game.extsload(bytes32(GameSlots.SUB_CURSOR))) >> 104) != 0;
     }
 
     function _expectStampedResolve(uint24 day) private {
@@ -80,7 +88,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
             ContractAddresses.GAME_LOOTBOX_MODULE,
             abi.encodeWithSelector(
                 IDegenerusGameLootboxModule.resolveAfkingBox.selector,
-                PLAYER, uint256(0.01 ether), day, SESSION_WORD, uint16(1200)
+                PLAYER, game.walletIdOf(PLAYER), uint256(0.01 ether), day, SESSION_WORD, uint16(1200)
             )
         );
     }
@@ -229,13 +237,13 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         _keep();
         _buyWriteBox();
         uint48 write = RecyclingState.writeBuffer(address(game));
-        assertGt(uint256(game.extsload(keccak256(abi.encode(write, uint256(57))))), 0);
+        assertGt(uint256(game.extsload(keccak256(abi.encode(write, GameSlots.BOX_PLAYERS)))), 0);
 
         _expectStampedResolve(day);
         for (uint256 i; i < 64 && _pending() != 0; ++i) _keep();
         assertEq(_pending(), 0);
         assertTrue(game.rngComplete(), "only the sealed read session must finish");
-        assertGt(uint256(game.extsload(keccak256(abi.encode(write, uint256(57))))), 0, "new write orders remain queued");
+        assertGt(uint256(game.extsload(keccak256(abi.encode(write, GameSlots.BOX_PLAYERS)))), 0, "new write orders remain queued");
     }
 
     function test_AfkingDrainAllowsMiddaySessionWithoutReopeningStamp() public {

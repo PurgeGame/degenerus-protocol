@@ -3,13 +3,14 @@ pragma solidity 0.8.34;
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @notice Regression: ETH sent alongside a FLIP Degenerette bet — which consumes no
 ///         ETH — is credited to the funder's withdrawable afking balance (solvency-preserving via
 ///         claimablePool), not stranded in the contract. A zero-value token bet is unaffected.
 contract DegeneretteStrayEthToAfking is DeployProtocol {
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED;
     uint8 private constant CURRENCY_FLIP = 1;
     uint8 private constant CURRENCY_WWXRP = 3;
     uint32 private constant TICKET = 0x01020304;

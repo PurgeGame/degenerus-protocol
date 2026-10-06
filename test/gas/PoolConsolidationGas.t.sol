@@ -8,6 +8,7 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {FreshWordLeg} from "./PurchaseDailyWorstCase.t.sol";
 import {CenturyBafScores, CenturyNativeGasHost} from "./AdvanceCenturyConsolidationGas.t.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @dev Last-purchase-day state one level below `lvl`; the real request pre-increments the level.
 ///      A Decimator event of `decEntrants` entrants is open for `lvl` (sealing is constant work
@@ -185,9 +186,9 @@ abstract contract PoolConsolidationFixture is FreshWordLeg {
         }
     }
 
-    /// @dev Balance slot (`balancesPacked`, game slot 7) of a yield surplus recipient.
-    function _balanceSlot(address who) private pure returns (bytes32) {
-        return keccak256(abi.encode(who, uint256(7)));
+    /// @dev Balance slot (`balancesPacked`, keyed by wallet ID) of a yield surplus recipient.
+    function _balanceSlot(address who) private view returns (bytes32) {
+        return keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.BALANCES_PACKED));
     }
 
     /// @dev How many of the three yield surplus recipients hold an empty balance slot (a credit to one

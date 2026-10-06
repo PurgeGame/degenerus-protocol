@@ -351,7 +351,7 @@ async function harvestJackpotFlipWinByCall(receipts, jackpotInterface) {
   //
   // Event signature (DegenerusGameJackpotModule.sol L96-102):
   //   event JackpotFlipWin(
-  //       address indexed winner,
+  //       uint32 indexed walletId,
   //       uint24  indexed level,   // <- positional arg: lvlPrime sampled per pull
   //       uint8   indexed traitId,
   //       uint256 amount,
@@ -371,7 +371,7 @@ async function harvestJackpotFlipWinByCall(receipts, jackpotInterface) {
           groupForTx.push({
             txHash: tx.hash,
             args: {
-              winner: parsed.args.winner,
+              winner: parsed.args.walletId,
               lvl: Number(parsed.args.level),
               traitId: Number(parsed.args.traitId),
               amount: BigInt(parsed.args.amount),

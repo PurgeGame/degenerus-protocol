@@ -7,6 +7,7 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {TicketQueueStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title MiddayFrozenPoolLatch — a mid-day request that freezes a future pool must release.
 ///
@@ -329,21 +330,21 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
 
     /// @dev LR_MID_DAY — lootboxRngPacked (slot 33) bits [224, 232).
     function _midDayLatch() internal view returns (uint256) {
-        return (uint256(vm.load(address(game), bytes32(uint256(33)))) >> 224) & 0xFF;
+        return (uint256(vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED))) >> 224) & 0xFF;
     }
 
     /// @dev foilQueue (slot 61) keyed by foilWriteSlot (slot 62, byte 10), the foil cohort's
     ///      own toggle that only the daily request flips.
     function _foilWriteCount() internal view returns (uint256) {
-        bool foilWriteSlot = ((uint256(vm.load(address(game), bytes32(uint256(62)))) >> 80) & 1) != 0;
+        bool foilWriteSlot = ((uint256(vm.load(address(game), bytes32(GameSlots.FOIL_CURSOR))) >> 80) & 1) != 0;
         return uint256(vm.load(address(game),
-            keccak256(abi.encode(uint256(foilWriteSlot ? 1 : 0), uint256(61)))));
+            keccak256(abi.encode(uint256(foilWriteSlot ? 1 : 0), GameSlots.FOIL_QUEUE))));
     }
 
     function _foilResolved() internal view returns (bool) {
         uint24 lvl = currentKey & ~TICKET_SLOT_BIT;
         uint256 packed = uint256(vm.load(address(game),
-            keccak256(abi.encode(buyer, keccak256(abi.encode(uint256(lvl & 3), uint256(58)))))));
+            keccak256(abi.encode(buyer, keccak256(abi.encode(uint256(lvl & 3), GameSlots.FOIL_RECORD))))));
         assertEq(uint24(packed >> 208), lvl, "foil record retains the purchased level");
         return packed >> 255 != 0;
     }

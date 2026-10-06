@@ -56,9 +56,9 @@ contract GrowthFoilStorageTest is GrowthFoilFixture {
         vm.mockCall(address(game), abi.encodeWithSignature("mintPackedFor(address)", PLAYER), abi.encode(mintData));
         vm.mockCall(address(game), abi.encodeWithSignature("hasDeityPass(address)", PLAYER), abi.encode(deity));
         vm.store(address(quests), keccak256(abi.encode(PLAYER, uint256(1))), bytes32(uint256(afking ? 1 : 0) << 104));
-        uint24 unitsLevel = uint24(mintData >> 104);
-        bool activity = (unitsLevel == lvl || unitsLevel == lvl + 1) && uint16(mintData >> 228) >= 400;
-        bool loyalty = uint24(mintData >> 48) >= 5 || (uint24(mintData >> 128) != 0 && ((mintData >> 152) & 3) != 0) || deity;
+        uint24 unitsLevel = uint24(mintData >> BitPackingLib.LEVEL_UNITS_LEVEL_SHIFT);
+        bool activity = (unitsLevel == lvl || unitsLevel == lvl + 1) && uint16(mintData >> BitPackingLib.LEVEL_UNITS_SHIFT) >= 400;
+        bool loyalty = uint24(mintData >> 48) >= 5 || (uint24(mintData >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) != 0 && ((mintData >> BitPackingLib.WHALE_PASS_TYPE_SHIFT) & 3) != 0) || deity;
         bool expectedReward = (activity && loyalty) || afking;
         (bool mayBet, bool earnsReward) = quests.marketBetGates(PLAYER, lvl);
         assertEq(earnsReward, expectedReward);

@@ -34,7 +34,8 @@ contract CustomerFollowupSeeder is DegenerusGameStorage {
         jackpotPhaseFlag = false;
         presaleOver = true;
         _setPrizePools(10 ether, 10 ether);
-        balancesPacked[player] = uint256(10 ether) | (uint256(10 ether) << 128);
+        (uint32 id,) = _registerWallet(player, type(uint256).max);
+        balancesPacked[id] = uint256(10 ether) | (uint256(10 ether) << 128);
         claimablePool = 20 ether;
     }
 }
@@ -215,7 +216,10 @@ contract CustomerFollowupGasTest is DeployProtocol {
     function test_Gas_DegeneretteProtocolSymbol() public { _begin(); _degen(0, 0, 0.01 ether); _end("degen_protocol_symbol"); }
 
 
-    function _existingMint() private { vm.store(address(game), keccak256(abi.encode(PLAYER, uint256(9))), bytes32(uint256(1))); }
+    function _existingMint() private {
+        bytes32 slot = keccak256(abi.encode(PLAYER, uint256(9)));
+        vm.store(address(game), slot, vm.load(address(game), slot) | bytes32(uint256(1)));
+    }
     function test_Gas_DegeneretteExistingMint() public {
         _existingMint(); _begin(); _degen(0, 3, 0.01 ether); _end("degen_existing_mint");
     }
@@ -232,7 +236,7 @@ contract CustomerFollowupGasTest is DeployProtocol {
         CustomerFollowupSeeder(address(game)).decimatorBoon(PLAYER, expired);
         vm.etch(address(game), code);
     }
-    function _dec() private { vm.prank(PLAYER); coin.decimatorBurn(address(0), 1000 ether, 0); }
+    function _dec() private { vm.prank(PLAYER); coin.decimatorBurn(address(0), 2_000, 0); }
     function test_Gas_DecimatorFirst() public {
         _prepareDecimator(); _begin(); _dec(); _end("decimator_first");
     }

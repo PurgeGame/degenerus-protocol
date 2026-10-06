@@ -152,14 +152,14 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         uint32 day = _openBatchId();
         address[] memory players = _newBurners(3, sdgnrs.totalSupply() * 16 / 1000);
         _resolve(day, 175, 99);
-        (uint128 thirdExpected,) = sdgnrs.pendingRedemptions(players[2], day);
+        (uint128 thirdExpected,) = sdgnrs.pendingRedemptions(game.walletIdOf(players[2]), day);
         // Two maximum beneficiaries fit 4M; the third's whole admission then does not.
         uint256 allowance = _oneClaimAllowance();
         (bool done, uint256 charged, uint256 quote) = _drain(allowance);
         assertFalse(done); assertLe(charged, 4_000_000);
-        (uint128 first,) = sdgnrs.pendingRedemptions(players[0], day);
-        (uint128 second,) = sdgnrs.pendingRedemptions(players[1], day);
-        (uint128 third,) = sdgnrs.pendingRedemptions(players[2], day);
+        (uint128 first,) = sdgnrs.pendingRedemptions(game.walletIdOf(players[0]), day);
+        (uint128 second,) = sdgnrs.pendingRedemptions(game.walletIdOf(players[1]), day);
+        (uint128 third,) = sdgnrs.pendingRedemptions(game.walletIdOf(players[2]), day);
         assertEq(first, 0); assertGt(second, 0); assertEq(third, thirdExpected); assertGt(third, 0);
         uint256 beforeReserve = sdgnrs.pendingRedemptionEthValue();
         (done, charged,) = _drain(1_000_000);
@@ -207,7 +207,7 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
     function test_CachedEscrowRewardCannotBeSuppliedByAnExternalCaller() public {
         uint32 day = _openBatchId();
         vm.expectRevert(sDGNRS.Unauthorized.selector);
-        sdgnrs.settleRedemptionHead(alice, day, 99);
+        sdgnrs.settleRedemptionHead(alice, game.walletIdOf(alice), day, 99);
     }
 
     function test_PerClaimStepsAndOneCallPlayerEventsAndBalancesAreIdentical() public {
@@ -366,8 +366,8 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         address[] memory players = _newBurners(67, 1 ether);
         _resolve(day, 100, 99);
         for (uint256 j; j < 22; ++j) _settleOneClaim();
-        (uint128 settled,) = sdgnrs.pendingRedemptions(players[21], day);
-        (uint128 next,) = sdgnrs.pendingRedemptions(players[22], day);
+        (uint128 settled,) = sdgnrs.pendingRedemptions(game.walletIdOf(players[21]), day);
+        (uint128 next,) = sdgnrs.pendingRedemptions(game.walletIdOf(players[22]), day);
         assertEq(settled, 0, "harness: the first 22 claims settled in FIFO order");
         assertGt(next, 0, "harness: 45 dust claims remain");
         // A caller may fund a safe checkpoint. The remaining physical gas admits

@@ -6,20 +6,21 @@ import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWha
 import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-contract RetiredWhaleHarness is DegenerusGameWhaleModule {
+contract RetiredWhaleHarness is DegenerusGameWhaleModule, WalletSeed {
     function seed(address deity, bool retired) external {
-        for (uint8 i; i < 32; ++i) deityBySymbol[i] = deity;
+        for (uint8 i; i < 32; ++i) deityBySymbol[i] = _seedWallet(deity);
         _setTicketBufferLevel(retired ? 3 : 1);
     }
-    function awarded(address player) external view returns (uint256) { return whalePassClaims[player]; }
+    function awarded(address player) external view returns (uint256) { return _halfPassesOf(player); }
 }
-contract RetiredJackpotHarness is DegenerusGameJackpotModule {
+contract RetiredJackpotHarness is DegenerusGameJackpotModule, WalletSeed {
     function seed(address deity, bool retired) external {
-        for (uint8 i; i < 32; ++i) deityBySymbol[i] = deity;
+        for (uint8 i; i < 32; ++i) deityBySymbol[i] = _seedWallet(deity);
         _setTicketBufferLevel(retired ? 3 : 1);
     }
-    function credited(address player) external view returns (uint256) { return _claimableOf(player); }
+    function credited(address player) external view returns (uint256) { return _claimableOf(_walletIdOf(player)); }
 }
 
 contract RetiredTicketReadersTest is Test {

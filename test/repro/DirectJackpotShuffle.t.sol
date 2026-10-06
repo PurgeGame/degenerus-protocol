@@ -12,8 +12,8 @@ import {PackedTicketShuffle} from "../../contracts/libraries/PackedTicketShuffle
 contract DirectShuffleHarness is DegenerusGameTicketModule, BucketSeed {
     function seed(bool tails) external {
         _setTicketBufferLevel(42);
-        _registerEntryOwner(address(1), 42);
-        for (uint256 i; i < 32; ++i) _registerEntryOwner(address(uint160(0x1000 + i)), 42);
+        _seedWallet(address(1));
+        for (uint256 i; i < 32; ++i) (uint80(_seedWallet(address(uint160(0x1000 + i)))) << OWNER_IDX_SHIFT);
         if (tails) {
             for (uint256 t; t < 256; ++t) _seedBucket(42, uint8(t), address(0xCAFE), t == 253 ? 1 : 7);
         }
@@ -32,13 +32,13 @@ contract DirectShuffleHarness is DegenerusGameTicketModule, BucketSeed {
         result = words;
     }
     function ownerDataSlot() external pure returns (uint256 slot) {
-        assembly ("memory-safe") { mstore(0, ticketOwners.slot) slot := keccak256(0, 32) }
+        assembly ("memory-safe") { mstore(0, wallets.slot) slot := keccak256(0, 32) }
     }
     function inventory() external view returns (uint32[32] memory traits, uint8[32] memory masks) {
         for (uint256 t; t < 256; ++t) {
             uint256 count = _bucketLength(42, t);
             for (uint256 i; i < count; ++i) {
-                address owner = _bucketOwnerAtUnchecked(42, uint8(t), i);
+                address owner = _bucketOwnerAt(42, uint8(t), i);
                 if (owner == address(0xCAFE)) continue;
                 uint256 idx = uint160(owner) - 0x1000;
                 uint8 bit = uint8(1 << (t >> 6));

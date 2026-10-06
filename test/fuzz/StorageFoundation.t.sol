@@ -4,9 +4,10 @@ pragma solidity 0.8.34;
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 /// @title StorageHarness -- Exposes internal DegenerusGameStorage helpers for testing.
-contract StorageHarness is DegenerusGameAdvanceModule {
+contract StorageHarness is DegenerusGameAdvanceModule, WalletSeed {
     // --- Prize Pool helpers ---
     function exposed_setPrizePools(uint128 next, uint128 future) external {
         _setPrizePools(next, future);
@@ -86,7 +87,7 @@ contract StorageHarness is DegenerusGameAdvanceModule {
 
     // --- Ticket queue helper for revert tests ---
     function pushToTicketQueue(uint24 key, address addr) external {
-        _tqAppend(key, uint32(_registerEntryOwner(addr, key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT)) >> OWNER_IDX_SHIFT));
+        _tqAppend(key, _seedWallet(addr));
     }
 
     // --- Consolidated tail-pack accessor (levelDgnrsPacked, post-v62 fold) ---

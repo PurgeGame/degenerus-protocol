@@ -7,6 +7,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IDegenerusGameTicketModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 contract RecyclingProgressSeeder is DeadVrfSeeder {
     function seedDeferredFoil(address foilOwner, address ticketOwner) external {
@@ -17,9 +18,9 @@ contract RecyclingProgressSeeder is DeadVrfSeeder {
         earlyTicketLevel = 203;
         _setTicketBufferLevel(201);
         _setTicketBufferLevel(202);
-        foilRecord[201 & 3][foilOwner] = uint256(day) | (uint256(10_000) << _FOIL_MULT_SHIFT)
+        foilRecord[201 & 3][_seedWallet(foilOwner)] = uint256(day) | (uint256(10_000) << _FOIL_MULT_SHIFT)
             | (uint256(201) << _FOIL_LEVEL_SHIFT);
-        uint256 pos = uint256(_registerEntryOwner(foilOwner, 201) >> OWNER_IDX_SHIFT) - 1;
+        uint256 pos = uint256(_seedWallet(foilOwner));
         foilQueue[_foilReadKey()].push(((pos + 1) << 192) | (uint256(201) << 160) | uint160(foilOwner));
         foilGenerationDay = 0;
         foilFirstDrawDay = 0;
@@ -44,14 +45,14 @@ contract RecyclingProgressSeeder is DeadVrfSeeder {
         _seedQueued(_tqReadKey(203), 203, owner, uint80(100) << 8);
     }
     function seedPaidFoil(uint24 lvl, uint24 day, address owner) external {
-        foilRecord[lvl & 3][owner] = uint256(day) | (uint256(10_000) << _FOIL_MULT_SHIFT)
+        foilRecord[lvl & 3][_seedWallet(owner)] = uint256(day) | (uint256(10_000) << _FOIL_MULT_SHIFT)
             | (uint256(lvl) << _FOIL_LEVEL_SHIFT);
-        uint256 pos = uint256(_registerEntryOwner(owner, lvl) >> OWNER_IDX_SHIFT) - 1;
+        uint256 pos = uint256(_seedWallet(owner));
         foilQueue[_foilReadKey()].push(((pos + 1) << 192) | (uint256(lvl) << 160) | uint160(owner));
         foilGenerationDay = 0;
         foilFirstDrawDay = 0;
     }
-    function foilRecordWord(uint24 lvl, address owner) external view returns (uint256) { return _foilRecordWord(owner, lvl); }
+    function foilRecordWord(uint24 lvl, address owner) external view returns (uint256) { return _foilRecordWord(_walletIdOf(owner), lvl); }
     function retireBeforeFoilWord() external { _setTicketBufferLevel(203); }
     /// @dev The production ticket worker, delegatecalled exactly as mineFlip's Tickets stage
     ///      dispatches it, with all remaining gas as its allowance.

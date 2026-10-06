@@ -12,6 +12,7 @@ import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 import {AdvanceStageStream} from "../helpers/AdvanceStageStream.sol";
 import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
+import {CrapsSlots} from "../helpers/GameSlots.sol";
 
 /// @title PurchaseDailyWorstCase — the purchase-phase daily stages at their winner caps.
 /// @notice Stage 6 pays 105 ETH winners (or level one's 50 trait shares) and prices tickets.
@@ -88,8 +89,8 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
         // virtual bucket entries. A level-1 trait draw excludes them as well — a deity lands on
         // VAULT / sDGNRS, whose seat is refused (cheaper than a fresh seat).
         if (s.bonusHolders == 0 || s.traitHolders != 0) {
-            deityBySymbol[VAULT_DEITY_SYMBOL] = address(0);
-            deityBySymbol[SDGNRS_DEITY_SYMBOL] = address(0);
+            deityBySymbol[VAULT_DEITY_SYMBOL] = 0;
+            deityBySymbol[SDGNRS_DEITY_SYMBOL] = 0;
         }
         // Level 1: genesis tickets sit in level 1's queues and would be drained (their own stage)
         // ahead of the draws once a fresh word swaps the slots. Empty both slots so the word-apply
@@ -110,7 +111,6 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
 
         // Keep registry position 0 out of every seeded level (a zero lane index understates gas).
         for (uint24 L = pl; L <= pl + 4; ++L) {
-            if (ticketOwners.length == 0) _registerEntryOwner(address(1), L);
         }
 
         for (uint8 q; q < 4; ++q) {
@@ -137,7 +137,7 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
             for (uint24 c = pl + 1; c <= pl + 99; ++c) {
                 uint160 b = s.base + 0x2000000 + uint160(c - pl - 1) * 0x1000;
                 for (uint256 i; i < s.ffHolders; ++i) {
-                    _tqAppend(_tqFarFutureKey(c), uint32(_registerEntryOwner(address(b + uint160(i + 1)), c) >> OWNER_IDX_SHIFT));
+                    _tqAppend(_tqFarFutureKey(c), _seedWallet(address(b + uint160(i + 1))));
                 }
             }
         }
@@ -171,7 +171,7 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
 abstract contract FreshWordLeg is AdvanceStageStream {
     uint8 internal constant STAGE_RNG_REQUESTED_ = 1;
     uint8 internal constant STAGE_RNG_APPLIED_ = 18;
-    uint256 internal constant CRAPS_DAY_STAKED_SLOT = 10; // CrapsBattle `_dayStaked` (forge inspect)
+    uint256 internal constant CRAPS_DAY_STAKED_SLOT = CrapsSlots.DAY_STAKED; // CrapsBattle `_dayStaked`
     /// @dev Historical per-transaction battle figure. Not asserted here: one 50-entry field group is
     ///      bounded per chunk by JackpotMergeAdvance (declared JACKPOT_BATTLE_DRAW envelope).
     uint256 internal constant BATTLE_TX_LIMIT = 10_000_000;
@@ -228,8 +228,8 @@ abstract contract FreshWordLeg is AdvanceStageStream {
 
     /// @dev ETH and ticket winner logs: the daily legs a word-apply or battle tx never carries.
     function _dailyLegLogs(Vm.Log[] memory logs) internal pure returns (uint256) {
-        return _countTopic(logs, keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)"))
-            + _countTopic(logs, keccak256("JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)"));
+        return _countTopic(logs, keccak256("JackpotEthWin(uint32,uint24,uint16,uint256,uint256)"))
+            + _countTopic(logs, keccak256("JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)"));
     }
 
     /// @dev One mineFlip call at a realistic 10M allowance: its last stage marker, its gas
@@ -308,10 +308,10 @@ abstract contract PurchaseDailyFixture is AdvanceStageStream {
     /// @dev Intrinsic cost of a zero-arg mineFlip() tx: 21,000 base + 4 non-zero calldata bytes.
     uint256 internal constant INTRINSIC = 21_064;
 
-    bytes32 internal constant ETH_WIN_SIG = keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)");
+    bytes32 internal constant ETH_WIN_SIG = keccak256("JackpotEthWin(uint32,uint24,uint16,uint256,uint256)");
     bytes32 internal constant TICKET_WIN_SIG =
-        keccak256("JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)");
-    bytes32 internal constant FLIP_WIN_SIG = keccak256("JackpotFlipWin(address,uint24,uint8,uint256,uint256)");
+        keccak256("JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)");
+    bytes32 internal constant FLIP_WIN_SIG = keccak256("JackpotFlipWin(uint32,uint24,uint8,uint256,uint256)");
     bytes32 internal constant BATTLE_ENTRY_SIG = keccak256("JackpotBattleEntry(uint64,uint256,address,uint256,uint32)");
     bytes32 internal constant BAF_ARMED_SIG = keccak256("BafDrawArmed(uint24)");
     bytes32 internal constant ADVANCE_SIG = keccak256("Advance(uint8,uint24)");

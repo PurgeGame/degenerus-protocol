@@ -19,7 +19,7 @@ contract LootboxTicketLanesFlush is DeployProtocol {
 
     bytes32 internal constant OPENED =
         keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
-    bytes32 internal constant QUEUED = keccak256("EntriesQueued(address,uint24,uint32)");
+    bytes32 internal constant QUEUED = keccak256("EntriesQueued(uint32,uint24,uint32)");
 
     function setUp() public {
         _deployProtocol();

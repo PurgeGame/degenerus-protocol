@@ -5,18 +5,19 @@ import {Test} from "forge-std/Test.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {TicketLevelPrep} from "../helpers/TicketLevelPrep.sol";
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-contract TicketQueueRingHarness is TicketLevelPrep {
+contract TicketQueueRingHarness is TicketLevelPrep, WalletSeed {
     function setLevel(uint24 lvl) external { level = lvl; jackpotPhaseFlag = false; }
-    function enqueue(address player, uint24 lvl, uint32 n) external { _queueEntries(player, lvl, n, false); }
+    function enqueue(address player, uint24 lvl, uint32 n) external { _queueEntries(_seedWallet(player), lvl, n, false); }
     function append(uint24 key, uint32 pos) external { _tqAppend(key, pos); }
     function release(uint24 key) external { _releaseTicketQueue(key); }
     function writeKey(uint24 lvl) external view returns (uint24) { return _tqWriteKey(lvl); }
     function farKey(uint24 lvl) external pure returns (uint24) { return _tqFarFutureKey(lvl); }
     function physical(uint24 key) external pure returns (uint24) { return _ticketQueueStorageKey(key); }
     function count(uint24 key) external view returns (uint256) { return _ticketQueueLength(key); }
-    function owed(uint24 key, address player) external view returns (uint80) { return _entriesOwed(key, player); }
-    function position(uint24 key, address player) external view returns (uint32) { return ticketOwnerId[player]; }
+    function owed(uint24 key, address player) external view returns (uint80) { return _owedOf(key, player); }
+    function position(uint24 key, address player) external view returns (uint32) { return _walletIdOf(player); }
     function prepare(uint24 lvl) external returns (bool) { return _prepareTicketLevel(lvl); }
     function flip() external { ticketWriteSlot = !ticketWriteSlot; }
     function reveal(uint24 key, uint8 trait) external {
@@ -26,7 +27,7 @@ contract TicketQueueRingHarness is TicketLevelPrep {
         uint256 n = _ticketQueueLength(key);
         for (uint256 i; i < n; ++i) {
             uint32 pos = _tqPositionAt(q, i);
-            uint80 packed = uint80(_entryRecord(key, pos) >> 160);
+            uint80 packed = uint80(_entryRecordOf(key, pos) >> 160);
             _bucketAppendRun(_traitBufferBase(lvl), trait, pos - 1, uint32(packed >> 8), lvl);
             _setEntryOwed(key, pos, 0);
         }
@@ -34,7 +35,7 @@ contract TicketQueueRingHarness is TicketLevelPrep {
     }
     function bucketOwner(uint24 lvl, uint8 trait, uint256 i) external view returns (address) {
         require(i < _bucketLength(lvl, trait), "outside");
-        return _bucketOwnerAtUnchecked(lvl, trait, i);
+        return _bucketOwnerAt(lvl, trait, i);
     }
     function extsload(bytes32 slot) external view returns (bytes32 value) {
         assembly ("memory-safe") { value := sload(slot) }

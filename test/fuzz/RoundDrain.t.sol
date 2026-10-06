@@ -56,7 +56,7 @@ contract RoundDrainHarness is MintBucketSeed {
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((uint48(0) + 1) & 1) << 12);
         rngWordCurrent = entropy | 1; _setRngSessionPublished(true); _setRngComplete(false);
         for (uint256 i; i < players.length; ++i) {
-            _queueEntriesScaled(players[i], lvl, entriesScaled[i]);
+            _queueEntriesScaled(_seedWallet(players[i]), lvl, entriesScaled[i]);
         }
         ticketWriteSlot = !ticketWriteSlot;
         ticketCursor = 0;
@@ -74,11 +74,11 @@ contract RoundDrainHarness is MintBucketSeed {
     }
 
     function ownerIdxBitsOf(uint24 lvl, address p) external view returns (uint256) {
-        return uint256(_entriesOwed(_tqReadKey(lvl), p) >> OWNER_IDX_SHIFT);
+        return uint256(_owedOf(_tqReadKey(lvl), p) >> OWNER_IDX_SHIFT);
     }
 
     function ownerAt(uint24 lvl, uint8 trait, uint256 k) external view returns (address) {
-        return _bucketOwnerAtUnchecked(lvl, trait, k);
+        return _bucketOwnerAt(lvl, trait, k);
     }
 
     function bucketLen(uint24 lvl, uint8 trait) external view returns (uint256) {
@@ -86,11 +86,11 @@ contract RoundDrainHarness is MintBucketSeed {
     }
 
     function ownerCount(uint24 lvl) external view returns (uint256) {
-        return ticketOwners.length;
+        return (wallets.length - 1);
     }
 
     function owedOf(uint24 lvl, address p) external view returns (uint80) {
-        return _entriesOwed(_tqReadKey(lvl), p);
+        return _owedOf(_tqReadKey(lvl), p);
     }
 
     function roundCounter() external view returns (uint32) {

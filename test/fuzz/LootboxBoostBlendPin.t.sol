@@ -6,6 +6,7 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title LootboxBoostBlendPin -- the boost lane of a box order blends across purchases
 /// @notice A lootbox boon lifts ONE purchase's spend. A second order at the same RNG index does
@@ -14,9 +15,9 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 ///         fraction of the whole order that was actually boosted. Pinned because the v78 mutation
 ///         campaign showed the blend write had no test on it.
 contract LootboxBoostBlendPin is DeployProtocol {
-    uint256 constant SLOT_BOON_PACKED = 50;
-    uint256 constant SLOT_LOOTBOX_ETH = 15;
-    uint256 constant SLOT_LOOTBOX_RNG_IDX = 33;
+    uint256 constant SLOT_BOON_PACKED = GameSlots.BOON_PACKED;
+    uint256 constant SLOT_LOOTBOX_ETH = GameSlots.LOOTBOX_ORDER;
+    uint256 constant SLOT_LOOTBOX_RNG_IDX = GameSlots.LOOTBOX_RNG_PACKED;
     uint256 constant LB_BOOST_SHIFT = 39;
     uint256 constant LB_BPS_MASK = 0x3FFF;
     uint256 constant BP_LOOTBOX_TIER_SHIFT = 104;

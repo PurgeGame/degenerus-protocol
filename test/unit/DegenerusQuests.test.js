@@ -1005,14 +1005,14 @@ describe("DegenerusQuests", function () {
   describe("Level quest streak bonus (+5 on completion)", function () {
     // mintPacked_ lives at storage slot 9 on the Game (forge inspect
     // DegenerusGame storageLayout). _isLevelQuestEligible reads it:
-    //   unitsLvl  = packed >> 104  must == level + 1   (4+ units this level)
-    //   units     = packed >> 228  must >= 4
-    //   loyalty   = (packed >> 48) >= 5  OR a pass
+    //   unitsLvl  = packed >> 96 (LEVEL_UNITS_LEVEL_SHIFT)  must == level + 1   (4+ units this level)
+    //   units     = packed >> 208 (LEVEL_UNITS_SHIFT, 16 bits) must >= 4
+    //   loyalty   = (packed >> 48) >= 5 (LEVEL_STREAK_SHIFT)  OR a pass
     // Poke exactly those bits so the player is eligible without a real mint.
     async function makeLevelQuestEligible(hreEthers, game, player) {
       const lvl = await game.level();
       const packed =
-        (5n << 48n) | ((BigInt(lvl) + 1n) << 104n) | (400n << 228n);
+        (5n << 48n) | ((BigInt(lvl) + 1n) << 96n) | (400n << 208n);
       const slot = hreEthers.keccak256(
         hreEthers.AbiCoder.defaultAbiCoder().encode(
           ["address", "uint256"],

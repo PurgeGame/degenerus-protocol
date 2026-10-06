@@ -15,6 +15,7 @@ import {
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 /// @title GoldenTicketFoilHarness -- drives the live drain and claim in the Game's context
 /// @notice Extends the production DegenerusGameFoilPackModule so the inherited externals
@@ -24,7 +25,7 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 ///         address(this) == GAME. Adds only storage seeders, read-only views, and two
 ///         passthroughs onto internals; overrides NO production logic.
 /// @dev Test-only. NO contracts/*.sol logic is mutated; this harness lives under test/.
-contract GoldenTicketFoilHarness is DegenerusGameFoilPackModule {
+contract GoldenTicketFoilHarness is DegenerusGameFoilPackModule, WalletSeed {
     function setFoilRecord(
         uint24 lvl,
         address buyer,
@@ -32,7 +33,7 @@ contract GoldenTicketFoilHarness is DegenerusGameFoilPackModule {
         uint24 resolveDay,
         uint16 score
     ) external {
-        foilRecord[lvl & 3][buyer] =
+        foilRecord[lvl & 3][_seedWallet(buyer)] =
             (uint256(multBps) << _FOIL_MULT_SHIFT) |
             (uint256(score) << _FOIL_SCORE_SHIFT) |
             (uint256(lvl) << _FOIL_LEVEL_SHIFT);
@@ -41,7 +42,7 @@ contract GoldenTicketFoilHarness is DegenerusGameFoilPackModule {
     function pushFoilBuyer(uint24 day, uint24 lvl, address buyer) external {
         // Register the buyer at the cycle level the way the live buy does, carrying the
         // position above the level in the bucketed word.
-        uint256 ownerIdx = uint256(_registerEntryOwner(buyer, lvl) >> OWNER_IDX_SHIFT) - 1;
+        uint256 ownerIdx = uint256(_seedWallet(buyer));
         foilQueue[_foilReadKey()].push(
             ((ownerIdx + 1) << 192) | (uint256(lvl) << 160) | uint256(uint160(buyer))
         );
@@ -119,14 +120,14 @@ contract GoldenTicketFoilHarness is DegenerusGameFoilPackModule {
         uint8 golds,
         uint8 allGold
     ) external {
-        _pushFoilGrand(buyer, lvl, golds, allGold);
+        _pushFoilGrand(buyer, _seedWallet(buyer), lvl, golds, allGold);
     }
 
     function goldenTicketClaimed(
         address buyer,
         uint24 lvl
     ) external view returns (bool) {
-        return _foilRecordWord(buyer, lvl) & _FOIL_GOLD_CLAIMED != 0;
+        return _foilRecordWord(_walletIdOf(buyer), lvl) & _FOIL_GOLD_CLAIMED != 0;
     }
 
     function packGold(
@@ -148,15 +149,15 @@ contract GoldenTicketFoilHarness is DegenerusGameFoilPackModule {
         uint8 traitId,
         uint256 i
     ) external view returns (address) {
-        return _bucketOwnerAtUnchecked(lvl, traitId, i);
+        return _bucketOwnerAt(lvl, traitId, i);
     }
 
     function claimableOf(address who) external view returns (uint256) {
-        return _claimableOf(who);
+        return _claimableOf(_walletIdOf(who));
     }
 
     function whalePassOf(address who) external view returns (uint256) {
-        return whalePassClaims[who];
+        return _halfPassesOf(who);
     }
 
     function claimablePoolView() external view returns (uint256) {
@@ -741,7 +742,7 @@ contract GoldenTicketFoilPack is Test {
         returns (uint8 route, uint8 goldCount, bool grand, uint256 ethAmount)
     {
         bytes32 topic = keccak256(
-            "GoldenTicketWin(address,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)"
+            "GoldenTicketWin(uint32,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)"
         );
         bool found;
         for (uint256 i; i < logs.length; ++i) {

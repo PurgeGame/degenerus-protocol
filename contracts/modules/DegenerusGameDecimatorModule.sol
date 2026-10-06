@@ -31,10 +31,11 @@ import {ContractAddresses} from "../ContractAddresses.sol";
 import {DecimatorSamplingLib as Sampling} from "../libraries/DecimatorSamplingLib.sol";
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 import {Craps} from "../Craps.sol";
+import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {DecimatorJackpotTerms} from "../interfaces/IDegenerusGameModules.sol";
 
 interface IDecimatorBoardPreference {
-    function preferredBoardOf(address player) external view returns (uint32 chips);
+    function preferredBoardOf(uint32 walletId) external view returns (uint32 chips);
 }
 
 /// @dev Pinned stateless engine. The pure ABI ensures a STATICCALL from the Game context.
@@ -105,7 +106,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
     );
     /// @dev Sampled generated entries only; survivors replay from the plan and sealed word.
     event DecimatorGenerated(
-        uint24 indexed lvl, uint64 indexed id, address indexed recipient, uint8 quadrant,
+        uint24 indexed lvl, uint64 indexed id, uint32 indexed recipientId, uint8 quadrant,
         uint32 chips, uint256 normalizedPeak, uint256 score
     );
     /// @dev Sampled original runs only; losers are never visited.
@@ -113,7 +114,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
     event DecimatorRanked(uint24 indexed lvl, uint64 champion, uint8 winners);
     /// @dev `amountWei` is the ETH credited; `halfPasses` the half whale passes queued instead.
     event DecimatorClaimed(
-        address indexed player, uint24 indexed lvl, uint64 indexed entryId, uint256 amountWei, uint256 halfPasses
+        uint32 indexed walletId, uint24 indexed lvl, uint64 indexed entryId, uint256 amountWei, uint256 halfPasses
     );
 
     /// @param chips The entry's board as a normal battle takes it: ten three-bit leg counts naming
@@ -131,20 +132,25 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         ) revert E();
         uint24 day = _simulatedDayIndex();
         if (round.openedDay == 0 || day < round.openedDay) revert E();
+        // A Decimator burn is a paying entry: register the burner at the burn's ETH equivalent
+        // (FLIP base units at PRICE_COIN_UNIT whole FLIP per ticket price).
+        (uint32 playerId, ) = _registerWallet(
+            player, baseAmount * PriceLookupLib.priceForLevel(lvl) / (PRICE_COIN_UNIT * 1 ether)
+        );
         uint256 factor = _dayFactor(day - round.openedDay);
         // Round once to whole FLIP. The uint64 aggregate bound keeps every accepted numerator below 2^138.
         uint256 credited = baseAmount * (factor * multBps) / (1 ether * 10_000);
         if (credited == 0) revert E();
         // The wallet slot finds a top-up; a new window's first burn overwrites it. Settlement reads
         // only the entry, so an older round still in the queue keeps its own.
-        uint256 latest = decBattlePlayers[player];
+        uint256 latest = decBattlePlayers[playerId];
         uint256 stack;
         if (uint24(latest >> 64) == lvl) {
             id = uint64(latest);
             stack = decBattleEntries[_entryKey(lvl, id)] >> STACK_SHIFT;
         } else {
             id = ++round.count;
-            decBattlePlayers[player] = (uint256(lvl) << 64) | id;
+            decBattlePlayers[playerId] = (uint256(lvl) << 64) | id;
         }
         // The checked 64-bit aggregate also bounds each stack inside its 66-bit entry lane.
         uint256 total = uint256(round.totalCreditedStack) + credited;
@@ -152,7 +158,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         stack += credited;
         round.totalCreditedStack = uint64(total);
         decBattleEntries[_entryKey(lvl, id)] =
-            (stack << STACK_SHIFT) | (uint256(chips) << CHIPS_SHIFT) | uint256(uint160(player));
+            (stack << STACK_SHIFT) | (uint256(chips) << CHIPS_SHIFT) | uint256(playerId);
         emit DecBurnRecorded(player, lvl, id, baseAmount, credited, stack, chips);
     }
 
@@ -254,7 +260,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
             if (q == terms.solo) continue;
             uint8 trait = uint8(jackpotWork.traits >> (uint256(q) * 8));
             uint256 len = _bucketLengthUnchecked(lvl, trait);
-            address deity = _traitDeity(trait);
+            uint32 deity = _traitDeity(trait);
             bool active = len + _deityVirtualCount(trait, len, deity) != 0;
             uint256 share = active ? terms.shares[q] : 0;
             uint16 weight = share == 0 ? 0 : terms.targets[q];
@@ -305,13 +311,13 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         }
         uint8 trait = uint8(jackpotWork.traits >> (uint256(q) * 8));
         uint256 len = _bucketLengthUnchecked(lvl, trait);
-        address deity = _traitDeity(trait);
+        uint32 deity = _traitDeity(trait);
         uint256 effectiveLen = len + _deityVirtualCount(trait, len, deity);
         // Allocation selects a nonempty cohort; the daily lock preserves it through every entry.
         uint64 id = uint64(round.count) + ordinal;
         uint256 index = uint256(keccak256(abi.encode(GEN_DRAW_TAG, word, lvl, id, q, trait))) % effectiveLen;
-        address owner = index < len ? _bucketOwnerAtUnchecked(lvl, trait, index) : deity;
-        // The registry guarantees a nonzero owner and Craps validates boards when saving them.
+        uint32 owner = index < len ? _bucketIdAtUnchecked(lvl, trait, index) : deity;
+        // Every lane and deity holds a nonzero wallet ID; Craps validates boards when saving them.
         uint32 chips = IDecimatorBoardPreference(ContractAddresses.CRAPS).preferredBoardOf(owner);
         Craps.SlipResult memory run = _settleRun(
             chips, uint256(keccak256(abi.encode(BOARD_TAG, word, lvl, id))),
@@ -381,16 +387,16 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
             while (paid < winners) {
                 if (!MineFlipGas.canRun(meter, PAYMENT_GAS_MAX, WORK_TAIL_GAS)) break;
                 uint64 id = uint64(heap[paid]);
-                address owner = id > round.count ? decGeneratedOwners[id - round.count]
-                    : address(uint160(decBattleEntries[_entryKey(lvl, id)]));
+                uint32 owner = id > round.count ? decGeneratedOwners[id - round.count]
+                    : uint32(decBattleEntries[_entryKey(lvl, id)]);
                 if (paid == 0) {
-                    if (champPasses != 0) whalePassClaims[owner] += champPasses;
+                    if (champPasses != 0) _addHalfPasses(owner, champPasses);
                     uint256 eth = champ - champPasses * HALF_WHALE_PASS_PRICE;
                     _creditClaimable(owner, eth);
                     emit DecimatorClaimed(owner, lvl, id, eth, champPasses);
                 } else if (passMode && paid & 1 == 0) {
                     uint256 halfPasses = base / HALF_WHALE_PASS_PRICE;
-                    whalePassClaims[owner] += halfPasses;
+                    _addHalfPasses(owner, halfPasses);
                     emit DecimatorClaimed(owner, lvl, id, 0, halfPasses);
                 } else {
                     _creditClaimable(owner, base + perEth);
@@ -445,7 +451,8 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
     {
         // Only sampled survivors reach the engine; original IDs are never scanned.
         uint256 entry = decBattleEntries[_entryKey(lvl, id)];
-        address owner = address(uint160(entry));
+        // Craps survival entropy still takes the owner's address (Phase D swaps in the ID).
+        address owner = _walletKey(uint32(entry));
         // The board was checked at burn, so settlement only counts its named chips.
         uint256 chips = (entry >> CHIPS_SHIFT) & 0x3FFFFFFF;
         Craps.SlipResult memory run = _settleRun(chips, uint256(keccak256(abi.encode(BOARD_TAG, word, lvl, id))), seed, owner);

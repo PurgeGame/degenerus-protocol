@@ -16,7 +16,7 @@ contract TerminalBurnCounter {
 }
 
 contract TerminalPayoutHarness is DegenerusGameGameOverModule, BucketSeed {
-    function seed(uint24 lvl, uint256 word, address affiliateWinner) external returns (uint24 day) {
+    function seed(uint24 lvl, uint256 word) external returns (uint24 day) {
         day = _simulatedDayIndex();
         level = lvl;
         jackpotPhaseFlag = true;
@@ -29,7 +29,6 @@ contract TerminalPayoutHarness is DegenerusGameGameOverModule, BucketSeed {
         _setRngSessionPublished(true);
         rngLockedFlag = true;
         rngWordCurrent = word;
-        terminalAffiliate = affiliateWinner;
         _recordDailyRng(day, word);
         uint8[4] memory traits = JackpotBucketLib.getRandomTraits(word);
         for (uint8 q; q < 4; ++q) this.seedBucket(lvl, traits[q], uint160(0x10000 + uint256(q) * 0x10000));
@@ -47,7 +46,6 @@ contract TerminalPayoutHarness is DegenerusGameGameOverModule, BucketSeed {
         return (gameOver, _goRead(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK),
             _goRead(GO_TIME_SHIFT, GO_TIME_MASK), jackpotWork.budget, claimablePool);
     }
-    function claimed(address who) external view returns (uint256) { return _claimableOf(who); }
 }
 
 contract TerminalPayoutCheckpointsTest is Test {
@@ -60,8 +58,7 @@ contract TerminalPayoutCheckpointsTest is Test {
         vm.etch(ContractAddresses.SDGNRS, type(TerminalBurnCounter).runtimeCode);
         vm.etch(ContractAddresses.COIN, type(TerminalBurnCounter).runtimeCode);
         vm.mockCall(ContractAddresses.STETH_TOKEN, abi.encodeWithSignature("balanceOf(address)", address(h)), abi.encode(uint256(0)));
-        address affiliateWinner = address(0xAFF);
-        uint24 day = h.seed(110, 0xAC4DE45EDBEEF, affiliateWinner);
+        uint24 day = h.seed(110, 0xAC4DE45EDBEEF);
         vm.deal(address(h), 1000 ether);
         vm.cool(address(h));
         (,, bool unlocked,) = h.runGameOverAdvance{gas: 10_000_000}(day, 110, 6_700_000);
@@ -70,8 +67,7 @@ contract TerminalPayoutCheckpointsTest is Test {
         assertTrue(ended);
         assertEq(paid, 0);
         assertEq(time, 0);
-        assertEq(budget, 980 ether, "affiliate allocation precedes fixed ticket pot");
-        assertEq(h.claimed(affiliateWinner), 20 ether);
+        assertEq(budget, 1000 ether, "the whole terminal pot goes to terminal tickets");
         vm.warp(vm.getBlockTimestamp() + 2 days);
         vm.deal(address(h), 1077 ether);
         uint256 calls;
@@ -83,7 +79,6 @@ contract TerminalPayoutCheckpointsTest is Test {
         assertEq(paid, 1);
         assertTrue(unlocked);
         assertEq(time, vm.getBlockTimestamp());
-        assertEq(h.claimed(affiliateWinner), 20 ether, "affiliate is paid only once");
         (,,,, uint256 liabilities) = h.terminalState();
         assertLe(liabilities, 1000 ether, "post-setup forced ETH cannot resize the draw");
         assertGt(liabilities, 999 ether);

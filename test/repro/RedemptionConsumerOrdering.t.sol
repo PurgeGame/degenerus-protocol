@@ -86,13 +86,13 @@ contract RedemptionConsumerOrderingTest is RedemptionCloseTools {
     }
 
     function _owed(address owner) private view returns (uint128 base) {
-        (base,) = sdgnrs.pendingRedemptions(owner, burnDay);
+        (base,) = sdgnrs.pendingRedemptions(game.walletIdOf(owner), burnDay);
     }
 
     function _claimsHash() private view returns (bytes32) {
-        (uint128 a, uint16 ascore) = sdgnrs.pendingRedemptions(ALICE, burnDay);
-        (uint128 b, uint16 bscore) = sdgnrs.pendingRedemptions(BOB, burnDay);
-        (uint128 c, uint16 cscore) = sdgnrs.pendingRedemptions(CAROL, burnDay);
+        (uint128 a, uint16 ascore) = sdgnrs.pendingRedemptions(game.walletIdOf(ALICE), burnDay);
+        (uint128 b, uint16 bscore) = sdgnrs.pendingRedemptions(game.walletIdOf(BOB), burnDay);
+        (uint128 c, uint16 cscore) = sdgnrs.pendingRedemptions(game.walletIdOf(CAROL), burnDay);
         return keccak256(abi.encode(a, ascore, b, bscore, c, cscore,
             sdgnrs.pendingRedemptionEthValue(), game.claimableWinningsOf(ALICE),
             game.claimableWinningsOf(BOB), game.claimableWinningsOf(CAROL)));

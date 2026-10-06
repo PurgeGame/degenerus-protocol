@@ -10,6 +10,7 @@ import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @dev The two things craps reads out of the live game: the raw lootbox-RNG slots and the
 ///      player's mint history. One double serves both because production reads both from the
@@ -34,7 +35,7 @@ contract MockGame {
         if (rngLocked) return 0;
         if (consumerStageOverride != 0) return consumerStageOverride - 1;
         uint256 read = ((uint256(slots[bytes32(0)]) >> 252) & 1) ^ 1;
-        if (uint256(slots[bytes32(uint256(33))]) & (uint256(1) << (250 + read)) != 0) {
+        if (uint256(slots[bytes32(GameSlots.LOOTBOX_RNG_PACKED)]) & (uint256(1) << (250 + read)) != 0) {
             return uint256(slots[bytes32(0)]) & (uint256(1) << 255) != 0 ? 6 : 0;
         }
         return 7;
@@ -47,10 +48,27 @@ contract MockGame {
     }
 
     function setCrapsRngPending(uint48 index, bool pending) external {
-        bytes32 root = bytes32(uint256(33));
+        bytes32 root = bytes32(GameSlots.LOOTBOX_RNG_PACKED);
         uint256 packed = uint256(slots[root]);
         uint256 mask = uint256(1) << (250 + (index & 1));
         slots[root] = bytes32(pending ? packed | mask : packed & ~mask);
+    }
+
+    /// @dev Stable wallet IDs. By default every contact is an existing Game player and gets an ID;
+    ///      strict mode applies the Game's rule (the first paying contact allocates, a non-paying
+    ///      contact returns the existing ID or zero).
+    mapping(address => uint32) public walletIdOf;
+    uint32 public walletCount;
+    bool public strictWalletIds;
+
+    function setStrictWalletIds(bool on) external { strictWalletIds = on; }
+
+    function registerWallet(address owner, bool allocate) external returns (uint32 id) {
+        id = walletIdOf[owner];
+        if (id == 0 && (allocate || !strictWalletIds)) {
+            id = ++walletCount;
+            walletIdOf[owner] = id;
+        }
     }
 
     function setScore(address player, uint256 s) external {
@@ -75,7 +93,7 @@ contract MockGame {
     function requestRng() external {
         uint256 state = uint256(slots[bytes32(0)]);
         uint256 read = ((state >> 252) & 1) ^ 1;
-        if (uint256(slots[bytes32(uint256(33))]) & (uint256(1) << (250 + read)) != 0) return;
+        if (uint256(slots[bytes32(GameSlots.LOOTBOX_RNG_PACKED)]) & (uint256(1) << (250 + read)) != 0) return;
         ++rngRequests;
         state ^= uint256(1) << 252;
         state &= ~(uint256(1) << 255);
@@ -326,7 +344,7 @@ abstract contract CrapsPins is Test {
     MockQuests internal quests;
     address internal vaultOwner = makeAddr("vaultOwner");
 
-    uint256 internal constant PACKED_SLOT = 33;
+    uint256 internal constant PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
     uint256 internal constant WORD_SLOT = 3;
     uint256 internal constant DAY_WORD_SLOT = 10;
 
@@ -342,6 +360,10 @@ abstract contract CrapsPins is Test {
         vm.etch(ContractAddresses.JACKPOT_BATTLE, address(new JackpotBattle()).code);
         quests = MockQuests(ContractAddresses.QUESTS);
         game = MockGame(ContractAddresses.GAME);
+        // Protocol wallets hold IDs 1..3 from deployment, as in the Game.
+        game.registerWallet(ContractAddresses.VAULT, true);
+        game.registerWallet(ContractAddresses.SDGNRS, true);
+        game.registerWallet(ContractAddresses.GNRUS, true);
         flip = MockFlip(ContractAddresses.COIN);
         coinflip = MockCoinflip(ContractAddresses.COINFLIP);
         vault = MockVault(ContractAddresses.VAULT);
@@ -570,8 +592,8 @@ abstract contract CrapsPins is Test {
 
     function _setDailyWord(uint24 day, uint256 word) internal {
         uint256 shift = (day & 1) * 24;
-        uint256 tags = uint256(game.slots(bytes32(uint256(34))));
-        game.set(bytes32(uint256(34)), bytes32((tags & ~(uint256(type(uint24).max) << shift)) | (uint256(day) << shift)));
+        uint256 tags = uint256(game.slots(bytes32(GameSlots.RNG_DAY_TAGS)));
+        game.set(bytes32(GameSlots.RNG_DAY_TAGS), bytes32((tags & ~(uint256(type(uint24).max) << shift)) | (uint256(day) << shift)));
         game.set(keccak256(abi.encode(uint256(day & 1), DAY_WORD_SLOT)), bytes32(word));
     }
 }

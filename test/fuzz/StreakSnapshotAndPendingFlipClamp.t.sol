@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title StreakSnapshotAndPendingFlipClampTest -- proves the v69 single-integer streak path and the
 ///        narrowed `pendingFlip` saturating clamp against the post-PACK Sub accumulator.
@@ -38,7 +39,7 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
     /// @dev _subOf mapping root @ slot 52. The accumulator section is affiliateBase u32 off19,
     ///      pendingFlip u24 off23, subStreakLatch u16 off26. The afking day markers:
     ///      afkCoveredThroughDay u24 off13, afkingStartDay u24 off16.
-    uint256 private constant SUBOF_SLOT = 52;
+    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;
     uint256 private constant OFF_AFKCOVERED = 13;
     uint256 private constant OFF_AFKINGSTART = 16;
     uint256 private constant OFF_PENDINGFLIP = 23; // uint24 pendingFlip (bytes 23..25)
@@ -269,7 +270,7 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
 
     /// @dev Write the uint16 streak latch (off 26) directly, leaving the rest of the slot intact.
     function _setStreakLatchSlot(address who, uint256 value) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         packed &= ~(uint256(0xFFFF) << (OFF_STREAKLATCH * 8));
         packed |= (value & 0xFFFF) << (OFF_STREAKLATCH * 8);
@@ -278,7 +279,7 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
 
     /// @dev Write the uint24 pendingFlip (off 23) directly, leaving the rest of the slot intact.
     function _setPendingFlipSlot(address who, uint256 value) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         packed &= ~(uint256(0xFFFFFF) << (OFF_PENDINGFLIP * 8));
         packed |= (value & 0xFFFFFF) << (OFF_PENDINGFLIP * 8);
@@ -286,7 +287,7 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
     }
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
+        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
         return p & ((uint256(1) << widthBits) - 1);
     }
 

@@ -6,6 +6,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title SdgnrsLevelHighPasses -- the house's level cut, banked as high-roller craps passes.
 /// @notice At every level close (`_consolidatePoolsAndRewardJackpots`) sDGNRS is handed a
@@ -16,7 +17,7 @@ import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 ///         multiple. Driven through the REAL game, the REAL advance and the REAL table.
 ///         Test-only: ZERO contracts/*.sol mutation.
 contract SdgnrsLevelHighPasses is DeployProtocol {
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED;
     uint256 private constant POOL_HALF_MASK = (uint256(1) << 128) - 1;
     uint256 private constant PRICE_COIN_UNIT = 1000;
     uint256 private constant HIGH_ROLLER_DAY_PASS_VALUE = 21 * 24_800 ether;

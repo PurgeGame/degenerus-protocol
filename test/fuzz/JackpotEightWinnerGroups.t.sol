@@ -37,7 +37,7 @@ contract JackpotEightWinnerGroupsTest is Test {
         vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
     }
 
-    bytes32 private constant WIN = keccak256("JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)");
+    bytes32 private constant WIN = keccak256("JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)");
 
     function _winnerFingerprint(uint256 word, uint256 tickets, uint8 kind) private returns (bytes32 result) {
         EightWinnerHarness h = new EightWinnerHarness();

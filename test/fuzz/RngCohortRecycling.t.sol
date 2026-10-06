@@ -5,6 +5,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 contract CohortRecyclingHarness is DegenerusGameStorage {
     function seal() external {
@@ -130,15 +131,15 @@ contract GameCrapsPendingMirrorTest is DeployProtocol {
         assertFalse(game.boxesPending(), "missing word cannot be opened");
     }
     function test_OnlyPinnedCrapsCanMutateIndependentPendingBits() public {
-        uint256 before = uint256(game.extsload(bytes32(uint256(33))));
+        uint256 before = uint256(game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED)));
         vm.expectRevert(DegenerusGameStorage.E.selector); game.setCrapsRngPending(0, true);
         vm.prank(ContractAddresses.CRAPS); game.setCrapsRngPending(0, true);
         vm.prank(ContractAddresses.CRAPS); game.setCrapsRngPending(1, true);
-        assertEq(uint256(game.extsload(bytes32(uint256(33)))), before | (uint256(3) << 250));
+        assertEq(uint256(game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED))), before | (uint256(3) << 250));
         vm.prank(ContractAddresses.CRAPS); game.setCrapsRngPending(1, false);
-        assertEq(uint256(game.extsload(bytes32(uint256(33)))), before | (uint256(1) << 250));
+        assertEq(uint256(game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED))), before | (uint256(1) << 250));
         vm.prank(ContractAddresses.CRAPS); game.setCrapsRngPending(0, false);
-        assertEq(uint256(game.extsload(bytes32(uint256(33)))), before);
+        assertEq(uint256(game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED))), before);
         vm.prank(ContractAddresses.CRAPS); vm.expectRevert(DegenerusGameStorage.E.selector);
         game.setCrapsRngPending(2, true);
     }

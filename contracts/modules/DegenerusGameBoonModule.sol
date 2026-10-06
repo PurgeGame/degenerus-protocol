@@ -89,7 +89,8 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         if (totalWeight == 0 || pool.awardedMask != 0) return;
         // Seal once before applying any reward. No retry or reroll after a collision.
         pool.awardedMask = 7;
-        deityBoonPacked[issuer] = uint32(awardDay) | (uint32(7) << 24);
+        deityBoonPacked[issuer == ContractAddresses.VAULT ? VAULT_WALLET_ID : SDGNRS_WALLET_ID] =
+            uint32(awardDay) | (uint32(7) << 24);
         if (count == 0) return;
         mapping(uint32 => ProtocolBoonEntry) storage entries = protocolBoonEntries[issuer][day & 1];
         for (uint8 slot; slot < DEITY_DAILY_BOON_COUNT; ++slot) {
@@ -104,8 +105,9 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
                 if (entries[mid].cumulativeWeight <= roll) lo = mid + 1;
                 else hi = mid;
             }
-            address winner = entries[lo].player;
-            if (winner == address(0)) continue;
+            uint32 winnerId = entries[lo].playerId;
+            if (winnerId == 0) continue;
+            address winner = _walletKey(winnerId);
             uint8 boonType = _deityBoonForSlot(issuer, awardDay, slot, menuWord);
             checkAndClearExpiredBoon(winner);
             _applyBoon(winner, boonType, awardDay, awardDay, 0, true);
@@ -869,7 +871,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         if (boonType >= BOON_DEITY_PASS_10 && boonType <= BOON_DEITY_PASS_35) {
             if (
                 mintPacked_[player] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 == 1 ||
-                deityPassOwners.length >= DEITY_PASS_MAX_TOTAL
+                _deityCount() >= DEITY_PASS_MAX_TOTAL
             ) {
                 emit BoonDiscarded(player, boonType);
                 return;
@@ -1355,7 +1357,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     ///      read-then-zero of `whalePassClaims[player]`.
     function _activateWhalePass(address player) private {
         // O(1) record of one full pass (two half-passes).
-        whalePassClaims[player] += 2;
+        _addHalfPasses(_walletIdOf(player), 2);
     }
 
     /// @notice Issue a deity boon to a recipient
@@ -1380,7 +1382,11 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         if (deity == address(0) || recipient == address(0)) revert ZeroAddress();
         if (deity == recipient) revert SelfBoon();
         if (slot >= DEITY_DAILY_BOON_COUNT) revert InvalidSlot();
-        if (mintPacked_[deity] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 == 0) revert Unauthorized();
+        uint256 deityWord = mintPacked_[deity];
+        if (deityWord >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 == 0) revert Unauthorized();
+        uint32 deityId = uint32(deityWord >> BitPackingLib.WALLET_ID_SHIFT);
+        // A boon is a gift: the recipient must already hold a wallet ID.
+        uint32 recipientId = _requireWalletId(recipient);
 
         uint24 day = _simulatedDayIndex();
         uint256 rngWord = _recordedDailyWord(day - 1);
@@ -1389,21 +1395,21 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         // starts empty: a stale day's mask is never read (every reader gates on the day
         // matching), and the single packed write below re-stamps the day with the fresh
         // mask in one store.
-        uint32 boonPacked = deityBoonPacked[deity];
+        uint32 boonPacked = deityBoonPacked[deityId];
         uint8 mask = uint24(boonPacked) == day ? uint8(boonPacked >> 24) : 0;
         // One boon per recipient per day, across all deities.
-        if (deityBoonRecipientDay[recipient] == day) revert RecipientAlreadyBoonedToday();
+        if (deityBoonRecipientDay[recipientId] == day) revert RecipientAlreadyBoonedToday();
         // Lifetime cap is per (deity, recipient) pair.
-        uint8 pairBoonCount = deityRecipientBoonCount[deity][recipient];
+        uint8 pairBoonCount = deityRecipientBoonCount[deityId][recipientId];
         if (pairBoonCount >= DEITY_RECIPIENT_BOON_CAP) revert RecipientBoonCapReached();
 
         uint8 slotMask = uint8(1) << slot;
         if ((mask & slotMask) != 0) revert SlotAlreadyUsed();
-        deityBoonPacked[deity] =
+        deityBoonPacked[deityId] =
             uint32(day) |
             (uint32(mask | slotMask) << 24);
-        deityBoonRecipientDay[recipient] = day;
-        deityRecipientBoonCount[deity][recipient] = pairBoonCount + 1;
+        deityBoonRecipientDay[recipientId] = day;
+        deityRecipientBoonCount[deityId][recipientId] = pairBoonCount + 1;
 
         // Every menu type is always issuable — the deity roll excludes the two
         // conditionally-usable families (decimator, deity-pass) unconditionally — so

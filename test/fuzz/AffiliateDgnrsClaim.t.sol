@@ -5,6 +5,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title AffiliateDgnrsClaim -- Tests for segregated affiliate DGNRS claim system
 /// @notice Validates proportional distribution, claim window, and edge cases.
@@ -25,8 +26,8 @@ contract AffiliateDgnrsClaim is DeployProtocol {
     // Storage slots (forge inspect, Stage B packing). levelDgnrsAllocation + levelDgnrsClaimed
     // are merged into one packed mapping levelDgnrsPacked @ slot 26: bits [0:128) = allocation,
     // bits [128:256) = claimed.
-    uint256 constant SLOT_LEVEL = 0; // level is at slot 0, offset 12, 3 bytes (uint24)
-    uint256 constant SLOT_LEVEL_DGNRS_PACKED = 25;
+    uint256 constant SLOT_LEVEL = GameSlots.LEVEL; // level is at slot 0, offset 12, 3 bytes (uint24)
+    uint256 constant SLOT_LEVEL_DGNRS_PACKED = GameSlots.LEVEL_DGNRS_PACKED;
 
     uint256 buyerNonce;
 

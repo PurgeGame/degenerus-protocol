@@ -37,7 +37,7 @@ struct DecimatorJackpotTerms {
 }
 
 interface IDegenerusGameTicketModule {
-    function registerAffiliateOwner(address owner, bool required) external returns (uint32 id);
+    function registerWallet(address owner, bool allocate) external returns (uint32 id);
     function runJackpotTicketAwards(TicketWorkPlan calldata plan, uint256 allowance)
         external returns (MineFlipGas.Result memory);
     function runTicketWork(uint24 anchor, uint256 gasAllowance) external returns (MineFlipGas.Result memory);
@@ -133,7 +133,7 @@ interface IDegenerusGameJackpotModule {
     /// @param lvl The pack's cycle level.
     /// @param golds The pack's total gold quadrants across its four tickets (8..16).
     function payGoldenTicketGrand(
-        address winner,
+        uint32 winner,
         uint24 lvl,
         uint8 golds
     ) external;
@@ -411,7 +411,7 @@ interface IDegenerusGameLootboxModule {
     /// @param rngWord Random word for lootbox resolution
     /// @param activityScore Frozen activity score in whole points for the EV multiplier (caller-snapshotted)
     function resolveLootboxDirect(
-        address player,
+        address player, uint32 id,
         uint256 amount,
         uint256 rngWord,
         uint16 activityScore
@@ -420,7 +420,7 @@ interface IDegenerusGameLootboxModule {
     /// @notice Resolve a purchased Degenerette win with a 50 ETH score ceiling if allowance remains.
     /// @dev One combined box per bet; recorded shared usage is clamped to the normal 10 ETH cap.
     function resolveDegeneretteLootboxDirect(
-        address player,
+        address player, uint32 id,
         uint256 amount,
         uint256 rngWord,
         uint16 activityScore
@@ -435,17 +435,17 @@ interface IDegenerusGameLootboxModule {
     /// @param activityScore Raw activity score (whole points) snapshotted at burn submission
     /// @param batchId Redemption batch of the claim (tags the order's seeds and events)
     function resolveRedemptionLootbox(
-        address player,
+        address player, uint32 id,
         uint256 amount,
         uint256 rngWord,
         uint16 activityScore,
         uint32 batchId
     ) external payable;
 
-    /// @notice Credit the direct half of an sDGNRS redemption claim to `player`'s claimable winnings.
-    /// @param player Claimant credited.
+    /// @notice Credit the direct half of an sDGNRS redemption claim to the claimant's claimable winnings.
+    /// @param id Claimant wallet ID credited.
     /// @param amount Total direct-half value (msg.value ETH + the stETH remainder pulled here).
-    function creditRedemptionDirect(address player, uint256 amount) external payable;
+    function creditRedemptionDirect(uint32 id, uint256 amount) external payable;
 
     /// @notice Resolve an AfKing-subscription box at the LIVE level from a caller-passed
     ///         frozen-day word.
@@ -460,7 +460,7 @@ interface IDegenerusGameLootboxModule {
     /// @param rngWord The frozen stamp day's word _recordedDailyWord(day), passed by the caller
     /// @param activityScore The stamped activity score in whole points (the frozen EV input)
     function resolveAfkingBox(
-        address player,
+        address player, uint32 id,
         uint256 amount,
         uint24 day,
         uint256 rngWord,
@@ -707,22 +707,15 @@ interface IDegenerusGameFoilPackModule {
     /// @notice Queue every deity owner's perpetual ticket for a phase-transition target level.
     function queuePerpetualTickets(uint24 targetLevel) external;
 
-    /// @notice Deliver one foil pack (four tickets) for the active cycle. Delegatecall
-    ///         target invoked by the mint module's purchase path (the foil leg of an
-    ///         additive ticket/lootbox/foil buy). Handles the foil leg's own payment
-    ///         (the canonical fresh -> claimable -> afking waterfall), 75/25 pool split,
-    ///         25/5 affiliate at game levels 0-2 and 20/5 from game level 3 (fresh/recycled,
-    ///         paid at level + 1 like the ticket affiliate), and
-    ///         delivery (boost freeze, queue push). The foil's mint units,
-    ///         streak, and secondary quest are recorded by the purchase path.
-    /// @param buyer Player receiving the pack (already operator-resolved).
-    /// @param ethSent Fresh ETH the purchase path allocated to the foil leg.
-    /// @param affiliateCode Affiliate/referral code for the foil leg.
-    /// @param payKind Payment method for the foil leg (DirectEth blocks claimable; prepaid
-    ///        afking covers the shortfall on every kind).
-    function buyFoilPack(
+    /// @notice The foil branch of Game.purchase: an additive foil pack on top of optional ticket
+    ///         and lootbox legs. Registers the buyer first (paid admission uses the whole quoted
+    ///         spend), caps fresh ETH at the combined cost, credits any overpay to the payer's
+    ///         afking, runs the ticket/lootbox leg through the mint module, then delivers the pack.
+    /// @param buyer Player receiving every leg (already operator-resolved).
+    function purchaseWithFoil(
         address buyer,
-        uint256 ethSent,
+        uint256 entryQuantityScaled,
+        uint256 boxOrder,
         bytes32 affiliateCode,
         MintPaymentKind payKind
     ) external payable;

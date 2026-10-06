@@ -4,11 +4,12 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {IsDGNRS} from "../../contracts/interfaces/IsDGNRS.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 /// @dev Etched over the game only to seed a claimable balance, then the real runtime is restored.
-contract ClaimableSeeder is DegenerusGame {
+contract ClaimableSeeder is DegenerusGame, WalletSeed {
     function seedClaimable(address player, uint256 amount) external {
-        balancesPacked[player] += amount;
+        balancesPacked[_seedWallet(player)] += amount;
         claimablePool += uint128(amount);
     }
 }

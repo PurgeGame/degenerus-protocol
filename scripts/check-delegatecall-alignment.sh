@@ -71,6 +71,8 @@ is_dead_constant() {
 # appending an entry is a visible diff in PR review, mirroring DEAD_CONSTANTS.
 declare -A ORPHAN_JUSTIFIED=(
   [DegenerusGameFoilPackModule.sol:IDegenerusGameDegeneretteModule]="_foilSpin owns the delegatecall -> GAME_DEGENERETTE_MODULE"
+  [DegenerusGameFoilPackModule.sol:IDegenerusGameLootboxModule]="purchaseWithFoil passes GAME_LOOTBOX_MODULE to the private _moduleCall helper (quoteBoxOrder)"
+  [DegenerusGameFoilPackModule.sol:IDegenerusGameMintModule]="purchaseWithFoil passes GAME_MINT_MODULE to the private _moduleCall helper (purchaseWith)"
   [DegenerusGameMintModule.sol:IDegenerusGameLootboxModule]="_lootboxLeg owns the delegatecall -> GAME_LOOTBOX_MODULE"
   [DegenerusGameAdvanceModule.sol:IDegenerusGameJackpotModule]="_runJackpotWork owns the delegatecall -> GAME_JACKPOT_MODULE"
   [DegenerusGameJackpotModule.sol:IDegenerusGameJackpotDrawModule]="_delegateJackpotDraw owns the delegatecall -> GAME_JACKPOT_DRAW_MODULE"

@@ -6,6 +6,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
 import {DegenerusParimutuel} from "../../contracts/DegenerusParimutuel.sol";
+import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
 /// @dev Exposes _growthRatchet and the two entries it chooses between. Inheriting the real
 ///      storage layout rather than pinning slots keeps this honest if the layout moves.
@@ -1125,8 +1126,8 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
 
         // Make alice level-quest eligible: a whole ticket (400 units) tagged at the
         // current level, and levelStreak 5 for the loyalty gate.
-        uint256 packedMint = (uint256(400) << 228) |
-            (uint256(round) << 104) |
+        uint256 packedMint = (uint256(400) << BitPackingLib.LEVEL_UNITS_SHIFT) |
+            (uint256(round) << BitPackingLib.LEVEL_UNITS_LEVEL_SHIFT) |
             (uint256(5) << 48);
         vm.mockCall(
             address(game),

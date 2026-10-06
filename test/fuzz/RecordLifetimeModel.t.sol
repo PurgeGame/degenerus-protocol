@@ -4,23 +4,24 @@ pragma solidity 0.8.34;
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {TicketLevelPrep} from "../helpers/TicketLevelPrep.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 /// @dev Setup advances completed levels; admission, lane mutation, tombstones,
 ///      queue release and inventory construction use production primitives.
 ///      This is not a complete engine reachability campaign.
-contract RecordLifetimeHarness is TicketLevelPrep {
+contract RecordLifetimeHarness is TicketLevelPrep, WalletSeed {
     function atLevel(uint24 current) external { level = current; }
-    function add(address owner, uint24 target, uint32 amount) external { _queueEntries(owner, target, amount, false); }
+    function add(address owner, uint24 target, uint32 amount) external { _queueEntries(_seedWallet(owner), target, amount, false); }
     function flip() external { ticketWriteSlot = !ticketWriteSlot; }
     function writeKey(uint24 target) external view returns (uint24) { return _tqWriteKey(target); }
-    function owed(uint24 key, address owner) external view returns (uint32) { return uint32(_entriesOwed(key, owner) >> 8); }
+    function owed(uint24 key, address owner) external view returns (uint32) { return uint32(_owedOf(key, owner) >> 8); }
     function count(uint24 key) external view returns (uint256) { return _ticketQueueLength(key); }
-    function id(address owner) external view returns (uint32) { return ticketOwnerId[owner]; }
+    function id(address owner) external view returns (uint32) { return _walletIdOf(owner); }
     function ownerAt(uint24 key, uint256 index) external view returns (address) {
         require(index < _ticketQueueLength(key));
-        return _ticketOwnerAt(_tqPositionAt(ticketQueue[_ticketQueueStorageKey(key)], index));
+        return _walletKey(_tqPositionAt(ticketQueue[_ticketQueueStorageKey(key)], index));
     }
-    function cancel(uint24 key, address owner) external { _setEntryOwed(key, ticketOwnerId[owner], 0); }
+    function cancel(uint24 key, address owner) external { _setEntryOwed(key, _walletIdOf(owner), 0); }
     function drain(uint24 key, uint8 trait) external returns (uint256 quantity) {
         uint24 target = key & 0x3fffff;
         require(_prepareTicketLevel(target), "old paid readers remain");
@@ -39,7 +40,7 @@ contract RecordLifetimeHarness is TicketLevelPrep {
     function ticketCount(uint24 target, uint8 trait) external view returns (uint256) { return _bucketLength(target, trait); }
     function ticketOwner(uint24 target, uint8 trait, uint256 i) external view returns (address) {
         require(i < _bucketLength(target, trait));
-        return _bucketOwnerAtUnchecked(target, trait, i);
+        return _bucketOwnerAt(target, trait, i);
     }
 }
 

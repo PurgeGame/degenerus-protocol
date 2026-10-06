@@ -11,6 +11,7 @@ import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol"
 import {IStETH} from "../../../contracts/interfaces/IStETH.sol";
 import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
 import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
+import {GameSlots} from "../../helpers/GameSlots.sol";
 
 /// @title SolvencyActionHandler — widens the SOLVENCY-01 action space to the pass + presale-box + claim
 ///        surfaces so the packed-balance Σ identity is fuzzed beyond the afking-only V61AfkingSpendHandler.
@@ -39,7 +40,7 @@ contract SolvencyActionHandler is Test {
     DegenerusDeityPass public deityPass;
     MockVRFCoordinator public vrf;
 
-    uint256 private constant MINTPACKED_SLOT = 9;
+    uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED;
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS score bit (advance bypass + subscribe gate)
     uint256 private constant WHALE_PASS_PRICE = 2.4 ether; // levels 0-3 (WhaleHandler bound)
     uint256 private constant LAZY_PASS_PRICE = 0.24 ether; // levels 0-2

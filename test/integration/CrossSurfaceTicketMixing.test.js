@@ -67,8 +67,8 @@ const MINT_MODULE_SOURCE_PATH = path.resolve(
 );
 
 // ---------------------------------------------------------------------------
-// `ticketOwnerId` maps wallets to stable IDs; `ticketOwners` is the global immutable address
-// array. Near owed balances share one `ticketPending[id]` word (read/write lanes per level
+// A wallet's stable ID is the position of its element in the `wallets` table (also stored in the
+// top 32 bits of `mintPacked_`). Near owed balances share one `ticketPending[id]` word (read/write lanes per level
 // parity, each parity tagged with its level); far-future balances are 32-bit lanes of
 // `farFutureOwed[id]`. The helper decodes the selected queue lane from the layout oracle;
 // the public accessor independently attests owed totals.
@@ -317,7 +317,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
         (i) => `${i.type}${i.indexed ? " indexed" : ""}`
       );
       expect(types).to.deep.equal([
-        "address indexed",
+        "uint32 indexed",
         "uint24 indexed",
         "uint16 indexed",
         "uint32",

@@ -386,7 +386,8 @@ contract DegenerusGameDegeneretteModule is
     ///      NOT accumulated here — it is summed PER betId and resolved once per bet
     ///      inside _resolveBet (resolution-batch-invariant).
     struct ResolveAcc {
-        address owner; // whose payouts ethClaimable / flipMint currently hold
+        uint32 ownerId; // whose payouts ethClaimable / flipMint currently hold
+        uint256 ownerElement; // that owner's wallet-table element, read once per owner run
         uint256 ethClaimable; // summed ETH claimable across all bets
         uint256 flipMint; // summed FLIP mint across all bets
         bool poolFrozen; // prizePoolFrozen snapshot (loaded with the pool locals)
@@ -452,11 +453,11 @@ contract DegenerusGameDegeneretteModule is
     /// @dev Pay the current owner's accumulated FLIP and ETH, then clear them.
     function _flushOwner(ResolveAcc memory acc) private {
         if (acc.flipMint != 0) {
-            coin.mintForGame(acc.owner, acc.flipMint);
+            coin.mintForGame(_payee(acc.ownerElement), acc.flipMint);
             acc.flipMint = 0;
         }
         if (acc.ethClaimable != 0) {
-            _addClaimableEth(acc.owner, acc.ethClaimable);
+            _addClaimableEth(acc.ownerId, acc.ethClaimable);
             acc.ethClaimable = 0;
         }
     }
@@ -489,8 +490,15 @@ contract DegenerusGameDegeneretteModule is
         uint8 symbol
     ) private {
         uint24 lvl = level;
+        // The bet is a paying entry for its owner: register before the core loads the owner's
+        // mint word, at the stake's ETH equivalent (FLIP converts at PRICE_COIN_UNIT per ticket).
+        uint256 staked = uint256(amountPerSpin) * spinCount;
+        (uint32 playerId, ) = _registerWallet(player, currency == CURRENCY_ETH
+            ? staked
+            : staked * PriceLookupLib.priceForLevel(lvl + 1) / PRICE_COIN_UNIT);
         uint256 totalBet = _placeDegeneretteBetCore(
             player,
+            playerId,
             currency,
             amountPerSpin,
             spinCount,
@@ -499,7 +507,9 @@ contract DegenerusGameDegeneretteModule is
             funder == player
         );
 
-        _collectBetFunds(funder, currency, totalBet, symbol);
+        // A gift funder's balance is touched only for a claimable shortfall or stray ETH on a
+        // FLIP bet; an unregistered funder reads the empty ID-0 word and those legs revert.
+        _collectBetFunds(funder, funder == player ? playerId : _walletIdOf(funder), currency, totalBet, symbol);
 
         // Quest progress for Degenerette bets (slot 1 only) — credited to the funder (the
         // spender earns the quest, e.g. a gifter advancing their own streak).
@@ -515,6 +525,7 @@ contract DegenerusGameDegeneretteModule is
 
     function _placeDegeneretteBetCore(
         address player,
+        uint32 playerId,
         uint8 currency,
         uint128 amountPerSpin,
         uint8 spinCount,
@@ -590,7 +601,7 @@ contract DegenerusGameDegeneretteModule is
                     ? activityScore
                     : uint16(_playerActivityScore(player, questStreak));
                 _enterProtocolBoonDraw(
-                    player, symbol, day, totalBet, wagerUnit, boonScore
+                    player, playerId, symbol, day, totalBet, wagerUnit, boonScore
                 );
             }
         }
@@ -636,7 +647,7 @@ contract DegenerusGameDegeneretteModule is
         uint256[] storage queue = degeneretteQueue[index & 1];
         uint64 betId = uint64(queue.length + 1);
         uint256 bet =
-            uint256(uint160(player)) |
+            uint256(playerId) |
             (uint256(symbol) << BET_SYMBOL_SHIFT) |
             (uint256(spinCount) << BET_COUNT_SHIFT) |
             (uint256(currency) << BET_CURRENCY_SHIFT) |
@@ -654,10 +665,10 @@ contract DegenerusGameDegeneretteModule is
     ///      to its recipient; all weight is paid stake, before any boon boost.
     ///      Pool and entry writes revert atomically if later funding fails.
     function _enterProtocolBoonDraw(
-        address player, uint8 symbol, uint24 day, uint256 amount, uint256 wagerUnits, uint16 score
+        address player, uint32 playerId, uint8 symbol, uint24 day, uint256 amount, uint256 wagerUnits, uint16 score
     ) private {
         address issuer = symbol == 0 ? ContractAddresses.VAULT : ContractAddresses.SDGNRS;
-        if (deityBySymbol[symbol] != issuer) return;
+        if (deityBySymbol[symbol] != (symbol == 0 ? VAULT_WALLET_ID : SDGNRS_WALLET_ID)) return;
         uint256 weight = wagerUnits * ActivityCurveLib.boonDrawMultUnits(score);
         if (weight > type(uint64).max) revert InvalidBet();
         // The ring slot for `day` (see protocolBoonPools). One still tagged with an older day
@@ -667,7 +678,7 @@ contract DegenerusGameDegeneretteModule is
         if (pool.day != day) pool = ProtocolBoonPool(0, 0, 0, 0, day);
         uint32 index = pool.entryCount;
         uint64 cumulativeWeight = pool.totalWeight + uint64(weight);
-        protocolBoonEntries[issuer][ring][index] = ProtocolBoonEntry(player, cumulativeWeight, score);
+        protocolBoonEntries[issuer][ring][index] = ProtocolBoonEntry(playerId, cumulativeWeight, score);
         // Weight <= uint64.max and multiplier >= 800 bound amount well below uint112.
         pool.totalWageredWei += uint112(amount);
         pool.totalWeight = cumulativeWeight;
@@ -679,6 +690,7 @@ contract DegenerusGameDegeneretteModule is
     /// @dev Processes bet funds (burn tokens, handle ETH, check pool).
     function _collectBetFunds(
         address player,
+        uint32 playerId,
         uint8 currency,
         uint256 totalBet,
         uint8 symbol
@@ -688,7 +700,7 @@ contract DegenerusGameDegeneretteModule is
             // sentinel) then afking via the canonical single-sink waterfall.
             if (msg.value > totalBet) revert InvalidBet();
             if (msg.value < totalBet) {
-                _settleShortfall(player, totalBet - msg.value, true);
+                _settleShortfall(playerId, totalBet - msg.value, true);
             }
 
             // Update pool and pending
@@ -717,7 +729,7 @@ contract DegenerusGameDegeneretteModule is
             // A token bet consumes no ETH; any ETH sent alongside it is absorbed to the funder's
             // withdrawable afking balance (solvency-preserving) rather than stranded in the pool.
             // Zero-value is a no-op, so a normal token bet pays no extra gas.
-            _creditAfkingValue(player, msg.value);
+            _creditAfkingValue(playerId, msg.value);
         }
     }
 
@@ -733,11 +745,14 @@ contract DegenerusGameDegeneretteModule is
         uint256 rngWord,
         ResolveAcc memory acc
     ) private {
-        address player = address(uint160(bet));
-        if (player != acc.owner) {
+        uint32 playerId = uint32(bet);
+        if (playerId != acc.ownerId) {
             _flushOwner(acc);
-            acc.owner = player;
+            acc.ownerId = playerId;
+            acc.ownerElement = _walletElement(playerId);
         }
+        // The owner's address feeds token payouts and, until Phase D, the bet's seeds.
+        address player = address(uint160(acc.ownerElement));
         uint8 symbol = uint8((bet >> BET_SYMBOL_SHIFT) & MASK_5);
         uint8 spinCount = uint8((bet >> BET_COUNT_SHIFT) & MASK_5);
         uint8 currency = uint8((bet >> BET_CURRENCY_SHIFT) & 1);
@@ -856,6 +871,7 @@ contract DegenerusGameDegeneretteModule is
             // so the per-box FLIP datum is recoverable.
             _resolveDegeneretteLootboxDirect(
                 player,
+                playerId,
                 totals.betLootboxShare,
                 EntropyLib.hash2(rngWord, betId),
                 activityScore
@@ -1073,6 +1089,7 @@ contract DegenerusGameDegeneretteModule is
     ///      The resolved box itemizes its contents via `LootBoxOpened` like every box path.
     function _resolveLootboxDirect(
         address player,
+        uint32 id,
         uint256 amount,
         uint256 rngWord,
         uint16 activityScore
@@ -1083,6 +1100,7 @@ contract DegenerusGameDegeneretteModule is
                 abi.encodeWithSelector(
                     IDegenerusGameLootboxModule.resolveLootboxDirect.selector,
                     player,
+                    id,
                     amount,
                     rngWord,
                     activityScore
@@ -1094,6 +1112,7 @@ contract DegenerusGameDegeneretteModule is
     /// @dev One purchased bet's combined box, with a 50 ETH ceiling if allowance remains.
     function _resolveDegeneretteLootboxDirect(
         address player,
+        uint32 id,
         uint256 amount,
         uint256 rngWord,
         uint16 activityScore
@@ -1102,6 +1121,7 @@ contract DegenerusGameDegeneretteModule is
             abi.encodeWithSelector(
                 IDegenerusGameLootboxModule.resolveDegeneretteLootboxDirect.selector,
                 player,
+                id,
                 amount,
                 rngWord,
                 activityScore
@@ -1296,9 +1316,9 @@ contract DegenerusGameDegeneretteModule is
     }
 
     /// @dev Credit a nonzero ETH payout through the shared accounting helper.
-    function _addClaimableEth(address beneficiary, uint256 weiAmount) private {
+    function _addClaimableEth(uint32 beneficiary, uint256 weiAmount) private {
         claimablePool += uint128(weiAmount);
-        _creditClaimable(beneficiary, weiAmount);
+        _creditClaimableLogged(beneficiary, weiAmount);
     }
 
     /// @dev Award sDGNRS from Reward pool on the top-3 score tiers (S>=7) Degenerette ETH bets.
@@ -1552,7 +1572,8 @@ contract DegenerusGameDegeneretteModule is
         if (s >= 7) _awardDegeneretteDgnrs(player, betAmount, s);
 
         // Flush THIS spin's pool/claimable BEFORE recirc so recirc reads fresh storage.
-        if (acc.ethClaimable != 0) _addClaimableEth(player, acc.ethClaimable);
+        uint32 playerId = _walletIdOf(player);
+        if (acc.ethClaimable != 0) _addClaimableEth(playerId, acc.ethClaimable);
         if (acc.poolLoaded) {
             if (acc.poolFrozen) {
                 _setPendingPools(acc.pendingNext, acc.pendingFuture);
@@ -1570,6 +1591,7 @@ contract DegenerusGameDegeneretteModule is
         if (lootboxShare != 0) {
             _resolveLootboxDirect(
                 player,
+                playerId,
                 lootboxShare,
                 EntropyLib.hash2(seed, BOX_RECIRC_TAG),
                 activityScore

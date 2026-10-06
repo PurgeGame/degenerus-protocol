@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @dev Actual paid custom seats, actual engine and Game keeper routing. Every
 /// measured call starts cold and is offered the unmodified transaction ceiling.
@@ -75,7 +76,7 @@ contract CustomRngCohortGasTest is DeployProtocol {
         assertTrue(crapsBattle.battleOf(key).finalized, "paid seats and winner must finish");
         assertEq(crapsBattle.battleOf(key).resolved, SEATS, "every paid seat settled");
         assertGt(calls, 1, "field must require resumable batches");
-        assertEq(uint256(vm.load(address(game), bytes32(uint256(33)))) & (uint256(1) << (250 + buffer)), 0);
+        assertEq(uint256(vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED))) & (uint256(1) << (250 + buffer)), 0);
         assertEq(RecyclingState.readBuffer(address(game)), buffer, "draining never replaces the session");
         emit log_named_uint("custom cold maximum keeper gas", maxGas);
         emit log_named_uint("custom cold finalization keeper gas", finalGas);

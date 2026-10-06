@@ -6,22 +6,24 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @dev Test overlay: exercises real module bytecode in the Game's storage and forwards
 ///      ordinary Game calls to its original runtime. No storage-layout slot constants.
-contract WinLootboxCapProbe is DegenerusGameStorage {
+contract WinLootboxCapProbe is DegenerusGameStorage, WalletSeed {
     address private constant ORIGINAL = address(0xCA9001);
 
     function seedAllowance(address player, uint24 key, uint256 used) external {
-        _setLootboxEvUsedFor(player, key, used);
+        _setLootboxEvUsedFor(_seedWallet(player), key, used);
     }
 
     function allowanceUsed(address player, uint24 key) external view returns (uint256) {
-        return _lootboxEvUsedFor(player, key);
+        return _lootboxEvUsedFor(_walletIdOf(player), key);
     }
 
     function allowanceWord(address player) external view returns (uint256) {
-        return lootboxEvCapPacked[player];
+        return lootboxEvCapPacked[_walletIdOf(player)];
     }
 
     function seedLevel(uint24 lvl) external {
@@ -56,8 +58,8 @@ contract WinLootboxCapProbe is DegenerusGameStorage {
 }
 
 contract DegeneretteWinLootboxCap is DeployProtocol {
-    bytes4 private constant NORMAL = bytes4(keccak256("resolveLootboxDirect(address,uint256,uint256,uint16)"));
-    bytes4 private constant WIN = bytes4(keccak256("resolveDegeneretteLootboxDirect(address,uint256,uint256,uint16)"));
+    bytes4 private constant NORMAL = bytes4(keccak256("resolveLootboxDirect(address,uint32,uint256,uint256,uint16)"));
+    bytes4 private constant WIN = bytes4(keccak256("resolveDegeneretteLootboxDirect(address,uint32,uint256,uint256,uint16)"));
     bytes32 private constant OPENED = keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
     uint16 private constant MAX_SCORE = 30_000;
     uint8 private constant SYMBOL = 9;
@@ -204,7 +206,7 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
     function _place(uint8 spins, uint16 score) private {
         vm.prank(player);
         game.placeDegeneretteBet{value: uint256(spins) * 10 ether}(address(0), 0, 10 ether, spins, SYMBOL);
-        uint64 id = uint64(uint256(vm.load(address(game), keccak256(abi.encode(uint256(INDEX & 1), uint256(21))))));
+        uint64 id = uint64(uint256(vm.load(address(game), keccak256(abi.encode(uint256(INDEX & 1), GameSlots.DEGENERETTE_QUEUE)))));
         probe.seedBetScore(INDEX, id - 1, score);
     }
 

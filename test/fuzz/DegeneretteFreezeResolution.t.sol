@@ -12,6 +12,7 @@ import {FlipRoundLib} from "../../contracts/libraries/FlipRoundLib.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {DegeneretteMathHarness} from "../../contracts/mocks/DegeneretteMathHarness.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title DegeneretteFreezeResolutionTest -- Proves
 ///        DGAS-05 same-results: the v47 Degenerette `resolveBets` write-batching
@@ -60,16 +61,16 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     uint256 private constant FROZEN_BIT_SHIFT = 208;
 
     /// @dev prizePoolsPacked: [upper 128: futurePrizePool] [lower 128: nextPrizePool]
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED;
 
     /// @dev prizePoolPendingPacked: [upper 128: futurePending] [lower 128: nextPending]
-    uint256 private constant PENDING_PACKED_SLOT = 11;
+    uint256 private constant PENDING_PACKED_SLOT = GameSlots.PRIZE_POOL_PENDING_PACKED;
 
     /// @dev lootboxRngWordByIndex mapping root slot (post Stage-B game-storage repack: was 36).
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = GameSlots.RNG_WORD_CURRENT;
 
     /// @dev lootboxRngPacked at slot 34 (post Stage-B game-storage repack: was 35); lootboxRngIndex is the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
 
     /// @dev Salt used in degenerette bet resolution for the first spin.
     bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q'
@@ -82,7 +83,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     // --- DGAS-05 same-results constants ---
 
     /// @dev claimablePool (uint128) lives in slot 1, byte 16.
-    uint256 private constant CLAIMABLE_POOL_SLOT = 1;
+    uint256 private constant CLAIMABLE_POOL_SLOT = GameSlots.CLAIMABLE_POOL;
     /// @dev FLIP.balanceOf mapping root slot.
     uint256 private constant FLIP_BALANCEOF_SLOT = 1;
 

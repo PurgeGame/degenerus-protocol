@@ -9,10 +9,11 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IJackpotBattle} from "../../contracts/interfaces/IJackpotBattle.sol";
 import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 /// @dev Initial state only. All requests, callbacks, field chunks and settlement use the
 ///      production entry points after the Game's runtime is restored.
-contract JackpotCommitmentSeeder is DegenerusGame {
+contract JackpotCommitmentSeeder is DegenerusGame, WalletSeed {
     function seed(address attacker) external returns (uint256 salvagePosition) {
         TQ.retireCompleted(address(this), 7);
         uint24 day = _simulatedDayIndex();
@@ -36,21 +37,23 @@ contract JackpotCommitmentSeeder is DegenerusGame {
         _recordDailyRng(day - 1, 123456);
         salvagePosition = _ticketQueueLength(_tqFarFutureKey(9));
         for (uint24 target = 9; target <= 106; target += 97) {
-            _queueEntries(attacker, target, 400, false);
+            _queueEntries(_seedWallet(attacker), target, 400, false);
             for (uint256 i; i < 180; ++i) {
-                _queueEntries(address(uint160(0x100000 + i)), target, 4, false);
+                _queueEntries(_seedWallet(address(uint160(0x100000 + i))), target, 4, false);
             }
         }
         // Real outstanding awards: either would add wallets to the drawn population if
         // its ordinary queue sink stopped enforcing the request lock.
-        whalePassClaims[attacker] = 4;
+        _seedHalfPasses(attacker, 4);
         claimablePool = 12 ether;
         decBattleRounds[5].poolWei = 12 ether;
         decBattleRounds[5].phase = 2;
+        decBattleRounds[5].count = 1;
+        decBattleRounds[5].capacity = 1;
         decBattleRounds[5].winners = 1;
         decBattleRounds[5].champion = 1;
-        decBattlePlayers[attacker] = (uint256(5) << 64) | 1;
-        decBattleEntries[(uint256(5) << 64) | 1] = (uint256(1) << 190) | uint256(uint160(attacker));
+        decBattlePlayers[_seedWallet(attacker)] = (uint256(5) << 64) | 1;
+        decBattleEntries[(uint256(5) << 64) | 1] = (uint256(1) << 190) | uint256(_seedWallet(attacker));
         decBattleHeap[0] = 1;
         decBattleQueue = 5 | (uint256(5) << 24);
 
@@ -154,7 +157,7 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
         vm.prank(ATTACKER);
         vm.expectRevert(CrapsBattleStorage.OnlyGame.selector);
         crapsBattle.runDailyBattleWork(10_000_000);
-        assertEq(crapsBattle.preferredBoardOf(ATTACKER), BOARD);
+        assertEq(crapsBattle.preferredBoardOf(game.walletIdOf(ATTACKER)), BOARD);
     }
 
     function _run(uint256 word, bool perturb) private returns (Result memory result) {

@@ -7,6 +7,7 @@ import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @dev Production facade plus a native `runDailyPhase` seam (one daily stage per call) and
 ///      read-only views of the BAF work record and pools.
@@ -64,11 +65,11 @@ contract BafRebuyHost is DegenerusGame {
 contract BafRebuyReconciliationTest is DeployProtocol {
     /// @dev Storage slot of prizePoolsPacked in DegenerusGameStorage (confirmed via forge inspect).
     ///      Layout: [upper 128 bits: futurePrizePool] [lower 128 bits: nextPrizePool]
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED;
 
     bytes32 private constant ADVANCE_SIG = keccak256("Advance(uint8,uint24)");
-    bytes32 private constant ETH_SIG = keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)");
-    bytes32 private constant CREDIT_SIG = keccak256("PlayerCredited(address,uint256)");
+    bytes32 private constant ETH_SIG = keccak256("JackpotEthWin(uint32,uint24,uint16,uint256,uint256)");
+    bytes32 private constant CREDIT_SIG = keccak256("PlayerCredited(uint32,uint256)");
     bytes32 private constant SKIPPED_SIG = keccak256("BafSkipped(uint24,uint24)");
     uint8 private constant STAGE_ENTERED_JACKPOT = 7;
     uint8 private constant STAGE_JACKPOT_BAF_AWARDS = 19;

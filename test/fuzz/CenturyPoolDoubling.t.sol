@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @dev Drives _prizePoolTarget over the real storage layout without pinning a single slot:
 ///      inheriting the storage base gets the compiler to resolve every offset, so a layout
@@ -37,9 +38,9 @@ contract CenturyPoolDoublingTest is DeployProtocol {
     // Slot positions (confirmed via `forge inspect DegenerusGame storageLayout`).
     uint256 private constant SLOT_0 = 0;
     uint256 private constant LEVEL_SHIFT = 96; // slot 0 bytes [12:15): level (uint24)
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2; // [future:128][next:128]
-    uint256 private constant LEVEL_PRIZE_POOL_SLOT = 23; // mapping(uint24 => uint256)
-    uint256 private constant CENTURY_POOLS_SLOT = 66; // uint128[] centuryPrizePools
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED; // [future:128][next:128]
+    uint256 private constant LEVEL_PRIZE_POOL_SLOT = GameSlots.LEVEL_PRIZE_POOL; // mapping(uint24 => uint256)
+    uint256 private constant CENTURY_POOLS_SLOT = GameSlots.CENTURY_PRIZE_POOLS; // uint128[] centuryPrizePools
 
     uint256 private constant REDEEM_QTY = 4000; // 10 whole tickets, above the min buy-in
 

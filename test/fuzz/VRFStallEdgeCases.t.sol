@@ -9,6 +9,7 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title VRFStallEdgeCases -- Audit tests for VRF stall edge case requirements
 /// @notice Covers STALL-01 (gap backfill entropy), STALL-02 (manipulation window),
@@ -19,7 +20,7 @@ import {Vm} from "forge-std/Vm.sol";
 contract VRFStallEdgeCases is DeployProtocol {
     /// @dev Storage slot constants verified via `forge inspect DegenerusGame storage-layout`.
     uint256 constant SLOT_PACKED_0 = 0;
-    uint256 constant SLOT_RNG_WORD_CURRENT = 3;
+    uint256 constant SLOT_RNG_WORD_CURRENT = GameSlots.RNG_WORD_CURRENT;
     uint256 constant SLOT_VRF_REQUEST_ID = 4;
 
     function setUp() public {
@@ -436,7 +437,7 @@ contract VRFStallEdgeCases is DeployProtocol {
     /// @dev Storage slot for totalFlipReversals (verified via forge inspect).
     uint256 constant SLOT_TOTAL_FLIP_REVERSALS = 5;
     /// @dev Storage slot for lootboxRngPacked (post V62 lootbox repack: was 36).
-    uint256 constant SLOT_LOOTBOX_RNG_PACKED = 33;
+    uint256 constant SLOT_LOOTBOX_RNG_PACKED = GameSlots.LOOTBOX_RNG_PACKED;
 
     /// @notice Unit: coordinator swap with a daily request in flight preserves the RNG lock
     ///         and re-issues the request on the new coordinator; intentionally-kept variables

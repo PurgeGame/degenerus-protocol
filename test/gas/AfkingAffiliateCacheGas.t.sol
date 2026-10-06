@@ -6,10 +6,13 @@ import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
+import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-contract AfkingAffiliateCacheHost is DegenerusGame {
+contract AfkingAffiliateCacheHost is DegenerusGame, WalletSeed {
     function prepare(address player, bool cacheHit) external {
         uint24 today = _simulatedDayIndex();
+        uint32 id = _seedWallet(player);
         level = 24;
         dailyIdx = today - 1;
         _afkingResetDay = today;
@@ -17,8 +20,7 @@ contract AfkingAffiliateCacheHost is DegenerusGame {
         _subOpenCursor = 0;
         _pendingBoxCount = 0;
         delete _subscribers;
-        _subscribers.push(player);
-        _subscriberIndex[player] = 1;
+        _subscribers.push(uint256(uint160(player)) | (uint256(id) << 160));
         subsFullyProcessed = false;
         ticketsFullyProcessed = true;
         humanReadComplete = true;
@@ -30,16 +32,17 @@ contract AfkingAffiliateCacheHost is DegenerusGame {
         // A pass/seat holder with actual prior purchases. The prior level's cache
         // is stale on the first buy after24; a subsequent buy already has tag24.
         mintPacked_[player] |= uint256(23) | (uint256(10) << 24)
-            | (uint256(today - 1) << 72) | (uint256(1) << 155)
-            | (uint256(cacheHit ? 24 : 23) << 185);
-        Sub storage sub = _subOf[player];
+            | (uint256(today - 1) << BitPackingLib.DAY_SHIFT) | (uint256(1) << BitPackingLib.SEAT_ENCUMBERED_SHIFT)
+            | (uint256(cacheHit ? 24 : 23) << BitPackingLib.AFFILIATE_BONUS_LEVEL_SHIFT);
+        Sub storage sub = _subOf[id];
+        sub.setPosition = 1;
         sub.dailyQuantity = 255;
         sub.flags = 0;
         sub.lastAutoBoughtDay = today - 1;
         sub.lastOpenedDay = today - 1;
         sub.afkingStartDay = today - 1;
         sub.afkCoveredThroughDay = today - 1;
-        _creditAfkingValue(player, 100 ether);
+        _creditAfkingValue(id, 100 ether);
     }
 
     function buy() external returns (MineFlipGas.Result memory result) {
@@ -51,7 +54,7 @@ contract AfkingAffiliateCacheHost is DegenerusGame {
     }
 
     function pending() external view returns (uint256) { return _pendingBoxCount; }
-    function bought(address player) external view returns (uint24) { return _subOf[player].lastAutoBoughtDay; }
+    function bought(address player) external view returns (uint24) { return _subOf[_walletIdOf(player)].lastAutoBoughtDay; }
 }
 
 contract AfkingAffiliateCacheGasTest is DeployProtocol {

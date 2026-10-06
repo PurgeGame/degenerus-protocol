@@ -6,6 +6,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title VrfRotationOrphanIndex -- VTST-01 orphan-index reproduction (proves VRF-01)
 /// @notice Proves the CATASTROPHE-class VRF-rotation orphan-index defect is closed by
@@ -23,8 +24,8 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 ///         ZERO contracts/ mutation -- audit-only (D-43N-AUDIT-ONLY-01).
 contract VrfRotationOrphanIndex is DeployProtocol {
     /// @dev Storage slot constants (authoritative storage-layout, not the drifted analog).
-    uint256 private constant SLOT_LOOTBOX_PACKED = 33;   // post Stage B Game pack: was 35
-    uint256 private constant SLOT_LOOTBOX_WORD_MAP = 34;  // post Stage B Game pack: was 36
+    uint256 private constant SLOT_LOOTBOX_PACKED = GameSlots.LOOTBOX_RNG_PACKED;   // post Stage B Game pack: was 35
+    uint256 private constant SLOT_LOOTBOX_WORD_MAP = GameSlots.RNG_DAY_TAGS;  // post Stage B Game pack: was 36
     /// @dev LR_MID_DAY occupies byte 28 of lootboxRngPacked (bit offset 224, mask 0xFF).
     uint256 private constant LR_MID_DAY_BIT = 224;
 

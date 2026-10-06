@@ -5,6 +5,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DeadVrfSeeder} from "../fuzz/helpers/DeadVrfSeeder.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 /// @dev The DeadVrfEnding seeder plus the post-swap probes this repro needs. Etched only to
 ///      seed and to read; every measured call runs the production DegenerusGame runtime.
@@ -23,7 +24,7 @@ contract PostSwapSeeder is DeadVrfSeeder {
             uint256 n = _bucketLength(lvl, t);
             digest = keccak256(abi.encode(digest, t, n));
             for (uint256 i; i < n; ++i) {
-                digest = keccak256(abi.encode(digest, _bucketOwnerAtUnchecked(lvl, uint8(t), i)));
+                digest = keccak256(abi.encode(digest, _bucketOwnerAt(lvl, uint8(t), i)));
             }
         }
     }
@@ -176,7 +177,7 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter == address(game) && logs[i].topics.length != 0
-                && logs[i].topics[0] == keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)")) {
+                && logs[i].topics[0] == keccak256("JackpotEthWin(uint32,uint24,uint16,uint256,uint256)")) {
                 digest = keccak256(abi.encode(digest, logs[i].topics, logs[i].data));
             }
         }

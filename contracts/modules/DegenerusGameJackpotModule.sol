@@ -96,38 +96,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     ///      traitId is uint16: values 0-255 are real trait IDs; values ≥256 are
     ///      sentinels for non-trait sources (e.g. BAF_TRAIT_SENTINEL = 420).
     event JackpotEthWin(
-        address indexed winner,
+        uint32 indexed walletId,
         uint24 indexed level,
         uint16 indexed traitId,
         uint256 amount,
         uint256 entryIndex
     );
 
-    /// @dev Ticket jackpot win. See JackpotEthWin for traitId sentinel semantics.
-    ///      entryCount is an entries count on all 3 paths and matches the
-    ///      entries awarded through direct materialization or the ordinary queue. roundedUp is
-    ///      true iff the BAF _jackpotTicketRoll (traitId = BAF_TRAIT_SENTINEL)
-    ///      Bernoulli sub-roll incremented the whole-ticket count; it is false
-    ///      on the two trait-matched paths, which have a zero fractional part
-    ///      by construction.
-    event JackpotTicketWin(
-        address indexed winner,
-        uint24 indexed entryLevel,
-        uint16 indexed traitId,
-        uint32 entryCount,
-        uint24 sourceLevel,
-        uint256 entryIndex,
-        bool roundedUp
-    );
 
-    /// @dev FLIP coin win (near-future, trait-matched).
-    event JackpotFlipWin(
-        address indexed winner,
-        uint24 indexed level,
-        uint8 indexed traitId,
-        uint256 amount,
-        uint256 entryIndex
-    );
 
     /// @dev Emitted once per daily drawing with the day's one winning board.
     event DailyWinningTraits(uint24 indexed day, uint32 mainTraitsPacked);
@@ -146,7 +122,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     ///      bucket's official (post-hero) values — the target the resolve board must
     ///      repeat (with 4 golds) for the grand.
     event GoldenTicketArmed(
-        address indexed winner,
+        uint32 indexed walletId,
         uint24 indexed level,
         uint8 quadrant,
         uint8 symbol
@@ -165,7 +141,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     ///      claimable; halfPassCount and flipCredit are face-value credits with no pool
     ///      debit; wwxrpAmount is the 0-gold consolation, before WWXRP's gameMintScale.
     event GoldenTicketWin(
-        address indexed winner,
+        uint32 indexed walletId,
         uint24 indexed level,
         uint8 route,
         uint8 goldCount,
@@ -575,7 +551,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
         for (uint8 o; o < 4; ++o) {
             if (o == q || d.shares[o] == 0) continue;
             uint8 trait = d.traits[o];
-            if (_bucketLength(d.lvl, trait) == 0 && _traitDeity(trait) == address(0)) continue;
+            if (_bucketLength(d.lvl, trait) == 0 && _traitDeity(trait) == 0) continue;
             (uint256 n, uint256 each, uint256 net) = _ethNonSolo(d, o);
             perWinner += net - n * each;
         }
@@ -844,9 +820,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
         uint256 quarterShare = (yieldPool * 2300) / 10_000;
 
         if (quarterShare != 0) {
-            _creditClaimable(ContractAddresses.VAULT, quarterShare);
-            _creditClaimable(ContractAddresses.SDGNRS, quarterShare);
-            _creditClaimable(ContractAddresses.GNRUS, quarterShare);
+            _creditClaimableLogged(VAULT_WALLET_ID, quarterShare);
+            _creditClaimableLogged(SDGNRS_WALLET_ID, quarterShare);
+            _creditClaimableLogged(GNRUS_WALLET_ID, quarterShare);
             // _creditClaimable writes only balancesPacked, so the cached
             // claimablePool / yieldAccumulator values are still exact here.
             claimablePool = claimablePoolCached + uint128(quarterShare * 3);
@@ -919,7 +895,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
             uint16[4] memory counts,
             uint8 activeCount,
             uint256[4] memory lens,
-            address[4] memory deities
+            uint32[4] memory deities
         )
     {
         uint8 activeMask;
@@ -927,9 +903,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
             uint8 trait = traitIds[i];
             uint256 len = _bucketLength(lvl, trait);
             lens[i] = len;
-            address deity = _traitDeity(trait);
+            uint32 deity = _traitDeity(trait);
             deities[i] = deity;
-            if (len != 0 || deity != address(0)) {
+            if (len != 0 || deity != 0) {
                 activeMask |= uint8(1 << i);
                 unchecked {
                     ++activeCount;
@@ -1065,12 +1041,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     ///      dailyIdx; the resolve-day ban fields are preserved so a chain arm (a
     ///      resolve day that itself rolls 4 golds) keeps the current day's hero ban
     ///      intact for later re-rolls of this board.
-    function _armGoldenTicket(address winner, uint24 lvl, uint8 traitId) private {
+    function _armGoldenTicket(uint32 winner, uint24 lvl, uint8 traitId) private {
         uint8 quadrant = traitId >> 6;
         uint8 symbol = traitId & 7;
         goldenTicket =
             (goldenTicket & ~((uint256(1) << 190) - 1)) |
-            uint256(uint160(winner)) |
+            uint256(winner) |
             (uint256(quadrant) << 160) |
             (uint256(symbol) << 162) |
             (uint256(dailyIdx) << 165) |
@@ -1111,7 +1087,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
             (uint256(quadrant) << 191) |
             (uint256(dailyIdx) << 193);
         _payGoldenTicket(
-            address(uint160(g)),
+            uint32(g),
             lvl,
             GOLDEN_TICKET_ROUTE_BOARD,
             golds,
@@ -1131,14 +1107,14 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     ///      The armed-board state is untouched — a foil grand neither arms, resolves,
     ///      nor consumes an armed board, so a pending arm still resolves on its own
     ///      next draw.
-    /// @param winner The foil buyer whose pack rolled the two all-gold tickets.
+    /// @param winner Wallet ID of the foil buyer whose pack rolled the two all-gold tickets.
     /// @param lvl The pack's cycle level (the flip-credit rate's basis).
     /// @param golds The pack's total gold quadrants — 8 to 16, since the grand fires on
     ///        two or more all-gold tickets and the remaining tickets hold 0-3 golds each.
     ///        Stamped as the event's goldCount; always above the board route's 0-4 range,
     ///        so the two routes never read alike even on the count alone.
     function payGoldenTicketGrand(
-        address winner,
+        uint32 winner,
         uint24 lvl,
         uint8 golds
     ) external {
@@ -1174,7 +1150,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
         // a deity, and its share stays in the pool like any empty quadrant's.
         if (_ticketLevelRetired(lvl)) return (count, 0, 0);
         uint256 len = _bucketLengthUnchecked(lvl, trait);
-        address deity = _traitDeity(trait);
+        uint32 deity = _traitDeity(trait);
         uint256 effectiveLen = len + _deityVirtualCount(trait, len, deity);
         PackedTicketSampleLib.Cursor memory cursor;
         while (pos < count) {
@@ -1183,24 +1159,24 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
             uint256 bound = (end - pos) * ETH_WINNER_GAS_MAX;
             if (pos == 0) bound += 160_000;
             if (!MineFlipGas.canRun(meter, bound, JACKPOT_TAIL_GAS)) break;
-            address first;
+            uint32 first;
             if (pos == 0) {
                 if (effectiveLen == 0) return (count, 0, 0);
                 if (passShare != 0) paid = _awardWhalePass(lvl, trait, passShare, seed, false);
             }
             for (uint256 i = pos; i < end; ++i) {
-                (address w, uint256 index) = _drawBucketEntry(
+                (uint32 w, uint256 index) = _drawBucketEntry(
                     lvl, trait, len, effectiveLen, deity, seed, uint8(200 + q), i, cursor
                 );
                 if (i == 0) first = w;
-                if (w != address(0)) {
+                if (w != 0) {
                     _creditClaimable(w, perWinner);
                     emit JackpotEthWin(w, lvl, trait, perWinner, index);
                     paid += perWinner;
                     liability += perWinner;
                 }
             }
-            if (armGold && first != address(0)) _armGoldenTicket(first, lvl, trait);
+            if (armGold && first != 0) _armGoldenTicket(first, lvl, trait);
             pos = end;
         }
         return (pos, paid, liability);
@@ -1222,7 +1198,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     ///      claimable is player money already owed and is excluded) 75% in half-passes at
     ///      HALF_WHALE_PASS_PRICE and 25% in flip credit at the level's ticket rate.
     function _payGoldenTicket(
-        address winner,
+        uint32 winner,
         uint24 lvl,
         uint8 route,
         uint8 golds,
@@ -1272,7 +1248,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
             claimablePool += uint128(ethAward);
         }
         if (halfPasses != 0) {
-            whalePassClaims[winner] += halfPasses;
+            _addHalfPasses(winner, halfPasses);
         }
         uint256 flipCredit;
         if (flipValueWei != 0) {
@@ -1288,12 +1264,12 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
                 (flipCredit / FlipRoundLib.FLIP_ROUND_UNIT) *
                 FlipRoundLib.FLIP_ROUND_UNIT;
             if (flipCredit != 0) {
-                coinflip.creditFlip(winner, flipCredit);
+                coinflip.creditFlip(_payee(_walletElement(winner)), flipCredit);
             }
         }
         if (wwxrpAward != 0) {
             IWwxrpMintPrize(ContractAddresses.WWXRP).mintPrize(
-                winner,
+                _payee(_walletElement(winner)),
                 wwxrpAward
             );
         }

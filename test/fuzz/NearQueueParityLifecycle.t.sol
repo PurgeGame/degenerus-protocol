@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {TicketCheckpointHarness} from "./TicketCheckpointDeterminism.t.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 contract NearParityLifecycleHarness is TicketCheckpointHarness {
     function phase(bool jackpot, bool lastDay, bool transition) external {
@@ -16,10 +17,10 @@ contract NearParityLifecycleHarness is TicketCheckpointHarness {
     function finalJackpotDay() external { jackpotCounter = _jackpotDays() - 1; }
     function buy(address buyer, uint32 scaled) external returns (uint24 target) {
         target = _activeTicketLevel();
-        _queueEntriesScaled(buyer, target, scaled);
+        _queueEntriesScaled(_seedWallet(buyer), target, scaled);
     }
     function total(uint24 lvl, address buyer) external view returns (uint32) {
-        return _entriesOwedTotal(lvl, buyer);
+        return _entriesOwedTotal(lvl, _walletIdOf(buyer));
     }
     function ceiling() external view returns (uint24) { return _mintCeiling(); }
     function queueLength(uint24 lvl) external view returns (uint256) {

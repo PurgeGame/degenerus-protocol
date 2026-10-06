@@ -4,13 +4,14 @@ pragma solidity 0.8.34;
 import {JackpotBattleFieldLib} from "../../contracts/libraries/JackpotBattleFieldLib.sol";
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameJackpotDrawModule} from "../../contracts/modules/DegenerusGameJackpotDrawModule.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-contract JackpotBattleDrawHarness is DegenerusGameJackpotDrawModule {
+contract JackpotBattleDrawHarness is DegenerusGameJackpotDrawModule, WalletSeed {
     function seed(uint24 target, address[] memory owners, bool gaps) external {
         for (uint256 i; i < owners.length; ++i) {
             // Queue positions need not equal registry positions (e.g. after a salvage swap).
-            if (gaps) _registerEntryOwner(address(uint160(0xDEAD0000 + i)), target);
-            uint32 pos = uint32(_registerEntryOwner(owners[i], target) >> OWNER_IDX_SHIFT);
+            if (gaps) (uint80(_seedWallet(address(uint160(0xDEAD0000 + i)))) << OWNER_IDX_SHIFT);
+            uint32 pos = _seedWallet(owners[i]);
             _tqAppend(_tqFarFutureKey(target), pos);
         }
     }
@@ -39,7 +40,7 @@ contract JackpotBattleDrawHarness is DegenerusGameJackpotDrawModule {
     function queued(uint24 target) external view returns (address[] memory owners) {
         uint256[] storage queue = ticketQueue[_ticketQueueStorageKey(_tqFarFutureKey(target))];
         owners = new address[](queue.length);
-        for (uint256 i; i < owners.length; ++i) owners[i] = _tqOwnerAt(queue, target, i);
+        for (uint256 i; i < owners.length; ++i) owners[i] = _walletKey(_tqPositionAt(queue, i));
     }
 }
 

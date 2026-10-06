@@ -5,16 +5,17 @@ import {Test} from "forge-std/Test.sol";
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
 import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 /// @dev Only environment setup is synthetic. Admission, packed balance writes,
 ///      registry allocation, trait generation, cursoring and bucket decoding are production.
-contract UnpushedTicketRngHarness is DegenerusGameTicketModule {
+contract UnpushedTicketRngHarness is DegenerusGameTicketModule, WalletSeed {
     function initialize() external { level = 1; }
     function credit(address player, uint24 lvl, uint32 scaled) external {
-        _queueEntriesScaled(player, lvl, scaled);
+        _queueEntriesScaled(_seedWallet(player), lvl, scaled);
     }
     function creditWhole(address player, uint24 lvl, uint32 entries) external {
-        _queueEntries(player, lvl, entries, false);
+        _queueEntries(_seedWallet(player), lvl, entries, false);
     }
     function commit(uint256 entropy, bool futurePool) external {
         rngWordCurrent = entropy < 2 ? 2 : entropy;
@@ -28,7 +29,7 @@ contract UnpushedTicketRngHarness is DegenerusGameTicketModule {
         }
     }
     function pending(address player, uint24 lvl, bool future, bool read) external view returns (uint80) {
-        return _entriesOwed(future ? _tqFarFutureKey(lvl) : read ? _tqReadKey(lvl) : _tqWriteKey(lvl), player);
+        return _owedOf(future ? _tqFarFutureKey(lvl) : read ? _tqReadKey(lvl) : _tqWriteKey(lvl), player);
     }
     function frozenLength(uint24 lvl, bool future) external view returns (uint256) {
         return _ticketQueueLength(future ? _tqFarFutureKey(lvl) : _tqReadKey(lvl));
@@ -42,7 +43,7 @@ contract UnpushedTicketRngHarness is DegenerusGameTicketModule {
             count += len;
             digest = keccak256(abi.encode(digest, trait, len));
             for (uint256 i; i < len; ++i) {
-                digest = keccak256(abi.encode(digest, _bucketOwnerAtUnchecked(lvl, uint8(trait), i)));
+                digest = keccak256(abi.encode(digest, _bucketOwnerAt(lvl, uint8(trait), i)));
             }
         }
     }

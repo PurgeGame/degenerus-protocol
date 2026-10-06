@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 interface IGameSnapshot {
     function level() external view returns (uint24);
@@ -84,7 +85,7 @@ contract CoinflipBonusRecorder {
 ///           the arm request).
 ///         - every other settled epoch carries bonus 0.
 contract CoinflipBonusDayTest is DeployProtocol {
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED;
     uint256 private constant MAX_EPOCH_SCAN = 800;
 
     address private buyer;

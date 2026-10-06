@@ -6,6 +6,7 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @dev Actual purchases, callbacks and keeper calls; no queue/completion/storage seeding.
 ///      Also runs against the baseline with RECYCLED_STORAGE=false for payer comparison.
@@ -115,7 +116,7 @@ contract StorageRecyclingLifecycleTest is DeployProtocol {
         uint256 occurrences; uint256 words;
         for (uint256 trait; trait < 256; ++trait) {
             uint256 header = uint256(game.extsload(bytes32(base + trait)));
-            uint256 bits = uint256(game.extsload(bytes32(uint256(75) + (lvl & 1))));
+            uint256 bits = uint256(game.extsload(bytes32(GameSlots.TRAIT_BUCKET_LIVE + (lvl & 1))));
             uint256 count = recycled ? ((bits >> trait) & 1 != 0 ? uint32(header) : 0) : header;
             occurrences += count;
             words += (count + 7) / 8;
@@ -150,9 +151,9 @@ contract StorageRecyclingLifecycleTest is DeployProtocol {
         emit log_named_uint("observed parity retirements", retirements);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 legacyTraits = keccak256("TraitsGenerated(address,uint256,uint32)");
-        bytes32 entries = keccak256("EntriesQueued(address,uint24,uint32)");
-        bytes32 scaled = keccak256("EntriesQueuedScaled(address,uint24,uint32)");
-        bytes32 range = keccak256("EntriesQueuedRange(address,uint24,uint24,uint24,uint32)");
+        bytes32 entries = keccak256("EntriesQueued(uint32,uint24,uint32)");
+        bytes32 scaled = keccak256("EntriesQueuedScaled(uint32,uint24,uint32)");
+        bytes32 range = keccak256("EntriesQueuedRange(uint32,uint24,uint24,uint24,uint32)");
         bytes32 boxes = keccak256("LootBoxBuy(address,uint48,uint256)");
         bytes32 bet = keccak256("DegeneretteBetPlaced(address,uint32,uint64,uint256)");
         for (uint256 i; i < logs.length; ++i) {

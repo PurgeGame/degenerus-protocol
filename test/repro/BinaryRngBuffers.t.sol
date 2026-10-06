@@ -8,6 +8,7 @@ import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {IVRFCoordinator, VRFRandomWordsRequest} from "../../contracts/interfaces/IVRFCoordinator.sol";
 import {IDegenerusGameRngModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @dev The RNG module's mid-day request worker (the one mineFlip's RequestMidday stage
 ///      dispatches), called alone in the Game's context to observe its own gates.
@@ -136,36 +137,36 @@ contract BinaryRngBuffersTest is DeployProtocol {
     function test_CoordinatorFailureRollsBackSealAndCredit() public {
         _buy();
         bytes32 state = game.extsload(bytes32(0));
-        bytes32 cursor = game.extsload(bytes32(uint256(33)));
+        bytes32 cursor = game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED));
         uint256 credit = game.middayRngCredits(buyer);
         uint256 id = mockVRF.lastRequestId();
         vm.mockCallRevert(address(mockVRF), abi.encodeWithSelector(IVRFCoordinator.requestRandomWords.selector), "coordinator unavailable");
         vm.prank(buyer); vm.expectRevert(bytes("coordinator unavailable")); game.mineFlip();
         assertEq(game.extsload(bytes32(0)), state, "failed request changed buffer or completion");
-        assertEq(game.extsload(bytes32(uint256(33))), cursor, "failed request changed pending commitments");
+        assertEq(game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED)), cursor, "failed request changed pending commitments");
         assertEq(game.middayRngCredits(buyer), credit);
         assertEq(mockVRF.lastRequestId(), id);
     }
     function test_EightSessionsReuseTwoBuffersWithoutLeakingOrdersOrBets() public {
         for (uint256 cycle; cycle < 8; ++cycle) {
             uint48 write = RecyclingState.writeBuffer(address(game));
-            assertEq(uint256(game.extsload(keccak256(abi.encode(write, uint256(57))))), 0, "write boxes header reset");
-            assertEq(uint256(game.extsload(keccak256(abi.encode(write, uint256(21))))), 0, "write bets header reset");
+            assertEq(uint256(game.extsload(keccak256(abi.encode(write, GameSlots.BOX_PLAYERS)))), 0, "write boxes header reset");
+            assertEq(uint256(game.extsload(keccak256(abi.encode(write, GameSlots.DEGENERETTE_QUEUE)))), 0, "write bets header reset");
             _buy();
             // The low 48 bits of lootboxRngPacked are unused; a request must leave them
             // untouched, so no request-epoch counter exists anywhere in the word.
-            uint48 lowBits = uint48(uint256(game.extsload(bytes32(uint256(33)))));
+            uint48 lowBits = uint48(uint256(game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED))));
             uint256 id = _request();
             assertEq(RecyclingState.readBuffer(address(game)), write);
             assertEq(RecyclingState.writeBuffer(address(game)), write ^ 1);
-            assertEq(uint48(uint256(game.extsload(bytes32(uint256(33))))), lowBits, "no increasing epoch counter");
+            assertEq(uint48(uint256(game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED)))), lowBits, "no increasing epoch counter");
             assertFalse(game.rngComplete()); assertEq(RecyclingState.currentWord(address(game)), 0);
             mockVRF.fulfillRandomWords(id, cycle + 42);
             assertFalse(game.rngComplete(), "delivery cannot skip settlement");
             // All producers now bind the other buffer, even while the read word exists.
             if (cycle == 0) {
                 _buy();
-                assertEq(uint256(game.extsload(keccak256(abi.encode(write ^ 1, uint256(21))))), 1);
+                assertEq(uint256(game.extsload(keccak256(abi.encode(write ^ 1, GameSlots.DEGENERETTE_QUEUE)))), 1);
             }
             _assertNextRequestBlocked(id);
             _drainSession();

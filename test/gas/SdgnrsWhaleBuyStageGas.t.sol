@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title SdgnrsWhaleBuyStageGas -- calibration of the sDGNRS whale purchase checkpoint.
 /// @notice Measures the COLD incremental gas of sDGNRS's automatic whale purchase inside the
@@ -21,15 +22,14 @@ import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlip
 ///         realistic chunk limit. Whole keeper calls are budgeted by their allowance and only
 ///         reported. Test-only: ZERO contracts/*.sol mutation.
 contract SdgnrsWhaleBuyStageGas is DeployProtocol {
-    uint256 private constant GAME_CLAIMABLE_SLOT = 7;
-    uint256 private constant CLAIMABLE_POOL_SLOT = 1;
-    uint256 private constant CURSOR_SLOT = 56;
+    uint256 private constant GAME_CLAIMABLE_SLOT = GameSlots.BALANCES_PACKED;
+    uint256 private constant CLAIMABLE_POOL_SLOT = GameSlots.CLAIMABLE_POOL;
+    uint256 private constant CURSOR_SLOT = GameSlots.SUB_CURSOR;
     uint256 private constant SDGNRS_BONUS_OFFBYTES = 20;
     uint256 private constant LEVEL_OFFBYTES = 12;
 
-    uint256 private constant TICKET_QUEUE_SLOT = 12;
-    uint256 private constant TICKET_OWNER_ID_SLOT = 13;
-    uint256 private constant TICKET_PENDING_SLOT = 78;
+    uint256 private constant TICKET_QUEUE_SLOT = GameSlots.TICKET_QUEUE;
+    uint256 private constant TICKET_PENDING_SLOT = GameSlots.TICKET_PENDING;
     /// @dev A realistic keeper allowance for the measured call.
     uint256 private constant KEEPER_ALLOWANCE = 10_000_000;
 
@@ -122,14 +122,14 @@ contract SdgnrsWhaleBuyStageGas is DeployProtocol {
         }
         address[2] memory holders = [ContractAddresses.SDGNRS, ContractAddresses.VAULT];
         for (uint256 i; i < 2; ++i) {
-            uint32 id = uint32(uint256(vm.load(address(game), keccak256(abi.encode(holders[i], TICKET_OWNER_ID_SLOT)))));
+            uint32 id = game.walletIdOf(holders[i]);
             if (id != 0) vm.store(address(game), keccak256(abi.encode(uint256(id), TICKET_PENDING_SLOT)), bytes32(0));
         }
     }
 
     function _setClaimable(address who, uint256 amount) internal {
         uint256 mask128 = (uint256(1) << 128) - 1;
-        bytes32 cwSlot = keccak256(abi.encode(who, uint256(GAME_CLAIMABLE_SLOT)));
+        bytes32 cwSlot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(GAME_CLAIMABLE_SLOT)));
         uint256 packed = uint256(vm.load(address(game), cwSlot));
         uint256 prev = packed & mask128;
         uint256 high = packed & ~mask128;
@@ -146,7 +146,7 @@ contract SdgnrsWhaleBuyStageGas is DeployProtocol {
     }
 
     function _claimableOf(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(GAME_CLAIMABLE_SLOT))))) & ((uint256(1) << 128) - 1);
+        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(GAME_CLAIMABLE_SLOT))))) & ((uint256(1) << 128) - 1);
     }
 
     function _sdgnrsBonusLevel() internal view returns (uint24) {

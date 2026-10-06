@@ -8,11 +8,12 @@ import {DegenerusGameBoonModule} from "../../contracts/modules/DegenerusGameBoon
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {DeityBoonViewer} from "../../contracts/DeityBoonViewer.sol";
 import {DeityBoonViewerTreeHarness} from "./BoonRollTreeParity.t.sol";
+import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
 contract PreviousDayBoonSeeder is DegenerusGameStorage {
     function seed(uint24 day, uint256 word, address deity, bool locked) external {
         _recordDailyRng(day, word);
-        mintPacked_[deity] |= uint256(1) << 184;
+        mintPacked_[deity] |= uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT;
         rngLockedFlag = locked;
     }
 }

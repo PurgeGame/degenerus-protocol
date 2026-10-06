@@ -33,7 +33,9 @@ import {TicketEntropy} from "../libraries/TicketEntropy.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {
     IDegenerusGameDegeneretteModule,
-    IDegenerusGameJackpotModule
+    IDegenerusGameJackpotModule,
+    IDegenerusGameLootboxModule,
+    IDegenerusGameMintModule
 } from "../interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
@@ -68,28 +70,29 @@ contract DegenerusGameFoilPackModule is
 {
     /// @notice One deity perpetual ticket per owner was queued at `targetLevel`.
     /// @dev The owner set is the deity registry at that transition (genesis plus every
-    ///      DeityPassPurchased so far); fresh registrations emit EntryOwnerRegistered.
+    ///      DeityPassPurchased so far).
     event DeityPerpetualQueued(uint24 indexed targetLevel, uint32 entriesPerOwner);
 
     /// @notice Extend every deity's perpetual coverage by one level, at most 32 owners.
     /// @dev The advance runs this exactly once per transition (the transition branch runs
     ///      once per boundary), so every owner is extended unconditionally. Existing
     ///      queued purchases and affiliate rewards share an owed record; append only newly
-    ///      enrolled owners. One event covers the batch.
+    ///      enrolled owners. Deity IDs are read eight per word. One event covers the batch.
     function queuePerpetualTickets(uint24 targetLevel) external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (targetLevel != level + 100) return;
         uint24 key = _tqFarFutureKey(targetLevel);
         uint256 lanes;
         uint256 count;
-        uint256 total = deityPassOwners.length;
+        uint256 total = _deityCount();
+        uint256 word;
         for (uint256 i; i < total; ++i) {
-            address owner = deityPassOwners[i];
-            uint80 packed = _entriesOwed(key, owner);
+            if (i & 7 == 0) word = _deityWord(i >> 3);
+            uint32 id = uint32(word >> ((i & 7) << 5));
+            uint80 packed = _entryPacked(key, id);
             if (packed == 0) {
-                packed = _registerEntryOwner(owner, targetLevel);
-                if (packed == 0) continue;
-                lanes |= uint256(uint32(packed >> OWNER_IDX_SHIFT)) << (count * 32);
+                packed = uint80(id) << OWNER_IDX_SHIFT;
+                lanes |= uint256(id) << (count * 32);
                 if (++count == 8) {
                     _tqAppendLanes(key, lanes, count);
                     lanes = 0;
@@ -97,7 +100,7 @@ contract DegenerusGameFoilPackModule is
                 }
             }
             uint32 owed = _saturateFarFutureOwed(uint256(uint32(packed >> 8)) + DEITY_PERPETUAL_ENTRIES);
-            _setEntryOwed(key, uint32(packed >> OWNER_IDX_SHIFT),
+            _setEntryOwed(key, id,
                 (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(uint8(packed)));
         }
         if (count != 0) _tqAppendLanes(key, lanes, count);
@@ -232,30 +235,77 @@ contract DegenerusGameFoilPackModule is
     // Buy
     // =========================================================================
 
-    /// @notice Deliver one foil pack (four tickets) for the active cycle as the foil leg
-    ///         of an additive ticket/lootbox/foil purchase.
-    /// @dev Delegatecall-only from the Game facade's combined purchase path (_purchaseWithFoil), a
-    ///      sibling leg to the mint ticket/lootbox leg: address(this) == GAME. A direct call on the deployed module would trap the
-    ///      in-flight msg.value against empty local state. Liveness is gated by the purchase
-    ///      path. This handles the ENTIRE foil leg so a foil pack counts exactly like a
-    ///      ticket purchase: its own payment (75/25 pool), the 25|20/5 affiliate, the ten
-    ///      price-equivalent mint units, the daily MINT_ETH primary + level quest, the mint
-    ///      streak, the recycle bonus, the boost freeze, the queue push, and the foil
-    ///      secondary quest. Kept a separate leg (not folded into the ticket path) so the
-    ///      near-full mint module's purchase body stays within the via-IR stack budget.
-    /// @param buyer Player receiving the pack (already operator-resolved).
-    /// @param ethSent Fresh ETH the purchase path carved for the foil leg.
-    /// @param affiliateCode Affiliate/referral code for the foil leg.
-    /// @param payKind Payment method (DirectEth forbids drawing claimable; prepaid afking
-    ///        still covers the shortfall on every kind).
-    function buyFoilPack(
+    /// @notice The foil branch of Game.purchase: one foil pack added to optional ticket and
+    ///         lootbox legs in the same transaction.
+    /// @dev Delegatecall-only. Quote every leg at the routed level (the level the ticket queue and
+    ///      the pack both deliver to), so the final-jackpot-day reroute to level+1 cannot strand
+    ///      the buyer's overpay or under-quote the pack. The foil term carries the level's snap
+    ///      exponent, the SAME quote the pack charges. The buyer registers before anything else
+    ///      loads its mint word, with the whole quote as its paid-admission spend. Fresh ETH is
+    ///      capped at the combined cost and any overpay is credited to the payer's afking (a payer
+    ///      other than the buyer must already hold a wallet ID). The ticket/lootbox leg takes fresh
+    ///      ETH first through the mint module; the pack gets the remainder, with claimable then
+    ///      prepaid afking covering any shortfall.
+    function purchaseWithFoil(
         address buyer,
-        uint256 ethSent,
+        uint256 entryQuantityScaled,
+        uint256 boxOrder,
         bytes32 affiliateCode,
         MintPaymentKind payKind
     ) external payable {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        uint24 routedLvl = _activeTicketLevel();
+        uint256 priceWei = PriceLookupLib.priceForLevel(routedLvl);
+        uint256 mintCost = (priceWei * entryQuantityScaled) / (4 * QTY_SCALE);
+        if (boxOrder != 0) {
+            mintCost += abi.decode(_moduleCall(ContractAddresses.GAME_LOOTBOX_MODULE, abi.encodeWithSelector(
+                IDegenerusGameLootboxModule.quoteBoxOrder.selector, buyer, boxOrder)), (uint256));
+        }
+        uint256 cost = mintCost + ((FOIL_PACK_TICKETS * priceWei) << _snapShiftFor(routedLvl));
+        (uint32 buyerId, ) = _registerWallet(buyer, cost);
+        uint256 fresh = payKind == MintPaymentKind.Claimable
+            ? 0
+            : (msg.value < cost ? msg.value : cost);
+        if (msg.value > fresh) {
+            _creditAfkingValue(_payerId(buyer, buyerId), msg.value - fresh);
+        }
+        uint256 mintFresh = fresh < mintCost ? fresh : mintCost;
+        if (mintCost != 0) {
+            _moduleCall(ContractAddresses.GAME_MINT_MODULE, abi.encodeWithSelector(
+                IDegenerusGameMintModule.purchaseWith.selector,
+                buyer, entryQuantityScaled, boxOrder, affiliateCode, payKind, mintFresh));
+        }
+        _buyFoilPack(buyer, buyerId, fresh - mintFresh, affiliateCode, payKind);
+    }
 
+    /// @dev Delegatecall a sibling module in the Game's storage context, bubbling its revert.
+    function _moduleCall(address module, bytes memory payload) private returns (bytes memory data) {
+        bool ok;
+        (ok, data) = module.delegatecall(payload);
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
+        }
+    }
+
+    /// @dev Deliver one foil pack (four tickets) for the active cycle as the foil leg of an
+    ///      additive ticket/lootbox/foil purchase. This handles the ENTIRE foil leg so a foil
+    ///      pack counts exactly like a ticket purchase: its own payment (75/25 pool), the
+    ///      25|20/5 affiliate, the ten price-equivalent mint units, the daily MINT_ETH primary +
+    ///      level quest, the mint streak, the recycle bonus, the boost freeze, the queue push,
+    ///      and the foil secondary quest.
+    /// @param buyer Player receiving the pack (already operator-resolved and registered).
+    /// @param buyerId The buyer's wallet ID.
+    /// @param ethSent Fresh ETH the purchase path carved for the foil leg.
+    /// @param affiliateCode Affiliate/referral code for the foil leg.
+    /// @param payKind Payment method (DirectEth forbids drawing claimable; prepaid afking
+    ///        still covers the shortfall on every kind).
+    function _buyFoilPack(
+        address buyer,
+        uint32 buyerId,
+        uint256 ethSent,
+        bytes32 affiliateCode,
+        MintPaymentKind payKind
+    ) private {
         // Block once the liveness-timeout game-over trigger is active, or the game has
         // ended: a foil pack must not be added to a terminal jackpot whose resolving word
         // is becoming known (mirrors the ticket queue's guard), and a post-gameover buy
@@ -266,8 +316,8 @@ contract DegenerusGameFoilPackModule is
         // Use the same active level and frozen read/write cohort as normal tickets.
         // Purchases after a request enter the next cohort and require fresh entropy.
         uint24 lvl = _activeTicketLevel();
-        if (_foilBoughtThisLevel(buyer, lvl)) revert FoilAlreadyBought();
-        if (!_foilRecordReusable(foilRecord[lvl & 3][buyer])) revert FoilRecordBusy();
+        if (_foilBoughtThisLevel(buyerId, lvl)) revert FoilAlreadyBought();
+        if (!_foilRecordReusable(foilRecord[lvl & 3][buyerId])) revert FoilRecordBusy();
 
 
         // Price: ten ticket prices for the level. The fresh ETH the purchase path carved
@@ -290,7 +340,7 @@ contract DegenerusGameFoilPackModule is
             // afking, reverting when the tiers together fall short. The sink emits
             // ClaimableSpent / AfkingSpent and pairs the claimablePool debit.
             (claimableUsed, ) = _settleShortfall(
-                buyer,
+                buyerId,
                 cost - ethUsed,
                 payKind != MintPaymentKind.DirectEth
             );
@@ -384,7 +434,7 @@ contract DegenerusGameFoilPackModule is
         // earns 25% spendable box credit on its gross cost, exactly as the ticket/lootbox
         // spend and the pass buys do, independent of the funding mix.
         if (!presaleOver) {
-            presaleBoxCredit[buyer] += cost / 4;
+            presaleBoxCredit[buyerId] += cost / 4;
         }
 
         // Recycle bonus: spending at least three whole tickets' worth of claimable on the
@@ -405,7 +455,7 @@ contract DegenerusGameFoilPackModule is
         // lootbox EV. The raw score is also frozen into the record and reused as the claim
         // spin's RTP input, so the spin's RTP is fixed at buy (the match resolves later, against the future resolveDay word).
         if (afking) {
-            (bool afkLive, uint32 afkStreak) = _liveAfkingStreak(buyer);
+            (bool afkLive, uint32 afkStreak) = _liveAfkingStreak(buyerId);
             if (afkLive) streakSnapshot = afkStreak;
         }
         uint256 score = _playerActivityScoreCached(buyer, streakSnapshot);
@@ -413,15 +463,13 @@ contract DegenerusGameFoilPackModule is
 
         // The daily request's foil swap freezes this pack before that request; a mid-day
         // request never moves it. Lines and eligibility are stamped when the cohort materializes.
-        foilRecord[lvl & 3][buyer] =
+        foilRecord[lvl & 3][buyerId] =
             (uint256(lvl) << _FOIL_LEVEL_SHIFT) |
             (uint256(multBps) << _FOIL_MULT_SHIFT) |
             (uint256(uint16(score)) << _FOIL_SCORE_SHIFT);
 
-        uint80 ownerBits = _registerEntryOwner(buyer, lvl);
-        if (ownerBits == 0) revert E();
         foilQueue[_foilWriteKey()].push(
-            (uint256(ownerBits >> OWNER_IDX_SHIFT) << 192) | (uint256(lvl) << 160) | uint256(uint160(buyer))
+            (uint256(buyerId) << 192) | (uint256(lvl) << 160) | uint256(uint160(buyer))
         );
 
         emit FoilPackBought(buyer, lvl, multBps, cost);
@@ -487,13 +535,14 @@ contract DegenerusGameFoilPackModule is
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (_livenessTriggered()) revert GameOver();
 
+        uint32 id = _walletIdOf(player);
         (bool present, , , ) = _foilRecordFor(
-            player,
+            id,
             lvl
         );
         if (!present) revert NoGoldenTicket();
 
-        uint256 record = _foilRecordWord(player, lvl);
+        uint256 record = _foilRecordWord(id, lvl);
         if (record & _FOIL_READY == 0 || !_foilGoldClaimOpen(uint24(record >> _FOIL_GENERATED_DAY_SHIFT))) {
             revert NoGoldenTicket();
         }
@@ -503,7 +552,7 @@ contract DegenerusGameFoilPackModule is
         if (record & _FOIL_GOLD_CLAIMED != 0) revert NoGoldenTicket();
 
         (uint8 golds, uint8 allGold) = _packGold(
-            _foilStoredLines(player, lvl)
+            _foilStoredLines(id, lvl)
         );
         // Three golds anywhere in the sixteen is the floor, and it subsumes every
         // richer shape: an all-gold ticket is four golds by construction.
@@ -516,7 +565,7 @@ contract DegenerusGameFoilPackModule is
         if (allGold >= 2) revert NoGoldenTicket();
 
         // Mark before any payout (CEI).
-        foilRecord[lvl & 3][player] = record | _FOIL_GOLD_CLAIMED;
+        foilRecord[lvl & 3][id] = record | _FOIL_GOLD_CLAIMED;
         _settleGoldenTicket(player, lvl, golds, allGold);
     }
 
@@ -596,7 +645,8 @@ contract DegenerusGameFoilPackModule is
 
         // The pack's first eligible draw and buy-time activity score (spin RTP).
         // Pending packs have no generated lines and cannot claim.
-        uint256 record = _foilRecordWord(player, L);
+        uint32 id = _walletIdOf(player);
+        uint256 record = _foilRecordWord(id, L);
         if (record & _FOIL_READY == 0) return false;
         uint24 resolveDay = uint24(record);
         uint16 activityScore = uint16(record >> _FOIL_SCORE_SHIFT);
@@ -606,7 +656,7 @@ contract DegenerusGameFoilPackModule is
         if (day < resolveDay) return false;
 
         // A sealed day has one level. Exact-day bitmap lanes separate all four tickets.
-        if (_foilMatchAlreadyClaimed(player, uint24(day), ticketIndex)) return false;
+        if (_foilMatchAlreadyClaimed(id, uint24(day), ticketIndex)) return false;
 
         uint32 sel = uint32(record >> (_FOIL_LINES_SHIFT + ticketIndex * 32));
 
@@ -628,7 +678,7 @@ contract DegenerusGameFoilPackModule is
         if (score < 4) return false;
 
         // Mark before any payout (CEI).
-        _markFoilMatchClaimed(player, uint24(day), ticketIndex);
+        _markFoilMatchClaimed(id, uint24(day), ticketIndex);
 
         uint8 tier = uint8(score); // 4..8
         uint256 faces;
@@ -646,7 +696,7 @@ contract DegenerusGameFoilPackModule is
 
         emit FoilMatchClaimed(player, uint24(day), ticketIndex, tier, faces);
 
-        _payFoilTier(player, day, ticketIndex, L, sel, tier, faces, activityScore, uint128(draw >> _FOIL_DRAW_SEED_SHIFT));
+        _payFoilTier(player, id, day, ticketIndex, L, sel, tier, faces, activityScore, uint128(draw >> _FOIL_DRAW_SEED_SHIFT));
         return true;
     }
 
@@ -702,6 +752,7 @@ contract DegenerusGameFoilPackModule is
     ///      Claims can follow purchases by many draws; no live snap read changes them.
     function _payFoilTier(
         address player,
+        uint32 id,
         uint256 day,
         uint256 ticketIndex,
         uint24 L,
@@ -712,7 +763,7 @@ contract DegenerusGameFoilPackModule is
         uint256 entropy
     ) private {
         if (tier == 8) {
-            whalePassClaims[player] += 1;
+            _addHalfPasses(id, 1);
         }
 
         // Currency and spin use disjoint lanes of the seed saved with this draw.
@@ -882,6 +933,7 @@ contract DegenerusGameFoilPackModule is
         uint8[16] memory touchedTraits
     ) private returns (bool grandPaid, uint32 units) {
         address buyer = address(uint160(packedLvlBuyer));
+        uint32 buyerId = uint32(packedLvlBuyer >> 192);
         uint24 lvl = uint24(packedLvlBuyer >> 160);
         // Only the terminal payout level needs generated traits after the ending latches.
         // Consuming unrelated packs must not reassign the frozen terminal payout buffer.
@@ -893,14 +945,14 @@ contract DegenerusGameFoilPackModule is
             buyer,
             lvl,
             entropy,
-            _foilMultFor(buyer, lvl),
+            _foilMultFor(buyerId, lvl),
             retired
         );
 
-        uint256 record = _foilRecordWord(buyer, lvl);
+        uint256 record = _foilRecordWord(buyerId, lvl);
         record |= uint256(foilFirstDrawDay) | (uint256(_simulatedDayIndex()) << _FOIL_GENERATED_DAY_SHIFT) | _FOIL_READY;
         for (uint256 i; i < 4; ++i) record |= uint256(lines[i]) << (_FOIL_LINES_SHIFT + i * 32);
-        foilRecord[lvl & 3][buyer] = record;
+        foilRecord[lvl & 3][buyerId] = record;
         units = 4; // record, cursor and stored lines
         // Tomorrow's word can land after a turbo transition retired this pack's
         // inventory. Claims still use its retained record and daily word; never
@@ -920,13 +972,11 @@ contract DegenerusGameFoilPackModule is
             }
 
             // Batch-write the sixteen entries into lvlTraitEntry[lvl][traitId] as packed
-            // lanes naming the buyer's registry position, one length update per distinct
-            // trait. Mirrors the mint module's batch writer; re-zeroes the shared scratch so
+            // lanes naming the buyer's wallet ID, one length update per distinct trait.
+            // Mirrors the mint module's batch writer; re-zeroes the shared scratch so
             // the next buyer starts clean.
             uint256 levelSlot = _traitBufferBase(lvl);
-            // Every queue writer registers a checked nonzero stable ID.
-            uint256 ownerIdx;
-            unchecked { ownerIdx = (packedLvlBuyer >> 192) - 1; }
+            uint256 ownerIdx = buyerId;
             for (uint16 u; u < touchedLen; ) {
                 uint8 traitId = touchedTraits[u];
                 uint32 occurrences = counts[traitId];
@@ -951,7 +1001,7 @@ contract DegenerusGameFoilPackModule is
         if (!terminal) {
             (uint8 golds, uint8 allGold) = _packGold(lines);
             if (allGold >= 2) {
-                _pushFoilGrand(buyer, lvl, golds, allGold);
+                _pushFoilGrand(buyer, buyerId, lvl, golds, allGold);
                 grandPaid = true;
             }
         }
@@ -1061,6 +1111,7 @@ contract DegenerusGameFoilPackModule is
     /// @param allGold How many of the pack's four tickets came out all gold (2..4).
     function _pushFoilGrand(
         address player,
+        uint32 id,
         uint24 lvl,
         uint8 golds,
         uint8 allGold
@@ -1071,11 +1122,11 @@ contract DegenerusGameFoilPackModule is
         // is exactly what two all-gold tickets are, so an unmarked pack would qualify
         // for 7.5M FLIP on top of a pool-sized grand. The marker closes that outright
         // rather than leaving it to the pull's re-derivation.
-        foilRecord[lvl & 3][player] |= _FOIL_GOLD_CLAIMED;
+        foilRecord[lvl & 3][id] |= _FOIL_GOLD_CLAIMED;
         (bool ok, bytes memory reason) = ContractAddresses.GAME_JACKPOT_MODULE.delegatecall(
             abi.encodeWithSelector(
                 IDegenerusGameJackpotModule.payGoldenTicketGrand.selector,
-                player,
+                id,
                 lvl,
                 golds
             )

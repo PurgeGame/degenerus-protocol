@@ -1,16 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 import {Vm} from "forge-std/Vm.sol";
+import {GameSlots} from "../../helpers/GameSlots.sol";
 
 /// @dev Raw reference for queue roots, normal pending lanes and packed logical future levels.
-///      Slots are attested against inherited production storage in TicketQueueCodec.
+///      Slots come from GameSlots (pinned by StorageSlotPins); queue and bucket lanes hold
+///      wallet IDs (wallet-table position; element 0 is never assigned).
 library TicketQueueStorage {
-    uint256 internal constant QUEUE = 12;
-    uint256 internal constant OWED = 13; // Permanent wallet-to-ID lookup.
-    uint256 internal constant OWNERS = 67;
-    uint256 internal constant QUEUE_LEVELS = 77;
-    uint256 internal constant PENDING = 78;
-    uint256 internal constant FUTURE = 81;
+    uint256 internal constant QUEUE = GameSlots.TICKET_QUEUE;
+    uint256 internal constant MINT = GameSlots.MINT_PACKED; // Forward ID at bits 224..255.
+    uint256 internal constant OWNERS = GameSlots.WALLETS; // Wallet table; ID = position.
+    uint256 internal constant QUEUE_LEVELS = GameSlots.TICKET_QUEUE_LEVELS;
+    uint256 internal constant PENDING = GameSlots.TICKET_PENDING;
+    uint256 internal constant FUTURE = GameSlots.FAR_FUTURE_OWED;
+    uint256 private constant ID_SHIFT = 224;
     Vm private constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
     function queueKey(uint24 key) internal pure returns (uint24) {
@@ -20,7 +23,7 @@ library TicketQueueStorage {
     }
     function ownerKey(uint24 lvl) internal pure returns (uint24) { return lvl; }
     function _id(address host, address player) private view returns (uint32) {
-        return uint32(uint256(vm.load(host, keccak256(abi.encode(player, OWED)))));
+        return uint32(uint256(vm.load(host, keccak256(abi.encode(player, MINT)))) >> ID_SHIFT);
     }
     function _shift(uint24 key) private pure returns (uint256) {
         return (key & 1) * 84 + (key & (uint24(1) << 23) != 0 ? 42 : 0);
@@ -62,8 +65,8 @@ library TicketQueueStorage {
         for (uint256 i; i < n; ++i) {
             uint256 word = uint256(vm.load(host, bytes32(uint256(keccak256(abi.encode(queue))) + i / 8)));
             uint32 id = uint32(word / (2 ** (32 * (i % 8))));
-            require(id != 0 && id <= count, "invalid owner ID");
-            address player = address(uint160(uint256(vm.load(host, bytes32(uint256(keccak256(abi.encode(OWNERS))) + id - 1)))));
+            require(id != 0 && id < count, "invalid owner ID");
+            address player = address(uint160(uint256(vm.load(host, bytes32(uint256(keccak256(abi.encode(OWNERS))) + id)))));
             require(player != address(0) && _id(host, player) == id, "identity mismatch");
         }
     }
@@ -71,16 +74,14 @@ library TicketQueueStorage {
         uint32 id = _id(host, player);
         if (id == 0) {
             uint256 count = uint256(vm.load(host, bytes32(OWNERS)));
-            if (count == 0) {
-                vm.store(host, keccak256(abi.encode(OWNERS)), bytes32(uint256(1)));
-                vm.store(host, keccak256(abi.encode(address(1), OWED)), bytes32(uint256(1)));
-                count = 1;
-            }
-            require(count < type(uint32).max);
-            id = uint32(count + 1);
+            if (count == 0) count = 1; // element 0 is never assigned
+            require(count <= type(uint32).max);
+            id = uint32(count);
             vm.store(host, bytes32(uint256(keccak256(abi.encode(OWNERS))) + count), bytes32(uint256(uint160(player))));
-            vm.store(host, bytes32(OWNERS), bytes32(uint256(id)));
-            vm.store(host, keccak256(abi.encode(player, OWED)), bytes32(uint256(id)));
+            vm.store(host, bytes32(OWNERS), bytes32(count + 1));
+            bytes32 mintSlot = keccak256(abi.encode(player, MINT));
+            uint256 mintWord = uint256(vm.load(host, mintSlot));
+            vm.store(host, mintSlot, bytes32(mintWord | (uint256(id) << ID_SHIFT)));
         }
         setOwed(host, key, player, (uint80(id) << 48) | uint48(value));
         uint24 physical = queueKey(key);
@@ -157,6 +158,6 @@ library TicketQueueStorage {
         uint256 word = uint256(vm.load(host, bytes32(uint256(keccak256(abi.encode(queue))) + index / 8)));
         uint32 id = uint32(word / (2 ** (32 * (index % 8))));
         require(id != 0);
-        return address(uint160(uint256(vm.load(host, bytes32(uint256(keccak256(abi.encode(OWNERS))) + id - 1)))));
+        return address(uint160(uint256(vm.load(host, bytes32(uint256(keccak256(abi.encode(OWNERS))) + id)))));
     }
 }

@@ -116,9 +116,6 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     ///      the refund credits exactly, without a separate refund event per holder.
     event DeityPassRefundsSettled(uint256 totalRefunded);
 
-    /// @notice The terminal level's leading affiliate received its one-time ETH share.
-    event TerminalAffiliatePaid(address indexed affiliate, uint24 indexed level, uint256 amount);
-
     /// @notice The deterministic (VRF-dead) ending fixed its payout: `pot` is shared by every
     ///         ticket of `level`. Uncreated entries (queued or in an undrained foil pack, whose
     ///         traits were never rolled) take pot * weight / total each, weight in QTY_SCALE
@@ -214,11 +211,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
 
         // Record which bucket the ending pays from before anything below can take the RNG
         // lock: the unlatched _gameOverTicketLevel reads the lock as "the last-purchase request
-        // already promoted level", so the bucket would move between transactions. The
-        // terminal affiliate is fixed with it, before any terminal word exists: a claim landing
-        // between the word and the payout could otherwise turn an empty leaderboard into a
-        // ranked one and move the pool the terminal draw is fed. (The dead ending pays no
-        // affiliate; the latch is harmless there.)
+        // already promoted level", so the bucket would move between transactions.
         uint24 drainLevel = _gameOverTicketLevel(lvl);
         if (_lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK) == 0) {
             _lrWrite(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK, drainLevel == lvl ? 1 : 2);
@@ -233,8 +226,6 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             delete jackpotWork;
             dailyTicketBudgetsPacked = 0;
             dailyJackpotCoinTicketsPending = false;
-            (address top, ) = affiliate.affiliateTop(drainLevel);
-            terminalAffiliate = top;
             work.progressed = true;
         }
 
@@ -460,9 +451,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     ///      Distribution logic:
     ///      - If game ended early (levels 0-9): refund of the price paid (capped at 20 ETH) per deity pass,
     ///        FIFO by purchase order, budget-capped to available funds minus claimablePool
-    ///      - Normal ending: 2% to the terminal level's top affiliate, 98% to its ticket cohort by
-    ///        the terminal jackpot (all of it when no affiliate is ranked)
-    ///      - Deterministic (VRF-dead) ending: no affiliate share and no draw; the remainder is
+    ///      - Normal ending: everything to the terminal level's ticket cohort by the terminal jackpot
+    ///      - Deterministic (VRF-dead) ending: no draw; the remainder is
     ///        fixed as the pot every terminal-level ticket claims from (claimDeadVrf)
     ///      - Any uncredited remainder later swept by _handleFinalSweep three-way to vault / sDGNRS / GNRUS
     ///
@@ -510,11 +500,11 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // DEITY_PASS_EARLY_GAMEOVER_REFUND so a boon-discounted deity (paid < 20 ETH) never refunds
         // more than it paid, then clamped to the remaining distributable budget (FIFO).
         if (lvl < 10) {
-            uint256 ownerCount = deityPassOwners.length;
+            uint256 ownerCount = _deityCount();
             uint256 budget = preRefundAvailable;
             uint256 totalRefunded;
             for (uint256 i; i < ownerCount; ) {
-                address owner = deityPassOwners[i];
+                uint32 owner = _deityIdAt(i);
                 uint256 refund = deityPassPricePaid[owner];
                 if (refund != 0) {
                     if (refund > DEITY_PASS_EARLY_GAMEOVER_REFUND) {
@@ -524,7 +514,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                         refund = budget;
                     }
                     if (refund != 0) {
-                        _creditClaimable(owner, refund);
+                        _creditClaimableLogged(owner, refund);
                         unchecked {
                             totalRefunded += refund;
                             budget -= refund;
@@ -593,7 +583,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // existed (_handleGameOverPath); credit it here once.
         uint24 terminalLevel = _gameOverTicketLevel(lvl);
 
-        // Deterministic ending: no affiliate share, no draw. Fix the pot and the total weight
+        // Deterministic ending: no draw. Fix the pot and the total weight
         // it divides by (tallied by _tallyDeadVrf before this ran); every terminal-level ticket
         // then claims its share through claimDeadVrf until the final sweep.
         if (dead) {
@@ -606,15 +596,6 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             _finishTerminalPayout();
             return true;
         }
-        address top = terminalAffiliate;
-        uint256 affiliateShare = remaining / 50;
-        if (top != address(0) && affiliateShare != 0) {
-            _creditClaimable(top, affiliateShare);
-            claimablePool += uint128(affiliateShare);
-            remaining -= affiliateShare;
-            emit TerminalAffiliatePaid(top, terminalLevel, affiliateShare);
-        }
-
         // All remaining ETH goes to the final ticket cohort (Final-day distribution).
         // gameOver=true prevents auto-rebuy inside _addClaimableEth (tickets worthless post-game).
         // Pay from the SAME phase-correct level the AdvanceModule terminal drain materialized:
@@ -666,9 +647,9 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         _goWrite(GO_SWEPT_SHIFT, GO_SWEPT_MASK, 1);
         charityGameOver.onFinalSweep(); // stamp GNRUS with the sweep time (anchors its recovery gates)
 
-        uint256 owedV  = _takeSinkBalance(ContractAddresses.VAULT);
-        uint256 owedSD = _takeSinkBalance(ContractAddresses.SDGNRS);
-        uint256 owedG  = _takeSinkBalance(ContractAddresses.GNRUS);
+        uint256 owedV  = _takeSinkBalance(VAULT_WALLET_ID);
+        uint256 owedSD = _takeSinkBalance(SDGNRS_WALLET_ID);
+        uint256 owedG  = _takeSinkBalance(GNRUS_WALLET_ID);
         claimablePool = 0;
 
         // Shutdown VRF subscription (fire-and-forget; failure must not block sweep)
@@ -705,7 +686,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
 
     /// @dev Zero a sink's packed balance — claimable (low half) and prepaid afking (high half),
     ///      both inside claimablePool — and return the total the final sweep owes it.
-    function _takeSinkBalance(address sink) private returns (uint256 owed) {
+    function _takeSinkBalance(uint32 sink) private returns (uint256 owed) {
         uint256 claimable = _claimableOf(sink);
         uint256 afking = _afkingOf(sink);
         _debitClaimableAndAfking(sink, claimable, afking);
@@ -897,6 +878,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         uint8 shift = _snapShiftFor(lvl);
         uint256 amount;
         uint256 weight;
+        // Holdings are verified by wallet ID; an unregistered address holds nothing.
+        uint32 playerId = _requireWalletId(player);
         for (uint256 i; i < refs.length; ) {
             uint256 ref = refs[i];
             uint256 kind = ref >> 248;
@@ -904,7 +887,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                 uint8 trait = uint8(ref >> 64);
                 uint256 k = uint64(ref);
                 uint256 n = _bucketLength(lvl, trait);
-                if (k >= n || _bucketOwnerAtUnchecked(lvl, trait, k) != player) revert E();
+                if (k >= n || _bucketIdAtUnchecked(lvl, trait, k) != playerId) revert E();
                 uint256 key = (uint256(trait) << 64) | (k >> 8);
                 uint256 bits = deadClaimed[key];
                 uint256 bit = uint256(1) << (k & 255);
@@ -916,9 +899,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                 // Queue-domain key is carried above the stable ID in bits 32..55.
                 uint24 key = uint24(ref >> 32);
                 if (key != _tqReadKey(lvl) && key != _tqWriteKey(lvl) && key != _tqFarFutureKey(lvl)) revert E();
-                uint256 record = _entryRecord(key, pos);
-                if (address(uint160(record)) != player) revert E();
-                uint256 w = _deadWeight(uint80(record >> 160), shift);
+                if (pos != playerId) revert E();
+                uint256 w = _deadWeight(_entryPacked(key, pos), shift);
                 if (w == 0) revert E();
                 _setEntryOwed(key, pos, 0);
                 weight += w;
@@ -930,7 +912,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                 uint256[] storage bucket = foilQueue[cohort];
                 if (idx >= bucket.length) revert E();
                 uint256 pack = bucket[idx];
-                if (address(uint160(pack)) != player || uint24(pack >> 160) != lvl) revert E();
+                if (uint32(pack >> 192) != playerId || uint24(pack >> 160) != lvl) revert E();
                 bucket[idx] = 0;
                 uint256 w = FOIL_PACK_ENTRIES * QTY_SCALE;
                 weight += w;
@@ -944,7 +926,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         if (weight > left) revert E();
         deadUncreatedLeft = uint64(left - weight);
         if (amount != 0) {
-            _creditClaimable(player, amount);
+            _creditClaimableLogged(playerId, amount);
             claimablePool += uint128(amount);
             emit DeadVrfClaimed(player, amount);
         }

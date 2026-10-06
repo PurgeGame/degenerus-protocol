@@ -10,6 +10,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title V56AfkingGasMarginal -- the v56 everyday-afking gas-MARGINAL harness (Phase 355) on the
 ///        compute-on-read applied tree (baseline 453f8073). Measures every marginal the GAS phase needs:
@@ -76,10 +77,10 @@ contract V56AfkingGasMarginal is DeployProtocol {
 
     // RE-DERIVED via `solc --storage-layout` on the working tree after the V62 lootbox repack — the
     // folded lootboxEth word + removed lootboxEthBase/Flip/Purchase/Distress shifted later slots down.
-    uint256 private constant RNG_WORD_BY_DAY_SLOT = 10; // mapping(uint24 => uint256) — the afking box's DAY-keyed word + readiness gate
-    uint256 private constant SUBOF_SLOT = 52;           // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = 54;     // address[] _subscribers (slot holds the length)
-    uint256 private constant SUBCURSOR_SLOT = 56;       // _subCursor (uint16 @ byte 0) + _subOpenCursor (uint16 @ byte 2) + _afkingResetDay (uint24 @ byte 4) + boxCursor (uint48 @ byte 7) + boxCursorIndex (uint48 @ byte 13)
+    uint256 private constant RNG_WORD_BY_DAY_SLOT = GameSlots.RNG_WORD_BY_DAY; // mapping(uint24 => uint256) — the afking box's DAY-keyed word + readiness gate
+    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;           // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS;     // address[] _subscribers (slot holds the length)
+    uint256 private constant SUBCURSOR_SLOT = GameSlots.SUB_CURSOR;       // _subCursor (uint16 @ byte 0) + _subOpenCursor (uint16 @ byte 2) + _afkingResetDay (uint24 @ byte 4) + boxCursor (uint48 @ byte 7) + boxCursorIndex (uint48 @ byte 13)
 
     // Sub packed-field byte offsets — RE-DERIVED via `forge inspect DegenerusGame storageLayout`. The
     // AFKing Subscription Token credential (sub <=> coin) needs no stored pass horizon, so `validThroughLevel` (the old
@@ -965,7 +966,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // Call runAfkingWork DIRECTLY on the module address — it hits the MODULE's empty storage, not the
         // Game's (selector isolation: it reaches the Game only through mineFlip's delegatecall). Whether the
         // module-local call returns or refuses, it must open no Game box.
-        bytes32 subSlot = keccak256(abi.encode(afk, uint256(SUBOF_SLOT)));
+        bytes32 subSlot = keccak256(abi.encode(uint256(game.walletIdOf(afk)), uint256(SUBOF_SLOT)));
         bytes32 subBefore = vm.load(address(game), subSlot);
         try IGameAfkingModule(ContractAddresses.GAME_AFKING_MODULE).runAfkingWork(1_000_000) returns (MineFlipGas.Result memory direct) {
             assertEq(direct.rewardBasis, 0, "LIVE-01(e): direct runAfkingWork on the module opens nothing (selector-isolated)");
@@ -1031,7 +1032,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
 
     /// @dev Test-only poke of a Sub's lastAutoBoughtDay (uint24 @ byte 11) — preserves all other Sub fields.
     function _pokeLastBoughtDay(address who, uint32 day) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT)));
         uint256 cur = uint256(vm.load(address(game), slot));
         uint256 mask = (uint256(0xFFFFFF)) << (OFF_LASTBOUGHT * 8);
         cur = (cur & ~mask) | ((uint256(day) << (OFF_LASTBOUGHT * 8)) & mask);
@@ -1040,7 +1041,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
 
     /// @dev Test-only poke of a Sub's lastOpenedDay (uint24 @ byte 14) — preserves all other Sub fields.
     function _pokeLastOpenedDay(address who, uint32 day) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT)));
         uint256 cur = uint256(vm.load(address(game), slot));
         uint256 mask = (uint256(0xFFFFFF)) << (OFF_LASTOPENED * 8);
         cur = (cur & ~mask) | ((uint256(day) << (OFF_LASTOPENED * 8)) & mask);
@@ -1343,7 +1344,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     // ---- Sub-slot reads (_subOf at slot 52 + v56 offsets) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
+        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
         return p & ((uint256(1) << widthBits) - 1);
     }
 
@@ -1729,7 +1730,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     function _nativeSubWord(address player) private view returns (bytes32) {
-        return vm.load(address(game), keccak256(abi.encode(player, uint256(SUBOF_SLOT))));
+        return vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(player)), uint256(SUBOF_SLOT))));
     }
 
     function _assertNativeEvictionCheckpoint(address[] memory players, bytes32[] memory originalSubs) private view {

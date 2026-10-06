@@ -12,9 +12,11 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @dev Seed only the starting state; requests, callbacks, advances and claims use production code.
-contract PreJackpotMintSeeder is DegenerusGame {
+contract PreJackpotMintSeeder is DegenerusGame, WalletSeed {
     function seed(address currentBuyer, address nextBuyer, uint32 nextEntries, bool parity, bool turbo) external {
         uint24 day = _simulatedDayIndex();
         TicketQueueStorage.retireCompleted(address(this), 129);
@@ -48,15 +50,15 @@ contract PreJackpotMintSeeder is DegenerusGame {
         rngWordCurrent = 0x01D; _setRngSessionPublished(true); _setRngComplete(true);
         // Synthetic empty prior cohort: delivered word, no boxes/bets/fields.
         humanReadComplete = true;
-        if (currentBuyer != address(0)) _queueEntries(currentBuyer, 130, 4, false);
-        if (nextEntries != 0) _queueEntries(nextBuyer, 131, nextEntries, false);
+        if (currentBuyer != address(0)) _queueEntries(_seedWallet(currentBuyer), 130, 4, false);
+        if (nextEntries != 0) _queueEntries(_seedWallet(nextBuyer), 131, nextEntries, false);
         // The turbo latch freezes the same FF cohort; set it after queueing that cohort.
         lastPurchaseDay = turbo;
         jackpotFlags = turbo ? JACKPOT_TURBO : 0;
     }
 
     function queueNext(address player, uint32 entries) external {
-        _queueEntries(player, 131, entries, false);
+        _queueEntries(_seedWallet(player), 131, entries, false);
     }
 
     function setTargetMet(bool met) external {
@@ -515,9 +517,9 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
             saw = true;
         }
         assertTrue(saw, "ending fixed its deterministic pot");
-        // A queued claim names the stable owner ID (ticketOwnerId, slot 13) and carries the queue
-        // key holding the entries in bits 32..55 (GameOverModule.claimDeadVrf).
-        uint256 pos = uint32(uint256(vm.load(address(game), keccak256(abi.encode(alice, uint256(13))))));
+        // A queued claim names the owner's wallet ID and carries the queue key holding the
+        // entries in bits 32..55 (GameOverModule.claimDeadVrf).
+        uint256 pos = game.walletIdOf(alice);
         uint24 aliceKey = _owed(_writeKey(CURRENT), alice) != 0 ? _writeKey(CURRENT) : _readKey(CURRENT);
         assertEq(_owed(aliceKey, alice), 4, "alice's current entries are still queued at the ending");
         uint256[] memory refs = new uint256[](1);
@@ -667,7 +669,7 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
     }
 
     function _midday() private view returns (uint256) {
-        return (uint256(vm.load(address(game), bytes32(uint256(33)))) >> 224) & 0xFF;
+        return (uint256(vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED))) >> 224) & 0xFF;
     }
 
     function _writeKey(uint24 lvl) private view returns (uint24) {

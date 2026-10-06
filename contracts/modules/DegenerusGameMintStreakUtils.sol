@@ -73,7 +73,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     /// @param totalBudget The -EV ETH budget the buyer must fund above its floor.
     /// @return buyer The counterparty (sDGNRS, the vault, or address(0) if none can fund).
     function _resolveSalvageBuyer(uint256 totalBudget) internal view returns (address buyer) {
-        if (_claimableOf(ContractAddresses.SDGNRS) >= totalBudget + 1 ether) {
+        if (_claimableOf(SDGNRS_WALLET_ID) >= totalBudget + 1 ether) {
             return ContractAddresses.SDGNRS;
         }
         (bool enabled, uint256 vaultFloorWei) = IDegenerusVaultOwner(
@@ -81,8 +81,8 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         ).salvageBuyConfig();
         if (
             enabled &&
-            _claimableOf(ContractAddresses.VAULT) +
-                _afkingOf(ContractAddresses.VAULT) >=
+            _claimableOf(VAULT_WALLET_ID) +
+                _afkingOf(VAULT_WALLET_ID) >=
             totalBudget + vaultFloorWei
         ) {
             return ContractAddresses.VAULT;
@@ -369,7 +369,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
 
         // Cashout/smite curse penalty: each point lowers the activity score by 1 point,
         // floored at 0. Rides the mintPacked_ word already loaded above (zero new SLOAD).
-        uint256 curse = (packed >> BitPackingLib.CURSE_COUNT_SHIFT) & BitPackingLib.MASK_8;
+        uint256 curse = (packed >> BitPackingLib.CURSE_COUNT_SHIFT) & BitPackingLib.MASK_5;
         if (curse != 0) {
             bonusPoints = bonusPoints > curse ? bonusPoints - curse : 0;
         }
@@ -407,7 +407,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         // the market's nonzero participation gate. This also avoids a fresh SSTORE.
         uint256 historyMask = (BitPackingLib.MASK_24 << BitPackingLib.LAST_LEVEL_SHIFT)
             | (BitPackingLib.MASK_24 << BitPackingLib.LEVEL_COUNT_SHIFT)
-            | (BitPackingLib.MASK_32 << BitPackingLib.DAY_SHIFT);
+            | (BitPackingLib.MASK_24 << BitPackingLib.DAY_SHIFT);
         if ((previous & historyMask) == 0) {
             return _playerActivityScoreAt(player, questStreak, streakBaseLevel, currLevel);
         }
@@ -441,7 +441,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     }
 
     // =========================================================================
-    // Cashout / smite curse counter (mintPacked_ bits 215-222)
+    // Cashout / smite curse counter (mintPacked_ bits 203-207)
     // =========================================================================
 
     /// @dev Curse cap = 20 points (-20 points max). Doubles as the uint8-wrap guard: a
@@ -451,14 +451,14 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     /// @dev Add a saturating +2 curse stack to `target` (no SSTORE once at the cap).
     function _applyCurseStack(address target) internal {
         uint256 packed = mintPacked_[target];
-        uint256 curse = (packed >> BitPackingLib.CURSE_COUNT_SHIFT) & BitPackingLib.MASK_8;
+        uint256 curse = (packed >> BitPackingLib.CURSE_COUNT_SHIFT) & BitPackingLib.MASK_5;
         if (curse >= CURSE_COUNT_CAP) return;
         uint256 newCurse = curse + 2;
         if (newCurse > CURSE_COUNT_CAP) newCurse = CURSE_COUNT_CAP;
         mintPacked_[target] = BitPackingLib.setPacked(
             packed,
             BitPackingLib.CURSE_COUNT_SHIFT,
-            BitPackingLib.MASK_8,
+            BitPackingLib.MASK_5,
             newCurse
         );
         emit CurseChanged(target, uint8(newCurse));
@@ -467,11 +467,11 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     /// @dev Clear `target`'s curse counter to 0 (field-isolated; no SSTORE when already 0).
     function _clearCurse(address target) internal {
         uint256 packed = mintPacked_[target];
-        if ((packed >> BitPackingLib.CURSE_COUNT_SHIFT) & BitPackingLib.MASK_8 == 0) return;
+        if ((packed >> BitPackingLib.CURSE_COUNT_SHIFT) & BitPackingLib.MASK_5 == 0) return;
         mintPacked_[target] = BitPackingLib.setPacked(
             packed,
             BitPackingLib.CURSE_COUNT_SHIFT,
-            BitPackingLib.MASK_8,
+            BitPackingLib.MASK_5,
             0
         );
         emit CurseChanged(target, 0);
@@ -597,7 +597,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
             prevData,
             day,
             BitPackingLib.DAY_SHIFT,
-            BitPackingLib.MASK_32
+            BitPackingLib.MASK_24
         );
 
         // ---------------------------------------------------------------------

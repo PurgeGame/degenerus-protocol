@@ -3,21 +3,22 @@ pragma solidity 0.8.34;
 
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-contract FuturePackingHarness is DegenerusGameStorage {
+contract FuturePackingHarness is DegenerusGameStorage, WalletSeed {
     function write(address p, uint24 key, uint32 owed, uint8 rem, bool snapped) external {
         if (key & TICKET_FAR_FUTURE_BIT != 0) _bindTicketQueue(key);
-        uint80 owner = _registerEntryOwner(p, key & 0x3fffff);
+        uint80 owner = (uint80(_seedWallet(p)) << OWNER_IDX_SHIFT);
         uint80 value = owed == 0 && rem == 0 && !snapped ? 0
             : owner | (uint80(owed) << 8) | uint80(rem) | (snapped ? SNAP_DONE_BIT : uint80(0));
         _setEntryOwed(key, uint32(owner >> OWNER_IDX_SHIFT), value);
     }
-    function read(address p, uint24 key) external view returns (uint80) { return _entriesOwed(key, p); }
-    function total(address p, uint24 lvl) external view returns (uint32) { return _entriesOwedTotal(lvl, p); }
-    function credit(address p, uint24 lvl, uint32 n) external { _queueEntries(p, lvl, n, false); }
-    function creditScaled(address p, uint24 lvl, uint32 n) external { _queueEntriesScaled(p, lvl, n); }
+    function read(address p, uint24 key) external view returns (uint80) { return _owedOf(key, p); }
+    function total(address p, uint24 lvl) external view returns (uint32) { return _entriesOwedTotal(lvl, _walletIdOf(p)); }
+    function credit(address p, uint24 lvl, uint32 n) external { _queueEntries(_seedWallet(p), lvl, n, false); }
+    function creditScaled(address p, uint24 lvl, uint32 n) external { _queueEntriesScaled(_seedWallet(p), lvl, n); }
     function range(address p, uint24 lvl, uint24 n, uint24 stride, uint32 amount) external {
-        _queueEntryRangeStridedCore(p, lvl, n, stride, amount, _mintCeiling(), rngLockedFlag,
+        _queueEntryRangeStridedCore(_seedWallet(p), lvl, n, stride, amount, _mintCeiling(), rngLockedFlag,
             ticketWriteSlot ? TICKET_SLOT_BIT : uint24(0));
     }
     function consume(uint24 key) external {
@@ -30,10 +31,10 @@ contract FuturePackingHarness is DegenerusGameStorage {
     function lock() external { rngLockedFlag = true; }
     function length(uint24 lvl) external view returns (uint256) { return _ticketQueueLength(_tqFarFutureKey(lvl)); }
     function legacy(address p, uint24 lvl) external view returns (uint256) {
-        return ticketPending[ticketOwnerId[p]];
+        return ticketPending[_walletIdOf(p)];
     }
     function blockWord(address p, uint24 lvl) external view returns (uint256) {
-        return farFutureOwed[ticketOwnerId[p]][((lvl - 1) % 100) >> 3];
+        return farFutureOwed[_walletIdOf(p)][((lvl - 1) % 100) >> 3];
     }
     function roots() external pure returns (uint256 legacySlot, uint256 packedSlot) {
         assembly ("memory-safe") { legacySlot := ticketPending.slot packedSlot := farFutureOwed.slot }

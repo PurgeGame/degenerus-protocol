@@ -7,6 +7,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {C1Viewer} from "../repro/C1BoxAutoOpen.t.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title LootboxBudgetResume -- a budget-bounded sweep resumes mid-index and maroons nothing
 /// @notice mineFlip's human-box stage charges each entry against its gas budget (the caller's
@@ -96,12 +97,12 @@ contract LootboxBudgetResume is DeployProtocol {
     ///      and the new write tag's queues are empty.
     function _deliverCohort(uint48 index) internal {
         RecyclingState.seedWord(address(game), index, keccak256("budget-resume-word"));
-        uint256 s14 = uint256(vm.load(address(game), bytes32(uint256(14))));
-        vm.store(address(game), bytes32(uint256(14)), bytes32(s14 & ~(uint256(type(uint48).max) << 160)));
-        uint256 s56 = uint256(vm.load(address(game), bytes32(uint256(56))));
-        vm.store(address(game), bytes32(uint256(56)), bytes32(s56 & ~(uint256(type(uint48).max) << 56)));
-        vm.store(address(game), keccak256(abi.encode(uint256((index ^ 1) & 1), uint256(21))), bytes32(0));
-        vm.store(address(game), keccak256(abi.encode(uint256((index ^ 1) & 1), uint256(57))), bytes32(0));
+        uint256 s14 = uint256(vm.load(address(game), bytes32(GameSlots.TICKET_CURSOR)));
+        vm.store(address(game), bytes32(GameSlots.TICKET_CURSOR), bytes32(s14 & ~(uint256(type(uint48).max) << 160)));
+        uint256 s56 = uint256(vm.load(address(game), bytes32(GameSlots.SUB_CURSOR)));
+        vm.store(address(game), bytes32(GameSlots.SUB_CURSOR), bytes32(s56 & ~(uint256(type(uint48).max) << 56)));
+        vm.store(address(game), keccak256(abi.encode(uint256((index ^ 1) & 1), GameSlots.DEGENERETTE_QUEUE)), bytes32(0));
+        vm.store(address(game), keccak256(abi.encode(uint256((index ^ 1) & 1), GameSlots.BOX_PLAYERS)), bytes32(0));
         uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
         slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192);
         vm.store(address(game), bytes32(0), bytes32(slot0));

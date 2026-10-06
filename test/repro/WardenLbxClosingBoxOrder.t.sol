@@ -5,6 +5,7 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title WardenLbxClosingBoxOrder -- the closing presale box cannot front-run its cohort
 /// @notice mineFlip's human-box stage is a strict in-order, oldest-first walk of
@@ -16,11 +17,11 @@ import {sDGNRS} from "../../contracts/sDGNRS.sol";
 ///         index, decomposed via the `PresaleBoxRemainderSwept` event, and (3) the closer's own roll
 ///         never itself takes a windfall share of the pool -- the remainder does, via the latch.
 contract WardenLbxClosingBoxOrder is DeployProtocol {
-    uint256 constant SLOT_PRESALE_BOX_ETH_SOLD = 16;
-    uint256 constant SLOT_PRESALE_BOX_CREDIT = 17;
-    uint256 constant SLOT_PRESALE_BOX_ETH = 18;
-    uint256 constant SLOT_LOOTBOX_RNG_PACKED = 33;
-    uint256 constant SLOT_LOOTBOX_RNG_WORD = 34;
+    uint256 constant SLOT_PRESALE_BOX_ETH_SOLD = GameSlots.PRESALE_BOX_ETH_SOLD;
+    uint256 constant SLOT_PRESALE_BOX_CREDIT = GameSlots.PRESALE_BOX_CREDIT;
+    uint256 constant SLOT_PRESALE_BOX_ETH = GameSlots.PRESALE_BOX_ETH;
+    uint256 constant SLOT_LOOTBOX_RNG_PACKED = GameSlots.LOOTBOX_RNG_PACKED;
+    uint256 constant SLOT_LOOTBOX_RNG_WORD = GameSlots.RNG_DAY_TAGS;
     uint256 constant PRESALE_BOX_ETH_CAP = 50 ether;
 
     bytes32 constant REMAINDER_SWEPT_TOPIC = keccak256("PresaleBoxRemainderSwept(address,uint256)");
@@ -88,7 +89,9 @@ contract WardenLbxClosingBoxOrder is DeployProtocol {
     }
 
     function _buyBox(address buyer, uint256 amount) internal returns (uint48 index) {
-        vm.store(address(game), keccak256(abi.encode(buyer, uint256(SLOT_PRESALE_BOX_CREDIT))), bytes32(amount));
+        uint32 id = game.walletIdOf(buyer);
+        if (id == 0) id = _giveWalletId(buyer);
+        vm.store(address(game), keccak256(abi.encode(uint256(id), uint256(SLOT_PRESALE_BOX_CREDIT))), bytes32(amount));
         vm.deal(buyer, amount);
         index = _lrIndex();
         vm.prank(buyer);

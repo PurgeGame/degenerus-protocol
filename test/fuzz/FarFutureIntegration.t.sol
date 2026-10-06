@@ -5,6 +5,7 @@ import {TicketQueueStorage as TQ} from "./helpers/TicketQueueStorage.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title FFKeyComputer -- Exposes internal key computation helpers for test inspection
 /// @notice Inherits DegenerusGameStorage solely to access _tqFarFutureKey as public pure.
@@ -44,10 +45,10 @@ contract FFKeyComputer is DegenerusGameStorage {
 ///      Storage layout: prizePoolsPacked at slot 2 = [future:128 | next:128].
 contract FarFutureIntegrationTest is DeployProtocol {
     /// @dev Storage slot of ticketQueue mapping in DegenerusGameStorage (confirmed via forge inspect)
-    uint256 private constant TICKET_QUEUE_SLOT = 12;
+    uint256 private constant TICKET_QUEUE_SLOT = GameSlots.TICKET_QUEUE;
 
     /// @dev Storage slot of prizePoolsPacked in DegenerusGameStorage (confirmed via forge inspect)
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED;
 
     FFKeyComputer private ffComputer;
     address private buyer;

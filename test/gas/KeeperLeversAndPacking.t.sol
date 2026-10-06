@@ -8,6 +8,7 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title KeeperLeversAndPacking -- GAS-02/03/04 batched-reward + packing lever assertions + the G1-G13
 ///        security-floor guard byte-presence pins. ADAPTED to the v55 AfKing-in-Game redesign (D-351-01).
@@ -50,9 +51,9 @@ contract KeeperLeversAndPacking is DeployProtocol {
 
     /// @dev lootboxRngPacked at slot 34 (RE-DERIVED via `solc --storage-layout` on the working tree
     ///      after the Stage B Game-storage packing); lootboxRngIndex is the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = GameSlots.RNG_WORD_CURRENT;
 
     // -------------------------------------------------------------------------
     // Constants

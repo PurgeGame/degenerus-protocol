@@ -7,23 +7,24 @@ import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {GoldSixLib} from "../../contracts/libraries/GoldSixLib.sol";
 import {TicketEntropy} from "../../contracts/libraries/TicketEntropy.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-contract GoldSixHarness is DegenerusGameTicketModule {
+contract GoldSixHarness is DegenerusGameTicketModule, WalletSeed {
     function prepare(uint24 lvl, address who) external returns (uint256 owner) {
         level = lvl;
         _setTicketBufferLevel(lvl);
-        owner = uint256(_registerEntryOwner(who, lvl) >> OWNER_IDX_SHIFT) - 1;
+        owner = uint256(_seedWallet(who));
     }
     function taken(uint24 lvl) external view returns (bool) { return _goldSixTaken(lvl); }
     function writeKey(uint24 lvl) external view returns (uint24) { return _tqWriteKey(lvl); }
     function count(uint24 lvl, uint8 trait) external view returns (uint256) { return _bucketLength(lvl, trait); }
-    function first(uint24 lvl, uint8 trait) external view returns (address) { return _bucketOwnerAtUnchecked(lvl, trait, 0); }
+    function first(uint24 lvl, uint8 trait) external view returns (address) { return _bucketOwnerAt(lvl, trait, 0); }
     function seedGold(uint24 lvl, uint256 owner) external { _bucketAppendRun(_traitBufferBase(lvl), 253, owner, 1, lvl); }
     function deity(uint8 trait, address who) external returns (address, uint256) {
-        deityBySymbol[(trait >> 6) * 8 + (trait & 7)] = who;
-        return (_traitDeity(trait), _deityVirtualCount(trait, 100, who));
+        deityBySymbol[(trait >> 6) * 8 + (trait & 7)] = _seedWallet(who);
+        return (_walletKey(_traitDeity(trait)), _deityVirtualCount(trait, 100, _seedWallet(who)));
     }
-    function queue(address who, uint32 scaled) external { _queueEntriesScaled(who, level, scaled); }
+    function queue(address who, uint32 scaled) external { _queueEntriesScaled(_seedWallet(who), level, scaled); }
     function commit(uint256 word) external {
         ticketWriteSlot = !ticketWriteSlot;
         rngWordCurrent = word;

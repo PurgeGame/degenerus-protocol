@@ -9,6 +9,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title FFKeyHarness -- Exposes _tqFarFutureKey as a pure helper for slot math.
 contract FFKeyHarness is DegenerusGameStorage {
@@ -40,10 +41,10 @@ contract FFKeyHarness is DegenerusGameStorage {
 ///      (mainnet) edits -- subject FROZEN at the Phase-326 diff.
 contract FarFutureSalvageSwapTest is DeployProtocol {
     // --- Storage slots (forge inspect DegenerusGame storageLayout) ---
-    uint256 private constant CLAIMABLE_WINNINGS_SLOT = 7;  // mapping(address => uint256)
-    uint256 private constant RNG_WORD_BY_DAY_SLOT = 10;    // mapping(uint32 => uint256)
-    uint256 private constant TICKET_QUEUE_SLOT = 12;       // mapping(uint24 => address[])
-    uint256 private constant CLAIMABLE_POOL_SLOT = 1;      // uint128 packed at offset 16 of slot 1
+    uint256 private constant CLAIMABLE_WINNINGS_SLOT = GameSlots.BALANCES_PACKED;  // mapping(address => uint256)
+    uint256 private constant RNG_WORD_BY_DAY_SLOT = GameSlots.RNG_WORD_BY_DAY;    // mapping(uint32 => uint256)
+    uint256 private constant TICKET_QUEUE_SLOT = GameSlots.TICKET_QUEUE;       // mapping(uint24 => address[])
+    uint256 private constant CLAIMABLE_POOL_SLOT = GameSlots.CLAIMABLE_POOL;      // uint128 packed at offset 16 of slot 1
 
     // No-arb reference figures from 325-ATTEST-SWAP (the LOCKED references the test asserts against).
     uint256 private constant ACQUISITION_FLOOR_BPS = 2100; // 21% of face -- cheapest re-confirmed acquisition
@@ -69,8 +70,8 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
     // Slot helpers
     // =====================================================================================
 
-    function _claimableSlot(address who) internal pure returns (bytes32) {
-        return keccak256(abi.encode(who, CLAIMABLE_WINNINGS_SLOT));
+    function _claimableSlot(address who) internal view returns (bytes32) {
+        return keccak256(abi.encode(uint256(game.walletIdOf(who)), CLAIMABLE_WINNINGS_SLOT));
     }
 
     function _rngWordSlot(uint32 day) internal pure returns (bytes32) {

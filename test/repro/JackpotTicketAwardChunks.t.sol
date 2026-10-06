@@ -11,13 +11,14 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {PackedTicketSampleLib} from "../../contracts/libraries/PackedTicketSampleLib.sol";
 import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWhaleModule.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 contract TicketChunkHarness is JackpotCheckpointHarness {
     function bucketData(uint24 lvl, uint8 trait) external pure returns (uint256) {
         return uint256(keccak256(abi.encode(_traitBufferBase(lvl) + trait)));
     }
     function owed(uint24 lvl, address player) external view returns (uint80) {
-        return _entriesOwed(lvl > _mintCeiling() ? _tqFarFutureKey(lvl) : _tqWriteKey(lvl), player);
+        return _owedOf(lvl > _mintCeiling() ? _tqFarFutureKey(lvl) : _tqWriteKey(lvl), player);
     }
 }
 
@@ -35,7 +36,7 @@ contract JackpotTicketAwardChunksTest is Test {
     uint256 private constant BELOW_GROUP = 400_000;
     // Admits setup (500k + tail); whether a group follows depends on setup's actual cost.
     uint256 private constant SETUP_CALL = 700_000;
-    bytes32 private constant TICKET_WIN = keccak256("JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)");
+    bytes32 private constant TICKET_WIN = keccak256("JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)");
 
     uint256 private dataStart;
     bytes32 private stream;
@@ -219,20 +220,26 @@ contract JackpotTicketAwardChunksTest is Test {
 }
 
 contract TicketGasHarness is TicketChunkHarness {
+    event JackpotTicketWin(
+        uint32 indexed walletId, uint24 indexed lvl, uint16 indexed trait,
+        uint32 tickets, uint24 sourceLvl, uint256 entryIndex, bool roundedUp
+    );
+
     /// @dev Replays positions [0, count) as `_resumeTicketWork` draws them; returns internal gas.
     function drawGas(uint24 lvl, uint256 entropy, uint8 trait, uint8 count, uint8 salt)
         external view returns (uint256 used, address[] memory winners)
     {
         uint256 g = gasleft();
         uint256 len = _bucketLength(lvl, trait);
-        address deity = _traitDeity(trait);
+        uint32 deity = _traitDeity(trait);
         _assertReadableTicketLevel(lvl);
         uint256 effectiveLen = len + _deityVirtualCount(trait, len, deity);
         winners = new address[](count);
         uint256[] memory indexes = new uint256[](count);
         PackedTicketSampleLib.Cursor memory cursor;
         for (uint256 i; i < count; ++i) {
-            (winners[i], indexes[i]) = _drawBucketEntry(lvl, trait, len, effectiveLen, deity, entropy, salt, i, cursor);
+            (uint32 winnerId, uint256 index) = _drawBucketEntry(lvl, trait, len, effectiveLen, deity, entropy, salt, i, cursor);
+            (winners[i], indexes[i]) = (_walletKey(winnerId), index);
         }
         used = g - gasleft();
     }
@@ -245,8 +252,9 @@ contract TicketGasHarness is TicketChunkHarness {
         for (uint256 i; i < winners.length; ++i) {
             address winner = winners[i];
             if (winner != address(0)) {
-                _queueEntries(winner, queueLvl, entries, true);
-                emit JackpotTicketWin(winner, queueLvl, traitId, entries, sourceLvl, i, false);
+                uint32 id = _seedWallet(winner);
+                _queueEntries(id, queueLvl, entries, true);
+                emit JackpotTicketWin(id, queueLvl, traitId, entries, sourceLvl, i, false);
             }
         }
         used = g - gasleft();
@@ -257,17 +265,17 @@ contract TicketGasHarness is TicketChunkHarness {
     function touchLanes(uint24 lvl, address[] calldata players, bool live) external {
         uint24 wk = _tqWriteKey(lvl);
         for (uint256 i; i < players.length; ++i) {
-            if (live) _queueEntries(players[i], lvl, 4, true);
-            else _setEntryOwed(wk, ticketOwnerId[players[i]], 0);
+            if (live) _queueEntries(_seedWallet(players[i]), lvl, 4, true);
+            else _setEntryOwed(wk, _walletIdOf(players[i]), 0);
         }
     }
 
     function touchClaimable(uint160 base, uint256 count) external {
-        for (uint256 i; i < count; ++i) balancesPacked[address(base + uint160(i + 1))] += 1;
+        for (uint256 i; i < count; ++i) balancesPacked[_seedWallet(address(base + uint160(i + 1)))] += 1;
     }
 
     function setDeity(uint8 trait, address deity) external {
-        deityBySymbol[(trait >> 6) * 8 + (trait & 7)] = deity;
+        deityBySymbol[(trait >> 6) * 8 + (trait & 7)] = _seedWallet(deity);
     }
 
     function seedMany(uint24 lvl, uint8 trait, uint256 count, uint160 base) external {
@@ -447,7 +455,7 @@ contract JackpotEthQuadrantGasTest is Test {
     uint256 private constant REDRAW_GAS = 2_500;
     uint256 private constant CHUNK = GasBounds.JACKPOT_ETH_AWARD_CHUNK;
     uint256 private constant SETUP_CALL = 700_000;
-    bytes32 private constant ETH_WIN = keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)");
+    bytes32 private constant ETH_WIN = keccak256("JackpotEthWin(uint32,uint24,uint16,uint256,uint256)");
 
     bytes32 private stream;
 

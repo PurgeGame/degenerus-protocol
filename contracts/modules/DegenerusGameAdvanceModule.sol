@@ -942,8 +942,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         uint256 word = _recordedDailyWord(day);
         if (len < 2 || word == 0) return;
         uint256 idx = 1 + (uint256(keccak256(abi.encodePacked("SEATDRAW", word))) % (len - 1));
-        address winner = _subscribers[idx];
-        Sub storage s = _subOf[winner];
+        uint256 element = _subscribers[idx];
+        address winner = address(uint160(element));
+        Sub storage s = _subOf[uint32(element >> 160)];
         uint24 startDay = s.afkingStartDay;
         uint24 covered = s.afkCoveredThroughDay;
         if (s.dailyQuantity == 0 || startDay == 0 || covered <= startDay) return;

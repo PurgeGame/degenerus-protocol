@@ -7,6 +7,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {DegeneretteQueue as DQ} from "../helpers/DegeneretteQueue.sol";
 import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title DegeneretteResolveRepeg -- sweep-budget invariance of queued-bet resolution.
 /// @notice Bets are queued per RNG index (`degeneretteQueue[index & 1]`, id = queue position + 1) and
@@ -34,13 +35,13 @@ contract DegeneretteResolveRepeg is DeployProtocol {
     // =========================================================================
 
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = GameSlots.RNG_WORD_CURRENT;
     /// @dev lootboxRngPacked; lootboxRngIndex is the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
     /// @dev prizePoolsPacked: [upper 128: futurePrizePool] [lower 128: nextPrizePool].
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED;
     /// @dev claimablePool (uint128) lives in slot 1, byte 16 (high 128 bits).
-    uint256 private constant CLAIMABLE_POOL_SLOT = 1;
+    uint256 private constant CLAIMABLE_POOL_SLOT = GameSlots.CLAIMABLE_POOL;
 
     /// @dev Salt used in degenerette bet resolution for the first spin.
     bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q'

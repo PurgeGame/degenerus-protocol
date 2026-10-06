@@ -9,6 +9,7 @@ import {DegeneretteQueue as DQ} from "../helpers/DegeneretteQueue.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title BigRecordArmingTest — pins the game-side arming of the all-time records.
 ///
@@ -24,13 +25,13 @@ import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 ///           on the 100-ticket floor.
 ///         A claim pays flip credit inside Coinflip; the box itself is never inflated.
 contract BigRecordArmingTest is DeployProtocol {
-    uint256 private constant LOOTBOX_ETH_SLOT = 15;
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3;
+    uint256 private constant LOOTBOX_ETH_SLOT = GameSlots.LOOTBOX_ORDER;
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = GameSlots.RNG_WORD_CURRENT;
     /// @dev degeneretteRecordBounty mapping root slot, keyed (index << 64) | betId.
-    uint256 private constant RECORD_BOUNTY_SLOT = 37;
+    uint256 private constant RECORD_BOUNTY_SLOT = GameSlots.DEGENERETTE_RECORD_BOUNTY;
     uint48 private constant BET_INDEX = 1;
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED;
     uint256 private constant LB_COVER_SHIFT = 161; // coverWei [161:209] @1e12 (lootboxOrder word)
     uint256 private constant LB_CUSTOM_SCALE = 1e12;
 

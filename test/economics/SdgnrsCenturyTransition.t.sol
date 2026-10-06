@@ -6,8 +6,9 @@ import {BoundaryGasFixture, PhaseEndSeeder} from "../gas/Lvl100PhaseEndAdvanceGa
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-contract SdgnrsTransitionSeeder is DegenerusGameStorage {
+contract SdgnrsTransitionSeeder is DegenerusGameStorage, WalletSeed {
     /// @dev 150 owners on the NEAREST unminted level: at the transition close of level L the
     ///      purchase level is L + 1 (minted on L's last-purchase word) and L + 2 is the first
     ///      level above _mintCeiling(). Its pool mints only as the frozen pool of L + 1's last
@@ -17,7 +18,7 @@ contract SdgnrsTransitionSeeder is DegenerusGameStorage {
         uint24 key = _tqFarFutureKey(target);
         for (uint160 i; i < 150; ++i) {
             address who = address(0xF0200000 + i);
-            uint80 packed = _registerEntryOwner(who, target);
+            uint80 packed = (uint80(_seedWallet(who)) << OWNER_IDX_SHIFT);
             uint32 pos = uint32(packed >> OWNER_IDX_SHIFT);
             _tqAppend(key, pos);
             _setEntryOwed(key, pos, packed | (uint80(4) << 8));

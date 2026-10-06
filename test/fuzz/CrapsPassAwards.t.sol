@@ -6,6 +6,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
 import {FlipRoundLib} from "../../contracts/libraries/FlipRoundLib.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title Whale/deity purchases bank Craps pass credits
 /// @notice Below level 10 a whale pass banks one normal Craps day-pass credit per pass bought
@@ -186,9 +187,9 @@ contract CrapsPassAwards is DeployProtocol {
         uint32 highPasses
     );
 
-    uint256 private constant SLOT_PRESALE_BOX_CREDIT = 17;
-    uint256 private constant SLOT_LOOTBOX_RNG_PACKED = 33;
-    uint256 private constant SLOT_LOOTBOX_RNG_WORD = 34;
+    uint256 private constant SLOT_PRESALE_BOX_CREDIT = GameSlots.PRESALE_BOX_CREDIT;
+    uint256 private constant SLOT_LOOTBOX_RNG_PACKED = GameSlots.LOOTBOX_RNG_PACKED;
+    uint256 private constant SLOT_LOOTBOX_RNG_WORD = GameSlots.RNG_DAY_TAGS;
     uint256 private constant NORMAL_UNIT = 24_800;
     uint256 private constant HIGH_UNIT = 21 * 24_800;
     uint256 private constant HIGH_CAP = 12;
@@ -201,9 +202,12 @@ contract CrapsPassAwards is DeployProtocol {
 
     /// @dev Buy one fully-ETH-funded presale box at the current index (credit seeded first).
     function _buyPresaleBox(address who, uint256 amount) private returns (uint48 index) {
+        // Presale credit is keyed by wallet ID; give the buyer its ID before seeding it.
+        uint32 id = game.walletIdOf(who);
+        if (id == 0) id = _giveWalletId(who);
         vm.store(
             address(game),
-            keccak256(abi.encode(who, SLOT_PRESALE_BOX_CREDIT)),
+            keccak256(abi.encode(uint256(id), SLOT_PRESALE_BOX_CREDIT)),
             bytes32(amount)
         );
         vm.deal(who, amount);

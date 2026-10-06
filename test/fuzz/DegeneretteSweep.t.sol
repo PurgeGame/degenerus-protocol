@@ -8,6 +8,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title DegeneretteSweep -- queued Degenerette bets resolve inside the box-open sweep.
 /// @notice A bet is one word appended to degeneretteQueue[index & 1]; its id is the queue
@@ -28,10 +29,10 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 ///         award). The record-bounty chain's IDegenerusCoin.mintForGame is driven by
 ///         BigRecordArming.
 contract DegeneretteSweep is DeployProtocol {
-    uint256 private constant LR_PACKED_SLOT = 33;
-    uint256 private constant LR_WORD_SLOT = 3;
-    uint256 private constant PRIZE_POOLS_SLOT = 2;
-    uint256 private constant QUEUE_SLOT = 21; // degeneretteQueue mapping root
+    uint256 private constant LR_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
+    uint256 private constant LR_WORD_SLOT = GameSlots.RNG_WORD_CURRENT;
+    uint256 private constant PRIZE_POOLS_SLOT = GameSlots.PRIZE_POOLS_PACKED;
+    uint256 private constant QUEUE_SLOT = GameSlots.DEGENERETTE_QUEUE; // degeneretteQueue mapping root
     uint256 private constant FROZEN_BIT = uint256(1) << 208; // slot 0, byte 26
 
     uint8 private constant ETH = 0;

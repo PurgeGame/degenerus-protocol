@@ -6,6 +6,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title StallResilience -- Proves VRF stall -> coordinator swap -> resume cycle
 /// @notice Integration tests for gap day RNG backfill (TEST-01), coinflip resolution
@@ -286,7 +287,7 @@ contract StallResilience is DeployProtocol {
         }
         assertGt(_dailyIdx(), sealedBefore, "the stalled day sealed");
         uint256 order = uint256(vm.load(address(game),
-            keccak256(abi.encode(buyer, keccak256(abi.encode(uint256(orphanedIndex & 1), uint256(15)))))));
+            keccak256(abi.encode(buyer, keccak256(abi.encode(uint256(orphanedIndex & 1), GameSlots.LOOTBOX_ORDER))))));
         assertTrue(order != 0, "the stalled cohort's box order exists");
         assertTrue(order >> 255 == 1, "the stalled cohort's box opened on the reissued word");
     }

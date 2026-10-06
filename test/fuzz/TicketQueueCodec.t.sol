@@ -3,18 +3,20 @@ pragma solidity 0.8.34;
 
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
+import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
-contract TicketQueueCodecHarness is DegenerusGameStorage {
+contract TicketQueueCodecHarness is DegenerusGameStorage, WalletSeed {
     function roots() external pure returns (uint256 q, uint256 locator, uint256 owners, uint256 pending) {
-        assembly { q := ticketQueue.slot locator := ticketOwnerId.slot owners := ticketOwners.slot pending := ticketPending.slot }
+        assembly { q := ticketQueue.slot locator := mintPacked_.slot owners := wallets.slot pending := ticketPending.slot }
     }
     function writeOwed(uint24 lvl, uint32 pos, uint80 packed) external { _setEntryOwed(lvl, pos, packed); }
-    function record(uint24 lvl, uint32 pos) external view returns (uint256) { return _entryRecord(lvl, pos); }
+    function record(uint24 lvl, uint32 pos) external view returns (uint256) { return _entryRecordOf(lvl, pos); }
     function seedBucket(uint24 lvl, uint32 pos) external {
         _setTicketBufferLevel(lvl);
-        _bucketAppendRun(_traitBufferBase(lvl), 17, uint256(pos) - 1, 1, lvl);
+        _bucketAppendRun(_traitBufferBase(lvl), 17, uint256(pos), 1, lvl);
     }
-    function bucketOwner(uint24 lvl) external view returns (address) { return _bucketOwnerAtUnchecked(lvl, 17, 0); }
+    function bucketOwner(uint24 lvl) external view returns (address) { return _bucketOwnerAt(lvl, 17, 0); }
     function append(uint24 key, uint32 pos) external { _tqAppend(key, pos); }
     function appendLanes(uint24 key, uint256 lanes, uint256 count) external { _tqAppendLanes(key, lanes, count); }
     function position(uint24 key, uint256 k) external view returns (uint32) {
@@ -23,7 +25,7 @@ contract TicketQueueCodecHarness is DegenerusGameStorage {
     }
     function owner(uint24 key, uint24 lvl, uint256 k) external view returns (address) {
         require(k < _ticketQueueLength(key));
-        return _tqOwnerAt(ticketQueue[_ticketQueueStorageKey(key)], lvl, k);
+        return _walletKey(_tqPositionAt(ticketQueue[_ticketQueueStorageKey(key)], k));
     }
     function length(uint24 key) external view returns (uint256) { return _ticketQueueLength(key); }
     function remove(uint24 key, uint256 k) external {
@@ -48,12 +50,14 @@ contract TicketQueueCodecHarness is DegenerusGameStorage {
     }
     function seedOwner(uint24 lvl, uint32 pos, address player) external {
         require(pos != 0);
-        ticketOwnerId[player] = pos;
-        address[] storage owners = ticketOwners;
+        uint256 word = mintPacked_[player];
+        mintPacked_[player] = (word & ~(uint256(type(uint32).max) << BitPackingLib.WALLET_ID_SHIFT))
+            | (uint256(pos) << BitPackingLib.WALLET_ID_SHIFT);
+        uint256[] storage table = wallets;
         assembly ("memory-safe") {
-            if gt(pos, sload(owners.slot)) { sstore(owners.slot, pos) }
-            mstore(0, owners.slot)
-            sstore(add(keccak256(0, 32), sub(pos, 1)), player)
+            if iszero(gt(sload(table.slot), pos)) { sstore(table.slot, add(pos, 1)) }
+            mstore(0, table.slot)
+            sstore(add(keccak256(0, 32), pos), player)
         }
     }
 }

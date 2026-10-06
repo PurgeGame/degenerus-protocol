@@ -6,6 +6,8 @@ import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
+import {activityScoreOf} from "../helpers/ActivityScoreOf.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title V61RngFreezeIntact — SEC-01 proof: the v61 surfaces (AFPAY / PACK / CURSE / SMITE) read NO
 ///        VRF-derived or block entropy in a player-manipulable window, proven EMPIRICALLY by a two-block
@@ -47,12 +49,12 @@ contract V61RngFreezeIntact is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots + mintPacked_ field shifts (378-01 key + BitPackingLib)
     // -------------------------------------------------------------------------
-    uint256 private constant BALANCES_PACKED_SLOT = 7; // [afking:hi128 | claimable:lo128]
-    uint256 private constant CLAIMABLE_POOL_SLOT = 1; // uint128 @ byte 16
+    uint256 private constant BALANCES_PACKED_SLOT = GameSlots.BALANCES_PACKED; // [afking:hi128 | claimable:lo128]
+    uint256 private constant CLAIMABLE_POOL_SLOT = GameSlots.CLAIMABLE_POOL; // uint128 @ byte 16
     uint256 private constant CLAIMABLE_POOL_OFFBYTES = 16;
-    uint256 private constant PRIZE_POOLS_SLOT = 2; // prizePoolsPacked [future:128 | next:128]
-    uint256 private constant PRIZE_POOL_PENDING_SLOT = 11; // prizePoolPendingPacked (frozen-phase sink)
-    uint256 private constant MINTPACKED_SLOT = 9;
+    uint256 private constant PRIZE_POOLS_SLOT = GameSlots.PRIZE_POOLS_PACKED; // prizePoolsPacked [future:128 | next:128]
+    uint256 private constant PRIZE_POOL_PENDING_SLOT = GameSlots.PRIZE_POOL_PENDING_PACKED; // prizePoolPendingPacked (frozen-phase sink)
+    uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED;
 
     uint256 private constant DAY_SHIFT = 72; // lastEthDay (32 bits)
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS (1 bit)
@@ -63,7 +65,7 @@ contract V61RngFreezeIntact is DeployProtocol {
     uint256 private constant PRICE_COIN_UNIT = 1000;
     uint256 private constant SMITE_BURN = PRICE_COIN_UNIT / 5; // 200 FLIP
 
-    bytes32 private constant AFKING_SPENT_SIG = keccak256("AfkingSpent(address,uint256)");
+    bytes32 private constant AFKING_SPENT_SIG = keccak256("AfkingSpent(uint32,uint256)");
 
     uint256 private _t;
     // Symbols 0 and 6 are the genesis deities (VAULT / SDGNRS); mint players from 1, skipping 6.
@@ -226,14 +228,14 @@ contract V61RngFreezeIntact is DeployProtocol {
         vm.roll(block.number + 1);
         vm.prevrandao(bytes32(pr1));
         vm.coinbase(address(uint160(uint256(keccak256(abi.encode(pr1, "cbA"))))));
-        uint256 scoreA = game.playerActivityScore(p);
+        uint256 scoreA = activityScoreOf(address(game), p);
 
         // Block context B (perturbed) — the same view must return the same value.
         vm.roll(block.number + 12345);
         vm.warp(block.timestamp + 9 hours);
         vm.prevrandao(bytes32(pr2));
         vm.coinbase(address(uint160(uint256(keccak256(abi.encode(pr2, "cbB"))))));
-        uint256 scoreB = game.playerActivityScore(p);
+        uint256 scoreB = activityScoreOf(address(game), p);
 
         assertEq(scoreA, scoreB, "penalty freeze: activity score block-invariant for a fixed curseCount");
         assertEq(scoreA, 6 - curse, "penalty determinism: score == base - curse (pure point-domain function)");
@@ -332,7 +334,7 @@ contract V61RngFreezeIntact is DeployProtocol {
         vm.prank(p);
         game.claimWinnings(p);
         curse = game.curseCountOf(p);
-        score = game.playerActivityScore(p);
+        score = activityScoreOf(address(game), p);
     }
 
     // =========================================================================
@@ -456,7 +458,7 @@ contract V61RngFreezeIntact is DeployProtocol {
     // =========================================================================
 
     function _seedClaimable(address who, uint256 amount) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(BALANCES_PACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(BALANCES_PACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         uint256 oldLow = uint128(packed);
         uint256 high = packed >> 128;
@@ -465,7 +467,7 @@ contract V61RngFreezeIntact is DeployProtocol {
     }
 
     function _seedAfking(address who, uint256 amount) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(BALANCES_PACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(BALANCES_PACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         uint256 low = uint128(packed);
         uint256 oldHigh = packed >> 128;

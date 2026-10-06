@@ -6,9 +6,10 @@ import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {Test} from "forge-std/Test.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-contract OwedEightPurchaseSeeder is DegenerusGame {
-    function seedClaim(address player) external { whalePassClaims[player] = 4; }
+contract OwedEightPurchaseSeeder is DegenerusGame, WalletSeed {
+    function seedClaim(address player) external { _seedHalfPasses(player, 4); }
 }
 
 contract OwedEightPurchaseBaselineTest is DeployProtocol {
@@ -50,9 +51,9 @@ contract OwedEightPurchaseBaselineTest is DeployProtocol {
     }
 }
 
-contract OwedEightDrainHarness is DegenerusGameTicketModule {
+contract OwedEightDrainHarness is DegenerusGameTicketModule, WalletSeed {
     function credit(address player, uint24 lvl, uint32 entries) external {
-        _queueEntries(player, lvl, entries, false);
+        _queueEntries(_seedWallet(player), lvl, entries, false);
     }
     function commit(uint24 lvl, uint8 shift) external {
         level = lvl - 1;
@@ -64,7 +65,7 @@ contract OwedEightDrainHarness is DegenerusGameTicketModule {
         snapShift = shift;
     }
     function owed(address player, uint24 lvl) external view returns (uint80) {
-        return _entriesOwed(_tqFarFutureKey(lvl), player);
+        return _owedOf(_tqFarFutureKey(lvl), player);
     }
     function count(uint24 lvl) external view returns (uint256 n) {
         for (uint256 t; t < 256; ++t) n += _bucketLength(lvl, t);

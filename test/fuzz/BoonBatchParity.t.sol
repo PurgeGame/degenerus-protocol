@@ -6,15 +6,16 @@ import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IDegenerusGameBoonModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {DegenerusGameBoonModule} from "../../contracts/modules/DegenerusGameBoonModule.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-contract BoonBatchParityHarness is DegenerusGameBoonModule {
+contract BoonBatchParityHarness is DegenerusGameBoonModule, WalletSeed {
     function playerState(address player)
         external
         view
         returns (uint256 slot0, uint256 slot1, uint256 mintData, uint256 whaleClaims)
     {
         BoonPacked storage bp = boonPacked[player];
-        return (bp.slot0, bp.slot1, mintPacked_[player], whalePassClaims[player]);
+        return (bp.slot0, bp.slot1, mintPacked_[player], _halfPassesOf(player));
     }
 }
 

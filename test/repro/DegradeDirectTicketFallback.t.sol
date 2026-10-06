@@ -19,7 +19,7 @@ contract DegradeDirectFallbackHarness is DegenerusGameJackpotModule, BucketSeed 
         jackpotPhaseFlag = true;
         dailyIdx = 100;
         rngLockedFlag = true;
-        _registerEntryOwner(address(1), 41);
+        _seedWallet(address(1));
         uint8[4] memory traits = JackpotBucketLib.getRandomTraits(word);
         traits[3] = GoldSixLib.daily(traits[3], word);
         dailyFoilDraw[(dailyIdx + 1) & 1] = _packFoilDraw(
@@ -37,7 +37,7 @@ contract DegradeDirectFallbackHarness is DegenerusGameJackpotModule, BucketSeed 
 
     /// @dev Deities without a registry ID for every symbol (real deities always carry one).
     function addUnregisteredDeities() external {
-        for (uint8 i; i < 32; ++i) deityBySymbol[i] = address(uint160(0xD000 + i));
+        for (uint8 i; i < 32; ++i) deityBySymbol[i] = _seedWallet(address(uint160(0xD000 + i)));
     }
 
     function state() external view returns (uint8 quadrant, uint16 winner, uint32 round, bool direct, uint8 counter, bool pending) {
@@ -56,7 +56,7 @@ contract DegradeDirectFallbackHarness is DegenerusGameJackpotModule, BucketSeed 
 ///      single round; the partial-group skip therefore never arms here and is a code-read item.
 ///      Run: forge test --match-path test/repro/DegradeDirectTicketFallback.t.sol -vv
 contract DegradeDirectTicketFallbackTest is Test {
-    bytes32 private constant WIN = keccak256("JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)");
+    bytes32 private constant WIN = keccak256("JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)");
     bytes32 private constant BATCH =
         keccak256("JackpotTicketBatchWin(uint24,uint24,uint16,uint16,uint8,uint32,uint256[4],uint256[4])");
     uint256 private constant WORD = 0xAC4DE45EDBEEF;

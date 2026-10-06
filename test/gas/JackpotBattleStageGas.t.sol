@@ -10,6 +10,7 @@ import {GoldSixLib} from "../../contracts/libraries/GoldSixLib.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 import {AdvanceStageStream} from "../helpers/AdvanceStageStream.sol";
 import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title JackpotBattleStageGas — STAGE_JACKPOT_COIN_TICKETS (8) / STAGE_JACKPOT_PHASE_ENDED (9) at
 ///        their full winner cap, and the exact per-day stage order of a jackpot phase.
@@ -80,10 +81,9 @@ contract JackpotBattleStageSeeder is DegenerusGame, BucketSeed {
 
         // Genesis deities add virtual entries naming VAULT / sDGNRS, whose seats are refused (a
         // cheaper path): exclude them so every ticket draw lands on a fresh wallet.
-        deityBySymbol[VAULT_DEITY_SYMBOL] = address(0);
-        deityBySymbol[SDGNRS_DEITY_SYMBOL] = address(0);
+        deityBySymbol[VAULT_DEITY_SYMBOL] = 0;
+        deityBySymbol[SDGNRS_DEITY_SYMBOL] = 0;
 
-        if (ticketOwners.length == 0) _registerEntryOwner(address(1), s.lvl);
         for (uint8 q; q < 4; ++q) {
             _seedBucketClear(s.lvl, mainTraits[q]);
             if (s.ticketHolders != 0) {
@@ -96,7 +96,7 @@ contract JackpotBattleStageSeeder is DegenerusGame, BucketSeed {
             for (uint24 c = s.lvl + 2; c <= s.lvl + 100; ++c) {
                 uint160 b = s.base + 0x2000000 + uint160(c - s.lvl - 2) * 0x1000;
                 for (uint256 i; i < s.ffHolders; ++i) {
-                    _tqAppend(_tqFarFutureKey(c), uint32(_registerEntryOwner(address(b + uint160(i + 1)), c) >> OWNER_IDX_SHIFT));
+                    _tqAppend(_tqFarFutureKey(c), _seedWallet(address(b + uint160(i + 1))));
                 }
             }
         }
@@ -107,7 +107,7 @@ abstract contract JackpotBattleStageFixture is AdvanceStageStream {
     uint256 internal constant GAS_TARGET = 10_000_000;
 
     bytes32 internal constant TICKET_WIN_SIG =
-        keccak256("JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)");
+        keccak256("JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)");
     bytes32 internal constant TICKET_BATCH_SIG =
         keccak256("JackpotTicketBatchWin(uint24,uint24,uint16,uint16,uint8,uint32,uint256[4],uint256[4])");
     bytes32 internal constant BATTLE_ENTRY_SIG = keccak256("JackpotBattleEntry(uint64,uint256,address,uint256,uint32)");
@@ -145,7 +145,7 @@ abstract contract JackpotBattleStageFixture is AdvanceStageStream {
 
     /// @dev Registry owner of zero-based index `idx` (ticketOwners, slot 67).
     function _ownerAt(uint256 idx) internal view returns (address) {
-        return address(uint160(uint256(vm.load(address(game), bytes32(uint256(keccak256(abi.encode(uint256(67)))) + idx)))));
+        return address(uint160(uint256(vm.load(address(game), bytes32(uint256(keccak256(abi.encode(GameSlots.WALLETS))) + idx)))));
     }
 
     /// @dev The coin+tickets leg from the stream: its partial calls mark stage 8; a final day's

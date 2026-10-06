@@ -117,17 +117,17 @@ contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
     }
 
     function seedFoilWrite(uint24 lvl, address player) external {
-        uint80 ownerBits = _registerEntryOwner(player, lvl);
+        uint80 ownerBits = (uint80(_seedWallet(player)) << OWNER_IDX_SHIFT);
         uint256 id = uint32(ownerBits >> OWNER_IDX_SHIFT);
         foilQueue[_foilWriteKey()].push((id << 192) | (uint256(lvl) << 160) | uint256(uint160(player)));
-        foilRecord[lvl & 3][player] = (uint256(20000) << _FOIL_MULT_SHIFT)
+        foilRecord[lvl & 3][_seedWallet(player)] = (uint256(20000) << _FOIL_MULT_SHIFT)
             | (uint256(100) << _FOIL_SCORE_SHIFT) | (uint256(lvl) << _FOIL_LEVEL_SHIFT);
     }
 
     function setFoilParity(bool writeSlot) external { ticketWriteSlot = writeSlot; foilWriteSlot = writeSlot; }
 
     function seedFoilRead(uint24 lvl, address player, bool processed) external {
-        uint80 ownerBits = _registerEntryOwner(player, lvl);
+        uint80 ownerBits = (uint80(_seedWallet(player)) << OWNER_IDX_SHIFT);
         foilQueue[_foilReadKey()].push((uint256(uint32(ownerBits >> OWNER_IDX_SHIFT)) << 192)
             | (uint256(lvl) << 160) | uint256(uint160(player)));
         uint256 record = (uint256(20000) << _FOIL_MULT_SHIFT) | (uint256(100) << _FOIL_SCORE_SHIFT);
@@ -136,13 +136,13 @@ contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
             record |= _FOIL_READY;
             foilCursor = 1;
         }
-        foilRecord[lvl & 3][player] = record | (uint256(lvl) << _FOIL_LEVEL_SHIFT);
+        foilRecord[lvl & 3][_seedWallet(player)] = record | (uint256(lvl) << _FOIL_LEVEL_SHIFT);
     }
 
     function foilCursorState() external view returns (uint256) { return foilCursor; }
 
     function foilState(uint24 lvl, address player) external view returns (uint256 writeLength, uint256 readLength, bool ready) {
-        return (foilQueue[_foilWriteKey()].length, foilQueue[_foilReadKey()].length, _foilRecordWord(player, lvl) & _FOIL_READY != 0);
+        return (foilQueue[_foilWriteKey()].length, foilQueue[_foilReadKey()].length, _foilRecordWord(_walletIdOf(player), lvl) & _FOIL_READY != 0);
     }
 
     function seedEveryTrait(uint24 lvl, address player) external {
@@ -159,14 +159,14 @@ contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
         for (uint16 trait; trait < 256; ++trait) {
             uint256 len = _bucketLength(lvl, uint8(trait));
             for (uint256 i; i < len; ++i) {
-                if (_bucketOwnerAtUnchecked(lvl, uint8(trait), i) == player) ++count;
+                if (_bucketOwnerAt(lvl, uint8(trait), i) == player) ++count;
             }
         }
     }
 
     function totalQueuedOwed(uint24 lvl, address player) external view returns (uint256) {
-        return uint256(uint32(_entriesOwed(lvl, player) >> 8)) +
-            uint256(uint32(_entriesOwed(lvl | TICKET_SLOT_BIT, player) >> 8));
+        return uint256(uint32(_owedOf(lvl, player) >> 8)) +
+            uint256(uint32(_owedOf(lvl | TICKET_SLOT_BIT, player) >> 8));
     }
 
     function ticketBufferState() external view returns (bool writeSlot, bool readDrained) {
@@ -174,7 +174,7 @@ contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
     }
 
     function _seedQueue(uint24 key, address player, uint32 entries) private {
-        uint80 ownerBits = _registerEntryOwner(player, uint24(key & ((uint24(1) << 22) - 1)));
+        uint80 ownerBits = (uint80(_seedWallet(player)) << OWNER_IDX_SHIFT);
         _tqAppend(key, uint32(ownerBits >> OWNER_IDX_SHIFT));
         _seedOwedAt(key, player, ownerBits | (uint80(entries) << 8));
     }

@@ -54,17 +54,23 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     function initProtocolDeity() external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (msg.sender != ContractAddresses.CREATOR || level != 0) revert E();
-        _registerDeity(ContractAddresses.VAULT, VAULT_DEITY_SYMBOL);
-        _registerDeity(ContractAddresses.SDGNRS, SDGNRS_DEITY_SYMBOL);
+        // The VAULT and sDGNRS constructors already registered (their self-subscriptions);
+        // GNRUS registers here. Protocol IDs are constants everywhere else, so pin them.
+        (uint32 vaultId, ) = _registerWallet(ContractAddresses.VAULT, 0);
+        (uint32 sdgnrsId, ) = _registerWallet(ContractAddresses.SDGNRS, 0);
+        (uint32 gnrusId, ) = _registerWallet(ContractAddresses.GNRUS, 0);
+        if (vaultId != VAULT_WALLET_ID || sdgnrsId != SDGNRS_WALLET_ID || gnrusId != GNRUS_WALLET_ID) revert E();
+        _registerDeity(ContractAddresses.VAULT, VAULT_WALLET_ID, VAULT_DEITY_SYMBOL);
+        _registerDeity(ContractAddresses.SDGNRS, SDGNRS_WALLET_ID, SDGNRS_DEITY_SYMBOL);
         _latchConstructionSeat(ContractAddresses.VAULT);
         _latchConstructionSeat(ContractAddresses.SDGNRS);
-        emit EntriesQueuedRange(ContractAddresses.VAULT, 1, 100, 1, DEITY_PERPETUAL_ENTRIES);
-        emit EntriesQueuedRange(ContractAddresses.SDGNRS, 1, 100, 1, DEITY_PERPETUAL_ENTRIES);
+        emit EntriesQueuedRange(VAULT_WALLET_ID, 1, 100, 1, DEITY_PERPETUAL_ENTRIES);
+        emit EntriesQueuedRange(SDGNRS_WALLET_ID, 1, 100, 1, DEITY_PERPETUAL_ENTRIES);
         uint24 mintCeiling = _mintCeiling();
         uint24 writeSlotBit = ticketWriteSlot ? TICKET_SLOT_BIT : 0;
         for (uint24 lvl = 1; lvl <= 100; ++lvl) {
             uint24 key = lvl > mintCeiling ? _tqFarFutureKey(lvl) : lvl | writeSlotBit;
-            _queueGenesisDeities(lvl, key);
+            _queueGenesisDeities(key);
         }
     }
 
@@ -294,9 +300,10 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint256 totalPrice = firstPrice + restPrice * (quantity - 1);
 
         // Claimable-pay: msg.value first (overpay -> payer's afking), claimable covers the rest.
+        (uint32 buyerId, ) = _registerWallet(buyer, totalPrice);
         uint256 freshPaid = msg.value > totalPrice ? totalPrice : msg.value;
-        _creditAfkingValue(msg.sender, msg.value - freshPaid);
-        _deliverWhalePass(buyer, passLevel, quantity, totalPrice, freshPaid, hasValidBoon, s0, affiliateCode);
+        if (msg.value > freshPaid) _creditAfkingValue(_payerId(buyer, buyerId), msg.value - freshPaid);
+        _deliverWhalePass(buyer, buyerId, passLevel, quantity, totalPrice, freshPaid, hasValidBoon, s0, affiliateCode);
     }
 
     /**
@@ -339,7 +346,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint24 passLevel = level + 1;
         (bool hasValidBoon, uint256 s0) = _whaleBoonState(ContractAddresses.SDGNRS);
         (uint256 firstPrice, uint256 restPrice) = _whaleUnitPrices(passLevel, hasValidBoon, s0);
-        uint256 budget = _claimableOf(ContractAddresses.SDGNRS) / SDGNRS_WHALE_BUDGET_DIVISOR;
+        uint256 budget = _claimableOf(SDGNRS_WALLET_ID) / SDGNRS_WHALE_BUDGET_DIVISOR;
         // quote(q) = firstPrice + restPrice * (q - 1) <= budget  <=>  q * restPrice <= budget + restPrice - firstPrice.
         // firstPrice <= restPrice on every path (the boon only discounts), so the sum never underflows.
         uint256 groups = (budget + restPrice - firstPrice) / (restPrice * WHALE_BULK_BONUS_DIVISOR);
@@ -356,7 +363,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             totalPrice = firstPrice + restPrice * (paidPasses - 1);
         }
         _deliverWhalePass(
-            ContractAddresses.SDGNRS, passLevel, paidPasses, totalPrice, 0, hasValidBoon, s0, bytes32(0)
+            ContractAddresses.SDGNRS, SDGNRS_WALLET_ID, passLevel, paidPasses, totalPrice, 0, hasValidBoon, s0, bytes32(0)
         );
     }
 
@@ -424,6 +431,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @param affiliateCode Affiliate/referral code (bytes32(0) = stored code / vault default).
     function _deliverWhalePass(
         address buyer,
+        uint32 buyerId,
         uint24 passLevel,
         uint256 quantity,
         uint256 totalPrice,
@@ -436,13 +444,13 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             // Clear whale fields (consumed)
             boonPacked[buyer].slot0 = s0 & BP_WHALE_CLEAR;
         }
-        _settleShortfall(buyer, totalPrice - freshPaid, true);
+        _settleShortfall(buyerId, totalPrice - freshPaid, true);
         // Whale-pass ETH-in (any funding source): the full price routes to the pools; the
         // pass lootbox is a pool-funded reward, so its LootBoxBuy must NOT be re-counted.
         emit WhalePassPurchased(buyer, quantity, totalPrice);
         // Coin-presale-box credit accrual: 25% of the committed ETH while presale open.
         if (!presaleOver) {
-            presaleBoxCredit[buyer] += totalPrice / 4;
+            presaleBoxCredit[buyerId] += totalPrice / 4;
         }
 
         uint256 prevData = mintPacked_[buyer];
@@ -508,7 +516,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             data,
             day,
             BitPackingLib.DAY_SHIFT,
-            BitPackingLib.MASK_32
+            BitPackingLib.MASK_24
         );
 
         // Front-load the LEVEL mint streak by the same freeze delta (survives pass expiry).
@@ -533,14 +541,14 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             : 0;
         if (bonusCount != 0) {
             _queueEntryRange(
-                buyer,
+                buyerId,
                 ticketStartLevel,
                 bonusCount,
                 bonusEntries
             );
         }
         _queueHalfPassAward(
-            buyer,
+            buyerId,
             ticketStartLevel + bonusCount,
             100 - bonusCount,
             WHALE_HALF_PASSES_PER_PASS * awardQty
@@ -740,16 +748,18 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             // Clear lazy pass fields (consumed)
             bpLazy.slot1 = s1 & BP_LAZY_PASS_CLEAR;
         }
+        // The pass is priced: register the buyer (the eligibility read above writes nothing back).
+        (uint32 buyerId, ) = _registerWallet(buyer, totalPrice);
         // Claimable-pay: msg.value first (overpay -> payer's afking), claimable covers the rest.
         uint256 freshPaid = msg.value > totalPrice ? totalPrice : msg.value;
-        _creditAfkingValue(msg.sender, msg.value - freshPaid);
-        _settleShortfall(buyer, totalPrice - freshPaid, true);
+        if (msg.value > freshPaid) _creditAfkingValue(_payerId(buyer, buyerId), msg.value - freshPaid);
+        _settleShortfall(buyerId, totalPrice - freshPaid, true);
         // Lazy-pass ETH-in (any funding source): the full price routes to the pools; the
         // pass lootbox is a pool-funded reward, so its LootBoxBuy must NOT be re-counted.
         emit LazyPassPurchased(buyer, startLevel, totalPrice);
         // Coin-presale-box credit accrual: 25% of the price paid while presale open.
         if (!presaleOver) {
-            presaleBoxCredit[buyer] += totalPrice / 4;
+            presaleBoxCredit[buyerId] += totalPrice / 4;
         }
 
         // Affiliate, fresh 25% at affiliate levels 1-3 / 20% at 4+ (paid at level + 1) and 5% recycle exactly like a
@@ -789,7 +799,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         // Queue bonus tickets from flat-price overpayment at early levels
         if (bonusEntries != 0) {
-            _queueEntries(buyer, startLevel, bonusEntries, false);
+            _queueEntries(buyerId, startLevel, bonusEntries, false);
         }
 
         // Split actual payment into pools (future + next)
@@ -861,7 +871,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         if (_livenessTriggered()) revert GameOver();
         if (symbolId >= 32) revert InvalidSymbol();
         if (symbolId == VAULT_DEITY_SYMBOL || symbolId == SDGNRS_DEITY_SYMBOL) revert SymbolTaken();
-        if (deityBySymbol[symbolId] != address(0)) revert SymbolTaken();
+        if (deityBySymbol[symbolId] != 0) revert SymbolTaken();
         // Link the buyer's referral before anything reads it, exactly as a ticket mint does:
         // payAffiliate stores the supplied code when the buyer has none yet, and keeps the
         // stored one otherwise. The zero amount takes its no-reward return, so the pass links
@@ -904,28 +914,30 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             // Consume boon regardless of expiry — clear deity pass fields
             bpDeity.slot1 = s1Deity & BP_DEITY_PASS_CLEAR;
         }
+        // The pass is priced: register the buyer (the eligibility read above writes nothing back).
+        (uint32 buyerId, ) = _registerWallet(buyer, totalPrice);
         // Claimable-pay: msg.value first (overpay -> payer's afking), claimable covers the rest.
         uint256 freshPaid = msg.value > totalPrice ? totalPrice : msg.value;
-        _creditAfkingValue(msg.sender, msg.value - freshPaid);
-        _settleShortfall(buyer, totalPrice - freshPaid, true);
+        if (msg.value > freshPaid) _creditAfkingValue(_payerId(buyer, buyerId), msg.value - freshPaid);
+        _settleShortfall(buyerId, totalPrice - freshPaid, true);
 
         uint24 passLevel = level + 1;
 
         // Record the price paid (caps the early-game-over refund). A buyer holds exactly one deity
         // pass (the HAS_DEITY_PASS guard above blocks a second), so this is a plain assignment.
-        deityPassPricePaid[buyer] = uint96(totalPrice);
+        deityPassPricePaid[buyerId] = uint96(totalPrice);
         // Coin-presale-box credit accrual: 25% of the committed ETH while presale open.
         if (!presaleOver) {
-            presaleBoxCredit[buyer] += totalPrice / 4;
+            presaleBoxCredit[buyerId] += totalPrice / 4;
         }
 
-        _registerDeity(buyer, symbolId);
+        _registerDeity(buyer, buyerId, symbolId);
         // The next transition extends every deity to level + 100. In the purchase phase
         // passLevel is level + 1, so a 100-level grant ends at level + 100 and the next
         // transition (targeting level + 101) continues it; in the jackpot phase the level
         // is already promoted, passLevel is level + 1 and the next transition targets
         // level + 100 itself, so the grant stops one level short.
-        _queueEntryRange(buyer, passLevel, jackpotPhaseFlag ? 99 : 100, DEITY_PERPETUAL_ENTRIES);
+        _queueEntryRange(buyerId, passLevel, jackpotPhaseFlag ? 99 : 100, DEITY_PERPETUAL_ENTRIES);
         ++deityPassSales;
 
         // DGNRS rewards
@@ -946,20 +958,22 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         // getReferrer defaults to VAULT when the buyer has no real referrer): queued immediately
         // for 100 levels from passLevel (= level + 1), 5/lvl over the level-1-9 bonus window +
         // one whole ticket every 2nd level standard, plus the whale-pass freeze/stat boost.
+        // Every referrer holds a wallet ID: a code's owner registers when the code is first used.
+        uint32 affiliateId = _requireWalletId(affiliateAddr);
         uint24 ticketStartLevel = passLevel;
         uint24 bonusCount = passLevel <= WHALE_BONUS_END_LEVEL
             ? (WHALE_BONUS_END_LEVEL - passLevel + 1)
             : 0;
         if (bonusCount != 0) {
             _queueEntryRange(
-                affiliateAddr,
+                affiliateId,
                 ticketStartLevel,
                 bonusCount,
                 WHALE_BONUS_ENTRIES_PER_LEVEL
             );
         }
         _queueHalfPassAward(
-            affiliateAddr,
+            affiliateId,
             ticketStartLevel + bonusCount,
             100 - bonusCount,
             WHALE_HALF_PASSES_PER_PASS
@@ -1014,37 +1028,36 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
     /// @dev Shared paid/genesis ownership registration. Callers queue the initial
     ///      range separately so genesis can append both owners in one packed group.
-    function _registerDeity(address buyer, uint8 symbolId) private {
+    function _registerDeity(address buyer, uint32 buyerId, uint8 symbolId) private {
         uint256 mp = mintPacked_[buyer];
         if (mp >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0) revert AlreadyOwnsDeityPass();
-        if (deityBySymbol[symbolId] != address(0)) revert SymbolTaken();
-        if (deityPassOwners.length >= 32) revert E();
+        if (deityBySymbol[symbolId] != 0) revert SymbolTaken();
+        if (_deityCount() >= 32) revert E();
         uint256 packed = mp | (uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT);
         mintPacked_[buyer] = packed;
-        deityBySymbol[symbolId] = buyer;
-        deityPassOwners.push(buyer);
+        deityBySymbol[symbolId] = buyerId;
+        _pushDeityId(buyerId);
         emit MintRecorded(buyer, packed);
         IDegenerusDeityPassMint(ContractAddresses.DEITY_PASS).mint(buyer, symbolId);
     }
 
-    /// @dev Credit both genesis wallets for one level, registering their permanent IDs
-    ///      only once. Packed queue lanes commit once; balances use independent lanes.
-    ///      Existing purchases and partial queue tails are preserved.
-    function _queueGenesisDeities(uint24 lvl, uint24 key) private {
+    /// @dev Credit both genesis wallets for one level under their protocol wallet IDs. Packed
+    ///      queue lanes commit once; balances use independent lanes. Existing purchases and
+    ///      partial queue tails are preserved.
+    function _queueGenesisDeities(uint24 key) private {
         uint256 lanes;
         uint256 count;
         for (uint256 i; i < 2; ++i) {
-            address buyer = i == 0 ? ContractAddresses.VAULT : ContractAddresses.SDGNRS;
-            uint80 packed = _entriesOwed(key, buyer);
+            uint32 id = i == 0 ? VAULT_WALLET_ID : SDGNRS_WALLET_ID;
+            uint80 packed = _entryPacked(key, id);
             if (packed == 0) {
-                packed = _registerEntryOwner(buyer, lvl);
-                if (packed == 0) revert E();
-                lanes |= uint256(uint32(packed >> OWNER_IDX_SHIFT)) << (count * 32);
+                packed = uint80(id) << OWNER_IDX_SHIFT;
+                lanes |= uint256(id) << (count * 32);
                 ++count;
             }
             uint32 owed = _addOwed(uint32(packed >> 8), DEITY_PERPETUAL_ENTRIES,
                 key & TICKET_FAR_FUTURE_BIT != 0);
-            _setEntryOwed(key, uint32(packed >> OWNER_IDX_SHIFT),
+            _setEntryOwed(key, id,
                 (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(uint8(packed)));
         }
         if (count != 0) {
@@ -1243,9 +1256,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     ) external returns (uint256 spent) {
         uint256 halfPasses = ticketLeg ? amount : (amount / (8 * HALF_WHALE_PASS_PRICE)) * 2;
         if (halfPasses == 0) return 0;
-        address winner = _drawWhalePassWinner(lvl, trait, randWord, ticketLeg);
-        if (winner == address(0)) return 0;
-        whalePassClaims[winner] += halfPasses;
+        uint32 winner = _drawWhalePassWinner(lvl, trait, randWord, ticketLeg);
+        if (winner == 0) return 0;
+        _addHalfPasses(winner, halfPasses);
         spent = halfPasses * HALF_WHALE_PASS_PRICE;
         if (!ticketLeg) {
             (uint128 next, uint128 future) = _getPrizePools();
@@ -1257,7 +1270,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @dev The deity holding a trait's symbol: the symbol id is the trait's quadrant (bits 7..6)
     ///      times eight plus its symbol (bits 2..0) — derived from the trait alone, the same form
     ///      the jackpot's deity lookups use, never from where the trait sits on a board.
-    function _deityOfTrait(uint8 trait) private view returns (address) {
+    function _deityOfTrait(uint8 trait) private view returns (uint32) {
         return _traitDeity(trait);
     }
 
@@ -1268,18 +1281,18 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint8 trait,
         uint256 randWord,
         bool ticketLeg
-    ) private view returns (address) {
+    ) private view returns (uint32) {
         uint256 entropy = EntropyLib.hash4(
             randWord, uint256(ticketLeg ? TICKET_WHALE_TAG : QUADRANT_WHALE_TAG), dailyIdx, lvl
         );
         uint256 len = _bucketLength(lvl, trait);
-        address deity = _deityOfTrait(trait);
+        uint32 deity = _deityOfTrait(trait);
         uint256 effectiveLen = len + _deityVirtualCount(trait, len, deity);
-        if (effectiveLen == 0) return address(0);
+        if (effectiveLen == 0) return 0;
         // A single recipient needs no packed-word group/cursor. Sample directly
         // over the same real-plus-virtual entries and resolve the packed owner.
         uint256 index = EntropyLib.hash2(entropy, 1) % effectiveLen;
-        return index < len ? _bucketOwnerAtUnchecked(lvl, trait, index) : deity;
+        return index < len ? _bucketIdAtUnchecked(lvl, trait, index) : deity;
     }
 
     /// @notice Claim deferred whale pass rewards for a player.
@@ -1289,11 +1302,11 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @custom:reverts NothingToClaim If the player has no pending whale-pass claims.
     function claimWhalePass(address player) external {
         if (_livenessTriggered()) revert GameOver();
-        uint256 halfPasses = whalePassClaims[player];
+        // Half passes are only ever credited to wallet IDs; an unregistered address reads the
+        // always-empty element 0. Read and clear before awarding to avoid double-claiming.
+        uint32 id = _walletIdOf(player);
+        uint256 halfPasses = _takeHalfPasses(id);
         if (halfPasses == 0) revert NothingToClaim();
-
-        // Clear before awarding to avoid double-claiming
-        whalePassClaims[player] = 0;
 
         // Award the half-passes over 100 levels as whole-ticket (4-entry) chunks:
         // halfPasses/4 tickets on every level, remainder strided (2 half-passes = one
@@ -1305,7 +1318,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         _applyWhalePassStats(player, startLevel);
         emit WhalePassClaimed(player, msg.sender, halfPasses, startLevel);
-        _queueHalfPassAward(player, startLevel, 100, halfPasses);
+        _queueHalfPassAward(id, startLevel, 100, halfPasses);
     }
 
     /// @dev One-per-address-LIFETIME AFKing seat latch. The seat is a perk of BUYING a

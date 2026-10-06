@@ -49,6 +49,8 @@ import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.so
 import {MockStETH} from "../../../contracts/mocks/MockStETH.sol";
 import {MockLinkToken} from "../../../contracts/mocks/MockLinkToken.sol";
 import {MockLinkEthFeed} from "../../../contracts/mocks/MockLinkEthFeed.sol";
+import {GameSlots, GameSlotKeys} from "../../helpers/GameSlots.sol";
+import {BitPackingLib} from "../../../contracts/libraries/BitPackingLib.sol";
 
 /// @title DeployProtocol -- Abstract base for Foundry invariant tests
 /// @notice Deploys all 4 mocks + 36 protocol contracts in setUp().
@@ -159,6 +161,13 @@ abstract contract DeployProtocol is Test {
             vm.prank(address(game));
             if (!crapsBattle.runCrapsMaintenance(gasleft() / 2).progressed) return;
         }
+    }
+
+    /// @dev Gives `who` a Game wallet ID through the registration hook, as a first paying action
+    ///      in another contract would. Non-paying doors (Craps board saves) require one.
+    function _giveWalletId(address who) internal returns (uint32 id) {
+        vm.prank(ContractAddresses.AFFILIATE);
+        id = game.registerWallet(who, true);
     }
 
     /// @notice Deploy the full protocol. Must be called from setUp().
@@ -303,34 +312,34 @@ abstract contract DeployProtocol is Test {
     /// @dev Pin sDGNRS's once-per-level automatic whale purchase shut for fixtures that
     ///      measure the level clock (bonus / turbo / forced-quest days): the protocol buy
     ///      routes a quarter of sDGNRS's claimable into the prize pools each level and would
-    ///      move the day a target is met. `_sdgnrsBonusLevel` (uint24 @ slot 56, byte 20) set
+    ///      move the day a target is met. `_sdgnrsBonusLevel` (uint24, GameSlots) set
     ///      to its maximum makes the STAGE gate `level > _sdgnrsBonusLevel` never hold.
     ///      Self-validating: reverts if the slot layout drifted.
     function _pinSdgnrsWhaleBuyShut() internal {
-        bytes32 slot = bytes32(uint256(56));
+        bytes32 slot = bytes32(GameSlots.SDGNRS_BONUS_LEVEL);
         uint256 word = uint256(vm.load(address(game), slot));
-        uint256 mask = uint256(0xFFFFFF) << 160;
+        uint256 mask = uint256(0xFFFFFF) << (GameSlots.SDGNRS_BONUS_LEVEL_OFFSET * 8);
         require(word & mask == 0, "pinSdgnrsWhaleBuyShut: latch already set");
         vm.store(address(game), slot, bytes32(word | mask));
     }
 
-    /// @dev Set the SEAT_CLAIMED lifetime eligibility latch (bit 154 of
-    ///      `mintPacked_`, storage slot 9) as the whale module's
+    /// @dev Set the SEAT_CLAIMED lifetime eligibility latch (`BitPackingLib.SEAT_CLAIMED_SHIFT`
+    ///      of `mintPacked_`) as the whale module's
     ///      pass-acquisition hook would. Self-validating via the game's
     ///      mintPackedFor view: reverts if the slot layout drifted.
     function _markSeatEligible(address player) internal {
-        bytes32 slot = keccak256(abi.encode(player, uint256(9)));
+        bytes32 slot = GameSlotKeys.mintPacked(player);
         uint256 packed = uint256(vm.load(address(game), slot));
-        vm.store(address(game), slot, bytes32(packed | (uint256(1) << 154)));
+        vm.store(address(game), slot, bytes32(packed | (uint256(1) << BitPackingLib.SEAT_CLAIMED_SHIFT)));
         require(
-            (game.mintPackedFor(player) >> 154) & 1 == 1,
+            (game.mintPackedFor(player) >> BitPackingLib.SEAT_CLAIMED_SHIFT) & 1 == 1,
             "seatEligible: mintPacked_ slot mismatch"
         );
     }
 
     /// @dev Satisfy the gambling-burn admission gate (rngWordForDay(currentDay) != 0) by landing a
     ///      deterministic non-zero word for the current view day in the game's rngWordByDay map
-    ///      (mapping(uint32 => uint256) at storage slot 10), mirroring a completed daily draw.
+    ///      (`rngWordByDay`, written through RecyclingState), mirroring a completed daily draw.
     ///      Self-validating: reverts if that slot is stale. No-op when the day is already drawn.
     function _primeCurrentDayRng() internal {
         uint24 d = game.currentDayView();

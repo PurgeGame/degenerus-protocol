@@ -5,6 +5,7 @@ import {CrapsPins, MockCoinflip} from "./CrapsPins.sol";
 import {CrapsViews} from "./CrapsViews.sol";
 import {JackpotBattleViews} from "./JackpotBattleViews.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {CrapsPreferenceLib} from "../../contracts/libraries/CrapsPreferenceLib.sol";
 
 contract CrapsJackpotBattleAwardsTest is CrapsPins {
     CrapsViews private c;
@@ -38,8 +39,8 @@ contract CrapsJackpotBattleAwardsTest is CrapsPins {
         vm.prank(winner);
         c.setPreferredBoard(3 | (3 << 12) | (1 << 15));
         c.payProgressiveAt(KEY, winner, 7500, 250_000);
-        assertEq(c.preferredBoardOf(winner), 3 | (3 << 12) | (1 << 15));
-        uint256 word = uint256(c.extsload(keccak256(abi.encode(winner, uint256(15)))));
+        assertEq(c.preferredBoardOf(game.walletIdOf(winner)), 3 | (3 << 12) | (1 << 15));
+        uint256 word = uint256(c.extsload(keccak256(abi.encode(winner, CrapsPreferenceLib.PASS_SLOT))));
         assertNotEq(word & (uint256(1) << 84), 0);
     }
 

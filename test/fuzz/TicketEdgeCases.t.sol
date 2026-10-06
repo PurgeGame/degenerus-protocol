@@ -3,18 +3,19 @@ pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 /// @title TicketEdgeCasesHarness -- Combines routing (Phase 75) and simplified processing (Phase 76)
 ///        to exercise cross-cutting edge cases around EDGE-01 and EDGE-02.
 /// @dev Routing via _queueEntries (uses isFarFuture check at deposit time) and
 ///      simplified processBatch (dual-queue drain with FF bit) from TicketProcessingFFHarness.
-contract TicketEdgeCasesHarness is DegenerusGameStorage {
+contract TicketEdgeCasesHarness is DegenerusGameStorage, WalletSeed {
     uint32 public constant BUDGET = 10;
 
     // -- Routing wrapper (from TicketRoutingHarness pattern) --
 
     function queueTickets(address buyer, uint24 targetLevel, uint32 quantity) external {
-        _queueEntries(buyer, targetLevel, quantity, false);
+        _queueEntries(_seedWallet(buyer), targetLevel, quantity, false);
     }
 
     // -- State setters --
@@ -25,7 +26,7 @@ contract TicketEdgeCasesHarness is DegenerusGameStorage {
 
     function setTicketQueue(uint24 key, uint256 count) external {
         for (uint256 i = 0; i < count; i++) {
-            _tqAppend(key, uint32(_registerEntryOwner(address(uint160(i + 1)), key & ~(TICKET_SLOT_BIT | TICKET_FAR_FUTURE_BIT)) >> OWNER_IDX_SHIFT));
+            _tqAppend(key, _seedWallet(address(uint160(i + 1))));
         }
     }
 
@@ -60,7 +61,7 @@ contract TicketEdgeCasesHarness is DegenerusGameStorage {
     }
 
     function getTicketsOwedPacked(uint24 key, address player) external view returns (uint80) {
-        return _entriesOwed(key, player);
+        return _owedOf(key, player);
     }
 
     // -- Key helpers (exposed) --

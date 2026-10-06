@@ -11,10 +11,12 @@ import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 import {CenturyConsolidationSeeder} from "../gas/AdvanceCenturyConsolidationGas.t.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
+import {CrapsSlots} from "../helpers/GameSlots.sol";
 
 /// @dev Production facade plus native worker seams and read-only storage digests. The seams
 ///      run the production modules by delegatecall; nothing here replaces production logic.
-contract BafTranscriptHost is DegenerusGame {
+contract BafTranscriptHost is DegenerusGame, WalletSeed {
     function btPublish() external {
         _btNative(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("publishRng()"));
     }
@@ -81,7 +83,7 @@ contract BafTranscriptHost is DegenerusGame {
     }
 
     function btPlayer(address w) external view returns (uint256 claimable, uint256 halfPasses) {
-        return (uint128(balancesPacked[w]), whalePassClaims[w]);
+        return (uint128(balancesPacked[_walletIdOf(w)]), _halfPassesOf(w));
     }
 
     /// @dev Every lane owner of a far-future level's queue, in queue order.
@@ -90,7 +92,7 @@ contract BafTranscriptHost is DegenerusGame {
         uint256 len = _ticketQueueLength(key);
         uint256[] storage q = ticketQueue[_ticketQueueStorageKey(key)];
         owners = new address[](len);
-        for (uint256 i; i < len; ++i) owners[i] = _tqOwnerAt(q, l, i);
+        for (uint256 i; i < len; ++i) owners[i] = _walletKey(_tqPositionAt(q, i));
     }
 
     /// @dev Total far-future lanes over levels from..to.
@@ -102,7 +104,7 @@ contract BafTranscriptHost is DegenerusGame {
     ///      `EntriesQueued` reports, so a reference walk rebuilds the queue state an award
     ///      stage left behind award by award.
     function btReplayQueued(address buyer, uint24 targetLevel, uint32 entries) external {
-        _queueEntries(buyer, targetLevel, entries, true);
+        _queueEntries(_seedWallet(buyer), targetLevel, entries, true);
     }
 
     /// @dev Pools, Decimator seal round, level pools and phase flags.
@@ -126,14 +128,14 @@ contract BafTranscriptHost is DegenerusGame {
     /// @dev Claimable, whale-pass claims, owner id, both normal cohorts and the far-future lanes
     ///      of `w`, plus its owed total at every level lvl..lvl+99.
     function btPlayerDigest(address w, uint24 lvl) external view returns (bytes32 h) {
-        uint32 id = ticketOwnerId[w];
-        h = keccak256(abi.encode(w, balancesPacked[w], whalePassClaims[w], id));
+        uint32 id = _walletIdOf(w);
+        h = keccak256(abi.encode(w, balancesPacked[_walletIdOf(w)], _halfPassesOf(w), id));
         if (id != 0) {
             uint256[13] memory lanes = farFutureOwed[id];
             h = keccak256(abi.encode(h, ticketPending[id], lanes));
         }
         for (uint24 l = lvl; l < lvl + 100; ++l) {
-            h = keccak256(abi.encode(h, _entriesOwedTotal(l, w)));
+            h = keccak256(abi.encode(h, _entriesOwedTotal(l, _walletIdOf(w))));
         }
     }
 
@@ -143,7 +145,7 @@ contract BafTranscriptHost is DegenerusGame {
             h = keccak256(abi.encode(h, _btQueueHash(l), _btQueueHash(l | TICKET_SLOT_BIT),
                 _btQueueHash(l | TICKET_FAR_FUTURE_BIT)));
         }
-        h = keccak256(abi.encode(h, ticketOwners.length, ticketWriteSlot));
+        h = keccak256(abi.encode(h, (wallets.length - 1), ticketWriteSlot));
     }
 
     function _btQueueHash(uint24 key) private view returns (bytes32 h) {
@@ -250,7 +252,7 @@ abstract contract BafTranscriptFixture is DeployProtocol {
     uint256 internal constant CALL_GAS = 90_000_000;
     uint256 internal constant WIDE_ALLOWANCE = 60_000_000;
     uint256 internal constant LADDER_MAX = 30_000_000;
-    uint256 internal constant CRAPS_DAY_STAKED_SLOT = 10; // CrapsBattle `_dayStaked`
+    uint256 internal constant CRAPS_DAY_STAKED_SLOT = CrapsSlots.DAY_STAKED; // CrapsBattle `_dayStaked`
     uint24 internal constant DAY = 400;
 
     // Scatter draw keys of DegenerusJackpots: the winners stream tag and the far-future pair key.
@@ -273,13 +275,13 @@ abstract contract BafTranscriptFixture is DeployProtocol {
     uint256 internal constant BAF_LEVEL_SLOT = 2;
 
     bytes32 internal constant ADVANCE_SIG = keccak256("Advance(uint8,uint24)");
-    bytes32 internal constant ETH_SIG = keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)");
+    bytes32 internal constant ETH_SIG = keccak256("JackpotEthWin(uint32,uint24,uint16,uint256,uint256)");
     bytes32 internal constant TICKET_SIG =
-        keccak256("JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)");
-    bytes32 internal constant WHALE_SIG = keccak256("JackpotWhalePassWin(address,uint256,uint8)");
-    bytes32 internal constant CREDIT_SIG = keccak256("PlayerCredited(address,uint256)");
-    bytes32 internal constant QUEUED_SIG = keccak256("EntriesQueued(address,uint24,uint32)");
-    bytes32 internal constant REGISTERED_SIG = keccak256("EntryOwnerRegistered(uint24,uint32,address)");
+        keccak256("JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)");
+    bytes32 internal constant WHALE_SIG = keccak256("JackpotWhalePassWin(uint32,uint256,uint8)");
+    bytes32 internal constant CREDIT_SIG = keccak256("PlayerCredited(uint32,uint256)");
+    bytes32 internal constant QUEUED_SIG = keccak256("EntriesQueued(uint32,uint24,uint32)");
+    bytes32 internal constant REGISTERED_SIG = keccak256("WalletRegistered(uint32,address)");
     bytes32 internal constant SKIPPED_SIG = keccak256("BafSkipped(uint24,uint24)");
 
     struct Run {

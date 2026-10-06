@@ -6,15 +6,16 @@ import {Test} from "forge-std/Test.sol";
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
 import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-contract GoldSixGasHarness is DegenerusGameTicketModule {
+contract GoldSixGasHarness is DegenerusGameTicketModule, WalletSeed {
     function seedGoldSix() external {
         _setTicketBufferLevel(1);
         _bucketAppendRun(_traitBufferBase(1), 253, 0, 1, 1);
     }
     function seed(uint256 players, uint32 entriesScaled) external {
         level = 1;
-        for (uint256 i; i < players; ++i) _queueEntriesScaled(address(uint160(0x1000 + i)), 1, entriesScaled);
+        for (uint256 i; i < players; ++i) _queueEntriesScaled(_seedWallet(address(uint160(0x1000 + i))), 1, entriesScaled);
         ticketWriteSlot = !ticketWriteSlot;
         rngWordCurrent = 0xabcdef123456;
         _setRngSessionPublished(true);
@@ -22,17 +23,17 @@ contract GoldSixGasHarness is DegenerusGameTicketModule {
     }
 }
 
-contract GoldSixFoilGasHarness is DegenerusGameFoilPackModule {
+contract GoldSixFoilGasHarness is DegenerusGameFoilPackModule, WalletSeed {
     function seed() external {
         dailyIdx = _simulatedDayIndex();
         purchaseStartDay = dailyIdx;
         _setTicketBufferLevel(1);
-        uint256 priorOwner = uint256(_registerEntryOwner(address(0xBEEF), 1) >> OWNER_IDX_SHIFT) - 1;
+        uint256 priorOwner = uint256(_seedWallet(address(0xBEEF)));
         _bucketAppendRun(_traitBufferBase(1), 253, priorOwner, 1, 1);
         for (uint256 i; i < 8; ++i) {
             address who = address(uint160(0x1000 + i));
-            uint256 owner = uint256(_registerEntryOwner(who, 1) >> OWNER_IDX_SHIFT);
-            foilRecord[1][who] = (uint256(20_000) << _FOIL_MULT_SHIFT) | (uint256(1) << _FOIL_LEVEL_SHIFT);
+            uint256 owner = uint256(_seedWallet(who));
+            foilRecord[1][_seedWallet(who)] = (uint256(20_000) << _FOIL_MULT_SHIFT) | (uint256(1) << _FOIL_LEVEL_SHIFT);
             foilQueue[_foilWriteKey()].push((owner << 192) | (uint256(1) << 160) | uint160(who));
         }
         // The daily request swaps both cohorts; foil keys follow foilWriteSlot (017ac4cdf).

@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 interface IGameBoonView {
     function boonPacked(address player) external view returns (uint256 slot0, uint256 slot1);
@@ -14,7 +15,7 @@ interface IGameBoonView {
 ///         (Game slot 50 mapping, second word, bits 232..255) has a nonzero tier. These tests pin
 ///         that slot against the Game's own getter and prove the skipped dispatch is a no-op.
 contract WwxrpBoonLaneSkipTest is DeployProtocol {
-    uint256 private constant BOON_PACKED_SLOT = 50;
+    uint256 private constant BOON_PACKED_SLOT = GameSlots.BOON_PACKED;
     uint256 private constant WWXRP_LANE_SHIFT = 232;
     uint256 private constant LANE_DAY_SHIFT = 3;
     uint256 private constant LANE_DEITY_BIT = 0x4;

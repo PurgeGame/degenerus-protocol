@@ -66,11 +66,11 @@ contract GoldenTicketHarness is DegenerusGameJackpotModule, BucketSeed {
     }
 
     function claimableOf(address who) external view returns (uint256) {
-        return _claimableOf(who);
+        return _claimableOf(_walletIdOf(who));
     }
 
     function whalePassOf(address who) external view returns (uint256) {
-        return whalePassClaims[who];
+        return _halfPassesOf(who);
     }
 
     function claimablePoolView() external view returns (uint256) {
@@ -267,7 +267,7 @@ contract GoldenTicketArmResolve is Test {
         h.runDailyJackpot(true, LVL, word, gasleft());
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 topic = keccak256(
-            "GoldenTicketWin(address,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)"
+            "GoldenTicketWin(uint32,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)"
         );
         bool found;
         for (uint256 i; i < logs.length; ++i) {
@@ -344,7 +344,7 @@ contract GoldenTicketArmResolve is Test {
         vm.recordLogs();
         (address winner, uint8 quadrant, uint8 symbol, ) = armDay([1, 2, 3, 4]);
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        bytes32 topic = keccak256("GoldenTicketArmed(address,uint24,uint8,uint8)");
+        bytes32 topic = keccak256("GoldenTicketArmed(uint32,uint24,uint8,uint8)");
         bool found;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] == topic) {
@@ -382,7 +382,7 @@ contract GoldenTicketArmResolve is Test {
         h.runDailyJackpot(true, LVL, word, gasleft());
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 topic = keccak256(
-            "GoldenTicketWin(address,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)"
+            "GoldenTicketWin(uint32,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)"
         );
         for (uint256 i; i < logs.length; ++i) {
             assertTrue(logs[i].topics[0] != topic, "no GoldenTicketWin at armedIdx");
@@ -427,7 +427,7 @@ contract GoldenTicketArmResolve is Test {
         h.runDailyJackpot(true, LVL, wordFor([0, 1, 2, 3], [5, 5, 5, 5], 0xFEED), gasleft());
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 topic = keccak256(
-            "GoldenTicketWin(address,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)"
+            "GoldenTicketWin(uint32,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)"
         );
         for (uint256 i; i < logs.length; ++i) {
             assertTrue(logs[i].topics[0] != topic, "resolution fires exactly once");
@@ -609,7 +609,7 @@ contract GoldenTicketArmResolve is Test {
         h.runDailyJackpot(true, LVL, word, gasleft());
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 winTopic = keccak256(
-            "GoldenTicketWin(address,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)"
+            "GoldenTicketWin(uint32,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)"
         );
         for (uint256 i; i < logs.length; ++i) {
             assertTrue(logs[i].topics[0] != winTopic, "prevBan-only state never pays");
@@ -660,9 +660,9 @@ contract GoldenTicketArmResolve is Test {
         h.runDailyJackpot(true, LVL, word, gasleft());
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 winTopic = keccak256(
-            "GoldenTicketWin(address,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)"
+            "GoldenTicketWin(uint32,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)"
         );
-        bytes32 armTopic = keccak256("GoldenTicketArmed(address,uint24,uint8,uint8)");
+        bytes32 armTopic = keccak256("GoldenTicketArmed(uint32,uint24,uint8,uint8)");
         bool sawWin;
         bool sawArm;
         for (uint256 i; i < logs.length; ++i) {

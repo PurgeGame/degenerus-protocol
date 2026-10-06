@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title AfKingSubscription -- Proves the v55.0 game-resident afking subscription acceptance
 ///        properties: the pass-eviction-OR-refresh crossing gate (AFSUB-02/03), the absence of any
@@ -50,9 +51,8 @@ contract AfKingSubscription is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`).
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 52; // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant FUNDING_SOURCE_SLOT = 53; // _fundingSourceOf mapping root (address => address)
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 55; // _subscriberIndex mapping root (1-indexed)
+    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF; // _subOf mapping root (address => Sub, one packed slot)
+    uint256 private constant FUNDING_SOURCE_SLOT = GameSlots.FUNDING_SOURCE_OF; // _fundingSourceOf mapping root (address => address)
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol:1895; the v56 compute-on-read re-pack
     // narrowed validThroughLevel + the day markers to uint24).
@@ -304,7 +304,7 @@ contract AfKingSubscription is DeployProtocol {
     // ---- Sub field reads (game-resident _subOf slot 52 + verified packed offsets) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
+        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
         return p & ((uint256(1) << widthBits) - 1);
     }
 
@@ -314,13 +314,13 @@ contract AfKingSubscription is DeployProtocol {
 
     /// @dev Read `who`'s 1-indexed subscriber index (slot 55); 0 = not in set.
     function _subscriberIndexOf(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBSCRIBER_INDEX_SLOT)))));
+        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 224; // Sub.setPosition (1-based)
     }
 
     /// @dev Read `who`'s fundingSource from the sparse `_fundingSourceOf` map (slot 53).
     ///      address(0) = self-funded (the common case stores nothing).
     function _fundingSourceOf(address who) internal view returns (address) {
-        return address(uint160(uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(FUNDING_SOURCE_SLOT)))))));
+        return address(uint160(uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(FUNDING_SOURCE_SLOT)))))));
     }
 
     // ---- Event drain (emitter == address(game) — the game-resident module emits via delegatecall) ----

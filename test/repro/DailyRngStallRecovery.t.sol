@@ -8,6 +8,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {DegenerusGameRngModule} from "../../contracts/modules/DegenerusGameRngModule.sol";
 import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title DailyRngStallRecovery — the council-confirmed stall-path repros.
 ///
@@ -127,7 +128,7 @@ contract DailyRngStallRecovery is DeployProtocol {
         uint256 oldId = _stallDailyRequest();
         bytes32 state = game.extsload(bytes32(0));
         bytes32 dayAndEpochs = game.extsload(bytes32(uint256(5)));
-        bytes32 buffer = game.extsload(bytes32(uint256(33)));
+        bytes32 buffer = game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED));
         uint48 sent = uint48(uint256(state) >> 48);
         vm.warp(uint256(sent) + 20 hours);
 
@@ -161,7 +162,7 @@ contract DailyRngStallRecovery is DeployProtocol {
         assertEq(uint256(game.extsload(bytes32(0))), uint256(state) | (uint256(1) << 250),
             "only the spent bit changes in lifecycle state; timeout origin stays fixed");
         assertEq(game.extsload(bytes32(uint256(5))), dayAndEpochs, "logical day and ticket epochs stay frozen");
-        assertEq(game.extsload(bytes32(uint256(33))), buffer, "buffer identity and pending metadata stay frozen");
+        assertEq(game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED)), buffer, "buffer identity and pending metadata stay frozen");
         assertEq(uint256(game.extsload(bytes32(uint256(3)))), 1, "replacement still awaits entropy");
         assertEq(coinflip.coinflipAmount(owner), credit, "administrative retry pays no miner reward");
     }

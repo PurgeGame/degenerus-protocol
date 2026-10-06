@@ -8,6 +8,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 import {FlipRoundLib} from "../../contracts/libraries/FlipRoundLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title DegeneretteFlipRoundAntiGrind — the 100-FLIP collapse is fixed at VRF fulfillment,
 ///        not at settle time, however many bets a sweep call happens to flush together.
@@ -49,11 +50,11 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
     // =========================================================================
 
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = GameSlots.RNG_WORD_CURRENT;
     /// @dev lootboxRngPacked; lootboxRngIndex is the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
     /// @dev prizePoolsPacked: [upper 128: futurePrizePool] [lower 128: nextPrizePool].
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED;
 
     /// @dev Degenerette bet currencies (DegeneretteModule).
     uint8 private constant CURRENCY_FLIP = 1;

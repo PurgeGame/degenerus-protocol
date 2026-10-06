@@ -57,7 +57,7 @@ contract YieldHarness is DegenerusGameJackpotModule {
     }
 
     function getClaimable(address a) external view returns (uint256) {
-        return _claimableOf(a);
+        return _claimableOf(_walletIdOf(a));
     }
 
     /// @dev Mirrors the live-pool liability terms in distributeYieldSurplus.

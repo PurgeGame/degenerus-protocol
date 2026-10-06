@@ -45,6 +45,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title RngLockRotationDeterminism -- VTST-03 freeze-invariant fuzz under rotation.
 /// @notice Asserts byte-identical VRF-derived outputs between a rotation-perturbed
@@ -58,10 +59,10 @@ contract RngLockRotationDeterminism is DeployProtocol {
     // header + VrfRotationLiveness.t.sol (313-02) slot constants.
     // ────────────────────────────────────────────────────────────────────
     uint256 private constant SLOT_PACKED_0 = 0;
-    uint256 private constant SLOT_RNG_WORD_CURRENT = 3;
+    uint256 private constant SLOT_RNG_WORD_CURRENT = GameSlots.RNG_WORD_CURRENT;
     uint256 private constant SLOT_VRF_REQUEST_ID = 4;
-    uint256 private constant SLOT_LOOTBOX_RNG_INDEX = 33;          // post Stage B Game pack: was 35
-    uint256 private constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = 34;  // post Stage B Game pack: was 36
+    uint256 private constant SLOT_LOOTBOX_RNG_INDEX = GameSlots.LOOTBOX_RNG_PACKED;          // post Stage B Game pack: was 35
+    uint256 private constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = GameSlots.RNG_DAY_TAGS;  // post Stage B Game pack: was 36
 
     /// @dev Last VRF request id fulfilled on the ACTIVE coordinator; avoids
     ///      double-fulfil when the game reuses a stale rngWordCurrent across
@@ -76,6 +77,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        _giveWalletId(address(0xC0FFEE));
         vm.warp(block.timestamp + 1 days);
         mockVRF.fundSubscription(1, 100e18);
     }

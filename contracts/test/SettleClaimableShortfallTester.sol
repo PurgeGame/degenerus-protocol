@@ -16,10 +16,15 @@ import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 ///      are never invoked by this helper, so deployment off-address is safe.
 contract SettleClaimableShortfallTester is DegenerusGameStorage {
     /// @notice Seed `buyer`'s claimable balance to `amount` (absolute, not additive).
+    /// @dev Balances are keyed by wallet ID; the harness gives each address a fixed ID.
+    function _id(address buyer) private pure returns (uint32) {
+        return uint32(uint160(buyer));
+    }
+
     function setClaimable(address buyer, uint256 amount) external {
-        uint256 cur = _claimableOf(buyer);
-        if (cur != 0) _debitClaimable(buyer, cur);
-        _creditClaimable(buyer, amount);
+        uint256 cur = _claimableOf(_id(buyer));
+        if (cur != 0) _debitClaimable(_id(buyer), cur);
+        _creditClaimable(_id(buyer), amount);
     }
 
     /// @notice Seed `buyer`'s prepaid afking balance to `amount` (absolute, not additive).
@@ -30,9 +35,9 @@ contract SettleClaimableShortfallTester is DegenerusGameStorage {
     ///      Callers that care about the identity set the pool explicitly via setClaimablePool.
     ///      Byte-identical to the paired credit's own write, so the halves cannot cross-bleed.
     function setAfking(address buyer, uint256 amount) external {
-        uint256 cur = _afkingOf(buyer);
-        if (cur != 0) _debitAfking(buyer, cur);
-        if (amount != 0) balancesPacked[buyer] += amount << 128;
+        uint256 cur = _afkingOf(_id(buyer));
+        if (cur != 0) _debitAfking(_id(buyer), cur);
+        if (amount != 0) balancesPacked[_id(buyer)] += amount << 128;
     }
 
     /// @notice Run the canonical PAIRED afking credit (`_creditAfkingValue`) verbatim.
@@ -40,7 +45,7 @@ contract SettleClaimableShortfallTester is DegenerusGameStorage {
     ///      does — so packing proofs can assert cross-half non-interference against the real
     ///      production write rather than against a copy of it in this harness.
     function creditAfkingValue(address buyer, uint256 amount) external {
-        _creditAfkingValue(buyer, amount);
+        _creditAfkingValue(_id(buyer), amount);
     }
 
     /// @notice Seed `claimablePool` to `amount` (narrows to the uint128 storage width).
@@ -50,12 +55,12 @@ contract SettleClaimableShortfallTester is DegenerusGameStorage {
 
     /// @notice Read `buyer`'s claimable balance.
     function getClaimable(address buyer) external view returns (uint256) {
-        return _claimableOf(buyer);
+        return _claimableOf(_id(buyer));
     }
 
     /// @notice Read `buyer`'s prepaid afking balance.
     function getAfking(address buyer) external view returns (uint256) {
-        return _afkingOf(buyer);
+        return _afkingOf(_id(buyer));
     }
 
     /// @notice Read `claimablePool`.
@@ -68,7 +73,7 @@ contract SettleClaimableShortfallTester is DegenerusGameStorage {
         external
         returns (uint256 claimableUsed, uint256 afkingUsed)
     {
-        return _settleShortfall(buyer, shortfall, allowClaimable);
+        return _settleShortfall(_id(buyer), shortfall, allowClaimable);
     }
 
     /// @notice 4-byte selector of the inherited `E()` error the strict-1-wei sentinel reverts with.

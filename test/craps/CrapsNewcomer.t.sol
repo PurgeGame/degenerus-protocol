@@ -4,6 +4,7 @@ pragma solidity 0.8.34;
 import {CrapsPins} from "./CrapsPins.sol";
 import {CrapsViews} from "./CrapsViews.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
 contract CrapsNewcomerTest is CrapsPins {
     CrapsViews private table;
@@ -44,7 +45,7 @@ contract CrapsNewcomerTest is CrapsPins {
     }
 
     function test_deityAndCreditedPassQualifyImmediately() public {
-        game.setMintHistory(player, uint256(1) << 184);
+        game.setMintHistory(player, uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT);
         assertEq(table.entryPrice(player, 500_000), 500_000);
         game.setMintHistory(player, uint256(10) << 24);
         assertEq(table.entryPrice(player, 500_000), 500_000);
@@ -61,7 +62,7 @@ contract CrapsNewcomerTest is CrapsPins {
         vm.mockCallRevert(ContractAddresses.GAME, abi.encodeWithSignature("level()"), "unnecessary level read");
         game.setMintHistory(player, uint256(3) << 24);
         assertEq(table.entryPrice(player, 25_000), 25_000);
-        game.setMintHistory(player, uint256(1) << 184);
+        game.setMintHistory(player, uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT);
         assertEq(table.entryPrice(player, 25_000), 25_000);
         game.setMintHistory(player, 0);
         assertEq(table.entryPrice(player, 25_000), 26_250);

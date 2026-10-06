@@ -8,6 +8,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {RngIndexDrainOracle} from "./handlers/RngIndexDrainHandler.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @notice Public-path daily ticket entropy binding and post-request box binding.
 /// The ordinary ticket oracle independently reconstructs generated traits and checks
@@ -15,7 +16,7 @@ import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
     /// @dev Base slot for `boxPlayers` mapping(uint48 => address[]). Authoritative
     ///      at the working tree (confirmed at runtime: boxPlayers[idx & 1][0] == buyer).
-    uint256 internal constant SLOT_BOX_PLAYERS_MAPPING = 57;
+    uint256 internal constant SLOT_BOX_PLAYERS_MAPPING = GameSlots.BOX_PLAYERS;
     /// @dev Base slot for `presaleBoxEth` mapping(uint48 => mapping(address => uint256)).
     ///      Authoritative at the working tree (confirmed at runtime: low-96 cell == applied box ETH).
     uint256 internal constant SLOT_PRESALE_BOX_ETH_MAPPING = 15;

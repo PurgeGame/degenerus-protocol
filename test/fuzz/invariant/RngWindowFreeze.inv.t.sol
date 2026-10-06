@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {RngWindowFreezeHandler} from "../handlers/RngWindowFreezeHandler.sol";
+import {GameSlots} from "../../helpers/GameSlots.sol";
 
 /// @title RngWindowFreeze — FUZZ-02 canonical RNG-FREEZE durable invariant.
 ///
@@ -52,9 +53,9 @@ import {RngWindowFreezeHandler} from "../handlers/RngWindowFreezeHandler.sol";
 contract RngWindowFreeze is DeployProtocol {
     RngWindowFreezeHandler public handler;
 
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33; // post Stage B pack: was 35
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED; // post Stage B pack: was 35
     uint256 private constant LR_INDEX_MASK = 0xFFFFFFFFFFFF;
-    uint256 private constant RNG_WORD_BY_DAY_SLOT = 10;
+    uint256 private constant RNG_WORD_BY_DAY_SLOT = GameSlots.RNG_WORD_BY_DAY;
 
     function setUp() public {
         _deployProtocol();

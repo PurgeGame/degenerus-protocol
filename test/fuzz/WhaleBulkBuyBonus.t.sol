@@ -6,6 +6,7 @@ import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @dev Exposes the storage contract's queue-key derivation so the test reads the
 ///      exact keys the production strided walks write.
@@ -34,7 +35,7 @@ contract WhaleBulkBuyBonusTest is DeployProtocol {
     event LootBoxBuy(address indexed buyer, uint48 indexed index, uint256 amount);
 
     uint256 private constant SLOT_0 = 0;
-    uint256 private constant TICKET_QUEUE_SLOT = 12;
+    uint256 private constant TICKET_QUEUE_SLOT = GameSlots.TICKET_QUEUE;
     uint256 private constant ENTRIES_OWED_SLOT = 13;
     uint256 private constant LEVEL_SHIFT = 96;
     uint256 private constant WRITE_SLOT_SHIFT = 200;

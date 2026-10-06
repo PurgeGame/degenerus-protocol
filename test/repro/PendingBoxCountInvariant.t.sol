@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title PendingBoxCountInvariant — `_pendingBoxCount` == Σ pending day-markers, everywhere
 /// @notice The `_pendingBoxCount` counter (DegenerusGameStorage slot 56, bits [184,200)) gates
@@ -19,9 +20,9 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 ///      eviction is not driven here: the no-orphan guard makes it unreachable while pending,
 ///      and a box-clean evict never touches the counter (see GameAfkingModule stage loop).
 contract PendingBoxCountInvariant is DeployProtocol {
-    uint256 private constant SUBOF_SLOT = 52;
-    uint256 private constant SUBSCRIBERS_SLOT = 54;
-    uint256 private constant CURSOR_SLOT = 56;
+    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;
+    uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS;
+    uint256 private constant CURSOR_SLOT = GameSlots.SUB_CURSOR;
     uint256 private constant PENDING_COUNT_SHIFT = 184;
     uint256 private constant OFF_LASTBOUGHT = 7;  // uint24 lastAutoBoughtDay (bytes 7..9)
     uint256 private constant OFF_LASTOPENED = 10; // uint24 lastOpenedDay     (bytes 10..12)
@@ -215,7 +216,7 @@ contract PendingBoxCountInvariant is DeployProtocol {
     // ---- fixture helpers (ported from OpenWalkCompositionGas / V56AfkingGasMarginal) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
+        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
         return p & ((uint256(1) << widthBits) - 1);
     }
 
@@ -228,7 +229,7 @@ contract PendingBoxCountInvariant is DeployProtocol {
     }
 
     function _pokeSubOpenedDay(address who, uint32 d) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT)));
         uint256 w = uint256(vm.load(address(game), slot));
         uint256 shift = OFF_LASTOPENED * 8;
         w = (w & ~(uint256(0xFFFFFF) << shift)) | (uint256(d & 0xFFFFFF) << shift);

@@ -24,13 +24,19 @@ import {IDegenerusGameFoilPackModule} from "../interfaces/IDegenerusGameModules.
 ///      of that partition. The miner dispatcher owns
 ///      admission/publication and must not replace the word before this work ends.
 contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
-    /// @notice Assign/reuse a permanent wallet ID without queueing tickets.
-    /// @dev Required direct affiliates fail atomically at capacity. Optional upline caches
-    ///      receive zero and keep resolving by address. Constructors do not call this hook.
-    function registerAffiliateOwner(address owner, bool required) external returns (uint32 id) {
-        if (msg.sender != ContractAddresses.AFFILIATE) revert E();
-        id = _ensureWalletId(owner);
-        if (required && id == 0) revert E();
+    /// @notice The one wallet-ID hook for protocol contracts with their own player entry points.
+    /// @dev `allocate = false` returns the existing ID or zero (non-paying actions fill a cache
+    ///      with it and revert only on zero). `allocate = true` (paying actions and affiliate code
+    ///      owners) also registers a new wallet, subject to paid admission: the hook carries no
+    ///      spend, so at PAID_ADMISSION_WALLETS registered wallets it refuses every new wallet.
+    ///      Callers invoke it at most once per wallet and cache any nonzero result.
+    function registerWallet(address owner, bool allocate) external returns (uint32 id) {
+        if (msg.sender != ContractAddresses.AFFILIATE && msg.sender != ContractAddresses.COINFLIP
+            && msg.sender != ContractAddresses.CRAPS && msg.sender != ContractAddresses.JACKPOT_BATTLE
+            && msg.sender != ContractAddresses.PARIMUTUEL && msg.sender != ContractAddresses.WWXRP
+            && msg.sender != ContractAddresses.ADMIN && msg.sender != ContractAddresses.COIN) revert E();
+        if (!allocate) return _walletIdOf(owner);
+        (id, ) = _registerWallet(owner, 0);
     }
 
     // Each bound includes cold writes. TAIL covers all cursor/seat persistence,
@@ -55,12 +61,12 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
     uint256 internal constant DIRECT_ROUND_GAS_MAX = 2_800_000;
 
     event JackpotTicketWin(
-        address indexed winner, uint24 indexed lvl, uint16 indexed trait,
+        uint32 indexed walletId, uint24 indexed lvl, uint16 indexed trait,
         uint32 tickets, uint24 sourceLvl, uint256 entryIndex, bool roundedUp
     );
 
-    /// @dev Packed IDs are permanent zero-based registry indices, eight per word.
-    ///      Source index uint32.max denotes a virtual deity occurrence.
+    /// @dev Packed owners are wallet IDs, eight per word. Source index uint32.max denotes a
+    ///      virtual deity occurrence (a source-index sentinel, not a wallet ID).
     event JackpotTicketBatchWin(
         uint24 indexed sourceLvl, uint24 indexed targetLvl, uint16 indexed trait,
         uint16 firstWinner, uint8 count, uint32 entriesEach,
@@ -84,15 +90,15 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
     {
         JackpotWork storage work = jackpotWork;
         MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
-        // The direct lane needs a live target buffer, unscaled entries and registered
-        // deities; otherwise the queued path finishes the draw from the same cursor. Both
+        // The direct lane needs a live target buffer and unscaled entries; otherwise the
+        // queued path finishes the draw from the same cursor. Both
         // paths draw winner i of quadrant q from the same seed, so completed groups are not
         // drawn again. A group whose rounds were only partly materialized is skipped: its
         // winners keep the rounds they received and the rest stays as nextPrizePool backing.
         // Every input here is state, so caller gas never chooses the delivery mode.
         if (work.directTickets && (work.kind != 6 || plan.sourceLvl != work.lvl
             || plan.queueLvl != work.lvl + 1 || _ticketBufferLevel(plan.queueLvl) != plan.queueLvl
-            || _snapShiftFor(plan.queueLvl) != 0 || !_deitiesRegistered(plan))) {
+            || _snapShiftFor(plan.queueLvl) != 0)) {
             work.directTickets = false;
             if (work.directTicketRound != 0) {
                 work.directTicketRound = 0;
@@ -183,7 +189,7 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
             }
             uint8 trait = plan.traits[q];
             uint256 len = plan.lens[q];
-            address deity = plan.deities[q];
+            uint32 deity = plan.deities[q];
             uint256 effectiveLen = len + _deityVirtualCount(trait, len, deity);
             uint256 seed = EntropyLib.hash2(plan.entropy, q);
             uint8 salt = uint8(plan.salt + q);
@@ -197,10 +203,10 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
                 result.progressed = true;
                 result.rewardBasis += end - i;
                 for (; i < end; ++i) {
-                    (address winner, uint256 index) = _drawBucketEntry(
+                    (uint32 winner, uint256 index) = _drawBucketEntry(
                         plan.sourceLvl, trait, len, effectiveLen, deity, seed, salt, i, cursor
                     );
-                    if (winner != address(0)) {
+                    if (winner != 0) {
                         _queueEntries(winner, plan.queueLvl, uint32(plan.entriesEach), true);
                         emit JackpotTicketWin(winner, plan.queueLvl, trait, uint32(plan.entriesEach),
                             plan.sourceLvl, index, false);
@@ -215,27 +221,14 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
         if (i != work.winner) work.winner = uint16(i);
     }
 
-    /// @dev Every deity a drawn quadrant can pay must hold a registry ID, which the direct
-    ///      lane writes in place of an address.
-    function _deitiesRegistered(TicketWorkPlan calldata plan) private view returns (bool) {
-        for (uint256 q; q < 4; ++q) {
-            address deity = plan.deities[q];
-            if (deity != address(0) && plan.counts[q] != 0 && ticketOwnerId[deity] == 0) return false;
-        }
-        return true;
-    }
-
     function _directTicketGroup(TicketWorkPlan calldata plan, uint8 q, uint256 start, uint256 n)
         private view returns (DirectTicketGroup memory group)
     {
         uint8 trait = plan.traits[q];
         uint256 len = plan.lens[q];
-        address deity = plan.deities[q];
+        uint32 deity = plan.deities[q];
         uint256 effectiveLen = len + _deityVirtualCount(trait, len, deity);
         uint256 seed = EntropyLib.hash2(plan.entropy, q);
-        // Paid and genesis deities acquire permanent IDs with their initial ticket
-        // grants. Resolve once per batch; ordinary sampled lanes need no lookup.
-        uint256 deityIdx = deity == address(0) ? 0 : uint256(ticketOwnerId[deity]) - 1;
         PackedTicketSampleLib.Cursor memory cursor;
         for (uint256 j; j < n; ++j) {
             if (cursor.used == 0) {
@@ -246,7 +239,7 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
             (uint256 index, bool redrawn) = PackedTicketSampleLib.next(cursor, effectiveLen);
             uint256 ownerIdx;
             if (index >= len) {
-                ownerIdx = deityIdx;
+                ownerIdx = deity;
                 index = type(uint32).max;
             } else {
                 uint256 word = redrawn ? _bucketWordAtUnchecked(plan.sourceLvl, trait, index) : cursor.word;
@@ -478,9 +471,8 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
         MineFlipGas.Meter memory meter) private returns (bool moved, bool complete, uint256 emitted)
     {
         if (!MineFlipGas.canRun(meter, SOLO_BASE + ENTRY_MAX, TAIL)) return (false, false, 0);
-        uint256 record = _entryRecord(rk, ownerPos);
-        address player = address(uint160(record));
-        uint80 packed = uint80(record >> 160);
+        address player = _walletKey(ownerPos);
+        uint80 packed = _entryPacked(rk, ownerPos);
         uint80 snapDone = shift == 0 ? 0 : SNAP_DONE_BIT;
         uint32 owed;
         uint8 rem;
@@ -517,7 +509,7 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
             // Solidity zero-initializes the scratch arrays again on the next run.
             uint256 free;
             assembly ("memory-safe") { free := mload(0x40) }
-            _generateTraitRun(stream, offset, uint32(emitted), entropy, uint256(ownerPos) - 1, goldSixTaken);
+            _generateTraitRun(stream, offset, uint32(emitted), entropy, ownerPos, goldSixTaken);
             assembly ("memory-safe") { mstore(0x40, free) }
             emit TraitsGenerated(player, stream | uint256(offset) | replayFlag, uint32(emitted));
         }
@@ -702,8 +694,8 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
         if (ticketRound != round) ticketRound = round;
         uint256 word;
         for (uint256 j; j < st.seated; ++j) {
-            _setEntryOwed(rk, uint32(st.ownerIdx[j] + 1),
-                uint80((st.ownerIdx[j] + 1) << OWNER_IDX_SHIFT) |
+            _setEntryOwed(rk, uint32(st.ownerIdx[j]),
+                uint80(st.ownerIdx[j] << OWNER_IDX_SHIFT) |
                 (uint80(st.owed[j]) << 8) | uint80(st.rem[j]) | snapDone);
             word |= (uint256(st.queueIdx[j]) + 1) << (32 * j);
         }
@@ -733,9 +725,8 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
             st.queueWordIndex = wordIndex;
         }
         uint32 ownerPos = uint32(st.queueWord >> ((physical & 7) << 5));
-        uint256 record = _entryRecord(st.rk, ownerPos);
-        address p = address(uint160(record));
-        uint80 packed = uint80(record >> 160);
+        address p = _walletKey(ownerPos);
+        uint80 packed = _entryPacked(st.rk, ownerPos);
         uint32 owed;
         uint8 rem;
         (packed, owed, rem) = _readOwed(packed, snapDone, shift, st.rk, lvl, physical, p, entropy);
@@ -756,8 +747,7 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
         st.queueIdx[j] = uint32(qi);
         st.owed[j] = owed;
         st.rem[j] = rem;
-        // _entryRecord authenticated ownerPos as a nonzero, in-range global ID.
-        unchecked { st.ownerIdx[j] = uint256(ownerPos) - 1; }
+        st.ownerIdx[j] = ownerPos;
         st.seated = j + 1;
     }
 
@@ -847,7 +837,7 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
                     rem = 0;
                 }
                 if (owed == 0) {
-                    _setEntryOwed(st.rk, uint32(st.ownerIdx[j] + 1), 0);
+                    _setEntryOwed(st.rk, uint32(st.ownerIdx[j]), 0);
                     unchecked {
                         ++j;
                     }

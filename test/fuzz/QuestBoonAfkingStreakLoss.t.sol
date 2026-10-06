@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title QuestBoonAfkingStreakLossTest -- reproduces the activity-boon streak-award value-loss + orphaned
 ///        century-shield defect when the recipient has a LIVE afking run.
@@ -50,7 +51,7 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident _subOf accumulator (AFKing-Coin-era offsets, DegenerusGameStorage.sol struct Sub)
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 52;
+    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;
     uint256 private constant OFF_AFKINGSTART = 16; // uint24 afkingStartDay
     uint256 private constant OFF_STREAKLATCH = 26; // uint16 subStreakLatch (the afking sub streak base)
 
@@ -176,7 +177,7 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
     }
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 pk = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
+        uint256 pk = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
         return pk & ((uint256(1) << widthBits) - 1);
     }
 

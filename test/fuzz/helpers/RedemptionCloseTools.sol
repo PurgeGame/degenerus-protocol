@@ -14,7 +14,7 @@ abstract contract RedemptionCloseTools is DeployProtocol {
     function _batchRoll(uint32 id) internal view returns (uint16 r) { (,,,,r,) = sdgnrs.redemptionBatches(id); }
     function _batchBase(address owner, uint32 id) internal view returns (uint256) {
         (uint128 total,,uint96 base,,,) = sdgnrs.redemptionBatches(id);
-        (uint128 tokens,) = sdgnrs.pendingRedemptions(owner, id);
+        (uint128 tokens,) = sdgnrs.pendingRedemptions(game.walletIdOf(owner), id);
         return total == 0 ? 0 : uint256(base) * tokens / total;
     }
     function _closeFunded() internal {

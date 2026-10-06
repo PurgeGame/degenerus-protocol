@@ -29,8 +29,8 @@ contract ColdTerminalSeeder is DegenerusGame, BucketSeed {
         }
         for (uint256 i; i < 30; ++i) {
             address owner = address(uint160(0xD3170000 + i));
-            deityPassOwners.push(owner);
-            deityPassPricePaid[owner] = 20 ether;
+            _seedDeity(owner);
+            deityPassPricePaid[_seedWallet(owner)] = 20 ether;
         }
     }
 }
@@ -92,7 +92,7 @@ abstract contract ColdTerminalFixture is DeployProtocol {
             for (uint256 i; i < logs.length; ++i) {
                 if (logs[i].topics.length == 0) continue;
                 bytes32 topic = logs[i].topics[0];
-                if (topic == keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)")) ++winners;
+                if (topic == keccak256("JackpotEthWin(uint32,uint24,uint16,uint256,uint256)")) ++winners;
                 if (topic == keccak256("DeityPassRefundsSettled(uint256)")) refunds += abi.decode(logs[i].data, (uint256));
                 if (topic == keccak256("DailyRngApplied(uint24,uint256,uint256,uint256)")) ++rngApplied;
             }

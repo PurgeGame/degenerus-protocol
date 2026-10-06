@@ -9,6 +9,7 @@ import {CrapsSeedViews} from "./CrapsSeedViews.sol";
 import {CrapsPins} from "./CrapsPins.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @dev Reads the two lootbox-RNG slot numbers straight off the audited storage declarations,
 ///     so the drift gate needs no build artifact and no external process.
@@ -299,7 +300,7 @@ contract LootboxCrapsTest is CrapsPins {
             WORD_SLOT,
             "lootboxRngWordByIndex moved - update LOOTBOX_RNG_WORD_SLOT"
         );
-        assertEq(probe.rngDayTagsSlot(), 34, "absolute day tag slot changed");
+        assertEq(probe.rngDayTagsSlot(), GameSlots.RNG_DAY_TAGS, "absolute day tag slot changed");
         assertEq(probe.rngWordByDaySlot(), DAY_WORD_SLOT, "rngWordByDay moved - update RNG_WORD_BY_DAY_SLOT");
 
     }

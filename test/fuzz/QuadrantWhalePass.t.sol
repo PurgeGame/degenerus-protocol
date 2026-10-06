@@ -10,6 +10,7 @@ import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {GoldSixLib} from "../../contracts/libraries/GoldSixLib.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {JackpotBoardFixtures} from "./helpers/JackpotBoardFixtures.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 contract QuadrantWhaleHarness is GoldenTicketHarness {
     function prepare(uint256 current, uint8 counter, bool turbo) external {
@@ -25,10 +26,10 @@ contract QuadrantWhaleHarness is GoldenTicketHarness {
     }
 
     function setDeity(uint8 trait, address who) external {
-        deityBySymbol[(trait >> 6) * 8 + (trait & 7)] = who;
+        deityBySymbol[(trait >> 6) * 8 + (trait & 7)] = _seedWallet(who);
     }
     function deityOf(uint8 trait) external view returns (address) {
-        return deityBySymbol[(trait >> 6) * 8 + (trait & 7)];
+        return _walletKey(deityBySymbol[(trait >> 6) * 8 + (trait & 7)]);
     }
     function bucketLength(uint8 trait) external view returns (uint256) { return _bucketLength(4, trait); }
     function seedRepeated(uint8 trait, address who) external { _seedBucket(4, trait, who, 65); }
@@ -40,8 +41,8 @@ contract QuadrantWhalePassTest is Test {
     uint256 private constant UNIT = 0.1 ether;
     uint160 private constant BASE = 0xA00000;
     uint160 private constant DEITY = 0xD00000;
-    bytes32 private constant ETH_WIN = keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)");
-    bytes32 private constant PASS_WIN = keccak256("JackpotWhalePassWin(address,uint256,uint8)");
+    bytes32 private constant ETH_WIN = keccak256("JackpotEthWin(uint32,uint24,uint16,uint256,uint256)");
+    bytes32 private constant PASS_WIN = keccak256("JackpotWhalePassWin(uint32,uint256,uint8)");
     QuadrantWhaleHarness private h;
 
     struct Draw {

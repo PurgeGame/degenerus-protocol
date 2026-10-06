@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title WwxrpTrustedMintersTest -- the vault owner's trusted minter/burner registry on WWXRP.
 /// @notice The vault owner (>50.1% of DGVE) may register any address to mint through mintPrize,
@@ -12,7 +13,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///         and reaches only the WWXRP boon lane.
 contract WwxrpTrustedMintersTest is DeployProtocol {
     // --- boonPacked[player].slot1 lanes (mirror DegeneretteBoonStake) ---
-    uint256 private constant SLOT_BOON_PACKED = 50;
+    uint256 private constant SLOT_BOON_PACKED = GameSlots.BOON_PACKED;
     uint256 private constant ETH_LANE_SHIFT = 184;
     uint256 private constant WWXRP_LANE_SHIFT = 232;
     uint256 private constant LANE_MASK = 0xFFFFFF;

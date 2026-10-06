@@ -15,8 +15,8 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 contract JackpotWinnerScalingTest is Test {
     uint24 private constant LVL = 4;
     uint160 private constant BASE = 0xA00000;
-    bytes32 private constant ETH_WIN = keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)");
-    bytes32 private constant PASS_WIN = keccak256("JackpotWhalePassWin(address,uint256,uint8)");
+    bytes32 private constant ETH_WIN = keccak256("JackpotEthWin(uint32,uint24,uint16,uint256,uint256)");
+    bytes32 private constant PASS_WIN = keccak256("JackpotWhalePassWin(uint32,uint256,uint8)");
 
     QuadrantWhaleHarness private h;
 

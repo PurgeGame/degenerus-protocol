@@ -5,6 +5,7 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title AdvancePrepareCursorStall — regression for the jackpot-phase mineFlip ticket-drain
 ///        liveness stall (prepare-future-tickets shared-cursor clobber).
@@ -51,11 +52,11 @@ import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
 ///         Run: forge test --match-path test/repro/AdvancePrepareCursorStall.t.sol -vv
 contract AdvancePrepareCursorStall is DeployProtocol {
     /// @dev prizePoolsPacked slot: [future:128 | next:128].
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED;
     /// @dev ticketQueue mapping root slot (forge inspect DegenerusGame storageLayout).
-    uint256 private constant TICKETQUEUE_SLOT = 12;
+    uint256 private constant TICKETQUEUE_SLOT = GameSlots.TICKET_QUEUE;
     /// @dev ticketCursor (uint32 @ slot 14 offset 0) + ticketLevel (uint24 @ slot 14 offset 4).
-    uint256 private constant TICKET_CURSOR_SLOT = 14;
+    uint256 private constant TICKET_CURSOR_SLOT = GameSlots.TICKET_CURSOR;
     /// @dev header slot 0; ticketWriteSlot bool at byte offset 25.
     uint256 private constant TICKET_WRITE_SLOT_BYTE = 25;
     /// @dev Storage.TICKET_SLOT_BIT = 1 << 23 (double-buffer read/write key discriminator).

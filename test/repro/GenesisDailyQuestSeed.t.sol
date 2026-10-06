@@ -5,6 +5,7 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {QuestInfo} from "../../contracts/interfaces/IDegenerusQuests.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title GenesisDailyQuestSeed — the deploy day carries a seeded daily quest pair.
 ///
@@ -19,7 +20,7 @@ contract GenesisDailyQuestSeed is DeployProtocol {
     uint8 private constant QUEST_TYPE_MINT_ETH = 1;
     uint8 private constant QUEST_TYPE_DEGENERETTE_ETH = 7;
     uint8 private constant CURRENCY_ETH = 0;
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
     uint256 private constant QUEST_BITMAP_SLOT = 4;
 
     address private player;

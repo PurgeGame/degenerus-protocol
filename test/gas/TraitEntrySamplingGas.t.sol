@@ -32,7 +32,7 @@ contract TraitEntrySamplingHarness is DegenerusGame, BucketSeed {
         for (uint256 i; i < take;) {
             (uint256 index, bool redrawn) = PackedTicketSampleLib.next(cursor, len);
             uint256 word = redrawn ? _bucketWordAtUnchecked(targetLvl, traitSel, index) : cursor.word;
-            entries[i] = _bucketOwnerFromWordUnchecked(targetLvl, word, index);
+            entries[i] = _walletKey(_bucketIdFromWord(word, index));
             unchecked { ++i; }
         }
     }

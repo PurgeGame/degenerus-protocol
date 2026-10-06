@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title BafFarFutureTicketsTest -- BAF ticket legs paid under the daily RNG lock never revert
 ///        on a far-future roll, so the level-10 BAF completes and the game moves past it.
@@ -21,7 +22,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///      per-call allowance and any stop other than mineFlip's own stop errors fails the run; a
 ///      halted stage would leave the game at level 10, caught by assertGt(finalLevel, 10).
 contract BafFarFutureTicketsTest is DeployProtocol {
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED;
 
     address private buyer;
     address[20] private bafPlayers;

@@ -42,6 +42,7 @@ import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {IDegenerusGameWhaleModule, IDegenerusGameJackpotDrawModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {IDegenerusJackpots} from "../../contracts/interfaces/IDegenerusJackpots.sol";
+import {WalletSeed} from "./WalletSeed.sol";
 
 /// @dev Minimal WWXRP surface for the golden-ticket consolation mint. The delegatecall
 ///      context makes msg.sender the Game, which is a whitelisted WWXRP minter.
@@ -80,7 +81,7 @@ interface IWwxrpMintPrize {
  *      - EntropyLib.hash2 provides full-diffusion keccak derivation for sub-selections.
  *      - Winner selection intentionally allows duplicates (more tickets = more chances).
  */
-contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpotDrawUtils {
+contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpotDrawUtils, WalletSeed {
     // -------------------------------------------------------------------------
     // Errors
     // -------------------------------------------------------------------------
@@ -96,7 +97,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
     ///      traitId is uint16: values 0-255 are real trait IDs; values ≥256 are
     ///      sentinels for non-trait sources (e.g. BAF_TRAIT_SENTINEL = 420).
     event JackpotEthWin(
-        address indexed winner,
+        uint32 indexed walletId,
         uint24 indexed level,
         uint16 indexed traitId,
         uint256 amount,
@@ -111,7 +112,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
     ///      on the two trait-matched paths, which have a zero fractional part
     ///      by construction.
     event JackpotTicketWin(
-        address indexed winner,
+        uint32 indexed walletId,
         uint24 indexed entryLevel,
         uint16 indexed traitId,
         uint32 entryCount,
@@ -122,7 +123,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
 
     /// @dev FLIP coin win (near-future, trait-matched).
     event JackpotFlipWin(
-        address indexed winner,
+        uint32 indexed walletId,
         uint24 indexed level,
         uint8 indexed traitId,
         uint256 amount,
@@ -146,7 +147,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
     ///      bucket's official (post-hero) values — the target the resolve board must
     ///      repeat (with 4 golds) for the grand.
     event GoldenTicketArmed(
-        address indexed winner,
+        uint32 indexed walletId,
         uint24 indexed level,
         uint8 quadrant,
         uint8 symbol
@@ -165,7 +166,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
     ///      claimable; halfPassCount and flipCredit are face-value credits with no pool
     ///      debit; wwxrpAmount is the 0-gold consolation, before WWXRP's gameMintScale.
     event GoldenTicketWin(
-        address indexed winner,
+        uint32 indexed walletId,
         uint24 indexed level,
         uint8 route,
         uint8 goldCount,
@@ -526,7 +527,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
         for (uint8 o; o < 4; ++o) {
             if (o == q || d.shares[o] == 0) continue;
             uint8 trait = d.traits[o];
-            if (_bucketLength(d.lvl, trait) == 0 && _traitDeity(trait) == address(0)) continue;
+            if (_bucketLength(d.lvl, trait) == 0 && _traitDeity(trait) == 0) continue;
             (uint256 n, uint256 each, uint256 net) = _ethNonSolo(d, o);
             perWinner += net - n * each;
         }
@@ -629,7 +630,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
         uint8[4] traits;
         uint16[4] counts;
         uint256[4] lens;
-        address[4] deities;
+        uint32[4] deities;
     }
 
     function _runTicketWork(uint8 kind, uint256 word, uint256 allowance)
@@ -748,7 +749,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
             }
             uint8 trait = plan.traits[q];
             uint256 len = plan.lens[q];
-            address deity = plan.deities[q];
+            uint32 deity = plan.deities[q];
             uint256 effectiveLen = len + _deityVirtualCount(trait, len, deity);
             uint256 seed = EntropyLib.hash2(plan.entropy, q);
             uint8 salt = uint8(plan.salt + q);
@@ -762,10 +763,10 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
                 result.progressed = true;
                 result.rewardBasis += end - i;
                 for (; i < end; ++i) {
-                    (address winner, uint256 index) = _drawBucketEntry(
+                    (uint32 winner, uint256 index) = _drawBucketEntry(
                         plan.sourceLvl, trait, len, effectiveLen, deity, seed, salt, i, cursor
                     );
-                    if (winner != address(0)) {
+                    if (winner != 0) {
                         _queueEntries(winner, plan.queueLvl, uint32(plan.entriesEach), true);
                         emit JackpotTicketWin(winner, plan.queueLvl, trait, uint32(plan.entriesEach),
                             plan.sourceLvl, index, false);
@@ -829,9 +830,9 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
         uint256 quarterShare = (yieldPool * 2300) / 10_000;
 
         if (quarterShare != 0) {
-            _creditClaimable(ContractAddresses.VAULT, quarterShare);
-            _creditClaimable(ContractAddresses.SDGNRS, quarterShare);
-            _creditClaimable(ContractAddresses.GNRUS, quarterShare);
+            _creditClaimable(_seedWallet(ContractAddresses.VAULT), quarterShare);
+            _creditClaimable(_seedWallet(ContractAddresses.SDGNRS), quarterShare);
+            _creditClaimable(_seedWallet(ContractAddresses.GNRUS), quarterShare);
             // _creditClaimable writes only balancesPacked, so the cached
             // claimablePool / yieldAccumulator values are still exact here.
             claimablePool = claimablePoolCached + uint128(quarterShare * 3);
@@ -904,7 +905,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
             uint16[4] memory counts,
             uint8 activeCount,
             uint256[4] memory lens,
-            address[4] memory deities
+            uint32[4] memory deities
         )
     {
         uint8 activeMask;
@@ -912,9 +913,9 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
             uint8 trait = traitIds[i];
             uint256 len = _bucketLength(lvl, trait);
             lens[i] = len;
-            address deity = _traitDeity(trait);
+            uint32 deity = _traitDeity(trait);
             deities[i] = deity;
-            if (len != 0 || deity != address(0)) {
+            if (len != 0 || deity != 0) {
                 activeMask |= uint8(1 << i);
                 unchecked {
                     ++activeCount;
@@ -1050,12 +1051,12 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
     ///      dailyIdx; the resolve-day ban fields are preserved so a chain arm (a
     ///      resolve day that itself rolls 4 golds) keeps the current day's hero ban
     ///      intact for later re-rolls of this board.
-    function _armGoldenTicket(address winner, uint24 lvl, uint8 traitId) private {
+    function _armGoldenTicket(uint32 winner, uint24 lvl, uint8 traitId) private {
         uint8 quadrant = traitId >> 6;
         uint8 symbol = traitId & 7;
         goldenTicket =
             (goldenTicket & ~((uint256(1) << 190) - 1)) |
-            uint256(uint160(winner)) |
+            uint256(winner) |
             (uint256(quadrant) << 160) |
             (uint256(symbol) << 162) |
             (uint256(dailyIdx) << 165) |
@@ -1156,7 +1157,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
         MineFlipGas.Meter memory meter
     ) private returns (uint256 next, uint256 paid, uint256 liability) {
         uint256 len = _bucketLength(lvl, trait);
-        address deity = _traitDeity(trait);
+        uint32 deity = _traitDeity(trait);
         uint256 effectiveLen = len + _deityVirtualCount(trait, len, deity);
         PackedTicketSampleLib.Cursor memory cursor;
         while (pos < count) {
@@ -1165,25 +1166,25 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
             uint256 bound = (end - pos) * ETH_WINNER_GAS_MAX;
             if (pos == 0) bound += 160_000;
             if (!MineFlipGas.canRun(meter, bound, JACKPOT_TAIL_GAS)) break;
-            address first;
+            uint32 first;
             if (pos == 0) {
                 _assertReadableTicketLevel(lvl);
                 if (effectiveLen == 0) return (count, 0, 0);
                 if (passShare != 0) paid = _awardWhalePass(lvl, trait, passShare, seed, false);
             }
             for (uint256 i = pos; i < end; ++i) {
-                (address w, uint256 index) = _drawBucketEntry(
+                (uint32 w, uint256 index) = _drawBucketEntry(
                     lvl, trait, len, effectiveLen, deity, seed, uint8(200 + q), i, cursor
                 );
                 if (i == 0) first = w;
-                if (w != address(0)) {
+                if (w != 0) {
                     _creditClaimable(w, perWinner);
                     emit JackpotEthWin(w, lvl, trait, perWinner, index);
                     paid += perWinner;
                     liability += perWinner;
                 }
             }
-            if (armGold && first != address(0)) _armGoldenTicket(first, lvl, trait);
+            if (armGold && first != 0) _armGoldenTicket(first, lvl, trait);
             pos = end;
         }
         return (pos, paid, liability);
@@ -1251,11 +1252,11 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
 
         if (ethAward != 0) {
             _setPrizePools(nextBal, uint128(futBal - ethAward));
-            _creditClaimable(winner, ethAward);
+            _creditClaimable(_seedWallet(winner), ethAward);
             claimablePool += uint128(ethAward);
         }
         if (halfPasses != 0) {
-            whalePassClaims[winner] += halfPasses;
+            _addHalfPasses(_seedWallet(winner), halfPasses);
         }
         uint256 flipCredit;
         if (flipValueWei != 0) {
@@ -1281,7 +1282,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
             );
         }
         emit GoldenTicketWin(
-            winner,
+            _walletIdOf(winner),
             lvl,
             route,
             golds,

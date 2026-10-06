@@ -7,6 +7,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title AffiliateLevelAllocation -- level-end affiliate sDGNRS through the real transition.
 /// @notice At the level increment the game pays the level's top affiliate 0.5% of the Affiliate
@@ -14,7 +15,7 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 ///         transfer; affiliates claim their score share of it. Driven through the real game,
 ///         advance and claim paths.
 contract AffiliateLevelAllocation is DeployProtocol {
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED;
     uint256 private constant POOL_HALF_MASK = (uint256(1) << 128) - 1;
     bytes32 private constant TOP_REWARD_SIG = keccak256("AffiliateDgnrsReward(address,uint24,uint256)");
     bytes32 private constant ALLOCATED_SIG = keccak256("LevelDgnrsAllocated(uint24,uint256)");

@@ -4,6 +4,8 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {activityScoreOf} from "../helpers/ActivityScoreOf.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title V61CurseSet — TST-03 proof: the cashout-curse SET (+2 on a stale ghost-cashout), every exemption
 ///        (by contrast), the curse*100-bps activity-score penalty (floored 0, across consumers + the public
@@ -34,11 +36,11 @@ contract V61CurseSet is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots + mintPacked_ field shifts (378-01 key + BitPackingLib)
     // -------------------------------------------------------------------------
-    uint256 private constant BALANCES_PACKED_SLOT = 7; // [afking:hi128 | claimable:lo128]
-    uint256 private constant CLAIMABLE_POOL_SLOT = 1; // uint128 @ byte 16
+    uint256 private constant BALANCES_PACKED_SLOT = GameSlots.BALANCES_PACKED; // [afking:hi128 | claimable:lo128]
+    uint256 private constant CLAIMABLE_POOL_SLOT = GameSlots.CLAIMABLE_POOL; // uint128 @ byte 16
     uint256 private constant CLAIMABLE_POOL_OFFBYTES = 16;
-    uint256 private constant MINTPACKED_SLOT = 9;
-    uint256 private constant SUBOF_SLOT = 52; // was 58
+    uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED;
+    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF; // was 58
 
     // mintPacked_ field shifts (BitPackingLib).
     uint256 private constant DAY_SHIFT = 72; // lastEthDay (32 bits)
@@ -204,8 +206,8 @@ contract V61CurseSet is DeployProtocol {
         _seedAffiliateBase(twin, 6);
         _seedCurse(cursed, 4); // 4 points ⇒ -4 points
 
-        uint256 base = game.playerActivityScore(twin);
-        uint256 penalized = game.playerActivityScore(cursed);
+        uint256 base = activityScoreOf(address(game), twin);
+        uint256 penalized = activityScoreOf(address(game), cursed);
         assertEq(base, 6, "twin base score == 6 points (6 affiliate points)");
         assertEq(penalized, base - 4, "cursed score == base - curse (4 points)");
     }
@@ -216,7 +218,7 @@ contract V61CurseSet is DeployProtocol {
         address p = makeAddr("pen_floor");
         _seedAffiliateBase(p, 6); // +6 points
         _seedCurse(p, 20); // -20 points > base
-        assertEq(game.playerActivityScore(p), 0, "penalty floors the score at 0 (no underflow)");
+        assertEq(activityScoreOf(address(game), p), 0, "penalty floors the score at 0 (no underflow)");
     }
 
     /// @notice The penalty is visible in a FROZEN SNAPSHOT consumer: a funded lootbox sub's `scorePlus1`
@@ -317,7 +319,7 @@ contract V61CurseSet is DeployProtocol {
     // =========================================================================
 
     function _seedClaimable(address who, uint256 amount) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(BALANCES_PACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(BALANCES_PACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         uint256 oldLow = uint128(packed);
         uint256 high = packed >> 128;
@@ -326,7 +328,7 @@ contract V61CurseSet is DeployProtocol {
     }
 
     function _topUpClaimable(address who, uint256 delta) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(BALANCES_PACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(BALANCES_PACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         uint256 low = uint128(packed);
         uint256 high = packed >> 128;
@@ -401,7 +403,7 @@ contract V61CurseSet is DeployProtocol {
     }
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
+        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
         return p & ((uint256(1) << widthBits) - 1);
     }
 

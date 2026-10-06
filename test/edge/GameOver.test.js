@@ -270,7 +270,8 @@ describe("GameOver", function () {
       const txs = await triggerGameOverAtLevel0(game, deployer, mockVRF);
       expect(await game.gameOver()).to.equal(true);
       const wins = (await Promise.all(txs.map(tx => getEvents(tx, jackpotModule, "JackpotEthWin")))).flat();
-      const jackpot = wins.filter(e => e.args.winner === alice.address).reduce((sum, e) => sum + e.args.amount, 0n);
+      const aliceId = await game.walletIdOf(alice.address);
+      const jackpot = wins.filter(e => e.args.walletId === aliceId).reduce((sum, e) => sum + e.args.amount, 0n);
       const claimAfter = await game.claimableWinningsOf(alice.address);
       expect(claimAfter - claimBefore - jackpot).to.equal(eth(20));
       const refunds = (await Promise.all(txs.map(tx => getEvents(tx, gameOverModule, "DeityPassRefundsSettled")))).flat();
@@ -301,7 +302,8 @@ describe("GameOver", function () {
       await advanceTime(SECONDS_912_DAYS + 86400);
       const txs = await triggerGameOverAtLevel0(game, deployer, mockVRF);
       const wins = (await Promise.all(txs.map(tx => getEvents(tx, jackpotModule, "JackpotEthWin")))).flat();
-      const won = who => wins.filter(e => e.args.winner === who).reduce((sum, e) => sum + e.args.amount, 0n);
+      const idOf = { [alice.address]: await game.walletIdOf(alice.address), [bob.address]: await game.walletIdOf(bob.address) };
+      const won = who => wins.filter(e => e.args.walletId === idOf[who]).reduce((sum, e) => sum + e.args.amount, 0n);
 
       const aliceAfter = await game.claimableWinningsOf(alice.address);
       const bobAfter = await game.claimableWinningsOf(bob.address);

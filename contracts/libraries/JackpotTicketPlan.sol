@@ -12,5 +12,5 @@ struct TicketWorkPlan {
     uint8[4] traits;
     uint16[4] counts;
     uint256[4] lens;
-    address[4] deities;
+    uint32[4] deities;
 }

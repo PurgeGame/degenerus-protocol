@@ -6,6 +6,7 @@ import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @dev Read-only view overlay etched onto the live game to inspect internal box-queue state. A
 ///      DegenerusGame subclass: etching type().runtimeCode (no constructor) gives the reads access to
@@ -273,7 +274,7 @@ contract C1BoxAutoOpen is DeployProtocol {
         vm.stopPrank();
 
         uint256 raw = uint256(vm.load(address(game),
-            keccak256(abi.encode(actor, keccak256(abi.encode(uint256(N & 1), uint256(15)))))));
+            keccak256(abi.encode(actor, keccak256(abi.encode(uint256(N & 1), GameSlots.LOOTBOX_ORDER))))));
         emit log_named_uint("[daily] N", N);
         emit log_named_uint("[daily] LR_INDEX at request time", nowIdx);
         emit log_named_uint("[daily] base[N] after auto", _base(N, actor));

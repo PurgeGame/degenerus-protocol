@@ -278,7 +278,7 @@ contract DegenerusAffiliate {
         return AffiliateIdentityLib.walletId(_resolveCodeOwner(code));
     }
 
-    event AffiliateOwnerRegistered(bytes32 indexed code, address indexed owner, uint32 id);
+    event AffiliateOwnerRegistered(bytes32 indexed code, address indexed owner);
 
     /// @notice Per-level earnings and immutable upline cache, keyed by affiliate.
     /// @dev Used for leaderboard calculations and activity score bonus points.
@@ -923,8 +923,8 @@ contract DegenerusAffiliate {
     function _requireIdentity(bytes32 code, address owner) private returns (uint32 id) {
         id = AffiliateIdentityLib.walletId(owner);
         if (id == 0) {
-            id = game.registerAffiliateOwner(owner, true);
-            emit AffiliateOwnerRegistered(code, owner, id);
+            id = game.registerWallet(owner, true);
+            emit AffiliateOwnerRegistered(code, owner);
         }
     }
 

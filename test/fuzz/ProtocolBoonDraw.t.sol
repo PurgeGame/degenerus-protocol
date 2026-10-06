@@ -9,12 +9,14 @@ import {Vm} from "forge-std/Vm.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 import {stdError} from "forge-std/StdError.sol";
 import {ActivityCurveLib} from "../../contracts/libraries/ActivityCurveLib.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 contract RejectingBoonRecipient {
     fallback() external { revert("recipient callback forbidden"); }
 }
 
-contract ProtocolBoonFixture is DegenerusGameStorage {
+contract ProtocolBoonFixture is DegenerusGameStorage, WalletSeed {
     function word(uint24 day, uint256 value) external { _recordDailyRng(day, value); }
     function genesisDay(uint24 day) external { dailyIdx = day; purchaseStartDay = day; }
     function resolve(address module, uint24 awardDay) external {
@@ -48,12 +50,12 @@ contract ProtocolBoonFixture is DegenerusGameStorage {
         return uint32(_dailyHeroWagerWord(day, symbol >> 3) >> ((symbol & 7) * 32));
     }
     function openIndex() external { rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12); }
-    function clearDeity(uint8 symbol) external { deityBySymbol[symbol] = address(0); }
+    function clearDeity(uint8 symbol) external { deityBySymbol[symbol] = 0; }
     function seedBoon(address player, uint24 day) external {
         boonPacked[player].slot1 = (uint256(3) | (uint256(day) << BP_LANE_DAY_SHIFT)) << BP_DEGEN_LANE0_SHIFT;
     }
     function claimable(address player, uint256 amount) external {
-        _creditClaimable(player, amount + 1);
+        _creditClaimable(_seedWallet(player), amount + 1);
         claimablePool += uint128(amount + 1);
     }
     function staleMintStreak(address player) external {
@@ -75,7 +77,7 @@ contract ProtocolBoonFixture is DegenerusGameStorage {
             | (d << BP_LAZY_PASS_DAY_SHIFT) | (tier << BP_LAZY_PASS_TIER_SHIFT)
             | (lane << BP_DEGEN_LANE0_SHIFT) | (lane << (BP_DEGEN_LANE0_SHIFT + 24))
             | (lane << (BP_DEGEN_LANE0_SHIFT + 48));
-        whalePassClaims[player] = 1_000; // occupied; the counter is a plain uint256 increment
+        _seedHalfPasses(player, 1_000); // occupied; the counter is a plain uint256 increment
     }
     function boonWords(address player) external view returns (uint256, uint256) {
         return (boonPacked[player].slot0, boonPacked[player].slot1);
@@ -168,7 +170,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         assertEq(pool.entryCount, 1);
         assertEq(pool.awardedMask, 0);
         DegenerusGameStorage.ProtocolBoonEntry memory e = lens.protocolBoonEntryAt(address(game), address(vault), day, 0);
-        assertEq(e.player, bettor); assertEq(e.cumulativeWeight, 99 * 1600); assertEq(e.scoreSnapshot, 400);
+        assertEq(e.playerId, game.walletIdOf(bettor)); assertEq(e.cumulativeWeight, 99 * 1600); assertEq(e.scoreSnapshot, 400);
         e = lens.protocolBoonEntryAt(address(game), address(sdgnrs), day, 0);
         assertEq(e.cumulativeWeight, 250 * 1600);
         assertEq(lens.protocolBoonPool(address(game), address(sdgnrs), day).totalWageredWei, 0.025 ether);
@@ -275,7 +277,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         vm.expectRevert(); vm.prank(bettor); game.placeDegeneretteBet{value: 0.005 ether}(address(0), 0, 0.005 ether, 0, 0);
         vm.expectRevert(); boonModule.resolveProtocolBoonDraws(day + 1);
         assertEq(lens.protocolBoonPool(address(game), address(vault), day).entryCount, 0);
-        assertEq(lens.protocolBoonEntryAt(address(game), address(vault), day, 0).player, address(0));
+        assertEq(lens.protocolBoonEntryAt(address(game), address(vault), day, 0).playerId, uint32(0));
     }
 
     function testLaunchDayEthBetsReceiveAllSixBoonsThroughRealAdvance() public {
@@ -541,11 +543,11 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         _score(bettor, 1200);
         vm.prank(bettor); game.placeDegeneretteBet{value: 0.005 ether}(recipient, 0, 0.005 ether, 1, 0);
         DegenerusGameStorage.ProtocolBoonEntry memory entry = lens.protocolBoonEntryAt(address(game), address(vault), day, 0);
-        assertEq(entry.player, recipient); assertEq(entry.scoreSnapshot, 400); assertEq(entry.cumulativeWeight, 80_000);
+        assertEq(entry.playerId, game.walletIdOf(recipient)); assertEq(entry.scoreSnapshot, 400); assertEq(entry.cumulativeWeight, 80_000);
         vm.prank(bettor); game.setOperatorApproval(address(this), true);
         game.placeDegeneretteBet{value: 0.005 ether}(bettor, 0, 0.005 ether, 1, 6);
         entry = lens.protocolBoonEntryAt(address(game), address(sdgnrs), day, 0);
-        assertEq(entry.player, bettor); assertEq(entry.scoreSnapshot, 1200); assertEq(entry.cumulativeWeight, 120_000);
+        assertEq(entry.playerId, game.walletIdOf(bettor)); assertEq(entry.scoreSnapshot, 1200); assertEq(entry.cumulativeWeight, 120_000);
     }
 
     function testClaimableEthFundsTheSameWeightWithoutFreshValue() public {
@@ -631,7 +633,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
 
     function _poolWord(address issuer, uint24 d) private view returns (uint256) {
         return uint256(vm.load(
-            address(game), keccak256(abi.encode(uint256(d & 1), keccak256(abi.encode(issuer, uint256(48)))))
+            address(game), keccak256(abi.encode(uint256(d & 1), keccak256(abi.encode(issuer, GameSlots.PROTOCOL_BOON_POOLS))))
         ));
     }
 
@@ -663,8 +665,8 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         assertEq(p.awardedMask, 0);
         assertEq(p.totalWageredWei, 0.005 ether);
         assertEq(p.totalWeight, 50 * fixture.multiplier(0));
-        assertEq(lens.protocolBoonEntryAt(address(game), address(vault), day + 2, 0).player, other);
-        assertEq(lens.protocolBoonEntryAt(address(game), address(vault), day + 2, 1).player, address(0));
+        assertEq(lens.protocolBoonEntryAt(address(game), address(vault), day + 2, 0).playerId, game.walletIdOf(other));
+        assertEq(lens.protocolBoonEntryAt(address(game), address(vault), day + 2, 1).playerId, uint32(0));
         assertEq(lens.protocolBoonPool(address(game), address(vault), day).entryCount, 0);
         assertTrue(_poolWord(address(vault), day + 2) != drawnWord, "same slot rewritten");
     }

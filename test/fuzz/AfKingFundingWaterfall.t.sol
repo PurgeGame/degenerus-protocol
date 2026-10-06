@@ -7,6 +7,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title AfKingFundingWaterfall -- Proves the v55.0 game-resident afking per-player funding waterfall
 ///        (SUB-05), the two-tier pinned-identity funding-skip kill (SUB-06), the OPEN-E shared funding
@@ -54,11 +55,10 @@ contract AfKingFundingWaterfall is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`).
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = 52; // _subOf mapping root
-    uint256 private constant FUNDINGSOURCE_SLOT = 53; // _fundingSourceOf mapping root
-    uint256 private constant SUBSCRIBER_INDEX_SLOT = 55; // _subscriberIndex mapping root (1-indexed)
-    uint256 private constant MINTPACKED_SLOT = 9; // mintPacked_ mapping root (deity bit)
-    uint256 private constant GAME_CLAIMABLE_SLOT = 7; // claimableWinnings mapping root
+    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF; // _subOf mapping root
+    uint256 private constant FUNDINGSOURCE_SLOT = GameSlots.FUNDING_SOURCE_OF; // _fundingSourceOf mapping root
+    uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED; // mintPacked_ mapping root (deity bit)
+    uint256 private constant GAME_CLAIMABLE_SLOT = GameSlots.BALANCES_PACKED; // claimableWinnings mapping root
 
     // Sub packed-field byte offsets (DegenerusGameStorage.sol:2341; the AFKing-Coin repack dropped
     // validThroughLevel entirely — sub <=> coin is the sole credential now — shifting every field
@@ -188,7 +188,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
     ///      `claimablePool -=` on a claimable-funded buy underflows (a test-fixture artifact, not a
     ///      contract bug). Mirrors the contract's own tandem credit.
     function _setClaimable(address who, uint256 amount) internal {
-        bytes32 cwSlot = keccak256(abi.encode(who, uint256(GAME_CLAIMABLE_SLOT)));
+        bytes32 cwSlot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(GAME_CLAIMABLE_SLOT)));
         uint256 prev = uint256(vm.load(address(game), cwSlot));
         vm.store(address(game), cwSlot, bytes32(amount));
         // claimablePool += (amount - prev) in tandem (keep the master invariant balanced).
@@ -222,7 +222,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
     ///      bumps `game.level` to 1 (uint24 at slot 0 bytes 14..16), which no longer forces any
     ///      eviction.
     function _forceCrossingDue(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(SUBOF_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         uint256 mask = uint256(0xFFFFFF) << (OFF_LASTBOUGHT * 8);
         packed &= ~mask;
@@ -238,7 +238,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
     // ---- Sub field reads + the source-delta charged-slice oracle ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
+        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
         return p & ((uint256(1) << widthBits) - 1);
     }
 
@@ -251,11 +251,11 @@ contract AfKingFundingWaterfall is DeployProtocol {
     }
 
     function _subscriberIndexOf(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBSCRIBER_INDEX_SLOT)))));
+        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 224; // Sub.setPosition (1-based)
     }
 
     function _fundingSourceOf(address who) internal view returns (address) {
-        return address(uint160(uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(FUNDINGSOURCE_SLOT)))))));
+        return address(uint160(uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(FUNDINGSOURCE_SLOT)))))));
     }
 
     /// @dev The current process-day stamp of the fixture (so "bought this STAGE" is robust). The STAGE

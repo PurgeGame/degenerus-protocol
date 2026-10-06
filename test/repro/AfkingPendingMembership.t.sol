@@ -5,8 +5,9 @@ import {Test} from "forge-std/Test.sol";
 import {GameAfkingModule} from "../../contracts/modules/GameAfkingModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-contract AfkingMembershipHarness is GameAfkingModule {
+contract AfkingMembershipHarness is GameAfkingModule, WalletSeed {
     function seed(address pending, address clean, uint8 quantity) external returns (uint24 processDay) {
         dailyIdx = _simulatedDayIndex();
         processDay = dailyIdx + 1;
@@ -16,9 +17,10 @@ contract AfkingMembershipHarness is GameAfkingModule {
         rngWordCurrent = 0xAFAF;
         ticketsFullyProcessed = true;
         humanReadComplete = true;
-        _subscribers.push(pending);
-        _subscriberIndex[pending] = 1;
-        Sub storage sub = _subOf[pending];
+        uint32 pendingId = _seedWallet(pending);
+        _subscribers.push(uint256(uint160(pending)) | (uint256(pendingId) << 160));
+        Sub storage sub = _subOf[pendingId];
+        sub.setPosition = 1;
         sub.dailyQuantity = quantity;
         sub.lastAutoBoughtDay = processDay;
         sub.lastOpenedDay = dailyIdx;
@@ -27,16 +29,17 @@ contract AfkingMembershipHarness is GameAfkingModule {
         sub.amount = 10;
         _pendingBoxCount = 1;
         if (clean != address(0)) {
-            _subscribers.push(clean);
-            _subscriberIndex[clean] = 2;
+            uint32 cleanId = _seedWallet(clean);
+            _subscribers.push(uint256(uint160(clean)) | (uint256(cleanId) << 160));
+            _subOf[cleanId].setPosition = 2;
         }
     }
     function deliver() external { ++dailyIdx; _setRngComplete(false); }
     function corruptEmptySet() external { delete _subscribers; }
     function complete() external view returns (bool) { return _rngComplete(); }
     function state(address player) external view returns (uint256 count, uint256 members, uint256 index, uint24 stamp, uint24 opened, uint8 quantity) {
-        Sub storage sub = _subOf[player];
-        return (_pendingBoxCount, _subscribers.length, _subscriberIndex[player], sub.lastAutoBoughtDay, sub.lastOpenedDay, sub.dailyQuantity);
+        Sub storage sub = _subOf[_walletIdOf(player)];
+        return (_pendingBoxCount, _subscribers.length, sub.setPosition, sub.lastAutoBoughtDay, sub.lastOpenedDay, sub.dailyQuantity);
     }
 }
 

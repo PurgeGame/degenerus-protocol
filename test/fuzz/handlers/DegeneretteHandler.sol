@@ -6,6 +6,7 @@ import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
+import {GameSlots} from "../../helpers/GameSlots.sol";
 
 /// @title DegeneretteHandler -- Handler for Degenerette slot machine betting in invariant tests
 /// @notice Wraps placeDegeneretteBet and resolveBets with bounded inputs, multi-actor support,
@@ -22,8 +23,8 @@ contract DegeneretteHandler is Test {
     ///      gates on (LR_INDEX != 0) AND (_lootboxWord(LR_INDEX) == 0); resolution
     ///      gates on _lootboxWord(betIndex) != 0. The handler seeds both so the fuzzer
     ///      reaches a non-vacuous place->resolve sequence regardless of call ordering.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33; // post Stage-B game-storage repack: was 35
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3;   // post Stage-B game-storage repack: was 36
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED; // post Stage-B game-storage repack: was 35
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = GameSlots.RNG_WORD_CURRENT;   // post Stage-B game-storage repack: was 36
     uint48 private constant SEED_LR_INDEX = 1;
 
     // --- Ghost variables ---
@@ -230,12 +231,12 @@ contract DegeneretteHandler is Test {
             // What the request's seal also does: the Degenerette and box cursors restart and the
             // new write tag's bet/box queues are emptied (degeneretteCursor slot 14 bits 160..207,
             // boxCursor slot 56 bits 56..103, degeneretteQueue root 21, boxPlayers root 57).
-            uint256 s14 = uint256(vm.load(address(game), bytes32(uint256(14))));
-            vm.store(address(game), bytes32(uint256(14)), bytes32(s14 & ~(uint256(type(uint48).max) << 160)));
-            uint256 s56 = uint256(vm.load(address(game), bytes32(uint256(56))));
-            vm.store(address(game), bytes32(uint256(56)), bytes32(s56 & ~(uint256(type(uint48).max) << 56)));
-            vm.store(address(game), keccak256(abi.encode(uint256((index ^ 1) & 1), uint256(21))), bytes32(0));
-            vm.store(address(game), keccak256(abi.encode(uint256((index ^ 1) & 1), uint256(57))), bytes32(0));
+            uint256 s14 = uint256(vm.load(address(game), bytes32(GameSlots.TICKET_CURSOR)));
+            vm.store(address(game), bytes32(GameSlots.TICKET_CURSOR), bytes32(s14 & ~(uint256(type(uint48).max) << 160)));
+            uint256 s56 = uint256(vm.load(address(game), bytes32(GameSlots.SUB_CURSOR)));
+            vm.store(address(game), bytes32(GameSlots.SUB_CURSOR), bytes32(s56 & ~(uint256(type(uint48).max) << 56)));
+            vm.store(address(game), keccak256(abi.encode(uint256((index ^ 1) & 1), GameSlots.DEGENERETTE_QUEUE)), bytes32(0));
+            vm.store(address(game), keccak256(abi.encode(uint256((index ^ 1) & 1), GameSlots.BOX_PLAYERS)), bytes32(0));
             knownQueueLen[index ^ 1] = 0;
             // The day itself is sealed (dailyIdx = today, tickets drained), as after a mid-day
             // request: the delivered cohort's read consumers are the engine's only work.

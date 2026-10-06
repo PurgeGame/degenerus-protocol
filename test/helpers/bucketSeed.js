@@ -1,7 +1,7 @@
 // Test-side seeding and decoding of the packed trait buckets via hardhat_setStorageAt.
 //
 // Trait headers hold a uint32 count and seven uint32 tail lanes. Full data words have eight lanes.
-// The full buffer level and per-parity bitmap gate validity; owners resolve through one permanent global registry.
+// The full buffer level and per-parity bitmap gate validity; lanes hold wallet IDs, the position in the `wallets` table (id 0 is the dummy; elements carry the address in bits 0..159).
 // Every storage root is read from the checked-in layout oracle (scripts/layout/golden/DegenerusGame.json),
 // which the layout gate verifies against production, so a layout shift cannot leave a stale literal here.
 import hre from "hardhat";
@@ -18,8 +18,9 @@ function layoutEntry(label) {
 const rootOf = (label) => BigInt(layoutEntry(label).slot);
 
 const TRAIT_SLOT = rootOf("lvlTraitEntry");
-const OWNER_SLOT = rootOf("ticketOwners");
-const OWNER_ID_SLOT = rootOf("ticketOwnerId");
+const OWNER_SLOT = rootOf("wallets");
+const MINT_PACKED_SLOT = rootOf("mintPacked_");
+const WALLET_ID_SHIFT = 224n;
 const QUEUE_SLOT = rootOf("ticketQueue");
 const QUEUE_LEVELS_SLOT = rootOf("ticketQueueLevels");
 const PENDING_SLOT = rootOf("ticketPending");
@@ -66,7 +67,7 @@ async function getStorage(addr, slot) {
 
 /**
  * Replace lvlTraitEntry[lvl][trait] with one occurrence per holder, in order. Holders are
- * registered globally; the bucket's lanes name their immutable zero-based positions.
+ * registered globally; the bucket's lanes name their wallet IDs.
  */
 async function seedTraitBucket(addr, lvl, trait, holders, opts = {}) {
   const traitSlot = opts.traitSlot ?? TRAIT_SLOT;
@@ -74,7 +75,7 @@ async function seedTraitBucket(addr, lvl, trait, holders, opts = {}) {
 
   const ownersLen = ownerLengthSlot(lvl, ownerSlot);
   const lanes = [];
-  for (const h of holders) lanes.push((await registerOwner(addr, h, ownerSlot)) - 1n);
+  for (const h of holders) lanes.push(await registerOwner(addr, h, ownerSlot));
 
   const stampShift = BUFFER_LEVELS_SHIFT + (BigInt(lvl) & 1n) * 24n;
   const stamps = await getStorage(addr, BUFFER_LEVELS_SLOT);
@@ -99,17 +100,24 @@ async function seedTraitBucket(addr, lvl, trait, holders, opts = {}) {
 }
 
 async function registerOwner(addr, holder, ownerSlot = OWNER_SLOT) {
-  const locator = mapSlot(BigInt(holder), OWNER_ID_SLOT);
-  let id = (await getStorage(addr, locator)) & LANE_MASK;
+  const mintSlot = mapSlot(BigInt(holder), MINT_PACKED_SLOT);
+  const word = await getStorage(addr, mintSlot);
+  let id = (word >> WALLET_ID_SHIFT) & LANE_MASK;
   if (id === 0n) {
     const count = await getStorage(addr, ownerSlot);
-    id = count + 1n;
-    if (id > LANE_MASK) throw new Error('stable owner namespace exhausted');
+    id = count;
+    if (id > LANE_MASK) throw new Error('wallet id namespace exhausted');
     await setStorage(addr, dataBase(ownerSlot) + count, BigInt(holder));
-    await setStorage(addr, ownerSlot, id);
-    await setStorage(addr, locator, id);
+    await setStorage(addr, ownerSlot, count + 1n);
+    await setStorage(addr, mintSlot, word | (id << WALLET_ID_SHIFT));
   }
   return id;
+}
+
+/** Address held by wallet-table element `id` (zero for id 0 or an unallocated id). */
+async function walletAddressOf(addr, id) {
+  const owner = (await getStorage(addr, dataBase(OWNER_SLOT) + BigInt(id))) & ((1n << 160n) - 1n);
+  return hre.ethers.getAddress("0x" + owner.toString(16).padStart(40, "0"));
 }
 
 /** Replace a queue with stable nonzero uint32 wallet IDs. */
@@ -132,7 +140,7 @@ async function seedTicketQueue(addr, key, holders) {
 }
 
 async function ownerIdOf(addr, player) {
-  return (await getStorage(addr, mapSlot(BigInt(player), OWNER_ID_SLOT))) & LANE_MASK;
+  return ((await getStorage(addr, mapSlot(BigInt(player), MINT_PACKED_SLOT))) >> WALLET_ID_SHIFT) & LANE_MASK;
 }
 
 /** Far-future lanes recycle 100 circular level positions, authenticated by the queue level tag. */
@@ -216,6 +224,9 @@ export {
   bucketLengthSlot,
   ownerLengthSlot,
   seedTraitBucket,
+  registerOwner,
+  walletAddressOf,
+  ownerIdOf,
   seedTicketQueue,
   readEntriesOwed,
   entryOwnerRecordSlot,

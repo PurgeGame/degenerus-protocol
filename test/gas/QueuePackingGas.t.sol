@@ -4,10 +4,11 @@ pragma solidity 0.8.34;
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 /// @dev Overlay seeds the claim and reads the inherited layout; measured calls use live bytecode.
-contract QueuePackingGasSeeder is DegenerusGame {
-    function claimFor(address player) external { whalePassClaims[player] = 4; }
+contract QueuePackingGasSeeder is DegenerusGame, WalletSeed {
+    function claimFor(address player) external { _seedHalfPasses(player, 4); }
 
     /// @dev Level 111 reuses level 1's physical near-queue slot (queue slots recycle under an
     ///      absolute-level tag) and a wallet's pending word keeps one lane pair per level parity,
@@ -18,7 +19,7 @@ contract QueuePackingGasSeeder is DegenerusGame {
         _seedDrainedQueue(_tqWriteKey(1));
         _seedDrainedQueue(_tqReadKey(1));
         level = 110;
-        _registerEntryOwner(address(1), 111);
+        _seedWallet(address(1));
     }
 
     function _seedDrainedQueue(uint24 key) private {
@@ -35,7 +36,7 @@ contract QueuePackingGasSeeder is DegenerusGame {
         // Same routing as the queue sinks: levels above the mint ceiling wait unminted in the
         // far-future key space; minted levels take the double-buffer write key.
         uint24 key = lvl > _mintCeiling() ? _tqFarFutureKey(lvl) : _tqWriteKey(lvl);
-        return _entriesOwed(key, player);
+        return _owedOf(key, player);
     }
 }
 

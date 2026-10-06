@@ -45,7 +45,7 @@ contract JackpotCheckpointHarness is DegenerusGameJackpotModule, BucketSeed {
         return (_getCurrentPrizePool(), _getNextPrizePool(), _getFuturePrizePool(), claimablePool, goldenTicket, dailyTicketBudgetsPacked);
     }
     function liabilities() external view returns (uint256) { return claimablePool; }
-    function claimable(address player) external view returns (uint256) { return _claimableOf(player); }
+    function claimable(address player) external view returns (uint256) { return _claimableOf(_walletIdOf(player)); }
     function pending() external view returns (uint256) { return dailyTicketBudgetsPacked; }
     function terminalGeometry(uint256 word, uint24 lvl, uint256 pool)
         external pure returns (uint16[4] memory counts, uint256[4] memory shares)
@@ -66,8 +66,8 @@ contract JackpotCheckpointsTest is Test {
     uint24 private constant LVL = 110;
     uint256 private constant WORD = 0xAC4DE45EDBEEF;
     uint256 private constant POOL = 1000 ether + 997;
-    bytes32 private constant ETH_WIN = keccak256("JackpotEthWin(address,uint24,uint16,uint256,uint256)");
-    bytes32 private constant TICKET_WIN = keccak256("JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)");
+    bytes32 private constant ETH_WIN = keccak256("JackpotEthWin(uint32,uint24,uint16,uint256,uint256)");
+    bytes32 private constant TICKET_WIN = keccak256("JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)");
 
     function setUp() public {
         vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);

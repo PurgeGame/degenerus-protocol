@@ -8,18 +8,20 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 /// @dev Only input preparation and gross gas metering are test-only. The measured
 ///      worker, GAME self-call dispatcher, delivery and eviction are production code.
 contract AfkingStethGasHost is SubscriberNativeGasHost {
     function addStethSubscriber(address player, address source, bool tickets) external {
-        _subscribers.push(player);
-        _subscriberIndex[player] = _subscribers.length;
-        Sub storage sub = _subOf[player];
+        uint32 subId = _seedWallet(player);
+        _subscribers.push(uint256(uint160(player)) | (uint256(subId) << 160));
+        _subOf[subId].setPosition = uint32(_subscribers.length);
+        Sub storage sub = _subOf[subId];
         uint24 yesterday = _afkingResetDay - 1;
         sub.dailyQuantity = 255;
         sub.flags = (source == player ? 0 : 1) | (tickets ? 4 : 0);
-        if (source != player) _fundingSourceOf[player] = source;
+        if (source != player) _fundingSourceOf[_seedWallet(player)] = uint256(uint160(source)) | (uint256(_seedWallet(source)) << 160);
         sub.lastAutoBoughtDay = yesterday;
         sub.lastOpenedDay = yesterday;
         sub.afkingStartDay = yesterday;
@@ -32,14 +34,14 @@ contract AfkingStethGasHost is SubscriberNativeGasHost {
     }
 
     function creditSource(address source, uint256 prepaid, bool sentinel) external {
-        if (prepaid != 0) _creditAfkingValue(source, prepaid);
+        if (prepaid != 0) _creditAfkingValue(_seedWallet(source), prepaid);
         if (sentinel) {
-            _creditClaimable(source, 1);
+            _creditClaimable(_seedWallet(source), 1);
             ++claimablePool;
         }
     }
 
-    function fundingOf(address source) external view returns (uint256) { return _afkingOf(source); }
+    function fundingOf(address source) external view returns (uint256) { return _afkingOf(_walletIdOf(source)); }
     function cursor() external view returns (uint256) { return _subCursor; }
 
     function measuredSubWork(uint256 allowance)

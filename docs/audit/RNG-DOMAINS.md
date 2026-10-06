@@ -342,9 +342,7 @@ named constants in the consumer; full string hashes are constant expressions.
 
 ## Regression evidence
 
-`TerminalAffiliateKnownWord.t.sol` compares actual terminal settlements with
-100 ETH versus 98 ETH plus a 2 ETH affiliate award and requires identical
-recipient identities. `JackpotEightWinnerGroups.t.sol` compares ticket winners
+`JackpotEightWinnerGroups.t.sol` compares ticket winners
 under different award budgets. `RandomnessSeedInputs.t.sol` compares production
 box resolutions after changing only amount. `DegeneretteFreezeResolution.t.sol`
 checks shared boards across owners, currencies, stakes and bet ids;

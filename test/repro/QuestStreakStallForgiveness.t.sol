@@ -3,6 +3,8 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {activityScoreOf} from "../helpers/ActivityScoreOf.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title QuestStreakStallForgiveness
 /// @notice Regression coverage for unrolled quest days and AFKing deliveries across an
@@ -18,7 +20,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
 
     uint256 private constant GAME_HEADER_SLOT = 0;
     uint256 private constant OFF_DAILY_IDX = 3;
-    uint256 private constant SUB_OF_SLOT = 52;
+    uint256 private constant SUB_OF_SLOT = GameSlots.SUB_OF;
     uint256 private constant OFF_SUB_SCORE = 2;       // uint16 score              (bytes 2..3)
     uint256 private constant OFF_SUB_LAST_AUTO = 7;   // uint24 lastAutoBoughtDay  (bytes 7..9)
     uint256 private constant OFF_SUB_COVERED = 13;    // uint24 afkCoveredThroughDay (bytes 13..15)
@@ -402,9 +404,9 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         uint24 covered = uint24(_subField(player, OFF_SUB_COVERED, 24));
         _setSubU24(player, OFF_SUB_START, covered - 1); // one already-earned funded day
 
-        uint256 beforeScore = game.playerActivityScore(player);
+        uint256 beforeScore = activityScoreOf(address(game), player);
         vm.warp(block.timestamp + 3 days);
-        uint256 duringGapScore = game.playerActivityScore(player);
+        uint256 duringGapScore = activityScoreOf(address(game), player);
 
         assertEq(duringGapScore, beforeScore, "unadvanced wall days do not temporarily zero the live AFKing streak");
     }
@@ -497,8 +499,8 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         return (uint256(vm.load(address(quests), slot)) & (uint256(1) << uint8(day))) != 0;
     }
 
-    function _subSlot(address player) private pure returns (bytes32) {
-        return keccak256(abi.encode(player, SUB_OF_SLOT));
+    function _subSlot(address player) private view returns (bytes32) {
+        return keccak256(abi.encode(uint256(game.walletIdOf(player)), SUB_OF_SLOT));
     }
 
     function _subField(address player, uint256 offset, uint256 width) private view returns (uint256) {

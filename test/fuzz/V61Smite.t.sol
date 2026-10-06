@@ -6,6 +6,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title V61Smite — TST-05 proof: deity-smite (the deity adds a curse stack to a smitee for 200 FLIP),
 ///        the ownerOf gate, the active-afker immunity, the 5-stack ceiling, the saturating +2, the shared
@@ -38,11 +39,11 @@ contract V61Smite is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots + mintPacked_ field shifts (378-01 key + BitPackingLib)
     // -------------------------------------------------------------------------
-    uint256 private constant BALANCES_PACKED_SLOT = 7;
-    uint256 private constant CLAIMABLE_POOL_SLOT = 1;
+    uint256 private constant BALANCES_PACKED_SLOT = GameSlots.BALANCES_PACKED;
+    uint256 private constant CLAIMABLE_POOL_SLOT = GameSlots.CLAIMABLE_POOL;
     uint256 private constant CLAIMABLE_POOL_OFFBYTES = 16;
-    uint256 private constant MINTPACKED_SLOT = 9;
-    uint256 private constant SUBOF_SLOT = 52; // was 58
+    uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED;
+    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF; // was 58
 
     uint256 private constant CURSE_COUNT_SHIFT = 215; // (8 bits)
     uint256 private constant CURSE_COUNT_CAP = 20;
@@ -336,7 +337,7 @@ contract V61Smite is DeployProtocol {
     // =========================================================================
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
+        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
         return p & ((uint256(1) << widthBits) - 1);
     }
 

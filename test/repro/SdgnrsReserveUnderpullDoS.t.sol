@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {RedemptionCloseTools} from "../fuzz/helpers/RedemptionCloseTools.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @notice Local mirror of the coinflip player surface so the submit-time FLIP leg is mocked to a
 ///         no-op, keeping the focus on the ETH/stETH redemption reserve identity.
@@ -24,7 +25,7 @@ interface IFlipCoinflipPlayerMock {
 ///      Run: forge test --match-path test/repro/SdgnrsReserveUnderpullDoS.t.sol -vv
 contract SdgnrsReserveUnderpullDoS is RedemptionCloseTools {
     /// @dev balancesPacked (DegenerusGame) at slot 7; low 128 bits = claimable.
-    uint256 internal constant GAME_CLAIMABLE_SLOT = 7;
+    uint256 internal constant GAME_CLAIMABLE_SLOT = GameSlots.BALANCES_PACKED;
     /// @dev claimablePool in the upper 128 bits of slot 1.
     uint256 internal constant GAME_SLOT1 = 1;
 
@@ -56,7 +57,7 @@ contract SdgnrsReserveUnderpullDoS is RedemptionCloseTools {
     }
 
     function _setGameClaimableSdgnrs(uint256 amount) internal {
-        bytes32 slot = keccak256(abi.encode(address(sdgnrs), GAME_CLAIMABLE_SLOT));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(address(sdgnrs))), GAME_CLAIMABLE_SLOT));
         uint256 word = uint256(vm.load(address(game), slot));
         word = (word & (type(uint256).max << 128)) | uint128(amount);
         vm.store(address(game), slot, bytes32(word));

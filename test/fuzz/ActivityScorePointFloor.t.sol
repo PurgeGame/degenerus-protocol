@@ -2,6 +2,8 @@
 pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {activityScoreOf} from "../helpers/ActivityScoreOf.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title ActivityScorePointFloorTest -- proves the whole-point activity score's sole sub-point leg
 ///        (the quest streak) floors at `floor(questStreak/2)`, that this point-domain leg is the exact
@@ -35,8 +37,8 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     ///      bit @ bit 184. The accumulator section is affiliateBase u32 off19, pendingFlip u24 off23,
     ///      subStreakLatch u16 off26. The two afking day markers are afkCoveredThroughDay u24 off13,
     ///      afkingStartDay u24 off16.
-    uint256 private constant SUBOF_SLOT = 52;
-    uint256 private constant MINTPACKED_SLOT = 9;
+    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;
+    uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED;
     uint256 private constant DEITY_SHIFT = 184;
     uint256 private constant OFF_AFKCOVERED = 13;
     uint256 private constant OFF_AFKINGSTART = 16;
@@ -97,14 +99,14 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     function test_QuestStreakLegIsoEndToEnd() public {
         // Non-vacuity: a fresh player has a zero score, so any streak contribution stands alone.
         address fresh = makeAddr("floor_fresh");
-        assertEq(game.playerActivityScore(fresh), 0, "fresh player has no score contributor (quest leg isolated)");
+        assertEq(activityScoreOf(address(game), fresh), 0, "fresh player has no score contributor (quest leg isolated)");
 
         // Odd streak 7: the score is exactly floor(7/2) = 3. A 0.5-pt-granular score (3.5-equivalent) or a
         // round-half-up score (4) would not equal 3.
         address odd = makeAddr("floor_odd7");
         _setManualQuestStreak(odd, 7);
         assertEq(_effectiveStreakSeenByScore(odd), 7, "the score reads the driven manual streak of 7");
-        assertEq(game.playerActivityScore(odd), 3, "odd streak 7 -> clean whole-point score floor(7/2) = 3");
+        assertEq(activityScoreOf(address(game), odd), 3, "odd streak 7 -> clean whole-point score floor(7/2) = 3");
 
         // Even/odd difference pairs: the odd member contributes the SAME points as the even one below it
         // (the half-point is dropped), and a +2 streak step adds exactly one point.
@@ -119,11 +121,11 @@ contract ActivityScorePointFloorTest is DeployProtocol {
         _setManualQuestStreak(o9, 9);
         _setManualQuestStreak(e10, 10);
 
-        uint256 s6 = game.playerActivityScore(e6);
-        uint256 s7 = game.playerActivityScore(o7);
-        uint256 s8 = game.playerActivityScore(e8);
-        uint256 s9 = game.playerActivityScore(o9);
-        uint256 s10 = game.playerActivityScore(e10);
+        uint256 s6 = activityScoreOf(address(game), e6);
+        uint256 s7 = activityScoreOf(address(game), o7);
+        uint256 s8 = activityScoreOf(address(game), e8);
+        uint256 s9 = activityScoreOf(address(game), o9);
+        uint256 s10 = activityScoreOf(address(game), e10);
 
         assertEq(s7 - s6, 0, "6 vs 7: the odd half-point is dropped (floor(7/2) - floor(6/2) == 0)");
         assertEq(s9 - s8, 0, "8 vs 9: the odd half-point is dropped (floor(9/2) - floor(8/2) == 0)");
@@ -181,7 +183,7 @@ contract ActivityScorePointFloorTest is DeployProtocol {
             _deliverDay(_singleton(p), uint256(keccak256(abi.encode("xor_dd", d))) | 1);
             liveStreak = _liveAfkingStreakOf(p);
             if (liveStreak >= 9 && liveStreak % 2 == 1) {
-                liveScore = game.playerActivityScore(p);
+                liveScore = activityScoreOf(address(game), p);
                 reachedLive = true;
                 break;
             }
@@ -202,7 +204,7 @@ contract ActivityScorePointFloorTest is DeployProtocol {
 
         (uint32 manualAfter, bool afking) = quests.effectiveBaseStreakAndAfking(p);
         assertFalse(afking, "the underfunded run handed back to manual quests");
-        uint256 postScore = game.playerActivityScore(p);
+        uint256 postScore = activityScoreOf(address(game), p);
         assertEq(postScore - DEITY_BASELINE_POINTS, uint256(manualAfter) / 2,
             "post-eviction: only the decay-aware manual quest leg contributes");
 
@@ -227,7 +229,7 @@ contract ActivityScorePointFloorTest is DeployProtocol {
             _deliverDay(_singleton(p), uint256(keccak256(abi.encode("comb_dd", d))) | 1);
             total = _liveAfkingStreakOf(p);
             if (total >= 5 && total % 2 == 1) {
-                score = game.playerActivityScore(p);
+                score = activityScoreOf(address(game), p);
                 reached = true;
                 break;
             }
@@ -354,7 +356,7 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     // ---- Sub-slot reads (the post-PACK offsets) ----
 
     function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(SUBOF_SLOT))))) >> (off * 8);
+        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
         return p & ((uint256(1) << widthBits) - 1);
     }
 

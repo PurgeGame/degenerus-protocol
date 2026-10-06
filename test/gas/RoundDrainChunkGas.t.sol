@@ -57,10 +57,9 @@ contract ChunkHarness is MintBucketSeed {
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12);
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((uint48(0) + 1) & 1) << 12);
         rngWordCurrent = uint256(keccak256("chunk-gas-entropy")) | 1; _setRngSessionPublished(true); _setRngComplete(false);
-        if (ticketOwners.length == 0) _registerEntryOwner(address(1), lvl);
         for (uint256 i; i < n; ++i) {
             address p = address(base + uint160(i + 1));
-            _queueEntriesScaled(p, lvl, entriesScaled);
+            _queueEntriesScaled(_seedWallet(p), lvl, entriesScaled);
         }
         ticketWriteSlot = !ticketWriteSlot;
         ticketLevel = 0;
@@ -76,10 +75,9 @@ contract ChunkHarness is MintBucketSeed {
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((uint48(0) + 1) & 1) << 12);
         rngWordCurrent = uint256(keccak256("chunk-gas-entropy")) | 1; _setRngSessionPublished(true); _setRngComplete(false);
         uint24 rk = _tqReadKey(lvl);
-        if (ticketOwners.length == 0) _registerEntryOwner(address(1), lvl);
         for (uint256 i; i < n; ++i) {
             address p = address(base + uint160(i + 1));
-            uint80 ownerBits = _registerEntryOwner(p, lvl);
+            uint80 ownerBits = (uint80(_seedWallet(p)) << OWNER_IDX_SHIFT);
             _tqAppend(rk, uint32(ownerBits >> OWNER_IDX_SHIFT));
             _seedOwedAt(rk, p, ownerBits | uint80(1)); // rem = 1 (1%): almost always a skip
         }
@@ -104,10 +102,9 @@ contract ChunkHarness is MintBucketSeed {
         rngWordCurrent = uint256(keccak256("chunk-gas-entropy")) | 1; _setRngSessionPublished(true); _setRngComplete(false);
         // Before the seal: level = lvl - 2, ceiling lvl - 1, so `lvl` routes far-future.
         level = lvl - 2;
-        if (ticketOwners.length == 0) _registerEntryOwner(address(1), lvl);
         for (uint256 i; i < n; ++i) {
             address p = address(base + uint160(i + 1));
-            _queueEntriesScaled(p, lvl, entriesScaled);
+            _queueEntriesScaled(_seedWallet(p), lvl, entriesScaled);
         }
         uint24 ffk = _tqFarFutureKey(lvl);
         require(_ticketQueueLength(ffk) == n, "fixture: every buyer sits on the far-future key");
@@ -199,11 +196,11 @@ contract ChunkHarness is MintBucketSeed {
     }
 
     function ffOwedOf(uint24 lvl, address p) external view returns (uint80) {
-        return _entriesOwed(_tqFarFutureKey(lvl), p);
+        return _owedOf(_tqFarFutureKey(lvl), p);
     }
 
     function owedOf(uint24 lvl, address p) external view returns (uint80) {
-        return _entriesOwed(_tqReadKey(lvl), p);
+        return _owedOf(_tqReadKey(lvl), p);
     }
 
     function seed(uint24 lvl, uint256 n, uint32 owedEach, uint160 base, bool warm) external {
@@ -213,10 +210,9 @@ contract ChunkHarness is MintBucketSeed {
         rngWordCurrent = uint256(keccak256("chunk-gas-entropy")) | 1; _setRngSessionPublished(true); _setRngComplete(false);
         uint24 rk = _tqReadKey(lvl);
         // Position zero stays out of the seeded set (a zero lane makes word stores no-ops).
-        if (ticketOwners.length == 0) _registerEntryOwner(address(1), lvl);
         for (uint256 i; i < n; ++i) {
             address p = address(base + uint160(i + 1));
-            uint80 ownerBits = _registerEntryOwner(p, lvl);
+            uint80 ownerBits = (uint80(_seedWallet(p)) << OWNER_IDX_SHIFT);
             _tqAppend(rk, uint32(ownerBits >> OWNER_IDX_SHIFT));
             _seedOwedAt(rk, p, ownerBits | (uint80(owedEach) << 8));
         }

@@ -419,14 +419,14 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
 
     it("entriesOwedPacked[rk][player] slot reads decode to the expected (rem | (owed<<8) | owner<<48) 80-bit packed form on the queued state — Path A (lvl=2..5 far-future) AND Path B (lvl=1 current-level) outer-mapping keys both resolve to non-zero packed values with owed > 0", async function () {
       const layout = await compiledStorageLayout();
-      const locator = layout.storage.find((entry) => entry.label === "ticketOwnerId");
-      const owners = layout.storage.find((entry) => entry.label === "ticketOwners");
+      const mint = layout.storage.find((entry) => entry.label === "mintPacked_");
+      const wallets = layout.storage.find((entry) => entry.label === "wallets");
       const pending = layout.storage.find((entry) => entry.label === "ticketPending");
-      expect(locator.slot).to.equal("13");
-      expect(owners.slot).to.equal("67");
-      expect(pending.slot).to.equal("78");
-      expect(layout.types[locator.type].label).to.equal("mapping(address => uint32)");
-      expect(layout.types[owners.type].label).to.equal("address[]");
+      expect(mint.slot).to.equal("9");
+      expect(wallets.slot).to.equal("13");
+      expect(pending.slot).to.equal("73");
+      expect(layout.types[mint.type].label).to.equal("mapping(address => uint256)");
+      expect(layout.types[wallets.type].label).to.equal("uint256[]");
       expect(layout.types[pending.type].label).to.equal("mapping(uint32 => uint256)");
 
       const { fixture, gameAddr, ticketWriteSlot } = await setupQueuedState();
@@ -461,9 +461,9 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
         }
         expect(packed).to.be.lessThan(
           1n << 80n,
-          `lvl=${lvl} path=${path}: packed value must fit in 80 bits (rem | owed<<8 | snap bit 40 | owner-registry position << 48)`
+          `lvl=${lvl} path=${path}: packed value must fit in 80 bits (rem | owed<<8 | snap bit 40 | wallet ID << 48)`
         );
-        // Bits 41..47 are unused; the owner-registry position (plus one) sits in
+        // Bits 41..47 are unused; the wallet ID sits in
         // bits 48..79 for a player-paid entry.
         expect((packed >> 41n) & 0x7fn, `lvl=${lvl} path=${path}: bits 41..47 must be zero`).to.equal(0n);
         expect(packed >> 80n, `lvl=${lvl} path=${path}: bits above bit-79 must be zero`).to.equal(0n);

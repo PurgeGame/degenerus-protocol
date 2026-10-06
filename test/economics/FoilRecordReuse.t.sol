@@ -4,10 +4,11 @@ pragma solidity 0.8.34;
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 /// @dev Exposes production record authentication and retirement rules without running
 ///      unrelated purchases, jackpots, or token payouts.
-contract FoilRecordReuseHarness is DegenerusGameStorage {
+contract FoilRecordReuseHarness is DegenerusGameStorage, WalletSeed {
     function setLevel(uint24 lvl) external { level = lvl; }
 
     function storeRecord(address player, uint24 lvl, uint24 generationDay, bool ready)
@@ -17,19 +18,19 @@ contract FoilRecordReuseHarness is DegenerusGameStorage {
             | (uint256(0xC0804000) << _FOIL_LINES_SHIFT)
             | (uint256(generationDay) << _FOIL_GENERATED_DAY_SHIFT)
             | (uint256(lvl) << _FOIL_LEVEL_SHIFT) | (ready ? _FOIL_READY : 0);
-        foilRecord[lvl & 3][player] = record;
+        foilRecord[lvl & 3][_seedWallet(player)] = record;
     }
 
     function recordFor(address player, uint24 lvl) external view returns (uint256) {
-        return _foilRecordWord(player, lvl);
+        return _foilRecordWord(_walletIdOf(player), lvl);
     }
 
     function bought(address player, uint24 lvl) external view returns (bool) {
-        return _foilBoughtThisLevel(player, lvl);
+        return _foilBoughtThisLevel(_walletIdOf(player), lvl);
     }
 
     function lines(address player, uint24 lvl) external view returns (uint32[4] memory) {
-        return _foilStoredLines(player, lvl);
+        return _foilStoredLines(_walletIdOf(player), lvl);
     }
 
     function reusable(uint256 record) external view returns (bool) {
@@ -44,14 +45,14 @@ contract FoilRecordReuseHarness is DegenerusGameStorage {
     function drawFor(uint256 day) external view returns (uint256) { return _foilDrawWord(day); }
 
     function mark(address player, uint24 day, uint256 index) external {
-        _markFoilMatchClaimed(player, day, index);
+        _markFoilMatchClaimed(_seedWallet(player), day, index);
     }
 
     function claimed(address player, uint24 day, uint256 index) external view returns (bool) {
-        return _foilMatchAlreadyClaimed(player, day, index);
+        return _foilMatchAlreadyClaimed(_walletIdOf(player), day, index);
     }
 
-    function markers(address player) external view returns (uint256) { return foilMatchClaimed[player]; }
+    function markers(address player) external view returns (uint256) { return foilMatchClaimed[_walletIdOf(player)]; }
 }
 
 contract FoilRecordReuseTest is Test {

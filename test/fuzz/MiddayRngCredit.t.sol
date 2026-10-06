@@ -6,6 +6,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title MiddayRngCredit — coverage for the LINK-donor mid-day RNG credit path.
 /// @notice mineFlip is the only door to a mid-day request; its RequestMidday stage runs last,
@@ -217,7 +218,7 @@ contract MiddayRngCreditTest is DeployProtocol {
         uint256 id = _mineRequest(donor);
         bytes32 requestSlot = game.extsload(bytes32(uint256(4)));
         uint256 requestTime = (uint256(game.extsload(bytes32(0))) >> 48) & type(uint48).max;
-        bytes32 packed = game.extsload(bytes32(uint256(33)));
+        bytes32 packed = game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED));
         vm.recordLogs();
         mockVRF.fulfillRandomWords(id, 42);
         Vm.Log[] memory delivered = vm.getRecordedLogs();
@@ -226,7 +227,7 @@ contract MiddayRngCreditTest is DeployProtocol {
             assertFalse(delivered[i].emitter == address(game) && delivered[i].topics[0] == applied,
                 "callback must not pay for publication");
         }
-        assertEq(uint256(game.extsload(bytes32(uint256(33)))), uint256(packed),
+        assertEq(uint256(game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED))), uint256(packed),
             "callback writes no lootbox RNG state");
         assertEq(game.extsload(bytes32(uint256(4))), requestSlot, "callback retains request ID");
         assertFalse(game.rngComplete(), "delivery alone cannot complete the session");
@@ -267,10 +268,10 @@ contract MiddayRngCreditTest is DeployProtocol {
         uint256 charge = _expectedCharge();
         _grantCredit(donor, charge * 3);
         _mockSubscriptionLink(LOOTBOX_LINK_FLOOR - 1);
-        bytes32 packed = vm.load(address(game), bytes32(uint256(33)));
+        bytes32 packed = vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED));
         _mineRefused(donor);
         assertEq(game.middayRngCredits(donor), charge * 3);
-        assertEq(vm.load(address(game), bytes32(uint256(33))), packed, "refused request changed the cohort");
+        assertEq(vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED)), packed, "refused request changed the cohort");
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -455,7 +456,7 @@ contract MiddayRngCreditTest is DeployProtocol {
         vm.prank(outsider);
         game.placeDegeneretteBet(address(0), 1, 200, 1, 0);
         // lootboxRngPacked (slot 33): bits 48..111 pending ETH, bits 184..223 pending FLIP.
-        uint256 packed = uint256(vm.load(address(game), bytes32(uint256(33))));
+        uint256 packed = uint256(vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED)));
         assertEq((packed >> 48) & type(uint64).max, 0, "harness: no pending ETH");
         assertGt((packed >> 184) & type(uint40).max, 0, "harness: pending FLIP");
         uint256 charge = _expectedCharge();

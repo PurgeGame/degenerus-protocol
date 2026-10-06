@@ -56,8 +56,8 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0, "open burns reserve nothing");
         vm.warp(vm.getBlockTimestamp() + 1 days);
         _complete(38_402); // 175% roll, losing escrow flip
-        (uint128 a,) = sdgnrs.pendingRedemptions(alice, day);
-        (uint128 b,) = sdgnrs.pendingRedemptions(bob, day);
+        (uint128 a,) = sdgnrs.pendingRedemptions(game.walletIdOf(alice), day);
+        (uint128 b,) = sdgnrs.pendingRedemptions(game.walletIdOf(bob), day);
         assertEq(a, 0);
         assertEq(b, 0);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
@@ -71,8 +71,8 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
         _burn(bob, sdgnrs.totalSupply() / 1000);
         _resolve(day, 100, 99);
         _settleOneClaim();
-        (uint128 a,) = sdgnrs.pendingRedemptions(alice, day);
-        (uint128 b,) = sdgnrs.pendingRedemptions(bob, day);
+        (uint128 a,) = sdgnrs.pendingRedemptions(game.walletIdOf(alice), day);
+        (uint128 b,) = sdgnrs.pendingRedemptions(game.walletIdOf(bob), day);
         assertEq(a, 0, "the first burner heads the queue");
         assertGt(b, 0, "the second waits for the next step");
         uint256 aliceCredit = game.claimableWinningsOf(alice);
@@ -118,7 +118,7 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
                 && logs[i].topics[0] == keccak256("RedemptionParked(address,uint32,bytes)")) ++parked;
         }
         assertEq(parked, 2);
-        (uint128 a,) = sdgnrs.pendingRedemptions(alice, day);
+        (uint128 a,) = sdgnrs.pendingRedemptions(game.walletIdOf(alice), day);
         assertGt(a, 0, "parked claim keeps its record");
 
         // Custody restored: only the player (or an approved operator) settles, exactly once.
@@ -132,7 +132,7 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
         vm.prank(alice);
         sdgnrs.claimParkedRedemption(alice, day);
         assertGt(game.claimableWinningsOf(alice), before, "parked claim pays its direct half");
-        (a,) = sdgnrs.pendingRedemptions(alice, day);
+        (a,) = sdgnrs.pendingRedemptions(game.walletIdOf(alice), day);
         assertEq(a, 0);
         vm.expectRevert(sDGNRS.NoClaim.selector);
         vm.prank(alice);
@@ -215,7 +215,7 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
         mockStETH.transfer(address(0xDEAD), st);
         vm.prank(address(game));
         assertTrue(_process(9_000_000));
-        (uint128 parked,) = sdgnrs.pendingRedemptions(alice, day);
+        (uint128 parked,) = sdgnrs.pendingRedemptions(game.walletIdOf(alice), day);
         assertGt(parked, 0, "harness: the refused claim parked");
         vm.deal(address(sdgnrs), eth);
         vm.prank(address(0xDEAD));

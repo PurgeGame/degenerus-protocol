@@ -1,20 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {WalletSeed} from "./WalletSeed.sol";
 
 /// @dev Adapt current seeded entitlements to the immutable historical reference runtimes.
 ///      Sparse IDs are copied only for queued wallets; never scan the lifetime registry.
-abstract contract LegacyTicketOwnerReference is DegenerusGameStorage {
+abstract contract LegacyTicketOwnerReference is DegenerusGameStorage, WalletSeed {
     function installLegacyOwners(uint24 key, uint24 lvl) external {
         uint256 root = uint256(keccak256(abi.encode(lvl, uint256(67))));
         uint256 base = uint256(keccak256(abi.encode(root)));
-        uint256 len = ticketOwners.length;
+        uint256 len = (wallets.length - 1);
         assembly ("memory-safe") { sstore(root, len) }
         uint256[] storage q = ticketQueue[_ticketQueueStorageKey(key)];
         for (uint256 i; i < q.length; ++i) {
             uint32 id = _tqPositionAt(q, i);
             if (id == 0) continue; // Preserve the deliberately malformed zero-lane witness.
-            uint256 record = _entryRecord(key, id);
+            uint256 record = _entryRecordOf(key, id);
             uint256 slot = base + id - 1;
             assembly ("memory-safe") { sstore(slot, record) }
         }

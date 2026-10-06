@@ -11,6 +11,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
 /// @title RngFreezeAndRemovalProofs -- Proves SAFE-04 (the v45 RNG-freeze hard-floor is
 ///        intact under the new permissionless crank) plus the v46 REMOVE proofs (the legacy
@@ -73,13 +74,13 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     // -------------------------------------------------------------------------
 
     /// @dev lootboxRngPacked at slot 34; lootboxRngIndex is the low 48 bits.
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = 33;
+    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = 3;
+    uint256 private constant LOOTBOX_RNG_WORD_SLOT = GameSlots.RNG_WORD_CURRENT;
     /// @dev lootboxOrder (the packed box-order word) mapping root slot. The whole word is the
     ///      box-owed signal (set on first deposit, zeroed on open in one SSTORE) — it replaced
     ///      the removed lootboxEthBase mapping the old pin read.
-    uint256 private constant LOOTBOX_ETH_SLOT = 15;
+    uint256 private constant LOOTBOX_ETH_SLOT = GameSlots.LOOTBOX_ORDER;
 
     // -------------------------------------------------------------------------
     // Crank reward peg mirror (the contract's own FIXED constants, REW-03)
@@ -488,7 +489,6 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
 
     /// @dev Storage slot for the `whalePassClaims` mapping (DegenerusGame slot 21; confirmed via
     ///      `forge inspect contracts/DegenerusGame.sol:DegenerusGame storage` and 336-01's same probe).
-    uint256 private constant WHALE_PASS_CLAIMS_SLOT = 20;
 
     /// @dev BitPackingLib shifts used by `_applyWhalePassStats` (mirrored locally so the test
     ///      reads the SAME slot fields the contract writes). Verified against
@@ -506,14 +506,14 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         return keccak256(abi.encode(who, uint256(9)));
     }
 
-    /// @dev Slot for `whalePassClaims[player]` (mapping root is slot 21).
-    function _whalePassClaimsSlot(address who) internal pure returns (bytes32) {
-        return keccak256(abi.encode(who, WHALE_PASS_CLAIMS_SLOT));
+    /// @dev Wallet-table element holding `who`'s half passes (bits 192..255).
+    function _whalePassClaimsSlot(address who) internal view returns (bytes32) {
+        return GameSlotKeys.walletElement(game.walletIdOf(who));
     }
 
     /// @dev Read `whalePassClaims[player]` from storage.
     function _readWhalePassClaims(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), _whalePassClaimsSlot(who)));
+        return uint256(vm.load(address(game), _whalePassClaimsSlot(who))) >> 192;
     }
 
     /// @dev Force `whalePassClaims[player] = halfPasses` via direct storage write — simulates the
@@ -522,11 +522,9 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     ///      plan's <action> step 2 — the oracle still asserts live contract behavior on the claim
     ///      side (the only path D-TST01-03 measures).
     function _forceWhalePassClaims(address who, uint256 halfPasses) internal {
-        vm.store(
-            address(game),
-            _whalePassClaimsSlot(who),
-            bytes32(halfPasses)
-        );
+        bytes32 slot = _whalePassClaimsSlot(who);
+        uint256 element = uint256(vm.load(address(game), slot));
+        vm.store(address(game), slot, bytes32((element & ((uint256(1) << 192) - 1)) | (halfPasses << 192)));
     }
 
     /// @dev Decode `frozenUntilLevel`, `levelCount`, `whalePassType`, `lastLevel` from a
@@ -907,10 +905,10 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         // A fresh session starts its box and bet cursors at zero, as the real seal does
         // (_swapRngBuffers): boxCursor (slot 56, bits 56..103), degeneretteCursor (slot 14,
         // bits 160..207).
-        uint256 s56 = uint256(vm.load(address(game), bytes32(uint256(56))));
-        vm.store(address(game), bytes32(uint256(56)), bytes32(s56 & ~(((uint256(1) << 48) - 1) << 56)));
-        uint256 s14 = uint256(vm.load(address(game), bytes32(uint256(14))));
-        vm.store(address(game), bytes32(uint256(14)), bytes32(s14 & ~(((uint256(1) << 48) - 1) << 160)));
+        uint256 s56 = uint256(vm.load(address(game), bytes32(GameSlots.SUB_CURSOR)));
+        vm.store(address(game), bytes32(GameSlots.SUB_CURSOR), bytes32(s56 & ~(((uint256(1) << 48) - 1) << 56)));
+        uint256 s14 = uint256(vm.load(address(game), bytes32(GameSlots.TICKET_CURSOR)));
+        vm.store(address(game), bytes32(GameSlots.TICKET_CURSOR), bytes32(s14 & ~(((uint256(1) << 48) - 1) << 160)));
     }
 
     /// @dev Seal `index` as the read buffer (the write side flips to index ^ 1), mirroring a

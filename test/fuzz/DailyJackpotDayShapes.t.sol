@@ -9,6 +9,7 @@ import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWhaleModule.sol";
 import {GoldenTicketHarness, CoinflipRecorder, WwxrpRecorder, ReturnZeroSink} from "./GoldenTicketArmResolve.t.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 /// @dev The golden-ticket harness plus a read of the packed daily ticket budgets Phase 1 leaves
 ///      for Phase 2.
@@ -39,7 +40,7 @@ contract JackpotBattleHarness is DayShapeHarness {
     ///      queue lane, exactly as a far-future purchase does (owed balance is irrelevant
     ///      to the jackpot battle, which only reads the registry's owner address).
     function seedFarFutureWallet(uint24 targetLevel, address who) external {
-        uint80 packed = _registerEntryOwner(who, targetLevel);
+        uint80 packed = (uint80(_seedWallet(who)) << OWNER_IDX_SHIFT);
         _tqAppend(_tqFarFutureKey(targetLevel), uint32(packed >> OWNER_IDX_SHIFT));
     }
 }
@@ -90,7 +91,7 @@ contract DailyJackpotDayShapes is Test {
     /// @dev The ETH the jackpot-phase quadrants converted to full whale passes: it is booked
     ///      back into the future pool in the same call, so the future pool's net move includes it.
     function _whalePassEth(Vm.Log[] memory logs) internal pure returns (uint256 eth) {
-        bytes32 topic = keccak256("JackpotWhalePassWin(address,uint256,uint8)");
+        bytes32 topic = keccak256("JackpotWhalePassWin(uint32,uint256,uint8)");
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].topics[0] != topic) continue;
             (uint256 halves,) = abi.decode(logs[i].data, (uint256, uint8));
@@ -140,7 +141,7 @@ contract DailyJackpotDayShapes is Test {
 
     /// @dev Count queued individual awards and direct packed awards at `queueLvl`.
     function _ticketWins(Vm.Log[] memory logs, uint24 queueLvl) internal pure returns (uint256 n) {
-        bytes32 topic = keccak256("JackpotTicketWin(address,uint24,uint16,uint32,uint24,uint256,bool)");
+        bytes32 topic = keccak256("JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)");
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].topics.length < 3 || uint24(uint256(logs[i].topics[2])) != queueLvl) continue;
             if (logs[i].topics[0] == topic) ++n;
@@ -336,7 +337,7 @@ contract DailyJackpotDayShapes is Test {
 
     // -- jackpot-day daily: tickets only, no trait-matched FLIP draw, and the battle is not its business ---
 
-    bytes32 private constant FLIP_WIN = keccak256("JackpotFlipWin(address,uint24,uint8,uint256,uint256)");
+    bytes32 private constant FLIP_WIN = keccak256("JackpotFlipWin(uint32,uint24,uint8,uint256,uint256)");
 
     /// @dev Runs a jackpot-phase daily (the ETH stage, then the coin+tickets stage, as mineFlip
     ///      sequences them) with the jackpot module's code hosted on the harness. The jackpot battle

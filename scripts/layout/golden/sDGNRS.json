@@ -45,7 +45,7 @@
     "label": "pendingRedemptions",
     "offset": 0,
     "slot": 5,
-    "typeLabel": "mapping(address => mapping(uint32 => struct sDGNRS.PendingRedemption))"
+    "typeLabel": "mapping(uint32 => mapping(uint32 => struct sDGNRS.PendingRedemption))"
   },
   {
     "bytes": "32",
@@ -117,7 +117,7 @@
     "label": "_batchPlayers",
     "offset": 0,
     "slot": 9,
-    "typeLabel": "address[][2]"
+    "typeLabel": "uint256[][2]"
   },
   {
     "bytes": "32",
@@ -133,6 +133,6 @@
     "label": "_parkedRedemptionWord",
     "offset": 0,
     "slot": 12,
-    "typeLabel": "mapping(address => mapping(uint32 => uint256))"
+    "typeLabel": "mapping(uint32 => mapping(uint32 => uint256))"
   }
 ]

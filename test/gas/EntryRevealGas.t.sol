@@ -11,27 +11,28 @@ import {TicketEntropy} from "../../contracts/libraries/TicketEntropy.sol";
 import {GoldSixLib} from "../../contracts/libraries/GoldSixLib.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 contract EntryRevealHarness is LegacyTicketOwnerReference {
     function seed(uint32[] memory amounts, uint8 rem, uint256 ownerStart) external {
         _setTicketBufferLevel(7);
-        address[] storage owners = ticketOwners;
-        assembly ("memory-safe") { sstore(owners.slot, ownerStart) }
+        uint256[] storage owners = wallets;
+        assembly ("memory-safe") { sstore(owners.slot, add(ownerStart, 1)) }
         for (uint256 i; i < amounts.length; ++i) {
-            uint80 bits = _registerEntryOwner(address(uint160(0x123400 + i)), 7);
+            uint80 bits = (uint80(_seedWallet(address(uint160(0x123400 + i)))) << OWNER_IDX_SHIFT);
             uint32 pos = uint32(bits >> OWNER_IDX_SHIFT);
             _tqAppend(7, pos);
             _setEntryOwed(7, pos, bits | (uint80(amounts[i]) << 8) | rem);
         }
     }
 
-    function owner(uint32 idx) external view returns (address) { return ticketOwners[idx]; }
+    function owner(uint32 id) external view returns (address) { return _walletKey(id); }
 
     /// @dev Owed entries left queued for `n` seeded buyers, and which buyers' fractional
     ///      remainder has been consumed (its stored remainder byte is zero).
     function remainingOwed(uint256 n) external view returns (uint256 owedSum, uint256 consumed) {
         for (uint256 i; i < n; ++i) {
-            uint80 packed = _entryPacked(7, ticketOwnerId[address(uint160(0x123400 + i))]);
+            uint80 packed = _entryPacked(7, _walletIdOf(address(uint160(0x123400 + i))));
             owedSum += uint32(packed >> 8);
             if (uint8(packed) == 0) consumed |= uint256(1) << i;
         }
@@ -41,7 +42,7 @@ contract EntryRevealHarness is LegacyTicketOwnerReference {
     function legacyRemainingOwed(uint256 n) external view returns (uint256 owedSum) {
         uint256 base = uint256(keccak256(abi.encode(keccak256(abi.encode(uint24(7), uint256(67))))));
         for (uint256 i; i < n; ++i) {
-            uint256 slot = base + ticketOwnerId[address(uint160(0x123400 + i))] - 1;
+            uint256 slot = base + _walletIdOf(address(uint160(0x123400 + i))) - 1;
             uint256 record;
             assembly ("memory-safe") { record := sload(slot) }
             owedSum += uint32(record >> 168);
@@ -54,7 +55,7 @@ contract EntryRevealHarness is LegacyTicketOwnerReference {
             uint256 n = _bucketLength(lvl, t);
             entries += n;
             for (uint256 i; i < n; ++i) {
-                unchecked { inventory += uint256(keccak256(abi.encode(_bucketOwnerAtUnchecked(lvl, uint8(t), i), uint8(t)))); }
+                unchecked { inventory += uint256(keccak256(abi.encode(_bucketOwnerAt(lvl, uint8(t), i), uint8(t)))); }
             }
         }
     }

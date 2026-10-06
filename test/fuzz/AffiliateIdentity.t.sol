@@ -11,11 +11,8 @@ import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
 contract AffiliateIdentitySeeder is DegenerusGameStorage {
-    function length(uint256 n) external { assembly ("memory-safe") { sstore(ticketOwners.slot, n) } }
+    function length(uint256 n) external { assembly ("memory-safe") { sstore(wallets.slot, add(n, 1)) } }
     function presale(bool value) external { presaleOver = !value; }
-    function identitySlots() external pure returns (uint256 ids, uint256 owners) {
-        assembly ("memory-safe") { ids := ticketOwnerId.slot owners := ticketOwners.slot }
-    }
     function rawOwner(uint32 id) external view returns (address) { return AffiliateIdentityLib.ownerOf(id); }
 }
 
@@ -75,7 +72,7 @@ contract AffiliateIdentityTest is DeployProtocol {
         vm.recordLogs();
         vm.prank(b); affiliate.referPlayer(defaultCode);
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        bytes32 entry = keccak256("EntryOwnerRegistered(uint24,uint32,address)");
+        bytes32 entry = keccak256("EntriesQueued(uint32,uint24,uint32)");
         for (uint256 i; i < logs.length; ++i) assertTrue(logs[i].topics[0] != entry, "identity emitted a ticket entry");
         uint32 id = _id(fresh);
         assertGt(id, 0);
@@ -254,8 +251,6 @@ contract AffiliateIdentityTest is DeployProtocol {
 
     function test_RawIdentityRootsAndZeroUnallocatedBounds() public {
         AffiliateIdentitySeeder seeder = new AffiliateIdentitySeeder();
-        (uint256 ids, uint256 owners) = seeder.identitySlots();
-        assertEq(ids, AffiliateIdentityLib.ID_SLOT); assertEq(owners, AffiliateIdentityLib.OWNERS_SLOT);
         assertEq(seeder.rawOwner(0), address(0));
         assertEq(seeder.rawOwner(uint32(CAP)), address(0));
         assertEq(seeder.rawOwner(type(uint32).max), address(0));
@@ -267,7 +262,7 @@ contract AffiliateIdentityTest is DeployProtocol {
     function test_UnauthorizedAllocationCannotConsumeAnId() public {
         address fresh = address(0xD11);
         vm.expectRevert(bytes4(keccak256("E()")));
-        game.registerAffiliateOwner(fresh, false);
+        game.registerWallet(fresh, false);
         assertEq(_id(fresh), 0);
     }
 
@@ -276,7 +271,7 @@ contract AffiliateIdentityTest is DeployProtocol {
         vm.recordLogs();
         vm.prank(fresh); affiliate.createAffiliateCode(bytes32("NEW_CUSTOM"), 4);
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        bytes32 entry = keccak256("EntryOwnerRegistered(uint24,uint32,address)");
+        bytes32 entry = keccak256("EntriesQueued(uint32,uint24,uint32)");
         for (uint256 i; i < logs.length; ++i) assertTrue(logs[i].topics[0] != entry);
         uint32 id = _id(fresh);
         assertGt(id, 0);

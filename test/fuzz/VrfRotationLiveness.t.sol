@@ -8,6 +8,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title VrfRotationLiveness -- VTST-02 liveness-after-rotation (proves VRF-02)
 /// @notice Proves the protocol stays LIVE after an emergency VRF coordinator/subscription
@@ -41,9 +42,9 @@ import {Vm} from "forge-std/Vm.sol";
 contract VrfRotationLiveness is DeployProtocol {
     /// @dev Storage slot constants (authoritative storage-layout, not the drifted analog).
     uint256 private constant SLOT_PACKED_0 = 0;
-    uint256 private constant SLOT_RNG_WORD_CURRENT = 3;
-    uint256 private constant SLOT_LOOTBOX_PACKED = 33;   // post Stage B Game pack: was 35
-    uint256 private constant SLOT_LOOTBOX_WORD_MAP = 34;  // post Stage B Game pack: was 36
+    uint256 private constant SLOT_RNG_WORD_CURRENT = GameSlots.RNG_WORD_CURRENT;
+    uint256 private constant SLOT_LOOTBOX_PACKED = GameSlots.LOOTBOX_RNG_PACKED;   // post Stage B Game pack: was 35
+    uint256 private constant SLOT_LOOTBOX_WORD_MAP = GameSlots.RNG_DAY_TAGS;  // post Stage B Game pack: was 36
     /// @dev LR_MID_DAY occupies byte 28 of lootboxRngPacked (bit offset 224, mask 0xFF).
     uint256 private constant LR_MID_DAY_BIT = 224;
 

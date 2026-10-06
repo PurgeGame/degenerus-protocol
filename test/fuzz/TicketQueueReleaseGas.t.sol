@@ -34,17 +34,18 @@ import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 contract TicketQueueReleaseGasTest is DeployProtocol {
     // ---- DegenerusGameStorage slot constants (see MintModuleDivergenceAcrossSplit) ----
     /// @dev ticketQueue (mapping(uint24 => uint256[])) — slot 12.
-    uint256 private constant SLOT_TICKET_QUEUE = 12;
+    uint256 private constant SLOT_TICKET_QUEUE = GameSlots.TICKET_QUEUE;
     /// @dev packed slot 14: ticketCursor (uint32) offset 0; ticketLevel (uint24) offset 4.
-    uint256 private constant SLOT_TICKET_CURSOR_LEVEL = 14;
+    uint256 private constant SLOT_TICKET_CURSOR_LEVEL = GameSlots.TICKET_CURSOR;
     /// @dev lootboxRngPacked — slot 33 (low 48 bits = lootboxRngIndex, defaults to 1).
-    uint256 private constant SLOT_LOOTBOX_RNG_PACKED = 33;
+    uint256 private constant SLOT_LOOTBOX_RNG_PACKED = GameSlots.LOOTBOX_RNG_PACKED;
     /// @dev lootboxRngWordByIndex (mapping(uint48 => uint256)) — slot 34.
-    uint256 private constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = 34;
+    uint256 private constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = GameSlots.RNG_DAY_TAGS;
     /// @dev Slot 0: packed timing/level/flags word. level occupies byte offset 12 (3 bytes);
     ///      lastPurchaseDay is the single bit at byte offset 17; rngLockedFlag at byte 19
     ///      (see the DegenerusGameStorage slot-0 layout table).

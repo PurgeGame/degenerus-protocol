@@ -40,8 +40,11 @@ enum MintPaymentKind {
 ///      payout phase (jackpotPhase()==true) once the prize target is met, then the level advances.
 ///      Ticket purchases stay open in both phases. gameOver() is terminal.
 interface IDegenerusGame {
-    /// @notice Affiliate-only permanent identity allocation; optional caches return zero at capacity.
-    function registerAffiliateOwner(address owner, bool required) external returns (uint32 id);
+    /// @notice Wallet-ID hook for trusted protocol contracts: existing ID, or with `allocate` a new
+    ///         one subject to paid admission. Non-allocating calls return zero for unregistered wallets.
+    function registerWallet(address owner, bool allocate) external returns (uint32 id);
+    /// @notice A wallet's permanent ID, or zero if unregistered.
+    function walletIdOf(address player) external view returns (uint32);
     /// @notice Read a raw storage slot; used for permanent identity lookups with pinned roots.
     function extsload(bytes32 slot) external view returns (bytes32 value);
     /// @notice Allowed read consumer: 0 blocked, 1 redemption, 2 AFK, 3 boxes/bets, 4 Decimator, 5 Craps, 6 complete.
@@ -96,8 +99,9 @@ interface IDegenerusGame {
     /// @notice Get the player's activity score.
     /// @dev Score based on participation and engagement, in whole points.
     /// @param player The player to query.
-    /// @return Activity score in whole points.
-    function playerActivityScore(address player) external view returns (uint256);
+    /// @return scorePoints Activity score in whole points.
+    /// @return walletId The player's wallet ID (zero if unregistered).
+    function playerActivityScore(address player) external view returns (uint256 scorePoints, uint32 walletId);
 
     function playerActivityScoreCached(address player) external returns (uint256);
 
@@ -536,8 +540,8 @@ interface IDegenerusGame {
             uint256 flipTokens
         );
 
-    /// @notice Credit the direct half of an sDGNRS redemption claim to `player`'s claimable winnings.
-    /// @param player Claimant credited.
+    /// @notice Credit the direct half of an sDGNRS redemption claim to the claimant's claimable winnings.
+    /// @param id Claimant wallet ID credited.
     /// @param amount Total direct-half value (msg.value ETH + the stETH remainder pulled here).
-    function creditRedemptionDirect(address player, uint256 amount) external payable;
+    function creditRedemptionDirect(uint32 id, uint256 amount) external payable;
 }

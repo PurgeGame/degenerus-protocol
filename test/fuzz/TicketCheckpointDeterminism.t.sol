@@ -9,10 +9,11 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {TicketEntropy} from "../../contracts/libraries/TicketEntropy.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-contract TicketCheckpointHarness is DegenerusGameTicketModule {
+contract TicketCheckpointHarness is DegenerusGameTicketModule, WalletSeed {
     function initialize(uint24 lvl) external { level = lvl; }
-    function credit(address player, uint24 lvl, uint32 scaled) external { _queueEntriesScaled(player, lvl, scaled); }
+    function credit(address player, uint24 lvl, uint32 scaled) external { _queueEntriesScaled(_seedWallet(player), lvl, scaled); }
     function commit(uint256 word, bool future) external {
         rngWordCurrent = word < 2 ? 2 : word;
         _setRngSessionPublished(true);
@@ -31,8 +32,8 @@ contract TicketCheckpointHarness is DegenerusGameTicketModule {
     function seedBuffer(uint24 lvl) external { _setTicketBufferLevel(lvl); }
     function setSnap(uint8 shift) external { snapShift = shift; }
     function seedFoil(address buyer, uint24 lvl) external {
-        uint80 owner = _registerEntryOwner(buyer, lvl);
-        foilRecord[lvl & 3][buyer] = (uint256(lvl) << _FOIL_LEVEL_SHIFT) | (uint256(10_000) << _FOIL_MULT_SHIFT);
+        uint80 owner = (uint80(_seedWallet(buyer)) << OWNER_IDX_SHIFT);
+        foilRecord[lvl & 3][_seedWallet(buyer)] = (uint256(lvl) << _FOIL_LEVEL_SHIFT) | (uint256(10_000) << _FOIL_MULT_SHIFT);
         foilQueue[_foilWriteKey()].push((uint256(owner >> OWNER_IDX_SHIFT) << 192) | (uint256(lvl) << 160) | uint160(buyer));
     }
     function terminal(uint24 drain) external {
@@ -41,7 +42,7 @@ contract TicketCheckpointHarness is DegenerusGameTicketModule {
     }
     function nearMaximum(address player, uint24 lvl, uint32 offset, uint32 owed, uint8 rem) external {
         uint24 rk = _tqReadKey(lvl);
-        uint32 pos = ticketOwnerId[player];
+        uint32 pos = _walletIdOf(player);
         uint80 packed = (uint80(pos) << OWNER_IDX_SHIFT) | (uint80(owed) << 8) | rem;
         _setEntryOwed(rk, pos, packed);
         ticketLevel = lvl;
@@ -56,14 +57,14 @@ contract TicketCheckpointHarness is DegenerusGameTicketModule {
         return (foilQueue[_foilReadKey()].length, foilCursor, foilGenerationDay);
     }
     function owed(address player, uint24 lvl, bool future) external view returns (uint80) {
-        return _entriesOwed(future ? _tqFarFutureKey(lvl) : _tqReadKey(lvl), player);
+        return _owedOf(future ? _tqFarFutureKey(lvl) : _tqReadKey(lvl), player);
     }
     function digest(uint24 lvl) external view returns (bytes32 out, uint256 count) {
         for (uint256 t; t < 256; ++t) {
             uint256 n = _bucketLength(lvl, t);
             count += n;
             out = keccak256(abi.encode(out, t, n));
-            for (uint256 i; i < n; ++i) out = keccak256(abi.encode(out, _bucketOwnerAtUnchecked(lvl, uint8(t), i)));
+            for (uint256 i; i < n; ++i) out = keccak256(abi.encode(out, _bucketOwnerAt(lvl, uint8(t), i)));
         }
     }
     function stream(uint24 lvl, uint256 qi, address player) external view returns (uint256) {

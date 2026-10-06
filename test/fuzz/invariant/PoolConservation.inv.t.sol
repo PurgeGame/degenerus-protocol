@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {PoolFlowHandler} from "../handlers/PoolFlowHandler.sol";
+import {GameSlots} from "../../helpers/GameSlots.sol";
 
 /// @title PoolConservation — FUZZ-05 (POOL-CONSERVATION) canonical always-on conservation invariant.
 ///
@@ -60,7 +61,7 @@ contract PoolConservation is DeployProtocol {
 
     // Slot 2 holds prizePoolsPacked = [future:128 | next:128] (forge inspect, authoritative).
     // Used ONLY by the focused falsifiability test to inject unbacked credit into futurePrizePool.
-    uint256 private constant PRIZE_POOLS_PACKED_SLOT = 2;
+    uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED;
 
     function setUp() public {
         _deployProtocol();

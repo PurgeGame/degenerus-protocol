@@ -2634,20 +2634,20 @@ contract DegenerusQuests is IDegenerusQuests {
         // Activity gate: one whole ticket minted for this level's window. Jackpot-phase
         // buys tag units with `lvl` (tickets target the current level), purchase-phase
         // buys tag `lvl + 1` — either satisfies the quest.
-        uint24 unitsLvl = uint24(packed >> 104);
+        uint24 unitsLvl = uint24((packed >> BitPackingLib.LEVEL_UNITS_LEVEL_SHIFT) & BitPackingLib.MASK_24);
         if (unitsLvl != lvl + 1 && unitsLvl != lvl) return false;
-        uint16 units = uint16(packed >> 228);
+        uint16 units = uint16((packed >> BitPackingLib.LEVEL_UNITS_SHIFT) & BitPackingLib.MASK_16);
         if (units < 400) return false;
 
         // Loyalty gate: levelStreak >= 5 OR any pass ever held. By design this does NOT
         // expire: passType is never cleared and frozenUntilLevel keeps its historical value,
         // so a lapsed pass still satisfies the gate.
-        uint24 streak = uint24(packed >> 48);
+        uint24 streak = uint24((packed >> BitPackingLib.LEVEL_STREAK_SHIFT) & BitPackingLib.MASK_24);
         if (streak >= 5) return true;
 
         // Whale/lazy pass from mintPacked_
-        uint24 frozen = uint24(packed >> 128);
-        uint8 passType = uint8((packed >> 152) & 0x3);
+        uint24 frozen = uint24((packed >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) & BitPackingLib.MASK_24);
+        uint8 passType = uint8((packed >> BitPackingLib.WHALE_PASS_TYPE_SHIFT) & 0x3);
         if (frozen > 0 && passType != 0) return true;
 
         // Deity pass fallback (separate SLOAD)
@@ -2776,8 +2776,9 @@ contract DegenerusQuests is IDegenerusQuests {
     ///         no quest ledger writes.
     /// @dev earnsReward = recordGrowthBet's own eligibility (level quest or active
     ///      afking). mayBet = that, or an ever-written mintPacked_ word with the curse
-    ///      counter masked out — the one field a third party can write into a stranger's
-    ///      word (deity smite), and a curse alone must not open the markets.
+    ///      counter and wallet ID masked out. The curse is the one field a third party can
+    ///      write into a stranger's word (deity smite), and an ID alone is registration, not
+    ///      participation; neither opens the markets.
     /// @param player The player to test.
     /// @param lvl The level to test against.
     /// @return mayBet True if the player may place a bet at all.
@@ -2795,7 +2796,8 @@ contract DegenerusQuests is IDegenerusQuests {
         mayBet =
             earnsReward ||
             (mintData &
-                ~(BitPackingLib.MASK_8 << BitPackingLib.CURSE_COUNT_SHIFT)) !=
+                ~((BitPackingLib.MASK_5 << BitPackingLib.CURSE_COUNT_SHIFT) |
+                    (uint256(type(uint32).max) << BitPackingLib.WALLET_ID_SHIFT))) !=
             0;
     }
 

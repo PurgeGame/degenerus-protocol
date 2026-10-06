@@ -7,6 +7,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @dev The turbo-chained advance rig of BafDrawArming, with the vault credited every day and
 ///      probes for its coinflip position and bracket scores. Shared by the gas suite.
@@ -151,7 +152,7 @@ abstract contract VaultBafRig is DeployProtocol {
     }
 
     function _levelPrizePool(uint24 lvl) internal view returns (uint256) {
-        uint256 v = uint256(vm.load(address(game), keccak256(abi.encode(uint256(lvl), uint256(23)))));
+        uint256 v = uint256(vm.load(address(game), keccak256(abi.encode(uint256(lvl), GameSlots.LEVEL_PRIZE_POOL))));
         return v < 50 ether ? 50 ether : v;
     }
 

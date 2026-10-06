@@ -4,6 +4,7 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title V62GasBrickCompose -- regression guard for the V62-02 fix.
 ///
@@ -49,9 +50,9 @@ contract V62GasBrickCompose is DeployProtocol {
     // Game-resident storage slots (forge inspect DegenerusGame storageLayout, v61/c4d48008)
     // (carried verbatim from V56AfkingGasMarginal so the probes are slot-faithful)
     // -------------------------------------------------------------------------
-    uint256 private constant RNG_WORD_BY_DAY_SLOT = 10;
-    uint256 private constant SUBOF_SLOT = 52;       // post V62 lootbox repack: was 58
-    uint256 private constant SUBSCRIBERS_SLOT = 54; // post V62 lootbox repack: was 60
+    uint256 private constant RNG_WORD_BY_DAY_SLOT = GameSlots.RNG_WORD_BY_DAY;
+    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;       // post V62 lootbox repack: was 58
+    uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS; // post V62 lootbox repack: was 60
 
     uint256 private constant HEADER_SLOT = 0;
     uint256 private constant OFF_DAILY_IDX = 3;          // uint24 @ byte 3
