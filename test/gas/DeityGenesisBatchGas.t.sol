@@ -5,7 +5,7 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
 contract GenesisQueueSeeder is DegenerusGameStorage, WalletSeed {
     function setLevel(uint24 lvl) external { level = lvl; }
@@ -66,18 +66,23 @@ contract DeityGenesisBatchGasTest is DeployProtocol {
             assertEq(uint32(TQ.owed(address(game), key, address(vault)) >> 8), 4);
             assertEq(uint32(TQ.owed(address(game), key, address(sdgnrs)) >> 8), 4);
         }
+        // The Game constructor registered the protocol wallets (IDs 1-3); genesis never touches
+        // the wallet table.
         uint256 registryWrites;
         uint256 vaultWrites;
         uint256 sdgnrsWrites;
-        bytes32 firstOwner = keccak256(abi.encode(uint256(67)));
+        bytes32 vaultElement = GameSlotKeys.walletElement(1);
+        bytes32 sdgnrsElement = GameSlotKeys.walletElement(2);
         for (uint256 i; i < writes.length; ++i) {
-            if (writes[i] == bytes32(uint256(67))) ++registryWrites;
-            if (writes[i] == firstOwner) ++vaultWrites;
-            if (writes[i] == bytes32(uint256(firstOwner) + 1)) ++sdgnrsWrites;
+            if (writes[i] == bytes32(GameSlots.WALLETS)) ++registryWrites;
+            if (writes[i] == vaultElement) ++vaultWrites;
+            if (writes[i] == sdgnrsElement) ++sdgnrsWrites;
         }
-        assertEq(registryWrites, 2, "registry length changes only on first registration");
-        assertEq(vaultWrites, 1, "Vault identity stored once across all levels");
-        assertEq(sdgnrsWrites, 1, "sDGNRS identity stored once across all levels");
+        assertEq(registryWrites, 0, "wallet table length untouched by genesis");
+        assertEq(vaultWrites, 0, "Vault identity stored at construction, not genesis");
+        assertEq(sdgnrsWrites, 0, "sDGNRS identity stored at construction, not genesis");
+        assertEq(game.walletIdOf(address(vault)), 1);
+        assertEq(game.walletIdOf(address(sdgnrs)), 2);
         assertEq(deityPass.ownerOf(0), address(vault));
         assertEq(deityPass.ownerOf(6), address(sdgnrs));
     }

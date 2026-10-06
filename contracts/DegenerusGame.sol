@@ -218,6 +218,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         levelPrizePool[0] = BOOTSTRAP_PRIZE_POOL;
         // Level 1 is the first level with tickets (every sink targets level + 1 or later).
         ticketGenerationStartBlock[1] = block.number;
+        // Protocol wallets take IDs 1-3 before any public door can register a wallet.
+        _registerWallet(ContractAddresses.VAULT, 0);
+        _registerWallet(ContractAddresses.SDGNRS, 0);
+        _registerWallet(ContractAddresses.GNRUS, 0);
 
         // Register this contract's ENS reverse name (best-effort; skipped when the
         // registrar is unset — local/test/testnet builds). The setName(string)

@@ -675,7 +675,7 @@ contract sDGNRS {
     /// @dev `_batchPlayers` element: wallet ID above the 160-bit address.
     uint256 private constant BATCH_PLAYER_ID_SHIFT = 160;
 
-    /// @dev This contract's own Game wallet ID; Game pins it at initProtocolDeity.
+    /// @dev This contract's own Game wallet ID; the Game constructor registers it.
     uint32 private constant SDGNRS_WALLET_ID = 2;
 
     /// @dev Minimum ETH size for a redemption lootbox (0.01 ETH). At claim the rolled value splits

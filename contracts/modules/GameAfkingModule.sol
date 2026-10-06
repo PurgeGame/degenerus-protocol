@@ -1105,14 +1105,17 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         uint24 covered = sub.afkCoveredThroughDay;
         preBuyStreak = uint32(_streakBaseOf(sub)) +
             uint32(covered - sub.afkingStartDay);
-        // The new-run day-0 cover-buy delivers with covered already framed to processDay
-        // (gap 0); every other delivery has processDay >= covered + 1 (same-day re-delivery
-        // is blocked by the lastAutoBoughtDay idempotency gates). The shifted afkingStartDay
-        // lands at most at processDay - 1, never above the new covered day.
-        if (uint32(processDay) > uint32(covered) + 1) {
-            sub.afkingStartDay += processDay - covered - 1;
+        // The run frame only moves forward. A day-0 cover-buy delivers with covered already
+        // framed to processDay, and an exempt VAULT/sDGNRS run re-framed unfunded on a later
+        // day can still receive the lagging pinned pass of an earlier day; neither advances
+        // it, so covered never drops below afkingStartDay. The shifted afkingStartDay lands
+        // at most at processDay - 1, never above the new covered day.
+        if (processDay > covered) {
+            if (uint32(processDay) > uint32(covered) + 1) {
+                sub.afkingStartDay += processDay - covered - 1;
+            }
+            sub.afkCoveredThroughDay = processDay;
         }
-        sub.afkCoveredThroughDay = processDay;
     }
 
     /// @dev Append a subscribe-time grounding lootbox as its own cover entry in the live write

@@ -54,12 +54,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     function initProtocolDeity() external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (msg.sender != ContractAddresses.CREATOR || level != 0) revert E();
-        // The VAULT and sDGNRS constructors already registered (their self-subscriptions);
-        // GNRUS registers here. Protocol IDs are constants everywhere else, so pin them.
-        (uint32 vaultId, ) = _registerWallet(ContractAddresses.VAULT, 0);
-        (uint32 sdgnrsId, ) = _registerWallet(ContractAddresses.SDGNRS, 0);
-        (uint32 gnrusId, ) = _registerWallet(ContractAddresses.GNRUS, 0);
-        if (vaultId != VAULT_WALLET_ID || sdgnrsId != SDGNRS_WALLET_ID || gnrusId != GNRUS_WALLET_ID) revert E();
+        // The Game constructor registered the protocol wallets as IDs 1-3.
         _registerDeity(ContractAddresses.VAULT, VAULT_WALLET_ID, VAULT_DEITY_SYMBOL);
         _registerDeity(ContractAddresses.SDGNRS, SDGNRS_WALLET_ID, SDGNRS_DEITY_SYMBOL);
         _latchConstructionSeat(ContractAddresses.VAULT);

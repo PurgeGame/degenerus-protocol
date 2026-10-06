@@ -367,6 +367,7 @@ contract AfkingStethFundingTest is DeployProtocol {
 
     function test_NewSubscribeAndActiveCoverBuyUseFallback() public {
         _grantSeat(PLAYER);
+        _giveWalletId(FUNDER); // a funding source must already hold a wallet ID
         mockStETH.mint(FUNDER, 1 ether);
         _authorize(FUNDER, PLAYER, type(uint256).max);
         vm.prank(FUNDER);

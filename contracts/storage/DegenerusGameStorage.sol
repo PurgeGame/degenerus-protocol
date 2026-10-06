@@ -2691,8 +2691,8 @@ abstract contract DegenerusGameStorage {
         }
     }
 
-    /// @dev Protocol wallet IDs, fixed by registration order: the VAULT and sDGNRS constructors
-    ///      subscribe (registering 1 and 2) and initProtocolDeity registers GNRUS (3), asserting all three.
+    /// @dev Protocol wallet IDs, registered in this order by the Game constructor before any
+    ///      public door exists.
     uint32 internal constant VAULT_WALLET_ID = 1;
     uint32 internal constant SDGNRS_WALLET_ID = 2;
     uint32 internal constant GNRUS_WALLET_ID = 3;
