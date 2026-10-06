@@ -96,6 +96,7 @@ describe("Presale flag is independent of mint-lootbox volume", function () {
     expect(ev.fragment.inputs.map((input) => input.name)).to.deep.equal([
       "buyer",
       "index",
+      "position",
       "amount",
     ]);
     expect(ev.args.buyer).to.equal(alice.address);

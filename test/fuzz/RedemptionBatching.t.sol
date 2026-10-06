@@ -12,17 +12,21 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 contract RedemptionBatchGameSeeder is DegenerusGame {
+    /// @dev Seal the write buffer (its box and bet counts latch into the read counts) and publish
+    ///      `word` for it.
     function commitWriteWord(uint256 word) external {
         _swapRngBuffers();
-        _resetLootboxWriteBuffer(_rngWriteBuffer());
         rngWordCurrent = word;
         _setRngSessionPublished(true);
         _setRngRequestActive(false);
         rngLockedFlag = false;
-        humanReadComplete = boxPlayers[_rngReadBuffer()].length == 0 && degeneretteQueue[_rngReadBuffer()].length == 0;
+        humanReadComplete = boxReadCount == 0 && degeneretteReadCount == 0;
     }
-    function boxState(address buyer) external view returns (uint256 count, uint256 cursor, bool complete) {
-        return (_boxOrderCount(_boxOrder(_rngReadBuffer(), buyer)), boxCursor, humanReadComplete);
+    /// @dev The read buffer's entry at `position`: its boxes still owed (zero once the cursor has
+    ///      passed it), the cursor and the completion flag.
+    function boxState(uint256 position) external view returns (uint256 count, uint256 cursor, bool complete) {
+        count = position < boxCursor ? 0 : _boxEntryCount(_boxEntryAt(_rngReadBuffer(), position));
+        return (count, boxCursor, humanReadComplete);
     }
 }
 
@@ -110,6 +114,7 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         players = new address[](n);
         for (uint256 i; i < n; ++i) {
             players[i] = address(uint160(0xBA7000 + i));
+            _giveWalletId(players[i]); // a burn needs the beneficiary's wallet ID
             vm.prank(address(game));
             assertEq(sdgnrs.transferFromPool(sDGNRS.Pool.Whale, players[i], amount), amount);
             _burn(players[i], amount);
@@ -121,13 +126,15 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         RedemptionBatchGameSeeder(payable(address(game))).commitWriteWord(word);
         vm.etch(address(game), real);
     }
-    function _boxState(address buyer) private returns (uint256 count, uint256 cursor, bool complete) {
+    function _boxState(uint256 position) private returns (uint256 count, uint256 cursor, bool complete) {
         bytes memory real = address(game).code;
         vm.etch(address(game), type(RedemptionBatchGameSeeder).runtimeCode);
-        (count, cursor, complete) = RedemptionBatchGameSeeder(payable(address(game))).boxState(buyer);
+        (count, cursor, complete) = RedemptionBatchGameSeeder(payable(address(game))).boxState(position);
         vm.etch(address(game), real);
     }
-    function _buyHuman(address buyer, uint256 count) private {
+    /// @dev One entry of `count` small boxes; returns its position in the write buffer.
+    function _buyHuman(address buyer, uint256 count) private returns (uint256 position) {
+        position = RecyclingState.boxCount(address(game), RecyclingState.writeBuffer(address(game)));
         (,,,, uint256 price) = game.purchaseInfo();
         vm.deal(buyer, price * count);
         vm.prank(buyer);
@@ -206,8 +213,9 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
 
     function test_CachedEscrowRewardCannotBeSuppliedByAnExternalCaller() public {
         uint32 day = _openBatchId();
+        uint32 aliceId = game.walletIdOf(alice);
         vm.expectRevert(sDGNRS.Unauthorized.selector);
-        sdgnrs.settleRedemptionHead(alice, game.walletIdOf(alice), day, 99);
+        sdgnrs.settleRedemptionHead(alice, aliceId, day, 99);
     }
 
     function test_PerClaimStepsAndOneCallPlayerEventsAndBalancesAreIdentical() public {
@@ -290,23 +298,22 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         revert("no allowance up to 9.5M admits the next chunk");
     }
     function test_RedemptionThenAffordableHumanBoxSharesOneCall() public {
-        address buyer = address(0xB0C1);
-        _buyHuman(buyer, 1);
+        uint256 pos = _buyHuman(address(0xB0C1), 20);
         uint32 day = _openBatchId();
         _burn(alice, sdgnrs.totalSupply() * 16 / 1000); _resolve(day, 175, 99); _commitWord(99);
         // The keeper is paid only the engine's measured-gas reward for the shared call; the claim
-        // is sized so the call clears the unpaid first 1M.
+        // and the affordable 20-box order are sized so the call clears the unpaid first 1M
+        // whatever their committed rolls draw.
         vm.fee(1 gwei);
         (uint256 reward, uint256 used) = _keeperMine(10_000_000);
         emit log_named_uint("redemption_plus_human_box_miner_execution_gas", used);
-        (uint256 count,, bool complete) = _boxState(buyer);
+        (uint256 count,, bool complete) = _boxState(pos);
         assertEq(count, 0); assertTrue(complete);
         assertFalse(sdgnrs.redemptionSettlementPending());
         assertGt(reward, 0, "keeper paid for the shared call");
     }
     function test_OversizedFirstHumanBoxWaitsAndRedemptionsCommit() public {
-        address buyer = address(0xB0C2);
-        _buyHuman(buyer, 100);
+        uint256 pos = _buyHuman(address(0xB0C2), 100);
         uint32 day = _openBatchId();
         _newBurners(2, sdgnrs.totalSupply() * 16 / 1000);
         _resolve(day, 175, 99); _commitWord(99);
@@ -315,13 +322,13 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         uint256 boundary = _boundaryAllowance(10_000_000);
         emit log_named_uint("maximum_redemption_admission_boundary_allowance", boundary);
         vm.prank(keeper); game.mineFlip{gas: boundary}();
-        (uint256 count, uint256 cursor, bool complete) = _boxState(buyer);
+        (uint256 count, uint256 cursor, bool complete) = _boxState(pos);
         assertEq(count, 100); assertEq(cursor, 0); assertFalse(complete);
         assertGt(sdgnrs.pendingRedemptionEthValue(), 0, "next maximum claim retains its reserve");
         assertTrue(sdgnrs.redemptionSettlementPending());
         for (uint256 i; i < 4 && count != 0; ++i) {
             vm.prank(keeper); game.mineFlip{gas: 10_000_000}();
-            (count,, complete) = _boxState(buyer);
+            (count,, complete) = _boxState(pos);
         }
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
         assertEq(count, 0); // Completing this cohort may request its generated next cohort.
@@ -329,9 +336,8 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
     function test_ColdMaximumRedemptionDefersWholeHumanOrderAtMeasuredBoundary() public {
         uint32 day = _openBatchId();
         _burn(alice, sdgnrs.totalSupply() * 16 / 1000);
-        address first = address(0xB0C4);
-        address second = address(0xB0C5);
-        _buyHuman(first, 100); _buyHuman(second, 64);
+        uint256 first = _buyHuman(address(0xB0C4), 100);
+        uint256 second = _buyHuman(address(0xB0C5), 64);
         _resolve(day, 175, 99); _commitWord(99);
         vm.cool(address(game)); vm.cool(address(sdgnrs)); vm.cool(address(coinflip)); vm.cool(address(mockStETH));
         vm.cool(ContractAddresses.GAME_AFKING_MODULE); vm.cool(ContractAddresses.GAME_LOOTBOX_MODULE);
@@ -360,8 +366,7 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
     }
 
     function test_NearBudgetCompletionDefersHumanBoxUntilFreshAllowance() public {
-        address buyer = address(0xB0C3);
-        _buyHuman(buyer, 1);
+        uint256 pos = _buyHuman(address(0xB0C3), 1);
         uint32 day = _openBatchId();
         address[] memory players = _newBurners(67, 1 ether);
         _resolve(day, 100, 99);
@@ -383,10 +388,10 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         }
         vm.prank(keeper); game.mineFlip{gas: allowance}();
         assertFalse(sdgnrs.redemptionSettlementPending());
-        (uint256 count, uint256 cursor, bool complete) = _boxState(buyer);
+        (uint256 count, uint256 cursor, bool complete) = _boxState(pos);
         assertEq(count, 1); assertEq(cursor, 0); assertFalse(complete);
         vm.prank(keeper); game.mineFlip();
-        (count,, complete) = _boxState(buyer);
+        (count,, complete) = _boxState(pos);
         assertEq(count, 0);
     }
 

@@ -472,7 +472,15 @@ contract ReviewFoilHarness is DegenerusGameFoilPackModule, WalletSeed {
         foilRecord[lvl & 3][_seedWallet(buyer)] = uint256(day) | (uint256(multBps) << _FOIL_MULT_SHIFT)
             | (uint256(lvl) << _FOIL_LEVEL_SHIFT);
         uint256 ownerIdx = uint256(_seedWallet(buyer));
-        foilQueue[_foilReadKey()].push(((ownerIdx + 1) << 192) | (uint256(lvl) << 160) | uint256(uint160(buyer)));
+        _foilAppend(_foilReadKey(), (ownerIdx << 192) | (uint256(lvl) << 160) | uint256(uint160(buyer)));
+    }
+
+    function _foilAppend(uint24 key, uint256 pack) internal {
+        uint256 i = _foilCount(key);
+        uint256 s = _foilSlot(key, i);
+        assembly ("memory-safe") { sstore(s, pack) }
+        if (key == _foilWriteKey()) foilWriteCount = uint32(i + 1);
+        else foilReadCount = uint32(i + 1);
     }
 
     function setWordAndWindow(uint24 day, uint256 word) external {

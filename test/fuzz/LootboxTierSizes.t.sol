@@ -6,31 +6,31 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
-import {C1Viewer} from "../repro/C1BoxAutoOpen.t.sol";
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 
-/// @dev Reads a stored order's rate lanes and the EV multiplier its score maps to, through the
+/// @dev Reads a stored entry's rate lanes and the EV multiplier its score maps to, through the
 ///      game's own storage layout and curve.
 contract RateViewer is DegenerusGame {
-    function rates(uint48 index, address who)
+    function rates(uint48 buffer, uint256 position)
         external
         view
-        returns (uint256 level, uint256 evBps, uint256 boostBps, uint256 adjBps, uint256 distressBps)
+        returns (uint256 level, uint256 evBps, uint256 boostBps, uint256 adjBps, bool distress)
     {
-        uint256 w = _boxOrder(index, who);
+        uint256 w = _boxEntryAt(buffer, position);
         level = (w >> LB_LEVEL_SHIFT) & LB_LEVEL_MASK;
         evBps = _lootboxEvMultiplierFromScore((w >> LB_SCORE_SHIFT) & LB_SCORE_MASK);
         boostBps = (w >> LB_BOOST_SHIFT) & LB_BPS_MASK;
-        adjBps = (w >> LB_ADJ_SHIFT) & LB_BPS_MASK;
-        distressBps = (w >> LB_DISTRESS_SHIFT) & LB_BPS_MASK;
+        adjBps = (w >> LB_EV_SHIFT) & LB_BPS_MASK;
+        distress = w & LB_DISTRESS != 0;
     }
 }
 
 /// @title LootboxTierSizes -- a medium box is five ticket prices and a large box twenty-five
-/// @notice The box order stores tier COUNTS; the open multiplies the level's ticket price by the
-///         tier's multiple (1x / 5x / 25x) to size each roll. Mutation v78 rewrote the medium
+/// @notice A queue entry stores tier COUNTS; the open multiplies the entry level's ticket price by
+///         the tier's multiple (1x / 5x / 25x) to size each roll. Mutation v78 rewrote the medium
 ///         size `price * 5` as `price - 5` in the open walk and no foundry oracle noticed: the
-///         tier multiples were asserted nowhere. This buys one box of each tier in one order,
+///         tier multiples were asserted nowhere. This buys one box of each tier in one purchase,
 ///         lands the word, auto-opens, and reads the three sizes back off `LootBoxOpened`.
 contract LootboxTierSizes is DeployProtocol {
     address internal actor;
@@ -46,25 +46,17 @@ contract LootboxTierSizes is DeployProtocol {
         vm.deal(actor, 100 ether);
     }
 
-    function _idx() internal returns (uint48 v) {
-        bytes memory real = address(game).code;
-        vm.etch(address(game), type(C1Viewer).runtimeCode);
-        v = C1Viewer(payable(address(game))).lrIndexView();
-        vm.etch(address(game), real);
+    function _idx() internal view returns (uint48) {
+        return RecyclingState.writeBuffer(address(game));
     }
 
-    function _base(uint48 index, address who) internal returns (uint256 v) {
-        bytes memory real = address(game).code;
-        vm.etch(address(game), type(C1Viewer).runtimeCode);
-        v = C1Viewer(payable(address(game))).lootboxBaseFor(index, who);
-        vm.etch(address(game), real);
+    function _word(uint48 index) internal view returns (uint256) {
+        return RecyclingState.word(address(game), index);
     }
 
-    function _word(uint48 index) internal returns (uint256 v) {
-        bytes memory real = address(game).code;
-        vm.etch(address(game), type(C1Viewer).runtimeCode);
-        v = C1Viewer(payable(address(game))).rngWordFor(index);
-        vm.etch(address(game), real);
+    /// @dev The `LootBoxOpened` tag of queued entry `position` in `buffer`.
+    function _tag(uint48 buffer, uint256 position) internal pure returns (uint48) {
+        return uint48((uint256(1) << 46) | (position << 1) | buffer);
     }
 
     /// @dev The mid-day request, issued by `caller`'s mineFlip as the engine's next action (the
@@ -136,8 +128,10 @@ contract LootboxTierSizes is DeployProtocol {
         // request threshold (the tiers alone are 31 ticket prices).
         uint256 order = BoxOrderLib.boOrder(1, 1, 1, 1, 1 ether);
         uint256 nominal = 31 * priceWei + 1 ether;
+        uint256 pos = RecyclingState.boxCount(address(game), N);
         vm.prank(actor);
         game.purchase{value: nominal + 1 ether}(actor, 400, order, bytes32(0), MintPaymentKind.DirectEth, false);
+        assertEq(RecyclingState.boxCount(address(game), N), pos + 1, "the purchase appended one entry");
 
         uint256 reqId = _mineMiddayRequest(actor);
 
@@ -155,12 +149,13 @@ contract LootboxTierSizes is DeployProtocol {
             vm.prank(actor);
             game.mineFlip();
             Vm.Log[] memory logs = vm.getRecordedLogs();
-            assertGt(_word(N), 0, "the word landed at the order's index");
-            assertTrue(game.boxIndexComplete(N), "the walk opened the order");
+            assertGt(_word(N), 0, "the word landed for the entry's buffer");
+            assertTrue(game.boxIndexComplete(N), "the walk opened the entry");
             uint256 n;
             for (uint256 i; i < logs.length; i++) {
                 if (logs[i].topics[0] != OPENED || logs[i].emitter != address(game)) continue;
                 if (address(uint160(uint256(logs[i].topics[1]))) != actor) continue;
+                if (uint48(uint256(logs[i].topics[2])) != _tag(N, pos)) continue;
                 (uint256 amount,,,,) = abi.decode(logs[i].data, (uint256, uint24, uint32, uint256, bool));
                 if (n < 4) sizes[n] = amount;
                 n++;
@@ -184,15 +179,14 @@ contract LootboxTierSizes is DeployProtocol {
         assertApproxEqAbs(sizes[3], (1 ether / priceWei) * sizes[0], 1 ether / priceWei + 1, "the custom box is its own size in small boxes");
     }
 
-    /// @dev The figure every plainly-opened box of `who` at `index` reported (all boxes of one
-    ///      single-tier order share it); zero if every box drew a spin.
-    function _rates(uint48 index, address who)
+    /// @dev The rate lanes of queued entry `position` in `buffer`.
+    function _rates(uint48 buffer, uint256 position)
         internal
         returns (uint256 level, uint256 evBps, uint256 boostBps, uint256 adjBps)
     {
         bytes memory real = address(game).code;
         vm.etch(address(game), type(RateViewer).runtimeCode);
-        (level, evBps, boostBps, adjBps,) = RateViewer(payable(address(game))).rates(index, who);
+        (level, evBps, boostBps, adjBps,) = RateViewer(payable(address(game))).rates(buffer, position);
         vm.etch(address(game), real);
     }
 
@@ -204,19 +198,21 @@ contract LootboxTierSizes is DeployProtocol {
         return evBps <= 10_000 ? (boosted * evBps) / 10_000 : (adjWei * evBps) / 10_000 + (boosted - adjWei);
     }
 
-    function _openedFigure(Vm.Log[] memory logs, address who, uint48 index) internal pure returns (uint256 fig) {
+    /// @dev The figure every plainly-opened box of `who` under entry tag `tag` reported (all
+    ///      boxes of one single-tier entry share it); zero if every box drew a spin.
+    function _openedFigure(Vm.Log[] memory logs, address who, uint48 tag) internal pure returns (uint256 fig) {
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].topics[0] != OPENED) continue;
             if (address(uint160(uint256(logs[i].topics[1]))) != who) continue;
-            if (uint48(uint256(logs[i].topics[2])) != index) continue;
+            if (uint48(uint256(logs[i].topics[2])) != tag) continue;
             (uint256 amount,,,,) = abi.decode(logs[i].data, (uint256, uint24, uint32, uint256, bool));
             if (fig == 0) fig = amount;
             else require(fig == amount, "one single-tier order, one figure");
         }
     }
 
-    /// @notice A one-tier order takes the lean immediate path (no five-lane batch). Three fresh
-    ///         wallets buy three boxes of one tier each at the same index; the daily word lands,
+    /// @notice A one-tier entry takes the lean immediate path (no five-lane batch). Three fresh
+    ///         wallets buy three boxes of one tier each into the same buffer; the daily word lands,
     ///         the walk opens all nine, and the three per-tier figures keep 1 : 5 : 25.
     function test_singleTierOrdersOpenAtTheirMultiples() public {
         _driveDailyCycleOnce();
@@ -227,32 +223,33 @@ contract LootboxTierSizes is DeployProtocol {
         address[3] memory who = [makeAddr("smalls"), makeAddr("mediums"), makeAddr("larges")];
         uint256[3] memory orders = [BoxOrderLib.boOrder(3, 0, 0, 0, 0), BoxOrderLib.boOrder(0, 3, 0, 0, 0), BoxOrderLib.boOrder(0, 0, 3, 0, 0)];
         uint256[3] memory mults = [uint256(1), 5, 25];
+        uint256[3] memory pos;
         for (uint256 t; t < 3; t++) {
             vm.deal(who[t], 100 ether);
+            pos[t] = RecyclingState.boxCount(address(game), N);
             vm.prank(who[t]);
             game.purchase{value: 3 * mults[t] * priceWei + 1 ether}(who[t], 400, orders[t], bytes32(0), MintPaymentKind.DirectEth, false);
+            assertEq(RecyclingState.boxCount(address(game), N), pos[t] + 1, "each purchase appends one entry");
         }
 
-        // The stored rate lanes, read before the open zeroes the orders: the exact figure each
-        // tier must report follows from them and the tier's size alone.
+        // The stored rate lanes: the exact figure each tier must report follows from them and
+        // the tier's size alone.
         uint256[3] memory expected;
         for (uint256 t; t < 3; t++) {
-            (uint256 lvl, uint256 ev, uint256 boost, uint256 adj) = _rates(N, who[t]);
+            (uint256 lvl, uint256 ev, uint256 boost, uint256 adj) = _rates(N, pos[t]);
             expected[t] = _expected(mults[t] * PriceLookupLib.priceForLevel(uint24(lvl)), ev, boost, adj);
         }
 
-        // The daily word finalizes the index and lands the boxes' word without a mid-day request;
-        // the same engine calls open the orders as read consumers of that word.
+        // The daily word seals the buffer and lands the boxes' word without a mid-day request;
+        // the same engine calls open the entries as read consumers of that word. Each entry's
+        // own tag (buffer and position) on `LootBoxOpened` is the evidence the walk opened it.
         vm.recordLogs();
         _driveDailyCycleOnce();
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        // The drive also settles any trailing craps cohort, which reuses the physical tags, so
-        // the orders' own markers (processed once opened) are the evidence, not the tag's word.
-        for (uint256 t; t < 3; t++) assertEq(_base(N, who[t]), 0, "the walk opened the orders");
 
         uint256[3] memory fig;
         for (uint256 t; t < 3; t++) {
-            fig[t] = _openedFigure(logs, who[t], N);
+            fig[t] = _openedFigure(logs, who[t], _tag(N, pos[t]));
             assertGt(fig[t], 0, "at least one box of the tier opened plainly");
             assertEq(fig[t], expected[t], "a box reports exactly its boosted, EV-scaled size");
         }

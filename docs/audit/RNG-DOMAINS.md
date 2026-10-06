@@ -279,15 +279,16 @@ named constants in the consumer; full string hashes are constant expressions.
 
 | Consumer | Root or domain | Sharing / fixed inputs |
 | --- | --- | --- |
-| Ordinary box roll | `H(word, player, BOX_OPEN_TAG, nonce)` | Nonce advances across tiers in the stored order; size excluded |
-| Ordinary box boon | `H(word, player, BOX_BOON_TAG, index)` | Separate from reward rolls and craps scatter; tier nonce for each boon draw |
-| Presale box | packed `H(word, PRESALE_BOX_TAG, player, uint48(index))` | One record per owner/index; amount excluded |
-| Redemption box | `H(chunkWord, player, REDEMPTION_BOX_TAG)` | Chunk word advances by `H(word)`; upstream redemption word fixed |
-| AFKing box | `H(word, player, AFKING_BOX_TAG, stampedDay)` | Day recorded before fulfillment; amount excluded |
+| Queued entry root | `H(QUEUED_ORDER_DOMAIN, word, buffer, position)` | One entry per purchase; buffer and position fixed by the append before the buffer's word is requested |
+| Ordinary box roll | `H(entryRoot, walletId, BOX_OPEN_TAG, nonce)` | Nonce advances across tiers in the entry; size excluded; wallet ID read from the entry |
+| Ordinary box boon | `H(entryRoot, walletId, BOX_BOON_TAG, buffer)` | Separate from reward rolls and craps scatter; tier nonce for each boon draw |
+| Presale box | `H(entryRoot, walletId, PRESALE_BOX_TAG, buffer)` | Presale leg of the same entry; amount excluded |
+| Redemption box | roll `H(redemptionWord, walletId, BOX_OPEN_TAG, nonce)`, boon `H(redemptionWord, walletId, BOX_BOON_TAG, REDEMPTION_INDEX_TAG \| batchId)` | `redemptionWord = H(batchWord, beneficiaryWalletId)` in sDGNRS; claim keyed by the beneficiary ID at the burn; no queue position |
+| AFKing box | `H(word, walletId, AFKING_BOX_TAG, stampedDay)` | Day recorded before fulfillment; amount excluded |
 | Decimator battle | `H(tag, fullWord, level[, entryId])` | Tags `decimator.battle.dice.v1`, `.board.v1`, `.tie.v1`; dice omit entry id, board/tie include it; engine survival uses frozen owner; hot activation follows shared dice duration |
 | Decimator survivor sample | `H(SAMPLE_TAG, fullWord, uint24(level)[, uint256(stratum)])` | `decimator.battle.sample.v1`; no-stratum hash rotates by modulo T; stratum hash selects one offset in [floor(i*T/S),floor((i+1)*T/S)); S=min(1000,ceil(T/2)); exact distinct set shared by locked generated and unlocked original workers |
 | Decimator generated entries | `H(tag, fullWord, level, uint64(id)[, uint8(quadrant), uint8(trait)])` | `decimator.battle.generated.player.v1` and `.recipient.v1`; IDs N+1..N+M share the original `decimator.battle.board.v1` and `.tie.v1` domains; allocation is fixed cumulative rounding; recipients/preferences read only for sampled entries under the daily RNG lock |
-| Direct reward box | `H(callerDerivedWord, player)` | ETH bet caller binds the relevant bet; this is not an independent raw-word consumer |
+| Direct reward box | `H(callerDerivedWord, walletId)` | ETH bet caller binds the relevant bet; this is not an independent raw-word consumer |
 | Box secondary draws | `BOX_*_SPIN_TAG`, `BOX_PASS_ROUND_TAG`, `FLIP_ROUND_TAG` | Derive from that box's root; stake only sizes payout |
 | Degenerette result board | packed `H(word, uint32(index), QUICK_PLAY_SALT)` for spin 0; add `uint8(spin)` for later spins | **Shared by all ETH/FLIP players and bets in an RNG period**, including different stakes, hero symbols and currencies. Only ETH/FLIP bets use it; WWXRP is not a bet currency |
 | Degenerette player ticket | `H(H(word, index, heroSymbol, spin), PLAYER_TICKET_TAG)` | Shared across owners, bet ids, stakes and spin counts for the same hero; different heroes regenerate the other cells; no settlement inputs |

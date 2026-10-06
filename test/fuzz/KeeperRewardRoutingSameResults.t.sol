@@ -597,7 +597,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         vm.store(address(game), slot, bytes32(packed));
         // This is an already-paid terminal state, not a freshly latched ending
         // whose remaining final jackpot the engine must still process.
-        bytes32 ending = bytes32(uint256(19));
+        bytes32 ending = bytes32(GameSlots.GAME_OVER_STATE_PACKED);
         vm.store(address(game), ending, bytes32(uint256(vm.load(address(game), ending)) | (uint256(1) << 48)));
         require(game.gameOver(), "_latchGameOver: gameOver did not flip (slot 0 byte 21)");
     }

@@ -47,7 +47,7 @@ const TICKET_FAR_FUTURE_BIT = 0x400000n;
 //
 //   Path B (lvl=1, current-level via runTicketWork): entropy is
 //     loaded from `lootboxRngWordByIndex[lrIndex - 1]` where `lrIndex` is
-//     bits 0..47 of `lootboxRngPacked` (storage slot 34). The index does
+//     bits 0..47 of `lootboxRngPacked` (resolved by name). The index does
 //     not change while alice's ticket queue at lvl=1 drains, so a single
 //     post-drain read is sufficient for every Path B emission.
 //   Path A (lvl>=2, the whale-pass far-future span, drained only once its
@@ -424,7 +424,7 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
       const pending = layout.storage.find((entry) => entry.label === "ticketPending");
       expect(mint.slot).to.equal("9");
       expect(wallets.slot).to.equal("13");
-      expect(pending.slot).to.equal("73");
+      expect(pending.slot).to.equal("70");
       expect(layout.types[mint.type].label).to.equal("mapping(address => uint256)");
       expect(layout.types[wallets.type].label).to.equal("uint256[]");
       expect(layout.types[pending.type].label).to.equal("mapping(uint32 => uint256)");

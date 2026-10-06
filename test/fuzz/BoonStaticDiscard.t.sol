@@ -21,16 +21,14 @@ contract BoonStaticDiscard is DeployProtocol {
     // Storage slots (from `forge inspect DegenerusGame storage-layout`, see
     // LootboxBoonCoexistence which pins the same values).
     uint256 constant SLOT_BOON_PACKED = GameSlots.BOON_PACKED; // mapping(address => BoonPacked)
-    uint256 constant SLOT_LOOTBOX_ETH = GameSlots.LOOTBOX_ORDER; // mapping(uint48 => mapping(address => uint256))
     uint256 constant SLOT_LOOTBOX_WORD = GameSlots.RNG_DAY_TAGS; // mapping(uint48 => uint256)
     uint256 constant SLOT_LOOTBOX_RNG_IDX = GameSlots.LOOTBOX_RNG_PACKED; // lootboxRngPacked (low 48 bits = lootboxRngIndex)
-    uint256 constant SLOT_BOX_PLAYERS = GameSlots.BOX_PLAYERS; // mapping(uint48 => address[]) boxPlayers (sweep's discovery queue)
-    uint256 constant SLOT_BOX_CURSORS = GameSlots.BOX_CURSOR; // packed (boxCursor @ byte 7, humanReadComplete @ byte 13)
 
-    uint256 constant LB_SCORE_SHIFT = 24;
-    uint256 constant LB_CUSTOM_COUNT_SHIFT = 105;
-    uint256 constant LB_CUSTOM_SIZE_SHIFT = 113;
-    uint256 constant LB_CUSTOM_SCALE = 1e12;
+    // Queue entry word (LB_* layout in DegenerusGameStorage).
+    uint256 constant LB_LEVEL_SHIFT = 32;
+    uint256 constant LB_SCORE_SHIFT = 56;
+    uint256 constant LB_CUSTOM_COUNT_SHIFT = 121;
+    uint256 constant LB_SIZE_SHIFT = 128;
 
     // BoonPacked field shifts (DegenerusGameStorage)
     uint256 constant BP_DECIMATOR_TIER_SHIFT = 168; // slot0
@@ -76,31 +74,21 @@ contract BoonStaticDiscard is DeployProtocol {
     }
 
     function _setupLootbox(address player, uint48 index, uint256 ethAmount, uint256 vrfWord) internal {
-        // One CUSTOM box of `ethAmount`, score=1, frozen to the live level (see
-        // LootboxBoonCoexistence._setupLootbox for the same migration pattern).
-        uint256 packed = uint256(game.level())
+        // One CUSTOM box of `ethAmount`, score=1, frozen to the live level, as a single queue
+        // entry in buffer `index`; the seal then latches it as the read cohort.
+        uint32 id = _giveWalletId(player);
+        uint256 word = uint256(id)
+            | (uint256(game.level()) << LB_LEVEL_SHIFT)
             | (uint256(1) << LB_SCORE_SHIFT)
             | (uint256(1) << LB_CUSTOM_COUNT_SHIFT)
-            | ((ethAmount / LB_CUSTOM_SCALE) << LB_CUSTOM_SIZE_SHIFT);
-        vm.store(address(game), _nestedMappingSlot(SLOT_LOOTBOX_ETH, index, player), bytes32(packed));
+            | ((ethAmount / 1 gwei) << LB_SIZE_SHIFT);
+        RecyclingState.seedWriteBuffer(address(game), index);
+        bytes32 data = keccak256(abi.encode(keccak256(abi.encode(uint256(index), GameSlots.BOX_QUEUE))));
+        vm.store(address(game), data, bytes32(word));
+        uint256 lr = uint256(vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED)));
+        lr = (lr & ~(uint256(0xFFFFFFFF) << 120)) | (uint256(1) << 120);
+        vm.store(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED), bytes32(lr));
         RecyclingState.seedWord(address(game), index, bytes32(vrfWord));
-
-        // Enqueue + park the frontier (same pattern as LootboxBoonCoexistence._setupLootbox) so
-        // mineFlip's in-order human-box stage discovers and reaches this forged entry.
-        bytes32 lenSlot = keccak256(abi.encode(uint256(index), uint256(SLOT_BOX_PLAYERS)));
-        uint256 len = 0; // one fixture entry; previous case was fully consumed
-        bytes32 dataBase = keccak256(abi.encode(lenSlot));
-        vm.store(address(game), bytes32(uint256(dataBase) + len), bytes32(uint256(uint160(player))));
-        vm.store(address(game), lenSlot, bytes32(len + 1));
-
-        uint256 mask48 = (uint256(1) << 48) - 1;
-        RecyclingState.seedWriteBuffer(address(game), index ^ 1);
-
-        bytes32 cursorSlot = bytes32(SLOT_BOX_CURSORS);
-        uint256 cur = uint256(vm.load(address(game), cursorSlot));
-        cur &= ~(mask48 << (7 * 8));
-        cur &= ~(uint256(0xff) << (13 * 8)); // humanReadComplete = false
-        vm.store(address(game), cursorSlot, bytes32(cur));
     }
 
     function _boonSlot(address player, uint256 offset) internal pure returns (bytes32) {
@@ -184,6 +172,7 @@ contract BoonStaticDiscard is DeployProtocol {
 
         for (uint8 s2 = 0; s2 < 3; s2++) {
             address recipient = makeAddr(string(abi.encodePacked("parityRecipient", s2)));
+            _giveWalletId(recipient);
             vm.recordLogs();
             vm.prank(deity);
             game.issueDeityBoon(deity, recipient, s2);

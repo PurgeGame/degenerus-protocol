@@ -6,7 +6,7 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
 /// @title FoilDrainMiddaySwap — the foil pack's sixteen entries against the queue swaps.
 ///
@@ -26,7 +26,6 @@ contract FoilDrainMiddaySwap is DeployProtocol {
     uint256 private constant SLOT_LVL_TRAIT_ENTRY = GameSlots.LVL_TRAIT_ENTRY;
     uint256 private constant SLOT_RNG_WORD_BY_DAY = GameSlots.RNG_WORD_BY_DAY;
     uint256 private constant SLOT_FOIL_RECORD = GameSlots.FOIL_RECORD;
-    uint256 private constant SLOT_FOIL_BUYERS = GameSlots.FOIL_QUEUE;
     uint256 private constant SLOT_FOIL_CURSORS = GameSlots.FOIL_CURSOR;
 
     struct Pack {
@@ -437,17 +436,6 @@ contract FoilDrainMiddaySwap is DeployProtocol {
         multBps = uint16(packed >> 24);
     }
 
-    /// foilQueue[day].length — slot 61.
-    function _foilBucketLen(uint24 day) internal view returns (uint256) {
-        return
-            uint256(
-                vm.load(
-                    address(game),
-                    keccak256(abi.encode(uint256(day), SLOT_FOIL_BUYERS))
-                )
-            );
-    }
-
     /// foilCursor | foilGenerationDay | foilFirstDrawDay — slot 62 at byte offsets 0/4/7.
     function _foilGenerationDay() internal view returns (uint24) {
         uint256 s = uint256(
@@ -487,24 +475,21 @@ contract FoilDrainMiddaySwap is DeployProtocol {
         );
         bytes32 elem = bytes32(uint256(levelSlot) + uint256(traitId));
         uint256 header = uint256(vm.load(address(game), elem));
-        uint48 stamps = uint48(uint256(vm.load(address(game), bytes32(uint256(5)))) >> 80);
+        uint48 stamps = uint48(uint256(vm.load(address(game), bytes32(GameSlots.TICKET_BUFFER_LEVELS))) >> (GameSlots.TICKET_BUFFER_LEVELS_OFFSET * 8));
         uint256 bits = uint256(vm.load(address(game), bytes32(GameSlots.TRAIT_BUCKET_LIVE + (lvl & 1))));
         if (uint24(stamps >> ((lvl & 1) * 24)) != lvl || ((bits >> traitId) & 1) == 0) return 0;
         uint256 len = uint32(header);
         if (len == 0) return 0;
         uint256 base = uint256(keccak256(abi.encode(elem)));
         // Lanes are uint32 registry positions, eight per word; resolve through
-        // the permanent address registry (slot 67).
-        uint256 owners = uint256(
-            keccak256(abi.encode(uint256(67)))
-        );
+        // the wallet table (element low 160 bits = owner address).
         for (uint256 i = 0; i < len; i++) {
             uint256 word = (i >> 3) == (len >> 3) ? header >> 32
                 : uint256(vm.load(address(game), bytes32(base + (i >> 3))));
             uint256 lane = (word >> (32 * (i & 7))) & 0xffffffff;
             address a = address(
                 uint160(
-                    uint256(vm.load(address(game), bytes32(owners + lane)))
+                    uint256(vm.load(address(game), GameSlotKeys.walletElement(uint32(lane))))
                 )
             );
             if (a == who) {
@@ -517,7 +502,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
 
     /// dailyIdx — slot 0, byte 3.
     function _dailyIdx() internal view returns (uint24) {
-        uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(0))));
+        uint256 s0 = uint256(vm.load(address(game), bytes32(uint256(GameSlots.DAILY_IDX))));
         return uint24(s0 >> 24);
     }
 

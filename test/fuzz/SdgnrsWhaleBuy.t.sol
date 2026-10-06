@@ -8,7 +8,8 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IDegenerusGameWhaleModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
+import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
 /// @dev Test-only stand-in for the Game facade's code at the pinned GAME address: forwards every
 ///      call by delegatecall into the real whale module, so `purchaseWhalePassForSdgnrs` runs in
@@ -16,6 +17,13 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///      without the STAGE's own gate in front. `vm.etch` keeps the Game's storage, so the module
 ///      sees the live level, claimable, boon lane and RNG state.
 contract WhaleModuleForwarder {
+    /// @dev The Game's raw storage read, which the affiliate calls back into during the purchase.
+    function extsload(bytes32 slot) external view returns (bytes32 value) {
+        assembly ("memory-safe") {
+            value := sload(slot)
+        }
+    }
+
     fallback() external payable {
         (bool ok, bytes memory data) = ContractAddresses.GAME_WHALE_MODULE.delegatecall(msg.data);
         assembly ("memory-safe") {
@@ -41,18 +49,15 @@ contract SdgnrsWhaleBuy is DeployProtocol {
     uint256 private constant GAME_CLAIMABLE_SLOT = GameSlots.BALANCES_PACKED; // balancesPacked root (low-128 = claimable)
     uint256 private constant CLAIMABLE_POOL_SLOT = GameSlots.CLAIMABLE_POOL; // claimablePool uint128 @ slot 1, high-128
     uint256 private constant CURSOR_SLOT = GameSlots.SUB_CURSOR; // cursor slot; _sdgnrsBonusLevel uint24 @ byte 20
-    uint256 private constant SDGNRS_BONUS_OFFBYTES = 20;
+    uint256 private constant SDGNRS_BONUS_OFFBYTES = GameSlots.SDGNRS_BONUS_LEVEL_OFFSET;
     uint256 private constant LEVEL_OFFBYTES = 12; // `level` uint24 @ slot 0, byte 12
     uint256 private constant RNG_LOCKED_OFFBYTES = 19; // `rngLockedFlag` bool @ slot 0, byte 19
     uint256 private constant RNG_WORD_BY_DAY_SLOT = GameSlots.RNG_WORD_BY_DAY; // mapping(uint32 => uint256)
-    uint256 private constant LOOTBOX_ORDER_SLOT = GameSlots.LOOTBOX_ORDER; // mapping(uint48 => mapping(address => uint256))
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED; // low 48 bits = live index
-    uint256 private constant LB_SMALL_SHIFT = 81; // packed order word: small count [81:89]
     uint256 private constant BOON_SLOT = GameSlots.BOON_PACKED; // mapping(address => BoonPacked), slot0 first
     uint256 private constant BP_WHALE_DAY_SHIFT = 200;
     uint256 private constant BP_WHALE_TIER_SHIFT = 248;
     uint256 private constant BP_WHALE_CLEAR = ~(uint256(type(uint56).max) << BP_WHALE_DAY_SHIFT);
-    uint256 private constant SEAT_CLAIMED_SHIFT = 154;
+    uint256 private constant SEAT_CLAIMED_SHIFT = BitPackingLib.SEAT_CLAIMED_SHIFT;
 
     uint256 private constant EARLY = 2.4 ether;
     uint256 private constant STANDARD = 4 ether;
@@ -297,30 +302,6 @@ contract SdgnrsWhaleBuy is DeployProtocol {
         assertEq(afkingSubToken.balanceOf(ContractAddresses.SDGNRS), 1, "still one seat");
     }
 
-    /// @notice A full lootbox entry with no custom box (the one case recordCoverBox refuses a pass)
-    ///         skips the purchase without reverting: no debit, the STAGE and the day complete, and
-    ///         the level's one attempt is spent (the latch stamps on the attempt).
-    function test_FullLootboxEntry_SkipsWithoutStallingAdvance() public {
-        _setLevel(4);
-        _setClaimable(ContractAddresses.SDGNRS, 1_000 ether);
-        uint48 idx = uint48(uint256(vm.load(address(game), bytes32(LOOTBOX_RNG_PACKED_SLOT))) & type(uint48).max);
-        bytes32 slot = keccak256(abi.encode(ContractAddresses.SDGNRS, keccak256(abi.encode(uint256(idx), LOOTBOX_ORDER_SLOT))));
-        vm.store(address(game), slot, bytes32(uint256(100) << LB_SMALL_SHIFT)); // 100 held, 0 custom
-        uint256 before = _claimableOf(ContractAddresses.SDGNRS);
-
-        _nextDay(0x5D70800);
-        (bool bought,,) = _lastWhalePurchase();
-        assertFalse(bought, "full entry: skipped");
-        assertEq(_sdgnrsBonusLevel(), 4, "the attempt latched the level");
-        assertGe(_claimableOf(ContractAddresses.SDGNRS) + 1 ether, before, "no whale debit (daily box only)");
-        assertTrue(game.rngLocked() || !game.advanceDue(), "the day still progressed past the STAGE");
-
-        _setClaimable(ContractAddresses.SDGNRS, 1_000 ether);
-        _nextDay(0x5D70801);
-        (bool bought2,,) = _lastWhalePurchase();
-        assertFalse(bought2, "same level: no second attempt");
-    }
-
     // =====================================================================================
     // RNG timing contract, exercised at the module entry itself
     // =====================================================================================
@@ -481,11 +462,16 @@ contract SdgnrsWhaleBuy is DeployProtocol {
         }
     }
 
+    /// @dev Wallet ID read from storage (the facade may be etched away by the forwarder).
+    function _walletId(address who) internal view returns (uint256) {
+        return uint256(vm.load(address(game), GameSlotKeys.mintPacked(who))) >> 224;
+    }
+
     /// @dev Force `who`'s claimable (slot 7 low-128) to `amount`, preserving the afking half, AND
     ///      move `claimablePool` (slot 1, high-128) in tandem so the solvency invariant holds.
     function _setClaimable(address who, uint256 amount) internal {
         uint256 mask128 = (uint256(1) << 128) - 1;
-        bytes32 cwSlot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(GAME_CLAIMABLE_SLOT)));
+        bytes32 cwSlot = keccak256(abi.encode(_walletId(who), uint256(GAME_CLAIMABLE_SLOT)));
         uint256 packed = uint256(vm.load(address(game), cwSlot));
         uint256 prev = packed & mask128;
         uint256 high = packed & ~mask128;
@@ -525,7 +511,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
     }
 
     function _claimableOf(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(GAME_CLAIMABLE_SLOT))))) & ((uint256(1) << 128) - 1);
+        return uint256(vm.load(address(game), keccak256(abi.encode(_walletId(who), uint256(GAME_CLAIMABLE_SLOT))))) & ((uint256(1) << 128) - 1);
     }
 
     function _sdgnrsBonusLevel() internal view returns (uint24) {

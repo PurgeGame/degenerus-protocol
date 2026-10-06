@@ -13,7 +13,9 @@ import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {Vm} from "forge-std/Vm.sol";
 
 contract HumanOrderGasSeed is DegenerusGame {
-    function seedOrder(address player, uint256 input, uint256 coverWei, bool presale, uint256 entropy) external {
+    /// @dev Seed the sealed read buffer with ONE entry for `player`: the `input` purchase priced at
+    ///      level 100 (none when zero), plus a 50 ETH closing presale leg when `presale`.
+    function seedOrder(address player, uint256 input, bool presale, uint256 entropy) external {
         _registerWallet(player, type(uint256).max);
         level = 99;
         dailyIdx = _simulatedDayIndex();
@@ -32,38 +34,39 @@ contract HumanOrderGasSeed is DegenerusGame {
         _lrWrite(LR_PENDING_FLIP_SHIFT, LR_PENDING_FLIP_MASK, 0);
         _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 0);
         uint48 idx = _rngReadBuffer();
-        uint256 word = uint256(100) | uint256(ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS) << LB_SCORE_SHIFT
-            | (input & 0xff) << LB_SMALL_SHIFT
-            | ((input >> 8) & 0xff) << LB_MED_SHIFT
-            | ((input >> 16) & 0xff) << LB_LARGE_SHIFT
-            | ((input >> 24) & 0xff) << LB_CUSTOM_COUNT_SHIFT
-            | ((input >> 32) & LB_CUSTOM_SIZE_MASK) << LB_CUSTOM_SIZE_SHIFT
-            | (coverWei / LB_CUSTOM_SCALE) << LB_COVER_SHIFT;
+        uint256 word = uint256(100) << LB_LEVEL_SHIFT;
+        if (input != 0) (word,) = _decodeBoxOrder(input, 100);
+        word |= uint256(_walletIdOf(player))
+            | uint256(ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS) << LB_SCORE_SHIFT;
         uint256 nominal = BoxOrderLib.boNominal(word, PriceLookupLib.priceForLevel(100));
         uint256 eligible = nominal < LOOTBOX_EV_BENEFIT_CAP ? nominal : LOOTBOX_EV_BENEFIT_CAP;
-        if (nominal != 0) word |= (eligible * 10_000 / nominal) << LB_ADJ_SHIFT;
-        lootboxOrder[idx][player] = word;
-        delete boxPlayers[idx];
-        boxPlayers[idx].push(player);
+        if (nominal != 0) word |= (eligible * 10_000 / nominal) << LB_EV_SHIFT;
         if (presale) {
-            presaleBoxEth[idx][player] = 50 ether | PRESALE_BOX_CLOSING_FLAG;
+            // One purchase applies the whole 50 ETH from zero sold: tier 0, and it closes the sale.
+            word |= (uint256(50 ether) << LB_PRESALE_SHIFT) | (_presaleTier(0) << LB_TIER_SHIFT) | LB_CLOSING;
             presaleBoxEthSold = 50 ether;
             presaleOver = true;
-            presaleDrained = false;
-            presaleCloser = player;
-            presaleCloseBuffer = idx;
-        } else presaleDrained = true;
+        }
+        uint256[] storage q = boxQueue[idx];
+        assembly ("memory-safe") {
+            mstore(0x00, q.slot)
+            sstore(keccak256(0x00, 0x20), word)
+        }
+        boxReadCount = 1;
+        boxCursor = 0;
         _setCurrentPrizePool(10_000 ether);
         _setPrizePools(10_000 ether, 10_000 ether);
     }
 
-    function rawAtomic(address player) external returns (uint256 boxes) {
+    /// @dev The worker's per-entry step: store the advanced cursor, then settle the entry.
+    function rawAtomic() external returns (uint256 boxes) {
         uint48 idx = _rngReadBuffer();
-        uint256 word = _boxOrder(idx, player);
-        boxes = _boxOrderCount(word);
+        uint256 entry = _boxEntryAt(idx, 0);
+        boxes = _boxEntryCount(entry);
+        boxCursor = 1;
         (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
-            abi.encodeWithSignature("resolveHumanBoxOrder(address,uint48,uint256,uint256,uint256,uint24)",
-                player, idx, word, presaleBoxEth[idx][player], _lootboxWord(idx), level + 1)
+            abi.encodeWithSignature("resolveHumanBoxOrder(uint48,uint256,uint256,uint256,uint24)",
+                idx, uint256(0), entry, _lootboxWord(idx), level + 1)
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
     }
@@ -78,14 +81,19 @@ contract HumanOrderGasSeed is DegenerusGame {
         (, done,) = abi.decode(returned, (bool, bool, uint256));
     }
 
-    function orderLeft(address player) external view returns (uint256) {
-        return _boxOrder(_rngReadBuffer(), player);
+    function entry() external view returns (uint256) {
+        return _boxEntryAt(_rngReadBuffer(), 0);
+    }
+
+    /// @dev Entries of the read buffer the cursor has not yet passed.
+    function entriesLeft() external view returns (uint256) {
+        return boxReadCount - boxCursor;
     }
 
     function outcome(address player) external view returns (bytes32 digest) {
         digest = keccak256(abi.encode(_claimableOf(_walletIdOf(player)), boonPacked[player], mintPacked_[player],
             _getCurrentPrizePool(), _getNextPrizePool(), _getFuturePrizePool(),
-            presaleDrained, humanReadComplete, _boxOrder(_rngReadBuffer(), player)));
+            humanReadComplete, boxCursor, boxReadCount));
         for (uint24 lvl = 100; lvl <= 150; ++lvl) {
             digest = keccak256(abi.encode(digest, _entriesOwedTotal(lvl, _walletIdOf(player))));
         }
@@ -116,22 +124,22 @@ contract HumanOrderNativeGasTest is DeployProtocol {
         vm.cool(ContractAddresses.GAME_FOILPACK_MODULE);
     }
 
-    function _probe(uint256 input, uint256 cover, bool presale, uint256 word) private {
+    function _probe(uint256 input, bool presale, uint256 word) private {
         HumanOrderGasSeed host = HumanOrderGasSeed(payable(address(game)));
-        host.seedOrder(PLAYER, input, cover, presale, word);
+        host.seedOrder(PLAYER, input, presale, word);
         uint256 snapshot = vm.snapshotState();
-        uint256 count = BoxOrderLib.boCount(host.orderLeft(PLAYER));
+        uint256 count = BoxOrderLib.boCount(host.entry());
         uint256 bound = GasBounds.HUMAN_ENTRY_GAS + count * GasBounds.HUMAN_BOX_GAS
             + (presale ? GasBounds.HUMAN_PRESALE_GAS : 0);
         _cool();
         uint256 beforeGas = gasleft();
-        uint256 resolved = host.rawAtomic{gas: 25_000_000}(PLAYER);
+        uint256 resolved = host.rawAtomic{gas: 25_000_000}();
         uint256 atomicGas = beforeGas - gasleft();
         emit log_named_uint("human boxes", resolved);
         emit log_named_uint("cold full atomic human order gas", atomicGas);
         emit log_named_uint("configured atomic human allowance", bound);
         assertEq(resolved, count);
-        assertEq(host.orderLeft(PLAYER), 0);
+        assertEq(host.entriesLeft(), 0);
         assertLe(atomicGas, bound, "cold entry exceeds its declared atomic bound");
         assertLe(bound + GasBounds.HUMAN_TAIL_GAS + MineFlipGas.CHECK_RESERVE, 10_000_000,
             "declared entry plus tail exceeds the 10M chunk limit");
@@ -148,7 +156,7 @@ contract HumanOrderNativeGasTest is DeployProtocol {
         vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
         game.mineFlip{gas: 2_000_000}();
         vm.etch(address(game), type(HumanOrderGasSeed).runtimeCode);
-        assertGt(host.orderLeft(PLAYER), 0, "gas shortage must preserve the unfinished atomic order");
+        assertGt(host.entriesLeft(), 0, "gas shortage must preserve the unfinished atomic order");
         vm.etch(address(game), gameCode);
         assertEq(_mineAndReadOutcome(), full, "low-gas checkpoint changed player awards or their order");
     }
@@ -171,7 +179,7 @@ contract HumanOrderNativeGasTest is DeployProtocol {
             wwxrp.balanceOf(PLAYER), normal, high));
         vm.etch(address(game), type(HumanOrderGasSeed).runtimeCode);
         HumanOrderGasSeed host = HumanOrderGasSeed(payable(address(game)));
-        assertEq(host.orderLeft(PLAYER), 0, "engine admitted and completed the order");
+        assertEq(host.entriesLeft(), 0, "engine admitted and completed the order");
         digest = keccak256(abi.encode(digest, host.outcome(PLAYER)));
     }
 
@@ -181,15 +189,15 @@ contract HumanOrderNativeGasTest is DeployProtocol {
     }
 
     /// @dev Cold atomic gas of one seeded entry, plus the number of winning ETH spins it ran.
-    function _coldAtomic(uint256 input, uint256 cover, bool presale, uint256 word)
+    function _coldAtomic(uint256 input, bool presale, uint256 word)
         private returns (uint256 used, uint256 ethWins)
     {
         HumanOrderGasSeed host = HumanOrderGasSeed(payable(address(game)));
-        host.seedOrder(PLAYER, input, cover, presale, word);
+        host.seedOrder(PLAYER, input, presale, word);
         _cool();
         vm.recordLogs();
         uint256 beforeGas = gasleft();
-        host.rawAtomic{gas: 25_000_000}(PLAYER);
+        host.rawAtomic{gas: 25_000_000}();
         used = beforeGas - gasleft();
         Vm.Log[] memory entries = vm.getRecordedLogs();
         for (uint256 i; i < entries.length; ++i) {
@@ -201,7 +209,7 @@ contract HumanOrderNativeGasTest is DeployProtocol {
 
     /// @dev Cold atomic gas of the same entry over `runs` independent committed words. Every
     ///      run starts from the same committed fixture, so each measurement is a cold first touch.
-    function _sweep(string memory label, uint256 input, uint256 cover, bool presale, uint256 runs)
+    function _sweep(string memory label, uint256 input, bool presale, uint256 runs)
         private returns (uint256 peak)
     {
         uint256 base = vm.snapshotState();
@@ -209,13 +217,13 @@ contract HumanOrderNativeGasTest is DeployProtocol {
         uint256 peakWins;
         uint256 mostWins;
         for (uint256 i; i < runs; ++i) {
-            (uint256 used, uint256 wins) = _coldAtomic(input, cover, presale, uint256(keccak256(abi.encode(label, i))));
+            (uint256 used, uint256 wins) = _coldAtomic(input, presale, uint256(keccak256(abi.encode(label, i))));
             total += used;
             if (used > peak) (peak, peakWins) = (used, wins);
             if (wins > mostWins) mostWins = wins;
             assertTrue(vm.revertToState(base));
         }
-        uint256 count = BoxOrderLib.boCount(_seededWord(input, cover, presale));
+        uint256 count = BoxOrderLib.boCount(_seededWord(input, presale));
         emit log_named_uint(string.concat(label, ": boxes"), count);
         emit log_named_uint(string.concat(label, ": cold atomic mean"), total / runs);
         emit log_named_uint(string.concat(label, ": cold atomic peak"), peak);
@@ -227,22 +235,22 @@ contract HumanOrderNativeGasTest is DeployProtocol {
             "declared entry plus tail exceeds the 10M chunk limit");
     }
 
-    function _seededWord(uint256 input, uint256 cover, bool presale) private returns (uint256 word) {
+    function _seededWord(uint256 input, bool presale) private returns (uint256 word) {
         uint256 snapshot = vm.snapshotState();
         HumanOrderGasSeed host = HumanOrderGasSeed(payable(address(game)));
-        host.seedOrder(PLAYER, input, cover, presale, 1);
-        word = host.orderLeft(PLAYER);
+        host.seedOrder(PLAYER, input, presale, 1);
+        word = host.entry();
         assertTrue(vm.revertToState(snapshot));
     }
 
     /// @dev One 10 ETH box over many words: the per-entry peak includes the heaviest single box
     ///      (a winning ETH spin whose lootbox share recirculates into a nested box).
     function test_ColdSingleBoxSweep() public {
-        _sweep("single 10 ETH box", BoxOrderLib.boCustoms(1, 10 ether), 0, false, 256);
+        _sweep("single 10 ETH box", BoxOrderLib.boCustoms(1, 10 ether), false, 256);
     }
 
     function test_ColdTenBoxSweep() public {
-        _sweep("10 x 10 ETH boxes", BoxOrderLib.boCustoms(10, 10 ether), 0, false, 96);
+        _sweep("10 x 10 ETH boxes", BoxOrderLib.boCustoms(10, 10 ether), false, 96);
     }
 
     /// @dev Entry cost is concave in its box count (first-touch and per-level writes saturate),
@@ -251,54 +259,55 @@ contract HumanOrderNativeGasTest is DeployProtocol {
         uint8[7] memory counts = [2, 3, 5, 20, 35, 50, 70];
         for (uint256 i; i < counts.length; ++i) {
             _sweep(string.concat(vm.toString(uint256(counts[i])), " x 10 ETH boxes"),
-                BoxOrderLib.boCustoms(counts[i], 10 ether), 0, false, 48);
+                BoxOrderLib.boCustoms(counts[i], 10 ether), false, 48);
         }
     }
 
-    /// @dev A presale box alone: the entry's fixed cost plus the presale resolution.
+    /// @dev A presale box alone: the entry's fixed cost plus the presale resolution, including the
+    ///      closing entry's remainder transfer.
     function test_ColdPresaleOnlySweep() public {
-        _sweep("presale box only", 0, 0, true, 128);
+        _sweep("presale box only", 0, true, 128);
     }
 
     /// @dev The maximum entry: 100 saturated boxes over many words, every run cold.
     function test_ColdHundredBoxSweep() public {
-        _sweep("100 x 10 ETH boxes", BoxOrderLib.boCustoms(100, 10 ether), 0, false, 64);
+        _sweep("100 x 10 ETH boxes", BoxOrderLib.boCustoms(100, 10 ether), false, 64);
     }
 
+    /// @dev The largest mixed entry: 100 bought boxes across all four tiers plus a closing presale
+    ///      leg (a cover is always its own one-box entry).
     function test_ColdMixedTierCoverPresaleSweep() public {
-        _sweep("mixed 100 boxes + cover + presale", BoxOrderLib.boOrder(24, 25, 25, 25, 10 ether), 10 ether, true, 48);
+        _sweep("mixed 100 boxes + presale", BoxOrderLib.boOrder(24, 25, 25, 26, 10 ether), true, 48);
     }
 
-    /// @dev The whole production worker over one maximum entry, presale close included, fits the
-    ///      entry's declared bound plus HUMAN_TAIL_GAS.
+    /// @dev The whole production worker over one maximum entry, its closing presale leg included,
+    ///      fits the entry's declared bound plus HUMAN_TAIL_GAS.
     function test_ColdWorkerEntryAndTailFitDeclaredEnvelope() public {
         HumanOrderGasSeed host = HumanOrderGasSeed(payable(address(game)));
         uint256 base = vm.snapshotState();
         uint256 peakTail;
         for (uint256 i; i < 16; ++i) {
             uint256 word = uint256(keccak256(abi.encode("worker envelope", i)));
-            (uint256 atomic,) = _coldAtomic(BoxOrderLib.boOrder(24, 25, 25, 25, 10 ether), 10 ether, true, word);
+            (uint256 atomic,) = _coldAtomic(BoxOrderLib.boOrder(24, 25, 25, 26, 10 ether), true, word);
             assertTrue(vm.revertToState(base));
-            host.seedOrder(PLAYER, BoxOrderLib.boOrder(24, 25, 25, 25, 10 ether), 10 ether, true, word);
+            host.seedOrder(PLAYER, BoxOrderLib.boOrder(24, 25, 25, 26, 10 ether), true, word);
             _cool();
             (bool done, uint256 worker) = host.measuredWork{gas: 25_000_000}(20_000_000);
-            assertTrue(done, "single-entry queue completes with its presale close");
-            assertLe(worker, _entryBound(101, true) + GasBounds.HUMAN_TAIL_GAS, "worker exceeds entry plus tail");
+            assertTrue(done, "single-entry queue completes after its closing presale leg");
+            assertLe(worker, _entryBound(100, true) + GasBounds.HUMAN_TAIL_GAS, "worker exceeds entry plus tail");
             if (worker - atomic > peakTail) peakTail = worker - atomic;
             assertTrue(vm.revertToState(base));
         }
-        emit log_named_uint("worker gas outside the atomic entry (loop, presale close, completion) peak", peakTail);
+        emit log_named_uint("worker gas outside the atomic entry (loop, completion) peak", peakTail);
         emit log_named_uint("declared HUMAN_TAIL_GAS", GasBounds.HUMAN_TAIL_GAS);
         assertLe(peakTail, GasBounds.HUMAN_TAIL_GAS, "worker tail exceeds its declared reserve");
     }
 
     function test_Cold100SaturatedCustomBoxes() public {
-        _probe(BoxOrderLib.boCustoms(100, 10 ether), 0, false, 0xBEEF1234);
+        _probe(BoxOrderLib.boCustoms(100, 10 ether), false, 0xBEEF1234);
     }
+    /// @dev The largest mixed entry with a closing presale leg (a cover is always its own entry).
     function test_Cold100MixedTierCoverAndPresale() public {
-        _probe(BoxOrderLib.boOrder(24, 25, 25, 25, 10 ether), 10 ether, true, 0xBEEF1234);
-    }
-    function test_Cold101PresetBoxesIncludingCoverAndPresale() public {
-        _probe(BoxOrderLib.boOrder(1, 1, 98, 0, 0), 10 ether, true, 0xBEEF1234);
+        _probe(BoxOrderLib.boOrder(24, 25, 25, 26, 10 ether), true, 0xBEEF1234);
     }
 }

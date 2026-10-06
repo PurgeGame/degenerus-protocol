@@ -75,7 +75,7 @@ interface ICrapsPassDelivery {
  * - Deity-boon event declarations shared with DegenerusGameBoonModule (issueDeityBoon lives there)
  */
 contract DegenerusGameLootboxModule is DegenerusGameStorage {
-    // One owner's full order and presale leg are indivisible; accumulation order is retained.
+    // One entry's ordinary and presale legs are indivisible; accumulation order is retained.
 
     // =========================================================================
     // Errors
@@ -94,7 +94,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     /// @notice Emitted when an ETH lootbox is successfully opened
     /// @param player The player who opened the lootbox
-    /// @param lootboxIndex The shared (system-wide) RNG index of the opened lootbox
+    /// @param lootboxIndex Entry tag: QUEUED_ENTRY_TAG | position << 1 | buffer for a queued
+    ///        entry; REDEMPTION_INDEX_TAG | batchId for an sDGNRS redemption order; 0 for the
+    ///        single-box resolvers. With the sealed session it identifies the entry permanently.
     /// @param amount The ETH amount of the lootbox (in wei)
     /// @param futureLevel The target level for future tickets
     /// @param futureTickets The pre-Bernoulli scaled (× QTY_SCALE) future ticket count
@@ -146,7 +148,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     /// @notice Emitted when a coin-presale box is resolved.
     /// @param player The box owner.
-    /// @param index The box's RNG index.
+    /// @param index Entry tag (see `LootBoxOpened.lootboxIndex`).
     /// @param amount The box ETH resolved.
     /// @param flip FLIP credited: the whole collapsed roll when the 50% FLIP-valued branch
     ///        keeps coin, or only the overflow above the 12-high-pass cap when it denominated
@@ -169,8 +171,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint32 highPasses
     );
 
-    /// @notice The Pool.PresaleBox remainder paid to the closing box's buyer once every presale
-    ///         box has been opened (the sweep advanced past the close index).
+    /// @notice The Pool.PresaleBox remainder, paid inside the closing purchase's own presale
+    ///         resolution: every earlier presale box has settled by then.
     /// @param player The closing box's buyer.
     /// @param dgnrs DGNRS swept (the pool's whole remaining balance).
     event PresaleBoxRemainderSwept(address indexed player, uint256 dgnrs);
@@ -328,16 +330,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // Relative DGNRS-per-ETH rates [3.0, 2.5, 2.0, 1.5, 1.0] x base, base = poolStart/40.
     // Over 50 ETH the idealized draw sums to 100*base = 2.5*poolStart (each box is priced
     // whole at the tier of its buy-time cumulative, so a boundary-straddling box pays its
-    // starting tier for its whole size); with the
-    // ~40% DGNRS branch rate the pool drains through the boxes (the drain sweep clamps to dust).
-    /// @dev DGNRS tier multipliers in tenths (3.0x .. 1.0x), by cumulative box volume.
-    uint16 private constant PRESALE_BOX_DGNRS_TIER1_TENTHS = 30;
-    uint16 private constant PRESALE_BOX_DGNRS_TIER2_TENTHS = 25;
-    uint16 private constant PRESALE_BOX_DGNRS_TIER3_TENTHS = 20;
-    uint16 private constant PRESALE_BOX_DGNRS_TIER4_TENTHS = 15;
-    uint16 private constant PRESALE_BOX_DGNRS_TIER5_TENTHS = 10;
-    /// @dev Cumulative box-ETH width of each DGNRS tier (10 ETH).
-    uint256 private constant PRESALE_BOX_DGNRS_TIER_WIDTH = 10 ether;
+    // starting tier for its whole size); with the ~40% DGNRS branch rate the pool drains
+    // through the boxes, and the closing box takes the dust.
+    /// @dev DGNRS tier multiplier in tenths: 3.0x at tier 0, 0.5x lower per tier, 1.0x at tier 4.
+    uint256 private constant PRESALE_BOX_DGNRS_TIER1_TENTHS = 30;
+    uint256 private constant PRESALE_BOX_DGNRS_TIER_STEP_TENTHS = 5;
 
     /// @dev Distress-mode ticket bonus in basis points (25%).
     uint16 private constant DISTRESS_TICKET_BONUS_BPS = 2500;
@@ -410,13 +407,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     // =========================================================================
-    // Box-order buy leg (delegatecalled from the Mint module)
+    // Box purchase entries (delegatecalled from the Mint, Whale and Afking modules)
     // =========================================================================
     //
-    // The buy path's box work lives here rather than in the Mint module for two reasons: it
-    // belongs with the rest of the box logic, and the Mint module sits ~250 bytes under the
-    // EIP-170 ceiling while this one has room. The Mint module keeps only what is genuinely
-    // mint-side — the minted-units tally, the payment split, the combined pool write.
+    // Every purchase builds one complete entry word and appends it once to the write buffer.
+    // No purchase reads, merges into or moves an earlier entry.
 
     /// @dev Portion of a box's EV reserved for the boon/pass draw (10%), capped. The haircut
     ///      is taken here because it comes off each box's reward amount; the DRAW itself lives
@@ -424,18 +419,17 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint16 private constant LOOTBOX_BOON_BUDGET_BPS = 1000;
     uint256 private constant LOOTBOX_BOON_MAX_BUDGET = 1 ether;
 
-    /// @notice Emitted when boxes are bought and queued for resolution. Same topic as the
-    ///         Mint / Whale / Afking declarations — one box-buy event across every path.
-    event LootBoxBuy(address indexed buyer, uint48 indexed index, uint256 amount);
+    /// @notice Emitted when a box entry is appended. Same topic as the Mint / Whale / Afking
+    ///         declarations — one box-buy event across every path.
+    /// @param index Physical write buffer (0/1) the entry joined.
+    /// @param position The entry's zero-based position in that buffer.
+    event LootBoxBuy(address indexed buyer, uint48 indexed index, uint32 position, uint256 amount);
 
     /// @notice Emitted when a lootbox-boost boon is consumed by a buy.
     event BoostUsed(
         address indexed player, uint24 indexed day, uint256 originalAmount, uint256 boostedAmount, uint16 boostBps
     );
 
-    /// @dev Minimum wei for a custom box. Presets clear it structurally: the cheapest ticket
-    ///      price is 0.01 ETH and a small is one of those.
-    uint256 private constant BOX_CUSTOM_MIN = 0.01 ether;
     /// @dev Floor for the biggest-box bounty.
     uint256 private constant BIGGEST_BOX_MIN_ETH = 5 ether;
     /// @dev Rake-free: all box ETH routes to the prize pools. Distress sends 100% next;
@@ -445,117 +439,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Boon boost: capped uplift, expiring, consumed on use.
     uint256 private constant BOX_BOOST_MAX_VALUE = 10 ether;
     uint32 private constant BOX_BOOST_EXPIRY_DAYS = 2;
-
-    // Packed order calldata: [small:8][med:8][large:8][customCount:8][customSize:48], 80 bits
-    // of 256. `customSize` carries the SAME 1e12-granularity units the slot stores, so the size
-    // charged and the size stored are the same number by construction rather than by a flooring
-    // step that could drift. Callers scale wei down by LB_CUSTOM_SCALE; the UI owns that.
-    uint256 private constant BO_MED_SHIFT = 8;
-    uint256 private constant BO_LARGE_SHIFT = 16;
-    uint256 private constant BO_CUSTOM_COUNT_SHIFT = 24;
-    uint256 private constant BO_CUSTOM_SIZE_SHIFT = 32;
-    uint256 private constant BO_COUNT_MASK = 0xFF;
-    uint256 private constant BO_CUSTOM_SIZE_MASK = 0xFFFFFFFFFFFF; // 48 bits
-
-    /// @dev Merge a purchase's order into the player's existing order for this index and price
-    ///      it. Works on the packed word in place — the order is one uint256, and a memory
-    ///      struct would cost a full word per field to materialise something already packed.
-    ///
-    ///      `level` freezes on the period's first box, so a small costs what a small cost when
-    ///      the player started — a period can straddle a level change, and pricing tiers off a
-    ///      moving level would let the charge and the rolled size disagree. `customSize` freezes
-    ///      the same way: a second custom at a different size REVERTS rather than repricing
-    ///      boxes already held. The UI reads the frozen size and locks the input. Only the
-    ///      player or their APPROVED operators can reach this at all (_resolvePlayer), and
-    ///      operators are trusted by design — the size freeze is not defended against them.
-    /// @return word Merged order, counts applied, bps lanes still to be folded.
-    /// @return costWei Total wei this order costs.
-    /// @return priorNominal Nominal wei already held here — the denominator the bps lanes
-    ///         re-weight against.
-    /// @custom:reverts E On an empty order, a sub-minimum custom, a custom-size change, or a
-    ///         count over MAX_BOXES_PER_ORDER.
-    function _mergeBoxOrder(uint256 existing, uint256 boxOrder, uint24 activeLevel)
-        private
-        pure
-        returns (uint256 word, uint256 costWei, uint256 priorNominal)
-    {
-        uint256 small = boxOrder & BO_COUNT_MASK;
-        uint256 med = (boxOrder >> BO_MED_SHIFT) & BO_COUNT_MASK;
-        uint256 large = (boxOrder >> BO_LARGE_SHIFT) & BO_COUNT_MASK;
-        uint256 customCount = (boxOrder >> BO_CUSTOM_COUNT_SHIFT) & BO_COUNT_MASK;
-        // Same 1e12 units the slot stores, so charge and storage agree by construction.
-        uint256 customScaled = (boxOrder >> BO_CUSTOM_SIZE_SHIFT) & BO_CUSTOM_SIZE_MASK;
-
-        uint256 added = small + med + large + customCount;
-        if (added == 0) revert E();
-        if (customCount != 0 && customScaled * LB_CUSTOM_SCALE < BOX_CUSTOM_MIN) revert E();
-
-        word = existing;
-        if (word == 0) {
-            word = _lbSet(0, LB_LEVEL_SHIFT, LB_LEVEL_MASK, activeLevel) | (customScaled << LB_CUSTOM_SIZE_SHIFT);
-        } else if (customCount != 0) {
-            uint256 held = _lbGet(word, LB_CUSTOM_SIZE_SHIFT, LB_CUSTOM_SIZE_MASK);
-            if (_lbGet(word, LB_CUSTOM_COUNT_SHIFT, LB_COUNT_MASK) == 0) {
-                word = _lbSet(word, LB_CUSTOM_SIZE_SHIFT, LB_CUSTOM_SIZE_MASK, customScaled);
-            } else if (held != customScaled) {
-                revert E();
-            }
-        }
-
-        uint256 sHeld = _lbGet(word, LB_SMALL_SHIFT, LB_COUNT_MASK);
-        uint256 mHeld = _lbGet(word, LB_MED_SHIFT, LB_COUNT_MASK);
-        uint256 lHeld = _lbGet(word, LB_LARGE_SHIFT, LB_COUNT_MASK);
-        uint256 cHeld = _lbGet(word, LB_CUSTOM_COUNT_SHIFT, LB_COUNT_MASK);
-
-        // Summed as uint256 before the cap check: 8-bit lanes would wrap a large request back
-        // under the ceiling and let it through. A held cover box counts, so a purchase can
-        // never push an entry past MAX_BOXES_PER_ORDER (only an afking cover landing on an
-        // already-full entry can, see recordCoverBox).
-        if (
-            sHeld + mHeld + lHeld + cHeld + (_lbGet(word, LB_COVER_SHIFT, LB_COVER_MASK) == 0 ? 0 : 1) + added
-                > MAX_BOXES_PER_ORDER
-        ) revert E();
-
-        uint256 price = PriceLookupLib.priceForLevel(uint24(_lbGet(word, LB_LEVEL_SHIFT, LB_LEVEL_MASK)));
-        uint256 customWei = _lbGet(word, LB_CUSTOM_SIZE_SHIFT, LB_CUSTOM_SIZE_MASK) * LB_CUSTOM_SCALE;
-
-        unchecked {
-            // Nominal already held, while the counts still describe only that. The cover lane
-            // is part of it: the bps lanes blend against the WHOLE order, and
-            // `applyBoxOrderScore` keys its score freeze off this being zero — omitting the
-            // cover would erase a cover-first period's blended fractions and re-freeze its
-            // score on the next manual buy.
-            priorNominal = (sHeld + LB_MED_MULTIPLE * mHeld + LB_LARGE_MULTIPLE * lHeld) * price + cHeld * customWei
-                + _lbGet(word, LB_COVER_SHIFT, LB_COVER_MASK) * LB_CUSTOM_SCALE;
-
-            costWei = (small + LB_MED_MULTIPLE * med + LB_LARGE_MULTIPLE * large) * price + customCount * customWei;
-
-            word = _lbSet(word, LB_SMALL_SHIFT, LB_COUNT_MASK, sHeld + small);
-            word = _lbSet(word, LB_MED_SHIFT, LB_COUNT_MASK, mHeld + med);
-            word = _lbSet(word, LB_LARGE_SHIFT, LB_COUNT_MASK, lHeld + large);
-            word = _lbSet(word, LB_CUSTOM_COUNT_SHIFT, LB_COUNT_MASK, cHeld + customCount);
-        }
-    }
-
-    /// @dev Fold one purchase's extra into a running fraction of the order's nominal value.
-    ///      All three lanes have this shape: each purchase contributes its own uplift over its
-    ///      own slice, and the stored fraction must stay correct for the order as a whole.
-    ///      Saturates at 100%; a zero-value order reads zero.
-    ///
-    ///      One ACCEPTED approximation: re-blending from an already-floored fraction makes
-    ///      the stored bps depend on purchase batching by up to ~1 bps per purchase. (The
-    ///      boost/distress correlation is NOT approximated — the distress lane blends over
-    ///      boosted value precisely so the resolver's product is exact.)
-    function _blendBps(uint16 oldBps, uint256 priorNominal, uint256 extra, uint256 addedNominal)
-        private
-        pure
-        returns (uint16)
-    {
-        uint256 t = priorNominal + addedNominal;
-        if (t == 0) return 0;
-        uint256 bps = (uint256(oldBps) * priorNominal + extra * 10_000) / t;
-        return uint16(bps > 10_000 ? 10_000 : bps);
-    }
 
     /// @dev Capped boon uplift on one purchase's spend.
     function _boostAmount(uint256 amount, uint16 bonusBps) private pure returns (uint256) {
@@ -592,140 +475,86 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         emit BoostUsed(player, day, amount, amount + extra, boostBps);
     }
 
-    /// @notice Price a box order without touching state — the buy path's overpay cap needs the
-    ///         cost before it splits payment, and the cost depends on stored state because the
-    ///         tier sizes come off the order's FROZEN level.
+    /// @notice Build a purchase's ordinary entry: validate and price the order at the active
+    ///         level, consume a live boost, snapshot distress, and arm the biggest-box bounty.
+    ///         Nothing is queued here — `applyBoxOrderScore` finalizes the word and the caller
+    ///         appends it once every leg of the purchase is complete.
     /// @dev Delegatecall entrypoint from the Mint module; runs in the Game's storage context.
-    /// @param buyer Player the order is for.
-    /// @param boxOrder Packed order.
-    /// @return costWei Total wei the order costs.
-    function quoteBoxOrder(address buyer, uint256 boxOrder) external payable returns (uint256 costWei) {
-        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        if (boxOrder == 0) return 0;
-        uint48 idx = _rngWriteBuffer();
-        (, costWei,) = _mergeBoxOrder(_boxOrder(idx, buyer), boxOrder, _activeTicketLevel());
-    }
-
-    /// @notice Record a purchase's box order: merge the counts, freeze level and custom size,
-    ///         fold the boost and distress lanes, enqueue the player once per index, bump the
-    ///         RNG pending-eth, and arm the biggest-box bounty.
-    /// @dev Delegatecall entrypoint from the Mint module; runs in the Game's storage context.
-    ///      The EV lane is left zero here and folded by `applyBoxOrderScore` once the caller
-    ///      has its post-action score — two warm writes to one slot rather than deferring the
-    ///      pool split past the point the buy path can publish it.
-    /// @param buyer Player the order is for.
-    /// @param boxOrder Packed order.
+    /// @param buyer Player the entry is for (already registered).
+    /// @param buyerId The buyer's wallet ID.
+    /// @param boxOrder Packed purchase input: [small:8][med:8][large:8][customCount:8][customSize:56 gwei].
     /// @return costWei Total wei the order costs.
     /// @return shares Prize-pool shares packed as (future << 128) | next. One return value
     ///         rather than two: the caller holds them across a long stretch of its body, and
     ///         two live locals there is exactly what tips it into a Yul stack-too-deep.
     /// @return flipCredit Any biggest-box bounty claim, to join the buyer's flip credit.
-    /// @return priorNominal Nominal wei held here before this purchase — the caller threads it
-    ///         back into `applyBoxOrderScore` so the EV lane weights the same way.
-    function beginBoxOrder(address buyer, uint256 boxOrder)
+    /// @return word The in-flight entry word, still missing its score and EV fraction.
+    function beginBoxOrder(address buyer, uint32 buyerId, uint256 boxOrder)
         external
         payable
-        returns (uint256 costWei, uint256 shares, uint256 flipCredit, uint256 priorNominal)
+        returns (uint256 costWei, uint256 shares, uint256 flipCredit, uint256 word)
     {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        if (boxOrder == 0) return (0, 0, 0, 0);
-
-        uint256 lrWord = lootboxRngPacked;
-        uint48 idx = _rngWriteBuffer();
-        uint256 existing = _boxOrder(idx, buyer);
-
-        uint256 word;
-        (word, costWei, priorNominal) = _mergeBoxOrder(existing, boxOrder, _activeTicketLevel());
-
-        if (existing == 0) {
-            // First box for this (index, buyer): enqueue for the permissionless open cursor.
-            // The consumer walk gates each index on the live cohort's delivered word (VRF
-            // orphan-index protection), so enqueue is producer-only here — and it happens ONCE
-            // per player per index however many boxes they buy, which is what keeps the sweep
-            // queue bounded by buyers rather than by boxes.
-            boxPlayers[idx & 1].push(buyer);
-        }
-
-        // The boon uplift is capped per purchase and applies only to the purchases that consume a
-        // held boon (the lane clears on use and can be refilled mid-period by a deity gift or an
-        // opened box), so it cannot be a frozen multiplier on the whole order. It rides as a
-        // running fraction of RAW nominal; the resolver scales each box's derived size by it.
-        uint16 oldBoost = uint16(_lbGet(word, LB_BOOST_SHIFT, LB_BPS_MASK));
-        uint256 boostExtra = _consumeBoxBoost(buyer, costWei);
-        word = _lbSet(word, LB_BOOST_SHIFT, LB_BPS_MASK, _blendBps(oldBoost, priorNominal, boostExtra, costWei));
-
-        // Distress can toggle between two purchases in one period, so it is a fraction too.
-        // It blends over BOOSTED value — the denominator grossed by the PRIOR boost fraction,
-        // this purchase's weight including its own uplift only when the purchase itself lands
-        // in distress — because the resolver takes distressEth = boostedSize * distressBps:
-        // a raw-basis fraction would let a boosted non-distress buy inflate (or deflate) the
-        // distress ticket-bonus basis of the boxes around it.
+        (word, costWei) = _decodeBoxOrder(boxOrder, _activeTicketLevel());
+        // The boost is capped at a quarter of the spend, so the fraction fits its lane.
+        word |= uint256(buyerId) | ((_consumeBoxBoost(buyer, costWei) * 10_000 / costWei) << LB_BOOST_SHIFT);
         bool distress = _isDistressMode();
-        {
-            uint256 boostedPrior = priorNominal + (priorNominal * oldBoost) / 10_000;
-            uint256 boostedAdded = costWei + boostExtra;
-            word = _lbSet(
-                word,
-                LB_DISTRESS_SHIFT,
-                LB_BPS_MASK,
-                _blendBps(
-                    uint16(_lbGet(word, LB_DISTRESS_SHIFT, LB_BPS_MASK)),
-                    boostedPrior,
-                    distress ? boostedAdded : 0,
-                    boostedAdded
-                )
-            );
-        }
-
-        lootboxOrder[idx & 1][buyer] = word;
+        if (distress) word |= LB_DISTRESS;
 
         // Biggest-box bounty: a CUSTOM only, and its per-box size, never the order's total.
         // Presets are excluded outright — the bounty marks deliberately going big, and a large
         // at a milestone price would clear the floor on its own. With presets out and the
         // candidate a single box, no quantity of small buys can reach it.
         if (((boxOrder >> BO_CUSTOM_COUNT_SHIFT) & BO_COUNT_MASK) != 0) {
-            uint256 candidate = ((boxOrder >> BO_CUSTOM_SIZE_SHIFT) & BO_CUSTOM_SIZE_MASK) * LB_CUSTOM_SCALE;
+            uint256 candidate = (boxOrder >> BO_SIZE_SHIFT) * LB_SIZE_UNIT;
             if (candidate >= BIGGEST_BOX_MIN_ETH) {
                 flipCredit = coinflip.armRecord(RECORD_KIND_LUCKBOX, buyer, candidate);
             }
         }
 
-        uint256 newPendingEth = ((lrWord >> LR_PENDING_ETH_SHIFT) & LR_PENDING_ETH_MASK) + _packEthToMilliEth(costWei);
-        lootboxRngPacked = (lrWord & ~(LR_PENDING_ETH_MASK << LR_PENDING_ETH_SHIFT))
-            | ((newPendingEth & LR_PENDING_ETH_MASK) << LR_PENDING_ETH_SHIFT);
-
         unchecked {
             shares = (((costWei * (distress ? 0 : BOX_SPLIT_FUTURE_BPS)) / 10_000) << 128)
                 | ((costWei * (distress ? 10_000 : BOX_SPLIT_NEXT_BPS)) / 10_000);
         }
-
-        emit LootBoxBuy(buyer, idx, costWei);
     }
 
-    /// @notice Record a system-granted box spend — the pass purchases and the afking auto-buy.
-    ///         A pass purchase lands as up to `count` ordinary custom boxes (fewer, larger ones
-    ///         as the entry's cap closes), folding any held customs in at the value-weighted
-    ///         average size; at a full entry the value folds into the held customs with no new
-    ///         box. The afking cover (count 0) accumulates into the order's cover lane and
-    ///         resolves as ONE box, folding into held customs instead when the entry is full.
+    /// @notice Finalize a purchase's ordinary entry: its post-action score and its EV-cap draw.
+    /// @dev Delegatecall entrypoint from the Mint module, called once the post-action score is
+    ///      known. The score is the resolver's frozen EV knob — the anti-gaming property, since
+    ///      the open level is not player-timable but the buy is. Clamped to the curve's effective
+    ///      cap so it fits the 15-bit lane; the multiplier is flat above that point.
+    /// @param word The in-flight entry from `beginBoxOrder`.
+    /// @param cachedScore Caller's post-action activity score in whole points.
+    /// @param capLevel Level key for the shared per-(wallet, level) EV-cap accumulator.
+    /// @param costWei This purchase's box spend, the basis of the EV fraction.
+    /// @return The completed ordinary fields.
+    function applyBoxOrderScore(uint256 word, uint256 cachedScore, uint24 capLevel, uint256 costWei)
+        external
+        payable
+        returns (uint256)
+    {
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        uint256 score = cachedScore > ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS
+            ? ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS
+            : cachedScore;
+        uint256 evExtra = _drawEvBenefit(uint32(word), capLevel, costWei, score);
+        return word | (score << LB_SCORE_SHIFT) | ((evExtra * 10_000 / costWei) << LB_EV_SHIFT);
+    }
+
+    /// @notice Append a system-granted box entry — the pass purchases and the afking cover.
+    ///         A pass purchase is `count` custom boxes of equal size; the afking cover
+    ///         (`count == 0`) is one cover box. Each grant is its own entry.
     /// @dev Delegatecall entrypoint shared by the Whale and Afking modules; runs in the Game's
-    ///      storage context. Purchases are capped at `MAX_BOXES_PER_ORDER` boxes per entry (the
-    ///      buy side counts a held cover box too); the one exception is an afking cover that
-    ///      finds a full entry with no custom to fold into — it takes the cover lane as the
-    ///      101st box, since a delivery the player did not choose must never fail. Pass
-    ///      deposits merge held and new customs at the count-weighted average size (total value
-    ///      over total box count), which can
-    ///      move either way. The player's own EV score/level freeze on the first box either
-    ///      way, so a cover arriving first is what seeds them.
-    /// @custom:reverts E When a pass purchase (`count != 0`) finds the entry full with no custom
-    ///         box to fold the value into.
-    /// @param player Player receiving the boxes.
+    ///      storage context. The size is whole gwei per box; the remainder is reward-side only,
+    ///      since the paid and credited ETH stays in the callers' accounting. A grant below one
+    ///      gwei per box appends nothing and never blocks the caller.
+    /// @param player Player receiving the boxes (registered; its mint word is already loaded).
     /// @param amountWei Box spend in wei.
-    /// @param score Caller's activity-score snapshot, used only if this is the first box.
-    /// @param capKey Level key for the shared per-(player, level) EV-cap accumulator.
-    /// @param boost Whether to consume a live lootbox-boost boon (pass purchases yes, afking no).
-    /// @param count Custom boxes wanted (one per pass bought); zero folds the value into a held
-    ///        custom on a full entry, else into the cover lane.
+    /// @param score Caller's activity-score snapshot.
+    /// @param capKey Level key for the shared per-(wallet, level) EV-cap accumulator.
+    /// @param boost Whether to consume a live lootbox-boost boon and snapshot distress (pass
+    ///        purchases yes, afking no).
+    /// @param count Custom boxes (one per pass bought, at most 100); zero for the afking cover.
     function recordCoverBox(
         address player,
         uint256 amountWei,
@@ -735,180 +564,27 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint8 count
     ) external payable {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        // Below storage granularity the cover lane would round to a ZERO count while the
-        // level/score write left the word non-zero — a queue slot the sweep skips forever.
-        // Sub-1e12-wei covers are unreachable from both cover paths; the guard makes the
-        // invariant (non-zero word => openable) structural rather than incidental.
-        if (amountWei < LB_CUSTOM_SCALE) return;
-
-        uint256 lrWord = lootboxRngPacked;
-        uint48 idx = _rngWriteBuffer();
-        uint256 word = _boxOrder(idx, player);
-
-        if (word == 0) {
-            boxPlayers[idx & 1].push(player);
-            word = _lbSet(0, LB_LEVEL_SHIFT, LB_LEVEL_MASK, _activeTicketLevel())
-                | _lbSet(
-                    0,
-                    LB_SCORE_SHIFT,
-                    LB_SCORE_MASK,
-                    score > ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS
-                        ? ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS
-                        : score
-                );
+        uint256 size = amountWei / ((count == 0 ? 1 : uint256(count)) * LB_SIZE_UNIT);
+        if (size == 0) return;
+        uint32 id = _walletIdOf(player);
+        uint256 capped = score > ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS
+            ? ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS
+            : score;
+        uint256 word = uint256(id) | (uint256(_activeTicketLevel()) << LB_LEVEL_SHIFT) | (capped << LB_SCORE_SHIFT)
+            | (size << LB_SIZE_SHIFT) | (count == 0 ? LB_COVER : uint256(count) << LB_CUSTOM_COUNT_SHIFT);
+        if (boost) {
+            word |= (_consumeBoxBoost(player, amountWei) * 10_000 / amountWei) << LB_BOOST_SHIFT;
+            if (_isDistressMode()) word |= LB_DISTRESS;
         }
-
-        uint256 priorNominal = _orderNominal(word);
-        uint16 oldBoost = uint16(_lbGet(word, LB_BOOST_SHIFT, LB_BPS_MASK));
-        uint256 extra = boost ? _consumeBoxBoost(player, amountWei) : 0;
-        word = _lbSet(word, LB_BOOST_SHIFT, LB_BPS_MASK, _blendBps(oldBoost, priorNominal, extra, amountWei));
-
-        // Distress rides the same flag as the boost: the whale bundle carries both lanes,
-        // the afking cover neither (it always preserves zero distress). Blended over BOOSTED
-        // value, mirroring beginBoxOrder — the resolver's distress basis is boostedSize * distressBps.
-        {
-            uint256 boostedPrior = priorNominal + (priorNominal * oldBoost) / 10_000;
-            uint256 boostedAdded = amountWei + extra;
-            word = _lbSet(
-                word,
-                LB_DISTRESS_SHIFT,
-                LB_BPS_MASK,
-                _blendBps(
-                    uint16(_lbGet(word, LB_DISTRESS_SHIFT, LB_BPS_MASK)),
-                    boostedPrior,
-                    (boost && _isDistressMode()) ? boostedAdded : 0,
-                    boostedAdded
-                )
-            );
-        }
-
-        // EV-cap draw against the shared per-(player, level) accumulator, same as a bought box.
-        uint256 evExtra;
-        if (_lootboxEvMultiplierFromScore(_lbGet(word, LB_SCORE_SHIFT, LB_SCORE_MASK)) > LOOTBOX_EV_NEUTRAL_BPS) {
-            // The grant's caller already loaded this wallet's mint word (registered buyer or
-            // scored subscriber), so the ID read is warm.
-            uint32 id = _walletIdOf(player);
-            uint256 used = _lootboxEvUsedFor(id, capKey);
-            uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP ? 0 : LOOTBOX_EV_BENEFIT_CAP - used;
-            evExtra = amountWei < remaining ? amountWei : remaining;
-            if (evExtra != 0) _setLootboxEvUsedFor(id, capKey, used + evExtra);
-        }
-        word = _lbSet(
-            word,
-            LB_ADJ_SHIFT,
-            LB_BPS_MASK,
-            _blendBps(uint16(_lbGet(word, LB_ADJ_SHIFT, LB_BPS_MASK)), priorNominal, evExtra, amountWei)
-        );
-
-        uint256 cHeld = _lbGet(word, LB_CUSTOM_COUNT_SHIFT, LB_COUNT_MASK);
-        uint256 held = _lbGet(word, LB_SMALL_SHIFT, LB_COUNT_MASK) + _lbGet(word, LB_MED_SHIFT, LB_COUNT_MASK)
-            + _lbGet(word, LB_LARGE_SHIFT, LB_COUNT_MASK) + cHeld
-            + (_lbGet(word, LB_COVER_SHIFT, LB_COVER_MASK) == 0 ? 0 : 1);
-        if (count != 0 || (held >= MAX_BOXES_PER_ORDER && cHeld != 0)) {
-            // A pass purchase lands in the custom lane: one box per pass while the entry has the
-            // room, fewer and larger ones as the cap closes. Customs already held fold in at the
-            // count-weighted average size, total value over total box count (which can land
-            // below a held size), and a full entry
-            // still takes the value without a new box. An afking cover that finds the entry full
-            // folds into a held custom the same way; with no custom to fold into it takes the
-            // cover lane below, the one box the ceiling admits past the hundred, since a
-            // delivery the player did not choose must never fail the subscriber stage. Only a
-            // full pass purchase with nothing to fold into refuses. The split's sub-unit dust is
-            // reward-side only.
-            uint256 n = held >= MAX_BOXES_PER_ORDER ? 0 : MAX_BOXES_PER_ORDER - held;
-            if (n > count) n = count;
-            if (n == 0 && cHeld == 0) revert E();
-            uint256 heldScaled = cHeld == 0 ? 0 : cHeld * _lbGet(word, LB_CUSTOM_SIZE_SHIFT, LB_CUSTOM_SIZE_MASK);
-            word = _lbSet(word, LB_CUSTOM_SIZE_SHIFT, LB_CUSTOM_SIZE_MASK, (heldScaled + amountWei / LB_CUSTOM_SCALE) / (cHeld + n));
-            word = _lbSet(word, LB_CUSTOM_COUNT_SHIFT, LB_COUNT_MASK, cHeld + n);
-        } else {
-            // Afking covers accumulate into one box rather than one each: they arrive on a
-            // schedule the player does not control, so counting them would let the sweep's
-            // per-entry cost drift with subscription cadence rather than with what anyone chose
-            // to buy.
-            word = _lbSet(
-                word,
-                LB_COVER_SHIFT,
-                LB_COVER_MASK,
-                _lbGet(word, LB_COVER_SHIFT, LB_COVER_MASK) + amountWei / LB_CUSTOM_SCALE
-            );
-        }
-        lootboxOrder[idx & 1][player] = word;
-
-        uint256 newPendingEth = ((lrWord >> LR_PENDING_ETH_SHIFT) & LR_PENDING_ETH_MASK) + _packEthToMilliEth(amountWei);
-        lootboxRngPacked = (lrWord & ~(LR_PENDING_ETH_MASK << LR_PENDING_ETH_SHIFT))
-            | ((newPendingEth & LR_PENDING_ETH_MASK) << LR_PENDING_ETH_SHIFT);
-
-        emit LootBoxBuy(player, idx, amountWei);
+        word |= (_drawEvBenefit(id, capKey, amountWei, capped) * 10_000 / amountWei) << LB_EV_SHIFT;
+        (uint48 idx, uint32 position) = _appendBoxEntry(word, amountWei);
+        emit LootBoxBuy(player, idx, position, amountWei);
     }
 
-    /// @dev Nominal wei an order currently represents — the four bought tiers at the frozen
-    ///      level's prices, plus the cover lane. The denominator every bps lane re-weights on.
-    function _orderNominal(uint256 word) private pure returns (uint256) {
-        uint256 price = PriceLookupLib.priceForLevel(uint24(_lbGet(word, LB_LEVEL_SHIFT, LB_LEVEL_MASK)));
-        unchecked {
-            return (_lbGet(word, LB_SMALL_SHIFT, LB_COUNT_MASK)
-                    + LB_MED_MULTIPLE
-                    * _lbGet(word, LB_MED_SHIFT, LB_COUNT_MASK)
-                    + LB_LARGE_MULTIPLE
-                    * _lbGet(word, LB_LARGE_SHIFT, LB_COUNT_MASK)) * price
-                + _lbGet(word, LB_CUSTOM_COUNT_SHIFT, LB_COUNT_MASK)
-                * _lbGet(word, LB_CUSTOM_SIZE_SHIFT, LB_CUSTOM_SIZE_MASK) * LB_CUSTOM_SCALE
-                + _lbGet(word, LB_COVER_SHIFT, LB_COVER_MASK) * LB_CUSTOM_SCALE;
-        }
-    }
-
-    /// @notice Freeze the order's activity score (first box of the period only) and fold this
-    ///         purchase's EV-cap draw into the order's adj lane.
-    /// @dev Delegatecall entrypoint from the Mint module, called after its post-action score is
-    ///      known. The score is the resolver's frozen EV knob — the anti-gaming property, since
-    ///      the open level is not player-timable but the buy is.
-    /// @param buyer Player the order is for.
-    /// @param cachedScore Caller's post-action activity score in whole points.
-    /// @param capLevel Level key for the shared per-(player, level) EV-cap accumulator.
-    /// @param costWei This purchase's box spend, the lane's weight for this slice.
-    /// @param priorNominal Nominal wei held before this purchase.
-    function applyBoxOrderScore(
-        address buyer,
-        uint256 cachedScore,
-        uint24 capLevel,
-        uint256 costWei,
-        uint256 priorNominal
-    ) external payable {
-        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        uint48 idx = _rngWriteBuffer();
-        uint256 word = _boxOrder(idx, buyer);
-        if (word == 0) return;
-
-        // Score freezes on the period's FIRST box. Clamped to the curve's effective cap so it
-        // fits the 15-bit lane; the multiplier is flat above that point, so the clamp changes
-        // no outcome.
-        if (priorNominal == 0) {
-            word = _lbSet(
-                word,
-                LB_SCORE_SHIFT,
-                LB_SCORE_MASK,
-                cachedScore > ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS
-                    ? ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS
-                    : cachedScore
-            );
-        }
-
-        uint256 evExtra = _drawEvBenefit(_walletIdOf(buyer), capLevel, costWei, _lbGet(word, LB_SCORE_SHIFT, LB_SCORE_MASK));
-        word = _lbSet(
-            word,
-            LB_ADJ_SHIFT,
-            LB_BPS_MASK,
-            _blendBps(uint16(_lbGet(word, LB_ADJ_SHIFT, LB_BPS_MASK)), priorNominal, evExtra, costWei)
-        );
-
-        lootboxOrder[idx & 1][buyer] = word;
-    }
-
-    /// @dev The EV-cap draw an order's `adjBps` lane records: a bonus score (mult > NEUTRAL)
-    ///      draws min(spend, CAP - used) from the shared per-(player, level) accumulator; neutral
-    ///      and sub-neutral scores draw nothing. Shared by the buy path and the sDGNRS redemption
-    ///      order, which draws at resolution.
+    /// @dev The EV-cap draw an entry's EV fraction records: a bonus score (mult > NEUTRAL)
+    ///      draws min(spend, CAP - used) from the shared per-(wallet, level) accumulator, which
+    ///      never resets per entry; neutral and sub-neutral scores draw nothing. Shared by the
+    ///      purchase paths and the sDGNRS redemption order, which draws at resolution.
     function _drawEvBenefit(uint32 id, uint24 capLevel, uint256 spend, uint256 score)
         private
         returns (uint256 evExtra)
@@ -948,6 +624,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // delivered in ONE call at the end — a winning box does not reach out to Craps on its own.
         uint32 passNormal;
         uint32 passHigh;
+        // The entry owner's wallet ID, handed to a nested ETH spin so it needs no lookup.
+        uint32 id;
     }
 
     /// @dev Resolution context for one entry, carried as a single memory struct rather than a
@@ -955,8 +633,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      exactly what tips this module into a Yul stack-too-deep.
     struct BoxRoll {
         address player;
-        uint48 index;
-        uint256 rngWord;
+        uint32 id; // the entry's wallet ID: the owner input of every seed
+        uint48 index; // event tag: the entry reference or the redemption batch tag
+        uint256 rootWord; // committed per-entry root every box seed derives from
         uint24 currentLevel;
         uint256 evBps;
         uint256 boostBps;
@@ -965,81 +644,75 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         BoxAcc acc; // the entry's shared reward accumulator
         uint16 score;
         uint256 nonce; // boxes rolled so far — also each box's seed nonce
-        uint256 boonSeed; // player-mixed; each box's draw is (boonSeed, its nonce)
+        uint256 boonSeed; // each box's draw is (boonSeed, its nonce)
     }
 
-    /// @dev Box-leg body operating on pre-loaded values: `word` is the player's packed order at
-    ///      `index`, `rngWord` the index's committed VRF word. The sweep loads both once per
-    ///      entry and threads them down; the manual shell loads them itself. Values cannot go
-    ///      stale between load and use: no callee on this path hands control to player code, and
-    ///      an order write at a worded index is unreachable from the buy path.
-    ///
-    ///      Every box in the order resolves as its OWN roll at its OWN size — a small rolls
-    ///      small and a medium rolls medium. There is no split threshold: one box, one roll.
-    /// @custom:reverts RngNotReady When boxes are queued but `rngWord` is zero.
-    function _openLootBoxLegWith(address player, uint48 index, uint256 word, uint256 rngWord, uint24 currentLevel)
-        internal
-        returns (bool opened)
-    {
-        if (_boxOrderCount(word) == 0) return false;
-        if (rngWord == 0) revert RngNotReady();
-
-        // Marked processed before resolution: external roll calls see an empty logical order,
-        // while its nonzero backing payload remains available for the next buffer occupant.
-        lootboxOrder[index & 1][player] = word | BOX_PROCESSED;
-        _rollOrder(player, index, word, rngWord, currentLevel);
-        return true;
-    }
-
-    /// @dev Storage-free order core: resolve every box of the packed order `word` for `player`
-    ///      on `rngWord`, then settle the entry. `index` tags the boon seed and the open events.
-    ///      The sweep marks the stored order processed first; the sDGNRS redemption leg builds
-    ///      its order in memory and passes a tagged batch id that no buffer index can equal.
-    function _rollOrder(address player, uint48 index, uint256 word, uint256 rngWord, uint24 currentLevel) private {
+    /// @dev Storage-free order core: resolve every box of the entry `word` for wallet `id`
+    ///      (account `player`) off `rootWord`, then settle the entry. Box `n` (1-based across
+    ///      all tiers) seeds from hash4(rootWord, id, BOX_OPEN_TAG, n) and the entry's boon
+    ///      draws from hash4(rootWord, id, BOX_BOON_TAG, boonIndex). Queued entries pass their
+    ///      order root and physical buffer; the sDGNRS redemption order passes its ID-mixed word
+    ///      and its tagged batch, which no buffer can equal. Every box in the entry resolves as
+    ///      its OWN roll at its OWN size — a small rolls small and a medium rolls medium.
+    function _rollOrder(
+        address player,
+        uint32 id,
+        uint256 rootWord,
+        uint256 boonIndex,
+        uint48 eventRef,
+        uint256 word,
+        uint24 currentLevel
+    ) private {
         // `c`'s declaration allocates its nested BoxAcc; use it directly rather than
         // allocating a second one and repointing.
         BoxRoll memory c;
         c.player = player;
-        c.index = index;
-        c.rngWord = rngWord;
-        // The boon seed MUST mix the player: the raw index word is shared by every entry at
-        // this index, and an unmixed seed would hand every player the same per-box roll
-        // values — correlated boon outcomes across the whole index.
-        c.boonSeed = EntropyLib.hash4(rngWord, uint256(uint160(player)), BOX_BOON_TAG, index);
+        c.id = id;
+        c.acc.id = id;
+        c.index = eventRef;
+        c.rootWord = rootWord;
+        c.boonSeed = EntropyLib.hash4(rootWord, uint256(id), BOX_BOON_TAG, boonIndex);
         c.currentLevel = currentLevel;
-        c.score = uint16(_lbGet(word, LB_SCORE_SHIFT, LB_SCORE_MASK));
+        c.score = uint16((word >> LB_SCORE_SHIFT) & LB_SCORE_MASK);
         // The EV multiplier stays FROZEN at buy (`score`) — that is the anti-gaming knob. The
         // box rolls from the LIVE level at open, which the holder cannot steer: the
         // permissionless bounty opens every ready box as soon as it can.
         c.evBps = _lootboxEvMultiplierFromScore(c.score);
-        c.boostBps = _lbGet(word, LB_BOOST_SHIFT, LB_BPS_MASK);
-        c.distressBps = _lbGet(word, LB_DISTRESS_SHIFT, LB_BPS_MASK);
-        c.adjBps = _lbGet(word, LB_ADJ_SHIFT, LB_BPS_MASK);
+        c.boostBps = (word >> LB_BOOST_SHIFT) & LB_BPS_MASK;
+        c.distressBps = word & LB_DISTRESS != 0 ? 10_000 : 0;
+        c.adjBps = (word >> LB_EV_SHIFT) & LB_BPS_MASK;
 
-        uint256 price = PriceLookupLib.priceForLevel(uint24(_lbGet(word, LB_LEVEL_SHIFT, LB_LEVEL_MASK)));
-
-        // Keep the overwhelmingly common one-tier order on the lean existing path. Only a
-        // genuinely mixed order allocates the five-lane batch and pays its packing work.
-        if (_boxOrderIsMixed(word)) {
-            _rollBatchedTiers(c, word, price);
+        uint256 size = ((word >> LB_SIZE_SHIFT) & LB_SIZE_MASK) * LB_SIZE_UNIT;
+        if (word & LB_COVER != 0) {
+            _rollTierImmediate(c, 1, size);
         } else {
-            _rollTierImmediate(c, _lbGet(word, LB_SMALL_SHIFT, LB_COUNT_MASK), price);
-            _rollTierImmediate(c, _lbGet(word, LB_MED_SHIFT, LB_COUNT_MASK), price * LB_MED_MULTIPLE);
-            _rollTierImmediate(c, _lbGet(word, LB_LARGE_SHIFT, LB_COUNT_MASK), price * LB_LARGE_MULTIPLE);
-            _rollTierImmediate(
-                c,
-                _lbGet(word, LB_CUSTOM_COUNT_SHIFT, LB_COUNT_MASK),
-                _lbGet(word, LB_CUSTOM_SIZE_SHIFT, LB_CUSTOM_SIZE_MASK) * LB_CUSTOM_SCALE
-            );
-            // The cover lane resolves as ONE box of its accumulated value.
-            _rollTierImmediate(c, 1, _lbGet(word, LB_COVER_SHIFT, LB_COVER_MASK) * LB_CUSTOM_SCALE);
+            uint256 price = PriceLookupLib.priceForLevel(uint24(word >> LB_LEVEL_SHIFT));
+            // Keep the overwhelmingly common one-tier entry on the lean path. Only a
+            // genuinely mixed entry allocates the batch and pays its packing work.
+            if (_boxOrderIsMixed(word)) {
+                _rollBatchedTiers(c, word, price, size);
+            } else {
+                _rollTierImmediate(c, (word >> LB_SMALL_SHIFT) & LB_COUNT_MASK, price);
+                _rollTierImmediate(c, (word >> LB_MED_SHIFT) & LB_COUNT_MASK, price * LB_MED_MULTIPLE);
+                _rollTierImmediate(c, (word >> LB_LARGE_SHIFT) & LB_COUNT_MASK, price * LB_LARGE_MULTIPLE);
+                _rollTierImmediate(c, (word >> LB_CUSTOM_COUNT_SHIFT) & LB_COUNT_MASK, size);
+            }
         }
 
         // Final settlement for the whole entry: one call per remaining fungible lane, one ticket
         // write per distinct level. DGNRS may already be checkpointed at an ETH-spin boundary.
-        // Boon draws have completed before this remaining fungible/ticket flush. Until the box
-        // queue carries IDs, a human entry reads its owner's ID from the mint word here.
-        _flushBoxAcc(player, _walletIdOf(player), c.acc, currentLevel);
+        // Boon draws have completed before this remaining fungible/ticket flush.
+        _flushBoxAcc(player, id, c.acc, currentLevel);
+    }
+
+    /// @dev Re-raise a failed nested module call with its own revert data. Empty data (the
+    ///      sub-call ran out of gas) becomes EmptyRevert(), which callers metering gas treat as
+    ///      caller-withheld gas; any other failure keeps its reason.
+    function _revertDelegate(bytes memory reason) private pure {
+        if (reason.length == 0) revert EmptyRevert();
+        assembly ("memory-safe") {
+            revert(add(32, reason), mload(reason))
+        }
     }
 
     /// @dev One box's boon draw, for the resolvers that settle a single box outside the
@@ -1047,7 +720,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      Identical draw to the entry path's per-tier call;
     ///      `seed` is the box's own player-specific resolution seed, drawn at nonce 0.
     function _rollSingleBoxBoons(address player, uint256 amount, uint24 currentLevel, uint256 seed) private {
-        (bool ok,) = ContractAddresses.GAME_BOON_MODULE
+        (bool ok, bytes memory data) = ContractAddresses.GAME_BOON_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameBoonModule.rollBoxBoons.selector,
@@ -1060,7 +733,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                     0
                 )
             );
-        if (!ok) revert EmptyRevert();
+        if (!ok) _revertDelegate(data);
     }
 
     /// @dev Settle an entry's remaining accumulated rewards: one call per fungible lane, one
@@ -1145,16 +818,14 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         acc.tickets[offset] = lane > laneCap ? uint32(laneCap) : uint32(lane);
     }
 
-    /// @dev True when two or more of small/medium/large/custom/cover are populated. The four
-    ///      bought counts are contiguous bytes, so collapse each byte to one presence bit and
-    ///      use the standard `x & (x - 1)` multiple-bit test; the cover becomes a fifth bit.
+    /// @dev True when two or more of the small/medium/large/custom counts are populated. A
+    ///      cover entry holds no counts, so it is never mixed.
     function _boxOrderIsMixed(uint256 word) private pure returns (bool) {
-        uint256 laneBits = (word >> LB_SMALL_SHIFT) & 0xFFFFFFFF;
-        laneBits |= laneBits >> 4;
-        laneBits |= laneBits >> 2;
-        laneBits = (laneBits | (laneBits >> 1)) & 0x01010101;
-        if (_lbGet(word, LB_COVER_SHIFT, LB_COVER_MASK) != 0) laneBits |= uint256(1) << 32;
-        return laneBits != 0 && (laneBits & (laneBits - 1)) != 0;
+        uint256 present = ((word >> LB_SMALL_SHIFT) & LB_COUNT_MASK == 0 ? 0 : 1)
+            + ((word >> LB_MED_SHIFT) & LB_COUNT_MASK == 0 ? 0 : 1)
+            + ((word >> LB_LARGE_SHIFT) & LB_COUNT_MASK == 0 ? 0 : 1)
+            + ((word >> LB_CUSTOM_COUNT_SHIFT) & LB_COUNT_MASK == 0 ? 0 : 1);
+        return present > 1;
     }
 
     /// @dev Resolve one populated tier and immediately dispatch its boon draws. Kept separate
@@ -1164,7 +835,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 nonceBase = c.nonce;
         uint256 scaled = _rollTier(c, count, size);
 
-        (bool okBoon,) = ContractAddresses.GAME_BOON_MODULE
+        (bool okBoon, bytes memory data) = ContractAddresses.GAME_BOON_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameBoonModule.rollBoxBoons.selector,
@@ -1177,7 +848,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                     nonceBase
                 )
             );
-        if (!okBoon) revert EmptyRevert();
+        if (!okBoon) _revertDelegate(data);
     }
 
     /// @dev Roll `count` boxes of `size` wei each. Every box takes its own seed — the nonce is
@@ -1204,10 +875,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint256 distressEth = (boosted * c.distressBps) / 10_000;
 
             for (uint256 i; i < count; ++i) {
-                // Seed = the per-index VRF anchor (fixed at the index's advance, unknowable at
-                // buy) + player + domain + this box's position across all tiers. Size only
-                // prices the award; the nonce already distinguishes every box in the order.
-                uint256 seed = EntropyLib.hash4(c.rngWord, uint256(uint160(c.player)), BOX_OPEN_TAG, ++c.nonce);
+                // Seed = the entry's committed root (fixed before the buffer's word is requested,
+                // unknowable at buy) + wallet ID + domain + this box's position across all tiers.
+                // Size only prices the award; the nonce already distinguishes every box.
+                uint256 seed = EntropyLib.hash4(c.rootWord, uint256(c.id), BOX_OPEN_TAG, ++c.nonce);
                 _resolveLootboxCommon(
                     c.player,
                     c.index,
@@ -1226,34 +897,31 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
     }
 
-    /// @dev Resolve all five lanes of a mixed order, then dispatch their boon draws together.
-    ///      Tier amounts stay separate so chance saturation is byte-identical; only call frames
-    ///      and repeated normalization collapse. This helper is never entered by one-tier orders,
-    ///      so its fixed array is not allocated on their hot path.
-    function _rollBatchedTiers(BoxRoll memory c, uint256 word, uint256 price) private {
+    /// @dev Resolve the four bought lanes of a mixed entry, then dispatch their boon draws
+    ///      together. Tier amounts stay separate so chance saturation is byte-identical; only
+    ///      call frames and repeated normalization collapse. This helper is never entered by
+    ///      one-tier entries, so its fixed array is not allocated on their hot path. The boon
+    ///      module's fifth (cover) lane stays empty: a cover entry is never mixed.
+    function _rollBatchedTiers(BoxRoll memory c, uint256 word, uint256 price, uint256 size) private {
         uint256[5] memory amounts;
         uint40 countsPacked;
-        uint256 count = _lbGet(word, LB_SMALL_SHIFT, LB_COUNT_MASK);
+        uint256 count = (word >> LB_SMALL_SHIFT) & LB_COUNT_MASK;
         amounts[0] = _rollTier(c, count, price);
         if (amounts[0] != 0) countsPacked = uint40(count);
 
-        count = _lbGet(word, LB_MED_SHIFT, LB_COUNT_MASK);
+        count = (word >> LB_MED_SHIFT) & LB_COUNT_MASK;
         amounts[1] = _rollTier(c, count, price * LB_MED_MULTIPLE);
         if (amounts[1] != 0) countsPacked |= uint40(count << 8);
 
-        count = _lbGet(word, LB_LARGE_SHIFT, LB_COUNT_MASK);
+        count = (word >> LB_LARGE_SHIFT) & LB_COUNT_MASK;
         amounts[2] = _rollTier(c, count, price * LB_LARGE_MULTIPLE);
         if (amounts[2] != 0) countsPacked |= uint40(count << 16);
 
-        count = _lbGet(word, LB_CUSTOM_COUNT_SHIFT, LB_COUNT_MASK);
-        amounts[3] = _rollTier(c, count, _lbGet(word, LB_CUSTOM_SIZE_SHIFT, LB_CUSTOM_SIZE_MASK) * LB_CUSTOM_SCALE);
+        count = (word >> LB_CUSTOM_COUNT_SHIFT) & LB_COUNT_MASK;
+        amounts[3] = _rollTier(c, count, size);
         if (amounts[3] != 0) countsPacked |= uint40(count << 24);
 
-        uint256 coverSize = _lbGet(word, LB_COVER_SHIFT, LB_COVER_MASK) * LB_CUSTOM_SCALE;
-        amounts[4] = _rollTier(c, 1, coverSize);
-        if (amounts[4] != 0) countsPacked |= uint40(1) << 32;
-
-        (bool okBoon,) = ContractAddresses.GAME_BOON_MODULE
+        (bool okBoon, bytes memory data) = ContractAddresses.GAME_BOON_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameBoonModule.rollBoxBoonTiers.selector,
@@ -1264,44 +932,71 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                     c.boonSeed
                 )
             );
-        if (!okBoon) revert EmptyRevert();
+        if (!okBoon) _revertDelegate(data);
     }
 
-    /// @notice Resolve one fully admitted human order atomically; the AFKing
-    ///         box worker owns queue ordering, cursor updates and completion.
-    function resolveHumanBoxOrder(address player, uint48 idx, uint256 word, uint256 stored,
-        uint256 indexWord, uint24 currentLevel) external
+    /// @dev Domain of a queued entry's root: hash4(QUEUED_ORDER_DOMAIN, word, buffer, position).
+    uint256 private constant QUEUED_ORDER_DOMAIN = 0x5175657565644f72646572; // "QueuedOrder"
+
+    /// @dev Event-tag bit of a queued entry: QUEUED_ENTRY_TAG | position << 1 | buffer. It keeps
+    ///      every queued tag apart from the single-box resolvers' 0 and from redemption batches.
+    uint48 private constant QUEUED_ENTRY_TAG = uint48(1) << 46;
+
+    /// @notice Settle one queued entry atomically: its ordinary leg, then its presale leg.
+    /// @dev Delegatecall target of the AFKing box worker, which owns queue order and stores the
+    ///      advanced cursor before this call, so an entry settles at most once. The entry's
+    ///      root binds the cohort word to the entry's buffer and position, both fixed when the
+    ///      purchase appended it, before that buffer's word was requested; every box, boon and
+    ///      presale seed then mixes the stored wallet ID. The address is decoded once, for the
+    ///      address-keyed boons and the token payouts.
+    /// @param buffer Physical read buffer (0/1).
+    /// @param position The entry's zero-based position in that buffer.
+    /// @param entry The stored entry word.
+    /// @param rngWord The buffer's published session word.
+    /// @param currentLevel Open level (`level + 1`).
+    function resolveHumanBoxOrder(uint48 buffer, uint256 position, uint256 entry, uint256 rngWord, uint24 currentLevel)
+        external
     {
-        _openLootBoxLegWith(player, idx, word, indexWord, currentLevel);
-        if (stored != 0) {
-            presaleBoxEth[idx & 1][player] = 0;
-            _resolvePresaleBox(player, idx, stored, indexWord, currentLevel);
+        uint32 id = uint32(entry);
+        address player = _walletKey(id);
+        uint256 rootWord = EntropyLib.hash4(QUEUED_ORDER_DOMAIN, rngWord, buffer, position);
+        uint48 ref = QUEUED_ENTRY_TAG | (uint48(position) << 1) | buffer;
+        if (_boxEntryCount(entry) != 0) _rollOrder(player, id, rootWord, buffer, ref, entry, currentLevel);
+        uint256 presale = (entry >> LB_PRESALE_SHIFT) & LB_PRESALE_MASK;
+        if (presale != 0) {
+            _resolvePresaleBox(
+                player,
+                ref,
+                presale,
+                entry,
+                EntropyLib.hash4(rootWord, uint256(id), uint256(PRESALE_BOX_TAG), buffer),
+                currentLevel
+            );
         }
     }
 
-    /// @dev Resolve a presale box off the salted committed word: 50% a FLIP-valued budget
-    ///      (a further committed coin toss keeps it as coinflip credit or denominates the
-    ///      whole roll into Craps day passes, cap overflow staying FLIP and a lost sub-pass
-    ///      fraction paying the WWXRP dud), 40% DGNRS, 10% WWXRP. The pool remainder is paid
-    ///      by the sweep's drain latch, not here.
+    /// @dev Resolve a presale box off its committed seed: 50% a FLIP-valued budget (a further
+    ///      committed coin toss keeps it as coinflip credit or denominates the whole roll into
+    ///      Craps day passes, cap overflow staying FLIP and a lost sub-pass fraction paying the
+    ///      WWXRP dud), 40% DGNRS, 10% WWXRP. The closing purchase's box is the last presale box
+    ///      ever appended and the FIFO settles it last, so it also takes whatever remains in
+    ///      Pool.PresaleBox: no other entry can draw from that pool afterwards.
     /// @param player Box owner.
-    /// @param index The box's RNG index (event tag).
-    /// @param stored Packed record: [bit255 closing][96:191 soldBefore][0:95 amount].
-    /// @param rngWord The index's committed daily word (lands at the index's advance, not at buy; the box only binds to the index at buy).
+    /// @param ref Event tag (QUEUED_ENTRY_TAG | position << 1 | buffer).
+    /// @param amount Exact applied presale wei.
+    /// @param entry The entry word (frozen tier and closing flag).
+    /// @param seed hash4(orderRoot, walletId, PRESALE_BOX_TAG, buffer).
     /// @param currentLevel Open level (`level + 1`); prices the FLIP branch's budget-to-coin
     ///        conversion. The DGNRS branch pays tokens and reads no price.
-    function _resolvePresaleBox(address player, uint48 index, uint256 stored, uint256 rngWord, uint24 currentLevel)
-        private
-    {
-        // A queued record always carries non-zero amount bits (the buy path packs
-        // applied >= the box minimum), so a non-zero `stored` implies amount != 0.
-        uint256 amount = stored & PRESALE_BOX_AMOUNT_MASK;
-        uint256 soldBefore = (stored >> PRESALE_BOX_SOLD_SHIFT) & PRESALE_BOX_AMOUNT_MASK;
-        bool closing = (stored & PRESALE_BOX_CLOSING_FLAG) != 0;
-
-        // One presale record per player/index: its identity, not its value, keys the draw.
-        uint256 seed = uint256(keccak256(abi.encodePacked(rngWord, PRESALE_BOX_TAG, player, index)));
-
+    function _resolvePresaleBox(
+        address player,
+        uint48 ref,
+        uint256 amount,
+        uint256 entry,
+        uint256 seed,
+        uint24 currentLevel
+    ) private {
+        bool closing = entry & LB_CLOSING != 0;
         uint256 outcome = uint16(seed) % 100;
         uint256 flipOut;
         uint256 dgnrsOut;
@@ -1324,9 +1019,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             // Collapse onto a whole 100-FLIP multiple, EV-preserving, mirroring the lootbox.
             // Only above the threshold: at the milestone price a minimum box bottoms out near
             // 59 FLIP, where a 100-FLIP granule would be the whole prize, so small awards keep
-            // the whole-FLIP floor instead. The roll keys on this box's own committed seed —
-            // immutable buy data hashed with the index's word — so it is fixed at fulfillment
-            // and unsteerable.
+            // the whole-FLIP floor instead. The roll keys on this box's own committed seed, so
+            // it is fixed at fulfillment and unsteerable.
             flipOut = flipOut > FlipRoundLib.FLIP_ROUND_THRESHOLD
                 ? FlipRoundLib.roundFlipToHundreds(flipOut, EntropyLib.hash2(seed, FLIP_ROUND_TAG))
                 : FlipRoundLib.floorWholeFlip(flipOut);
@@ -1371,25 +1065,34 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 coinflip.creditFlip(player, flipOut);
             }
         } else if (outcome < 90) {
-            // 40% DGNRS: 5-tier %-of-pool curve keyed on the FROZEN buy-time cumulative.
-            dgnrsOut = _presaleBoxDgnrsReward(player, amount, soldBefore);
+            // 40% DGNRS: 5-tier %-of-pool curve keyed on the tier frozen at purchase.
+            dgnrsOut = _presaleBoxDgnrsReward(player, amount, (entry >> LB_TIER_SHIFT) & 7);
         } else {
             // 10% WWXRP: 1 token flavor "dud".
             wwxrpOut = LOOTBOX_WWXRP_PRIZE;
             wwxrp.mintPrize(player, wwxrpOut);
         }
 
-        emit PresaleBoxOpened(player, index, amount, flipOut, dgnrsOut, wwxrpOut, closing, passNormal, passHigh);
+        emit PresaleBoxOpened(player, ref, amount, flipOut, dgnrsOut, wwxrpOut, closing, passNormal, passHigh);
+
+        if (closing) {
+            uint256 remaining = dgnrs.poolBalance(IsDGNRS.Pool.PresaleBox);
+            if (remaining != 0) {
+                emit PresaleBoxRemainderSwept(
+                    player, dgnrs.transferFromPool(IsDGNRS.Pool.PresaleBox, player, remaining)
+                );
+            }
+        }
     }
 
-    /// @dev Presale-box DGNRS award: tierMultiplier x base x boxEth, base = poolStart/40,
-    ///      tier by the FROZEN buy-time cumulative box volume (5 tiers x 10 ETH).
-    ///      Snapshots Pool.PresaleBox into presaleBoxDgnrsPoolStart on first resolution.
+    /// @dev Presale-box DGNRS award: tierMultiplier x base x boxEth, base = poolStart/40, at
+    ///      the tier frozen at purchase (`_presaleTier`: 3.0x, 2.5x, 2.0x, 1.5x, 1.0x for tiers
+    ///      0..4). Snapshots Pool.PresaleBox into presaleBoxDgnrsPoolStart on first resolution.
     /// @param player Box owner to credit.
     /// @param amount Box ETH for this resolution.
-    /// @param soldBefore Cumulative box ETH before this box's buy (tier selector).
+    /// @param tier Frozen tier 0..4.
     /// @return paid Actual DGNRS transferred from the pool.
-    function _presaleBoxDgnrsReward(address player, uint256 amount, uint256 soldBefore) private returns (uint256 paid) {
+    function _presaleBoxDgnrsReward(address player, uint256 amount, uint256 tier) private returns (uint256 paid) {
         uint256 poolStart = presaleBoxDgnrsPoolStart;
         if (poolStart == 0) {
             poolStart = dgnrs.poolBalance(IsDGNRS.Pool.PresaleBox);
@@ -1397,32 +1100,13 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             presaleBoxDgnrsPoolStart = poolStart;
         }
         // base = poolStart / 40 DGNRS per ETH; tier multiplier in tenths.
-        uint256 tierTenths = _presaleBoxDgnrsTierTenths(soldBefore);
-        // amount (wei) * (poolStart/40) per ETH * tier/10:
         //   = poolStart * tierTenths * amount / (40 * 10 * 1 ether)
         // Collapse onto three significant figures so the award reads as a round number
         // at any pool size. A pure floor: no entropy, and the truncation is under 1%.
+        uint256 tierTenths = PRESALE_BOX_DGNRS_TIER1_TENTHS - PRESALE_BOX_DGNRS_TIER_STEP_TENTHS * tier;
         uint256 dgnrsAmount = SigFigLib.floorToThreeSigFigs((poolStart * tierTenths * amount) / (400 * 1 ether));
         if (dgnrsAmount == 0) return 0;
         paid = dgnrs.transferFromPool(IsDGNRS.Pool.PresaleBox, player, dgnrsAmount);
-    }
-
-    /// @dev DGNRS tier multiplier (tenths) by buy-time cumulative box volume.
-    ///      [0,10) -> 3.0x, [10,20) -> 2.5x, [20,30) -> 2.0x, [30,40) -> 1.5x, >=40 -> 1.0x.
-    /// @param soldBefore Cumulative box ETH before the buy.
-    /// @return tenths Tier multiplier x10.
-    function _presaleBoxDgnrsTierTenths(uint256 soldBefore) private pure returns (uint256 tenths) {
-        if (soldBefore < PRESALE_BOX_DGNRS_TIER_WIDTH) {
-            tenths = PRESALE_BOX_DGNRS_TIER1_TENTHS;
-        } else if (soldBefore < 2 * PRESALE_BOX_DGNRS_TIER_WIDTH) {
-            tenths = PRESALE_BOX_DGNRS_TIER2_TENTHS;
-        } else if (soldBefore < 3 * PRESALE_BOX_DGNRS_TIER_WIDTH) {
-            tenths = PRESALE_BOX_DGNRS_TIER3_TENTHS;
-        } else if (soldBefore < 4 * PRESALE_BOX_DGNRS_TIER_WIDTH) {
-            tenths = PRESALE_BOX_DGNRS_TIER4_TENTHS;
-        } else {
-            tenths = PRESALE_BOX_DGNRS_TIER5_TENTHS;
-        }
     }
 
     /// @notice Resolve an internal ETH reward spin's recirculated lootbox (normal 10 ETH cap).
@@ -1468,11 +1152,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
         uint24 currentLevel = level + 1;
         // Freeze-safe seed: only the committed rngWord — which the caller domain-separates per
-        // resolution (Degenerette mixes the immutable betId) — and the player feed it. No live,
-        // post-word-reveal input enters the seed, so neither claim timing nor a futurePrizePool
-        // nudge can re-roll the outcome. No live day is read here either — boon expiry uses the
-        // boon path's own currentDay.
-        uint256 seed = EntropyLib.hash2(rngWord, uint256(uint160(player)));
+        // resolution (Degenerette mixes the immutable betId) — and the owner's permanent wallet
+        // ID, committed with that bet, feed it. No live, post-word-reveal input enters the seed,
+        // so neither claim timing nor a futurePrizePool nudge can re-roll the outcome. No live
+        // day is read here either — boon expiry uses the boon path's own currentDay.
+        uint256 seed = EntropyLib.hash2(rngWord, uint256(id));
         uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
 
         uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(activityScore));
@@ -1483,6 +1167,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // 19 awards tickets instead. Every box itemizes its contents, so this path emits the
         // `LootBoxOpened` summary unconditionally (gated only by the spin suppression downstream).
         BoxAcc memory acc;
+        acc.id = id;
         _resolveLootboxCommon(
             player, 0, scaledAmount, targetLevel, currentLevel, seed, false, 0, 0, activityScore, false, acc
         );
@@ -1510,11 +1195,13 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      claimableWinnings[SDGNRS] debit occurs — the batch close already moved the reserve
     ///      into sDGNRS custody, so debiting claimable here would double-spend it. The whole leg
     ///      resolves now as ONE box order through the sweep's own core: N = min(ceil(amount /
-    ///      1 ETH), 20) custom boxes of amount / N each (1e12 granularity), at the live level, with
+    ///      1 ETH), 20) custom boxes of amount / N each (whole gwei), at the live level, with
     ///      the snapshotted score and the EV-cap draw taken here, as the redemption leg always did.
-    ///      Per-box seeds come from the redemption entropy; the order's index is the tagged batch
-    ///      id. The pool takes the whole amount, so the size rounding dust stays protocol value.
+    ///      Per-box seeds come from the redemption entropy, which sDGNRS mixes with the claim's
+    ///      beneficiary ID; the order's boon index and event tag are the tagged batch id. The
+    ///      pool takes the whole amount, so the size rounding dust stays protocol value.
     /// @param player Player receiving lootbox rewards
+    /// @param id The claim's beneficiary wallet ID
     /// @param amount Total lootbox value to resolve (msg.value ETH + the stETH remainder pulled here)
     /// @param rngWord RNG entropy for lootbox resolution
     /// @param activityScore Snapshotted activity score (whole points) from burn submission
@@ -1547,23 +1234,22 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
 
         // One order: ~1 ETH boxes up to 20 ETH, then 20 equal larger boxes. The leg is at least
-        // the 0.01 ETH lootbox floor, so every box keeps a nonzero 1e12-granular size.
+        // the 0.01 ETH lootbox floor, so every box keeps a nonzero gwei-granular size.
         uint256 boxes = (amount - 1) / GasBounds.REDEMPTION_BOX_UNIT + 1;
         if (boxes > GasBounds.REDEMPTION_BOXES_MAX) boxes = GasBounds.REDEMPTION_BOXES_MAX;
-        uint256 sizeScaled = amount / boxes / LB_CUSTOM_SCALE;
+        uint256 size = amount / boxes / LB_SIZE_UNIT;
         uint24 currentLevel = level + 1;
         uint256 score = activityScore > ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS
             ? ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS
             : activityScore;
-        uint256 nominal = boxes * sizeScaled * LB_CUSTOM_SCALE;
-        uint256 word = _lbSet(0, LB_LEVEL_SHIFT, LB_LEVEL_MASK, currentLevel);
-        word = _lbSet(word, LB_SCORE_SHIFT, LB_SCORE_MASK, score);
-        word = _lbSet(
-            word, LB_ADJ_SHIFT, LB_BPS_MASK, _blendBps(0, 0, _drawEvBenefit(id, currentLevel, nominal, score), nominal)
-        );
-        word = _lbSet(word, LB_CUSTOM_COUNT_SHIFT, LB_COUNT_MASK, boxes);
-        word = _lbSet(word, LB_CUSTOM_SIZE_SHIFT, LB_CUSTOM_SIZE_MASK, sizeScaled);
-        _rollOrder(player, REDEMPTION_INDEX_TAG | uint48(batchId), word, rngWord, currentLevel);
+        uint256 nominal = boxes * size * LB_SIZE_UNIT;
+        uint256 word = uint256(id) | (uint256(currentLevel) << LB_LEVEL_SHIFT) | (score << LB_SCORE_SHIFT)
+            | ((_drawEvBenefit(id, currentLevel, nominal, score) * 10_000 / nominal) << LB_EV_SHIFT)
+            | (boxes << LB_CUSTOM_COUNT_SHIFT) | (size << LB_SIZE_SHIFT);
+        // No queue position: the ID-mixed redemption word is the root and the tagged batch keys
+        // the boon draw.
+        uint48 tag = REDEMPTION_INDEX_TAG | uint48(batchId);
+        _rollOrder(player, id, rngWord, tag, tag, word, currentLevel);
     }
 
     /// @notice Credit the direct half of an sDGNRS redemption claim to `player`'s claimable winnings.
@@ -1595,7 +1281,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev The afking open route: the LIVE-LEVEL twin of `resolveLootboxDirect` — identical
     ///      resolution shape (derive the seed, roll the target level from the LIVE level, do
     ///      the SINGLE `_applyEvMultiplierWithCap` RMW at open, then `_resolveLootboxCommon`)
-    ///      — with two AFKing-specific twists (vs the human `_openLootBoxLeg`):
+    ///      — with two AFKing-specific twists (vs a queued entry):
     ///
     ///        1. the RNG `rngWord` is a CALLER-PASSED param (the GameAfkingModule open-leg
     ///           passes the frozen stamp day's word), NOT read from any index-keyed map; and
@@ -1623,7 +1309,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      path (gated by real game-state, identical to the auto-resolve callers); the
     ///      boons-off rule governs the AMOUNT field, not the roll.
     ///
-    ///      Tail flags match the HUMAN box open (`_openLootBoxLeg`) for outcome parity (an afking box must be
+    ///      Tail flags match the queued box open for outcome parity (an afking box must be
     ///      identical to a normal box in every way that matters): it emits the `LootBoxOpened`
     ///      summary like any box open, and `payColdBustConsolation = true` (a
     ///      bust pays the same WWXRP consolation a human box does). The ONE intentional
@@ -1648,10 +1334,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     {
         if (amount == 0) return;
 
-        // Seed = the CALLER-PASSED active session word + player + the FROZEN
+        // Seed = the CALLER-PASSED active session word + the subscriber's wallet ID + the FROZEN
         // stamped `day` (prevents seed-grinding by open-timing) + this route's domain.
         // The amount sizes the award and never selects the outcome.
-        uint256 seed = EntropyLib.hash4(rngWord, uint256(uint160(player)), AFKING_BOX_TAG, day);
+        uint256 seed = EntropyLib.hash4(rngWord, uint256(id), AFKING_BOX_TAG, day);
 
         // LIVE level, exactly like resolveLootboxDirect: auto-open removes the
         // player's ability to time the level, so the box rolls from the live level with
@@ -1672,6 +1358,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             : _applyEvMultiplierWithCap(id, currentLevel, amount, evMultiplierBps);
 
         BoxAcc memory acc;
+        acc.id = id;
         _resolveLootboxCommon(
             player, 0, scaledAmount, targetLevel, currentLevel, seed, true, 0, 0, activityScore, true, acc
         );
@@ -1728,8 +1415,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Common lootbox resolution logic shared by ETH and FLIP lootboxes.
     ///      Handles whale pass jackpots, lazy pass awards, ticket/FLIP rolls, and boons.
     /// @param player Player receiving rewards
-    /// @param index Shared (system-wide) RNG index of the lootbox being opened. Used purely as
-    ///        the `lootboxIndex` identifier on the manual `LootBoxOpened` emit; auto-resolve
+    /// @param index Entry tag (see `LootBoxOpened.lootboxIndex`). Used purely as the
+    ///        `lootboxIndex` identifier on the `LootBoxOpened` emit; auto-resolve
     ///        callers pass `0`.
     /// @param amount ETH-equivalent amount for reward calculations
     /// @param targetLevel Target level for future tickets
@@ -1737,10 +1424,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///        target-level roll's base and the FLIP legs' price basis.
     /// @param seed Per-resolution 256-bit keccak seed (single-source-of-entropy threaded through all sub-rolls and bit-sliced per-consumer)
     /// @dev One keccak seed per box, derived by the caller from the committed word and the
-    ///      box's immutable identity — entry sweep and sDGNRS redemption order: hash4(rngWord,
-    ///      player, BOX_OPEN_TAG, nonce), the redemption's rngWord being its player-mixed
-    ///      entropy; direct auto-resolve: hash2(rngWord, player); afking:
-    ///      hash4(rngWord, player, AFKING_BOX_TAG, frozenDay) — and bit-sliced per consumer:
+    ///      box's immutable identity, with the owner's wallet ID as the owner input — queued
+    ///      entry: hash4(orderRoot, id, BOX_OPEN_TAG, nonce) where orderRoot =
+    ///      hash4(QUEUED_ORDER_DOMAIN, word, buffer, position); sDGNRS redemption order:
+    ///      hash4(redemptionWord, id, BOX_OPEN_TAG, nonce), the redemption word being already
+    ///      ID-mixed; direct auto-resolve: hash2(rngWord, id); afking:
+    ///      hash4(rngWord, id, AFKING_BOX_TAG, frozenDay) — and bit-sliced per consumer:
     ///        bits[0..15]    rangeRoll % 100         (_rollTargetLevel)
     ///        bits[16..23]   near-offset % 5         (_rollTargetLevel)
     ///        bits[24..39]   far-offset % 46         (_rollTargetLevel)
@@ -1751,12 +1440,13 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///        bits[224..255] fracRoundUp % 100      (_settleLootboxRoll ticket whole-collapse;
     ///        uint32 window, bias ~2e-8)
     ///      One box, one roll: no split and no second chunk. The boon draw is not sliced from
-    ///      this seed — the Boon module rolls it from hash2(boonSeed, nonce) >> 120 (entry
-    ///      sweep: boonSeed = hash4(rngWord, player, BOX_BOON_TAG, index); single-box resolvers pass the box seed
-    ///      at nonce 0). The Degenerette-spin rolls (WWXRP / FLIP-spins / ETH-spin) derive
+    ///      this seed — the Boon module rolls it from hash2(boonSeed, nonce) >> 120 (queued
+    ///      entry: boonSeed = hash4(orderRoot, id, BOX_BOON_TAG, buffer); redemption order:
+    ///      hash4(redemptionWord, id, BOX_BOON_TAG, taggedBatch); single-box resolvers pass the
+    ///      box seed at nonce 0). The Degenerette-spin rolls (WWXRP / FLIP-spins / ETH-spin) derive
     ///      their sub-seeds via hash2(seed, BOX_*_SPIN_TAG) and consume no primary bits.
     /// @param payColdBustConsolation Whether a ticket-path cold-bust (`whole == 0`) pays the
-    ///        roll's `_boxWwxrpStake` in WWXRP; `true` for the manual caller `_openLootBoxLeg`
+    ///        roll's `_boxWwxrpStake` in WWXRP; `true` for queued entries
     ///        and `resolveAfkingBox`, `false` for the auto-resolve callers (`resolveLootboxDirect`,
     ///        `resolveRedemptionLootbox`), which stay silent on cold-bust
     /// @param distressEth Portion of lootbox ETH bought during distress mode (pre-EV-scaling basis)
@@ -1810,7 +1500,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      floor + creditFlip, and one LootBoxOpened. `rollAmount` drives the reward calc;
     ///      `fullAmount` fills the event's amount field. One box resolves here exactly once.
     /// @param player Player receiving rewards.
-    /// @param index Shared (system-wide) RNG index of the lootbox — event tag only.
+    /// @param index Entry tag (see `LootBoxOpened.lootboxIndex`) — event tag only.
     /// @param rollAmount This roll's ETH chunk (the box's main amount, boon budget removed).
     /// @param fullAmount The box's full ETH-equivalent amount — event amount field only, not the reward basis.
     /// @param rollLevel The target level this roll's tickets queue at.
@@ -1897,7 +1587,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             // call). The cap keeps `wholeTicketsToEntries`' `<< 2` in range too. Reachable
             // only at economically absurd (though encodable) order sizes; saturation matches
             // the per-roll ceiling's own graceful-cap policy.
-            // `_openLootBoxLeg` and `resolveAfkingBox` pay the WWXRP cold-bust consolation;
+            // Queued entries and `resolveAfkingBox` pay the WWXRP cold-bust consolation;
             // the other auto-resolve callers stay silent.
             _addBoxTickets(acc, rollLevel - currentLevel, whole);
             if (payColdBustConsolation && whole == 0) {
@@ -2030,7 +1720,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                         uint256 paid = _creditDgnrsReward(player, pendingDgnrs);
                         if (paid != 0) emit LootBoxDgnrsBatch(player, pendingDgnrs, paid);
                     }
-                    _callEthSpin(player, ethStake, activityScore, EntropyLib.hash2(seed, BOX_ETH_SPIN_TAG));
+                    _callEthSpin(player, acc.id, ethStake, activityScore, EntropyLib.hash2(seed, BOX_ETH_SPIN_TAG));
                     // The child may have changed Pool.Lootbox even when the parent had nothing
                     // pending. Force any later parent DGNRS roll to observe the live balance.
                     acc.dgnrsPoolLoaded = false;
@@ -2150,7 +1840,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                     uint8(32)
                 )
             );
-        if (!ok) revert EmptyRevert();
+        if (!ok) _revertDelegate(data);
         wwxrpOut = abi.decode(data, (uint256));
     }
 
@@ -2170,24 +1860,25 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                     uint8(32)
                 )
             );
-        if (!ok) revert EmptyRevert();
+        if (!ok) _revertDelegate(data);
         flipOut = abi.decode(data, (uint256));
     }
 
     /// @dev Delegatecall the Degenerette module's ETH box-spin resolver.
-    function _callEthSpin(address player, uint256 stake, uint16 activityScore, uint256 seed) private {
-        (bool ok,) = ContractAddresses.GAME_DEGENERETTE_MODULE
+    function _callEthSpin(address player, uint32 id, uint256 stake, uint16 activityScore, uint256 seed) private {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_DEGENERETTE_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameDegeneretteModule.resolveEthSpinFromBox.selector,
                     player,
+                    id,
                     stake,
                     activityScore,
                     seed,
                     uint8(32)
                 )
             );
-        if (!ok) revert EmptyRevert();
+        if (!ok) _revertDelegate(data);
     }
 
     /// @dev Calculate scaled ticket count from budget with ranged variance tiers.

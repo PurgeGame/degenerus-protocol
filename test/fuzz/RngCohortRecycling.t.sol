@@ -6,12 +6,12 @@ import {Test} from "forge-std/Test.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-contract CohortRecyclingHarness is DegenerusGameStorage {
+contract CohortRecyclingHarness is WalletSeed {
     function seal() external {
         if (!_lootboxReadComplete()) revert E();
         _swapRngBuffers();
-        _resetLootboxWriteBuffer(_rngWriteBuffer());
         rngWordCurrent = RNG_WORD_WAITING;
     }
     function ready(uint256 value) external { rngWordCurrent = value; _setRngSessionPublished(true); _tryCompleteRng(); }
@@ -26,15 +26,25 @@ contract CohortRecyclingHarness is DegenerusGameStorage {
         else _tryCompleteRng();
     }
     function queueBox(address player, uint256 order_) external {
-        lootboxOrder[_rngWriteBuffer()][player] = order_;
-        boxPlayers[_rngWriteBuffer()].push(player);
+        uint256 word = (order_ << 32) | _seedWallet(player);
+        _appendBoxEntry(word, 0);
     }
-    function queueBet(uint256 bet) external { degeneretteQueue[_rngWriteBuffer()].push(bet); }
-    function processed(address player) external { lootboxOrder[_rngReadBuffer()][player] |= BOX_PROCESSED; }
-    function order(uint48 buffer, address player) external view returns(uint256) { return _boxOrder(buffer, player); }
-    function counts(uint48 buffer) external view returns(uint256, uint256) { return(boxPlayers[buffer].length, degeneretteQueue[buffer].length); }
+    function queueBet(uint256 bet) external {
+        uint256 lr = lootboxRngPacked;
+        uint256 position = uint32(lr >> LR_BET_COUNT_SHIFT);
+        lootboxRngPacked = lr + (uint256(1) << LR_BET_COUNT_SHIFT);
+        uint256 slot = _betSlot(_rngWriteBuffer(), position);
+        assembly { sstore(slot, bet) }
+    }
+    function processed() external { boxCursor = boxReadCount; }
+    function entry(uint48 buffer, uint256 position) external view returns(uint256) { return _boxEntryAt(buffer, position); }
+    function writeCounts() external view returns(uint256, uint256) {
+        uint256 lr = lootboxRngPacked;
+        return(uint32(lr >> LR_BOX_COUNT_SHIFT), uint32(lr >> LR_BET_COUNT_SHIFT));
+    }
+    function readCounts() external view returns(uint256, uint256) { return(boxReadCount, degeneretteReadCount); }
     function frontier(bool done) external { humanReadComplete = done; if (!done) _setRngComplete(false); _tryCompleteRng(); }
-    function settleBets() external { degeneretteCursor = uint32(degeneretteQueue[_rngReadBuffer()].length); _tryCompleteRng(); }
+    function settleBets() external { degeneretteCursor = degeneretteReadCount; _tryCompleteRng(); }
     function tickets(bool done) external { ticketsFullyProcessed = done; if (!done) _setRngComplete(false); _tryCompleteRng(); }
     function mid(uint8 flag) external { _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, flag); if (flag != 0) _setRngComplete(false); _tryCompleteRng(); }
     function locked(bool on) external { rngLockedFlag = on; if (on) _setRngComplete(false); _tryCompleteRng(); }
@@ -94,14 +104,17 @@ contract RngCohortRecyclingTest is Test {
     function test_RepeatedReuseResetsOnlyHeadersAndMasksProcessedOrders() public {
         for (uint256 i; i < 8; ++i) {
             uint48 write = h.writeBuffer();
-            (uint256 boxes, uint256 bets) = h.counts(write); assertEq(boxes, 0); assertEq(bets, 0);
+            (uint256 boxes, uint256 bets) = h.writeCounts(); assertEq(boxes, 0); assertEq(bets, 0);
             address player = address(uint160(10 + (i & 1)));
-            assertEq(h.order(write, player), 0);
             h.queueBox(player, i + 100); h.queueBet(i + 200);
+            (boxes, bets) = h.writeCounts(); assertEq(boxes, 1); assertEq(bets, 1);
             h.seal(); assertEq(h.readBuffer(), write); assertEq(h.word(write), 0);
+            (boxes, bets) = h.writeCounts(); assertEq(boxes, 0); assertEq(bets, 0);
+            (boxes, bets) = h.readCounts(); assertEq(boxes, 1); assertEq(bets, 1);
+            assertEq(h.entry(write, 0) >> 32, i + 100, "reused buffer holds this cohort's entry at position 0");
             vm.expectRevert(DegenerusGameStorage.E.selector); h.seal();
             h.ready(i + 42); assertEq(h.word(write), i + 42); assertEq(h.word(write ^ 1), 0);
-            h.processed(player); assertEq(h.order(write, player), 0);
+            h.processed();
             h.tickets(true); h.frontier(true);
             assertFalse(h.complete(), "human completion does not skip committed Degenerette bets");
             h.settleBets(); assertTrue(h.complete());
@@ -109,7 +122,7 @@ contract RngCohortRecyclingTest is Test {
     }
     function test_InvalidPhysicalTagsNeverAliasARealBuffer() public {
         h.seal(); _finish();
-        assertEq(h.word(2), 0); assertEq(h.order(2, address(10)), 0);
+        assertEq(h.word(2), 0); assertEq(h.entry(2, 0), 0);
         vm.expectRevert(DegenerusGameStorage.E.selector); h.craps(2, true);
     }
 }

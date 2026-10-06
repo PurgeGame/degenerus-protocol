@@ -25,6 +25,7 @@ contract TicketCheckpointHarness is DegenerusGameTicketModule, WalletSeed {
             // The daily request swaps both cohorts; foil keys follow foilWriteSlot (017ac4cdf).
             ticketWriteSlot = !ticketWriteSlot;
             foilWriteSlot = !foilWriteSlot;
+            (foilWriteCount, foilReadCount) = (foilReadCount, foilWriteCount);
         }
     }
     function frozenFuture(uint24 lvl) external { earlyTicketLevel = lvl; lastPurchaseDay = true; }
@@ -34,7 +35,14 @@ contract TicketCheckpointHarness is DegenerusGameTicketModule, WalletSeed {
     function seedFoil(address buyer, uint24 lvl) external {
         uint80 owner = (uint80(_seedWallet(buyer)) << OWNER_IDX_SHIFT);
         foilRecord[lvl & 3][_seedWallet(buyer)] = (uint256(lvl) << _FOIL_LEVEL_SHIFT) | (uint256(10_000) << _FOIL_MULT_SHIFT);
-        foilQueue[_foilWriteKey()].push((uint256(owner >> OWNER_IDX_SHIFT) << 192) | (uint256(lvl) << 160) | uint160(buyer));
+        _foilAppend(_foilWriteKey(), (uint256(owner >> OWNER_IDX_SHIFT) << 192) | (uint256(lvl) << 160) | uint160(buyer));
+    }
+    function _foilAppend(uint24 key, uint256 pack) internal {
+        uint256 i = _foilCount(key);
+        uint256 s = _foilSlot(key, i);
+        assembly ("memory-safe") { sstore(s, pack) }
+        if (key == _foilWriteKey()) foilWriteCount = uint32(i + 1);
+        else foilReadCount = uint32(i + 1);
     }
     function terminal(uint24 drain) external {
         _lrWrite(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK, drain == level ? 1 : 2);
@@ -54,7 +62,7 @@ contract TicketCheckpointHarness is DegenerusGameTicketModule, WalletSeed {
     function offset() external view returns (uint32) { return ticketSoloOffset; }
     function frontier() external view returns (uint32, uint256) { return (ticketCursor, ticketSeats); }
     function foilState() external view returns (uint256, uint32, uint24) {
-        return (foilQueue[_foilReadKey()].length, foilCursor, foilGenerationDay);
+        return (foilReadCount, foilCursor, foilGenerationDay);
     }
     function owed(address player, uint24 lvl, bool future) external view returns (uint80) {
         return _owedOf(future ? _tqFarFutureKey(lvl) : _tqReadKey(lvl), player);

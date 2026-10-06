@@ -31,18 +31,13 @@ contract DelegateOnlyGuards is DeployProtocol {
         whaleModule.purchaseDeityPass{value: 1 ether}(address(this), 0, bytes32(0));
     }
 
-    // The lootbox module's five delegatecall-only entrypoints. Each guards on the executing
+    // The lootbox module's delegatecall-only entrypoints. Each guards on the executing
     // address being the Game; called on the module itself, each must refuse before touching
     // the module's own (empty) storage.
 
-    function test_quoteBoxOrder_directCallReverts() public {
-        vm.expectRevert();
-        lootboxModule.quoteBoxOrder(address(this), 1);
-    }
-
     function test_beginBoxOrder_directCallReverts() public {
         vm.expectRevert();
-        lootboxModule.beginBoxOrder(address(this), 1);
+        lootboxModule.beginBoxOrder(address(this), 1, 1);
     }
 
     function test_recordCoverBox_directCallReverts() public {
@@ -52,7 +47,7 @@ contract DelegateOnlyGuards is DeployProtocol {
 
     function test_applyBoxOrderScore_directCallReverts() public {
         vm.expectRevert();
-        lootboxModule.applyBoxOrderScore(address(this), 1, 0, 1 ether, 0);
+        lootboxModule.applyBoxOrderScore(1, 1, 0, 1 ether);
     }
 
     function test_resolveLootboxDirect_directCallReverts() public {

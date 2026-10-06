@@ -14,23 +14,11 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @dev View/seed overlay etched onto the live game to inspect internal box-queue state.
 ///      A DegenerusGame subclass: etching type().runtimeCode (no constructor) gives the reads access
-///      to the live internal boxPlayers / lootboxOrder / presaleBoxEth maps and the read frontier
-///      (humanReadComplete, boxCursor); the real code is restored after each call.
+///      to the live internal box queue and the read frontier (humanReadComplete, boxCursor); the
+///      real code is restored after each call.
 contract SweepViewer is DegenerusGame {
     function lrIndexView() external view returns (uint48) {
         return _rngWriteBuffer();
-    }
-
-    function queueLen(uint48 index) external view returns (uint256) {
-        return boxPlayers[index & 1].length;
-    }
-
-    function lootboxAmountFor(uint48 index, address who) external view returns (uint256) {
-        return _boxOrder(index, who);
-    }
-
-    function presaleAmountFor(uint48 index, address who) external view returns (uint256) {
-        return presaleBoxEth[index & 1][who] & PRESALE_BOX_AMOUNT_MASK;
     }
 
     function boxCursorView() external view returns (uint48) {
@@ -45,24 +33,17 @@ contract SweepViewer is DegenerusGame {
         return _rngReadBuffer();
     }
 
-    /// @dev The human sweep's declared admission bound for `who`'s entry in `index`
-    ///      (GameAfkingModule._runHumanBoxWork).
-    function entryDeclaredGas(uint48 index, address who) external view returns (uint256) {
-        uint256 boxes = _boxOrderCount(_boxOrder(index, who));
-        uint256 stored = presaleDrained ? 0 : presaleBoxEth[index & 1][who];
-        if (boxes == 0 && stored == 0) return MineFlipGasBounds.HUMAN_SKIP_GAS;
-        return MineFlipGasBounds.HUMAN_ENTRY_GAS + boxes * MineFlipGasBounds.HUMAN_BOX_GAS
-            + (stored == 0 ? 0 : MineFlipGasBounds.HUMAN_PRESALE_GAS);
+    /// @dev Append `count` copies of the complete entry `word` to the write buffer, through the
+    ///      production append (no pending ETH): more, smaller entries, each admitted on its own.
+    function appendClones(uint256 word, uint256 count) external {
+        for (uint256 i; i < count; ++i) _appendBoxEntry(word, 0);
     }
 
     /// @dev Fixture seal of the write cohort as a mid-day request leaves it before its word lands
-    ///      (RngModule._requestLootboxRng: _sealRngWriteBuffer, then the request goes out). Used at
+    ///      (RngModule._requestLootboxRng: the buffer swap, then the request goes out). Used at
     ///      genesis, where no real mid-day request is possible before the first daily word.
     function sealWriteCohortPending(uint256 requestId) external {
-        lootboxRngPacked &= ~((LR_PENDING_ETH_MASK << LR_PENDING_ETH_SHIFT)
-            | (LR_PENDING_FLIP_MASK << LR_PENDING_FLIP_SHIFT));
         _swapRngBuffers();
-        _resetLootboxWriteBuffer(_rngWriteBuffer());
         rngWordCurrent = RNG_WORD_WAITING;
         _setRngSessionPublished(false);
         rngRequestTime = uint48(block.timestamp);
@@ -80,15 +61,11 @@ contract SweepViewer is DegenerusGame {
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
     }
 
-    /// @dev Fixture seal of the write cohort, mirroring RngModule._sealRngWriteBuffer followed by
-    ///      a published delivery: the pending-value counters clear, the buffers swap (which
-    ///      reopens the read frontier), the new write buffer's queues reset, and the sealed
-    ///      cohort's word lands published.
+    /// @dev Fixture seal of the write cohort, mirroring the production swap followed by a
+    ///      published delivery: the buffers swap (latching the box and bet counts and reopening
+    ///      the read frontier) and the sealed cohort's word lands published.
     function sealWriteCohort(uint256 word) external {
-        lootboxRngPacked &= ~((LR_PENDING_ETH_MASK << LR_PENDING_ETH_SHIFT)
-            | (LR_PENDING_FLIP_MASK << LR_PENDING_FLIP_SHIFT));
         _swapRngBuffers();
-        _resetLootboxWriteBuffer(_rngWriteBuffer());
         rngWordCurrent = word;
         _setRngRequestActive(false);
         _setRngSessionPublished(true);
@@ -98,14 +75,15 @@ contract SweepViewer is DegenerusGame {
 /// @title SweepWorstCaseDrain — AUTO-03 worst-case, gas-checkpointed human-box sweep.
 ///
 /// @notice The human sweep (GameAfkingModule._runHumanBoxWork, reached only from the mineFlip
-///         HumanBoxes action) walks the sealed read cohort boxPlayers[read] from
-///         boxCursor, opening every ready entry (lootbox order and presale leg). Lootbox RNG
+///         HumanBoxes action) walks the sealed read cohort boxQueue[read] from
+///         boxCursor, opening every entry (ordinary leg then presale leg). Lootbox RNG
 ///         uses two physical buffers (slot 0 bit 252, read = write ^ 1) and a fresh request
 ///         waits for every read consumer, so at most ONE sealed cohort is ever outstanding; its
 ///         frontier is (humanReadComplete, boxCursor). The worst case the gas checkpoints defend
-///         against: LONG walls of stale / no-box entries (each a pure skip) around the live
-///         boxes. A wall must be crossed across bounded-gas calls (each entry is admitted only if
-///         its declared bound fits the remaining allowance), so progress is monotonic across
+///         against: LONG walls of small one-box entries (every entry is real work, each admitted
+///         on its own HUMAN_ENTRY_GAS bound) around the live boxes. A wall must be crossed across
+///         bounded-gas calls (each entry is admitted only if its declared bound fits the
+///         remaining allowance), so progress is monotonic across
 ///         calls and nothing is ever marooned.
 ///
 ///         This test seeds that shape and asserts:
@@ -115,13 +93,10 @@ contract SweepViewer is DegenerusGame {
 ///           (4) the live lootbox box AND a presale box are auto-opened by the sweep.
 ///
 /// @dev Test-only. ZERO contracts/*.sol mutation. Real lootbox + presale boxes are created through
-///      the genuine purchase entrypoints (so their resolution is solvent); the skip walls
-///      (no-box addresses) are appended via field-isolated slot pokes, and the cohort is sealed
-///      through an etched overlay that runs the storage contract's own swap/reset routines.
+///      the genuine purchase entrypoints (so their resolution is solvent); the walls are clones of
+///      one real purchase's entry appended through the production append in an etched overlay,
+///      and the cohort is sealed through the overlay running the storage contract's own swap.
 contract SweepWorstCaseDrain is DeployProtocol {
-    // boxPlayers: mapping(uint48 => address[]) at slot 57 (scripts/layout/golden/DegenerusGame.json).
-    uint256 private constant SLOT_BOX_PLAYERS = GameSlots.BOX_PLAYERS;
-
     // A realistic keeper/door allowance: one call admits work only while the remaining gas covers
     // the next entry's declared bound.
     uint256 private constant TEN_M_TARGET = 10_000_000;
@@ -129,11 +104,10 @@ contract SweepWorstCaseDrain is DeployProtocol {
     // selection/dispatch slack ahead of the meter.
     uint256 private constant ENGINE_OVERHEAD =
         MineFlipGasBounds.ENGINE_BOUNDARY + MineFlipGasBounds.ENGINE_RETURN + 100_000;
-    // A wall no realistic 10M call can cross by declared admission (HUMAN_SKIP_GAS each).
-    uint256 private constant SKIP_WALL = 4_000;
-    // The per-call budget is gas (a skip costs a few thousand gas actual, ~200 to ~1,500 fit in
-    // one bounded call), so the fuzzed wall lengths are scaled to stay longer than one call.
-    uint256 private constant WALL_SCALE = 10;
+    // A wall of one-box entries no realistic 10M call can cross: admission keeps taking entries while
+    // the remaining allowance covers the next declared bound, so the wall is sized against the
+    // ~25k gas one such entry actually costs, not the 1.3M it declares.
+    uint256 private constant SKIP_WALL = 600;
     uint8 private constant ACTION_AFKING = 9;
     uint8 private constant ACTION_HUMAN_BOXES = 10;
 
@@ -164,27 +138,40 @@ contract SweepWorstCaseDrain is DeployProtocol {
         vm.etch(address(game), real);
     }
 
-    function _lootAmt(uint48 index, address who) internal returns (uint256 v) {
-        (bytes memory real, SweepViewer sv) = _viewer();
-        v = sv.lootboxAmountFor(index, who);
-        vm.etch(address(game), real);
+    /// @dev Entries queued in `index` (write count, or the sealed read count).
+    function _queueLen(uint48 index) internal view returns (uint256) {
+        return RecyclingState.boxCount(address(game), index);
     }
 
-    function _presaleAmt(uint48 index, address who) internal returns (uint256 v) {
-        (bytes memory real, SweepViewer sv) = _viewer();
-        v = sv.presaleAmountFor(index, who);
-        vm.etch(address(game), real);
+    /// @dev Position of `who`'s first entry in `index` that carries a presale leg when `presale`,
+    ///      else an ordinary leg and no presale leg.
+    function _entryPos(uint48 index, address who, bool presale) internal view returns (uint256 pos) {
+        uint32 id = game.walletIdOf(who);
+        uint256 n = _queueLen(index);
+        for (; pos < n; ++pos) {
+            uint256 word = RecyclingState.boxEntry(address(game), index, pos);
+            if (BoxOrderLib.boId(word) == id && (BoxOrderLib.boPresaleWei(word) != 0) == presale) return pos;
+        }
+        revert("fixture: entry not queued");
     }
 
-    function _queueLen(uint48 index) internal returns (uint256 v) {
-        (bytes memory real, SweepViewer sv) = _viewer();
-        v = sv.queueLen(index);
-        vm.etch(address(game), real);
+    /// @dev The human sweep's declared admission bound for entry `word`
+    ///      (GameAfkingModule._runHumanBoxWork).
+    function _declaredGas(uint256 word) internal pure returns (uint256) {
+        return MineFlipGasBounds.HUMAN_ENTRY_GAS + BoxOrderLib.boCount(word) * MineFlipGasBounds.HUMAN_BOX_GAS
+            + (BoxOrderLib.boPresaleWei(word) != 0 ? MineFlipGasBounds.HUMAN_PRESALE_GAS : 0);
     }
 
-    function _entryDeclaredGas(uint48 index, address who) internal returns (uint256 v) {
+    /// @dev Entry `pos` of the read cohort has settled (the cursor moved past it).
+    function _settled(uint256 pos) internal returns (bool) {
+        (, uint48 cur) = _frontier();
+        return cur > pos;
+    }
+
+    /// @dev Append `count` clones of `word` to the write buffer.
+    function _appendClones(uint256 word, uint256 count) internal {
         (bytes memory real, SweepViewer sv) = _viewer();
-        v = sv.entryDeclaredGas(index, who);
+        sv.appendClones(word, count);
         vm.etch(address(game), real);
     }
 
@@ -218,26 +205,6 @@ contract SweepWorstCaseDrain is DeployProtocol {
         (bytes memory real, SweepViewer sv) = _viewer();
         sv.sealWriteCohort(word);
         vm.etch(address(game), real);
-    }
-
-    // =========================================================================
-    // Slot-poke seeding helpers (no contract mutation)
-    // =========================================================================
-
-    /// @dev Append `count` no-box addresses to boxPlayers[index & 1] — a pure skip wall. Each entry
-    ///      has a zero lootbox order AND zero presale leg, so the sweep skips it (one admitted
-    ///      HUMAN_SKIP_GAS step, no resolution, never reverts). boxPlayers is mapping(uint48 =>
-    ///      address[]) at slot 57: length at keccak(index & 1, 57); element i at
-    ///      keccak(keccak(index & 1, 57)) + i.
-    function _appendSkipPrefix(uint48 index, uint256 count, uint256 saltSeed) internal {
-        bytes32 lenSlot = keccak256(abi.encode(uint256(index & 1), uint256(SLOT_BOX_PLAYERS)));
-        uint256 len = uint256(vm.load(address(game), lenSlot));
-        bytes32 dataBase = keccak256(abi.encode(lenSlot));
-        for (uint256 i; i < count; ++i) {
-            address ghost = address(uint160(uint256(keccak256(abi.encode("skip", saltSeed, len + i)))));
-            vm.store(address(game), bytes32(uint256(dataBase) + len + i), bytes32(uint256(uint160(ghost))));
-        }
-        vm.store(address(game), lenSlot, bytes32(len + count));
     }
 
     // =========================================================================
@@ -311,8 +278,15 @@ contract SweepWorstCaseDrain is DeployProtocol {
     /// @dev Buy a REAL presale box into the current write cohort (credit-funded; enqueues for auto-open).
     function _buyPresaleBox(address who, uint256 boxWei) internal returns (bool created) {
         if (game.presaleBoxEthRemaining() == 0) return false;
-        // Seed spendable presale-box credit (presaleBoxCredit, slot 17 — a credit ALLOWANCE, not a box record).
-        bytes32 cslot = keccak256(abi.encode(who, uint256(17)));
+        vm.deal(who, boxWei + 2 ether);
+        if (game.walletIdOf(who) == 0) {
+            // Entry-point registration: a plain ticket buy gives the wallet its ID (no box entry).
+            (, , , , uint256 priceWei) = game.purchaseInfo();
+            vm.prank(who);
+            game.purchase{value: priceWei}(who, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        }
+        // Seed spendable presale-box credit (presaleBoxCredit — a credit ALLOWANCE keyed by wallet ID).
+        bytes32 cslot = keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.PRESALE_BOX_CREDIT));
         uint256 existing = uint256(vm.load(address(game), cslot));
         vm.store(address(game), cslot, bytes32(existing + boxWei));
         vm.deal(who, boxWei + 1 ether);
@@ -328,7 +302,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
     // The worst-case drain
     // =========================================================================
 
-    /// @notice FUZZ: long skip walls before and after a live lootbox box and a presale box in the
+    /// @notice FUZZ: long walls of small entries before and after a live lootbox box and a presale box in the
     ///         sealed read cohort all drain across mineFlip calls given a bounded realistic
     ///         allowance — every call succeeds, the frontier advances monotonically, the drain
     ///         completes and both real boxes open. (No assertion is weakened: the drain MUST
@@ -345,30 +319,35 @@ contract SweepWorstCaseDrain is DeployProtocol {
 
         // 2) Two head walls in the write cohort that the seal will commit. With two physical
         //    buffers only one sealed cohort can be outstanding, so every wall lives in the single
-        //    read cohort: head walls before the real entries, a tail wall after them.
+        //    read cohort: head walls before the real entries, a tail wall after them. A wall is a
+        //    run of one-box entries (clones of one real small purchase), each real work admitted
+        //    on its own bound.
         uint48 cohort = _lrIndex();
-        uint256 headA = bound(prefixSeed >> 8, 20, 80) * WALL_SCALE;
-        uint256 headB = bound(prefixSeed >> 16, 20, 80) * WALL_SCALE;
-        _appendSkipPrefix(cohort, headA, prefixSeed ^ 0xA);
-        _appendSkipPrefix(cohort, headB, prefixSeed ^ 0xB);
+        uint256 headA = bound(prefixSeed >> 8, 3, 10);
+        uint256 headB = bound(prefixSeed >> 16, 3, 10);
+        address wallOwner = makeAddr("wall-owner");
+        _buyLootbox(wallOwner, 0.01 ether);
+        uint256 template = RecyclingState.boxEntry(address(game), cohort, _entryPos(cohort, wallOwner, false));
+        _appendClones(template, headA);
+        _appendClones(template, headB);
 
         // 3) Real boxes behind the head walls.
         address lootOwner = makeAddr("loot-owner");
         uint256 lootboxWei = bound(lootSeed, 0.05 ether, 2 ether);
         _buyLootbox(lootOwner, lootboxWei);
-        assertGt(_lootAmt(cohort, lootOwner), 0, "fixture: real lootbox box queued in the write cohort");
+        uint256 lootPos = _entryPos(cohort, lootOwner, false);
 
         address presaleOwner = makeAddr("presale-owner");
         bool presaleCreated = _buyPresaleBox(presaleOwner, 1 ether);
         // Presale must actually be created for the presale-leg assertion to be non-vacuous.
         vm.assume(presaleCreated);
-        assertGt(_presaleAmt(cohort, presaleOwner), 0, "fixture: real presale box queued in the write cohort");
+        uint256 presalePos = _entryPos(cohort, presaleOwner, true);
 
         // 4) A LONG tail wall after the real entries: the sweep must still scan past it to drain the
         //    cohort, proving the cursor persists past the real opens.
-        uint256 prefixLen = bound(prefixSeed, 40, 160) * WALL_SCALE;
-        _appendSkipPrefix(cohort, prefixLen, prefixSeed);
-        uint256 totalEntries = headA + headB + 2 + prefixLen;
+        uint256 prefixLen = bound(prefixSeed, 6, 20);
+        _appendClones(template, prefixLen);
+        uint256 totalEntries = 1 + headA + headB + 2 + prefixLen;
         assertEq(_queueLen(cohort), totalEntries, "fixture: walls and real entries queued in the cohort");
 
         // 5) Seal: the cohort becomes the read buffer with its word landed.
@@ -379,8 +358,8 @@ contract SweepWorstCaseDrain is DeployProtocol {
         assertEq(game.nextMinerAction(), ACTION_HUMAN_BOXES, "fixture: the human sweep is the next read consumer");
 
         // 6) Per-chunk property: the heaviest entry's declared bound fits a realistic 10M call.
-        uint256 heaviest = _entryDeclaredGas(cohort, lootOwner);
-        uint256 presaleEntry = _entryDeclaredGas(cohort, presaleOwner);
+        uint256 heaviest = _declaredGas(RecyclingState.boxEntry(address(game), cohort, lootPos));
+        uint256 presaleEntry = _declaredGas(RecyclingState.boxEntry(address(game), cohort, presalePos));
         if (presaleEntry > heaviest) heaviest = presaleEntry;
         // The Game's delegatecall retains 1/64 of the forwarded gas.
         uint256 minChunk = (heaviest + MineFlipGasBounds.HUMAN_TAIL_GAS + ENGINE_OVERHEAD) * 64 / 63;
@@ -413,22 +392,20 @@ contract SweepWorstCaseDrain is DeployProtocol {
         assertLe(calls, totalEntries + 1, "DRAIN COMPLETE: at least one entry per bounded call");
 
         // (4) the live lootbox box AND the presale box were auto-opened (both legs drained).
-        assertEq(_lootAmt(cohort, lootOwner), 0, "DRAINED: the live lootbox box was auto-opened by the sweep");
-        assertEq(_presaleAmt(cohort, presaleOwner), 0, "DRAINED: the presale box was auto-opened by the sweep (presale leg)");
+        assertTrue(_settled(lootPos), "DRAINED: the live lootbox box was auto-opened by the sweep");
+        assertTrue(_settled(presalePos), "DRAINED: the presale box was auto-opened by the sweep (presale leg)");
 
         // The frontier swept the whole cohort — nothing marooned behind it.
         (, uint48 finalCur) = _frontier();
-        assertEq(finalCur, 0, "FRONTIER: completion resets the cursor (none marooned)");
+        assertEq(finalCur, totalEntries, "FRONTIER: completion leaves the cursor at the read count (none marooned)");
         assertTrue(game.nextMinerAction() != ACTION_HUMAN_BOXES, "FRONTIER: no human-box work remains for the cohort");
     }
 
-    /// @dev Regression: when the human sweep scans only stale entries (opens nothing) but advances
-    ///      the frontier, mineFlip COMMITS that progress instead of reverting NoWork and rolling it
-    ///      back. So the keeper route advances through a skip wall cumulatively across calls and
-    ///      reaches the live box behind it. Pre-fix this reverted NoWork every call, rolling the
-    ///      cursor back to 0 and stranding the tail box on the rewarded route.
-    /// @dev SKIP_WALL is sized so a realistic 10M mineFlip cannot cross it in one call: each skip is
-    ///      admitted only while the remaining allowance covers HUMAN_SKIP_GAS plus the tail.
+    /// @dev Regression: a human sweep that stops inside a wall of entries COMMITS its cursor progress
+    ///      (mineFlip does not revert and roll it back), so the keeper route advances through the
+    ///      wall cumulatively across calls and reaches the live box behind it.
+    /// @dev SKIP_WALL is sized so a realistic 10M mineFlip cannot cross it in one call: each entry is
+    ///      admitted only while the remaining allowance covers its declared bound plus the tail.
     function testRegression_MintFlipCommitsSkipProgressAndReachesLiveTail() public {
         _driveDailyCycleOnce();
         require(!game.rngLocked(), "fixture: game unlocked");
@@ -437,13 +414,17 @@ contract SweepWorstCaseDrain is DeployProtocol {
         require(!game.advanceDue() && !game.rngLocked(), "fixture: no advance work, unlocked");
 
         uint48 index = _lrIndex();
+        address wallOwner = makeAddr("audit-wall-owner");
+        _buyLootbox(wallOwner, 0.01 ether);
+        uint256 template = RecyclingState.boxEntry(address(game), index, _entryPos(index, wallOwner, false));
         uint256 skipPrefixLen = SKIP_WALL;
-        _appendSkipPrefix(index, skipPrefixLen, 0xBAD5EED);
+        _appendClones(template, skipPrefixLen - 1);
 
         address liveOwner = makeAddr("audit-live-owner");
         _buyLootbox(liveOwner, 1 ether);
-        assertEq(_queueLen(index), skipPrefixLen + 1, "fixture: stale entries precede one live box");
-        assertGt(_lootAmt(index, liveOwner), 0, "fixture: tail box is live");
+        uint256 livePos = _entryPos(index, liveOwner, false);
+        assertEq(_queueLen(index), skipPrefixLen + 1, "fixture: a wall of entries precedes one live box");
+        assertEq(livePos, skipPrefixLen, "fixture: tail box sits behind the wall");
 
         _sealCohort(uint256(keccak256("audit-word")) | 1);
         _clearAfkingStage();
@@ -458,43 +439,34 @@ contract SweepWorstCaseDrain is DeployProtocol {
         // Foundry's default basefee is zero, which would price every call at zero.
         vm.fee(1 gwei);
 
-        // Call 1: a realistic allowance walks part of the stale wall and opens nothing. mineFlip
-        // does NOT revert; it COMMITS that skip-only progress. The only reward the engine pays is
-        // the gas-priced miner reward (MinerBounty kind 1): the stale walk is measured keeper
-        // work above the unpaid first 1M, and nothing else is credited.
+        // Call 1: a realistic allowance walks part of the wall and stops inside it. mineFlip does
+        // NOT revert; it COMMITS that progress.
         uint256 keeperFlipBefore = coinflip.coinflipAmount(actor);
-        vm.recordLogs();
         vm.prank(actor);
+        uint256 gasBefore = gasleft();
         game.mineFlip{gas: TEN_M_TARGET}();
-        (uint256 skipOnlyGas, uint256 skipOnlyReward) = _minerRewardOnly(vm.getRecordedLogs());
-        emit log_named_uint("skip-only keeper call execution gas", skipOnlyGas);
+        emit log_named_uint("first chunk gas", gasBefore - gasleft());
 
         (bool afterDone, uint48 afterCur) = _frontier();
         assertFalse(afterDone, "regression: still sweeping the same cohort");
-        assertGt(afterCur, beforeCur, "regression: skip-only progress is COMMITTED, not rolled back");
-        assertLt(afterCur, skipPrefixLen, "regression: budget hit the wall - stopped inside the stale wall");
-        assertGt(_lootAmt(index, liveOwner), 0, "regression: budget hit the wall - tail box not yet reached");
-        assertGt(skipOnlyReward, 0, "regression: the stale walk is measured work above the unpaid 1M");
-        assertEq(
-            coinflip.coinflipAmount(actor),
-            keeperFlipBefore + skipOnlyReward,
-            "regression: skip-only housekeeping earns only the gas-priced miner reward"
-        );
+        assertGt(afterCur, beforeCur, "regression: wall progress is COMMITTED, not rolled back");
+        assertLt(afterCur, skipPrefixLen, "regression: budget hit the wall - stopped inside the wall");
+        assertFalse(_settled(livePos), "regression: budget hit the wall - tail box not yet reached");
 
         // Later calls resume past the committed cursor (never from zero) and open the live box.
         uint48 resumed = afterCur;
-        for (uint256 i; i < 16 && _lootAmt(index, liveOwner) != 0; ++i) {
+        for (uint256 i; i < 16 && !_settled(livePos); ++i) {
             vm.prank(actor);
             game.mineFlip{gas: TEN_M_TARGET}();
             (afterDone, afterCur) = _frontier();
             assertTrue(afterDone || afterCur > resumed, "regression: each keeper call resumes past the committed cursor");
             resumed = afterCur;
         }
-        assertEq(_lootAmt(index, liveOwner), 0, "regression: keeper route reaches and opens the live tail box");
+        assertTrue(_settled(livePos), "regression: keeper route reaches and opens the live tail box");
         assertGt(
             coinflip.coinflipAmount(actor),
-            keeperFlipBefore + skipOnlyReward,
-            "regression: an actual box open earns the normal keeper bounty"
+            keeperFlipBefore,
+            "regression: opening boxes earns the keeper bounty"
         );
         assertTrue(afterDone, "regression: frontier swept past the whole cohort");
 
@@ -592,28 +564,5 @@ contract SweepWorstCaseDrain is DeployProtocol {
         (bool finalDone, uint48 finalCur) = _frontier();
         assertTrue(finalDone, "the stationary follow-up keeps the completed frontier");
         assertEq(finalCur, 0, "the stationary follow-up leaves the cursor zero");
-    }
-
-    /// @dev The call's MinerWork (execution gas, reward), requiring every `MinerBounty` in it to be
-    ///      the engine's gas-priced miner reward (kind 1) and to equal the reported reward: any
-    ///      other kind on a skip-only sweep is the regression.
-    function _minerRewardOnly(Vm.Log[] memory logs) internal view returns (uint256 used, uint256 reward) {
-        bytes32 bountyTopic = keccak256("MinerBounty(uint8,address,uint256)");
-        bytes32 workTopic = keccak256("MinerWork(address,uint8,uint256,uint256)");
-        uint256 credited;
-        bool sawWork;
-        for (uint256 i; i < logs.length; i++) {
-            if (logs[i].emitter != address(game) || logs[i].topics.length == 0) continue;
-            if (logs[i].topics[0] == bountyTopic) {
-                (uint8 kind, uint256 amount) = abi.decode(logs[i].data, (uint8, uint256));
-                require(kind == 1, "regression: a non-miner bounty was paid for skip-only sweep progress");
-                credited += amount;
-            } else if (logs[i].topics[0] == workTopic) {
-                (, used, reward) = abi.decode(logs[i].data, (uint8, uint256, uint256));
-                sawWork = true;
-            }
-        }
-        require(sawWork, "fixture: the keeper call reported its work");
-        require(credited == reward, "regression: the credited bounty differs from the reported reward");
     }
 }

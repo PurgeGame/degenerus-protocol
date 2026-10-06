@@ -5,6 +5,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title CombinedPresaleBoxFunding
 /// @notice Proves buyLootboxAndPresaleBox funds the presale-box leg from whatever funding
@@ -13,9 +14,12 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 ///         Before the funding-split change the box leg was claimable-only, so this exact call
 ///         reverted for lack of claimable -- run this file against HEAD to see it fail.
 ///
-///         Assertions are slot-free (event + balances) so they are robust to the storage
-///         layout shifts that stale the vm.load harnesses elsewhere in this suite.
+///         Assertions read the purchase event and the entry it names, plus balances.
 contract CombinedPresaleBoxFunding is DeployProtocol {
+    using BoxOrderLib for uint256;
+
+    bytes32 constant PRESALE_BUY = keccak256("PresaleBoxBuy(address,uint48,uint32,uint256,bool)");
+
     function setUp() public {
         _deployProtocol();
         // Stay inside the deploy-idle liveness window.
@@ -43,7 +47,7 @@ contract CombinedPresaleBoxFunding is DeployProtocol {
         game.buyLootboxAndPresaleBox{value: total}(
             buyer,
             ticketQty,
-            0, // lootBoxAmount
+            0, // no ordinary box leg: a presale-only entry
             bytes32(0),
             MintPaymentKind.DirectEth,
             boxAmount
@@ -51,16 +55,19 @@ contract CombinedPresaleBoxFunding is DeployProtocol {
 
         // The box queued for this buyer at the funded amount (order-independent log scan).
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        bytes32 sig = keccak256("PresaleBoxBuy(address,uint48,uint256,bool)");
         bool found;
         for (uint256 i; i < logs.length; ++i) {
             if (
-                logs[i].topics[0] == sig &&
+                logs[i].topics[0] == PRESALE_BUY &&
                 address(uint160(uint256(logs[i].topics[1]))) == buyer
             ) {
-                (uint256 amount, bool closing) = abi.decode(logs[i].data, (uint256, bool));
+                (uint32 position, uint256 amount, bool closing) = abi.decode(logs[i].data, (uint32, uint256, bool));
                 assertEq(amount, boxAmount, "box funded at requested amount");
                 assertFalse(closing, "not the closing box");
+                uint256 entry = RecyclingState.boxEntry(address(game), uint48(uint256(logs[i].topics[2])), position);
+                assertEq(entry.boId(), game.walletIdOf(buyer), "the named entry is the buyer's");
+                assertEq(entry.boPresaleWei(), boxAmount, "the entry holds the applied presale wei");
+                assertEq(entry.boCount(), 0, "no ordinary boxes: a presale-only entry");
                 found = true;
             }
         }
@@ -68,15 +75,45 @@ contract CombinedPresaleBoxFunding is DeployProtocol {
         assertEq(buyer.balance, 0, "fresh ETH funded both the mint and the box");
     }
 
-    function test_StandalonePresaleUsesWriteZeroAndRejectsDuplicate() public {
-        _standalonePresaleAndDuplicate(0);
+    function test_StandalonePresaleUsesWriteZeroAndRepeatsAsOwnEntry() public {
+        _standalonePresaleAndRepeat(0);
     }
 
-    function test_StandalonePresaleUsesWriteOneAndRejectsDuplicate() public {
-        _standalonePresaleAndDuplicate(1);
+    function test_StandalonePresaleUsesWriteOneAndRepeatsAsOwnEntry() public {
+        _standalonePresaleAndRepeat(1);
     }
 
-    function _standalonePresaleAndDuplicate(uint48 writeBuffer) private {
+    /// @dev One standalone presale buy, asserting its event names the write buffer and the
+    ///      entry it appended; returns that position.
+    function _buyAndCheck(address buyer, uint48 writeBuffer, uint256 amount) private returns (uint256 position) {
+        uint256 expectedPosition = RecyclingState.boxCount(address(game), writeBuffer);
+        vm.recordLogs();
+        vm.prank(buyer);
+        game.buyPresaleBox{value: amount}(buyer, amount);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bool found;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] != PRESALE_BUY) continue;
+            assertEq(address(uint160(uint256(logs[i].topics[1]))), buyer);
+            assertEq(uint256(logs[i].topics[2]), writeBuffer, "purchase records the write buffer");
+            uint32 pos;
+            uint256 applied;
+            bool closing;
+            (pos, applied, closing) = abi.decode(logs[i].data, (uint32, uint256, bool));
+            assertEq(pos, expectedPosition, "the entry joins at the buffer's write count");
+            assertEq(applied, amount);
+            assertFalse(closing);
+            position = pos;
+            found = true;
+        }
+        assertTrue(found, "standalone presale purchase succeeded");
+        assertEq(RecyclingState.boxCount(address(game), writeBuffer), expectedPosition + 1, "one entry appended");
+        uint256 entry = RecyclingState.boxEntry(address(game), writeBuffer, position);
+        assertEq(entry.boId(), game.walletIdOf(buyer));
+        assertEq(entry.boPresaleWei(), amount);
+    }
+
+    function _standalonePresaleAndRepeat(uint48 writeBuffer) private {
         address buyer = makeAddr("standalonePresaleBuyer");
         vm.deal(buyer, 1 ether);
         // A published word belongs only to the opposite read buffer. A new presale
@@ -86,32 +123,30 @@ contract CombinedPresaleBoxFunding is DeployProtocol {
         game.purchase{value: 0.48 ether}(buyer, 19_200, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(game.presaleBoxCreditOf(buyer), 0.12 ether, "real purchase funds two box attempts");
 
-        vm.recordLogs();
-        vm.prank(buyer);
-        game.buyPresaleBox{value: 0.05 ether}(buyer, 0.05 ether);
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        bool found;
-        for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics[0] != keccak256("PresaleBoxBuy(address,uint48,uint256,bool)")) continue;
-            assertEq(address(uint160(uint256(logs[i].topics[1]))), buyer);
-            assertEq(uint256(logs[i].topics[2]), writeBuffer, "purchase records the write buffer");
-            (uint256 amount, bool closing) = abi.decode(logs[i].data, (uint256, bool));
-            assertEq(amount, 0.05 ether);
-            assertFalse(closing);
-            found = true;
-        }
-        assertTrue(found, "standalone presale purchase succeeded");
+        uint256 first = _buyAndCheck(buyer, writeBuffer, 0.05 ether);
+        uint256 firstEntry = RecyclingState.boxEntry(address(game), writeBuffer, first);
         assertEq(game.presaleBoxCreditOf(buyer), 0.07 ether);
         assertEq(game.presaleBoxEthRemaining(), 49.95 ether);
 
+        // A repeat purchase by the same wallet in the same buffer is its own entry; the credit
+        // gate still applies to it.
+        uint256 second = _buyAndCheck(buyer, writeBuffer, 0.05 ether);
+        assertEq(second, first + 1, "the repeat purchase is the next entry");
+        assertEq(RecyclingState.boxEntry(address(game), writeBuffer, first), firstEntry, "the first entry is untouched");
+        assertEq(game.presaleBoxCreditOf(buyer), 0.02 ether, "each purchase consumes its own credit");
+        assertEq(game.presaleBoxEthRemaining(), 49.9 ether, "each purchase sells its own box");
+
+        // A third attempt exceeds the remaining credit: it reverts and keeps nothing.
+        uint256 count = RecyclingState.boxCount(address(game), writeBuffer);
         uint256 gameBalance = address(game).balance;
         uint256 buyerBalance = buyer.balance;
         vm.prank(buyer);
         vm.expectRevert(bytes4(keccak256("E()")));
         game.buyPresaleBox{value: 0.05 ether}(buyer, 0.05 ether);
-        assertEq(game.presaleBoxCreditOf(buyer), 0.07 ether, "duplicate rolls back the credit debit");
-        assertEq(game.presaleBoxEthRemaining(), 49.95 ether, "duplicate sells no additional box");
-        assertEq(address(game).balance, gameBalance, "duplicate retains no payment");
-        assertEq(buyer.balance, buyerBalance, "duplicate refunds its fresh ETH");
+        assertEq(game.presaleBoxCreditOf(buyer), 0.02 ether, "the failed buy rolls back the credit debit");
+        assertEq(game.presaleBoxEthRemaining(), 49.9 ether, "the failed buy sells no box");
+        assertEq(RecyclingState.boxCount(address(game), writeBuffer), count, "the failed buy appends nothing");
+        assertEq(address(game).balance, gameBalance, "the failed buy retains no payment");
+        assertEq(buyer.balance, buyerBalance, "the failed buy refunds its fresh ETH");
     }
 }

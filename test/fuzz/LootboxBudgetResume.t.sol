@@ -5,21 +5,22 @@ import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
-import {C1Viewer} from "../repro/C1BoxAutoOpen.t.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
-/// @title LootboxBudgetResume -- a budget-bounded sweep resumes mid-index and maroons nothing
+/// @title LootboxBudgetResume -- a budget-bounded sweep resumes mid-cohort and maroons nothing
 /// @notice mineFlip's human-box stage charges each entry against its gas budget (the caller's
 ///         allowance; each entry is admitted only while the remaining allowance covers its declared
-///         bound), BREAKS when the next entry would not fit, and leaves the cursor on it so the next
-///         call resumes at the same index. Mutation v78 rewrote both halves of that — never breaking on the
-///         budget, and never stopping the outer walk mid-index (which would carry the cursor to
-///         the next index past unopened entries) — and no foundry oracle noticed. Five wallets
-///         enqueue at one index; a two-step budget opens exactly one entry per call, and every
-///         order is drained by the time the walk reports nothing pending.
+///         bound), BREAKS when the next entry would not fit, and leaves `boxCursor` on it so the next
+///         call resumes at the same position. Mutation v78 rewrote both halves of that — never breaking on
+///         the budget, and never stopping the walk mid-cohort (which would carry the cursor past
+///         unopened entries) — and no foundry oracle noticed. Five wallets append one entry each to
+///         one buffer; a two-step budget settles exactly one entry per call, the cursor alone marks
+///         them settled (the stored entries never change), and completion waits for the last one.
 contract LootboxBudgetResume is DeployProtocol {
     address internal actor;
+
+    bytes32 internal constant OPENED = keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
 
     function setUp() public {
         _deployProtocol();
@@ -29,18 +30,23 @@ contract LootboxBudgetResume is DeployProtocol {
         vm.deal(actor, 100 ether);
     }
 
-    function _idx() internal returns (uint48 v) {
-        bytes memory real = address(game).code;
-        vm.etch(address(game), type(C1Viewer).runtimeCode);
-        v = C1Viewer(payable(address(game))).lrIndexView();
-        vm.etch(address(game), real);
+    function _idx() internal view returns (uint48) {
+        return RecyclingState.writeBuffer(address(game));
     }
 
-    function _word(uint48 index) internal returns (uint256 v) {
-        bytes memory real = address(game).code;
-        vm.etch(address(game), type(C1Viewer).runtimeCode);
-        v = C1Viewer(payable(address(game))).rngWordFor(index);
-        vm.etch(address(game), real);
+    function _word(uint48 index) internal view returns (uint256) {
+        return RecyclingState.word(address(game), index);
+    }
+
+    /// @dev Next unsettled position of the read buffer.
+    function _cursor() internal view returns (uint256) {
+        return (uint256(vm.load(address(game), bytes32(GameSlots.BOX_CURSOR))) >> (GameSlots.BOX_CURSOR_OFFSET * 8))
+            & type(uint48).max;
+    }
+
+    function _readComplete() internal view returns (bool) {
+        return (uint256(vm.load(address(game), bytes32(GameSlots.HUMAN_READ_COMPLETE)))
+            >> (GameSlots.HUMAN_READ_COMPLETE_OFFSET * 8)) & 0xff != 0;
     }
 
     function _driveDailyCycleOnce() internal {
@@ -93,28 +99,42 @@ contract LootboxBudgetResume is DeployProtocol {
 
     /// @dev Deliver and publish a word for the sealed cohort at `index`, as a fulfilled mid-day
     ///      request leaves it, on a sealed day (dailyIdx = today, tickets drained): the cohort's
-    ///      human orders are then the next engine stage. Mirrors the request's seal: cursors restart
-    ///      and the new write tag's queues are empty.
+    ///      human entries are then the next engine stage. `seedWord` mirrors the request's seal: the
+    ///      write counts latch into the read counts and both read cursors restart.
     function _deliverCohort(uint48 index) internal {
         RecyclingState.seedWord(address(game), index, keccak256("budget-resume-word"));
-        uint256 s14 = uint256(vm.load(address(game), bytes32(GameSlots.TICKET_CURSOR)));
-        vm.store(address(game), bytes32(GameSlots.TICKET_CURSOR), bytes32(s14 & ~(uint256(type(uint48).max) << 160)));
-        uint256 s56 = uint256(vm.load(address(game), bytes32(GameSlots.SUB_CURSOR)));
-        vm.store(address(game), bytes32(GameSlots.SUB_CURSOR), bytes32(s56 & ~(uint256(type(uint48).max) << 56)));
-        vm.store(address(game), keccak256(abi.encode(uint256((index ^ 1) & 1), GameSlots.DEGENERETTE_QUEUE)), bytes32(0));
-        vm.store(address(game), keccak256(abi.encode(uint256((index ^ 1) & 1), GameSlots.BOX_PLAYERS)), bytes32(0));
-        uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
-        slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192);
-        vm.store(address(game), bytes32(0), bytes32(slot0));
+        uint256 slot0 = uint256(vm.load(address(game), bytes32(GameSlots.DAILY_IDX)));
+        slot0 = (slot0 & ~(uint256(0xFFFFFF) << (GameSlots.DAILY_IDX_OFFSET * 8)))
+            | (uint256(game.currentDayView()) << (GameSlots.DAILY_IDX_OFFSET * 8))
+            | (uint256(1) << (GameSlots.TICKETS_FULLY_PROCESSED_OFFSET * 8));
+        vm.store(address(game), bytes32(GameSlots.DAILY_IDX), bytes32(slot0));
     }
 
-    function _drainedCount(uint48 index, address[5] memory who) internal returns (uint256 n) {
-        for (uint256 k; k < 5; k++) if (_base(index, who[k]) == 0) n++;
+    /// @dev Five wallets each append one two-small-box entry to the write buffer `N`, at
+    ///      consecutive positions; returns the stored entry words.
+    function _buyFive(string memory label, uint48 N, uint256 priceWei) internal returns (uint256[5] memory entries) {
+        for (uint256 k; k < 5; k++) {
+            address who = makeAddr(string.concat(label, vm.toString(k)));
+            vm.deal(who, 10 ether);
+            vm.prank(who);
+            game.purchase{value: 2 * priceWei + 1 ether}(who, 400, BoxOrderLib.boOrder(2, 0, 0, 0, 0), bytes32(0), MintPaymentKind.DirectEth, false);
+            assertEq(RecyclingState.boxCount(address(game), N), k + 1, "fixture: one entry per purchase");
+            entries[k] = RecyclingState.boxEntry(address(game), N, k);
+            assertEq(BoxOrderLib.boId(entries[k]), game.walletIdOf(who), "fixture: the entry holds the buyer's ID");
+            assertEq(BoxOrderLib.boSmall(entries[k]), 2, "fixture: two small boxes");
+        }
     }
 
-    /// @dev The smallest mineFlip allowance that opens any entry (bisection over snapshots).
-    function _minimalOpenAllowance(uint48 index, address[5] memory who) internal returns (uint256) {
-        uint256 before = _drainedCount(index, who);
+    /// @dev Settlement never rewrites an entry: only the cursor moves.
+    function _assertEntriesUnchanged(uint48 N, uint256[5] memory entries) internal view {
+        for (uint256 k; k < 5; k++) {
+            assertEq(RecyclingState.boxEntry(address(game), N, k), entries[k], "a settled entry is never rewritten");
+        }
+    }
+
+    /// @dev The smallest mineFlip allowance that settles `entries` entries (bisection over snapshots).
+    function _minimalOpenAllowance(uint256 entries) internal returns (uint256) {
+        uint256 before = _cursor();
         uint256 lo = 100_000;
         uint256 hi = 20_000_000;
         while (hi - lo > 1_000) {
@@ -122,7 +142,7 @@ contract LootboxBudgetResume is DeployProtocol {
             uint256 snap = vm.snapshotState();
             vm.prank(actor);
             (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip()"));
-            bool opened = ok && _drainedCount(index, who) > before;
+            bool opened = ok && _cursor() >= before + entries;
             vm.revertToStateAndDelete(snap);
             if (opened) hi = mid;
             else lo = mid;
@@ -130,85 +150,100 @@ contract LootboxBudgetResume is DeployProtocol {
         return hi;
     }
 
-    function _base(uint48 index, address who) internal returns (uint256 v) {
-        bytes memory real = address(game).code;
-        vm.etch(address(game), type(C1Viewer).runtimeCode);
-        v = C1Viewer(payable(address(game))).lootboxBaseFor(index, who);
-        vm.etch(address(game), real);
-    }
-
     function test_smallBudgetOpensOneEntryPerCallAndDrainsTheIndex() public {
         _driveDailyCycleOnce();
         (, , , , uint256 priceWei) = game.purchaseInfo();
         uint48 N = _idx();
-        address[5] memory who;
-        for (uint256 k; k < 5; k++) {
-            who[k] = makeAddr(string.concat("budgetActor", vm.toString(k)));
-            vm.deal(who[k], 10 ether);
-            vm.prank(who[k]);
-            game.purchase{value: 2 * priceWei + 1 ether}(who[k], 400, BoxOrderLib.boOrder(2, 0, 0, 0, 0), bytes32(0), MintPaymentKind.DirectEth, false);
-            assertGt(_base(N, who[k]), 0, "fixture: the order persisted");
-        }
+        uint256[5] memory entries = _buyFive("budgetActor", N, priceWei);
 
         _deliverCohort(N);
         assertGt(_word(N), 0, "the daily word landed at the index");
+        assertEq(RecyclingState.boxCount(address(game), N), 5, "the seal latched five entries");
+        assertEq(_cursor(), 0, "nothing settled before the walk");
         assertTrue(game.boxesPending(), "five entries wait at the index");
 
         // The smallest allowance that opens anything: the first entry runs, the second never fits.
-        uint256 budget = _minimalOpenAllowance(N, who);
+        uint256 budget = _minimalOpenAllowance(1);
         emit log_named_uint("one-entry mineFlip allowance", budget);
         vm.prank(actor);
         game.mineFlip{gas: budget}();
-        uint256 drained;
-        for (uint256 k; k < 5; k++) if (_base(N, who[k]) == 0) drained++;
-        assertEq(drained, 1, "one order drained, four still owed");
+        assertEq(_cursor(), 1, "one entry settled, four still owed");
+        assertFalse(_readComplete(), "no early completion while entries remain");
         assertTrue(game.boxesPending(), "the walk still reports the index pending");
 
-        // Resume until the walk reports nothing pending: every order must be gone.
+        // Resume until the walk reports nothing pending: every entry settles exactly once, in order.
         uint256 calls = 1;
         while (game.boxesPending() && calls < 12) {
             vm.prank(actor);
             game.mineFlip{gas: budget}();
             calls++;
+            assertEq(_cursor(), calls, "each call settles exactly the next entry; none is replayed");
+            assertEq(_readComplete(), calls == 5, "completion only after the last entry");
         }
         assertFalse(game.boxesPending(), "the index drains within a bounded number of calls");
-        for (uint256 k; k < 5; k++) {
-            assertEq(_base(N, who[k]), 0, "no order is marooned behind a budget break");
-        }
         assertEq(calls, 5, "five entries, five one-entry calls");
+        assertEq(_cursor(), 5, "the cursor stays at the read count after completion");
+        _assertEntriesUnchanged(N, entries);
     }
 
-    /// @notice A budget that fits one two-box entry with room to spare but not a second: the
-    ///         smallest one-entry allowance plus 30k gas. The inner loop is still running after the
-    ///         first entry and only the budget BREAK (the next entry's declared bound no longer fits)
-    ///         can refuse the second. Five such calls drain the five entries.
+    /// @notice A budget that fits one two-box entry with room to spare but not a second: midway
+    ///         between the smallest one-entry and the smallest two-entry allowance, re-measured for
+    ///         each call (an entry's actual cost is far below its declared bound and shrinks as the
+    ///         test's storage warms, so a fixed margin over the one-entry figure can reach the second
+    ///         entry's admission). The walk is still running after the first entry and only the
+    ///         budget BREAK (the next entry's declared bound no longer fits) can refuse the second.
+    ///         Five such calls drain the five entries; the last one has no second to refuse.
     function test_budgetThatFitsOneEntryRefusesTheSecond() public {
         _driveDailyCycleOnce();
         (, , , , uint256 priceWei) = game.purchaseInfo();
         uint48 N = _idx();
-        address[5] memory who;
-        for (uint256 k; k < 5; k++) {
-            who[k] = makeAddr(string.concat("budgetActorB", vm.toString(k)));
-            vm.deal(who[k], 10 ether);
-            vm.prank(who[k]);
-            game.purchase{value: 2 * priceWei + 1 ether}(who[k], 400, BoxOrderLib.boOrder(2, 0, 0, 0, 0), bytes32(0), MintPaymentKind.DirectEth, false);
-        }
+        uint256[5] memory entries = _buyFive("budgetActorB", N, priceWei);
         _deliverCohort(N);
         assertGt(_word(N), 0, "the daily word landed at the index");
-        uint256 budget = _minimalOpenAllowance(N, who) + 30_000;
 
         uint256 calls;
         while (game.boxesPending() && calls < 12) {
-            uint256 before;
-            for (uint256 k; k < 5; k++) if (_base(N, who[k]) == 0) before++;
+            uint256 before = _cursor();
+            uint256 one = _minimalOpenAllowance(1);
+            uint256 budget = before + 1 < 5 ? one + (_minimalOpenAllowance(2) - one) / 2 : one + 30_000;
             vm.prank(actor);
             game.mineFlip{gas: budget}();
-            uint256 after_;
-            for (uint256 k; k < 5; k++) if (_base(N, who[k]) == 0) after_++;
-            assertEq(after_ - before, 1, "one entry per call: the second never fits the budget");
+            assertEq(_cursor() - before, 1, "one entry per call: the second never fits the budget");
             calls++;
+            assertEq(_readComplete(), calls == 5, "completion only after the last entry");
         }
         assertEq(calls, 5, "five entries, five calls");
-        for (uint256 k; k < 5; k++) assertEq(_base(N, who[k]), 0, "every order drained");
+        assertEq(_cursor(), 5, "every entry settled");
+        _assertEntriesUnchanged(N, entries);
+    }
+
+    /// @notice Every entry settled but completion not yet run (the cursor already stands at the read
+    ///         count, as a call that settled the last entry without the tail allowance leaves it):
+    ///         the next call runs only the completion. It opens no box — the last entry is not
+    ///         replayed — and leaves the cursor where it was.
+    function test_settledTailCompletesWithoutReplay() public {
+        _driveDailyCycleOnce();
+        (, , , , uint256 priceWei) = game.purchaseInfo();
+        uint48 N = _idx();
+        _buyFive("budgetActorC", N, priceWei);
+        _deliverCohort(N);
+        uint256 slot = uint256(vm.load(address(game), bytes32(GameSlots.BOX_CURSOR)));
+        slot = (slot & ~(uint256(type(uint48).max) << (GameSlots.BOX_CURSOR_OFFSET * 8)))
+            | (uint256(5) << (GameSlots.BOX_CURSOR_OFFSET * 8));
+        vm.store(address(game), bytes32(GameSlots.BOX_CURSOR), bytes32(slot));
+        assertFalse(_readComplete(), "fixture: settled but not complete");
+        assertTrue(game.boxesPending(), "fixture: the cohort still reports pending");
+
+        vm.recordLogs();
+        vm.prank(actor);
+        game.mineFlip();
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; i++) {
+            if (logs[i].emitter == address(game) && logs[i].topics.length != 0) {
+                assertTrue(logs[i].topics[0] != OPENED, "the completion call replays no entry");
+            }
+        }
+        assertTrue(_readComplete(), "the tail-only call completes the cohort");
+        assertEq(_cursor(), 5, "the cursor is left at the read count");
     }
 }

@@ -32,7 +32,7 @@ contract WBBKeyComputer is DegenerusGameStorage {
 ///         quantity + floor(quantity / 5), the level past the span stays empty, and the
 ///         extra entries equal one paid pass's entries per bonus pass.
 contract WhaleBulkBuyBonusTest is DeployProtocol {
-    event LootBoxBuy(address indexed buyer, uint48 indexed index, uint256 amount);
+    event LootBoxBuy(address indexed buyer, uint48 indexed index, uint32 position, uint256 amount);
 
     uint256 private constant SLOT_0 = 0;
     uint256 private constant TICKET_QUEUE_SLOT = GameSlots.TICKET_QUEUE;
@@ -230,7 +230,7 @@ contract WhaleBulkBuyBonusTest is DeployProtocol {
         uint256 price = WHALE_EARLY_PRICE * 5;
         vm.deal(who, price);
         vm.expectEmit(true, false, false, true, address(game));
-        emit LootBoxBuy(who, 0, price / 10);
+        emit LootBoxBuy(who, 0, 0, price / 10);
         vm.prank(who);
         game.purchaseWhalePass{value: price}(who, 5, bytes32(0));
 

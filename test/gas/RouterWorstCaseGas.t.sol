@@ -53,7 +53,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///      `depositAfkingFunding` funding, `_grantDeityPass`, the Sub-stamp slot reads). All pinned slots
 ///      RE-DERIVED via `solc --storage-layout` on the working tree after the V62 lootbox repack:
 ///      `_subOf = 54`, `_subscribers = 56`, `_subscriberIndex = 57`, cursor pack `= 58`, `rngWordByDay = 10`,
-///      `lootboxEth = 15`, `lootboxRngPacked = 34`, `lootboxRngWordByIndex = 35`. Test-only: ZERO
+///      `lootboxRngPacked = 34`, `lootboxRngWordByIndex = 35`. Test-only: ZERO
 ///      contracts/*.sol mutated. Run with --isolate for true per-call gas.
 contract RouterWorstCaseGas is DeployProtocol {
     // -------------------------------------------------------------------------
@@ -61,7 +61,6 @@ contract RouterWorstCaseGas is DeployProtocol {
     // -------------------------------------------------------------------------
 
     uint256 private constant RNG_WORD_BY_DAY_SLOT = GameSlots.RNG_WORD_BY_DAY;             // mapping(uint24 => uint256) — the afking box's DAY-keyed word
-    uint256 private constant LOOTBOX_ETH_SLOT = GameSlots.LOOTBOX_ORDER;                 // folded box word; amount[0:128] = box-owed signal
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;          // [0:47] lootboxRngIndex
     uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 3;   // mapping(uint48 => uint256) (human box)
     uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;                       // _subOf mapping root (address => Sub, one packed slot)

@@ -5,9 +5,11 @@ import {Vm} from "forge-std/Vm.sol";
 import {GameSlots} from "./GameSlots.sol";
 
 /// @title DegeneretteQueue -- test-side readers for queued Degenerette bets.
-/// @notice A bet is one word in the Game's degeneretteQueue[index & 1] (mapping root slot 21); its
-///         id is the queue position + 1, so the queue length is the newest bet's id. The word
-///         packs owner [0..159] | symbol [160..164] | spins [165..169] | currency [170] |
+/// @notice A bet is one word at keccak256(degeneretteQueue[index & 1].slot) + position; its id is
+///         the position + 1, so the buffer's bet count is the newest bet's id. The write buffer's
+///         count lives in lootboxRngPacked bits 152..183, the sealed read buffer's in
+///         degeneretteReadCount. The word packs owner wallet ID [0..31] | symbol [160..164] |
+///         spins [165..169] | currency [170] |
 ///         record flag [171] | activity [172..187] | stake units [188..251] (ETH gwei, FLIP
 ///         whole). DegeneretteResolved carries five bytes per spin: player traits (big-endian)
 ///         then score | house wilds << 4.
@@ -17,9 +19,22 @@ library DegeneretteQueue {
     bytes32 internal constant RESOLVED_SIG =
         keccak256("DegeneretteResolved(address,uint32,uint64,uint256,uint32,bytes)");
 
-    /// @dev The newest bet id at `index` (the queue length).
+    /// @dev The newest bet id at `index` (the buffer's bet count).
     function lastBetId(Vm vm, address game, uint48 index) internal view returns (uint64) {
-        return uint64(uint256(vm.load(game, keccak256(abi.encode(uint256(index & 1), QUEUE_SLOT)))));
+        uint256 writeBuffer = (uint256(vm.load(game, bytes32(GameSlots.RNG_FLAGS_AND_NUDGES))) >> 252) & 1;
+        if ((index & 1) == writeBuffer) {
+            return uint64((uint256(vm.load(game, bytes32(GameSlots.LOOTBOX_RNG_PACKED))) >> 152) & 0xFFFFFFFF);
+        }
+        return uint64(
+            (uint256(vm.load(game, bytes32(GameSlots.DEGENERETTE_READ_COUNT)))
+                >> (GameSlots.DEGENERETTE_READ_COUNT_OFFSET * 8)) & 0xFFFFFFFF
+        );
+    }
+
+    /// @dev Bet word with id `betId` at `index`.
+    function betAt(Vm vm, address game, uint48 index, uint64 betId) internal view returns (uint256) {
+        bytes32 data = keccak256(abi.encode(uint256(keccak256(abi.encode(uint256(index & 1), QUEUE_SLOT)))));
+        return uint256(vm.load(game, bytes32(uint256(data) + betId - 1)));
     }
 
     function owner(uint256 bet) internal pure returns (address) {

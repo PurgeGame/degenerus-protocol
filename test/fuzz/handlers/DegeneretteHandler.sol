@@ -227,16 +227,9 @@ contract DegeneretteHandler is Test {
         if (index > 1) return;
         bytes32 wordSlot = keccak256(abi.encode(uint256(index), LOOTBOX_RNG_WORD_SLOT));
         if (uint256(bytes32(RecyclingState.word(address(game), uint48(index)))) == 0) {
+            // seedWord latches the queue counts as the seal does: the bet/box write counts become
+            // the read lengths, the new write buffer counts from zero and both cursors restart.
             RecyclingState.seedWord(address(game), uint48(index), bytes32(uint256(keccak256(abi.encodePacked("degenerette_resolve_word", index))) | 1));
-            // What the request's seal also does: the Degenerette and box cursors restart and the
-            // new write tag's bet/box queues are emptied (degeneretteCursor slot 14 bits 160..207,
-            // boxCursor slot 56 bits 56..103, degeneretteQueue root 21, boxPlayers root 57).
-            uint256 s14 = uint256(vm.load(address(game), bytes32(GameSlots.TICKET_CURSOR)));
-            vm.store(address(game), bytes32(GameSlots.TICKET_CURSOR), bytes32(s14 & ~(uint256(type(uint48).max) << 160)));
-            uint256 s56 = uint256(vm.load(address(game), bytes32(GameSlots.SUB_CURSOR)));
-            vm.store(address(game), bytes32(GameSlots.SUB_CURSOR), bytes32(s56 & ~(uint256(type(uint48).max) << 56)));
-            vm.store(address(game), keccak256(abi.encode(uint256((index ^ 1) & 1), GameSlots.DEGENERETTE_QUEUE)), bytes32(0));
-            vm.store(address(game), keccak256(abi.encode(uint256((index ^ 1) & 1), GameSlots.BOX_PLAYERS)), bytes32(0));
             knownQueueLen[index ^ 1] = 0;
             // The day itself is sealed (dailyIdx = today, tickets drained), as after a mid-day
             // request: the delivered cohort's read consumers are the engine's only work.

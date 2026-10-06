@@ -4,278 +4,138 @@ pragma solidity ^0.8.26;
 import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {BoxCreationHandler} from "../handlers/BoxCreationHandler.sol";
-import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 
-/// @dev Read-only view overlay etched onto the live game to inspect internal box-queue state. Reuses the
-///      one-shot's BoxQueueViewer shape (PassBoxAutoOpenEnqueue.t.sol) and extends it with a presaleBoxEth
-///      base reader so the invariant can distinguish a persisted presale box (base != 0) from a resolved one.
-///      The viewer is a DegenerusGame subclass: etching type().runtimeCode (no constructor) gives the reads
-///      access to the live internal boxPlayers / lootboxOrder / presaleBoxEth maps without a storage change;
-///      the real code is restored after the read.
-contract BoxQueueViewer is DegenerusGame {
-    function lrIndexView() external view returns (uint48) {
-        return _rngWriteBuffer();
-    }
-
-    /// @notice Walk boxPlayers[index & 1] for `who`. TRUE iff the box is enqueued for the permissionless
-    ///         mineFlip HumanBoxes stage (the WHALE-01 property: a persisted box must be present here).
-    function boxPlayersContains(uint48 index, address who) external view returns (bool) {
-        address[] storage q = boxPlayers[index & 1];
-        for (uint256 i; i < q.length; ++i) {
-            if (q[i] == who) return true;
-        }
-        return false;
-    }
-
-    /// @notice The raw persisted lootboxOrder word. word != 0 => a persisted, not-yet-opened box;
-    ///         word == 0 => already resolved (drained on open, the whole word cleared in one
-    ///         SSTORE) and correctly absent from the queue.
-    /// @notice The most times any one buyer appears in boxPlayers[index & 1]. Each store enqueues a
-    ///         buyer once per index however many boxes they buy: the box order (mint and cover
-    ///         lootboxes share `lootboxOrder`) and the presale box (`presaleBoxEth`) each push
-    ///         on their own first deposit, so a buyer holding both sits in the queue twice, and
-    ///         the sweep's first visit opens both legs and its second is a zero/zero skip.
-    function boxPlayersMaxMultiplicity(uint48 index) external view returns (uint256 most) {
-        address[] storage q = boxPlayers[index & 1];
-        for (uint256 i; i < q.length; i++) {
-            uint256 n;
-            for (uint256 j; j < q.length; j++) {
-                if (q[i] == q[j]) n++;
-            }
-            if (n > most) most = n;
-        }
-    }
-
-    function lootboxAmountFor(uint48 index, address who) external view returns (uint256) {
-        return _boxOrder(index, who);
-    }
-
-    /// @notice The persisted presale-box applied-ETH base (the low 96-bit field; the closing flag at bit 255
-    ///         and soldBefore at bits 96:191 are masked off). base != 0 => a persisted presale box.
-    function presaleBoxBaseFor(uint48 index, address who) external view returns (uint256) {
-        return presaleBoxEth[index & 1][who] & PRESALE_BOX_AMOUNT_MASK;
-    }
-}
-
-/// @title BoxEnqueue — FUZZ-04 (BOX-ENQUEUE) canonical always-on enqueue invariant.
+/// @title BoxEnqueue — FUZZ-04 (BOX-ENQUEUE) canonical always-on box-queue invariant.
 ///
-/// @notice Promotes the WHALE-01 one-shot (PassBoxAutoOpenEnqueue.t.sol — one whale pass, one assertion)
-///         into a fuzzed invariant over the FULL box-creating action-space: mint-with-lootbox, the
-///         whale / lazy / deity pass bundles, and the coin-presale box (and, where reachable, afking-cover).
-///         Case (b) PROMOTE — it REUSES the one-shot's BoxQueueViewer etch overlay + boxPlayersContains read
-///         pattern and GENERALIZES the single assertion to every tracked (index, owner) the campaign creates.
+/// @notice Every box purchase — mint-with-lootbox, the whale / lazy / deity pass bundles and the
+///         coin-presale box — appends ONE complete entry to the write buffer's box queue, which the
+///         permissionless mineFlip human-box stage settles in FIFO order from `boxCursor` once the
+///         buffer is sealed and its word published. A box that never reached the queue could be held
+///         closed by its owner and opened at a favorable live level/boon (the WHALE-01 finding); an
+///         entry rewritten after its append, or settled out of order, would let a later purchase
+///         change or pre-empt an earlier one.
 ///
-///         THE PROPERTY (invariant_everyPersistedBoxIsEnqueued). Across any fuzzed sequence of box-creating
-///         actions, every persisted box — a lootboxEth or presaleBoxEth record with base != 0 for an active
-///         index — is present in boxPlayers[index & 1] until it is opened, never held un-enqueued. A box owner is
-///         the ONLY party who can open a box (manual openLootBox is operator-gated); a persisted-but-unenqueued
-///         box lets the owner hold it closed and time the open to a favorable live level/boon, defeating the
-///         lootbox-resolution-timing by-design ruling for that box class (the WHALE-01 finding). The invariant
-///         distinguishes persisted-but-unenqueued (a BUG) from already-resolved (base == 0, drained on open
-///         and correctly absent from / no longer owed in the queue) by checking ONLY base != 0 entries.
+///         THE PROPERTIES.
+///           (1) invariant_everyCreationAppendsOneMatchingEntry: each successful creating call grew
+///               the write buffer by exactly one entry, at the prior count, whose wallet ID, level,
+///               box counts/size or presale amount/tier/closing flag match the action and whose
+///               purchase event names that (buffer, position). One entry per purchase, however many
+///               boxes it holds; a ticket-only purchase appends nothing.
+///           (2) invariant_entriesAreNeverRewritten: every tracked entry whose cohort still lives
+///               (its buffer has not reopened for a new cohort) still holds the word appended.
+///           (3) invariant_readCursorObeysFifo: the read cursor never passes the read count,
+///               completion implies the cursor reached it, and across every observed engine call the
+///               cursor never moves backwards and every queued-entry resolution lands in FIFO order
+///               inside [cursor, readCount), behind the stored cursor, to the entry's own wallet.
 ///
-///         NON-VACUITY. The property is meaningful only if the campaign actually creates boxes across MULTIPLE
-///         creation paths. afterInvariant gates acceptance on the per-path ghost counters: a campaign that
-///         created 0 boxes (every creation reverted) — under which the for-each loop is empty and the
-///         invariant trivially green — FAILS. A focused non-vacuity test additionally drives the creation
-///         actions directly and asserts boxes are created across >= 2 distinct paths, so a path that silently
-///         skipped its enqueue could not hide behind a vacuous green.
+///         NON-VACUITY. afterInvariant gates acceptance on boxes created across >= 2 distinct paths;
+///         a focused test drives the creation actions directly.
 ///
-///         FALSIFIABILITY. A focused test seeds the exact WHALE-01 bug shape — a persisted lootboxEth record
-///         (base != 0) NOT pushed into boxPlayers[index & 1] — via the handler's debugSeedUnenqueuedBox seam, then
-///         asserts the invariant's underlying check (base != 0 AND boxPlayersContains == false) registers the
-///         break. Restoring the slot returns the check to green. A passing assertion here proves the wired
-///         invariant is genuinely falsifiable, not vacuously true.
+///         FALSIFIABILITY. A focused test rewrites a tracked live entry in place through the
+///         handler's debugRewriteEntry seam and asserts property (2)'s check registers the break,
+///         then restores it.
 ///
-/// @dev Test-only. ZERO contracts/*.sol mutation. The viewer is etched (type().runtimeCode, no constructor)
-///      to inspect the internal box maps, then the real code is restored after every read.
+/// @dev Test-only. ZERO contracts/*.sol mutation. Entries are read through the queue's storage
+///      location (RecyclingState.boxEntry / boxCount); slots come from GameSlots.
 contract BoxEnqueue is DeployProtocol {
     BoxCreationHandler public handler;
 
     function setUp() public {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
-        // Back the box-creating buys with solvent funds so a creation that DOES run does not revert on the
-        // contract's balance (the enqueue property is about queue membership, not solvency).
+        // Back the box-creating buys with solvent funds so a creation that DOES run does not revert on
+        // the contract's balance (the queue properties are about entries, not solvency).
         vm.deal(address(game), 5_000_000 ether);
         mockVRF.fundSubscription(1, 100e18);
 
         handler = new BoxCreationHandler(game, deityPass, mockVRF, 5);
         targetContract(address(handler));
 
-        // The falsifiability seams (debugSeedUnenqueuedBox / debugClearBox) are TEST-ONLY hooks used solely by
-        // the focused falsifiability test — they vm.store an un-enqueued box record to prove the invariant can
-        // fail. Exclude them from the fuzz campaign so the always-on invariant only ever sees boxes created
-        // through the REAL entrypoints (which always enqueue at c4d48008); otherwise the fuzzer could seed a
-        // persisted-but-unenqueued record and either spuriously trip the invariant or, by clearing it, mask the
-        // real action mix. The campaign must reflect genuine contract behaviour, not a seeded bug shape.
-        bytes4[] memory excluded = new bytes4[](2);
-        excluded[0] = BoxCreationHandler.debugSeedUnenqueuedBox.selector;
-        excluded[1] = BoxCreationHandler.debugClearBox.selector;
+        // The falsifiability seam is a TEST-ONLY hook for the focused falsifiability test; the
+        // campaign must only ever see entries created through the REAL entrypoints.
+        bytes4[] memory excluded = new bytes4[](1);
+        excluded[0] = BoxCreationHandler.debugRewriteEntry.selector;
         excludeSelector(StdInvariant.FuzzSelector({addr: address(handler), selectors: excluded}));
     }
 
     // =========================================================================
-    // INVARIANT: every persisted box (base != 0) for a tracked (index, owner) is enqueued
+    // INVARIANTS
     // =========================================================================
 
-    /// @notice THE PROPERTY. For each (index, owner) the campaign created, read its persisted base (the
-    ///         lootbox amount OR the presale-box applied-ETH base) via the etched viewer; if base != 0
-    ///         (persisted, not yet opened) assert it is present in boxPlayers[index & 1]. Opened boxes (base == 0)
-    ///         are skipped — they are correctly resolved and no longer owed in the queue. The viewer is etched
-    ///         once, all reads are batched under it, and the real code is restored at the end so the campaign's
-    ///         next call sees the unmodified game.
-    function invariant_everyPersistedBoxIsEnqueued() public {
-        BoxCreationHandler.BoxRef[] memory refs = handler.trackedBoxes();
-
-        bytes memory realCode = address(game).code;
-        vm.etch(address(game), type(BoxQueueViewer).runtimeCode);
-        BoxQueueViewer viewer = BoxQueueViewer(payable(address(game)));
-
-        for (uint256 i; i < refs.length; i++) {
-            uint48 idx = refs[i].index;
-            address who = refs[i].owner;
-
-            // A box is persisted if EITHER its lootbox amount OR its presale-box base is non-zero. base == 0 on
-            // both => resolved (drained on open) => correctly absent from the queue => skip (no false positive).
-            uint256 lootboxBase = viewer.lootboxAmountFor(idx, who);
-            uint256 presaleBase = viewer.presaleBoxBaseFor(idx, who);
-            if (lootboxBase == 0 && presaleBase == 0) continue;
-
-            bool enqueued = viewer.boxPlayersContains(idx, who);
-            // Restore the real code BEFORE the assertion so a revert here cannot leave the viewer etched.
-            if (!enqueued) {
-                vm.etch(address(game), realCode);
-                assertTrue(
-                    enqueued,
-                    "WHALE-01: every persisted box (base != 0) must be enqueued in boxPlayers[index & 1] for the permissionless auto-open"
-                );
-            }
-        }
-
-        vm.etch(address(game), realCode);
+    function invariant_everyCreationAppendsOneMatchingEntry() public view {
+        assertEq(handler.appendViolations(), 0, handler.lastAppendViolation());
     }
 
-    // =========================================================================
-    // INVARIANT: the queue is bounded by buyers x stores, never by boxes
-    // =========================================================================
+    function invariant_entriesAreNeverRewritten() public view {
+        assertEq(handler.rewrittenEntries(), 0, "an appended entry was rewritten while its cohort lives");
+    }
 
-    function invariant_queueIsBoundedByBuyersNotBoxes() public {
-        BoxCreationHandler.BoxRef[] memory refs = handler.trackedBoxes();
-
-        bytes memory realCode = address(game).code;
-        vm.etch(address(game), type(BoxQueueViewer).runtimeCode);
-        BoxQueueViewer viewer = BoxQueueViewer(payable(address(game)));
-
-        for (uint256 i; i < refs.length; i++) {
-            uint256 most = viewer.boxPlayersMaxMultiplicity(refs[i].index);
-            if (most > 2) {
-                vm.etch(address(game), realCode);
-                assertLe(most, 2, "a buyer is enqueued at most once per store (box order, presale box), however many boxes they buy");
-            }
-        }
-
-        vm.etch(address(game), realCode);
+    function invariant_readCursorObeysFifo() public view {
+        BoxCreationHandler.ReadState memory s = handler.readState();
+        assertLe(s.cursor, s.readCount, "the read cursor never passes the read count");
+        if (s.complete) assertEq(s.cursor, s.readCount, "completion implies every read entry settled");
+        assertEq(handler.fifoViolations(), 0, handler.lastFifoViolation());
     }
 
     // =========================================================================
     // NON-VACUITY: the campaign created boxes across >= 2 distinct paths
     // =========================================================================
 
-    /// @notice afterInvariant runs once at the END of the campaign. The enqueue property is only meaningful if
-    ///         boxes were actually created across multiple paths — otherwise the for-each loop is empty and the
-    ///         invariant is trivially green. Gating on >= 2 distinct paths (pathsExercised) makes a
-    ///         "green because nothing was created" pass impossible: if fewer than two creation paths fired, this
-    ///         campaign FAILS.
     function afterInvariant() public view {
         assertGe(
             handler.pathsExercised(),
             2,
-            "NON-VACUITY: boxes must be created across >= 2 distinct paths (else the enqueue invariant is vacuous)"
+            "NON-VACUITY: boxes must be created across >= 2 distinct paths (else the queue invariants are vacuous)"
         );
-        assertGt(
-            handler.totalBoxesCreated(),
-            0,
-            "NON-VACUITY: the campaign must create > 0 boxes"
-        );
+        assertGt(handler.totalBoxesCreated(), 0, "NON-VACUITY: the campaign must create > 0 boxes");
     }
 
-    // =========================================================================
-    // NON-VACUITY (focused): driving the creation actions directly creates boxes across >= 2 paths
-    // =========================================================================
-
-    /// @notice Drive the handler's creation actions directly (deterministic seeds spanning the actor pool) and
-    ///         assert boxes are created across >= 2 distinct paths. This proves the action surface is reachable
-    ///         at the fixture level independent of the fuzzer's sequencing — a path that silently skipped its
-    ///         enqueue would still be tracked here and so could be caught by the invariant.
+    /// @notice Drive the handler's creation actions directly (deterministic seeds spanning the actor
+    ///         pool) and assert entries are created across >= 2 distinct paths with every property
+    ///         holding — the action surface is reachable independent of the fuzzer's sequencing.
     function test_boxesCreatedAcrossPaths_nonVacuous() public {
         // mint-with-lootbox across the actors (both DirectEth and Combined kinds).
         for (uint256 a; a < handler.actorCount(); a++) {
             handler.mintWithLootbox(a, 0.5 ether, uint8(a));
         }
-        // pass bundles: whale + lazy + deity across the actors.
+        // pass bundles: whale + lazy + deity across the actors, and a presale box each.
         for (uint256 a; a < handler.actorCount(); a++) {
             handler.buyWhalePass(a, 1);
             handler.buyLazyPass(a);
             handler.buyDeityPass(a, a);
+            handler.buyPresaleBox(a, 0.5 ether);
         }
 
         assertGt(handler.totalBoxesCreated(), 0, "fixture: at least one box was created");
-        assertGe(
-            handler.pathsExercised(),
-            2,
-            "fixture: boxes created across >= 2 distinct paths (mint-lootbox + a pass path)"
-        );
+        assertGe(handler.pathsExercised(), 2, "fixture: boxes created across >= 2 distinct paths");
+        assertEq(handler.trackedCount(), handler.totalBoxesCreated(), "every creation tracked one entry");
+        invariant_everyCreationAppendsOneMatchingEntry();
+        invariant_entriesAreNeverRewritten();
+
+        // Seal, publish and settle through the engine; the FIFO properties hold across it.
+        for (uint256 i; i < 4; i++) handler.openSome(i, 3, i);
+        assertGt(handler.resolutionsObserved(), 0, "fixture: the engine settled queued entries under observation");
+        invariant_entriesAreNeverRewritten();
+        invariant_readCursorObeysFifo();
     }
 
     // =========================================================================
-    // FALSIFIABILITY: a seeded persisted-but-unenqueued box breaks the invariant's check
+    // FALSIFIABILITY: an entry rewritten in place breaks property (2)'s check
     // =========================================================================
 
-    /// @notice The WHALE-01 bug shape the net catches: a box-creating path persists a lootboxEth record
-    ///         (base != 0) but DROPS the boxPlayers[index & 1] enqueue. We simulate that bug via the handler's
-    ///         debugSeedUnenqueuedBox seam (a field-isolated vm.store of a lootboxEth amount with NO enqueue),
-    ///         then assert the invariant's underlying condition — base != 0 AND boxPlayersContains == false —
-    ///         now holds (the break is registered). Clearing the seeded slot returns the check to green. If the
-    ///         invariant were vacuous (never reading the seeded entry, or comparing against a mirror that drifts
-    ///         with it), this seeded break would NOT register — so a passing assertion proves the wired property
-    ///         is genuinely falsifiable.
-    function test_invariantIsFalsifiable_persistedButUnenqueued() public {
-        address victim = handler.actors(0);
+    function test_invariantIsFalsifiable_rewrittenEntry() public {
+        handler.mintWithLootbox(0, 0.5 ether, 0);
+        handler.mintWithLootbox(1, 0.7 ether, 1);
+        assertEq(handler.trackedCount(), 2, "fixture: two entries appended");
+        assertEq(handler.rewrittenEntries(), 0, "pre: both entries hold their appended words");
 
-        bytes memory realCode = address(game).code;
-        vm.etch(address(game), type(BoxQueueViewer).runtimeCode);
-        BoxQueueViewer viewer = BoxQueueViewer(payable(address(game)));
-        uint48 idx = viewer.lrIndexView();
-        // Pre: nothing persisted/enqueued for the victim at this index.
-        assertEq(viewer.lootboxAmountFor(idx, victim), 0, "pre: no persisted box for the victim");
-        assertFalse(viewer.boxPlayersContains(idx, victim), "pre: victim not in the queue");
-        vm.etch(address(game), realCode);
+        // Rewrite the first entry in place, as a purchase that merged into it would.
+        BoxCreationHandler.EntryRef memory first = handler.trackedEntry(0);
+        handler.debugRewriteEntry(0, first.word + (uint256(1) << 121));
+        assertEq(handler.rewrittenEntries(), 1, "FALSIFIABILITY: a rewritten live entry registers the break");
 
-        // Seed the bug: a persisted lootboxEth amount (base != 0) WITHOUT pushing to boxPlayers[index & 1].
-        uint256 injected = 3 ether;
-        handler.debugSeedUnenqueuedBox(idx, victim, injected);
-
-        // The invariant's underlying check must now register the break.
-        vm.etch(address(game), realCode); // ensure real code (handler seam may have left it set)
-        vm.etch(address(game), type(BoxQueueViewer).runtimeCode);
-        viewer = BoxQueueViewer(payable(address(game)));
-        uint256 base = viewer.lootboxAmountFor(idx, victim);
-        bool enqueued = viewer.boxPlayersContains(idx, victim);
-        vm.etch(address(game), realCode);
-
-        assertEq(base, injected, "the seeded persisted base is non-zero");
-        assertFalse(
-            enqueued,
-            "FALSIFIABILITY: a persisted box (base != 0) NOT in boxPlayers is exactly the WHALE-01 break the invariant catches"
-        );
-        assertTrue(base != 0 && !enqueued, "FALSIFIABILITY: base != 0 && !enqueued => the invariant would FAIL");
-
-        // Clear the seeded slot — the check returns to green (proves the break was the injection).
-        handler.debugClearBox(idx, victim);
-        vm.etch(address(game), type(BoxQueueViewer).runtimeCode);
-        viewer = BoxQueueViewer(payable(address(game)));
-        assertEq(viewer.lootboxAmountFor(idx, victim), 0, "post: seeded box cleared, base back to 0");
-        vm.etch(address(game), realCode);
+        // Restoring the word returns the check to green (the break was the injection).
+        handler.debugRewriteEntry(0, first.word);
+        assertEq(handler.rewrittenEntries(), 0, "post: restored entry, check green again");
     }
 }

@@ -34,7 +34,6 @@ import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {
     IDegenerusGameDegeneretteModule,
     IDegenerusGameJackpotModule,
-    IDegenerusGameLootboxModule,
     IDegenerusGameMintModule
 } from "../interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
@@ -258,8 +257,8 @@ contract DegenerusGameFoilPackModule is
         uint256 priceWei = PriceLookupLib.priceForLevel(routedLvl);
         uint256 mintCost = (priceWei * entryQuantityScaled) / (4 * QTY_SCALE);
         if (boxOrder != 0) {
-            mintCost += abi.decode(_moduleCall(ContractAddresses.GAME_LOOTBOX_MODULE, abi.encodeWithSelector(
-                IDegenerusGameLootboxModule.quoteBoxOrder.selector, buyer, boxOrder)), (uint256));
+            (, uint256 boxCost) = _decodeBoxOrder(boxOrder, routedLvl);
+            mintCost += boxCost;
         }
         uint256 cost = mintCost + ((FOIL_PACK_TICKETS * priceWei) << _snapShiftFor(routedLvl));
         (uint32 buyerId, ) = _registerWallet(buyer, cost);
@@ -468,9 +467,12 @@ contract DegenerusGameFoilPackModule is
             (uint256(multBps) << _FOIL_MULT_SHIFT) |
             (uint256(uint16(score)) << _FOIL_SCORE_SHIFT);
 
-        foilQueue[_foilWriteKey()].push(
-            (uint256(buyerId) << 192) | (uint256(lvl) << 160) | uint256(uint160(buyer))
-        );
+        // Append at the write cohort's count, which shares the slot `_foilWriteKey` loaded.
+        uint32 position = foilWriteCount;
+        uint256 slot = _foilSlot(_foilWriteKey(), position);
+        uint256 pack = (uint256(buyerId) << 192) | (uint256(lvl) << 160) | uint256(uint160(buyer));
+        assembly ("memory-safe") { sstore(slot, pack) }
+        foilWriteCount = position + 1;
 
         emit FoilPackBought(buyer, lvl, multBps, cost);
     }
@@ -788,6 +790,7 @@ contract DegenerusGameFoilPackModule is
             _foilSpin(
                 IDegenerusGameDegeneretteModule.resolveEthSpinFromBox.selector,
                 player,
+                id,
                 faces * PriceLookupLib.priceForLevel(L),
                 activityScore,
                 seed,
@@ -799,6 +802,7 @@ contract DegenerusGameFoilPackModule is
             _foilSpin(
                 IDegenerusGameDegeneretteModule.resolveFlipSpinsFromBox.selector,
                 player,
+                id,
                 faces * FLIP_FACE_AMOUNT * TOKEN_MATH_SCALE,
                 activityScore,
                 seed,
@@ -809,6 +813,7 @@ contract DegenerusGameFoilPackModule is
             _foilSpin(
                 IDegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox.selector,
                 player,
+                id,
                 faces * WWXRP_FACE_AMOUNT * TOKEN_MATH_SCALE,
                 activityScore,
                 seed,
@@ -818,26 +823,23 @@ contract DegenerusGameFoilPackModule is
     }
 
     /// @dev Delegatecall one of the Degenerette box-spin resolvers in the Game's
-    ///      storage context. The three resolvers share a single (player, stake,
-    ///      activityScore, seed, symbol) shape, so one helper covers every
-    ///      currency. Only the chosen hero symbol reaches the spin resolver.
+    ///      storage context. The three resolvers share a (player, stake, activityScore,
+    ///      seed, symbol) shape, the ETH one adding the wallet ID after the player, so one
+    ///      helper covers every currency. Only the chosen hero symbol reaches the spin resolver.
     function _foilSpin(
         bytes4 selector,
         address player,
+        uint32 id,
         uint256 stake,
         uint16 activityScore,
         uint256 seed,
         uint8 symbol
     ) private {
+        // Only the ETH resolver credits claimable and recirculates, so only it takes the ID.
         (bool ok, bytes memory data) = ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall(
-            abi.encodeWithSelector(
-                selector,
-                player,
-                stake,
-                activityScore,
-                seed,
-                symbol
-            )
+            selector == IDegenerusGameDegeneretteModule.resolveEthSpinFromBox.selector
+                ? abi.encodeWithSelector(selector, player, id, stake, activityScore, seed, symbol)
+                : abi.encodeWithSelector(selector, player, stake, activityScore, seed, symbol)
         );
         if (!ok) revert EmptyRevert();
         // The FLIP and WWXRP box-spin resolvers RETURN their payout for the caller to credit
@@ -856,13 +858,6 @@ contract DegenerusGameFoilPackModule is
         }
     }
 
-    /// @dev Payable delegate worker: records the presale leg in the reusable cohort.
-    function recordPresaleBox(address buyer, uint48 index, uint256 word) external payable {
-        if (presaleBoxEth[index & 1][buyer] != 0) revert E();
-        presaleBoxEth[index & 1][buyer] = word;
-        boxPlayers[index & 1].push(buyer);
-    }
-
     function runFoilWork(uint256 allowance) external returns (MineFlipGas.Result memory) {
         return _runFoilWork(allowance);
     }
@@ -870,9 +865,9 @@ contract DegenerusGameFoilPackModule is
     function _runFoilWork(uint256 allowance) private returns (MineFlipGas.Result memory result) {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
-        uint256[] storage packs = foilQueue[_foilReadKey()];
         uint256 cursor = foilCursor;
-        uint256 total = packs.length;
+        uint256 total = foilReadCount;
+        uint256 base = _foilSlot(_foilReadKey(), 0);
         uint256 entropy = _lootboxWord(_rngReadBuffer());
         bool terminal = gameOver || _lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK) != 0
             || _lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) != 0;
@@ -881,7 +876,9 @@ contract DegenerusGameFoilPackModule is
         uint8[16] memory touchedTraits;
         // Includes a cold pack, all bucket flushes, and the possible grand push.
         while (entropy != 0 && cursor < total && MineFlipGas.canRun(meter, GasBounds.FOIL_PACK, 100_000)) {
-            uint24 packLevel = uint24(packs[cursor] >> 160);
+            uint256 pack;
+            assembly ("memory-safe") { pack := sload(add(base, cursor)) }
+            uint24 packLevel = uint24(pack >> 160);
             if (!_ticketLevelRetired(packLevel) && !(terminal && packLevel != _gameOverTicketLevel(level))
                 && !_prepareTicketLevelAfterFoil(packLevel)) break;
             if (foilGenerationDay == 0) {
@@ -890,14 +887,14 @@ contract DegenerusGameFoilPackModule is
                 (bool drawn,,) = _foilDrawFor(day);
                 foilFirstDrawDay = drawn ? day + 1 : day;
             }
-            _resolveFoilBuyer(packs[cursor], entropy, terminal, counts, touchedTraits);
+            _resolveFoilBuyer(pack, entropy, terminal, counts, touchedTraits);
             result.progressed = true;
             result.rewardBasis += FOIL_PACK_ENTRIES;
             ++cursor;
         }
         result.done = cursor >= total;
         if (result.done) {
-            assembly ("memory-safe") { sstore(packs.slot, 0) }
+            foilReadCount = 0;
             foilCursor = 0;
         } else if (cursor != foilCursor) foilCursor = uint32(cursor);
         MineFlipGas.finish(meter);

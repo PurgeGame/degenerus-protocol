@@ -649,9 +649,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @param buyer Player address to receive purchases (address(0) = msg.sender).
     /// @param entryQuantityScaled Purchase units (400 = 4*QTY_SCALE = one whole ticket = 4 entries; 0 to skip).
     /// @param boxOrder Packed box order (0 to skip):
-    ///        [small:8][med:8][large:8][customCount:8][customSize:48 in 1e12-wei units].
-    ///        Presets are 1x/5x/25x the frozen level's ticket price; a custom is customCount
-    ///        boxes of customSize each (min 0.01 ETH, frozen for the period on first buy).
+    ///        [small:8][med:8][large:8][customCount:8][customSize:56 in gwei]; every bit at or
+    ///        above 88 must be zero. Presets are 1x/5x/25x the active level's ticket price; a
+    ///        custom is customCount boxes of customSize each (min 0.01 ETH). At most 100 boxes;
+    ///        each purchase is its own queue entry.
     /// @param affiliateCode Affiliate/referral code for all purchases.
     /// @param payKind Payment method (DirectEth, Claimable, or Combined).
     /// @param foil True to additively buy one foil pack (10x the level price, shifted by
@@ -1441,8 +1442,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Physical tags are reused; this view makes no statement about historical sessions.
     /// @param index Physical buffer tag (0 or 1).
     function boxIndexComplete(uint48 index) external view returns (bool) {
-        return index == _rngReadBuffer() && humanReadComplete
-            && degeneretteCursor >= degeneretteQueue[index].length;
+        return index == _rngReadBuffer() && humanReadComplete && degeneretteCursor >= degeneretteReadCount;
     }
 
     /*+======================================================================+
@@ -1968,10 +1968,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint48 index,
         uint64 betId
     ) external view returns (uint256 packed) {
-        if (!_lootboxBufferValid(index)) return 0;
-        uint256[] storage bets = degeneretteQueue[index & 1];
-        if (betId == 0 || betId > bets.length) return 0;
-        uint256 word = bets[betId - 1];
+        if (!_lootboxBufferValid(index) || betId == 0
+            || betId > (index == _rngWriteBuffer() ? uint32(lootboxRngPacked >> LR_BET_COUNT_SHIFT) : degeneretteReadCount)
+        ) return 0;
+        uint256 slot = _betSlot(index, betId - 1);
+        uint256 word;
+        assembly ("memory-safe") { word := sload(slot) }
         return word & BET_PROCESSED == 0 ? word : 0;
     }
 

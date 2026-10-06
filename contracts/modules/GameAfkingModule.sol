@@ -3,8 +3,6 @@ pragma solidity 0.8.34;
 
 import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
 
-import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
-
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
  *
@@ -96,9 +94,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     uint256 private constant HUMAN_ENTRY_GAS = GasBounds.HUMAN_ENTRY_GAS;
     uint256 private constant HUMAN_BOX_GAS = GasBounds.HUMAN_BOX_GAS;
     uint256 private constant HUMAN_PRESALE_GAS = GasBounds.HUMAN_PRESALE_GAS;
-    uint256 private constant HUMAN_SKIP_GAS = GasBounds.HUMAN_SKIP_GAS;
     uint256 private constant HUMAN_TAIL_GAS = GasBounds.HUMAN_TAIL_GAS;
-    event PresaleBoxRemainderSwept(address indexed player, uint256 dgnrs);
 
     uint256 private constant SUBSCRIBER_ITEM_GAS = GasBounds.SUBSCRIBER_ITEM_GAS;
     uint256 private constant SUBSCRIBER_WHALE_GAS = GasBounds.SUBSCRIBER_WHALE_GAS;
@@ -186,11 +182,13 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @notice Emitted for an afking subscribe-time cover-buy box. Same signature/topic as the
     ///         mint + whale `LootBoxBuy` — one box-buy event across every path.
     /// @param buyer The box recipient.
-    /// @param index The lootbox RNG index the box queued at.
+    /// @param index The physical write buffer (0/1) the entry joined.
+    /// @param position The entry's zero-based position in that buffer.
     /// @param amount The box ETH spend (boons off ⇒ raw spend).
     event LootBoxBuy(
         address indexed buyer,
         uint48 indexed index,
+        uint32 position,
         uint256 amount
     );
 
@@ -1117,31 +1115,24 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         sub.afkCoveredThroughDay = processDay;
     }
 
-    /// @dev Write a subscribe-time grounding lootbox as a full INDEXED box on the live lootbox
-    ///      index — the cover-buy's freeze-safe box record, mirroring the manual
-    ///      `_recordLootboxEntry` minus the boons-off legs (no boost, no distress tally, no
-    ///      mint-day record). The box binds to `_lootboxWord(index)` — a future word
-    ///      written at the next advance, never knowable at subscribe — and rolls from the LIVE
-    ///      open level, so the stored day and purchase-level are pure seed labels (the day-1
-    ///      genesis box resolves on its index word at the first advance, unlike `_recordedDailyWord(1)`,
-    ///      which is never written, so a genesis lootbox sub is never bricked). First deposit
-    ///      enqueues the index for the permissionless auto-open cursor and runs the purchase-time
-    ///      EV-cap tally (a bonus box draws `add = min(spend, CAP - used)` from the shared
-    ///      per-(player, level) accumulator, freezing the adjustedPortion into the packed word); a
-    ///      subsequent deposit at the same un-advanced index accumulates onto it with the
-    ///      multiplier frozen from the first-deposit score. The EV-cap key is `currentLevel + 1`
-    ///      (== the resolver's open level = level + 1).
+    /// @dev Append a subscribe-time grounding lootbox as its own cover entry in the live write
+    ///      buffer, mirroring the manual `_recordLootboxEntry` minus the boons-off legs (no boost,
+    ///      no distress tally, no mint-day record). The entry opens on that buffer's word, requested
+    ///      only after the append, and rolls from the LIVE open level. The append draws this box's
+    ///      EV fraction from the shared per-(wallet, level) accumulator (`add = min(spend, CAP -
+    ///      used)`) and freezes it with the score into the entry. The EV-cap key is
+    ///      `currentLevel + 1` (== the resolver's open level = level + 1).
     /// @param player The box recipient.
     /// @param currentLevel The live game level (== the STAGE's hoisted currentLevel).
     /// @param amount The lootbox spend in wei (boons off ⇒ no boost; amount == spend).
-    /// @param score The frozen activity score EV input (first deposit only).
+    /// @param score The frozen activity score EV input.
     function _recordAfkingCoverBox(
         address player,
         uint24 currentLevel,
         uint256 amount,
         uint16 score
     ) private {
-        // The cover box is recorded by the Lootbox module — one place owns the order slot's
+        // The cover box is appended by the Lootbox module — one place owns the entry word
         // encoding. Boons stay OFF for afking covers, so no boost is consumed here.
         (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
             abi.encodeWithSelector(
@@ -1301,8 +1292,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // nothing that level, and no later chunk/day this level tries again — one probe per
         // level, never a per-day poll of the claimable. The module re-checks the RNG timing
         // contract live (unlocked AND the process day's word uncommitted — the same two halves
-        // the STAGE gate keys on), skips a terminal game and defers a full lootbox entry,
-        // returning 0 for all of them, so this block never reverts the crank; those returns
+        // the STAGE gate keys on) and skips a terminal game, returning 0 for both, so this
+        // block never reverts the crank; those returns
         // latch too (they are unreachable through this gate and cost the level its buy, not
         // the crank its day). sDGNRS's ordinary daily box is untouched — the per-sub loop still
         // stamps it (no Sub field is written here, no pending-box count). A real purchase's
@@ -1714,11 +1705,16 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         _tryCompleteRng();
     }
 
-    /// @notice Open the active session's human orders in FIFO order, after AFKing.
+    /// @notice Settle the active session's box entries in FIFO order, after AFKing.
     function runHumanBoxWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory) {
         return _runHumanBoxWork(gasAllowance);
     }
 
+    /// @dev Each entry is admitted against its own box and presale bound, then the advanced
+    ///      cursor is stored BEFORE the entry's rewards run: the cursor alone marks an entry
+    ///      settled, and the entry's legs and the cursor move revert together. Once every entry
+    ///      has settled, completion needs only the tail allowance; a call that cannot afford it
+    ///      leaves boxCursor at the read count and the next call completes without replaying.
     function _runHumanBoxWork(uint256 gasAllowance) private returns (MineFlipGas.Result memory result) {
         MineFlipGas.Meter memory meter = MineFlipGas.start(gasAllowance);
         if (humanReadComplete) { result.done = true; return result; }
@@ -1727,48 +1723,30 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         uint256 indexWord = _lootboxWord(idx);
         if (indexWord == 0) return result;
         uint256 cur = boxCursor;
-        uint256 initialCursor = cur;
-        bool checkPresale = !presaleDrained;
+        uint256 qlen = boxReadCount;
         uint24 currentLevel = level + 1;
-        address[] storage queue = boxPlayers[idx & 1];
-        uint256 qlen = queue.length;
         while (cur < qlen) {
-            address player = queue[cur];
-            uint256 word = _boxOrder(idx, player);
-            uint256 stored = checkPresale ? presaleBoxEth[idx & 1][player] : 0;
-            uint256 boxes = _boxOrderCount(word);
-            uint256 maximum = boxes == 0 && stored == 0 ? HUMAN_SKIP_GAS
-                : HUMAN_ENTRY_GAS + boxes * HUMAN_BOX_GAS + (stored == 0 ? 0 : HUMAN_PRESALE_GAS);
-            if (!MineFlipGas.canRun(meter, maximum, HUMAN_TAIL_GAS)) break;
-            ++cur;
-            if (boxes == 0 && stored == 0) continue;
+            uint256 entry = _boxEntryAt(idx, cur);
+            uint256 boxes = _boxEntryCount(entry);
+            bool presale = (entry >> LB_PRESALE_SHIFT) & LB_PRESALE_MASK != 0;
+            if (!MineFlipGas.canRun(
+                meter, HUMAN_ENTRY_GAS + boxes * HUMAN_BOX_GAS + (presale ? HUMAN_PRESALE_GAS : 0), HUMAN_TAIL_GAS
+            )) break;
+            boxCursor = uint48(cur + 1);
             (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
                 abi.encodeWithSelector(IDegenerusGameLootboxModule.resolveHumanBoxOrder.selector,
-                    player, idx, word, stored, indexWord, currentLevel)
+                    idx, cur, entry, indexWord, currentLevel)
             );
             if (!ok) _revertDelegate(data);
-            result.rewardBasis += boxes + (stored != 0 ? 1 : 0);
+            ++cur;
+            result.progressed = true;
+            result.rewardBasis += boxes + (presale ? 1 : 0);
         }
-        result.progressed = cur != initialCursor;
         if (cur == qlen && MineFlipGas.canRun(meter, 0, HUMAN_TAIL_GAS)) {
-            // Presale dust belongs to the closing buyer only after every human order resolves.
-            if (presaleOver && checkPresale && idx == presaleCloseBuffer) {
-                presaleDrained = true;
-                uint256 remaining = dgnrs.poolBalance(IsDGNRS.Pool.PresaleBox);
-                if (remaining != 0) {
-                    address closer = presaleCloser;
-                    emit PresaleBoxRemainderSwept(
-                        closer, dgnrs.transferFromPool(IsDGNRS.Pool.PresaleBox, closer, remaining)
-                    );
-                }
-            }
             humanReadComplete = true;
-            boxCursor = 0;
             result.progressed = true;
             result.done = true;
             _tryCompleteRng();
-        } else if (result.progressed) {
-            boxCursor = uint48(cur);
         }
         MineFlipGas.finish(meter);
     }

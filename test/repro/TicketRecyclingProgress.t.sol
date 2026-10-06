@@ -21,7 +21,7 @@ contract RecyclingProgressSeeder is DeadVrfSeeder {
         foilRecord[201 & 3][_seedWallet(foilOwner)] = uint256(day) | (uint256(10_000) << _FOIL_MULT_SHIFT)
             | (uint256(201) << _FOIL_LEVEL_SHIFT);
         uint256 pos = uint256(_seedWallet(foilOwner));
-        foilQueue[_foilReadKey()].push(((pos + 1) << 192) | (uint256(201) << 160) | uint160(foilOwner));
+        _foilAppend(_foilReadKey(), (pos << 192) | (uint256(201) << 160) | uint160(foilOwner));
         foilGenerationDay = 0;
         foilFirstDrawDay = 0;
         _recordDailyRng(day, uint256(keccak256("old foil word")) | 1);
@@ -44,11 +44,18 @@ contract RecyclingProgressSeeder is DeadVrfSeeder {
         _setRngSessionPublished(false);
         _seedQueued(_tqReadKey(203), 203, owner, uint80(100) << 8);
     }
+    function _foilAppend(uint24 key, uint256 pack) internal {
+        uint256 i = _foilCount(key);
+        uint256 s = _foilSlot(key, i);
+        assembly ("memory-safe") { sstore(s, pack) }
+        if (key == _foilWriteKey()) foilWriteCount = uint32(i + 1);
+        else foilReadCount = uint32(i + 1);
+    }
     function seedPaidFoil(uint24 lvl, uint24 day, address owner) external {
         foilRecord[lvl & 3][_seedWallet(owner)] = uint256(day) | (uint256(10_000) << _FOIL_MULT_SHIFT)
             | (uint256(lvl) << _FOIL_LEVEL_SHIFT);
         uint256 pos = uint256(_seedWallet(owner));
-        foilQueue[_foilReadKey()].push(((pos + 1) << 192) | (uint256(lvl) << 160) | uint160(owner));
+        _foilAppend(_foilReadKey(), (pos << 192) | (uint256(lvl) << 160) | uint160(owner));
         foilGenerationDay = 0;
         foilFirstDrawDay = 0;
     }

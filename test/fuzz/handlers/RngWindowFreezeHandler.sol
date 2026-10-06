@@ -83,8 +83,8 @@ contract RngWindowFreezeHandler is Test {
     uint256 private constant TICKET_WRITE_SLOT_BYTE_OFF = 25; // bool ticketWriteSlot @ slot 0 byte 25
     uint256 private constant LR_MID_DAY_SHIFT = 224; // LR_MID_DAY flag bits of slot 33
     uint256 private constant LR_MID_DAY_MASK = 0xFF;
-    uint256 private constant LR_THRESHOLD_SHIFT = 112; // lootboxRngThreshold (milli-ETH) bits of slot 33
-    uint256 private constant LR_THRESHOLD_MASK = 0xFFFFFFFFFFFFFFFF;
+    uint256 private constant LR_THRESHOLD_SHIFT = 88; // lootboxRngThreshold (milli-ETH) bits 88..119
+    uint256 private constant LR_THRESHOLD_MASK = 0xFFFFFFFF;
     uint256 private constant LR_ETH_SCALE = 1e15; // milli-ETH packing scale
 
     bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q' — degenerette first-spin salt

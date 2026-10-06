@@ -455,9 +455,9 @@ contract MiddayRngCreditTest is DeployProtocol {
         coin.mintForGame(outsider, 1_000);
         vm.prank(outsider);
         game.placeDegeneretteBet(address(0), 1, 200, 1, 0);
-        // lootboxRngPacked (slot 33): bits 48..111 pending ETH, bits 184..223 pending FLIP.
+        // lootboxRngPacked: bits 48..87 pending ETH, bits 184..223 pending FLIP.
         uint256 packed = uint256(vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED)));
-        assertEq((packed >> 48) & type(uint64).max, 0, "harness: no pending ETH");
+        assertEq((packed >> 48) & type(uint40).max, 0, "harness: no pending ETH");
         assertGt((packed >> 184) & type(uint40).max, 0, "harness: pending FLIP");
         uint256 charge = _expectedCharge();
         _grantCredit(donor, charge * 2);

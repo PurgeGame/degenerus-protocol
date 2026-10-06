@@ -294,7 +294,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                     return (true, STAGE_GAMEOVER, false);
                 }
                 if (
-                    (_ticketQueueLength(_tqWriteKey(drainLevel)) != 0 || foilQueue[_foilWriteKey()].length != 0)
+                    (_ticketQueueLength(_tqWriteKey(drainLevel)) != 0 || foilWriteCount != 0)
                         && _lrRead(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK) == 0
                 ) {
                     // ONE terminal swap, ever, and always before the terminal request: every
@@ -353,8 +353,6 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             requestConfirmations: VRF_REQUEST_CONFIRMATIONS,
             callbackGasLimit: VRF_CALLBACK_GAS_LIMIT, numWords: 1, extraArgs: hex""
         })) returns (uint256 id) {
-            lootboxRngPacked &= ~((LR_PENDING_ETH_MASK << LR_PENDING_ETH_SHIFT)
-                | (LR_PENDING_FLIP_MASK << LR_PENDING_FLIP_SHIFT));
             _swapRngBuffers();
             vrfRequestId = id;
             _setRngRequestActive(true);
@@ -759,14 +757,9 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
 
         if (stage == 1) {
             while (dd != 0 && dd <= 2) {
-                uint256[] storage bucket = foilQueue[dd - 1];
-                uint256 n = bucket.length;
+                uint256 n = _foilCount(dd - 1);
                 if (idx < n) {
-                    uint256 packs;
-                    assembly ("memory-safe") {
-                        mstore(0, bucket.slot)
-                        packs := keccak256(0, 32)
-                    }
+                    uint256 packs = _foilSlot(dd - 1, 0);
                     do {
                         if (!MineFlipGas.canRun(meter, GasBounds.TERMINAL_TALLY_RECORD, GasBounds.TERMINAL_TALLY_TAIL)) {
                             _saveDeadTally(1, dd, idx, uncreated);
@@ -909,11 +902,12 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                 uint24 cohort = uint24(ref >> 64);
                 uint256 idx = uint64(ref);
                 if (cohort > 1 || (cohort == _foilReadKey() && idx < foilCursor)) revert E();
-                uint256[] storage bucket = foilQueue[cohort];
-                if (idx >= bucket.length) revert E();
-                uint256 pack = bucket[idx];
+                if (idx >= _foilCount(cohort)) revert E();
+                uint256 packSlot = _foilSlot(cohort, idx);
+                uint256 pack;
+                assembly ("memory-safe") { pack := sload(packSlot) }
                 if (uint32(pack >> 192) != playerId || uint24(pack >> 160) != lvl) revert E();
-                bucket[idx] = 0;
+                assembly ("memory-safe") { sstore(packSlot, 0) }
                 uint256 w = FOIL_PACK_ENTRIES * QTY_SCALE;
                 weight += w;
                 amount += (pot * w) / total;

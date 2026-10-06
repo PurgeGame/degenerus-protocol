@@ -12,15 +12,11 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///         craps table. Nothing about the conversion is mirrored or restated — a mirror could agree
 ///         with itself while the shipped arithmetic drifted underneath it.
 contract LootboxCrapsPasses is DeployProtocol {
-    uint256 constant SLOT_LOOTBOX_ETH = GameSlots.LOOTBOX_ORDER;
-    uint256 constant SLOT_LOOTBOX_WORD = GameSlots.RNG_DAY_TAGS;
-    uint256 constant SLOT_LOOTBOX_RNG_IDX = GameSlots.LOOTBOX_RNG_PACKED; // lootboxRngPacked (low 48 bits = lootboxRngIndex)
-    uint256 constant SLOT_BOX_PLAYERS = GameSlots.BOX_PLAYERS;     // mapping(uint48 => address[]) boxPlayers (sweep's discovery queue)
-    uint256 constant SLOT_BOX_CURSORS = GameSlots.BOX_CURSOR;     // packed (boxCursor @ byte 7, humanReadComplete @ byte 13)
-    uint256 constant LB_SCORE_SHIFT = 24;
-    uint256 constant LB_CUSTOM_COUNT_SHIFT = 105;
-    uint256 constant LB_CUSTOM_SIZE_SHIFT = 113;
-    uint256 constant LB_CUSTOM_SCALE = 1e12;
+    // Queue entry word (LB_* layout in DegenerusGameStorage).
+    uint256 constant LB_LEVEL_SHIFT = 32;
+    uint256 constant LB_SCORE_SHIFT = 56;
+    uint256 constant LB_CUSTOM_COUNT_SHIFT = 121;
+    uint256 constant LB_SIZE_SHIFT = 128;
 
     bytes32 constant PASS_EVENT = keccak256("LootBoxCrapsPasses(address,uint32,uint32,uint24)");
 
@@ -46,40 +42,23 @@ contract LootboxCrapsPasses is DeployProtocol {
         _finishReadConsumers();
     }
 
-    function _nested(uint256 baseSlot, uint48 index, address player) internal pure returns (bytes32) {
-        return keccak256(abi.encode(player, keccak256(abi.encode(uint256(index), baseSlot))));
-    }
-
-    function _simple(uint256 baseSlot, uint48 index) internal pure returns (bytes32) {
-        return keccak256(abi.encode(uint256(index), baseSlot));
-    }
-
-    /// @dev mineFlip's human-box stage only ever finds a box by walking `boxPlayers[index & 1]`
-    ///      on the delivered read buffer, so this forged setup also enqueues `player` and parks
-    ///      the stage's frontier on `index` -- every call is self-contained (the buffer selector
-    ///      and the cursor are unconditionally overwritten each time), so the many non-monotonic
-    ///      index sequences the callers below use are each independently reachable regardless of
-    ///      call order.
+    /// @dev mineFlip's human-box stage only ever finds a box by walking `boxQueue[read]`, so this
+    ///      forged setup makes `player`'s one custom box the only entry of buffer `index` and seals
+    ///      it with the delivered word -- every call is self-contained (the write buffer, the entry
+    ///      count and the cursors are unconditionally overwritten each time), so the many
+    ///      non-monotonic index sequences the callers below use are each independently reachable
+    ///      regardless of call order.
     function _setupLootbox(address player, uint48 index, uint256 ethAmount, uint256 vrfWord) internal {
-        uint256 packed = uint256(game.level()) | (uint256(1) << LB_SCORE_SHIFT)
-            | (uint256(1) << LB_CUSTOM_COUNT_SHIFT) | ((ethAmount / LB_CUSTOM_SCALE) << LB_CUSTOM_SIZE_SHIFT);
-        vm.store(address(game), _nested(SLOT_LOOTBOX_ETH, index, player), bytes32(packed));
+        uint256 word = uint256(game.walletIdOf(player)) | (uint256(game.level()) << LB_LEVEL_SHIFT)
+            | (uint256(1) << LB_SCORE_SHIFT) | (uint256(1) << LB_CUSTOM_COUNT_SHIFT)
+            | ((ethAmount / 1 gwei) << LB_SIZE_SHIFT);
+        RecyclingState.seedWriteBuffer(address(game), index);
+        bytes32 data = keccak256(abi.encode(keccak256(abi.encode(uint256(index), GameSlots.BOX_QUEUE))));
+        vm.store(address(game), data, bytes32(word));
+        uint256 lr = uint256(vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED)));
+        lr = (lr & ~(uint256(0xFFFFFFFF) << 120)) | (uint256(1) << 120);
+        vm.store(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED), bytes32(lr));
         RecyclingState.seedWord(address(game), index, bytes32(vrfWord));
-
-        bytes32 lenSlot = keccak256(abi.encode(uint256(index), uint256(SLOT_BOX_PLAYERS)));
-        uint256 len = 0; // one fixture entry; previous case was fully consumed
-        bytes32 dataBase = keccak256(abi.encode(lenSlot));
-        vm.store(address(game), bytes32(uint256(dataBase) + len), bytes32(uint256(uint160(player))));
-        vm.store(address(game), lenSlot, bytes32(len + 1));
-
-        uint256 mask48 = (uint256(1) << 48) - 1;
-        RecyclingState.seedWriteBuffer(address(game), index ^ 1);
-
-        bytes32 cursorSlot = bytes32(SLOT_BOX_CURSORS);
-        uint256 cur = uint256(vm.load(address(game), cursorSlot));
-        cur &= ~(mask48 << (7 * 8));
-        cur &= ~(uint256(0xff) << (13 * 8));
-        vm.store(address(game), cursorSlot, bytes32(cur));
     }
 
     /// @dev Open a box on a chosen word and report what, if anything, it announced. Deliberately
@@ -213,9 +192,9 @@ contract LootboxCrapsPasses is DeployProtocol {
         uint256 big;
         uint256 small;
         for (uint48 i = 1; i <= n; ++i) {
-            (bool f1,,,) = _open(player, uint48(i & 1), uint256(keccak256(abi.encode("big", i))), 200 ether);
+            (bool f1,,,) = _open(player, uint48(i & 1), uint256(keccak256(abi.encode("big-c", i))), 200 ether);
             if (f1) ++big;
-            (bool f2,,,) = _open(player, uint48(i & 1), uint256(keccak256(abi.encode("small", i))), 3 ether);
+            (bool f2,,,) = _open(player, uint48(i & 1), uint256(keccak256(abi.encode("small-c", i))), 3 ether);
             if (f2) ++small;
         }
         emit log_named_uint("announced, large boxes", big);

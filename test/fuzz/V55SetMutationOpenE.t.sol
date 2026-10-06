@@ -18,13 +18,13 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///        ([[open-e-operator-approval-trust-boundary]]).
 ///
 /// @notice The two open routes are GENUINELY SEPARATE (no selector / queue overlap):
-///   - HUMAN box open: `game.mineFlip()`'s HumanBoxes stage walks `boxPlayers[index & 1]`.
+///   - HUMAN box open: `game.mineFlip()`'s HumanBoxes stage walks `boxQueue[read]` from `boxCursor`.
 ///   - AFKING box open: `game.mineFlip()`'s open leg (GameAfkingModule.sol:1000-1009, only when
 ///     !advanceDue) walks `_subscribers` via `_autoOpen`. The afking module's own `autoOpen` selector
 ///     COLLIDES with the human `autoOpen(uint256)` so it is NOT re-exposed on the Game (DegenerusGame.sol
 ///     :352-353) — the afking open is reached ONLY through `mineFlip`. The two paths share no mutable
-///     state: distinct queues (`boxPlayers` vs `_subscribers`), distinct cursors (`boxCursor` vs
-///     `_subOpenCursor`), distinct per-box records (`lootboxEth[index][player]` vs the warm Sub stamp).
+///     state: distinct queues (`boxQueue` vs `_subscribers`), distinct cursors (`boxCursor` vs
+///     `_subOpenCursor`), distinct per-box records (the queued purchase entry vs the warm Sub stamp).
 ///
 /// @notice NO-ORPHAN (the load-bearing §3 guard): a box is STAMPED at the process STAGE (day D) but
 ///         OPENED later; it exists ONLY as (Sub stamp + lastAutoBoughtDay) with no cold ledger. The open

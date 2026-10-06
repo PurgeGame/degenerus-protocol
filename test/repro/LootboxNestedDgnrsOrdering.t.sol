@@ -8,6 +8,7 @@ import {IsDGNRS} from "../../contracts/interfaces/IsDGNRS.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {SigFigLib} from "../../contracts/libraries/SigFigLib.sol";
 import {VmSafe} from "forge-std/Vm.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 
 /// @title LootboxNestedDgnrsOrdering
 /// @notice Regression for a parent box entry that wins DGNRS, recursively resolves an ETH-spin
@@ -17,18 +18,24 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
     address private constant PLAYER = address(0xBEEF);
     uint48 private constant PARENT_BUFFER = 1;
     uint256 private constant CUSTOM_SIZE = 10 ether;
-    uint256 private constant BOX_ORDER = (uint256(3) << 24) | ((CUSTOM_SIZE / 1e12) << 32);
-    // Verified against the single-symbol spin: parent DGNRS / score-6 ETH spin
-    // with a DGNRS recirculation / parent DGNRS. The assertions below require all
+    uint256 private constant BOX_ORDER = (uint256(3) << 24) | ((CUSTOM_SIZE / 1 gwei) << 32);
+    // Derived from the queued-entry seed formula for PLAYER's entry (wallet ID 5, buffer 1,
+    // position 0): box n = H(H(QUEUED_ORDER_DOMAIN, word, 1, 0), 5, BOX_OPEN_TAG, n) draws parent
+    // DGNRS / a score-5 ETH spin (one result wild) whose recirculated child, seeded
+    // H(H(spinSeed, "Recir"), 5), rolls DGNRS / parent DGNRS. The assertions below require all
     // three nonzero batches and distinguish live-pool pricing after the child.
-    uint256 private constant RNG_WORD = 204344;
+    uint256 private constant RNG_WORD = 53867;
 
     bytes32 private constant DGNRS_BATCH_SIG = keccak256("LootBoxDgnrsBatch(address,uint256,uint256)");
     bytes32 private constant LOOTBOX_OPENED_SIG =
         keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
+    uint256 private constant QUEUED_ORDER_DOMAIN = 0x5175657565644f72646572;
+    uint48 private constant QUEUED_ENTRY_TAG = uint48(1) << 46;
     uint256 private _lastFulfilledReqId;
+    /// @dev PLAYER's entry position in PARENT_BUFFER, recorded at purchase.
+    uint256 private _parentPos;
 
     function setUp() public {
         _deployProtocol();
@@ -49,7 +56,7 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
             vm.deal(filler, 1 ether);
             vm.prank(filler);
             game.purchase{value: 1 ether}(
-                filler, 0, (uint256(1) << 24) | ((1 ether / 1e12) << 32), bytes32(0), MintPaymentKind.DirectEth, false
+                filler, 0, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
             );
             vm.prank(filler);
             game.mineFlip();
@@ -90,12 +97,26 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
         game.mineFlip{gas: hi}();
     }
 
-    /// @notice Accepted century behavior: any keeper can settle the known winner before the
-    ///         refill; if it remains unresolved, its nested awards use the replenished live pool.
-    function testPermissionlessKnownWinnerBeforeAndAfterCenturyRefill() public {
+    /// @dev PLAYER buys the three-box parent entry into PARENT_BUFFER (its write buffer).
+    function _buyParent() private {
+        _parentPos = RecyclingState.boxCount(address(game), PARENT_BUFFER);
         vm.deal(PLAYER, 31 ether);
         vm.prank(PLAYER);
         game.purchase{value: 30 ether}(PLAYER, 0, BOX_ORDER, bytes32(0), MintPaymentKind.DirectEth, false);
+        assertEq(RecyclingState.boxCount(address(game), PARENT_BUFFER), _parentPos + 1, "one parent entry");
+        assertEq(game.walletIdOf(PLAYER), 5, "RNG_WORD was derived for wallet ID 5");
+        assertEq(_parentPos, 0, "RNG_WORD was derived for position 0");
+    }
+
+    /// @dev Root of the parent entry under RNG_WORD (the queued-entry seed formula).
+    function _parentRoot() private view returns (uint256) {
+        return EntropyLib.hash4(QUEUED_ORDER_DOMAIN, RNG_WORD, PARENT_BUFFER, _parentPos);
+    }
+
+    /// @notice Accepted century behavior: any keeper can settle the known winner before the
+    ///         refill; if it remains unresolved, its nested awards use the replenished live pool.
+    function testPermissionlessKnownWinnerBeforeAndAfterCenturyRefill() public {
+        _buyParent();
         _landWord(RNG_WORD);
         vm.prank(address(game));
         IsDGNRS(address(sdgnrs)).transferFromPool(IsDGNRS.Pool.Whale, address(sdgnrs), 100_000_000_000 ether);
@@ -103,8 +124,8 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
         uint256 snapshot = vm.snapshotState();
         uint256 balanceBefore = sdgnrs.balanceOf(PLAYER);
         // Any third party's mineFlip settles PLAYER's box: the engine's human-box stage credits the
-        // box owner regardless of caller. PARENT_BUFFER holds PLAYER's only queued box (a real
-        // purchase through the production path, so boxPlayers[PARENT_BUFFER] already holds it).
+        // box owner regardless of caller. PARENT_BUFFER holds PLAYER's entry (a real purchase
+        // through the production path).
         vm.prank(address(0xCA11));
         game.mineFlip();
         uint256 beforeRefillAward = sdgnrs.balanceOf(PLAYER) - balanceBefore;
@@ -156,7 +177,7 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
                 ++r.batchCount;
             } else if (
                 entry.topics[0] == LOOTBOX_OPENED_SIG && entry.topics.length == 3
-                    && uint48(uint256(entry.topics[2])) == PARENT_BUFFER
+                    && uint48(uint256(entry.topics[2])) == (QUEUED_ENTRY_TAG | (uint48(_parentPos) << 1) | PARENT_BUFFER)
             ) {
                 (uint256 amount,,,,) = abi.decode(entry.data, (uint256, uint24, uint32, uint256, bool));
                 r.parentAmount = amount;
@@ -167,8 +188,8 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
 
     /// @dev Box three's DGNRS award priced from the live pool after the first two batches, and
     ///      from the entry's stale opening snapshot.
-    function _thirdRoll(NestedOpen memory r) private pure returns (uint256 fresh, uint256 stale) {
-        uint256 seed3 = EntropyLib.hash4(RNG_WORD, uint256(uint160(PLAYER)), 0x426f784f70656e, 3);
+    function _thirdRoll(NestedOpen memory r) private view returns (uint256 fresh, uint256 stale) {
+        uint256 seed3 = EntropyLib.hash4(_parentRoot(), uint256(game.walletIdOf(PLAYER)), 0x426f784f70656e, 3);
         uint256 boonBudget = r.parentAmount / 10;
         if (boonBudget > 1 ether) boonBudget = 1 ether;
         uint256 rollAmount = r.parentAmount - boonBudget;
@@ -199,9 +220,7 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
     }
 
     function testParentDgnrsIsSettledAndSnapshotReloadedAcrossNestedEthSpin() public {
-        vm.deal(PLAYER, 31 ether);
-        vm.prank(PLAYER);
-        game.purchase{value: 30 ether}(PLAYER, 0, BOX_ORDER, bytes32(0), MintPaymentKind.DirectEth, false);
+        _buyParent();
 
         _landWord(RNG_WORD);
         uint256 trim = _distinguishingPoolTrim();

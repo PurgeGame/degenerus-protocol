@@ -6,7 +6,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {Vm} from "forge-std/Vm.sol";
 
 /// @title StallResilience -- Proves VRF stall -> coordinator swap -> resume cycle
 /// @notice Integration tests for gap day RNG backfill (TEST-01), coinflip resolution
@@ -274,21 +274,28 @@ contract StallResilience is DeployProtocol {
         // Resume: the reissued request's word finalizes the reserved index. Publication is the
         // first action of the next call, before any consumer reads the word.
         newVRF.fulfillRandomWords(newVRF.lastRequestId(), 0x1007CAFE);
+        vm.recordLogs();
         game.mineFlip();
         assertTrue(_lootboxRngWord(orphanedIndex) != 0, "Reserved index finalized by the reissued word");
 
         // The engine steps on that index without an unexpected error, and the box bought into
         // the stalled cohort resolves on that word in the engine's human-box stage, which must
-        // finish before any later request may retire the buffer: its raw order word carries
-        // BOX_PROCESSED (bit 255; lootboxOrder is mapping slot 15, keyed by buffer parity).
+        // finish before any later request may retire the buffer: its queue entry opens
+        // (the open reports an event indexed by the buyer).
         uint24 sealedBefore = _dailyIdx();
         for (uint256 i = 0; i < 50 && _dailyIdx() == sealedBefore; i++) {
             if (!_step()) break;
         }
         assertGt(_dailyIdx(), sealedBefore, "the stalled day sealed");
-        uint256 order = uint256(vm.load(address(game),
-            keccak256(abi.encode(buyer, keccak256(abi.encode(uint256(orphanedIndex & 1), GameSlots.LOOTBOX_ORDER))))));
-        assertTrue(order != 0, "the stalled cohort's box order exists");
-        assertTrue(order >> 255 == 1, "the stalled cohort's box opened on the reissued word");
+        uint256 entry = RecyclingState.boxEntry(address(game), orphanedIndex & 1, 0);
+        assertTrue(entry != 0, "the stalled cohort's box entry exists");
+        assertEq(BoxOrderLib.boId(entry), game.walletIdOf(buyer), "the entry belongs to the buyer");
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bool opened;
+        for (uint256 i; i < logs.length; i++) {
+            if (logs[i].emitter == address(game) && logs[i].topics.length > 1
+                && address(uint160(uint256(logs[i].topics[1]))) == buyer) opened = true;
+        }
+        assertTrue(opened, "the stalled cohort's box opened on the reissued word");
     }
 }

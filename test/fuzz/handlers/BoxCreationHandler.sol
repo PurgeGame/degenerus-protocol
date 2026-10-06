@@ -7,60 +7,78 @@ import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {DegenerusDeityPass} from "../../../contracts/DegenerusDeityPass.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
+import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
+import {PriceLookupLib} from "../../../contracts/libraries/PriceLookupLib.sol";
 import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 import {GameSlots} from "../../helpers/GameSlots.sol";
 
-/// @title BoxCreationHandler — drives every box-creating entrypoint for the FUZZ-04 ENQUEUE invariant
-/// @notice The box-creating family the ASYM-02 sweep enumerates has FOUR enqueue sites, each guarded by a
-///         first-deposit check that pushes the (index, owner) into boxPlayers[index & 1] for mineFlip()'s
-///         in-order human-box stage:
-///           - mint-with-lootbox purchase           (MintModule first-deposit -> boxPlayers push)
-///           - whale / lazy / deity pass bundle      (WhaleModule._recordLootboxEntry -> boxPlayers push)
-///           - presale box                           (MintModule._buyPresaleBoxFor -> boxPlayers push)
-///           - afking-cover subscribe-grounding box  (GameAfkingModule._recordAfkingCoverBox -> boxPlayers push)
+/// @title BoxCreationHandler — drives every box-creating entrypoint for the FUZZ-04 box-queue invariant
+/// @notice Every box purchase appends ONE complete entry to the write buffer's box queue, which
+///         mineFlip()'s human-box stage settles in FIFO order from `boxCursor` once the buffer is
+///         sealed and its word published. The creating entrypoints this handler drives:
+///           - mint-with-lootbox purchase  (MintModule: one custom box, appended by `_appendBoxOrder`)
+///           - whale / lazy / deity pass   (WhaleModule -> LootboxModule.recordCoverBox: one entry,
+///                                          one custom box per pass bought)
+///           - presale box                 (MintModule._buyPresaleBoxFor: a presale-only entry)
 ///
-///         This handler exercises each path in a randomized sequence through the REAL entrypoints (never a
-///         vm.store of a box record — the box is created by the contract so the enqueue site actually fires),
-///         records every successfully-created (index, owner) pair into a tracked list the BoxEnqueue invariant
-///         iterates, and bumps a per-path ghost counter so the invariant can prove non-vacuity (boxes were
-///         actually created across multiple paths). It also drives mineFlip()+VRF-fulfill so
-///         boxes drain to base==0 over the campaign — exercising BOTH the still-enqueued and the resolved
-///         transitions the invariant distinguishes.
+///         Each creating call is checked as it lands: the write buffer did not move, its count grew
+///         by exactly one, and the entry at the prior count carries the buyer's wallet ID, the
+///         purchase level, the box counts/size or presale amount/tier/closing flag the action
+///         implies, and matches the purchase event's (buffer, position, amount). Each entry is
+///         snapshotted with its buffer generation so the invariant can prove it is never
+///         rewritten while its cohort lives. The engine cranks (`openSome`) are observed one
+///         mineFlip at a time: the read cursor never moves backwards or past the read count
+///         without a seal, completion implies the cursor reached the read count, and every
+///         queued-entry resolution event lands in FIFO order, inside [cursor, readCount), at or
+///         behind the stored cursor, and to the entry's own wallet.
 ///
-/// @dev WHALE-01 is the bug this net catches: a sibling box-creation path that persists a record
-///      (lootboxEth/presaleBoxEth with base != 0) but skips the boxPlayers[index & 1] push, letting the sole
-///      opener (manual openLootBox is operator-gated) hold the box and time the open to a favorable
-///      level/boon. The actor base is 0x70000 (disjoint from WhaleHandler's 0xB0000 and the afking
-///      handler's 0xAF000 / 0xDE17A); each actor is field-isolated-seeded with the HAS_DEITY_PASS score
-///      bit so the subscribe/pass gates pass. Test-only: ZERO contracts/*.sol mutation.
+/// @dev The actor base is 0x70000 (disjoint from WhaleHandler's 0xB0000 and the afking handler's
+///      0xAF000 / 0xDE17A); even actors are field-isolated-seeded with the HAS_DEITY_PASS score
+///      bit. Test-only: ZERO contracts/*.sol mutation.
 contract BoxCreationHandler is Test {
+    using BoxOrderLib for uint256;
+
     DegenerusGame public game;
     DegenerusDeityPass public deityPass;
     MockVRFCoordinator public vrf;
 
-    // -------------------------------------------------------------------------
-    // Canonical c4d48008 storage layout (380-01 LAYOUT-KEY, confirmed via forge inspect)
-    // -------------------------------------------------------------------------
     uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED;
     uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS score bit (subscribe/pass gate)
-    uint256 private constant LR_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED; // lootboxRngPacked; LR_INDEX = low 48 bits (post Stage B pack: was 35)
-    uint256 private constant LR_INDEX_MASK = 0xFFFFFFFFFFFF;
-    uint256 private constant PRESALE_BOX_CREDIT_SLOT = GameSlots.PRESALE_BOX_CREDIT; // mapping(address => uint256)
-    // The folded lootboxEth word: amount[0:128] | adj[128:192] | scorePlus1[192:208] | distress[208:256].
-    uint256 private constant LOOTBOX_ETH_SLOT = GameSlots.LOOTBOX_ORDER; // mapping(uint48 => mapping(address => uint256))
-    uint256 private constant LOOTBOX_AMOUNT_MASK = (uint256(1) << 128) - 1; // amount sub-field [0:128]
+    uint256 private constant PRESALE_BOX_CREDIT_SLOT = GameSlots.PRESALE_BOX_CREDIT; // mapping(uint32 => uint256)
+    uint256 private constant PRESALE_BOX_ETH_CAP = 50 ether;
+
+    bytes32 private constant LOOTBOX_BUY = keccak256("LootBoxBuy(address,uint48,uint32,uint256)");
+    bytes32 private constant PRESALE_BUY = keccak256("PresaleBoxBuy(address,uint48,uint32,uint256,bool)");
+    bytes32 private constant LOOTBOX_OPENED = keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
+    bytes32 private constant PRESALE_OPENED =
+        keccak256("PresaleBoxOpened(address,uint48,uint256,uint256,uint256,uint256,bool,uint32,uint32)");
+    uint256 private constant QUEUED_ENTRY_TAG = uint256(1) << 46;
+    uint256 private constant REDEMPTION_INDEX_TAG = uint256(1) << 47;
 
     // -------------------------------------------------------------------------
-    // A tracked (index, owner) record — the invariant asserts each persisted one is enqueued.
+    // Tracked entries: one per successful creating call, snapshotted at append.
     // -------------------------------------------------------------------------
-    struct BoxRef {
-        uint48 index;
+    struct EntryRef {
+        uint48 buffer;
+        uint32 position;
+        uint32 gen; // the buffer's generation when appended
+        uint256 word; // the word as appended
         address owner;
     }
 
-    BoxRef[] private created;
-    // Dedup guard: (index, owner) -> already tracked.
-    mapping(uint48 => mapping(address => bool)) private tracked;
+    EntryRef[] private created;
+    /// @dev Generation of each physical buffer: bumped when a buffer's write count restarts at
+    ///      position 0, i.e. it reopened for a new cohort and its old entries are dead.
+    uint32[2] public gen;
+    /// @dev (buffer, gen, position) -> owner, for the resolution-event wallet check.
+    mapping(bytes32 => address) private ownerAt;
+
+    // --- Ghost violations (asserted zero by the invariants) ---
+    uint256 public appendViolations;
+    string public lastAppendViolation;
+    uint256 public fifoViolations;
+    string public lastFifoViolation;
+    uint256 public resolutionsObserved;
 
     // --- Per-path ghost counters (non-vacuity: each box-creating path that fires bumps its own) ---
     uint256 public boxesCreated_mintLootbox;
@@ -68,7 +86,6 @@ contract BoxCreationHandler is Test {
     uint256 public boxesCreated_lazy;
     uint256 public boxesCreated_deity;
     uint256 public boxesCreated_presale;
-    uint256 public boxesCreated_afkingCover;
 
     // --- Call counters (coverage visibility) ---
     uint256 public calls_mintLootbox;
@@ -87,6 +104,35 @@ contract BoxCreationHandler is Test {
         _;
     }
 
+    /// @dev What a creating call must have appended.
+    struct Expect {
+        uint256 custom; // custom box count (0 for presale-only)
+        uint256 sizeWei; // exact custom size; 0 = derive from the LootBoxBuy amount / custom
+        uint256 presaleWei; // applied presale wei (0 = no presale leg)
+        uint256 tier;
+        bool closing;
+        uint256 maxAmount; // LootBoxBuy amount ceiling (0 = no ordinary leg). A pass box is a
+            // share of the pass price, which claimable/afking may fund beyond msg.value, so
+            // passes bound it only through the entry's size.
+    }
+
+    /// @dev Write-side state captured just before a creating call.
+    struct Pre {
+        uint48 wb;
+        uint256 count;
+        uint24 lvl;
+        uint256 priceWei;
+    }
+
+    /// @dev Read-side state around one engine call.
+    struct ReadState {
+        uint48 wb;
+        uint48 rb;
+        uint256 cursor;
+        uint256 readCount;
+        bool complete;
+    }
+
     constructor(
         DegenerusGame game_,
         DegenerusDeityPass deityPass_,
@@ -102,44 +148,42 @@ contract BoxCreationHandler is Test {
             address actor = address(uint160(0x70000 + i));
             actors.push(actor);
             vm.deal(actor, 1_000 ether);
-            // Seed the HAS_DEITY_PASS score bit on EVEN actors only — it grants the subscribe gate the
-            // presale-box path needs, but a deity-pass HOLDER cannot buy a lazy pass NOR a fresh deity pass
-            // (both revert), so the un-seeded ODD actors keep the lazy-pass and deity-pass surfaces reachable.
-            // A field-isolated mintPacked_ seed (no balance touched) — mirrors the established
-            // V61AfkingSpendHandler / SolvencyActionHandler split. The whale pass works for either band.
+            // Seed the HAS_DEITY_PASS score bit on EVEN actors only — a deity-pass HOLDER cannot buy a
+            // lazy pass NOR a fresh deity pass (both revert), so the un-seeded ODD actors keep those
+            // surfaces reachable. The whale pass works for either band.
             if (i % 2 == 0) _grantDeityScoreBit(actor);
         }
     }
 
     // =========================================================================
-    // The tracked (index, owner) set + the per-path counters the invariant reads
+    // Views the invariant reads
     // =========================================================================
-
-    /// @notice Every (index, owner) box record this campaign created via a real entrypoint. The invariant
-    ///         iterates these and, for each with base != 0 (persisted, not yet opened), asserts it is present
-    ///         in boxPlayers[index & 1].
-    function trackedBoxes() external view returns (BoxRef[] memory refs) {
-        refs = new BoxRef[](created.length);
-        for (uint256 i; i < created.length; i++) refs[i] = created[i];
-    }
 
     function trackedCount() external view returns (uint256) {
         return created.length;
+    }
+
+    function trackedEntry(uint256 i) external view returns (EntryRef memory) {
+        return created[i];
     }
 
     function actorCount() external view returns (uint256) {
         return actors.length;
     }
 
-    /// @notice Sum of the per-path box-creation counters (non-vacuity headline).
+    /// @notice Tracked entries whose cohort still lives (buffer generation unchanged) but whose stored
+    ///         word differs from the word appended. Zero is the never-rewritten property.
+    function rewrittenEntries() public view returns (uint256 n) {
+        for (uint256 i; i < created.length; i++) {
+            EntryRef memory e = created[i];
+            if (e.gen != gen[e.buffer]) continue;
+            if (RecyclingState.boxEntry(address(game), e.buffer, e.position) != e.word) n++;
+        }
+    }
+
     function totalBoxesCreated() external view returns (uint256) {
-        return
-            boxesCreated_mintLootbox +
-            boxesCreated_whale +
-            boxesCreated_lazy +
-            boxesCreated_deity +
-            boxesCreated_presale +
-            boxesCreated_afkingCover;
+        return boxesCreated_mintLootbox + boxesCreated_whale + boxesCreated_lazy + boxesCreated_deity
+            + boxesCreated_presale;
     }
 
     /// @notice Count of DISTINCT box-creating paths that fired at least once (the >=2 non-vacuity gate).
@@ -149,15 +193,21 @@ contract BoxCreationHandler is Test {
         if (boxesCreated_lazy != 0) n++;
         if (boxesCreated_deity != 0) n++;
         if (boxesCreated_presale != 0) n++;
-        if (boxesCreated_afkingCover != 0) n++;
+    }
+
+    /// @notice The read-side state the FIFO invariant checks.
+    function readState() public view returns (ReadState memory s) {
+        s.wb = RecyclingState.writeBuffer(address(game));
+        s.rb = s.wb ^ 1;
+        s.cursor = uint48(uint256(vm.load(address(game), bytes32(GameSlots.BOX_CURSOR))) >> (GameSlots.BOX_CURSOR_OFFSET * 8));
+        s.readCount = uint32(uint256(vm.load(address(game), bytes32(GameSlots.BOX_READ_COUNT))) >> (GameSlots.BOX_READ_COUNT_OFFSET * 8));
+        s.complete = uint8(uint256(vm.load(address(game), bytes32(GameSlots.HUMAN_READ_COMPLETE))) >> (GameSlots.HUMAN_READ_COMPLETE_OFFSET * 8)) != 0;
     }
 
     // =========================================================================
-    // Action 1: mint-with-lootbox (a non-zero lootboxAmt on purchase persists a lootbox box at LR_INDEX)
+    // Action 1: mint-with-lootbox (one custom box appended as one entry)
     // =========================================================================
 
-    /// @notice Buy a whole ticket bundle with a non-zero lootbox spend. The first deposit at the active index
-    ///         enqueues the box (MintModule:1251). Cycles DirectEth/Combined so both fresh-ETH branches run.
     function mintWithLootbox(uint256 actorSeed, uint256 lbSeed, uint8 kindSeed) external useActor(actorSeed) {
         calls_mintLootbox++;
         if (game.gameOver()) return;
@@ -170,24 +220,22 @@ contract BoxCreationHandler is Test {
         uint256 value = lootboxAmt + 1 ether;
         if (value > currentActor.balance) return;
 
-        uint48 idx = _lrIndex();
+        uint256 size = (lootboxAmt / 1 gwei) * 1 gwei;
+        Pre memory pre = _pre();
+        vm.recordLogs();
         vm.prank(currentActor);
         try game.purchase{value: value}(currentActor, 400, BoxOrderLib.boCustomFloor(lootboxAmt), bytes32(0), kind, false) {
-            // A successful lootbox-bearing purchase persists a box at this index; count the path and track the
-            // (index, owner) for the invariant. The counter is bumped per successful creating-call (the
-            // non-vacuity signal that this PATH fired); the tracked list is deduped so the invariant iterates
-            // each (index, owner) once even when several paths deposit into the SAME accumulating record.
             boxesCreated_mintLootbox++;
-            _track(idx, currentActor);
-        } catch {}
+            _checkAppend(pre, Expect({custom: 1, sizeWei: size, presaleWei: 0, tier: 0, closing: false, maxAmount: size}));
+        } catch {
+            vm.getRecordedLogs();
+        }
     }
 
     // =========================================================================
-    // Action 2: pass bundles (whale / lazy / deity — each deposits a 10%-of-price lootbox via WhaleModule)
+    // Action 2: pass bundles (one entry, one custom box per pass bought)
     // =========================================================================
 
-    /// @notice Whale pass: a 10%-of-price lootbox is recorded via _recordLootboxEntry (WhaleModule:896
-    ///         first-deposit enqueue). passLevel bounded [1,5]; 2.4 ETH base price covers early levels.
     function buyWhalePass(uint256 actorSeed, uint256 qtySeed) external useActor(actorSeed) {
         calls_whale++;
         if (game.gameOver()) return;
@@ -196,15 +244,17 @@ contract BoxCreationHandler is Test {
         uint256 cost = 2.4 ether * qty;
         if (cost > currentActor.balance) return;
 
-        uint48 idx = _lrIndex();
+        Pre memory pre = _pre();
+        vm.recordLogs();
         vm.prank(currentActor);
         try game.purchaseWhalePass{value: cost}(currentActor, qty, bytes32(0)) {
             boxesCreated_whale++;
-            _track(idx, currentActor);
-        } catch {}
+            _checkAppend(pre, Expect({custom: qty, sizeWei: 0, presaleWei: 0, tier: 0, closing: false, maxAmount: type(uint256).max}));
+        } catch {
+            vm.getRecordedLogs();
+        }
     }
 
-    /// @notice Lazy pass: 0.24 ETH at early levels; deposits a 10% lootbox the same way.
     function buyLazyPass(uint256 actorSeed) external useActor(actorSeed) {
         calls_lazy++;
         if (game.gameOver()) return;
@@ -212,16 +262,19 @@ contract BoxCreationHandler is Test {
         uint256 cost = 0.24 ether;
         if (cost > currentActor.balance) return;
 
-        uint48 idx = _lrIndex();
+        Pre memory pre = _pre();
+        vm.recordLogs();
         vm.prank(currentActor);
         try game.purchaseLazyPass{value: cost}(currentActor, bytes32(0)) {
             boxesCreated_lazy++;
-            _track(idx, currentActor);
-        } catch {}
+            _checkAppend(pre, Expect({custom: 1, sizeWei: 0, presaleWei: 0, tier: 0, closing: false, maxAmount: type(uint256).max}));
+        } catch {
+            vm.getRecordedLogs();
+        }
     }
 
-    /// @notice Deity pass: base 24 ETH (first pass; subsequent passes cost more and revert on the fixed price,
-    ///         which the try/catch swallows). Deposits a 10% lootbox via the pass path.
+    /// @notice Deity pass: base 24 ETH (first pass; subsequent passes cost more and revert on the
+    ///         fixed price, which the try/catch swallows).
     function buyDeityPass(uint256 actorSeed, uint256 symbolSeed) external useActor(actorSeed) {
         calls_deity++;
         if (game.gameOver()) return;
@@ -230,28 +283,29 @@ contract BoxCreationHandler is Test {
         uint256 cost = 24 ether;
         if (cost > currentActor.balance) return;
 
-        uint48 idx = _lrIndex();
+        Pre memory pre = _pre();
+        vm.recordLogs();
         vm.prank(currentActor);
         try game.purchaseDeityPass{value: cost}(currentActor, symbolId, bytes32(0)) {
             boxesCreated_deity++;
-            _track(idx, currentActor);
-        } catch {}
+            _checkAppend(pre, Expect({custom: 1, sizeWei: 0, presaleWei: 0, tier: 0, closing: false, maxAmount: type(uint256).max}));
+        } catch {
+            vm.getRecordedLogs();
+        }
     }
 
     // =========================================================================
-    // Action 3: presale box (the credit-gated coin-presale box — its own enqueue at MintModule:1602)
+    // Action 3: presale box (a presale-only entry)
     // =========================================================================
 
-    /// @notice Buy a presale box. Presale-box credit is normally earned 25% on buys; here it is seeded directly
-    ///         (the established PresaleBoxDrain idiom — a CREDIT allowance write at slot 17, NOT a box-record
-    ///         write) so the box is created reliably through the REAL buyPresaleBox entrypoint, which writes
-    ///         presaleBoxEth and enqueues via the real inlined boxPlayers push. boxAmount bounded [0.01, 2] ETH.
+    /// @notice Buy a presale box. Presale-box credit is normally earned 25% on buys; here it is
+    ///         seeded directly (a CREDIT allowance, NOT a box record) so the box is created through
+    ///         the REAL buyPresaleBox entrypoint. boxAmount bounded [0.01, 2] ETH.
     function buyPresaleBox(uint256 actorSeed, uint256 amtSeed) external useActor(actorSeed) {
         calls_presale++;
         if (game.gameOver()) return;
-        // presaleOver latches at the 50-ETH close; presaleBoxEthRemaining() returns 0 once latched or sold
-        // out (DegenerusGame:2537), so it is the public proxy for "the presale-box path is still open".
-        if (game.presaleBoxEthRemaining() == 0) return;
+        uint256 remaining = game.presaleBoxEthRemaining();
+        if (remaining == 0) return;
 
         uint256 boxAmount = bound(amtSeed, 0.01 ether, 2 ether);
         if (boxAmount > currentActor.balance) return;
@@ -259,23 +313,27 @@ contract BoxCreationHandler is Test {
         // Seed enough spendable credit for this buy (credit is consumed 1:1; an over-credit request reverts).
         _grantCredit(currentActor, boxAmount);
 
-        uint48 idx = _lrIndex();
+        uint256 applied = boxAmount > remaining ? remaining : boxAmount;
+        uint256 tier = (PRESALE_BOX_ETH_CAP - remaining) / 10 ether;
+        if (tier > 4) tier = 4;
+        Pre memory pre = _pre();
+        vm.recordLogs();
         vm.prank(currentActor);
         try game.buyPresaleBox{value: boxAmount}(currentActor, boxAmount) {
             boxesCreated_presale++;
-            _track(idx, currentActor);
-        } catch {}
+            _checkAppend(pre, Expect({custom: 0, sizeWei: 0, presaleWei: applied, tier: tier, closing: applied == remaining, maxAmount: 0}));
+        } catch {
+            vm.getRecordedLogs();
+        }
     }
 
     // =========================================================================
-    // Action 4: open + advance (drain boxes to base==0; land per-index words so opens resolve)
+    // Action 4: open + advance (seal, publish and settle cohorts through the engine)
     // =========================================================================
 
-    /// @notice Crank the permissionless engine (mineFlip's in-order box stages open whatever cohort is
-    ///         ready), then advance the state machine a few steps and fulfill any pending VRF so per-index
-    ///         words land and ready boxes resolve (base -> 0). This is what drives the still-enqueued ->
-    ///         resolved transition the invariant distinguishes (opened boxes are correctly excluded). A
-    ///         small actor buy first satisfies the daily purchase gate for advance.
+    /// @notice Crank the permissionless engine, buy one ticket (the daily purchase gate), and
+    ///         answer any pending VRF so sealed cohorts publish and settle. Every engine call is
+    ///         observed for the FIFO properties.
     function openSome(uint256 actorSeed, uint256 crankSeed, uint256 wordSeed) external useActor(actorSeed) {
         calls_openSome++;
 
@@ -284,16 +342,21 @@ contract BoxCreationHandler is Test {
 
         if (game.gameOver()) return;
 
-        // Satisfy the daily purchase gate with one whole ticket so mineFlip can progress.
+        // Satisfy the daily purchase gate with one whole ticket; a ticket-only buy appends nothing.
         (, , , , uint256 priceWei) = game.purchaseInfo();
         if (priceWei != 0 && priceWei <= currentActor.balance) {
+            uint48 wb = RecyclingState.writeBuffer(address(game));
+            uint256 count = RecyclingState.boxCount(address(game), wb);
             vm.prank(currentActor);
-            try game.purchase{value: priceWei}(currentActor, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+            try game.purchase{value: priceWei}(currentActor, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {
+                if (RecyclingState.writeBuffer(address(game)) != wb || RecyclingState.boxCount(address(game), wb) != count) {
+                    _appendViolation("a ticket-only purchase appended a box entry");
+                }
+            } catch {}
         }
 
         for (uint256 i; i < 3; i++) {
-            vm.prank(currentActor);
-            try game.mineFlip() {} catch {}
+            _mine();
             uint256 reqId = vrf.lastRequestId();
             if (reqId != 0) {
                 (, , bool fulfilled) = vrf.pendingRequests(reqId);
@@ -303,17 +366,155 @@ contract BoxCreationHandler is Test {
             }
         }
 
-        // After resolution some boxes drained to base==0; crank the engine once more so the resolved
-        // transition is realized for the invariant to observe both states across the campaign.
         _crank(cranks);
     }
 
-    /// @dev Up to `cranks` engine calls by the current actor. NoWork / RngNotReady (or any refusal)
-    ///      ends the run; the engine owns the order, the handler only supplies calls.
+    /// @dev Up to `cranks` observed engine calls; any refusal ends the run.
     function _crank(uint256 cranks) internal {
         for (uint256 i; i < cranks; i++) {
-            vm.prank(currentActor);
-            try game.mineFlip() {} catch { return; }
+            if (!_mine()) return;
+        }
+    }
+
+    /// @dev One observed engine call by the current actor.
+    function _mine() internal returns (bool ok) {
+        ReadState memory pre = readState();
+        vm.recordLogs();
+        vm.prank(currentActor);
+        try game.mineFlip() {
+            ok = true;
+        } catch {}
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        if (ok) _checkFifo(pre, readState(), logs);
+    }
+
+    // =========================================================================
+    // Checks
+    // =========================================================================
+
+    function _pre() internal view returns (Pre memory p) {
+        p.wb = RecyclingState.writeBuffer(address(game));
+        p.count = RecyclingState.boxCount(address(game), p.wb);
+        (p.lvl, , , , p.priceWei) = game.purchaseInfo();
+    }
+
+    function _appendViolation(string memory why) internal {
+        appendViolations++;
+        lastAppendViolation = why;
+    }
+
+    function _fifoViolation(string memory why) internal {
+        fifoViolations++;
+        lastFifoViolation = why;
+    }
+
+    /// @dev The creating call just succeeded: verify it appended exactly one entry matching `x`
+    ///      at the write buffer's prior count, then track it.
+    function _checkAppend(Pre memory pre, Expect memory x) internal {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        // A first append at position 0 reopens the buffer: its earlier cohort is dead.
+        if (pre.count == 0) gen[pre.wb]++;
+        string memory why = _appendMismatch(pre, x, logs);
+        if (bytes(why).length != 0) {
+            _appendViolation(why);
+            return;
+        }
+        created.push(EntryRef({
+            buffer: pre.wb,
+            position: uint32(pre.count),
+            gen: gen[pre.wb],
+            word: RecyclingState.boxEntry(address(game), pre.wb, pre.count),
+            owner: currentActor
+        }));
+        ownerAt[keccak256(abi.encode(pre.wb, gen[pre.wb], pre.count))] = currentActor;
+    }
+
+    /// @dev Why the creating call's append does not match `x`, or "" when it does.
+    function _appendMismatch(Pre memory pre, Expect memory x, Vm.Log[] memory logs)
+        internal
+        view
+        returns (string memory)
+    {
+        if (RecyclingState.writeBuffer(address(game)) != pre.wb) return "the write buffer moved during a purchase";
+        if (RecyclingState.boxCount(address(game), pre.wb) != pre.count + 1) return "a purchase did not append exactly one entry";
+
+        uint256 word = RecyclingState.boxEntry(address(game), pre.wb, pre.count);
+        uint32 id = game.walletIdOf(currentActor);
+        if (id == 0 || word.boId() != id) return "entry wallet ID is not the buyer's";
+        if (word >> 255 != 0) return "entry spare bit set";
+        if (word.boCover()) return "a purchase appended a cover entry";
+        if (word.boSmall() + word.boMed() + word.boLarge() != 0) return "unexpected preset boxes";
+        if (word.boCustomCount() != x.custom) return "entry custom count does not match the action";
+        if (word.boPresaleWei() != x.presaleWei) return "entry presale amount does not match the applied amount";
+        if (word.boPresaleTier() != x.tier) return "entry presale tier does not match the starting sold amount";
+        if (word.boPresaleClosing() != x.closing) return "entry closing flag does not match the sale state";
+
+        (bool sawBuy, uint256 amount) = _purchaseEvent(logs, pre, x.custom != 0 ? LOOTBOX_BUY : PRESALE_BUY);
+        if (!sawBuy) return "no purchase event names the appended (buffer, position)";
+        if (x.custom != 0) {
+            // The ordinary leg: priced at the active ticket level and announced by LootBoxBuy.
+            uint24 lvl = word.boLevel();
+            if ((lvl != pre.lvl && lvl != pre.lvl + 1) || PriceLookupLib.priceForLevel(lvl) != pre.priceWei) {
+                return "entry level is not the active ticket level";
+            }
+            if (amount == 0 || amount > x.maxAmount) return "box spend outside the action's bound";
+            if (x.sizeWei != 0 && amount != x.sizeWei * x.custom) return "LootBoxBuy amount is not the order's cost";
+            uint256 size = x.sizeWei != 0 ? x.sizeWei : (amount / (x.custom * 1 gwei)) * 1 gwei;
+            if (size == 0 || word.boSizeWei() != size) return "entry box size does not match the spend";
+        } else {
+            if (word.boLevel() != 0 || word.boSizeWei() != 0) return "presale-only entry carries ordinary lanes";
+            if (amount != x.presaleWei) return "PresaleBoxBuy amount is not the applied amount";
+        }
+        return "";
+    }
+
+    /// @dev The buyer's purchase event of `topic` naming (pre.wb, pre.count); returns its amount.
+    function _purchaseEvent(Vm.Log[] memory logs, Pre memory pre, bytes32 topic)
+        internal
+        view
+        returns (bool found, uint256 amount)
+    {
+        for (uint256 i; i < logs.length; i++) {
+            if (logs[i].emitter != address(game) || logs[i].topics.length < 3 || logs[i].topics[0] != topic) continue;
+            if (address(uint160(uint256(logs[i].topics[1]))) != currentActor) continue;
+            if (uint256(logs[i].topics[2]) != pre.wb) continue;
+            uint32 position;
+            if (topic == LOOTBOX_BUY) (position, amount) = abi.decode(logs[i].data, (uint32, uint256));
+            else (position, amount,) = abi.decode(logs[i].data, (uint32, uint256, bool));
+            if (position == pre.count) return (true, amount);
+        }
+    }
+
+    /// @dev One engine call's read-side transition and its queued-entry resolutions.
+    function _checkFifo(ReadState memory pre, ReadState memory post, Vm.Log[] memory logs) internal {
+        if (post.cursor > post.readCount) _fifoViolation("cursor beyond the read count");
+        if (post.complete && post.cursor != post.readCount) _fifoViolation("completion before the cursor reached the read count");
+        bool sealed_ = post.wb != pre.wb;
+        if (!sealed_) {
+            if (post.readCount != pre.readCount) _fifoViolation("read count moved without a seal");
+            if (post.cursor < pre.cursor) _fifoViolation("cursor moved backwards without a seal");
+            if (pre.complete && !post.complete) _fifoViolation("completion cleared without a seal");
+        }
+        uint256 last = pre.cursor;
+        for (uint256 i; i < logs.length; i++) {
+            if (logs[i].emitter != address(game) || logs[i].topics.length < 3) continue;
+            bytes32 t0 = logs[i].topics[0];
+            if (t0 != LOOTBOX_OPENED && t0 != PRESALE_OPENED) continue;
+            uint256 tag = uint256(logs[i].topics[2]);
+            // Single-box resolvers (0) and redemption orders carry no queue position.
+            if (tag & REDEMPTION_INDEX_TAG != 0 || tag & QUEUED_ENTRY_TAG == 0) continue;
+            uint48 buffer = uint48(tag & 1);
+            uint256 position = (tag & (QUEUED_ENTRY_TAG - 1)) >> 1;
+            resolutionsObserved++;
+            if (buffer != pre.rb) _fifoViolation("an entry resolved outside the sealed read buffer");
+            if (position < last) _fifoViolation("an entry resolved out of FIFO order or behind the cursor");
+            if (position >= pre.readCount) _fifoViolation("an entry resolved past the read count");
+            if (!sealed_ && position >= post.cursor) _fifoViolation("an entry resolved ahead of the stored cursor");
+            last = position;
+            address owner = ownerAt[keccak256(abi.encode(buffer, gen[buffer], position))];
+            if (owner != address(0) && address(uint160(uint256(logs[i].topics[1]))) != owner) {
+                _fifoViolation("an entry resolved to a wallet other than its buyer");
+            }
         }
     }
 
@@ -321,24 +522,7 @@ contract BoxCreationHandler is Test {
     // Helpers
     // =========================================================================
 
-    /// @dev Record a created (index, owner) into the deduped tracked list the invariant iterates. A lootbox
-    ///      record ACCUMULATES across deposits at one index for one owner, so several creating-calls can land
-    ///      on the SAME (index, owner); deduping keeps the invariant's iteration set to one entry per box
-    ///      record (the per-path NON-VACUITY counter is bumped separately, per successful creating-call, at the
-    ///      call site). Returns true on a first insert (unused by callers; kept for diagnostic clarity).
-    function _track(uint48 index, address owner) internal returns (bool firstInsert) {
-        if (tracked[index][owner]) return false;
-        tracked[index][owner] = true;
-        created.push(BoxRef({index: index, owner: owner}));
-        return true;
-    }
-
-    /// @dev Active lootbox RNG index (low 48 bits of lootboxRngPacked, slot 34).
-    function _lrIndex() internal view returns (uint48) {
-        return RecyclingState.writeBuffer(address(game));
-    }
-
-    /// @dev Field-isolated HAS_DEITY_PASS score-bit seed in mintPacked_ (slot 9, shift 184). No balance touched.
+    /// @dev Field-isolated HAS_DEITY_PASS score-bit seed in mintPacked_. No balance touched.
     function _grantDeityScoreBit(address who) internal {
         bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
@@ -346,45 +530,28 @@ contract BoxCreationHandler is Test {
         vm.store(address(game), slot, bytes32(packed));
     }
 
-    /// @dev Seed spendable presale-box credit (slot 17) — a credit ALLOWANCE, not a box record. The box itself
-    ///      is created by the real buyPresaleBox entrypoint. Mirrors PresaleBoxDrain._grantCredit.
+    /// @dev Seed spendable presale-box credit for `buyer`'s wallet ID — a credit ALLOWANCE, not a
+    ///      box record. A buyer without an ID first registers one, as its first paying action would.
     function _grantCredit(address buyer, uint256 amount) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(buyer)), uint256(PRESALE_BOX_CREDIT_SLOT)));
+        uint32 id = game.walletIdOf(buyer);
+        if (id == 0) {
+            vm.prank(ContractAddresses.AFFILIATE);
+            id = game.registerWallet(buyer, true);
+        }
+        bytes32 slot = keccak256(abi.encode(uint256(id), uint256(PRESALE_BOX_CREDIT_SLOT)));
         uint256 existing = uint256(vm.load(address(game), slot));
         vm.store(address(game), slot, bytes32(existing + amount));
     }
 
     // =========================================================================
-    // Falsifiability seams (used ONLY by the BoxEnqueue falsifiability test, never by a fuzzed action)
+    // Falsifiability seam (used ONLY by the BoxEnqueue falsifiability test, never by a fuzzed action)
     // =========================================================================
 
-    /// @dev FALSIFIABILITY seam: simulate the WHALE-01 bug shape — a persisted lootboxEth record (amount != 0)
-    ///      that was NOT pushed into boxPlayers[index & 1]. Writes the lootbox amount sub-field of
-    ///      lootboxEth[index][who] (slot 15 nested mapping) via a field-isolated vm.store WITHOUT calling any
-    ///      enqueue site, so boxPlayersContains(index, who) stays false. This is exactly the persisted-but-
-    ///      unenqueued state the invariant must catch; it is NOT used by any fuzzed action (the campaign creates
-    ///      boxes only through real entrypoints, which always enqueue). The adj/score/distress high bits are
-    ///      left untouched; only the amount sub-field [0:128] is set (the box-owed signal).
-    function debugSeedUnenqueuedBox(uint48 index, address who, uint256 amount) external {
-        bytes32 slot = _lootboxEthSlot(index, who);
-        uint256 packed = uint256(vm.load(address(game), slot));
-        packed = (packed & ~LOOTBOX_AMOUNT_MASK) | (amount & LOOTBOX_AMOUNT_MASK);
-        vm.store(address(game), slot, bytes32(packed));
-    }
-
-    /// @dev FALSIFIABILITY seam: clear the seeded lootboxEth amount (base -> 0), returning the invariant's
-    ///      underlying check to green so the falsifiability test can prove the break was the injection.
-    function debugClearBox(uint48 index, address who) external {
-        bytes32 slot = _lootboxEthSlot(index, who);
-        uint256 packed = uint256(vm.load(address(game), slot));
-        packed &= ~LOOTBOX_AMOUNT_MASK;
-        vm.store(address(game), slot, bytes32(packed));
-    }
-
-    /// @dev Storage slot of lootboxEth[index][who] — a nested mapping(uint48 => mapping(address => uint256))
-    ///      at slot 15: keccak(who . keccak(index . slot)).
-    function _lootboxEthSlot(uint48 index, address who) internal pure returns (bytes32) {
-        bytes32 inner = keccak256(abi.encode(uint256(index), uint256(LOOTBOX_ETH_SLOT)));
-        return keccak256(abi.encode(who, inner));
+    /// @dev Overwrite tracked entry `i`'s stored word in place — the shape of a purchase that
+    ///      rewrote an earlier entry instead of appending its own.
+    function debugRewriteEntry(uint256 i, uint256 word) external {
+        EntryRef memory e = created[i];
+        bytes32 data = keccak256(abi.encode(keccak256(abi.encode(uint256(e.buffer), GameSlots.BOX_QUEUE))));
+        vm.store(address(game), bytes32(uint256(data) + e.position), bytes32(word));
     }
 }

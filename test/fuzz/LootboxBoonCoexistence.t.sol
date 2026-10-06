@@ -21,25 +21,14 @@ contract LootboxBoonCoexistence is DeployProtocol {
     // Storage slot constants (from `forge inspect DegenerusGame storage-layout`)
     // ──────────────────────────────────────────────────────────────────────
 
-    // Authoritative slots from `solc --storage-layout` on the working tree (post Stage B Game-storage packing).
-    // The box-order rework folded lootboxEthBase / lootboxPurchasePacked / lootboxDistressEth into
-    // the single lootboxOrder word (level[0:24] | score[24:39] | boostBps[39:53] |
-    // distressBps[53:67] | adjBps[67:81] | small[81:89] | med[89:97] | large[97:105] |
-    // customCount[105:113] | customSize[113:161]@1e12 | coverWei[161:209]@1e12) and removed the
-    // dead lootboxFlip mapping; the Stage B packing further folded deity/VRF/boon fields, shifting
-    // lootboxRngPacked, lootboxRngWordByIndex, and boonPacked down.
     uint256 constant SLOT_BOON_PACKED     = GameSlots.BOON_PACKED;   // mapping(address => BoonPacked)
-    uint256 constant SLOT_LOOTBOX_ETH     = GameSlots.LOOTBOX_ORDER;   // mapping(uint48 => mapping(address => uint256)) (packed order word)
-    uint256 constant SLOT_LOOTBOX_RNG_IDX = GameSlots.LOOTBOX_RNG_PACKED;   // lootboxRngPacked (low 48 bits = lootboxRngIndex)
-    uint256 constant SLOT_LOOTBOX_WORD    = GameSlots.RNG_DAY_TAGS;   // mapping(uint48 => uint256) lootboxRngWordByIndex
-    uint256 constant SLOT_BOX_PLAYERS     = GameSlots.BOX_PLAYERS;   // mapping(uint48 => address[]) boxPlayers (queue the sweep walks)
-    uint256 constant SLOT_BOX_CURSORS     = GameSlots.BOX_CURSOR;   // packed (boxCursor @ byte 7, humanReadComplete @ byte 13)
 
-    // Packed lootboxOrder bit layout (mirrors DegenerusGameStorage lootboxOrder — see LB_* there).
-    uint256 constant LB_SCORE_SHIFT       = 24;   // score        [24:39]
-    uint256 constant LB_CUSTOM_COUNT_SHIFT = 105; // customCount  [105:113]
-    uint256 constant LB_CUSTOM_SIZE_SHIFT  = 113; // customSize   [113:161] @1e12
-    uint256 constant LB_CUSTOM_SCALE       = 1e12;
+    // Queue entry word (LB_* layout in DegenerusGameStorage): id[0:32) | level[32:56) |
+    // score[56:71) | customCount[121:128) | customSize[128:184) in gwei.
+    uint256 constant LB_LEVEL_SHIFT       = 32;
+    uint256 constant LB_SCORE_SHIFT       = 56;
+    uint256 constant LB_CUSTOM_COUNT_SHIFT = 121;
+    uint256 constant LB_SIZE_SHIFT        = 128;
 
     // BoonPacked bit layout (slot0)
     uint256 constant BP_COINFLIP_DAY_SHIFT  = 0;
@@ -87,17 +76,6 @@ contract LootboxBoonCoexistence is DeployProtocol {
         return keccak256(abi.encode(player, SLOT_BOON_PACKED));
     }
 
-    /// @dev Compute the storage slot for a nested mapping: base[index][player]
-    function _nestedMappingSlot(uint256 baseSlot, uint48 index, address player) internal pure returns (bytes32) {
-        bytes32 outerSlot = keccak256(abi.encode(uint256(index), baseSlot));
-        return keccak256(abi.encode(player, outerSlot));
-    }
-
-    /// @dev Compute the storage slot for a simple mapping: base[index]
-    function _simpleMappingSlot(uint256 baseSlot, uint48 index) internal pure returns (bytes32) {
-        return keccak256(abi.encode(uint256(index), baseSlot));
-    }
-
     /// @dev Inject a coinflip boon (tier 1, day = currentDay) into boonPacked[player].slot0.
     ///      This simulates the player having an active coinflip boon from a prior lootbox/deity.
     function _injectCoinflipBoon(address player, uint48 day) internal {
@@ -130,9 +108,11 @@ contract LootboxBoonCoexistence is DeployProtocol {
         return uint8(s0 >> BP_LOOTBOX_TIER_SHIFT);
     }
 
-    /// @dev Set up a lootbox ready to open: record ETH at index for player, set VRF word, enqueue
-    ///      the player in `boxPlayers[index & 1]` (the only way mineFlip's human-box stage finds a
-    ///      box), and park the stage's frontier on `index`'s read buffer.
+    /// @dev Set up a lootbox ready to open: one CUSTOM box of `ethAmount` (score=1, a low raw
+    ///      activity score, frozen to the live level) appended as the only entry of physical
+    ///      buffer `index`, then sealed with the delivered word so mineFlip's human-box stage
+    ///      can only ever reach this one entry. `purchaseLevel` and `day` are unused (kept in the
+    ///      signature for callers).
     function _setupLootbox(
         address player,
         uint48 index,
@@ -141,61 +121,34 @@ contract LootboxBoonCoexistence is DeployProtocol {
         uint48 day,
         uint256 vrfWord
     ) internal {
-        // lootboxOrder[index][player] = one CUSTOM box of `ethAmount`, score=1 (a low raw activity
-        // score), frozen to the live level. openLootBox reads score straight into the EV
-        // multiplier (no +1 offset in the new layout); purchaseLevel is unused (vestigial — the
-        // box rolls off the level embedded in the word, pinned here to the live level so the
-        // level-scoped price lookup stays sane).
-        purchaseLevel; // silence unused-parameter (kept in the signature for callers)
-        uint256 customUnits = ethAmount / LB_CUSTOM_SCALE;
-        uint256 packed = uint256(game.level())
+        purchaseLevel; day;
+        uint32 id = _giveWalletId(player);
+        uint256 word = uint256(id)
+            | (uint256(game.level()) << LB_LEVEL_SHIFT)
             | (uint256(1) << LB_SCORE_SHIFT)
             | (uint256(1) << LB_CUSTOM_COUNT_SHIFT)
-            | (customUnits << LB_CUSTOM_SIZE_SHIFT);
-        vm.store(address(game), _nestedMappingSlot(SLOT_LOOTBOX_ETH, index, player), bytes32(packed));
-
-        // Seed the live delivered RNG word.
+            | ((ethAmount / 1 gwei) << LB_SIZE_SHIFT);
+        RecyclingState.seedWriteBuffer(address(game), index);
+        bytes32 data = keccak256(abi.encode(keccak256(abi.encode(uint256(index), GameSlots.BOX_QUEUE))));
+        vm.store(address(game), data, bytes32(word));
+        uint256 lr = uint256(vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED)));
+        lr = (lr & ~(uint256(0xFFFFFFFF) << 120)) | (uint256(1) << 120);
+        vm.store(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED), bytes32(lr));
         RecyclingState.seedWord(address(game), index, bytes32(vrfWord));
-
-        // Enqueue `player` into boxPlayers[index & 1] (the sweep's discovery queue — every real
-        // purchase path pushes here on first deposit; this forged setup bypasses all of them) and
-        // park the frontier exactly on `index` so the engine's human-box stage can only ever
-        // reach this one entry.
-        _enqueueForSweep(index, player);
-        _finalizeAndParkSweep(index);
-    }
-
-    /// @dev Push `player` onto boxPlayers[index & 1] (mapping(uint48 => address[]) at slot 57): the
-    ///      length lives at keccak(index, 57), element i at keccak(that slot) + i.
-    function _enqueueForSweep(uint48 index, address player) internal {
-        bytes32 lenSlot = keccak256(abi.encode(uint256(index), uint256(SLOT_BOX_PLAYERS)));
-        uint256 len = 0; // one fixture entry; previous case was fully consumed
-        bytes32 dataBase = keccak256(abi.encode(lenSlot));
-        vm.store(address(game), bytes32(uint256(dataBase) + len), bytes32(uint256(uint160(player))));
-        vm.store(address(game), lenSlot, bytes32(len + 1));
-    }
-
-    /// @dev Select the delivered physical read and reset only its fixture cursor.
-    function _finalizeAndParkSweep(uint48 index) internal {
-        uint256 mask48 = (uint256(1) << 48) - 1;
-        RecyclingState.seedWriteBuffer(address(game), index ^ 1);
-
-        bytes32 cursorSlot = bytes32(uint256(SLOT_BOX_CURSORS));
-        uint256 cur = uint256(vm.load(address(game), cursorSlot));
-        cur &= ~(mask48 << (7 * 8));
-        cur &= ~(uint256(0xff) << (13 * 8)); // humanReadComplete = false
-        vm.store(address(game), cursorSlot, bytes32(cur));
     }
 
     /// @dev Every preservation assertion must follow one real, consumed box.
     ///      A rejected or blocked sweep is a failed fixture, never a passing case.
     function _openSeededBox(address player, uint48 index) internal {
-        bytes32 orderSlot = _nestedMappingSlot(SLOT_LOOTBOX_ETH, index, player);
         assertFalse(game.rngLocked(), "seeded boon fixture must be unlocked");
-        assertGt(uint256(vm.load(address(game), orderSlot)), 0, "seeded box must exist");
+        assertGt(RecyclingState.boxEntry(address(game), index, 0), 0, "seeded box must exist");
         vm.prank(player);
         game.mineFlip();
-        assertTrue(uint256(vm.load(address(game), orderSlot)) >> 255 != 0, "seeded order must carry its consumed marker");
+        uint256 cursors = uint256(vm.load(address(game), bytes32(GameSlots.BOX_CURSOR)));
+        assertEq(
+            uint48(cursors >> (GameSlots.BOX_CURSOR_OFFSET * 8)), 1,
+            "seeded entry must be consumed by the frontier"
+        );
         // The forged queue holds exactly this one entry, so a completed frontier on its buffer
         // means the call opened exactly one box.
         assertTrue(game.boxIndexComplete(index), "preservation proof must actually open its one box");

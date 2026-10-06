@@ -288,7 +288,7 @@ contract DegenerusGameDegeneretteModule is
     // -------------------------------------------------------------------------
     //
     // A bet is one word in degeneretteQueue[index & 1] (full layout on the storage declaration):
-    // owner [0..159] | symbol [160..164] | spinCount [165..169] | currency [170] |
+    // owner wallet ID [0..31] | symbol [160..164] | spinCount [165..169] | currency [170] |
     // record flag [171] | activity score [172..187] | boosted stake units [188..251].
     // The bet id is the queue position + 1, so the index and id need no bits.
     //
@@ -414,21 +414,23 @@ contract DegenerusGameDegeneretteModule is
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         MineFlipGas.Meter memory meter = MineFlipGas.start(gasAllowance);
         uint48 index = _rngReadBuffer();
-        uint256[] storage queue = degeneretteQueue[index & 1];
         uint256 pos = degeneretteCursor;
-        uint256 qlen = queue.length;
+        uint256 qlen = degeneretteReadCount;
         if (pos == qlen) { result.done = true; return result; }
         if (_rngConsumerStage() != 4) return result;
         uint256 rngWord = _lootboxWord(index);
         if (rngWord == 0) return result;
         ResolveAcc memory acc;
         uint256 startPos = pos;
+        uint256 base = _betSlot(index, 0);
         while (pos < qlen) {
-            uint256 bet = queue[pos];
+            uint256 bet;
+            assembly ("memory-safe") { bet := sload(add(base, pos)) }
             bool skip = bet == 0 || bet & BET_PROCESSED != 0;
             if (!MineFlipGas.canRun(meter, skip ? BET_SKIP_GAS : _betGasMaximum(bet), BET_TAIL_GAS)) break;
             if (skip) { ++pos; continue; }
-            queue[pos] = bet | BET_PROCESSED;
+            uint256 marked = bet | BET_PROCESSED;
+            assembly ("memory-safe") { sstore(add(base, pos), marked) }
             ++pos;
             ++result.rewardBasis;
             _resolveBet(bet, uint32(index), uint64(pos), rngWord, acc);
@@ -643,9 +645,11 @@ contract DegenerusGameDegeneretteModule is
         if (stakeUnits > MASK_64) revert InvalidBet();
 
         // The bet itself is the sweep's queue entry: one word, appended at this index. Its
-        // id is the queue position + 1, fixed here while the index word is still unset.
-        uint256[] storage queue = degeneretteQueue[index & 1];
-        uint64 betId = uint64(queue.length + 1);
+        // id is the queue position + 1, fixed here while the index word is still unset. The
+        // position is the buffer's write count, which `_collectBetFunds` commits in the
+        // lootboxRngPacked write it makes for every bet.
+        uint256 position = uint32(lootboxRngPacked >> LR_BET_COUNT_SHIFT);
+        uint64 betId = uint64(position + 1);
         uint256 bet =
             uint256(playerId) |
             (uint256(symbol) << BET_SYMBOL_SHIFT) |
@@ -657,7 +661,8 @@ contract DegenerusGameDegeneretteModule is
             bet |= BET_RECORD_FLAG;
             degeneretteRecordBounty[(uint256(index) << 64) | betId] = recordBounty;
         }
-        queue.push(bet);
+        uint256 slot = _betSlot(index, position);
+        assembly ("memory-safe") { sstore(slot, bet) }
         emit DegeneretteBetPlaced(player, uint32(index), betId, bet);
     }
 
@@ -719,13 +724,18 @@ contract DegenerusGameDegeneretteModule is
             );
             uint256 pendingEth = ((lrWord >> LR_PENDING_ETH_SHIFT) & LR_PENDING_ETH_MASK)
                 + _packEthToMilliEth(totalBet);
-            lootboxRngPacked = (lrWord & ~(LR_PENDING_ETH_MASK << LR_PENDING_ETH_SHIFT))
-                | ((pendingEth & LR_PENDING_ETH_MASK) << LR_PENDING_ETH_SHIFT);
+            // The bet's queue count commits in this same write.
+            lootboxRngPacked = ((lrWord & ~(LR_PENDING_ETH_MASK << LR_PENDING_ETH_SHIFT))
+                | ((pendingEth & LR_PENDING_ETH_MASK) << LR_PENDING_ETH_SHIFT)) + (uint256(1) << LR_BET_COUNT_SHIFT);
             // No max payout check needed: ETH payouts are capped at 10% of pool at distribution
             // time, so solvency is guaranteed regardless of jackpot size
         } else if (currency == CURRENCY_FLIP) {
             coin.burnCoin(player, totalBet);
-            _lrAdd(LR_PENDING_FLIP_SHIFT, LR_PENDING_FLIP_MASK, totalBet);
+            // Pending FLIP and the bet's queue count commit in one write.
+            uint256 lrWord = lootboxRngPacked;
+            lootboxRngPacked = ((lrWord & ~(LR_PENDING_FLIP_MASK << LR_PENDING_FLIP_SHIFT))
+                | ((((lrWord >> LR_PENDING_FLIP_SHIFT) + totalBet) & LR_PENDING_FLIP_MASK) << LR_PENDING_FLIP_SHIFT))
+                + (uint256(1) << LR_BET_COUNT_SHIFT);
             // A token bet consumes no ETH; any ETH sent alongside it is absorbed to the funder's
             // withdrawable afking balance (solvency-preserving) rather than stranded in the pool.
             // Zero-value is a no-op, so a normal token bet pays no extra gas.
@@ -1537,6 +1547,7 @@ contract DegenerusGameDegeneretteModule is
     ///      module passes allowEthSpin=false on the recirc entry) so no ETH-spin can cascade.
     function resolveEthSpinFromBox(
         address player,
+        uint32 playerId,
         uint256 stake,
         uint16 activityScore,
         uint256 seed,
@@ -1572,7 +1583,6 @@ contract DegenerusGameDegeneretteModule is
         if (s >= 7) _awardDegeneretteDgnrs(player, betAmount, s);
 
         // Flush THIS spin's pool/claimable BEFORE recirc so recirc reads fresh storage.
-        uint32 playerId = _walletIdOf(player);
         if (acc.ethClaimable != 0) _addClaimableEth(playerId, acc.ethClaimable);
         if (acc.poolLoaded) {
             if (acc.poolFrozen) {

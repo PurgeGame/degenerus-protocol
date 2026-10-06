@@ -18,8 +18,8 @@ contract LaneViewer is DegenerusGame {
 }
 
 /// @title LootboxPendingEthLane -- a box order, or a pass's cover box, adds exactly its cost in milli-ETH to the pending lane
-/// @notice `beginBoxOrder` packs the order's ETH cost into the 64-bit pending-ETH lane of
-///         `lootboxRngPacked` (bits 48..111), which is what the mid-day RNG request's threshold
+/// @notice `beginBoxOrder` packs the order's ETH cost into the 40-bit pending-ETH lane of
+///         `lootboxRngPacked` (bits 48..87), which is what the mid-day RNG request's threshold
 ///         gate reads. Mutation v78 rewrote that pack five different ways (`>>` to `/`, `&` to
 ///         `/`, `<<` to `-`, `<<` to `/`, `&` to `%`) and every one survived: the gating suites
 ///         assert the gate's behaviour, never the lane's figure. `recordCoverBox` — the pass

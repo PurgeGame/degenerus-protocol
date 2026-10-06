@@ -12,7 +12,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IGameAfkingModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
 /// @title TLKeyComputer -- Exposes internal key computation and queue inspection helpers
 contract TLKeyComputer is DegenerusGameStorage {
@@ -55,7 +55,7 @@ contract TLHumanBoxWorker is DegenerusGame {
 ///                [21:22]gameOver [22:23]dailyJackpotCoinTicketsPending
 ///                [23:24]jackpotFlags [24:25]ticketsFullyProcessed
 ///                [25:26]ticketWriteSlot [26:27]prizePoolFrozen [27:28]presaleOver
-///                [28:29]subsFullyProcessed [29:30]presaleDrained [30:31]ticketRedemptionOpen
+///                [28:29]subsFullyProcessed [29:30]humanReadComplete [30:31]ticketRedemptionOpen
 ///      - Slot 1: [0:16]currentPrizePool(uint128) [16:32]claimablePool(uint128)
 ///      - ticketQueue: slot 12 (mapping(uint24 => uint256[]))
 ///      - ticketOwnerId: slot 13 (mapping(address => uint32))
@@ -756,7 +756,7 @@ contract TicketLifecycleTest is DeployProtocol {
         uint24 openLevel = uint24(game.level()) + 1; // a box's base level: the live mint level
 
         // Land the word and open all eight boxes (mid-day: buyer3's 8 ETH clears the threshold).
-        _openWithMiddayWord(buyer3, _nearRollWord(buyer3));
+        _openWithMiddayWord(buyer3, _nearRollWord(buffer, buyer3));
         assertEq(_boxesOwed(buffer, buyer3), 0, "the engine opened buyer3's whole order");
 
         // The selected first box rolled offset 0: its tickets sit on the live write key.
@@ -824,13 +824,9 @@ contract TicketLifecycleTest is DeployProtocol {
     ///         forward and verify all FF queues for processed levels are drained.
     /// @dev SRC-05: Lootbox far roll (offset 5-50) queues to FF key, drained at phase transition.
     ///
-    ///      ONE ORDER PER (buffer, player). The entry sweep seeds each box off
-    ///      `EntropyLib.hash4(rngWord, player, BOX_OPEN_TAG, nonce)`, so independent far-roll
-    ///      trials come from distinct BUYERS here (one box each) — not from repeated buys by one
-    ///      buyer. The original fixture bought five DIFFERENT custom sizes per buyer at one index;
-    ///      `_mergeBoxOrder` freezes one custom size per (buffer, buyer) and reverts `E()` on a
-    ///      size change, and `_purchaseWithLootbox` swallows that revert, so buys 2-5 vanished
-    ///      silently and 20 intended trials became 4.
+    ///      Each purchase is its own queue entry; the sweep seeds each box off a per-entry root
+    ///      word and the wallet ID, so independent far-roll trials come from distinct entries
+    ///      (one box each).
     ///
     ///      Rebuilt to buy from 20 distinct buyers at one shared size, which is 20 real trials
     ///      under the current model. The word is then CHOSEN so buyer 0's first box takes the
@@ -872,7 +868,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         // Land a word chosen so buyer 0 rolls far with tickets; the rest ride the same word at
         // their own player-salted seeds. 20 x 0.1 ETH pending clears the mid-day threshold.
-        _openWithMiddayWord(lboxBuyers[0], _farRollWord(lboxBuyers[0]));
+        _openWithMiddayWord(lboxBuyers[0], _farRollWord(buffer, lboxBuyers[0]));
         for (uint256 k = 0; k < 20; k++) {
             assertEq(_boxesOwed(buffer, lboxBuyers[k]), 0, "the engine opened every buyer's box");
         }
@@ -998,10 +994,8 @@ contract TicketLifecycleTest is DeployProtocol {
     function testClaimWhalePassStridedWholeTicketQuadrants() public {
         address claimant = makeAddr("strided_claimant");
 
-        // Credit whalePassClaims[claimant] = 2 directly (mapping(address => uint256)
-        // at slot 20, confirmed via forge inspect).
-        bytes32 claimSlot = keccak256(abi.encode(uint256(uint160(claimant)), uint256(20)));
-        vm.store(address(game), claimSlot, bytes32(uint256(2)));
+        // Credit the claimant's pending half-passes directly (wallet-table element, bits 192..255).
+        _creditHalfPasses(claimant, 2);
 
         game.claimWhalePass(claimant);
 
@@ -1060,10 +1054,8 @@ contract TicketLifecycleTest is DeployProtocol {
     function testBudgetSplitMaterializationQuadrantAligned() public {
         address claimant = makeAddr("split_claimant");
 
-        // Credit whalePassClaims[claimant] = 400 directly (mapping(address => uint256)
-        // at slot 20, confirmed via forge inspect).
-        bytes32 claimSlot = keccak256(abi.encode(uint256(uint160(claimant)), uint256(20)));
-        vm.store(address(game), claimSlot, bytes32(uint256(400)));
+        // Credit the claimant's pending half-passes directly (wallet-table element, bits 192..255).
+        _creditHalfPasses(claimant, 400);
 
         game.claimWhalePass(claimant);
 
@@ -2304,10 +2296,10 @@ contract TicketLifecycleTest is DeployProtocol {
     ///      `uint16(seed) % 100 < 20`, tickets iff `uint16(seed >> 40) % 20 < 8`), which is why a
     ///      drift in that mapping surfaces as a failed FF-growth assertion rather than as a
     ///      quietly-vacuous pass.
-    function _farRollWord(address player) internal pure returns (uint256) {
+    function _farRollWord(uint48 buffer, address player) internal view returns (uint256) {
         for (uint256 n = 1; n < 10_000; ++n) {
             uint256 w = uint256(keccak256(abi.encode("SRC-05", n)));
-            uint256 seed = _boxSeed(w, player, 1);
+            uint256 seed = _boxSeed(w, buffer, player, 1);
             if (uint16(seed) % 100 < 20 && uint16(seed >> 40) % 20 < 8) return w;
         }
         revert("no far-roll word found");
@@ -2335,14 +2327,28 @@ contract TicketLifecycleTest is DeployProtocol {
         }
     }
 
+    /// @dev Register `claimant` in the wallet table as production does (append the owner key, record
+    ///      the ID in its mintPacked word; no ticket or box state) and set its pending half-passes
+    ///      to `halfPasses` (wallet-table element bits 192..255).
+    function _creditHalfPasses(address claimant, uint256 halfPasses) internal {
+        uint32 id = game.walletIdOf(claimant);
+        if (id == 0) {
+            uint256 position = uint256(vm.load(address(game), bytes32(GameSlots.WALLETS)));
+            vm.store(address(game), bytes32(GameSlots.WALLETS), bytes32(position + 1));
+            vm.store(address(game), GameSlotKeys.walletElement(uint32(position)), bytes32(uint256(uint160(claimant))));
+            bytes32 packedSlot = GameSlotKeys.mintPacked(claimant);
+            vm.store(address(game), packedSlot, bytes32(uint256(vm.load(address(game), packedSlot)) | (position << 224)));
+            id = uint32(position);
+        }
+        bytes32 slot = GameSlotKeys.walletElement(id);
+        uint256 element = uint256(vm.load(address(game), slot));
+        vm.store(address(game), slot, bytes32((element & ((uint256(1) << 192) - 1)) | (halfPasses << 192)));
+    }
+
     // ==================== Box-Order / Mid-Day Word Helpers ====================
     // Lootbox RNG uses two physical buffers (read = write ^ 1): a box binds to the WRITE buffer
     // (tag 0 or 1, so 0 is a valid tag) and resolves on the word of the session that seals it.
 
-    /// @dev lootboxOrder: mapping(uint48 => mapping(address => uint256)) at slot 15 (golden layout).
-    uint256 private constant LOOTBOX_ORDER_SLOT = GameSlots.LOOTBOX_ORDER;
-    /// @dev Resolved-order marker (Storage BOX_PROCESSED).
-    uint256 private constant BOX_PROCESSED = uint256(1) << 255;
     /// @dev Seed domain of the entry sweep's per-box roll (LootboxModule BOX_OPEN_TAG, "BoxOpen").
     uint256 private constant BOX_OPEN_TAG = 0x426f784f70656e;
     /// @dev vrfSubscriptionId at slot 32 (golden layout).
@@ -2352,16 +2358,22 @@ contract TicketLifecycleTest is DeployProtocol {
     uint256 private constant TICKET_BUFFER_LEVELS_SLOT = GameSlots.TICKET_BUFFER_LEVELS;
     uint256 private constant TICKET_BUFFER_LEVELS_SHIFT = 80;
 
-    /// @dev The raw packed order word of `who` at physical buffer `buffer`.
-    function _boxOrderWord(uint48 buffer, address who) internal view returns (uint256) {
-        bytes32 inner = keccak256(abi.encode(uint256(buffer), LOOTBOX_ORDER_SLOT));
-        return uint256(vm.load(address(game), keccak256(abi.encode(who, inner))));
-    }
-
-    /// @dev Boxes still owed in `who`'s order at `buffer` (0 once the order resolved).
-    function _boxesOwed(uint48 buffer, address who) internal view returns (uint256) {
-        uint256 word = _boxOrderWord(buffer, who);
-        return word & BOX_PROCESSED != 0 ? 0 : BoxOrderLib.boCount(word);
+    /// @dev Boxes still owed to `who` in the queue entries of physical buffer `buffer`: every entry
+    ///      of the write buffer, or the unsettled tail (from boxCursor) of the sealed read buffer.
+    function _boxesOwed(uint48 buffer, address who) internal view returns (uint256 owed) {
+        address host = address(game);
+        uint256 end = RecyclingState.boxCount(host, buffer);
+        uint256 from;
+        if (buffer == RecyclingState.readBuffer(host)) {
+            from = (uint256(vm.load(host, bytes32(GameSlots.BOX_CURSOR))) >> (GameSlots.BOX_CURSOR_OFFSET * 8))
+                & type(uint48).max;
+        }
+        uint32 id = game.walletIdOf(who);
+        if (id == 0) return 0;
+        for (uint256 p = from; p < end; ++p) {
+            uint256 word = RecyclingState.boxEntry(host, buffer, p);
+            if (BoxOrderLib.boId(word) == id) owed += BoxOrderLib.boCount(word);
+        }
     }
 
     /// @dev Buy one custom box of `eth` for `who` and report whether it landed: the buyer's order
@@ -2434,10 +2446,22 @@ contract TicketLifecycleTest is DeployProtocol {
         vm.etch(address(game), productionCode);
     }
 
-    /// @dev The entry sweep's per-box seed: hash4(word, player, BOX_OPEN_TAG, nonce), where the
-    ///      nonce is the box's 1-based position in the player's order (LootboxModule._rollTier).
-    function _boxSeed(uint256 word, address player, uint256 nonce) internal pure returns (uint256) {
-        return uint256(keccak256(abi.encode(word, uint256(uint160(player)), BOX_OPEN_TAG, nonce)));
+    /// @dev Seed domain of a queued entry's root word (LootboxModule QUEUED_ORDER_DOMAIN, "QueuedOrder").
+    uint256 private constant QUEUED_ORDER_DOMAIN = 0x5175657565644f72646572;
+
+    /// @dev The entry sweep's per-box seed for the FIRST queued entry of `player` in `buffer`:
+    ///      hash4(hash4(QUEUED_ORDER_DOMAIN, word, buffer, position), walletId, BOX_OPEN_TAG, nonce),
+    ///      where the nonce is the box's 1-based position in the entry (LootboxModule._rollTier).
+    function _boxSeed(uint256 word, uint48 buffer, address player, uint256 nonce) internal view returns (uint256) {
+        uint32 id = game.walletIdOf(player);
+        uint256 n = RecyclingState.boxCount(address(game), buffer);
+        uint256 position;
+        for (; position < n; ++position) {
+            if (BoxOrderLib.boId(RecyclingState.boxEntry(address(game), buffer, position)) == id) break;
+        }
+        require(position < n, "harness: player has no entry in the buffer");
+        uint256 root = uint256(keccak256(abi.encode(QUEUED_ORDER_DOMAIN, word, uint256(buffer), position)));
+        return uint256(keccak256(abi.encode(root, uint256(id), BOX_OPEN_TAG, nonce)));
     }
 
     /// @notice Pick a word whose FIRST box for `player` takes the ticket path and lands at offset 0
@@ -2445,10 +2469,10 @@ contract TicketLifecycleTest is DeployProtocol {
     /// @dev SELECTION ONLY, like `_farRollWord`: the assertions still read the real queues.
     ///      Mirrors `_rollTargetLevel` (near iff `uint16(seed) % 100 >= 20`, offset
     ///      `uint8(seed >> 16) % 5`) and `_resolveLootboxRoll` (tickets iff `uint16(seed >> 40) % 20 < 8`).
-    function _nearRollWord(address player) internal pure returns (uint256) {
+    function _nearRollWord(uint48 buffer, address player) internal view returns (uint256) {
         for (uint256 n = 1; n < 10_000; ++n) {
             uint256 w = uint256(keccak256(abi.encode("SRC-04", n)));
-            uint256 seed = _boxSeed(w, player, 1);
+            uint256 seed = _boxSeed(w, buffer, player, 1);
             if (uint16(seed) % 100 >= 20 && uint8(seed >> 16) % 5 == 0 && uint16(seed >> 40) % 20 < 8) return w;
         }
         revert("no near-roll ticket word found");

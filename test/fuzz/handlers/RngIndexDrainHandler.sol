@@ -17,7 +17,7 @@ import {GameSlots} from "../../helpers/GameSlots.sol";
 abstract contract RngIndexDrainOracle is Test {
     uint256 internal constant SLOT_LOOTBOX_MAPPING = GameSlots.RNG_DAY_TAGS;
     uint256 internal constant SLOT_LR_INDEX = GameSlots.LOOTBOX_RNG_PACKED;
-    uint256 private constant SLOT_BUCKETS = 8;
+    uint256 private constant SLOT_BUCKETS = GameSlots.LVL_TRAIT_ENTRY;
     uint256 private constant SLOT_OWNERS = GameSlots.WALLETS;
     uint256 private constant SLOT_TICKET_CURSOR = GameSlots.TICKET_CURSOR;
     bytes32 internal constant TOPIC_TRAITS_GENERATED = keccak256("TraitsGenerated(address,uint256,uint32)");
@@ -64,8 +64,9 @@ abstract contract RngIndexDrainOracle is Test {
 
     function _bucketLengthOf(DegenerusGame subject, uint24 lvl, uint256 trait) private view returns (uint256) {
         uint256 header = uint256(vm.load(address(subject), _bucketSlot(lvl, trait)));
-        uint24 stamp = uint24(uint256(vm.load(address(subject), bytes32(uint256(5)))) >> (80 + (lvl & 1) * 24));
-        uint256 bits = uint256(vm.load(address(subject), bytes32(uint256(75) + (lvl & 1))));
+        uint24 stamp = uint24(uint256(vm.load(address(subject), bytes32(GameSlots.TICKET_BUFFER_LEVELS)))
+            >> (GameSlots.TICKET_BUFFER_LEVELS_OFFSET * 8 + (lvl & 1) * 24));
+        uint256 bits = uint256(vm.load(address(subject), bytes32(GameSlots.TRAIT_BUCKET_LIVE + (lvl & 1))));
         return stamp == lvl && ((bits >> trait) & 1) != 0 ? uint32(header) : 0;
     }
 

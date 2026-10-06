@@ -77,11 +77,6 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
     /// @dev lootboxRngWordByIndex mapping root slot.
     uint256 private constant LOOTBOX_RNG_WORD_SLOT = GameSlots.RNG_WORD_CURRENT;
-    /// @dev lootboxOrder (the packed box-order word) mapping root slot. The whole word is the
-    ///      box-owed signal (set on first deposit, zeroed on open in one SSTORE) — it replaced
-    ///      the removed lootboxEthBase mapping the old pin read.
-    uint256 private constant LOOTBOX_ETH_SLOT = GameSlots.LOOTBOX_ORDER;
-
     // -------------------------------------------------------------------------
     // Crank reward peg mirror (the contract's own FIXED constants, REW-03)
     // -------------------------------------------------------------------------
@@ -161,9 +156,9 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         uint48 idx = _activeLootboxIndex();
         _buyBox(boxOwner, 1 ether);
         assertGt(
-            _lootboxEthBase(idx, boxOwner),
+            _boxUnsettled(idx, boxOwner),
             0,
-            "box enqueued (first-deposit signal set)"
+            "box enqueued (one queue entry)"
         );
 
         // Finalize the box's index: a request seals idx as the read buffer (two physical buffers,
@@ -183,20 +178,19 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         vm.prank(cranker);
         game.mineFlip{gas: 2_000_000}();
         assertGt(
-            _lootboxEthBase(idx, boxOwner),
+            _boxUnsettled(idx, boxOwner),
             0,
             "pre-word: box NOT opened (no published word for its cohort)"
         );
-        assertEq(_lootboxEthBase(idx, boxOwner) >> 255, 0, "pre-word: box order not marked processed");
 
         // POST-WORD: land the word at the finalized index -> the SAME crank opens the box. An
-        // open marks the order word BOX_PROCESSED (bit 255) instead of zeroing it (6d0e64b09).
+        // open advances the box cursor past the entry; the entry word itself is never rewritten.
         _injectLootboxRngWord(idx, FIXED_WORD);
         vm.prank(cranker);
         game.mineFlip();
         assertEq(
-            _lootboxEthBase(idx, boxOwner) >> 255,
-            1,
+            _boxUnsettled(idx, boxOwner),
+            0,
             "post-word: same crank now opens the box (relaxation is WHO, not WHEN)"
         );
     }
@@ -445,9 +439,9 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         // Plan 335-02 settled the O(1) write shape: `whalePassClaims[player] += 1;` inside the
         // (post-USER-simplification) one-line whale-pass activation body.
         assertGt(
-            _countOccurrences(src, "whalePassClaims[player] +="),
+            _countOccurrences(src, "_addHalfPasses(_walletIdOf(player), 2)"),
             0,
-            "WHALE-01: box-open O(1) `whalePassClaims[player] +=` write byte-present"
+            "WHALE-01: box-open O(1) half-pass accumulator write byte-present"
         );
         // The slot has TWO other +=-writers (PayoutUtils:52 and JackpotModule:1410) per Plan 335-02
         // SUMMARY; this test only pins the LootboxModule writer. The slot is a pending-claim
@@ -495,8 +489,8 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     ///      contracts/libraries/BitPackingLib.sol:48/51/63/66 at e756a6f3.
     uint256 private constant LAST_LEVEL_SHIFT = 0;
     uint256 private constant LEVEL_COUNT_SHIFT = 24;
-    uint256 private constant FROZEN_UNTIL_LEVEL_SHIFT = 128;
-    uint256 private constant WHALE_PASS_TYPE_SHIFT = 152;
+    uint256 private constant FROZEN_UNTIL_LEVEL_SHIFT = 120;
+    uint256 private constant WHALE_PASS_TYPE_SHIFT = 144;
     uint256 private constant MASK_24 = (uint256(1) << 24) - 1;
     uint256 private constant MASK_PASS_TYPE = 0x3; // 2-bit field
 
@@ -564,12 +558,13 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         // here so the "box-open writes ONLY the accumulator" assertion is anchored
         // at a strict pre-mutation baseline.
         // -------------------------------------------------------------------
+        uint32 claimantId = _giveWalletId(claimant); // the wallet ID is the only prior state
         bytes32 mintPackedSlot = _mintPackedSlot(claimant);
         bytes32 mintPackedPreBoxOpen = vm.load(address(game), mintPackedSlot);
         assertEq(
             mintPackedPreBoxOpen,
-            bytes32(0),
-            "pre-condition: claimant's mintPacked_ slot starts clean (no prior state)"
+            bytes32(uint256(claimantId) << 224),
+            "pre-condition: claimant's mintPacked_ slot holds only its wallet ID (no prior state)"
         );
         assertEq(
             _readWhalePassClaims(claimant),
@@ -711,7 +706,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
                 "byte-present: claimWhalePass invokes `_applyWhalePassStats(player, startLevel)` at claim-time"
             );
             assertGt(
-                _countOccurrences(whaleSrc, "whalePassClaims[player] = 0"),
+                _countOccurrences(whaleSrc, "_takeHalfPasses(id)"),
                 0,
                 "byte-present: claimWhalePass clears the accumulator at claim (WHALE-02 consumption)"
             );
@@ -902,27 +897,24 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         RecyclingState.seedWord(address(game), index, bytes32(rngWord));
         uint256 s0 = uint256(vm.load(address(game), bytes32(0)));
         vm.store(address(game), bytes32(0), bytes32(s0 | (uint256(1) << 192)));
-        // A fresh session starts its box and bet cursors at zero, as the real seal does
-        // (_swapRngBuffers): boxCursor (slot 56, bits 56..103), degeneretteCursor (slot 14,
-        // bits 160..207).
-        uint256 s56 = uint256(vm.load(address(game), bytes32(GameSlots.SUB_CURSOR)));
-        vm.store(address(game), bytes32(GameSlots.SUB_CURSOR), bytes32(s56 & ~(((uint256(1) << 48) - 1) << 56)));
-        uint256 s14 = uint256(vm.load(address(game), bytes32(GameSlots.TICKET_CURSOR)));
-        vm.store(address(game), bytes32(GameSlots.TICKET_CURSOR), bytes32(s14 & ~(((uint256(1) << 48) - 1) << 160)));
+        // seedWord latches the queue counts and restarts the box and bet cursors at zero, as the
+        // real seal (_swapRngBuffers) does.
     }
 
     /// @dev Seal `index` as the read buffer (the write side flips to index ^ 1), mirroring a
     ///      request's seal under two physical buffers (6d0e64b09) — the replacement for the old
     ///      "advance LR_INDEX by one" step. Idempotent once a word was injected at `index`.
     function _sealBuffer(uint48 index) internal {
-        RecyclingState.seedWriteBuffer(address(game), index ^ 1);
+        if (RecyclingState.writeBuffer(address(game)) == index) {
+            RecyclingState.latchQueueCounts(address(game));
+            RecyclingState.seedWriteBuffer(address(game), index ^ 1);
+        }
     }
 
-    /// @dev Raw BET_PROCESSED bit (255) of bet `betId` in degeneretteQueue[index & 1] (slot 21).
-    ///      A later seal only zeroes the queue LENGTH, so the element word stays readable.
+    /// @dev Raw BET_PROCESSED bit (255) of bet `betId` in degeneretteQueue[index & 1]. A later seal
+    ///      only resets the counts, so the element word stays readable.
     function _betProcessed(uint48 index, uint64 betId) internal view returns (bool) {
-        bytes32 base = keccak256(abi.encode(keccak256(abi.encode(uint256(index & 1), uint256(21)))));
-        return uint256(vm.load(address(game), bytes32(uint256(base) + betId - 1))) >> 255 == 1;
+        return DQ.betAt(vm, address(game), index, betId) >> 255 == 1;
     }
 
     /// @dev Resolve queued bets through the permissionless crank. Degenerette resolution is the
@@ -936,31 +928,30 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         }
     }
 
-    /// @dev Park the human-box frontier (humanReadComplete byte 13 + boxCursor byte 7, both slot 56)
-    ///      at `index`'s first entry, as a fresh seal leaves it.
+    /// @dev Leave the human-box frontier as a fresh seal does: not complete (the cursor restarts at
+    ///      zero when the counts latch).
     function _parkBoxFrontier(uint48 index) internal {
-        bytes32 slot = bytes32(uint256(56));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        uint256 cursorMask = (uint256(1) << 48) - 1;
-        packed &= ~(cursorMask << (7 * 8));   // boxCursor = 0
-        packed &= ~(uint256(0xff) << (13 * 8)); // humanReadComplete = false
         require(index < 2, "binary buffer fixture");
-        vm.store(address(game), slot, bytes32(packed));
+        uint256 packed = uint256(vm.load(address(game), bytes32(GameSlots.HUMAN_READ_COMPLETE)));
+        packed &= ~(uint256(0xff) << (GameSlots.HUMAN_READ_COMPLETE_OFFSET * 8));
+        vm.store(address(game), bytes32(GameSlots.HUMAN_READ_COMPLETE), bytes32(packed));
     }
 
     function _injectedWord(uint48 index) internal view returns (uint256) {
         return RecyclingState.word(address(game), index);
     }
 
-    function _lootboxEthBase(
-        uint48 index,
-        address who
-    ) internal view returns (uint256) {
-        bytes32 inner = keccak256(
-            abi.encode(uint256(index), uint256(LOOTBOX_ETH_SLOT))
-        );
-        bytes32 leaf = keccak256(abi.encode(who, uint256(inner)));
-        return uint256(vm.load(address(game), leaf));
+    /// @dev Nominal wei of `who`'s queue entries in `index`'s buffer that the human-box cursor has
+    ///      not yet settled (zero once every one of them is opened).
+    function _boxUnsettled(uint48 index, address who) internal view returns (uint256 total) {
+        uint256 n = RecyclingState.boxCount(address(game), index);
+        uint256 cursor = (uint256(vm.load(address(game), bytes32(GameSlots.BOX_CURSOR))) >> (GameSlots.BOX_CURSOR_OFFSET * 8)) & type(uint48).max;
+        uint32 id = game.walletIdOf(who);
+        for (uint256 i = index == RecyclingState.readBuffer(address(game)) ? cursor : 0; i < n; ++i) {
+            uint256 word = RecyclingState.boxEntry(address(game), index, i);
+            if (BoxOrderLib.boId(word) != id) continue;
+            total += BoxOrderLib.boNominal(word, PriceLookupLib.priceForLevel(BoxOrderLib.boLevel(word)));
+        }
     }
 
     /// @dev Seed the live futurePrizePool (future half (bits 128-255) of prizePoolsPacked slot 2) so winning

@@ -150,11 +150,11 @@ contract BinaryRngBuffersTest is DeployProtocol {
     function test_EightSessionsReuseTwoBuffersWithoutLeakingOrdersOrBets() public {
         for (uint256 cycle; cycle < 8; ++cycle) {
             uint48 write = RecyclingState.writeBuffer(address(game));
-            assertEq(uint256(game.extsload(keccak256(abi.encode(write, GameSlots.BOX_PLAYERS)))), 0, "write boxes header reset");
-            assertEq(uint256(game.extsload(keccak256(abi.encode(write, GameSlots.DEGENERETTE_QUEUE)))), 0, "write bets header reset");
+            assertEq(RecyclingState.boxCount(address(game), write), 0, "write box count reset");
+            assertEq(RecyclingState.betCount(address(game), write), 0, "write bet count reset");
             _buy();
-            // The low 48 bits of lootboxRngPacked are unused; a request must leave them
-            // untouched, so no request-epoch counter exists anywhere in the word.
+            // The low 48 bits of lootboxRngPacked hold the hero ring and the basefee gate; a
+            // request must leave them untouched, so no request-epoch counter lives there.
             uint48 lowBits = uint48(uint256(game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED))));
             uint256 id = _request();
             assertEq(RecyclingState.readBuffer(address(game)), write);
@@ -166,7 +166,7 @@ contract BinaryRngBuffersTest is DeployProtocol {
             // All producers now bind the other buffer, even while the read word exists.
             if (cycle == 0) {
                 _buy();
-                assertEq(uint256(game.extsload(keccak256(abi.encode(write ^ 1, GameSlots.DEGENERETTE_QUEUE)))), 1);
+                assertEq(RecyclingState.betCount(address(game), write ^ 1), 1);
             }
             _assertNextRequestBlocked(id);
             _drainSession();

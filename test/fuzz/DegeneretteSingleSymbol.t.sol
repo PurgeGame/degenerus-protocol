@@ -11,6 +11,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IDegenerusGameDegeneretteModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {FlipRoundLib} from "../../contracts/libraries/FlipRoundLib.sol";
 import {DegeneretteQueue as DQ} from "../helpers/DegeneretteQueue.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @dev Expose an internal ETH award while keeping the real Game facade available
 ///      for callbacks from the resulting lootbox rewards (notably Lens.extsload).
@@ -46,7 +47,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         vm.deal(bob, 100 ether);
         vm.deal(address(game), 10_000 ether);
         RecyclingState.seedWriteBuffer(address(game), 1);
-        vm.store(address(game), bytes32(uint256(2)), bytes32(uint256(10_000 ether) << 128));
+        vm.store(address(game), bytes32(GameSlots.PRIZE_POOLS_PACKED), bytes32(uint256(10_000 ether) << 128));
     }
 
     function _place(address who, uint8 currency, uint8 spins, uint8 symbol, uint128 stake) private returns (uint64 id) {
@@ -167,9 +168,9 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         return keccak256(abi.encode(
             address(game).balance, alice.balance, caller.balance,
             coin.balanceOf(alice), wwxrp.balanceOf(alice), wwxrp.totalSupply(),
-            vm.load(address(game), bytes32(uint256(1))),
-            vm.load(address(game), bytes32(uint256(2))),
-            vm.load(address(game), keccak256(abi.encode(uint256(1), DQ.QUEUE_SLOT))), // index-1 bet queue length
+            vm.load(address(game), bytes32(GameSlots.CLAIMABLE_POOL)),
+            vm.load(address(game), bytes32(GameSlots.PRIZE_POOLS_PACKED)),
+            DQ.lastBetId(vm, address(game), 1), // index-1 bet count
             vm.load(address(game), boonSlot)
         ));
     }
@@ -425,6 +426,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
     function testNaturalEthJackpotCapsCashAndResolvesOverflow() public {
         // Reuse the natural WWXRP jackpot's inner seed on the ordinary ETH stream.
         uint256 seed = Ref.drawWord(359_696, true);
+        _place(alice, 1, 1, 0, 100); // registers alice's wallet ID
         uint256 claimableBefore = game.claimableWinningsOf(alice);
         bytes memory facade = address(game).code;
         address facadeCopy = makeAddr("eth_jackpot_facade");
@@ -432,7 +434,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         vm.etch(address(game), address(new DegeneretteEthAwardRouter(facadeCopy)).code);
         vm.recordLogs();
         IDegenerusGameDegeneretteModule(address(game)).resolveEthSpinFromBox(
-            alice, 0.01 ether, uint16(30_000), seed, uint8(15)
+            alice, game.walletIdOf(alice), 0.01 ether, uint16(30_000), seed, uint8(15)
         );
         Vm.Log[] memory logs = vm.getRecordedLogs();
         vm.etch(address(game), facade);
@@ -441,7 +443,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         assertEq(payout, 6_807.81 ether, "jackpot includes max activity, two wilds and the ETH addition");
         // 25% of gross exceeds the cap: exactly 10% of the 10,000 ETH future pool is cash.
         assertEq(game.claimableWinningsOf(alice) - claimableBefore, 1000 ether);
-        assertEq(uint256(vm.load(address(game), bytes32(uint256(2)))) >> 128, 9000 ether);
+        assertEq(uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOLS_PACKED))) >> 128, 9000 ether);
         bytes32 capTopic = keccak256("PayoutCapped(address,uint256,uint256)");
         bool capped;
         for (uint256 i; i < logs.length; ++i) {

@@ -8,19 +8,18 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
-/// @title LootboxBoostBlendPin -- the boost lane of a box order blends across purchases
-/// @notice A lootbox boon lifts ONE purchase's spend. A second order at the same RNG index does
-///         not inherit that lift whole and does not lose it: the order word's boost lane is the
-///         nominal-weighted average of the two purchases, so the resolver scales each box by the
-///         fraction of the whole order that was actually boosted. Pinned because the v78 mutation
-///         campaign showed the blend write had no test on it.
+/// @title LootboxBoostBlendPin -- the boost lane of a box entry belongs to its own purchase
+/// @notice A lootbox boon lifts ONE purchase's spend. Every purchase is its own queue entry, so
+///         the entry that consumed the boon carries its lift as a fraction of its own spend, and
+///         a later purchase neither inherits that lift nor erases it. Pinned because the v78
+///         mutation campaign showed the boost write had no test on it.
 contract LootboxBoostBlendPin is DeployProtocol {
+    using BoxOrderLib for uint256;
+
     uint256 constant SLOT_BOON_PACKED = GameSlots.BOON_PACKED;
-    uint256 constant SLOT_LOOTBOX_ETH = GameSlots.LOOTBOX_ORDER;
-    uint256 constant SLOT_LOOTBOX_RNG_IDX = GameSlots.LOOTBOX_RNG_PACKED;
-    uint256 constant LB_BOOST_SHIFT = 39;
-    uint256 constant LB_BPS_MASK = 0x3FFF;
     uint256 constant BP_LOOTBOX_TIER_SHIFT = 104;
+    /// @dev Tier-1 lootbox boost (`_lootboxTierToBps(1)`).
+    uint256 constant TIER1_BOOST_BPS = 500;
 
     address internal player = makeAddr("blendPlayer");
     uint256 private _lastFulfilledReqId;
@@ -51,71 +50,64 @@ contract LootboxBoostBlendPin is DeployProtocol {
         return RecyclingState.writeBuffer(address(game));
     }
 
-    function _orderWord(uint48 index, address who) internal view returns (uint256) {
-        bytes32 inner = keccak256(abi.encode(uint256(index), SLOT_LOOTBOX_ETH));
-        return uint256(vm.load(address(game), keccak256(abi.encode(who, inner))));
-    }
-
-    function _boostLane(uint256 word) internal pure returns (uint256) {
-        return (word >> LB_BOOST_SHIFT) & LB_BPS_MASK;
-    }
-
     function _giveLootboxBoon(address who) internal {
         bytes32 slot = keccak256(abi.encode(who, SLOT_BOON_PACKED));
         uint256 s0 = uint256(vm.load(address(game), slot));
         vm.store(address(game), slot, bytes32(s0 | (uint256(1) << BP_LOOTBOX_TIER_SHIFT)));
     }
 
-    /// @dev `n` custom boxes of `amount` each. The custom size freezes on an index's first order,
-    ///      so a later order at the same index adds boxes of that size.
-    function _buyBoxes(uint256 n, uint256 amount) internal {
+    /// @dev `n` custom boxes of `amount` each; returns the entry's position in `idx`.
+    function _buyBoxes(uint48 idx, uint256 n, uint256 amount) internal returns (uint256 position) {
+        position = RecyclingState.boxCount(address(game), idx);
         vm.prank(player);
         game.purchase{value: n * amount + 1 ether}(
             player, 400, BoxOrderLib.boCustoms(n, amount), bytes32(0), MintPaymentKind.DirectEth, false
         );
+        assertEq(RecyclingState.boxCount(address(game), idx), position + 1, "one entry per purchase");
     }
 
-    function _buyBox(uint256 amount) internal {
-        _buyBoxes(1, amount);
+    function _buyBox(uint48 idx, uint256 amount) internal returns (uint256) {
+        return _buyBoxes(idx, 1, amount);
     }
 
-    function test_secondOrderAtTheSameIndexBlendsTheBoostLane() public {
+    function _entry(uint48 idx, uint256 position) internal view returns (uint256) {
+        return RecyclingState.boxEntry(address(game), idx, position);
+    }
+
+    /// @notice The boon lifts the purchase that consumes it, as a fraction of that purchase's own
+    ///         spend; a later purchase in the same buffer carries no lift and leaves the boosted
+    ///         entry untouched.
+    function test_boonLiftsOnlyThePurchaseThatConsumesIt() public {
         uint48 idx = _lrIndex();
         uint256 size = 0.05 ether;
-        uint256 first = size;
-        uint256 second = 3 * size;
 
         _giveLootboxBoon(player);
-        _buyBox(size);
-        uint256 lane1 = _boostLane(_orderWord(idx, player));
-        assertGt(lane1, 0, "the boon lifted the first purchase");
-        assertEq(_lrIndex(), idx, "same index for the second order");
+        uint256 p1 = _buyBox(idx, size);
+        uint256 first = _entry(idx, p1);
+        assertEq(first.boBoostBps(), TIER1_BOOST_BPS, "the boon lifted the first purchase by its tier");
+        assertEq(_lrIndex(), idx, "same buffer for the second purchase");
 
-        _buyBoxes(3, size);
-        uint256 lane2 = _boostLane(_orderWord(idx, player));
-        // Weighted by nominal: the unboosted second purchase dilutes the lane, never zeroes it
-        // and never carries the first purchase's lift whole.
-        uint256 expected = (lane1 * first) / (first + second);
-        assertApproxEqAbs(lane2, expected, 1, "boost lane is the nominal-weighted blend");
-        assertLt(lane2, lane1, "an unboosted purchase dilutes the lane");
-        assertGt(lane2, 0, "the earlier lift is not discarded");
+        uint256 p2 = _buyBoxes(idx, 3, size);
+        assertEq(p2, p1 + 1, "the second purchase is the next entry");
+        assertEq(_entry(idx, p2).boBoostBps(), 0, "the one-shot boon does not lift a second purchase");
+        assertEq(_entry(idx, p1), first, "the earlier lift is not discarded");
     }
 
-    /// @notice `applyBoxOrderScore` folds the buyer's activity score into the order word's score
-    ///         lane on the period's first box. A purchase that leaves the lane empty would resolve
-    ///         every box at the curve's floor.
+    /// @notice `applyBoxOrderScore` writes the buyer's post-action activity score into the entry's
+    ///         score lane. A purchase that leaves the lane empty would resolve every box at the
+    ///         curve's floor.
     function test_purchaseFoldsTheScoreLane() public {
         uint48 idx = _lrIndex();
-        _buyBox(0.05 ether);
-        uint256 word = _orderWord(idx, player);
-        assertTrue(word != 0, "the order was recorded");
-        assertGt((word >> 24) & 0x7FFF, 0, "the score lane was folded on the first box");
+        uint256 word = _entry(idx, _buyBox(idx, 0.05 ether));
+        assertTrue(word != 0, "the entry was recorded");
+        assertGt(word.boScore(), 0, "the score lane was written");
     }
 
     function test_orderWithoutAnyBoonHasAnEmptyBoostLane() public {
         uint48 idx = _lrIndex();
-        _buyBox(0.05 ether);
-        _buyBox(0.05 ether);
-        assertEq(_boostLane(_orderWord(idx, player)), 0, "no boon, no lift");
+        uint256 p1 = _buyBox(idx, 0.05 ether);
+        uint256 p2 = _buyBox(idx, 0.05 ether);
+        assertEq(_entry(idx, p1).boBoostBps(), 0, "no boon, no lift");
+        assertEq(_entry(idx, p2).boBoostBps(), 0, "no boon, no lift");
     }
 }

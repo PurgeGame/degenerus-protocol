@@ -31,8 +31,7 @@ contract TicketRecyclingHarness is TicketLevelPrep, WalletSeed {
     function seated(uint24 lvl, uint32 n) external { ticketLevel=lvl; ticketSeats=n; }
     function livePhase(uint24 lvl) external { level=lvl; jackpotPhaseFlag=true; }
     function foilPending(uint24, uint256 n) external {
-        uint256[] storage q = foilQueue[_foilReadKey()];
-        assembly ("memory-safe") { sstore(q.slot, n) }
+        foilReadCount = uint32(n);
         foilCursor = 0;
     }
     function latchTerminal(uint24 payoutLevel) external {

@@ -123,14 +123,16 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint16 boostBps
     );
 
-    /// @notice Emitted on every pass-bundled lootbox deposit (whale / lazy / deity pass). Same
+    /// @notice Emitted on every pass-bundled box entry (whale / lazy / deity pass). Same
     ///         signature/topic as the mint module's `LootBoxBuy` — one box-buy event across paths.
     /// @param buyer The box recipient.
-    /// @param index The lootbox RNG index the box queued at.
-    /// @param amount The deposited box ETH (this deposit).
+    /// @param index The physical write buffer (0/1) the entry joined.
+    /// @param position The entry's zero-based position in that buffer.
+    /// @param amount The entry's box ETH.
     event LootBoxBuy(
         address indexed buyer,
         uint48 indexed index,
+        uint32 position,
         uint256 amount
     );
 
@@ -258,9 +260,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *        awardQty = paid quantity plus the bulk bonus below.
      *      - Bulk buy: every 5 passes in one purchase award one more pass's entries; the
      *        price, lootbox, DGNRS, affiliate and Craps credit follow the paid quantity.
-     *      - Lootbox: 10% of price, as one custom box per pass bought; fewer, larger boxes as
-     *        the entry's 100-box cap closes, held customs averaged in (a full entry with no
-     *        custom to fold into reverts; the next RNG index clears it).
+     *      - Lootbox: 10% of price, as its own queue entry of one equal custom box per pass
+     *        bought (at most 100 passes, so at most 100 boxes).
      *      - Below level 10: one Craps day-pass credit per pass purchased, banked at the
      *        table (credit-only, spendable via applyCrapsPasses). Keys on passes bought,
      *        not price paid, so a boon-discounted purchase earns the same.
@@ -326,10 +327,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *      costs the level its purchase, never the crank its day; the caller charges the STAGE
      *      weight only on a non-zero return.
      *
-     *      Liveness: the delivery's one refusing path (a full lootbox entry with no custom box to
-     *      fold the bundled reward into) is preflighted here and skipped, so the crank never
-     *      stalls on the purchase; a terminal game buys nothing. Everything else the delivery
-     *      touches is revert-free for a claimable-funded protocol buyer: the quote is within
+     *      Liveness: a terminal game buys nothing. Everything the delivery touches is revert-free
+     *      for a claimable-funded protocol buyer (its bundled boxes append as their own entry and
+     *      are never refused): the quote is within
      *      claimable, the affiliate code is blank (vault default, recycle-rate leg only), the
      *      seat bit was latched at genesis, and the Craps door saturates instead of reverting.
      *
@@ -354,7 +354,6 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             groups = WHALE_MAX_QUANTITY / WHALE_BULK_BONUS_DIVISOR;
         }
         if (groups == 0) return 0;
-        if (_lootboxEntryRefusesPass(ContractAddresses.SDGNRS)) return 0;
 
         uint256 totalPrice;
         // The group cap bounds paidPasses to 5..100 and both unit prices to at most 4 ETH.
@@ -399,21 +398,6 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             first = passLevel <= 4 ? WHALE_PASS_EARLY_PRICE : WHALE_PASS_STANDARD_PRICE;
             rest = first;
         }
-    }
-
-    /// @dev True when `recordCoverBox` would refuse a pass purchase for `player` at the live
-    ///      lootbox index: the entry already holds `MAX_BOXES_PER_ORDER` boxes and no custom box
-    ///      exists to fold the bundled reward into. Mirrors the recorder's own count exactly.
-    function _lootboxEntryRefusesPass(address player) private view returns (bool) {
-        uint48 idx = _rngWriteBuffer();
-        uint256 word = _boxOrder(idx, player);
-        if (word == 0) return false;
-        if (_lbGet(word, LB_CUSTOM_COUNT_SHIFT, LB_COUNT_MASK) != 0) return false;
-        uint256 held = _lbGet(word, LB_SMALL_SHIFT, LB_COUNT_MASK)
-            + _lbGet(word, LB_MED_SHIFT, LB_COUNT_MASK)
-            + _lbGet(word, LB_LARGE_SHIFT, LB_COUNT_MASK)
-            + (_lbGet(word, LB_COVER_SHIFT, LB_COVER_MASK) == 0 ? 0 : 1);
-        return held >= MAX_BOXES_PER_ORDER;
     }
 
     /// @dev The whale purchase past its quote: consumes the boon, debits the price (fresh ETH
@@ -1196,8 +1180,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         // ticket-price), combining with ticket spend for the participation floor.
         _recordLootboxUnits(buyer, lootboxAmount);
 
-        // The boxes themselves are recorded by the Lootbox module — one place owns the order
-        // slot's encoding, and boons stay ON for the pass bundle.
+        // The boxes themselves are appended by the Lootbox module as one entry — one place owns
+        // the entry word encoding, and boons stay ON for the pass bundle.
         (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
             abi.encodeWithSelector(
                 IDegenerusGameLootboxModule.recordCoverBox.selector,

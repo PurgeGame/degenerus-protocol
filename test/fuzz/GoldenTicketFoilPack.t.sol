@@ -43,9 +43,11 @@ contract GoldenTicketFoilHarness is DegenerusGameFoilPackModule, WalletSeed {
         // Register the buyer at the cycle level the way the live buy does, carrying the
         // position above the level in the bucketed word.
         uint256 ownerIdx = uint256(_seedWallet(buyer));
-        foilQueue[_foilReadKey()].push(
-            ((ownerIdx + 1) << 192) | (uint256(lvl) << 160) | uint256(uint160(buyer))
-        );
+        uint32 position = foilReadCount;
+        uint256 slot = _foilSlot(_foilReadKey(), position);
+        uint256 pack = (ownerIdx << 192) | (uint256(lvl) << 160) | uint256(uint160(buyer));
+        assembly ("memory-safe") { sstore(slot, pack) }
+        foilReadCount = position + 1;
     }
 
     function setRngWord(uint24 day, uint256 word) external {

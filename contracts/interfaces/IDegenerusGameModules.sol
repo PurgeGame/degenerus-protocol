@@ -279,7 +279,7 @@ interface IDegenerusGameMintModule {
     /// @notice Processes a ticket and lootbox purchase
     /// @param buyer Address of the buyer
     /// @param entryQuantityScaled Ticket quantity in scaled entry units (400 = one whole ticket; 2 decimals, x100)
-    /// @param boxOrder Packed box order (0 to skip): [small:8][med:8][large:8][customCount:8][customSize:48 @1e12].
+    /// @param boxOrder Packed box order (0 to skip): [small:8][med:8][large:8][customCount:8][customSize:56 gwei].
     /// @param affiliateCode Affiliate code for referral tracking
     /// @param payKind Payment method used for the purchase
     function purchase(
@@ -332,7 +332,7 @@ interface IDegenerusGameMintModule {
     /// @notice Buys a mint leg AND a presale box in one tx sharing one RNG index
     /// @param buyer Player receiving both legs
     /// @param entryQuantityScaled Tickets to buy
-    /// @param boxOrder Packed box order (0 to skip): [small:8][med:8][large:8][customCount:8][customSize:48 @1e12].
+    /// @param boxOrder Packed box order (0 to skip): [small:8][med:8][large:8][customCount:8][customSize:56 gwei].
     /// @param affiliateCode Affiliate code for the mint leg
     /// @param payKind Payment method for the mint leg
     /// @param boxAmount Requested presale-box ETH (funded by the mint leg's leftover fresh ETH, then claimable, then afking)
@@ -349,39 +349,41 @@ interface IDegenerusGameMintModule {
 /// @title IDegenerusGameLootboxModule
 /// @notice Interface for opening lootboxes and managing boons
 interface IDegenerusGameLootboxModule {
-    function resolveHumanBoxOrder(address player, uint48 idx, uint256 word, uint256 stored,
-        uint256 indexWord, uint24 currentLevel) external;
-    /// @notice Price a packed box order without touching state
-    /// @param buyer Player the order is for
-    /// @param boxOrder Packed order: [small:8][med:8][large:8][customCount:8][customSize:48]
-    /// @return costWei Total wei the order costs
-    function quoteBoxOrder(address buyer, uint256 boxOrder) external payable returns (uint256 costWei);
+    /// @notice Settle one queued box entry (ordinary leg, then presale leg)
+    /// @param buffer Physical read buffer (0/1)
+    /// @param position The entry's zero-based position in that buffer
+    /// @param entry The stored entry word
+    /// @param rngWord The buffer's published session word
+    /// @param currentLevel Open level (`level + 1`)
+    function resolveHumanBoxOrder(uint48 buffer, uint256 position, uint256 entry, uint256 rngWord,
+        uint24 currentLevel) external;
 
-    /// @notice Record a purchase's box order — merge counts, freeze level and custom size, fold
-    ///         the boost and distress lanes, enqueue, bump pending RNG eth, arm the box bounty
-    /// @param buyer Player the order is for
-    /// @param boxOrder Packed order
+    /// @notice Build a purchase's ordinary entry: validate and price, consume a live boost,
+    ///         snapshot distress, arm the box bounty. Nothing is queued
+    /// @param buyer Player the entry is for
+    /// @param buyerId The buyer's wallet ID
+    /// @param boxOrder Packed input: [small:8][med:8][large:8][customCount:8][customSize:56 gwei]
     /// @return costWei Total wei the order costs
     /// @return shares Prize-pool shares packed as (future << 128) | next
     /// @return flipCredit Biggest-box bounty claim, to join the buyer's flip credit
-    /// @return priorNominal Nominal wei held before this purchase
-    function beginBoxOrder(address buyer, uint256 boxOrder)
+    /// @return word The in-flight entry word
+    function beginBoxOrder(address buyer, uint32 buyerId, uint256 boxOrder)
         external
         payable
         returns (
             uint256 costWei,
             uint256 shares,
             uint256 flipCredit,
-            uint256 priorNominal
+            uint256 word
         );
 
-    /// @notice Record a system-granted box spend (pass purchases, afking auto-buy)
+    /// @notice Append a system-granted box entry (pass purchases, afking cover)
     /// @param player Player receiving the boxes
     /// @param amountWei Box spend in wei
-    /// @param score Activity-score snapshot, used only if this is the player's first box here
-    /// @param capKey Level key for the shared per-(player, level) EV-cap accumulator
-    /// @param boost Whether to consume a live lootbox-boost boon
-    /// @param count Custom boxes wanted, one per pass (fewer, larger ones as the cap closes; held customs fold in at the average size); zero folds the value into the cover lane
+    /// @param score Activity-score snapshot
+    /// @param capKey Level key for the shared per-(wallet, level) EV-cap accumulator
+    /// @param boost Whether to consume a live lootbox-boost boon and snapshot distress
+    /// @param count Custom boxes, one per pass; zero for the afking cover box
     function recordCoverBox(
         address player,
         uint256 amountWei,
@@ -391,19 +393,18 @@ interface IDegenerusGameLootboxModule {
         uint8 count
     ) external payable;
 
-    /// @notice Freeze the order's activity score and fold this purchase's EV-cap draw
-    /// @param buyer Player the order is for
+    /// @notice Finalize a purchase's ordinary entry with its post-action score and EV-cap draw
+    /// @param word The in-flight entry from `beginBoxOrder`
     /// @param cachedScore Caller's post-action activity score in whole points
-    /// @param capLevel Level key for the shared per-(player, level) EV-cap accumulator
+    /// @param capLevel Level key for the shared per-(wallet, level) EV-cap accumulator
     /// @param costWei This purchase's box spend
-    /// @param priorNominal Nominal wei held before this purchase
+    /// @return The completed ordinary fields
     function applyBoxOrderScore(
-        address buyer,
+        uint256 word,
         uint256 cachedScore,
         uint24 capLevel,
-        uint256 costWei,
-        uint256 priorNominal
-    ) external payable;
+        uint256 costWei
+    ) external payable returns (uint256);
 
     /// @notice Resolves a lootbox directly with provided randomness
     /// @param player Address of the lootbox owner
@@ -603,12 +604,14 @@ interface IDegenerusGameDegeneretteModule {
 
     /// @notice Resolve a lootbox roll as one ETH Degenerette spin (claimable + recirc split).
     /// @param player The reward recipient.
+    /// @param playerId The recipient's wallet ID.
     /// @param stake The ETH bet amount for the one spin (the ticket budget it replaces).
     /// @param activityScore Frozen activity score in whole points from the box's commitment.
     /// @param seed Domain-separated spin seed (hash2-tagged off the box seed).
     /// @param symbol Hero symbol 0..23 (no Dice), or 32 for a random eligible hero.
     function resolveEthSpinFromBox(
         address player,
+        uint32 playerId,
         uint256 stake,
         uint16 activityScore,
         uint256 seed,
@@ -703,7 +706,6 @@ interface IGameAfkingModule {
 ///      player is passed explicitly and msg.value rides through the call.
 interface IDegenerusGameFoilPackModule {
     function runFoilWork(uint256 allowance) external returns (MineFlipGas.Result memory);
-    function recordPresaleBox(address buyer, uint48 index, uint256 word) external payable;
     /// @notice Queue every deity owner's perpetual ticket for a phase-transition target level.
     function queuePerpetualTickets(uint24 targetLevel) external;
 

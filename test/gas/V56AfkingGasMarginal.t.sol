@@ -80,7 +80,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     uint256 private constant RNG_WORD_BY_DAY_SLOT = GameSlots.RNG_WORD_BY_DAY; // mapping(uint24 => uint256) — the afking box's DAY-keyed word + readiness gate
     uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;           // _subOf mapping root (address => Sub, one packed slot)
     uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS;     // address[] _subscribers (slot holds the length)
-    uint256 private constant SUBCURSOR_SLOT = GameSlots.SUB_CURSOR;       // _subCursor (uint16 @ byte 0) + _subOpenCursor (uint16 @ byte 2) + _afkingResetDay (uint24 @ byte 4) + boxCursor (uint48 @ byte 7) + boxCursorIndex (uint48 @ byte 13)
+    uint256 private constant SUBCURSOR_SLOT = GameSlots.SUB_CURSOR;       // _subCursor (uint16 @ byte 0) + _subOpenCursor (uint16 @ byte 2) + _afkingResetDay (uint24 @ byte 4) + boxCursor (uint48 @ byte 7) + boxReadCount (uint32 @ byte 13)
 
     // Sub packed-field byte offsets — RE-DERIVED via `forge inspect DegenerusGame storageLayout`. The
     // AFKing Subscription Token credential (sub <=> coin) needs no stored pass horizon, so `validThroughLevel` (the old
@@ -307,8 +307,8 @@ contract V56AfkingGasMarginal is DeployProtocol {
 
     /// @notice The per-open marginal = (gas for N opens − gas for N−1 opens) / 1, snapshot/revert. The afking
     ///         open leg is mineFlip's AFKing stage (`runAfkingWork`); each afking box rolls boons
-    ///         like a human box (~75k/box, uniform O(1) — a cheap stamp-derived resolve, no boxPlayers walk /
-    ///         no lootboxEth read-zero, the anti-gas-DoS property the human openLootBox lacks). All numbers
+    ///         like a human box (~75k/box, uniform O(1) — a cheap stamp-derived resolve, no boxQueue walk /
+    ///         no entry-word read, the anti-gas-DoS property the human openLootBox lacks). All numbers
     ///         are EMITTED first (the measured per-box marginal + the OPEN_BATCH chunk + the derived max-safe
     ///         batch ARE the deliverable). HARD safety asserts (the never-breach floor): per-box is uniform
     ///         O(1), a derived max-safe batch > 0 exists, the chunk AT the derived max-safe batch is < 10M
@@ -735,10 +735,11 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     /// @dev `m` funded lootbox subs whose next-day box rolls the ETH-spin under the session word: the
-    ///      seed is hash4(sessionWord, player, AFKING_BOX_TAG, stampDay) and the roll uint16(seed >> 40)
-    ///      % 20 == 19, so players are brute-forced against the chosen word (no nudges in this fixture,
-    ///      so the session word is the delivered word) and the known next stamp day. Returns the stamp
-    ///      day's session gas and the count of first-level ETH-type BoxSpin events.
+    ///      seed is hash4(sessionWord, walletId, AFKING_BOX_TAG, stampDay) and the roll uint16(seed >> 40)
+    ///      % 20 == 19, so wallet IDs are brute-forced against the chosen word (no nudges in this fixture,
+    ///      so the session word is the delivered word) and the known next stamp day: each candidate is
+    ///      registered for its ID, and the non-rolling ones stay plain registered wallets. Returns the
+    ///      stamp day's session gas and the count of first-level ETH-type BoxSpin events.
     function _forceEthSpinSession(uint256 m, string memory prefix) internal returns (uint256 sessionGas, uint256 ethSpins) {
         uint256 word = uint256(keccak256(abi.encodePacked(prefix, "w"))) | 1;
         uint32 day = _simulatedDayIndex() + 1;
@@ -747,7 +748,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         for (uint256 k; found < m; ++k) {
             require(k < 50_000, "fixture: ETH-spin players");
             address who = makeAddr(string(abi.encodePacked(prefix, _u(k))));
-            uint256 seed = uint256(keccak256(abi.encode(word, uint256(uint160(who)), uint256(0x41666b696e67426f78), uint256(day))));
+            uint256 seed = uint256(keccak256(abi.encode(word, uint256(_giveWalletId(who)), uint256(0x41666b696e67426f78), uint256(day))));
             if (uint16(seed >> 40) % 20 == 19) subs[found++] = who;
         }
         for (uint256 i; i < m; ++i) {
@@ -772,14 +773,14 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     /// @dev Brute-force an injected stamp-day word so the afking box's roll lands on the ETH-spin (19).
-    function _findEthSpinWord(address player, uint32 day, uint256 amountWei, uint256 salt)
+    function _findEthSpinWord(uint32 playerId, uint32 day, uint256 amountWei, uint256 salt)
         internal
         pure
         returns (uint256 w)
     {
         for (uint256 k; k < 8000; ++k) {
             w = uint256(keccak256(abi.encodePacked("r3ethspin", salt, k))) | 1;
-            uint256 seed = uint256(keccak256(abi.encode(w, player, uint256(0x41666b696e67426f78), uint256(day))));
+            uint256 seed = uint256(keccak256(abi.encode(w, uint256(playerId), uint256(0x41666b696e67426f78), uint256(day))));
             if (uint16(seed >> 40) % 20 == 19) return w;
         }
         revert("no eth-spin word found");
@@ -844,7 +845,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         _settleGame(0xA0F1 ^ 0xF00D);
         _finishIndexedReadConsumers();
 
-        // HUMAN backlog: a real lootbox buyer queues a box on the human path (boxPlayers), committed by
+        // HUMAN backlog: a real lootbox buyer queues a box entry on the human path (boxQueue), committed by
         // the same daily request as the afking stamp.
         address human = makeAddr("v_human");
         vm.deal(human, 5 ether);
@@ -1236,6 +1237,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     function _fundPool(address who, uint256 amount) internal {
+        // Funding a beneficiary requires its wallet ID, which a real subscriber holds from an
+        // earlier paying action; registration returns the existing ID when there is one.
+        _giveWalletId(who);
         vm.deal(address(this), amount);
         game.depositAfkingFunding{value: amount}(who);
     }
@@ -1445,7 +1449,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     /// @dev Read the human-box cursor `boxCursor` (slot 56, byte 7, uint48) — the human open walk
-    ///      (mineFlip's HumanBoxes stage, runHumanBoxWork over boxPlayers[index & 1]). Distinct from
+    ///      (mineFlip's HumanBoxes stage, runHumanBoxWork over boxQueue[read buffer]). Distinct from
     ///      _subOpenCursor (byte 2).
     function _boxCursor() internal view returns (uint256) {
         return (uint256(vm.load(address(game), bytes32(uint256(SUBCURSOR_SLOT)))) >> 56) & 0xFFFFFFFFFFFF;
@@ -1729,8 +1733,11 @@ contract V56AfkingGasMarginal is DeployProtocol {
         require(game.advanceDue(), "fixture: the new subscription day is due");
     }
 
+    /// @dev The player's Sub word without its set position (bits 224..255), which swap-pop
+    ///      rewrites when another member's eviction moves this record within the set.
     function _nativeSubWord(address player) private view returns (bytes32) {
-        return vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(player)), uint256(SUBOF_SLOT))));
+        uint256 word = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(player)), uint256(SUBOF_SLOT)))));
+        return bytes32(word & ~(uint256(type(uint32).max) << 224));
     }
 
     function _assertNativeEvictionCheckpoint(address[] memory players, bytes32[] memory originalSubs) private view {

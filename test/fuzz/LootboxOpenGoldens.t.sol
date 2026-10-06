@@ -5,7 +5,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
-import {C1Viewer} from "../repro/C1BoxAutoOpen.t.sol";
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title LootboxOpenGoldens -- one fixed word, every reward figure a box open reports
@@ -34,18 +34,12 @@ contract LootboxOpenGoldens is DeployProtocol {
         vm.deal(actor, 100 ether);
     }
 
-    function _idx() internal returns (uint48 v) {
-        bytes memory real = address(game).code;
-        vm.etch(address(game), type(C1Viewer).runtimeCode);
-        v = C1Viewer(payable(address(game))).lrIndexView();
-        vm.etch(address(game), real);
+    function _idx() internal view returns (uint48) {
+        return RecyclingState.writeBuffer(address(game));
     }
 
-    function _word(uint48 index) internal returns (uint256 v) {
-        bytes memory real = address(game).code;
-        vm.etch(address(game), type(C1Viewer).runtimeCode);
-        v = C1Viewer(payable(address(game))).rngWordFor(index);
-        vm.etch(address(game), real);
+    function _word(uint48 index) internal view returns (uint256) {
+        return RecyclingState.word(address(game), index);
     }
 
     /// @dev The mid-day request, issued by `caller`'s mineFlip as the engine's next action (the
@@ -170,57 +164,57 @@ contract LootboxOpenGoldens is DeployProtocol {
         assertApproxEqAbs(sizes[3], (1 ether / priceWei) * sizes[0], 1 ether / priceWei + 1, "the custom box is its own size in small boxes");
     }
 
-    /// @dev The figure every plainly-opened box of `who` at `index` reported (all boxes of one
-    ///      single-tier order share it); zero if every box drew a spin.
     function _grantPresaleCredit(address buyer, uint256 amount) internal {
         bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(buyer)), uint256(PRESALE_BOX_CREDIT_SLOT)));
         uint256 existing = uint256(vm.load(address(game), slot));
         vm.store(address(game), slot, bytes32(existing + amount));
     }
 
-    struct Opened { uint256 amount; uint24 level; uint32 tickets; bool up; }
+    struct Opened { uint256 amount; uint24 level; uint32 tickets; uint256 flip; bool up; }
 
-    /// @dev The presale roll keys on keccak(word, PRESALE_BOX_TAG, player, index). The pinned
-    ///      presale figures were drawn at the old monotonic lootbox index 2; 6d0e64b09 made the
-    ///      index a physical buffer tag (0/1) and this fixture opens at tag 0, so each word's
-    ///      presale buyer is relabelled to the address whose tag-0 roll lands on the same pinned
-    ///      branch and figures (_presaleBoxDgnrsReward is seed-independent, so 3.75e9 DGNRS recurs
-    ///      exactly; word 3 re-derives six normal passes; word 12 the one WWXRP prize). The
-    ///      presale resolver is byte-identical to origin/main; only the index input changed.
-    function _presaleLabel(uint256 w) internal pure returns (string memory) {
-        if (w == 1) return "goldenPresale2";
-        if (w == 3) return "goldenPresale14";
-        if (w == 12) return "goldenPresale10";
-        revert("no relabelled presale buyer for this word");
-    }
+    /// @dev Event tags of the fixture's two entries: QUEUED_ENTRY_TAG | position << 1 | buffer.
+    uint48 internal constant QUEUED_ENTRY_TAG = uint48(1) << 46;
+    uint48 internal constant WHALE_REF = QUEUED_ENTRY_TAG; // buffer 0, position 0
+    uint48 internal constant PRESALE_REF = QUEUED_ENTRY_TAG | (uint48(1) << 1); // buffer 0, position 1
 
-    /// @dev Fixed word under BOX_OPEN_TAG: eight plain boxes, three queued levels,
-    ///      one DGNRS batch and the presale DGNRS branch. Values are pinned below.
-    function test_goldensUnderOneWord() public {
+    /// @dev The golden fixture: on buffer 0, the whale's mixed order (6 small, 3 medium, 2 large and
+    ///      one 1-ETH custom box) is entry 0 and a 0.5-ETH presale-only purchase is entry 1. Every
+    ///      queued seed is H(H(QUEUED_ORDER_DOMAIN, word, buffer, position), walletId, tag, n), so the
+    ///      pinned figures belong to these wallet IDs and positions; the fixture asserts both.
+    function _goldenFixture() internal returns (address whale, address pre) {
         _driveDailyCycleOnce();
         assertFalse(game.rngLocked(), "stage: mid-day path reachable");
         (, , , , uint256 priceWei) = game.purchaseInfo();
         assertEq(game.level(), 0, "golden fixture level");
         assertEq(priceWei, 0.01 ether, "golden fixture price");
-        uint48 N = _idx();
-        assertEq(N, 0, "golden fixture tag");
-
-        address whale = makeAddr("goldenBuyer");
+        assertEq(_idx(), 0, "golden fixture tag");
+        assertEq(RecyclingState.boxCount(address(game), 0), 0, "golden fixture: empty buffer");
+        whale = makeAddr("goldenBuyer");
         vm.deal(whale, 20 ether);
         vm.prank(whale);
         game.purchase{value: (6 + 15 + 50) * priceWei + 1 ether + 1 ether}(whale, 400, BoxOrderLib.boOrder(6, 3, 2, 1, 1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
-        address pre = makeAddr(_presaleLabel(1));
+        pre = makeAddr("goldenPresale");
         vm.deal(pre, 5 ether);
+        _giveWalletId(pre); // presale credit is keyed by wallet ID
         _grantPresaleCredit(pre, 0.5 ether);
         vm.prank(pre);
         game.buyPresaleBox{value: 0.5 ether}(pre, 0.5 ether);
+        assertEq(RecyclingState.boxCount(address(game), 0), 2, "golden fixture: two entries");
+        assertEq(BoxOrderLib.boId(RecyclingState.boxEntry(address(game), 0, 0)), 5, "golden fixture: whale wallet ID 5 at position 0");
+        assertEq(BoxOrderLib.boId(RecyclingState.boxEntry(address(game), 0, 1)), 6, "golden fixture: presale wallet ID 6 at position 1");
+        assertEq(BoxOrderLib.boPresaleWei(RecyclingState.boxEntry(address(game), 0, 1)), 0.5 ether, "golden fixture: presale-only entry");
+    }
 
+    /// @dev Fixed word ("golden_word", 28): nine plain boxes, three queued levels, one DGNRS batch
+    ///      and the presale DGNRS branch. Values are pinned below.
+    function test_goldensUnderOneWord() public {
+        (address whale, address pre) = _goldenFixture();
         _mineMiddayRequest(actor);
-        Vm.Log[] memory logs = _fulfilAndOpen(uint256(keccak256("golden_word_1")) | 1);
-        assertGt(_word(N), 0, "the word landed");
-        assertTrue(game.boxIndexComplete(N), "opened");
+        Vm.Log[] memory logs = _fulfilAndOpen(uint256(keccak256(abi.encode("golden_word", uint256(28)))) | 1);
+        assertGt(_word(0), 0, "the word landed");
+        assertTrue(game.boxIndexComplete(0), "opened");
 
-        Opened[8] memory opened;
+        Opened[9] memory opened;
         uint256 nOpened;
         uint256[8] memory qLevel;
         uint256[8] memory qEntries;
@@ -232,6 +226,7 @@ contract LootboxOpenGoldens is DeployProtocol {
         uint256 presaleDgnrs;
         uint256 nPresale;
         uint256 nPasses;
+        uint32 whaleId = game.walletIdOf(whale);
         for (uint256 i; i < logs.length; i++) {
             // The engine call also carries unindexed engine events (Advance, MinerWork, ...).
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
@@ -239,10 +234,11 @@ contract LootboxOpenGoldens is DeployProtocol {
             address who = address(uint160(uint256(logs[i].topics[1])));
             if (t == OPENED) {
                 assertEq(who, whale, "every plain box is the order's");
-                (uint256 a, uint24 lvl, uint32 sc,, bool up) = abi.decode(logs[i].data, (uint256, uint24, uint32, uint256, bool));
-                assertLt(nOpened, 8, "bounded");
-                opened[nOpened++] = Opened(a, lvl, sc, up);
-            } else if (t == QUEUED && who == whale) {
+                assertEq(uint256(logs[i].topics[2]), WHALE_REF, "tagged with the order's buffer and position");
+                (uint256 a, uint24 lvl, uint32 sc, uint256 fl, bool up) = abi.decode(logs[i].data, (uint256, uint24, uint32, uint256, bool));
+                assertLt(nOpened, 9, "bounded");
+                opened[nOpened++] = Opened(a, lvl, sc, fl, up);
+            } else if (t == QUEUED && uint32(uint256(logs[i].topics[1])) == whaleId) {
                 (uint24 lvl, uint32 e) = abi.decode(logs[i].data, (uint24, uint32));
                 assertLt(nQueued, 8, "bounded");
                 qLevel[nQueued] = lvl; qEntries[nQueued++] = e;
@@ -253,6 +249,7 @@ contract LootboxOpenGoldens is DeployProtocol {
                 dReq[nDgnrs] = r; dPaid[nDgnrs++] = pd;
             } else if (t == PRESALE) {
                 assertEq(who, pre, "the presale box is the presale buyer's");
+                assertEq(uint256(logs[i].topics[2]), PRESALE_REF, "tagged with the presale entry's position");
                 (uint256 a, uint256 fl, uint256 dg,, bool cl,,) = abi.decode(logs[i].data, (uint256, uint256, uint256, uint256, bool, uint32, uint32));
                 assertEq(a, 0.5 ether, "presale amount");
                 assertFalse(cl, "not the closing box");
@@ -262,61 +259,51 @@ contract LootboxOpenGoldens is DeployProtocol {
             }
         }
 
-        assertEq(nOpened, 8, "eight boxes opened plainly on this word");
-        uint24[8] memory levels = [uint24(3), 3, 4, 5, 1, 8, 4, 7];
-        uint32[8] memory tickets = [uint32(130), 109, 113, 0, 421, 0, 4671, 0];
-        uint256[8] memory amounts = [uint256(9016e12), 9016e12, 9016e12, 45080e12, 45080e12, 225400e12, 225400e12, 901600e12];
-        for (uint256 k; k < 8; k++) {
+        assertEq(nOpened, 9, "nine boxes opened plainly on this word");
+        uint24[9] memory levels = [uint24(5), 4, 4, 3, 3, 2, 4, 19, 2];
+        uint32[9] memory tickets = [uint32(47), 150, 0, 0, 308, 0, 1096, 0, 0];
+        uint256[9] memory flips = [uint256(0), 0, 560, 0, 0, 0, 0, 0, 0];
+        uint256[9] memory amounts = [uint256(9016e12), 9016e12, 9016e12, 9016e12, 45080e12, 45080e12, 45080e12, 225400e12, 225400e12];
+        for (uint256 k; k < 9; k++) {
             assertEq(opened[k].amount, amounts[k], "box amount");
             assertEq(opened[k].level, levels[k], "target level");
             assertEq(opened[k].tickets, tickets[k], "ticket variance roll");
-            assertEq(opened[k].up, k == 4 || k == 6, "Bernoulli round-up");
+            assertEq(opened[k].flip, flips[k], "FLIP branch");
+            assertEq(opened[k].up, k == 0 || k == 6, "Bernoulli round-up");
         }
         assertEq(nQueued, 3, "three lanes queued");
-        uint24[3] memory expectedLevels = [uint24(1), 3, 4];
-        uint32[3] memory expectedEntries = [uint32(20), 8, 192];
+        uint24[3] memory expectedLevels = [uint24(3), 4, 5];
+        uint32[3] memory expectedEntries = [uint32(12), 48, 4];
         for (uint256 k; k < 3; ++k) {
             assertEq(qLevel[k], expectedLevels[k], "queued target");
             assertEq(qEntries[k], expectedEntries[k], "whole-ticket entries");
         }
         assertEq(nDgnrs, 1, "one DGNRS batch");
-        assertEq(dReq[0], 5_185_000 ether, "DGNRS requested");
-        assertEq(dPaid[0], 5_185_000 ether, "DGNRS paid in full");
+        assertEq(dReq[0], 32_902_300 ether, "DGNRS requested");
+        assertEq(dPaid[0], 32_902_300 ether, "DGNRS paid in full");
         assertEq(nPresale, 1, "the presale box opened");
         assertEq(presaleFlip, 0, "presale FLIP branch not drawn");
         assertEq(presaleDgnrs, 3_750_000_000 ether, "presale DGNRS roll");
         assertEq(nPasses, 0, "no craps passes rolled on this word");
     }
 
-    /// @dev Second fixed word: eight plain parent boxes; the redesigned ETH spin creates no nested box,
-    ///      three flushed levels, and six presale normal passes (24,800-FLIP units).
+    /// @dev Second fixed word: eight plain parent boxes (tickets, flat FLIP and large-box FLIP), no
+    ///      recirculated child box, two flushed levels, and the presale FLIP branch kept as coinflip
+    ///      credit.
     function test_goldensUnderWordThree() public {
-        _driveDailyCycleOnce();
-        assertFalse(game.rngLocked(), "stage: mid-day path reachable");
-        (, , , , uint256 priceWei) = game.purchaseInfo();
-        assertEq(game.level(), 0, "golden fixture level");
-        uint48 N = _idx();
-        assertEq(N, 0, "golden fixture tag");
-        address whale = makeAddr("goldenBuyer");
-        vm.deal(whale, 20 ether);
-        vm.prank(whale);
-        game.purchase{value: (6 + 15 + 50) * priceWei + 1 ether + 1 ether}(whale, 400, BoxOrderLib.boOrder(6, 3, 2, 1, 1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
-        address pre = makeAddr(_presaleLabel(3));
-        vm.deal(pre, 5 ether);
-        _grantPresaleCredit(pre, 0.5 ether);
-        vm.prank(pre);
-        game.buyPresaleBox{value: 0.5 ether}(pre, 0.5 ether);
+        (address whale, address pre) = _goldenFixture();
         _mineMiddayRequest(actor);
         Vm.Log[] memory logs = _fulfilAndOpen(uint256(keccak256(abi.encode("golden_word", uint256(3)))) | 1);
-        assertTrue(game.boxIndexComplete(N), "opened");
+        assertTrue(game.boxIndexComplete(0), "opened");
 
-        uint256[8] memory amount = [uint256(9016e12), 9016e12, 9016e12, 9016e12, 45080e12, 45080e12, 225400e12, 901600e12];
-        uint24[8] memory level = [uint24(5), 1, 3, 5, 4, 5, 5, 22];
-        uint32[8] memory tickets = [uint32(0), 0, 205, 84, 0, 0, 653, 5356];
-        uint256[8] memory flip;
-        bool[8] memory up = [false, false, false, false, false, false, false, true];
-        uint24[3] memory qLevel = [uint24(3), 5, 22];
-        uint32[3] memory qEntries = [uint32(8), 24, 216];
+        uint256[8] memory amount = [uint256(9016e12), 9016e12, 9016e12, 9016e12, 9016e12, 45080e12, 45080e12, 901600e12];
+        uint24[8] memory level = [uint24(5), 5, 3, 3, 18, 3, 9, 2];
+        uint32[8] memory tickets = [uint32(0), 42, 0, 119, 47, 0, 263, 0];
+        uint256[8] memory flip = [uint256(0), 0, 618, 0, 0, 3800, 0, 67700];
+        bool[8] memory up = [false, false, false, true, false, false, false, false];
+        uint24[2] memory qLevel = [uint24(3), 9];
+        uint32[2] memory qEntries = [uint32(8), 8];
+        uint32 whaleId = game.walletIdOf(whale);
         uint256 nO; uint256 nQ; uint256 nP; uint256 nPre;
         for (uint256 i; i < logs.length; i++) {
             // The engine call also carries unindexed engine events (Advance, MinerWork, ...).
@@ -325,6 +312,7 @@ contract LootboxOpenGoldens is DeployProtocol {
             address who = address(uint160(uint256(logs[i].topics[1])));
             if (t == OPENED) {
                 assertEq(who, whale, "order's box");
+                assertEq(uint256(logs[i].topics[2]), WHALE_REF, "a parent box, never a recirculated child");
                 assertLt(nO, 8, "eight parent boxes");
                 (uint256 a, uint24 lvl, uint32 sc, uint256 fl, bool u) = abi.decode(logs[i].data, (uint256, uint24, uint32, uint256, bool));
                 assertEq(a, amount[nO], "box amount");
@@ -333,60 +321,45 @@ contract LootboxOpenGoldens is DeployProtocol {
                 assertEq(fl, flip[nO], "FLIP branch");
                 assertEq(u, up[nO], "Bernoulli round-up");
                 nO++;
-            } else if (t == QUEUED && who == whale) {
-                assertLt(nQ, 3, "three lanes");
+            } else if (t == QUEUED && uint32(uint256(logs[i].topics[1])) == whaleId) {
+                assertLt(nQ, 2, "two lanes");
                 (uint24 lvl, uint32 e) = abi.decode(logs[i].data, (uint24, uint32));
                 assertEq(lvl, qLevel[nQ], "flushed lane level");
                 assertEq(e, qEntries[nQ], "flushed lane entries");
                 nQ++;
             } else if (t == PASSES) {
-                assertEq(who, whale, "order's passes");
-                (uint32 n, uint32 h, uint24 d) = abi.decode(logs[i].data, (uint32, uint32, uint24));
-                assertEq(n, 2, "two normal passes");
-                assertEq(h, 0, "no high passes");
-                assertEq(d, 4, "placed on day 4");
                 nP++;
             } else if (t == PRESALE) {
                 assertEq(who, pre, "presale buyer");
+                assertEq(uint256(logs[i].topics[2]), PRESALE_REF, "the presale entry's tag");
                 (uint256 a, uint256 fl, uint256 dg, uint256 ww, bool cl, uint32 pn, uint32 ph) = abi.decode(logs[i].data, (uint256, uint256, uint256, uint256, bool, uint32, uint32));
                 assertEq(a, 0.5 ether, "presale amount");
-                assertEq(fl, 0, "presale FLIP branch not drawn");
+                assertEq(fl, 151_500, "presale FLIP branch kept as coinflip credit");
                 assertEq(dg, 0, "presale DGNRS branch not drawn");
                 assertEq(ww, 0, "presale WWXRP branch not drawn");
                 assertFalse(cl, "not the closing box");
-                assertEq(pn, 6, "six presale normal passes");
+                assertEq(pn, 0, "no presale normal passes");
                 assertEq(ph, 0, "no presale high passes");
                 nPre++;
             }
         }
-        assertEq(nO, 8, "eight plain parent boxes; spin produces no recirc");
-        assertEq(nQ, 3, "three lanes flushed");
+        assertEq(nO, 8, "eight plain parent boxes; no recirculated child");
+        assertEq(nQ, 2, "two lanes flushed");
         assertEq(nP, 0, "no ordinary pass delivery");
         assertEq(nPre, 1, "the presale box opened");
     }
 
     /// @dev The presale roll under a given word: the same fixture, only the presale figures read.
     function _presaleUnder(uint256 w) internal returns (uint256 fl, uint256 dg, uint256 ww, uint32 pn, uint32 ph) {
-        _driveDailyCycleOnce();
-        (, , , , uint256 priceWei) = game.purchaseInfo();
-        uint48 N = _idx();
-        assertEq(N, 0, "golden fixture tag");
-        address whale = makeAddr("goldenBuyer");
-        vm.deal(whale, 20 ether);
-        vm.prank(whale);
-        game.purchase{value: (6 + 15 + 50) * priceWei + 1 ether + 1 ether}(whale, 400, BoxOrderLib.boOrder(6, 3, 2, 1, 1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
-        address pre = makeAddr(_presaleLabel(w));
-        vm.deal(pre, 5 ether);
-        _grantPresaleCredit(pre, 0.5 ether);
-        vm.prank(pre);
-        game.buyPresaleBox{value: 0.5 ether}(pre, 0.5 ether);
+        (, address pre) = _goldenFixture();
         _mineMiddayRequest(actor);
         Vm.Log[] memory logs = _fulfilAndOpen(uint256(keccak256(abi.encode("golden_word", w))) | 1);
-        assertTrue(game.boxIndexComplete(N), "opened");
+        assertTrue(game.boxIndexComplete(0), "opened");
         uint256 n;
         for (uint256 i; i < logs.length; i++) {
-            if (logs[i].emitter != address(game) || logs[i].topics[0] != PRESALE) continue;
+            if (logs[i].emitter != address(game) || logs[i].topics.length < 2 || logs[i].topics[0] != PRESALE) continue;
             assertEq(address(uint160(uint256(logs[i].topics[1]))), pre, "presale buyer");
+            assertEq(uint256(logs[i].topics[2]), PRESALE_REF, "the presale entry's tag");
             uint256 a; bool cl;
             (a, fl, dg, ww, cl, pn, ph) = abi.decode(logs[i].data, (uint256, uint256, uint256, uint256, bool, uint32, uint32));
             assertEq(a, 0.5 ether, "presale amount");
@@ -397,23 +370,23 @@ contract LootboxOpenGoldens is DeployProtocol {
     }
 
     /// @dev Word `("golden_word", 12)`: the presale box takes the WWXRP branch — one whole WWXRP
-    ///      prize, nothing else.
+    ///      prize (the event reports it before WWXRP's mint scale), nothing else.
     function test_presaleGoldenWwxrpBranch() public {
         (uint256 fl, uint256 dg, uint256 ww, uint32 pn, uint32 ph) = _presaleUnder(12);
         assertEq(fl, 0, "no FLIP");
         assertEq(dg, 0, "no DGNRS");
-        assertEq(ww, 1 ether, "one WWXRP prize");
+        assertEq(ww, 1, "one WWXRP prize");
         assertEq(uint256(pn) + ph, 0, "no passes");
     }
 
-    /// @dev Word `("golden_word", 3)`: the presale box takes the craps-pass branch — six normal
+    /// @dev Word `("golden_word", 4)`: the presale box takes the craps-pass branch — five normal
     ///      day passes (24,800-FLIP units), nothing else.
     function test_presaleGoldenPassBranch() public {
-        (uint256 fl, uint256 dg, uint256 ww, uint32 pn, uint32 ph) = _presaleUnder(3);
+        (uint256 fl, uint256 dg, uint256 ww, uint32 pn, uint32 ph) = _presaleUnder(4);
         assertEq(fl, 0, "no FLIP");
         assertEq(dg, 0, "no DGNRS");
         assertEq(ww, 0, "no WWXRP");
-        assertEq(pn, 6, "six normal passes");
+        assertEq(pn, 5, "five normal passes");
         assertEq(ph, 0, "no high passes");
     }
 }

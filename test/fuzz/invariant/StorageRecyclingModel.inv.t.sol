@@ -25,20 +25,21 @@ contract CohortReferenceHandler is Test {
     uint256 public seals;
     uint256 public completions;
     uint256 public refusals;
-    mapping(uint48 => mapping(address => uint256)) public orders;
-    mapping(uint48 => address[]) internal players;
+    /// @dev Stored entry words per epoch, in append order: one entry per purchase, never merged.
+    mapping(uint48 => uint256[]) internal entries;
     mapping(uint48 => uint256) public wordByIndex;
     mapping(uint48 => uint256) public fields;
     mapping(uint48 => uint256) public processed;
     constructor(CohortRecyclingHarness harness) { h = harness; }
     function buyer(uint256 seed) public pure returns (address) { return address(uint160(0xCA1100 + seed % 4)); }
     function buy(uint256 seed, uint256 payload) public {
-        address owner = buyer(seed);
-        if (orders[active][owner] != 0) return;
-        uint256 word = (payload & ((uint256(1) << 255) - 1)) | 1;
-        orders[active][owner] = word;
-        players[active].push(owner);
-        h.queueBox(owner, word);
+        if (entries[active].length >= 8) return;
+        uint48 write = uint48((active - 1) & 1);
+        uint256 position = entries[active].length;
+        h.queueBox(buyer(seed), (payload & ((uint256(1) << 223) - 1)) | 1);
+        uint256 stored = h.entry(write, position);
+        assertTrue(uint32(stored) != 0, "entry carries the wallet ID");
+        entries[active].push(stored);
     }
     function arm() public {
         if (fields[active] >= 4) return;
@@ -47,7 +48,7 @@ contract CohortReferenceHandler is Test {
     }
     function complete() public view returns (bool) {
         return active == 1 || (delivered && ticketsDone && frontier > active - 1
-            && processed[active - 1] == players[active - 1].length && fields[active - 1] == 0);
+            && processed[active - 1] == entries[active - 1].length && fields[active - 1] == 0);
     }
     function seal() public {
         assertEq(h.complete(), complete(), "completion differs from actual-index reference");
@@ -71,17 +72,14 @@ contract CohortReferenceHandler is Test {
         ticketsDone = true;
         h.tickets(true);
     }
+    /// @dev The FIFO settles the whole read cohort: the cursor reaches the read count.
     function open() public {
         if (!delivered) return;
         uint48 read = active - 1;
-        uint256 pos = processed[read];
-        if (pos < players[read].length) {
-            address owner = players[read][pos];
-            orders[read][owner] = 0;
-            h.processed(owner);
-            ++processed[read];
-        }
-        if (processed[read] == players[read].length) { frontier = active; h.frontier(true); }
+        processed[read] = entries[read].length;
+        h.processed();
+        frontier = active;
+        h.frontier(true);
     }
     function settleField() public {
         if (!delivered || fields[active - 1] == 0) return;
@@ -94,20 +92,19 @@ contract CohortReferenceHandler is Test {
         assertEq(h.writeBuffer(), write);
         assertEq(h.readBuffer(), read);
         assertEq(h.complete(), complete());
-        (uint256 count, uint256 bets) = h.counts(write);
-        assertEq(count, players[active].length);
+        (uint256 count, uint256 bets) = h.writeCounts();
+        assertEq(count, entries[active].length, "write count is this epoch's appends");
         assertEq(bets, 0);
         assertEq(h.word(write), 0, "unsealed write word must be inaccessible");
+        for (uint256 i; i < count; ++i) {
+            assertEq(h.entry(write, i), entries[active][i], "reused write holds only its current epoch's entries");
+        }
         if (active > 1) {
-            (count, bets) = h.counts(read);
-            assertEq(count, players[active - 1].length);
+            (count, bets) = h.readCounts();
+            assertEq(count, entries[active - 1].length, "read count latched at the seal");
             assertEq(bets, 0);
             assertEq(h.word(read), delivered ? wordByIndex[active - 1] : 0);
-        }
-        for (uint256 i; i < 4; ++i) {
-            address owner = buyer(i);
-            assertEq(h.order(write, owner), orders[active][owner], "reused write contains only its current epoch");
-            if (active > 1) assertEq(h.order(read, owner), orders[active - 1][owner]);
+            for (uint256 i; i < count; ++i) assertEq(h.entry(read, i), entries[active - 1][i], "sealed entries unchanged");
         }
         assertEq(h.word(2), 0, "nonphysical tags cannot expose historical words");
     }

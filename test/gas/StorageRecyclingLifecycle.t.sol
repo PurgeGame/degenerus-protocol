@@ -154,7 +154,7 @@ contract StorageRecyclingLifecycleTest is DeployProtocol {
         bytes32 entries = keccak256("EntriesQueued(uint32,uint24,uint32)");
         bytes32 scaled = keccak256("EntriesQueuedScaled(uint32,uint24,uint32)");
         bytes32 range = keccak256("EntriesQueuedRange(uint32,uint24,uint24,uint24,uint32)");
-        bytes32 boxes = keccak256("LootBoxBuy(address,uint48,uint256)");
+        bytes32 boxes = keccak256("LootBoxBuy(address,uint48,uint32,uint256)");
         bytes32 bet = keccak256("DegeneretteBetPlaced(address,uint32,uint64,uint256)");
         for (uint256 i; i < logs.length; ++i) {
             Vm.Log memory row = logs[i];

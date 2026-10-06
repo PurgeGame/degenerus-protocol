@@ -17,14 +17,19 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 contract LootboxRngLifecycle is DeployProtocol {
     VRFHandler public vrfHandler;
 
-    /// @dev Storage slot constants for direct state inspection via vm.load.
-    ///      Verified via `forge inspect DegenerusGame storage-layout`.
-    ///      Slot 0: packed timing/flags (see DegenerusGameStorage layout).
-    ///      Slot 3: rngWordCurrent (uint256).
-    ///      Slot 4: vrfRequestId (uint256).
-    uint256 constant SLOT_PACKED_0 = 0;
+    /// @dev Storage slots for direct state inspection via vm.load (GameSlots, pinned by
+    ///      StorageSlotPins).
+    uint256 constant SLOT_PACKED_0 = GameSlots.RNG_REQUEST_TIME;
     uint256 constant SLOT_RNG_WORD_CURRENT = GameSlots.RNG_WORD_CURRENT;
-    uint256 constant SLOT_VRF_REQUEST_ID = 4;
+    uint256 constant SLOT_VRF_REQUEST_ID = GameSlots.VRF_REQUEST_ID;
+
+    /// @dev Seed domains (DegenerusGameLootboxModule): a queued entry's root is
+    ///      hash4(QUEUED_ORDER_DOMAIN, word, buffer, position); box n seeds from
+    ///      hash4(root, walletId, BOX_OPEN_TAG, n) and the boon draw from
+    ///      hash4(root, walletId, BOX_BOON_TAG, buffer).
+    uint256 constant QUEUED_ORDER_DOMAIN = 0x5175657565644f72646572;
+    uint256 constant BOX_OPEN_TAG = 0x426f784f70656e;
+    uint256 constant BOX_BOON_TAG = 0x426f78426f6f6e;
 
     function setUp() public {
         _deployProtocol();
@@ -69,10 +74,10 @@ contract LootboxRngLifecycle is DeployProtocol {
         return RecyclingState.currentWord(address(game));
     }
 
-    /// @dev Read rngRequestTime from packed slot 0, bytes [6:12] (uint48, bit offset 48).
+    /// @dev Read rngRequestTime from packed slot 0 (uint48).
     function _readRngRequestTime() internal view returns (uint48) {
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(SLOT_PACKED_0))));
-        return uint48(packed >> 48);
+        return uint48(packed >> (GameSlots.RNG_REQUEST_TIME_OFFSET * 8));
     }
 
     /// @dev Deploy a new MockVRFCoordinator and wire it up via admin prank.
@@ -163,33 +168,44 @@ contract LootboxRngLifecycle is DeployProtocol {
         return _lootboxRngWord(index);
     }
 
-    /// @dev Read the packed lootboxOrder word for [index][who] directly from storage
-    ///      (mapping root at slot 15 — same slot position as the pre-migration lootboxEth word).
-    function _lootboxOrderWord(uint48 index, address who) internal view returns (uint256) {
-        bytes32 inner = keccak256(abi.encode(uint256(index & 1), uint256(15)));
-        bytes32 leaf = keccak256(abi.encode(who, uint256(inner)));
-        uint48 active = _readLootboxRngIndex();
-        uint256 word = uint256(vm.load(address(game), leaf));
-        return (index < 2) && word >> 255 == 0 ? word : 0;
+    /// @dev Next unsettled position of the read buffer (left at the read count on completion).
+    function _boxCursor() internal view returns (uint256) {
+        return (uint256(vm.load(address(game), bytes32(GameSlots.BOX_CURSOR))) >> (GameSlots.BOX_CURSOR_OFFSET * 8))
+            & type(uint48).max;
     }
 
-    /// @dev Nominal wei the stored order represents — the migration replacement for the old
-    ///      lootboxEth low-128-bit amount (excludes boon boost; frozen level decodes off the
-    ///      word itself, bits [0:24]).
-    function _lootboxAmount(uint48 index, address who) internal view returns (uint256) {
-        uint256 word = _lootboxOrderWord(index, who);
-        if (word == 0) return 0;
-        return BoxOrderLib.boNominal(word, PriceLookupLib.priceForLevel(uint24(word & 0xFFFFFF)));
+    /// @dev The stored entry at (`index`, `position`); a purchase never rewrites another's entry.
+    function _entry(uint48 index, uint256 position) internal view returns (uint256) {
+        return RecyclingState.boxEntry(address(game), index, position);
     }
 
-    /// @dev Make a lootbox purchase for buyer with the given lootbox ETH amount.
-    function _makePurchase(address buyer, uint256 lootboxAmount) internal {
+    /// @dev Whether the entry at (`index`, `position`) has settled: the cursor alone marks it, and
+    ///      only while `index` is the sealed read buffer (a later seal of the same physical buffer
+    ///      starts a new cohort).
+    function _settled(uint48 index, uint256 position) internal view returns (bool) {
+        return RecyclingState.readBuffer(address(game)) == index && _boxCursor() > position;
+    }
+
+    function _rootWord(uint256 word, uint48 index, uint256 position) internal pure returns (uint256) {
+        return uint256(keccak256(abi.encode(QUEUED_ORDER_DOMAIN, word, uint256(index), position)));
+    }
+
+    /// @dev Make a lootbox purchase for buyer with the given lootbox ETH amount. Returns the
+    ///      position its one entry took in the write buffer.
+    function _makePurchase(address buyer, uint256 lootboxAmount) internal returns (uint256 position) {
+        uint48 index = _readLootboxRngIndex();
+        position = RecyclingState.boxCount(address(game), index);
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
         // numCoins = 400 (minimum for 1 ETH lootbox), total = purchase + lootbox
         game.purchase{value: lootboxAmount + 0.01 ether}(
             buyer, 400, BoxOrderLib.boCustomFloor(lootboxAmount), bytes32(0), MintPaymentKind.DirectEth, false
         );
+        assertEq(RecyclingState.boxCount(address(game), index), position + 1, "one appended entry per purchase");
+        uint256 entry = _entry(index, position);
+        assertEq(BoxOrderLib.boId(entry), game.walletIdOf(buyer), "the entry holds the buyer's wallet ID");
+        assertEq(BoxOrderLib.boCustomCount(entry), 1, "one custom box");
+        assertEq(BoxOrderLib.boSizeWei(entry), lootboxAmount, "of the purchased size");
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -533,8 +549,9 @@ contract LootboxRngLifecycle is DeployProtocol {
     // ──────────────────────────────────────────────────────────────────────
 
     /// @notice Two different players purchasing at the same index produce different entropy.
-    ///         First-roll entropy = H(rngWord, player, BOX_OPEN_TAG, 1).
-    ///         Different player addresses -> different preimage -> different entropy.
+    ///         First-roll entropy = H(root, walletId, BOX_OPEN_TAG, 1) with
+    ///         root = H(QUEUED_ORDER_DOMAIN, word, buffer, position): two purchases hold different
+    ///         positions and different wallet IDs, so their preimages differ.
     function test_entropyUniqueDifferentPlayers(uint256 vrfWord) public {
         vm.assume(vrfWord > 1);
 
@@ -544,31 +561,48 @@ contract LootboxRngLifecycle is DeployProtocol {
         uint48 purchaseIndex = _readLootboxRngIndex();
 
         // Both buyers purchase at the same index with identical amounts
-        _makePurchase(buyer1, 1 ether);
-        _makePurchase(buyer2, 1 ether);
-
-        uint256 amount1 = _lootboxAmount(purchaseIndex, buyer1);
-        uint256 amount2 = _lootboxAmount(purchaseIndex, buyer2);
-        assertGt(amount1, 0);
-        assertGt(amount2, 0);
+        uint256 pos1 = _makePurchase(buyer1, 1 ether);
+        uint256 pos2 = _makePurchase(buyer2, 1 ether);
+        assertEq(pos2, pos1 + 1, "consecutive positions");
+        uint256 entry1 = _entry(purchaseIndex, pos1);
+        uint256 entry2 = _entry(purchaseIndex, pos2);
         // Complete and settle the cohort before another request can be admitted.
         _completeDay(vrfWord);
 
-        // Read stored word at the purchase index
         uint256 storedWord = _readLootboxWord(purchaseIndex);
         assertTrue(storedWord != 0, "Word should be stored");
 
-        // Read buyer1's stored day from lootboxStatus (day is what was recorded at purchase time)
-        // Both purchased on day 1, so day = 1 for both.
-        // Read amounts from lootboxStatus
-        assertEq(_lootboxAmount(purchaseIndex, buyer1), 0, "settled orders are logically empty");
-        assertEq(_lootboxAmount(purchaseIndex, buyer2), 0, "settled orders are logically empty");
+        assertTrue(_settled(purchaseIndex, pos1), "both entries settled on the cohort's word");
+        assertTrue(_settled(purchaseIndex, pos2), "both entries settled on the cohort's word");
+        assertEq(_entry(purchaseIndex, pos1), entry1, "settlement leaves the entry word untouched");
+        assertEq(_entry(purchaseIndex, pos2), entry2, "settlement leaves the entry word untouched");
 
-        uint256 entropy1 = uint256(keccak256(abi.encode(storedWord, buyer1, uint256(0x426f784f70656e), uint256(1))));
-        uint256 entropy2 = uint256(keccak256(abi.encode(storedWord, buyer2, uint256(0x426f784f70656e), uint256(1))));
+        uint256 entropy1 = uint256(keccak256(abi.encode(
+            _rootWord(storedWord, purchaseIndex, pos1), uint256(game.walletIdOf(buyer1)), BOX_OPEN_TAG, uint256(1))));
+        uint256 entropy2 = uint256(keccak256(abi.encode(
+            _rootWord(storedWord, purchaseIndex, pos2), uint256(game.walletIdOf(buyer2)), BOX_OPEN_TAG, uint256(1))));
 
-        // Different player addresses in preimage -> different entropy
         assertTrue(entropy1 != entropy2, "Different players must produce different entropy");
+    }
+
+    /// @notice One wallet buying twice in one cohort holds two entries at two positions, and the
+    ///         position keeps their roots (hence every box seed) apart.
+    function test_entropyUniqueSamePlayerTwoPositions(uint256 vrfWord) public {
+        vm.assume(vrfWord > 1);
+        address buyer = makeAddr("twiceBuyer");
+        uint48 index = _readLootboxRngIndex();
+        uint256 pos1 = _makePurchase(buyer, 0.5 ether);
+        uint256 entry1 = _entry(index, pos1);
+        uint256 pos2 = _makePurchase(buyer, 0.5 ether);
+        assertEq(pos2, pos1 + 1, "the second purchase appends, it never merges");
+        assertEq(_entry(index, pos1), entry1, "the first entry is unchanged by the second purchase");
+        _completeDay(vrfWord);
+        uint256 storedWord = _readLootboxWord(index);
+        assertTrue(_settled(index, pos1) && _settled(index, pos2), "both entries settled");
+        uint256 id = game.walletIdOf(buyer);
+        uint256 seed1 = uint256(keccak256(abi.encode(_rootWord(storedWord, index, pos1), id, BOX_OPEN_TAG, uint256(1))));
+        uint256 seed2 = uint256(keccak256(abi.encode(_rootWord(storedWord, index, pos2), id, BOX_OPEN_TAG, uint256(1))));
+        assertTrue(seed1 != seed2, "same wallet, same cohort: the position separates the draws");
     }
 
     /// @notice Same player with different amounts at different indices produces different entropy.
@@ -581,26 +615,25 @@ contract LootboxRngLifecycle is DeployProtocol {
         uint48 index1 = _readLootboxRngIndex();
 
         // First purchase: 1 ether lootbox on day 2 (setUp already warped to day 2)
-        _makePurchase(buyer, 1 ether);
+        uint256 pos1 = _makePurchase(buyer, 1 ether);
         _completeDay(vrfWord);
 
         uint256 word1 = _readLootboxWord(index1);
-        uint256 amount1 = _lootboxAmount(index1, buyer);
 
         // Warp to day 3: purchase 2 ether lootbox
         vm.warp(3 * 86400);
         uint48 index2 = _readLootboxRngIndex();
-        _makePurchase(buyer, 2 ether);
+        uint256 pos2 = _makePurchase(buyer, 2 ether);
         uint256 word2Seed = vrfWord ^ 0xBEEF;
         if (word2Seed == 0) word2Seed = 1;
         _completeDay(word2Seed);
 
         uint256 word2 = _readLootboxWord(index2);
-        uint256 amount2 = _lootboxAmount(index2, buyer);
 
         // Compute entropy for each
-        uint256 entropy1 = uint256(keccak256(abi.encode(word1, buyer, uint256(0x426f784f70656e), uint256(1))));
-        uint256 entropy2 = uint256(keccak256(abi.encode(word2, buyer, uint256(0x426f784f70656e), uint256(1))));
+        uint256 id = game.walletIdOf(buyer);
+        uint256 entropy1 = uint256(keccak256(abi.encode(_rootWord(word1, index1, pos1), id, BOX_OPEN_TAG, uint256(1))));
+        uint256 entropy2 = uint256(keccak256(abi.encode(_rootWord(word2, index2, pos2), id, BOX_OPEN_TAG, uint256(1))));
 
         // Different VRF words -> different entropy
         assertTrue(entropy1 != entropy2, "Different committed words must produce different entropy");
@@ -615,73 +648,28 @@ contract LootboxRngLifecycle is DeployProtocol {
         uint48 index1 = _readLootboxRngIndex();
 
         // First purchase on day 2 (setUp already warped to day 2)
-        _makePurchase(buyer, 1 ether);
+        uint256 pos1 = _makePurchase(buyer, 1 ether);
         _completeDay(vrfWord);
 
         uint256 word1 = _readLootboxWord(index1);
-        uint256 amount1 = _lootboxAmount(index1, buyer);
 
         // Warp to day 3: purchase same amount
         vm.warp(3 * 86400);
         uint48 index2 = _readLootboxRngIndex();
-        _makePurchase(buyer, 1 ether);
+        uint256 pos2 = _makePurchase(buyer, 1 ether);
         // Use same VRF word to isolate the day variable
         _completeDay(vrfWord);
 
         uint256 word2 = _readLootboxWord(index2);
-        uint256 amount2 = _lootboxAmount(index2, buyer);
 
         // The boon root binds each stored order index.
         assertNotEq(index1, index2, "fixture must advance the order index");
-        uint256 entropy1 = uint256(keccak256(abi.encode(word1, buyer, uint256(0x426f78426f6f6e), index1)));
-        uint256 entropy2 = uint256(keccak256(abi.encode(word2, buyer, uint256(0x426f78426f6f6e), index2)));
+        uint256 id = game.walletIdOf(buyer);
+        uint256 entropy1 = uint256(keccak256(abi.encode(_rootWord(word1, index1, pos1), id, BOX_BOON_TAG, uint256(index1))));
+        uint256 entropy2 = uint256(keccak256(abi.encode(_rootWord(word2, index2, pos2), id, BOX_BOON_TAG, uint256(index2))));
 
         // Different recorded indices -> different boon entropy
         assertTrue(entropy1 != entropy2, "Different indices must produce different boon entropy");
-    }
-
-    /// @notice Same player purchasing twice at the same index accumulates amounts.
-    ///         The total amount sizes awards without entering their seed.
-    function test_entropyAccumulationSamePlayer() public {
-        address buyer = makeAddr("accumBuyer");
-        uint48 purchaseIndex = _readLootboxRngIndex();
-
-        // First purchase: 0.5 ether lootbox
-        _makePurchase(buyer, 0.5 ether);
-
-        // Check accumulated amount after first purchase
-        uint256 amountAfterFirst = _lootboxAmount(purchaseIndex, buyer);
-        assertTrue(amountAfterFirst != 0, "Should have amount after first purchase");
-
-        // Second purchase: another 0.5 ether lootbox at the same index (same day)
-        _makePurchase(buyer, 0.5 ether);
-
-        // Check accumulated amount after second purchase
-        uint256 amountAfterSecond = _lootboxAmount(purchaseIndex, buyer);
-
-        // Amount should have increased (accumulated)
-        assertTrue(
-            amountAfterSecond > amountAfterFirst,
-            "Accumulated amount should increase with second purchase"
-        );
-
-        // Complete the day so the word is stored
-        _completeDay(0xDEAD0001);
-
-        // The entropy derivation will use the accumulated total, not individual purchase amounts
-        uint256 storedWord = _readLootboxWord(purchaseIndex);
-        uint256 entropyWithAccumulated = uint256(
-            keccak256(abi.encode(storedWord, buyer, uint48(2), amountAfterSecond))
-        );
-        uint256 entropyWithFirstOnly = uint256(
-            keccak256(abi.encode(storedWord, buyer, uint48(2), amountAfterFirst))
-        );
-
-        // Since accumulated amount differs from first-only, entropy must differ
-        assertTrue(
-            entropyWithAccumulated != entropyWithFirstOnly,
-            "Accumulated amount produces different entropy than single purchase"
-        );
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -696,7 +684,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         uint48 purchaseIndex = _readLootboxRngIndex();
 
         // Purchase lootbox
-        _makePurchase(buyer, 1 ether);
+        uint256 pos = _makePurchase(buyer, 1 ether);
 
         // mineFlip triggers VRF request
         game.mineFlip();
@@ -721,7 +709,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         vm.startPrank(buyer);
         _mineAll(16);
         vm.stopPrank();
-        assertEq(_lootboxAmount(purchaseIndex, buyer), 0, "the engine opened the box on its word");
+        assertTrue(_settled(purchaseIndex, pos), "the engine opened the box on its word");
     }
 
     /// @notice Full mid-day lifecycle: purchase -> mid-day request -> VRF fulfill -> the engine opens the box.
@@ -736,7 +724,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         uint48 purchaseIndex = _readLootboxRngIndex();
 
         // Purchase lootbox (creates pending ETH for the mid-day request)
-        _makePurchase(buyer, 1 ether);
+        uint256 pos = _makePurchase(buyer, 1 ether);
 
         // The engine's mid-day request seals the write buffer
         assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.RequestMidday), "mid-day request is due");
@@ -755,7 +743,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         vm.startPrank(buyer);
         _mineAll(16);
         vm.stopPrank();
-        assertEq(_lootboxAmount(purchaseIndex, buyer), 0, "the engine opened the box on its word");
+        assertTrue(_settled(purchaseIndex, pos), "the engine opened the box on its word");
     }
 
     /// @notice Before VRF fulfillment the engine waits (RngNotReady) and the box is DEFERRED,
@@ -767,8 +755,8 @@ contract LootboxRngLifecycle is DeployProtocol {
         uint48 purchaseIndex = _readLootboxRngIndex();
 
         // Purchase lootbox
-        _makePurchase(buyer, 1 ether);
-        assertGt(_lootboxAmount(purchaseIndex, buyer), 0, "box queued before the lock");
+        uint256 pos = _makePurchase(buyer, 1 ether);
+        uint256 entry = _entry(purchaseIndex, pos);
 
         // mineFlip triggers VRF request (index increments)
         game.mineFlip();
@@ -781,7 +769,10 @@ contract LootboxRngLifecycle is DeployProtocol {
         vm.prank(buyer);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
         game.mineFlip();
-        assertGt(_lootboxAmount(purchaseIndex, buyer), 0, "box still queued -- not consumed while the word is pending");
+        assertEq(RecyclingState.readBuffer(address(game)), purchaseIndex, "the request sealed the purchase buffer");
+        assertEq(RecyclingState.boxCount(address(game), purchaseIndex), pos + 1, "the seal latched the entry");
+        assertEq(_entry(purchaseIndex, pos), entry, "the entry is intact");
+        assertFalse(_settled(purchaseIndex, pos), "box still queued -- not consumed while the word is pending");
     }
 
     /// @notice Multiple indices: purchases at different indices each use their respective VRF word.
@@ -790,20 +781,21 @@ contract LootboxRngLifecycle is DeployProtocol {
 
         // First index: purchase at index N on day 2 (setUp already warped to day 2)
         uint48 indexN = _readLootboxRngIndex();
-        _makePurchase(buyer, 1 ether);
+        uint256 posN = _makePurchase(buyer, 1 ether);
 
         // Complete the first post-deploy day (stores word at indexN)
         _completeDay(0xDEAD0001);
         uint256 wordN = _readLootboxWord(indexN);
         assertGt(wordN, 0);
         assertTrue(game.boxIndexComplete(indexN), "first read settled before next request");
+        assertTrue(_settled(indexN, posN), "the first day's box opened on its word");
 
         // Next day (day 3 absolute): purchase at index N+1
         vm.warp(3 * 86400);
         uint48 indexN1 = _readLootboxRngIndex();
         assertEq(indexN1, indexN ^ 1, "Index should have incremented after first day");
 
-        _makePurchase(buyer, 1 ether);
+        uint256 posN1 = _makePurchase(buyer, 1 ether);
 
         // Complete the second day (stores word at indexN1)
         _completeDay(0xDEAD0002);
@@ -819,7 +811,6 @@ contract LootboxRngLifecycle is DeployProtocol {
         vm.startPrank(buyer);
         _mineAll(16);
         vm.stopPrank();
-        assertEq(_lootboxAmount(indexN, buyer), 0, "the first day's box opened on its word");
-        assertEq(_lootboxAmount(indexN1, buyer), 0, "the second day's box opened on its word");
+        assertTrue(_settled(indexN1, posN1), "the second day's box opened on its word");
     }
 }

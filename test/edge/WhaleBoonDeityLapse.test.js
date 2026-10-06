@@ -1,4 +1,5 @@
 import { expect } from "chai";
+import { compiledStorageSlot } from "../helpers/storageLayout.js";
 import hre from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import {
@@ -26,9 +27,9 @@ import {
  * treats a dead lane as tier 0 before the upgrade comparison.
  *
  * Storage is seeded directly via hardhat_setStorageAt into boonPacked[recipient].slot0
- * -- SLOT_BOON_PACKED = 49, the same mapping slot documented in
- * test/fuzz/LootboxBoonCoexistence.t.sol and test/fuzz/WhaleBoonExpiry.t.sol (both
- * `forge inspect DegenerusGame storage-layout` on the working tree). The whale lane
+ * -- the `boonPacked` mapping slot is resolved from the compiled layout (the Foundry
+ * counterparts test/fuzz/LootboxBoonCoexistence.t.sol and test/fuzz/WhaleBoonExpiry.t.sol
+ * use GameSlots). The whale lane
  * occupies bits 200-255 of slot0: whaleDay[24] | deityWhaleDay[24] | whaleTier[8].
  *
  * A deity boon's type is a weighted roll over the preceding day's finalized VRF word
@@ -49,12 +50,12 @@ describe("WhaleBoonDeityLapse", function () {
 
   const DEITY_BOON_WHALE_10 = 16; // 10% discount -> tier 1
 
-  const SLOT_BOON_PACKED = 49n;
   const BP_WHALE_DAY_SHIFT = 200n;
   const BP_DEITY_WHALE_DAY_SHIFT = 224n;
   const BP_WHALE_TIER_SHIFT = 248n;
 
-  function boonSlot0(player) {
+  async function boonSlot0(player) {
+    const SLOT_BOON_PACKED = await compiledStorageSlot("boonPacked");
     return hre.ethers.keccak256(
       hre.ethers.AbiCoder.defaultAbiCoder().encode(
         ["address", "uint256"],
@@ -81,7 +82,7 @@ describe("WhaleBoonDeityLapse", function () {
   ///      read-clear-merge, as the Foundry counterpart does to protect sibling lanes)
   ///      is exact.
   async function injectWhaleBoon(game, player, whaleDay, deityWhaleDay, tier) {
-    const slot = boonSlot0(player);
+    const slot = await boonSlot0(player);
     const packed = packWhaleLane(whaleDay, deityWhaleDay, tier);
     await hre.network.provider.send("hardhat_setStorageAt", [
       await game.getAddress(),

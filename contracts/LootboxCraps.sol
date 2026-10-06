@@ -53,7 +53,7 @@ contract LootboxCraps is Craps {
     ///      protocol's recorded DAILY word, retained separately from the shared live payload. Pinned
     ///      against the frozen tree exactly like those two, and covered by the same drift gate.
     uint256 internal constant RNG_WORD_BY_DAY_SLOT = 10;
-    uint256 internal constant RNG_DAY_TAGS_SLOT = 33;
+    uint256 internal constant RNG_DAY_TAGS_SLOT = 31;
 
     // ---------------------------------------------------------------------------------------
     // Reading the protocol

@@ -9,6 +9,7 @@ import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {TicketQueueStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 contract PurchaseHotPathSeeder is DegenerusGameStorage, WalletSeed {
     function seed(uint24 lvl, address buyer, bool presale, bool frozen) external {
@@ -143,11 +144,18 @@ contract PurchaseHotPathGasTest is DeployProtocol {
             vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), GameSlots.LOOTBOX_EV_CAP_PACKED))),
             vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), GameSlots.CENTURY_BONUS_USED))),
             vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), GameSlots.SUB_OF))),
-            vm.load(address(game), keccak256(abi.encode(BUYER, keccak256(abi.encode(uint256(0), GameSlots.LOOTBOX_ORDER))))),
-            vm.load(address(game), keccak256(abi.encode(BUYER, keccak256(abi.encode(uint256(1), GameSlots.LOOTBOX_ORDER))))),
+            vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED)),
+            _newestBoxEntry(),
             vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), keccak256(abi.encode(uint256((game.level() + 1) & 3), GameSlots.FOIL_RECORD)))))
         ));
         emit log_named_bytes32(string.concat(scenario, " state"), digest);
+    }
+
+    /// @dev The newest entry in the write buffer (zero when the buffer holds none).
+    function _newestBoxEntry() private view returns (uint256) {
+        uint48 write = RecyclingState.writeBuffer(address(game));
+        uint256 count = RecyclingState.boxCount(address(game), write);
+        return count == 0 ? 0 : RecyclingState.boxEntry(address(game), write, count - 1);
     }
 
     function _price() internal view returns (uint256) { return PriceLookupLib.priceForLevel(game.level() + 1); }

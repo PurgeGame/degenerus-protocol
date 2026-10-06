@@ -6,31 +6,34 @@ import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 /// @dev Read-only view overlay etched onto the live game to inspect internal box-queue state. A
 ///      DegenerusGame subclass: etching type().runtimeCode (no constructor) gives the reads access to
-///      the live internal boxPlayers / retained orders / current word and the packed LR_INDEX
-///      cursor without any storage change; the real code is restored after each read.
+///      the live internal box queue / read cursor / current word and the write-buffer selector
+///      without any storage change; the real code is restored after each read.
 contract C1Viewer is DegenerusGame {
     function lrIndexView() external view returns (uint48) {
         return _rngWriteBuffer();
     }
 
-    function boxPlayersContains(uint48 index, address who) external view returns (bool) {
-        address[] storage q = boxPlayers[index & 1];
-        for (uint256 i; i < q.length; ++i) {
-            if (q[i] == who) return true;
-        }
-        return false;
+    /// @notice Entries appended to buffer `index`: its write count, or the sealed read count.
+    function entryCount(uint48 index) external view returns (uint256) {
+        return index == _rngWriteBuffer() ? uint32(lootboxRngPacked >> LR_BOX_COUNT_SHIFT) : boxReadCount;
     }
 
-    /// @notice The raw packed lootboxOrder word for [index][who] — the live "box still owed" signal
-    ///         that mineFlip's human-box stage gates on (it skips an entry whose box order AND
-    ///         presale leg are both zero) and marks processed on a successful open. The decisive "opened vs not" signal: != 0 => the box is still
-    ///         closed; 0 => it was opened/drained.
-    function lootboxBaseFor(uint48 index, address who) external view returns (uint256) {
-        return _boxOrder(index, who);
+    /// @notice The entry at `position` of buffer `index` while it is still owed — the live "box
+    ///         still owed" signal: appended to the write buffer, or in the sealed read buffer at or
+    ///         past the cursor. mineFlip's human-box stage stores its cursor past an entry before
+    ///         settling it and never rewrites the entry. != 0 => the box is still closed; 0 => it
+    ///         was opened (or its buffer has since been reused).
+    function lootboxBaseFor(uint48 index, uint256 position) external view returns (uint256) {
+        if (index == _rngWriteBuffer()) {
+            if (position >= uint32(lootboxRngPacked >> LR_BOX_COUNT_SHIFT)) return 0;
+        } else if (position < boxCursor || position >= boxReadCount) {
+            return 0;
+        }
+        return _boxEntryAt(index, position);
     }
 
     /// @notice _lootboxWord(index) — the per-index VRF word the open path gates on.
@@ -41,7 +44,7 @@ contract C1Viewer is DegenerusGame {
 
 /// @title C1BoxAutoOpen — REGRESSION TEST for finding V62-01 (lootbox auto-open off-by-one).
 ///
-/// @notice THE DEFECT CLASS (V62-01): a human lootbox is enqueued in boxPlayers[N & 1] while N is the
+/// @notice THE DEFECT CLASS (V62-01): a human lootbox entry is appended to boxQueue[N] while N is the
 ///         write buffer. The mid-day request (mineFlip's RequestMidday stage) or the daily request seals
 ///         N — the write side flips to N ^ 1 — BEFORE the word lands, and the word is published for the
 ///         read buffer N. The human-box stage and the boxesPending hint must read buffer N, not the
@@ -76,18 +79,29 @@ contract C1BoxAutoOpen is DeployProtocol {
         vm.etch(address(game), real);
     }
 
-    function _base(uint48 index, address who) internal returns (uint256 v) {
+    function _base(uint48 index, uint256 position) internal returns (uint256 v) {
         bytes memory real = address(game).code;
         vm.etch(address(game), type(C1Viewer).runtimeCode);
-        v = C1Viewer(payable(address(game))).lootboxBaseFor(index, who);
+        v = C1Viewer(payable(address(game))).lootboxBaseFor(index, position);
         vm.etch(address(game), real);
     }
 
-    function _enqueued(uint48 index, address who) internal returns (bool v) {
+    function _entryCount(uint48 index) internal returns (uint256 v) {
         bytes memory real = address(game).code;
         vm.etch(address(game), type(C1Viewer).runtimeCode);
-        v = C1Viewer(payable(address(game))).boxPlayersContains(index, who);
+        v = C1Viewer(payable(address(game))).entryCount(index);
         vm.etch(address(game), real);
+    }
+
+    /// @dev LootBoxOpened events in `logs` for `who`'s queued entry (N, pos): the tag is
+    ///      QUEUED_ENTRY_TAG (bit 46) | pos << 1 | N.
+    function _opens(Vm.Log[] memory logs, address who, uint48 index, uint256 pos) internal view returns (uint256 n) {
+        bytes32 sig = keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
+        uint256 tag = (uint256(1) << 46) | (pos << 1) | index;
+        for (uint256 i; i < logs.length; i++) {
+            if (logs[i].emitter == address(game) && logs[i].topics.length == 3 && logs[i].topics[0] == sig
+                && address(uint160(uint256(logs[i].topics[1]))) == who && uint256(logs[i].topics[2]) == tag) ++n;
+        }
     }
 
     function _word(uint48 index) internal returns (uint256 v) {
@@ -155,16 +169,18 @@ contract C1BoxAutoOpen is DeployProtocol {
         fail("harness: mid-day work did not settle");
     }
 
-    function _enqueueHumanBoxAtCurrentIndex() internal returns (uint48 N, uint256 base) {
+    function _enqueueHumanBoxAtCurrentIndex() internal returns (uint48 N, uint256 position, uint256 base) {
         N = _idx();
+        position = _entryCount(N);
         uint256 lootboxDeposit = 1.2 ether;
         vm.prank(actor);
         game.purchase{value: lootboxDeposit + 1 ether}(
             actor, 400, BoxOrderLib.boCustom(lootboxDeposit), bytes32(0), MintPaymentKind.DirectEth, false
         );
-        base = _base(N, actor);
+        assertEq(_entryCount(N), position + 1, "fixture: the purchase appended one entry to buffer N");
+        base = _base(N, position);
         assertGt(base, 0, "fixture: a human lootbox box persisted at index N (base != 0)");
-        assertTrue(_enqueued(N, actor), "fixture: the human box is enqueued in boxPlayers[N & 1]");
+        assertEq(BoxOrderLib.boId(base), game.walletIdOf(actor), "fixture: the entry at N is the buyer's");
         assertEq(_idx(), N, "fixture: LR_INDEX is still N right after the box was enqueued");
     }
 
@@ -179,7 +195,7 @@ contract C1BoxAutoOpen is DeployProtocol {
         _finishReadConsumers();
         assertFalse(game.rngLocked(), "stage0: not locked (mid-day path reachable)");
 
-        (uint48 N, uint256 baseAtCreate) = _enqueueHumanBoxAtCurrentIndex();
+        (uint48 N, uint256 pos, uint256 baseAtCreate) = _enqueueHumanBoxAtCurrentIndex();
 
         // The box's pending ETH clears the mid-day threshold: the engine's mid-day request fires the
         // VRF AND seals buffer N (the write side flips to N ^ 1) before the word lands.
@@ -203,7 +219,7 @@ contract C1BoxAutoOpen is DeployProtocol {
         assertEq(game.nextMinerAction(), 10, "the human-box stage is next");
         assertGt(_word(N), 0, "the VRF word landed at _lootboxWord(N) (box at N IS ready)");
         assertEq(_idx(), N ^ 1, "LR_INDEX is N+1 while the ready word sits at N");
-        assertEq(_base(N, actor), baseAtCreate, "pre-open: box at N still closed");
+        assertEq(_base(N, pos), baseAtCreate, "pre-open: box at N still closed");
 
         // boxesPending() must now SEE the finalized box (it reads the read buffer N).
         assertTrue(game.boxesPending(), "boxesPending() reports the finalized box at N is openable");
@@ -212,10 +228,10 @@ contract C1BoxAutoOpen is DeployProtocol {
         vm.prank(actor);
         game.mineFlip();
 
-        emit log_named_uint("lootboxOrder word[N][actor] AFTER the human-box stage", _base(N, actor));
+        emit log_named_uint("owed entry word[N][pos] AFTER the human-box stage", _base(N, pos));
         emit log_named_uint("N", N);
 
-        assertEq(_base(N, actor), 0, "FIX: the human-box stage drained the finalized human box at N");
+        assertEq(_base(N, pos), 0, "FIX: the human-box stage drained the finalized human box at N");
         // Consumer order (60d31f775): the cohort's tickets materialized BEFORE its boxes, so after
         // the open the human read of buffer N is complete rather than held open by tickets.
         assertTrue(game.boxIndexComplete(N), "the read cohort's human queue completed with its box open");
@@ -231,7 +247,7 @@ contract C1BoxAutoOpen is DeployProtocol {
         _settleMidday();
         assertFalse(game.rngLocked(), "stage0: not locked");
 
-        (uint48 N, uint256 baseAtCreate) = _enqueueHumanBoxAtCurrentIndex();
+        (uint48 N, uint256 pos, uint256 baseAtCreate) = _enqueueHumanBoxAtCurrentIndex();
 
         // The daily request seals buffer N (the write side flips to N ^ 1) before its word lands.
         for (uint256 i; i < 10 && !game.rngLocked(); i++) {
@@ -243,12 +259,12 @@ contract C1BoxAutoOpen is DeployProtocol {
         uint48 nowIdx = _idx();
         assertEq(nowIdx, N ^ 1, "daily seal switches to the other write buffer");
         assertEq(_word(N), 0, "no word at N before the daily word lands");
-        assertEq(_base(N, actor), baseAtCreate, "pre-open: box at N still closed");
+        assertEq(_base(N, pos), baseAtCreate, "pre-open: box at N still closed");
 
         // The daily word finalizes buffer N, and the permissionless keeper's human-box stage
         // opens the box at N (the read buffer) before any later request can retire it. The
-        // V62-01 off-by-one (opening the write side) would leave it closed. An open marks the raw
-        // order word BOX_PROCESSED (bit 255; 6d0e64b09) and the logical view reads it as 0.
+        // V62-01 off-by-one (opening the write side) would leave it closed. An open stores the read
+        // cursor past the entry and leaves the entry word itself unchanged.
         uint256 reqId = mockVRF.lastRequestId();
         mockVRF.fulfillRandomWords(reqId, uint256(keccak256("c1_daily_word")) | 2);
         vm.recordLogs();
@@ -272,14 +288,15 @@ contract C1BoxAutoOpen is DeployProtocol {
         vm.startPrank(actor);
         _mineAll(16);
         vm.stopPrank();
+        uint256 opens = _opens(logs, actor, N, pos) + _opens(vm.getRecordedLogs(), actor, N, pos);
 
-        uint256 raw = uint256(vm.load(address(game),
-            keccak256(abi.encode(actor, keccak256(abi.encode(uint256(N & 1), GameSlots.LOOTBOX_ORDER))))));
+        uint256 raw = RecyclingState.boxEntry(address(game), N, pos);
         emit log_named_uint("[daily] N", N);
         emit log_named_uint("[daily] LR_INDEX at request time", nowIdx);
-        emit log_named_uint("[daily] base[N] after auto", _base(N, actor));
+        emit log_named_uint("[daily] base[N] after auto", _base(N, pos));
 
-        assertTrue(raw >> 255 == 1, "FIX(daily): the permissionless keeper opened the finalized human box at N");
-        assertEq(_base(N, actor), 0, "FIX(daily): the human-box stage drained the finalized human box at N");
+        assertEq(raw, baseAtCreate, "the settled entry word is never rewritten");
+        assertEq(opens, 1, "FIX(daily): the permissionless keeper opened the finalized human box at N, once");
+        assertEq(_base(N, pos), 0, "FIX(daily): the human-box stage drained the finalized human box at N");
     }
 }

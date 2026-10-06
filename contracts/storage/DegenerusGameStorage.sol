@@ -103,7 +103,7 @@ interface IAdminLinkValue {
  * | [26:27] prizePoolFrozen          bool     Prize pool freeze active flag         |
  * | [27:28] presaleOver              bool     Coin-presale-box terminal latch       |
  * | [28:29] subsFullyProcessed       bool     Afking STAGE drain-complete flag      |
- * | [29:30] presaleDrained           bool     All presale boxes opened (sweep)      |
+ * | [29:30] humanReadComplete        bool     Read cohort's box entries all settled |
  * | [30:32] rngFlagsAndNudges        uint16   Eight-bit nudges, completion and window  |
  * +---------------------------------------------------------------------------------+
  *   Total: 32 bytes used (0 bytes padding -- FULL)
@@ -486,11 +486,10 @@ abstract contract DegenerusGameStorage {
     ///      costs no additional cold slot access on that path.
     bool internal subsFullyProcessed;
 
-    /// @dev One-way completion of the closing presale read cohort. Earlier read cohorts
-    ///      were drained before it could be sealed. Flipped only by the ordered sweep,
-    ///      never a manual open. Pays the remaining PresaleBox pool to presaleCloser.
-    ///      Packed into slot0 so opening can skip the presale-balance read once complete.
-    bool internal presaleDrained;
+    /// @dev True only after every box entry in the sealed read buffer has settled. Fresh
+    ///      requests clear it; retries preserve it and the cursor. Packed into slot 0 beside the
+    ///      RNG flags that `_rngConsumerStage` and `_swapRngBuffers` already read and write.
+    bool internal humanReadComplete = true;
 
     /// @dev Slot-0 bytes 30..31. Bits 0..7 hold the nudge count (0..255); bit8 marks RNG
     ///      complete, bit9 the FLIP redemption window, bit10 the request's spent retry; bit11
@@ -527,11 +526,21 @@ abstract contract DegenerusGameStorage {
     /// @dev Bit12 selects the accumulating write buffer; the other is sealed read.
     function _rngWriteBuffer() internal view returns (uint48) { return uint48((rngFlagsAndNudges >> 12) & 1); }
     function _rngReadBuffer() internal view returns (uint48) { return _rngWriteBuffer() ^ 1; }
+    /// @dev The write buffer becomes the read buffer: its box and bet write counts become the
+    ///      read lengths the drains walk, and the new write buffer counts from zero. Pending ETH
+    ///      and FLIP clear in the same lootboxRngPacked write. Normal seals and the terminal
+    ///      request only; a retry never relatches.
     function _swapRngBuffers() internal {
+        uint256 lr = lootboxRngPacked;
+        lootboxRngPacked = lr & ~((LR_PENDING_ETH_MASK << LR_PENDING_ETH_SHIFT)
+            | (LR_PENDING_FLIP_MASK << LR_PENDING_FLIP_SHIFT) | (LR_COUNT_MASK << LR_BOX_COUNT_SHIFT)
+            | (LR_COUNT_MASK << LR_BET_COUNT_SHIFT));
         rngFlagsAndNudges ^= uint16(1) << 12;
         humanReadComplete = false;
         boxCursor = 0;
+        boxReadCount = uint32(lr >> LR_BOX_COUNT_SHIFT);
         degeneretteCursor = 0;
+        degeneretteReadCount = uint32(lr >> LR_BET_COUNT_SHIFT);
         _setRngComplete(false);
         _setRngSessionPublished(false);
     }
@@ -792,6 +801,9 @@ abstract contract DegenerusGameStorage {
     uint32 internal ticketSoloOffset;
     /// @dev Independent read-side bet cursor; packed into unused ticket-control bytes.
     uint48 internal degeneretteCursor;
+    /// @dev Bets in the sealed read buffer, latched from the write count at the seal. The
+    ///      drain walks positions [degeneretteCursor, degeneretteReadCount).
+    uint32 internal degeneretteReadCount;
 
     // =========================================================================
     // Ticket Queue Helpers
@@ -2320,73 +2332,136 @@ abstract contract DegenerusGameStorage {
     // Loot Box State
     // =========================================================================
 
-    /// @dev A player's box order for one RNG index, packed into one word. Four tiers, each a
-    ///      COUNT against a size: small / medium / large take their size from `level`'s ticket
-    ///      price (1x / 5x / 25x), the custom tier carries its own. Storing counts rather than
-    ///      summed wei is what keeps an unlimited mix of boxes in a single slot, and keeps
-    ///      `boxPlayers` bounded by unique buyers rather than by boxes.
-    ///
-    ///      `level`, `score` and `customSize` freeze on the period's first buy; later buys in
-    ///      the same period only bump counts. The three bps lanes are running fractions of the
-    ///      order's nominal value (which the counts themselves derive), not absolute wei —
-    ///      `boostBps` because the boon uplift is capped per purchase and only the first buy in
-    ///      a period carries one, `distressBps` because distress can toggle mid-period, and
-    ///      `adjBps` because the EV cap is drawn against a per-level running total. All three
-    ///      are only ever read as ratios, which is what lets them fit in 14 bits apiece.
-    ///
-    ///      Bit layout (LSB -> MSB), 209 bits used of 256:
-    ///      - [0:24]     level        (uint24; frozen buy level, derives every preset size)
-    ///      - [24:39]    score        (uint15; EV knob, clamped at ACTIVITY_EFFECTIVE_CAP_POINTS)
-    ///      - [39:53]    boostBps     (uint14; boon uplift as a fraction of nominal order value)
-    ///      - [53:67]    distressBps  (uint14; distress-bought fraction, the 25%-ticket-bonus basis)
-    ///      - [67:81]    adjBps       (uint14; cap-eligible fraction that received the EV bonus)
-    ///      - [81:89]    smallCount   (uint8)
-    ///      - [89:97]    medCount     (uint8)
-    ///      - [97:105]   largeCount   (uint8)
-    ///      - [105:113]  customCount  (uint8)
-    ///      - [113:161]  customSize   (uint48; per-box wei / LB_CUSTOM_SCALE)
-    ///      - [161:209]  coverWei     (uint48; system-granted cover spend / LB_CUSTOM_SCALE)
-    mapping(uint48 => mapping(address => uint256)) internal lootboxOrder;
+    // Box queue entry (`boxQueue`), one complete word per purchase, LSB -> MSB:
+    //   [0:32]     wallet ID       nonzero beneficiary
+    //   [32:56]    level           purchase level; prices the preset tiers
+    //   [56:71]    score           post-action activity score, clamped to the effective cap
+    //   [71:85]    boostBps        boon uplift as a fraction of this purchase's spend
+    //   [85:99]    evBps           EV-cap-eligible fraction drawn at purchase
+    //   [99]       distress        bought in distress mode
+    //   [100:128]  small/med/large/custom counts, 7 bits each, summing to at most 100
+    //   [128:184]  size            custom or cover box size in gwei
+    //   [184]      cover           one system-granted cover box of `size`; no counts
+    //   [185:251]  presaleAmount   exact applied presale wei; zero means no presale leg
+    //   [251:254]  presaleTier     DGNRS tier frozen from the purchase's starting sold amount
+    //   [254]      presaleClosing  this purchase closed the presale
+    //   [255]      zero
+    uint256 internal constant LB_ID_MASK = 0xFFFFFFFF;
+    uint256 internal constant LB_LEVEL_SHIFT = 32;
+    uint256 internal constant LB_LEVEL_MASK = 0xFFFFFF;
+    uint256 internal constant LB_SCORE_SHIFT = 56;
+    uint256 internal constant LB_SCORE_MASK = 0x7FFF;
+    uint256 internal constant LB_BOOST_SHIFT = 71;
+    uint256 internal constant LB_EV_SHIFT = 85;
+    uint256 internal constant LB_BPS_MASK = 0x3FFF;
+    uint256 internal constant LB_DISTRESS = uint256(1) << 99;
+    uint256 internal constant LB_SMALL_SHIFT = 100;
+    uint256 internal constant LB_MED_SHIFT = 107;
+    uint256 internal constant LB_LARGE_SHIFT = 114;
+    uint256 internal constant LB_CUSTOM_COUNT_SHIFT = 121;
+    uint256 internal constant LB_COUNT_MASK = 0x7F;
+    uint256 internal constant LB_SIZE_SHIFT = 128;
+    uint256 internal constant LB_SIZE_MASK = 0xFFFFFFFFFFFFFF;                    // 56 bits
+    uint256 internal constant LB_COVER = uint256(1) << 184;
+    uint256 internal constant LB_PRESALE_SHIFT = 185;
+    uint256 internal constant LB_PRESALE_MASK = 0x3FFFFFFFFFFFFFFFF;              // 66 bits
+    uint256 internal constant LB_TIER_SHIFT = 251;
+    uint256 internal constant LB_CLOSING = uint256(1) << 254;
 
-    /// @dev Bit offsets / masks for the packed lootboxOrder word.
-    uint256 internal constant LB_LEVEL_SHIFT = 0;
-    uint256 internal constant LB_LEVEL_MASK = 0xFFFFFF;                           // 24 bits
-    uint256 internal constant LB_SCORE_SHIFT = 24;
-    uint256 internal constant LB_SCORE_MASK = 0x7FFF;                             // 15 bits
-    uint256 internal constant LB_BOOST_SHIFT = 39;
-    uint256 internal constant LB_DISTRESS_SHIFT = 53;
-    uint256 internal constant LB_ADJ_SHIFT = 67;
-    uint256 internal constant LB_BPS_MASK = 0x3FFF;                               // 14 bits, holds 0..10000
-    uint256 internal constant LB_SMALL_SHIFT = 81;
-    uint256 internal constant LB_MED_SHIFT = 89;
-    uint256 internal constant LB_LARGE_SHIFT = 97;
-    uint256 internal constant LB_CUSTOM_COUNT_SHIFT = 105;
-    uint256 internal constant LB_COUNT_MASK = 0xFF;                               // 8 bits per tier
-    uint256 internal constant LB_CUSTOM_SIZE_SHIFT = 113;
-    uint256 internal constant LB_CUSTOM_SIZE_MASK = 0xFFFFFFFFFFFF;               // 48 bits
-    /// @dev The afking cover grants box value the player did not choose and cannot size, so it
-    ///      cannot be a count against a preset. It accumulates in its own lane and resolves as
-    ///      ONE extra box that counts toward MAX_BOXES_PER_ORDER like any other, never touching
-    ///      customSize; an entry already holding a hundred presets and no custom takes it as
-    ///      its hundred-and-first, the one box the ceiling admits past the cap. Pass purchases
-    ///      land as ordinary custom boxes instead.
-    uint256 internal constant LB_COVER_SHIFT = 161;
-    uint256 internal constant LB_COVER_MASK = 0xFFFFFFFFFFFF;                     // 48 bits
+    /// @dev Custom and cover sizes are whole gwei; the remainder of a system grant below one
+    ///      gwei per box is reward-side only, the pool split banks the exact wei.
+    uint256 internal constant LB_SIZE_UNIT = 1 gwei;
 
-    /// @dev Custom-box wei is stored at 1e12 granularity — 0.0001% of the 0.01-ETH minimum
-    ///      box, and 48 bits then span far past the ETH supply. The truncation is reward-side
-    ///      only: the pool split at buy banks the exact wei paid, so it cannot move solvency.
-    uint256 internal constant LB_CUSTOM_SCALE = 1e12;
-
-    /// @dev Preset multipliers against the frozen level's ticket price.
+    /// @dev Preset multipliers against the entry's level ticket price.
     uint256 internal constant LB_MED_MULTIPLE = 5;
     uint256 internal constant LB_LARGE_MULTIPLE = 25;
 
-    /// @dev Boxes one player may hold in one RNG index. Sized so a maximum entry — every box
-    ///      rolled, plus one recirculated box per ETH spin — resolves inside a block alongside
-    ///      the afking leg that shares the `mineFlip()` transaction. Not a spend limit: a
-    ///      player wanting more exposure buys a larger custom, not more boxes.
+    /// @dev Boxes one purchase may hold. Sized so a maximum entry — every box rolled, plus one
+    ///      recirculated box per ETH spin — resolves inside a block alongside the afking leg
+    ///      that shares the `mineFlip()` transaction. Not a spend limit: a player wanting more
+    ///      exposure buys a larger custom, or another entry.
     uint256 internal constant MAX_BOXES_PER_ORDER = 100;
+
+    /// @dev Minimum custom box. Presets clear it structurally: the cheapest ticket price is
+    ///      0.01 ETH and a small is one of those.
+    uint256 internal constant BOX_CUSTOM_MIN = 0.01 ether;
+
+    // Purchase input (`boxOrder`): [small:8][med:8][large:8][customCount:8][customSize:56 gwei].
+    // Every bit at or above 88 must be zero; zero means no ordinary leg.
+    uint256 internal constant BO_MED_SHIFT = 8;
+    uint256 internal constant BO_LARGE_SHIFT = 16;
+    uint256 internal constant BO_CUSTOM_COUNT_SHIFT = 24;
+    uint256 internal constant BO_SIZE_SHIFT = 32;
+    uint256 internal constant BO_COUNT_MASK = 0xFF;
+
+    /// @dev Validate one purchase's `boxOrder` input as wide integers and price it at `lvl`.
+    ///      `lanes` holds the counts, size and level already positioned for the entry word.
+    /// @custom:reverts E On a nonzero bit at or above 88, an empty order, more than
+    ///         MAX_BOXES_PER_ORDER boxes, a custom below BOX_CUSTOM_MIN, or a size without customs.
+    function _decodeBoxOrder(uint256 boxOrder, uint24 lvl) internal pure returns (uint256 lanes, uint256 cost) {
+        uint256 small = boxOrder & BO_COUNT_MASK;
+        uint256 med = (boxOrder >> BO_MED_SHIFT) & BO_COUNT_MASK;
+        uint256 large = (boxOrder >> BO_LARGE_SHIFT) & BO_COUNT_MASK;
+        uint256 custom = (boxOrder >> BO_CUSTOM_COUNT_SHIFT) & BO_COUNT_MASK;
+        uint256 size = boxOrder >> BO_SIZE_SHIFT;
+        uint256 boxes = small + med + large + custom;
+        if (
+            size > LB_SIZE_MASK || boxes == 0 || boxes > MAX_BOXES_PER_ORDER
+                || (custom == 0 ? size != 0 : size * LB_SIZE_UNIT < BOX_CUSTOM_MIN)
+        ) revert E();
+        unchecked {
+            cost = (small + LB_MED_MULTIPLE * med + LB_LARGE_MULTIPLE * large) * PriceLookupLib.priceForLevel(lvl)
+                + custom * size * LB_SIZE_UNIT;
+        }
+        lanes = (uint256(lvl) << LB_LEVEL_SHIFT) | (small << LB_SMALL_SHIFT) | (med << LB_MED_SHIFT)
+            | (large << LB_LARGE_SHIFT) | (custom << LB_CUSTOM_COUNT_SHIFT) | (size << LB_SIZE_SHIFT);
+    }
+
+    /// @dev Boxes an entry resolves: the four bought counts, or its one cover box.
+    function _boxEntryCount(uint256 word) internal pure returns (uint256) {
+        unchecked {
+            return ((word >> LB_SMALL_SHIFT) & LB_COUNT_MASK) + ((word >> LB_MED_SHIFT) & LB_COUNT_MASK)
+                + ((word >> LB_LARGE_SHIFT) & LB_COUNT_MASK) + ((word >> LB_CUSTOM_COUNT_SHIFT) & LB_COUNT_MASK)
+                + ((word >> 184) & 1);
+        }
+    }
+
+    /// @dev Append a complete entry to the write buffer at position = its write count. The
+    ///      count and `pendingWei` (the ordinary leg's RNG-pending ETH) commit in one
+    ///      lootboxRngPacked write. Returns the buffer and position the entry occupies.
+    function _appendBoxEntry(uint256 word, uint256 pendingWei) internal returns (uint48 buffer, uint32 position) {
+        uint256 lr = lootboxRngPacked;
+        position = uint32(lr >> LR_BOX_COUNT_SHIFT);
+        uint256 pending = ((lr >> LR_PENDING_ETH_SHIFT) + pendingWei / LR_ETH_SCALE) & LR_PENDING_ETH_MASK;
+        lootboxRngPacked = (lr & ~(LR_PENDING_ETH_MASK << LR_PENDING_ETH_SHIFT))
+            + (pending << LR_PENDING_ETH_SHIFT) + (uint256(1) << LR_BOX_COUNT_SHIFT);
+        buffer = _rngWriteBuffer();
+        uint256[] storage q = boxQueue[buffer];
+        assembly ("memory-safe") {
+            mstore(0x00, q.slot)
+            sstore(add(keccak256(0x00, 0x20), position), word)
+        }
+    }
+
+    /// @dev Entry `position` of `buffer`. Callers bound `position` by that buffer's count.
+    function _boxEntryAt(uint48 buffer, uint256 position) internal view returns (uint256 word) {
+        uint256[] storage q = boxQueue[buffer];
+        assembly ("memory-safe") {
+            mstore(0x00, q.slot)
+            word := sload(add(keccak256(0x00, 0x20), position))
+        }
+    }
+
+    /// @dev Presale DGNRS tier of a purchase that starts at `soldBefore` cumulative box ETH:
+    ///      [0,10) [10,20) [20,30) [30,40) [40,50) ETH map to tiers 0..4. A purchase crossing a
+    ///      boundary keeps its starting tier. Settlement prices the tier, never the amount.
+    function _presaleTier(uint256 soldBefore) internal pure returns (uint256 tier) {
+        tier = soldBefore / PRESALE_TIER_WIDTH;
+        if (tier > 4) tier = 4;
+    }
+
+    /// @dev Cumulative box-ETH width of each presale DGNRS tier.
+    uint256 internal constant PRESALE_TIER_WIDTH = 10 ether;
 
     uint8 internal constant JACKPOT_DAYS = 3;
 
@@ -2420,59 +2495,19 @@ abstract contract DegenerusGameStorage {
         return level;
     }
 
-    /// @dev Read a field from a packed box order.
-    function _lbGet(uint256 word, uint256 shift, uint256 mask) internal pure returns (uint256) {
-        return (word >> shift) & mask;
-    }
-
-    /// @dev Write a field into a packed box order, masked to its width so an over-wide value
-    ///      cannot alias a neighbour.
-    function _lbSet(
-        uint256 word,
-        uint256 shift,
-        uint256 mask,
-        uint256 value
-    ) internal pure returns (uint256) {
-        return (word & ~(mask << shift)) | ((value & mask) << shift);
-    }
-
     // =========================================================================
     // Coin-Presale-Box State
     // =========================================================================
 
     /// @dev Cumulative ETH spent on coin-presale boxes. Read+written per box buy
-    ///      during the presale to enforce the 50-ETH cap and detect the crossing
-    ///      (presaleOver latch + presaleCloser stamp). Never read after the
-    ///      latch, so its cold-slot cost is confined to the presale window.
+    ///      during the presale to enforce the 50-ETH cap, freeze each purchase's DGNRS tier
+    ///      and detect the closing purchase. Never read after the presaleOver latch.
     uint96 internal presaleBoxEthSold;
-
-    /// @dev Buyer of the 50-ETH-crossing box. Receives the Pool.PresaleBox remainder once the
-    ///      auto-open sweep has advanced past presaleCloseBuffer — after EVERY presale box has
-    ///      drawn, so the remainder is variance dust and no open order can pull another box's
-    ///      DGNRS into it. Packs into presaleBoxEthSold's slot (warm at the crossing buy).
-    address internal presaleCloser;
 
     /// @dev Spendable presale-box credit accrued per wallet from ETH buys while
     ///      the presale is open (presaleBoxCredit += 0.25 * purchaseEth). Consumed
     ///      1:1 when a box is bought.
     mapping(uint32 => uint256) internal presaleBoxCredit;
-
-    /// @dev Presale-box record per RNG index per player. One box per (index, player).
-    ///      A box always queues at the current lootbox RNG index and resolves off the
-    ///      SAME committed word _lootboxWord(index), domain-separated by the
-    ///      "PRESALE_BOX" salt. A combined lootbox+box buy shares that one index.
-    ///      Packed: [bit 255: closing][bits 96:191: soldBefore][bits 0:95: applied ETH].
-    ///      soldBefore (cumulative box ETH before this buy) freezes the DGNRS-tier
-    ///      curve input. Bit 255 (PRESALE_BOX_CLOSING_FLAG) marks the 50-ETH-crossing
-    ///      box (event tag); its buyer is stamped in presaleCloser for the remainder sweep.
-    mapping(uint48 => mapping(address => uint256)) internal presaleBoxEth;
-
-    /// @dev Sentinel OR'd into presaleBoxEth marking the 50-ETH-crossing box.
-    uint256 internal constant PRESALE_BOX_CLOSING_FLAG = 1 << 255;
-    /// @dev Bit offset of the soldBefore (buy-time cumulative box ETH) field.
-    uint256 internal constant PRESALE_BOX_SOLD_SHIFT = 96;
-    /// @dev Mask for the 96-bit applied-ETH / soldBefore fields in presaleBoxEth.
-    uint256 internal constant PRESALE_BOX_AMOUNT_MASK = 0xFFFFFFFFFFFFFFFFFFFFFFFF; // 96 bits
 
     // =========================================================================
     // Presale State
@@ -2516,10 +2551,13 @@ abstract contract DegenerusGameStorage {
     // Degenerette Bet Queue
     // =========================================================================
 
-    /// @dev Degenerette bets per lootbox RNG index, one word per bet in placement order.
-    ///      A bet's id is its position + 1. Placement appends only while the index word is
-    ///      unset; the ordered miner chain resolves the queue after that index's box entries.
-    ///      Direct worker calls enforce the same consumer stage. A resolved bet is zeroed.
+    /// @dev Degenerette bets per physical RNG buffer, one word per bet in placement order.
+    ///      A bet's id is its position + 1. Placement appends only to the write buffer; the
+    ///      ordered miner chain resolves the read buffer after its box entries. A resolved bet
+    ///      carries BET_PROCESSED. Manually addressed like `boxQueue`: bet `p` sits at
+    ///      `keccak256(degeneretteQueue[buffer].slot) + p`, the write count lives in
+    ///      lootboxRngPacked and the read length in `degeneretteReadCount`. Never use Solidity
+    ///      length, push, pop or indexing on this mapping.
     ///      Word layout (LSB → MSB):
     ///      - [0..31]    owner wallet ID
     ///      - [32..159]  zero
@@ -3095,10 +3133,12 @@ abstract contract DegenerusGameStorage {
     // Layout (LSB -> MSB):
     //   [bits   0:23]   heroBufferDay             uint24   (latest day in the hero ring)
     //   [bits  24:29]   heroQuadrantsValid        uint6    (3 quadrant bits per parity)
-    //   [bits  30:47]   unused
-    //   [bits  48:111]  lootboxRngPendingEth     uint64   (scaled /1e15, 0.001 ETH res, far exceeds ETH supply)
-    //   [bits 112:175]  lootboxRngThreshold      uint64   (scaled /1e15, 0.001 ETH res, far exceeds ETH supply)
-    //   [bits 176:183]  middayMaxBasefeeGwei     uint8    (whole gwei, 0 disables the gate)
+    //   [bits  30:37]   middayMaxBasefeeGwei      uint8    (whole gwei, 0 disables the gate)
+    //   [bits  38:47]   unused
+    //   [bits  48:87]   lootboxRngPendingEth      uint40   (scaled /1e15, 0.001 ETH res, ~1.1B ETH)
+    //   [bits  88:119]  lootboxRngThreshold       uint32   (scaled /1e15, 0.001 ETH res, ~4.29M ETH)
+    //   [bits 120:151]  boxWriteCount             uint32   (box entries appended to the write buffer)
+    //   [bits 152:183]  betWriteCount             uint32   (Degenerette bets appended to the write buffer)
     //   [bits 184:223]  lootboxRngPendingFlip  uint40   (whole FLIP, max ~1.1T FLIP)
     //   [bits 224:231]  midDayTicketRngPending   uint8    (0=idle, 1=ordinary, 2=isolated future pool)
     //   [bits 232:239]  gameOverDeadLatched      uint8    (bool flag, 8 bits)
@@ -3112,14 +3152,19 @@ abstract contract DegenerusGameStorage {
     ///      Initialized with lootboxRngThreshold=1 ether (scaled=1000),
     ///      middayMaxBasefeeGwei=5.
     uint256 internal lootboxRngPacked =
-        (uint256(1000) << 112)                    // lootboxRngThreshold = 1 ether / 1e15 = 1000
-        | (uint256(5) << 176);                      // middayMaxBasefeeGwei = 5
+        (uint256(1000) << 88)                     // lootboxRngThreshold = 1 ether / 1e15 = 1000
+        | (uint256(5) << 30);                       // middayMaxBasefeeGwei = 5
 
     // ---- lootboxRng shifts and masks ----
     uint256 internal constant LR_PENDING_ETH_SHIFT = 48;
-    uint256 internal constant LR_PENDING_ETH_MASK = 0xFFFFFFFFFFFFFFFF;      // 64 bits
-    uint256 internal constant LR_THRESHOLD_SHIFT = 112;
-    uint256 internal constant LR_THRESHOLD_MASK = 0xFFFFFFFFFFFFFFFF;        // 64 bits
+    uint256 internal constant LR_PENDING_ETH_MASK = 0xFFFFFFFFFF;            // 40 bits
+    uint256 internal constant LR_THRESHOLD_SHIFT = 88;
+    uint256 internal constant LR_THRESHOLD_MASK = 0xFFFFFFFF;                // 32 bits
+    /// @dev Write-side queue counts. Each purchase or bet commits its count in the
+    ///      lootboxRngPacked write it already makes; the seal copies them into the read lengths.
+    uint256 internal constant LR_BOX_COUNT_SHIFT = 120;
+    uint256 internal constant LR_BET_COUNT_SHIFT = 152;
+    uint256 internal constant LR_COUNT_MASK = 0xFFFFFFFF;                    // 32 bits
     uint256 internal constant LR_PENDING_FLIP_SHIFT = 184;
     uint256 internal constant LR_PENDING_FLIP_MASK = 0xFFFFFFFFFF;         // 40 bits
     uint256 internal constant LR_MID_DAY_SHIFT = 224;
@@ -3127,7 +3172,7 @@ abstract contract DegenerusGameStorage {
     /// @dev An isolated next-level pool, committed without swapping the ordinary ticket queues.
     ///      Like an ordinary mid-day batch (1), it pins the sealed read buffer until the drain completes.
     uint256 internal constant MID_DAY_FUTURE_POOL = 2;
-    uint256 internal constant LR_MAX_BASEFEE_SHIFT = 176;
+    uint256 internal constant LR_MAX_BASEFEE_SHIFT = 30;
     uint256 internal constant LR_MAX_BASEFEE_MASK = 0xFF;                   // 8 bits
     /// @dev Set on the first entry of the deterministic (VRF-dead) ending; never cleared.
     uint256 internal constant LR_GO_DEAD_SHIFT = 232;
@@ -3216,18 +3261,6 @@ abstract contract DegenerusGameStorage {
         return uint256(milli) * LR_ETH_SCALE;
     }
 
-
-    /// @dev Total boxes in a packed order — the four bought tiers plus the cover box, if any.
-    ///      The sweep's skip check wants only this, and it runs per entry.
-    function _boxOrderCount(uint256 word) internal pure returns (uint256) {
-        unchecked {
-            return ((word >> LB_SMALL_SHIFT) & LB_COUNT_MASK)
-                + ((word >> LB_MED_SHIFT) & LB_COUNT_MASK)
-                + ((word >> LB_LARGE_SHIFT) & LB_COUNT_MASK)
-                + ((word >> LB_CUSTOM_COUNT_SHIFT) & LB_COUNT_MASK)
-                + (((word >> LB_COVER_SHIFT) & LB_COVER_MASK) == 0 ? 0 : 1);
-        }
-    }
 
     /// @dev EV multiplier from a raw activity score (whole points).
     ///      Unchanged low anchor 90%→100% (0 to 60 points), then a steep ramp to vA
@@ -4075,19 +4108,12 @@ abstract contract DegenerusGameStorage {
     // Human-Box Auto-Open Sweep State
     // =========================================================================
 
-    /// @dev Entry position within boxPlayers[_rngReadBuffer()] for the box auto-open sweep.
-    ///      Persists across calls when a budget runs out mid-index; reset to zero each
-    ///      time the sweep fully drains an index and advances the frontier.
+    /// @dev Next unsettled position in boxQueue[_rngReadBuffer()]. Stored before each entry's
+    ///      rewards run, so an entry settles at most once; reset by the seal.
     uint48 internal boxCursor;
 
-    /// @dev True only after every human box and presale leg in the sealed read buffer finishes.
-    ///      Fresh requests clear it; retries preserve it and the cursor.
-    bool internal humanReadComplete = true;
-
-    /// @dev Physical buffer holding the final presale purchase. Earlier sessions must already
-    ///      be settled before this one seals. Completing this buffer releases the residual pool.
-    ///      presaleOver distinguishes a real close on buffer0 from the deployment default.
-    uint48 internal presaleCloseBuffer;
+    /// @dev Box entries in the sealed read buffer, latched from the write count at the seal.
+    uint32 internal boxReadCount;
 
     /// @dev Once-per-level latch for sDGNRS's automatic whale purchase: the level at which the
     ///      process STAGE already bought (DegenerusGameWhaleModule.purchaseWhalePassForSdgnrs,
@@ -4109,13 +4135,15 @@ abstract contract DegenerusGameStorage {
     ///      (GameAfkingModule.SUBSCRIBER_CAP).
     uint16 internal _pendingBoxCount;
 
-    /// @dev Players with an open box queued per lootbox RNG index, enqueued once at
-    ///      first deposit (the lootboxEth amount == 0 signal). Keyed on the lootbox index,
-    ///      which re-couples to the VRF-rotation orphan-index keyspace — the box auto-open
-    ///      walk MUST gate each open on _lootboxWord(index) != 0 so an index
-    ///      orphaned mid-day by an emergency coordinator rotation is skipped until the
-    ///      detect-preserve-re-issue path lands the re-issued word.
-    mapping(uint48 => address[]) internal boxPlayers;
+    /// @dev Box purchase queue per physical RNG buffer (keys 0/1): one complete entry word per
+    ///      purchase, appended to the write buffer and settled FIFO from `boxCursor` once the
+    ///      buffer is sealed and its word published. Entries are never updated after their
+    ///      append; the array index is the position. Entry `p` sits at
+    ///      `keccak256(boxQueue[buffer].slot) + p`; the write count lives in lootboxRngPacked
+    ///      and the read length in `boxReadCount`. Never use Solidity length, push, pop or
+    ///      indexing on this mapping. A drained buffer is reused by resetting only its count.
+    ///      Entry layout: the LB_* constants.
+    mapping(uint48 => uint256[]) internal boxQueue;
 
     // =========================================================================
     // Foil Pack
@@ -4137,7 +4165,9 @@ abstract contract DegenerusGameStorage {
     mapping(uint24 => uint256) internal dailyFoilDraw;
 
     /// @dev Foil read/write cohorts (keys 0/1), frozen at the daily request only.
-    ///      New buys always append to the write half.
+    ///      New buys always append to the write half. Manually addressed: pack `p` of cohort
+    ///      `key` sits at `keccak256(foilQueue[key].slot) + p`, and the cohort lengths are
+    ///      foilWriteCount / foilReadCount. Never use Solidity length, push, pop or indexing.
     mapping(uint24 => uint256[]) internal foilQueue;
 
     /// @dev Resumable read cursor and cohort-wide generation/eligibility stamps.
@@ -4147,6 +4177,11 @@ abstract contract DegenerusGameStorage {
     /// @dev Foil cohort write toggle. Flips at a daily request or the one terminal swap,
     ///      never at a mid-day request, so packs always generate from a daily word.
     bool internal foilWriteSlot;
+    /// @dev Packs in the write cohort and in the sealed read cohort. `_swapFoilSlot` swaps the
+    ///      two with the cohorts themselves; a completed drain zeroes the read count. A buy
+    ///      writes its count into this slot, which `_foilWriteKey` already loaded.
+    uint32 internal foilWriteCount;
+    uint32 internal foilReadCount;
 
     /// @dev Lifetime count of deity boons issued from a given deity to a given
     ///      recipient, keyed [deity][recipient]. Capped at DEITY_RECIPIENT_BOON_CAP
@@ -4234,7 +4269,21 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Paid read-side work must finish before its committed word is released.
     function _foilDrainPending() internal view returns (bool) {
-        return foilCursor < foilQueue[_foilReadKey()].length;
+        return foilCursor < foilReadCount;
+    }
+
+    /// @dev Packs queued in cohort `key` (0/1).
+    function _foilCount(uint24 key) internal view returns (uint256) {
+        return key == _foilWriteKey() ? foilWriteCount : foilReadCount;
+    }
+
+    /// @dev Slot of pack `position` in cohort `key`. Callers bound `position` by `_foilCount`.
+    function _foilSlot(uint24 key, uint256 position) internal view returns (uint256 slot) {
+        uint256[] storage q = foilQueue[key];
+        assembly ("memory-safe") {
+            mstore(0x00, q.slot)
+            slot := add(keccak256(0x00, 0x20), position)
+        }
     }
 
     function _foilStoredLines(uint32 id, uint24 lvl) internal view returns (uint32[4] memory lines) {
@@ -4444,8 +4493,7 @@ abstract contract DegenerusGameStorage {
     ///      Bit255 stays nonzero after all lanes and tags are consumed.
     mapping(uint32 => uint256) internal ticketPending;
 
-    /// @dev Resolved payload markers, masked before every live decode.
-    uint256 internal constant BOX_PROCESSED = uint256(1) << 255;
+    /// @dev Resolved Degenerette bet marker, masked before every live decode.
     uint256 internal constant BET_PROCESSED = uint256(1) << 255;
 
     /// @dev The shared session payload is usable by lootbox consumers only after fulfillment.
@@ -4457,18 +4505,13 @@ abstract contract DegenerusGameStorage {
     /// @dev References are physical buffer tags, never increasing generations.
     function _lootboxBufferValid(uint48 buffer) internal pure returns (bool) { return buffer < 2; }
 
-    function _boxOrder(uint48 index, address player) internal view returns (uint256) {
-        if (!_lootboxBufferValid(index)) return 0;
-        uint256 word = lootboxOrder[index & 1][player];
-        return word & BOX_PROCESSED == 0 ? word : 0;
-    }
-
-    /// @dev Called once after a successful NORMAL seal, never by purchases or terminal.
-    ///      Completion was proved before requesting; only fixed queue lengths are reset.
-    function _resetLootboxWriteBuffer(uint48 index) internal {
-        address[] storage boxes = boxPlayers[index & 1];
-        uint256[] storage bets = degeneretteQueue[index & 1];
-        assembly ("memory-safe") { sstore(boxes.slot, 0) sstore(bets.slot, 0) }
+    /// @dev Slot of Degenerette bet `position` (zero-based) in `buffer`.
+    function _betSlot(uint48 buffer, uint256 position) internal view returns (uint256 slot) {
+        uint256[] storage q = degeneretteQueue[buffer];
+        assembly ("memory-safe") {
+            mstore(0x00, q.slot)
+            slot := add(keccak256(0x00, 0x20), position)
+        }
     }
 
     function _lootboxReadComplete() internal view virtual returns (bool) {
@@ -4491,7 +4534,7 @@ abstract contract DegenerusGameStorage {
         if (IsDGNRS(ContractAddresses.SDGNRS).redemptionSettlementPending()) return 1;
         if (_pendingBoxCount != 0) return 2;
         if (!humanReadComplete) return 3;
-        if (degeneretteCursor < degeneretteQueue[_rngReadBuffer()].length) return 4;
+        if (degeneretteCursor < degeneretteReadCount) return 4;
         if (decBattleQueue != 0) return 5;
         if (packed & (uint256(1) << (LR_CRAPS_PENDING_SHIFT + _rngReadBuffer())) != 0) return 6;
         return 7;
@@ -4502,7 +4545,7 @@ abstract contract DegenerusGameStorage {
         uint256 packed = lootboxRngPacked;
         if (!_rngSessionPublished() || _currentRngWord() == 0 || !ticketsFullyProcessed
             || ((packed >> LR_MID_DAY_SHIFT) & LR_MID_DAY_MASK) != 0 || !humanReadComplete
-            || degeneretteCursor < degeneretteQueue[_rngReadBuffer()].length
+            || degeneretteCursor < degeneretteReadCount
             || _pendingBoxCount != 0 || decBattleQueue != 0) return false;
         if (IsDGNRS(ContractAddresses.SDGNRS).redemptionSettlementPending()) return false;
         return packed & (uint256(1) << (LR_CRAPS_PENDING_SHIFT + _rngReadBuffer())) == 0;

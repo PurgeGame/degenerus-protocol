@@ -80,7 +80,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
     }
 
     function _humanComplete() private view returns (bool) {
-        return uint8(uint256(game.extsload(bytes32(GameSlots.SUB_CURSOR))) >> 104) != 0;
+        return uint8(uint256(game.extsload(bytes32(GameSlots.HUMAN_READ_COMPLETE))) >> (GameSlots.HUMAN_READ_COMPLETE_OFFSET * 8)) != 0;
     }
 
     function _expectStampedResolve(uint24 day) private {
@@ -237,13 +237,13 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         _keep();
         _buyWriteBox();
         uint48 write = RecyclingState.writeBuffer(address(game));
-        assertGt(uint256(game.extsload(keccak256(abi.encode(write, GameSlots.BOX_PLAYERS)))), 0);
+        assertGt(RecyclingState.boxCount(address(game), write), 0);
 
         _expectStampedResolve(day);
         for (uint256 i; i < 64 && _pending() != 0; ++i) _keep();
         assertEq(_pending(), 0);
         assertTrue(game.rngComplete(), "only the sealed read session must finish");
-        assertGt(uint256(game.extsload(keccak256(abi.encode(write, GameSlots.BOX_PLAYERS)))), 0, "new write orders remain queued");
+        assertGt(RecyclingState.boxCount(address(game), write), 0, "new write orders remain queued");
     }
 
     function test_AfkingDrainAllowsMiddaySessionWithoutReopeningStamp() public {

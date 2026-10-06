@@ -5,6 +5,8 @@ import {RedemptionFixture} from "./helpers/RedemptionFixture.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
 contract RedemptionTerminalSeeder is DegenerusGame {
     function end() external { gameOver = true; }
@@ -19,6 +21,17 @@ contract RedemptionTerminalSeeder is DegenerusGame {
 }
 contract RedemptionRejectEth {
     receive() external payable { revert(); }
+}
+
+/// @dev Etched over the boon module: every box boon draw refuses with its own reason.
+contract RedemptionRefusingBoonModule {
+    error BoonRefused(uint256 code);
+    fallback() external payable { revert BoonRefused(7); }
+}
+
+/// @dev Etched over the boon module: every box boon draw burns all forwarded gas (empty data).
+contract RedemptionGasBurningBoonModule {
+    fallback() external payable { assembly { invalid() } }
 }
 
 contract AutomaticRedemptionSettlementTest is RedemptionFixture {
@@ -152,6 +165,63 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
         _process(9_000_000);
     }
 
+    /// @dev A nested box sub-call (here the boon draw inside the redemption order's boxes) that
+    ///      refuses with revert data reaches sDGNRS with that data, so the claim parks with its
+    ///      word and the cursor moves on; the cohort completes.
+    function test_NestedBoxSubcallRefusalParksClaim() public {
+        uint32 day = _openBatchId();
+        _burn(alice, sdgnrs.totalSupply() / 1000);
+        _burn(bob, sdgnrs.totalSupply() / 1000);
+        _resolve(day, 100, 99);
+        bytes memory original = ContractAddresses.GAME_BOON_MODULE.code;
+        vm.etch(ContractAddresses.GAME_BOON_MODULE, type(RedemptionRefusingBoonModule).runtimeCode);
+
+        // One claim's step: the refused head parks and the cursor moves to the next claim.
+        uint32 cursorBefore = _cursor();
+        uint256 step = _oneClaimAllowance();
+        vm.recordLogs();
+        _work(step);
+        assertEq(_cursor(), cursorBefore + 1, "cursor advanced past the parked claim");
+        assertTrue(sdgnrs.redemptionSettlementPending(), "the next claim is still queued");
+        vm.prank(address(game));
+        assertTrue(_process(9_000_000), "the refused claims do not hold the cohort");
+        assertFalse(sdgnrs.redemptionSettlementPending());
+        bytes memory reason;
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter == address(sdgnrs)
+                && logs[i].topics[0] == keccak256("RedemptionParked(address,uint32,bytes)")) {
+                reason = abi.decode(logs[i].data, (bytes));
+            }
+        }
+        assertEq(reason, abi.encodeWithSelector(RedemptionRefusingBoonModule.BoonRefused.selector, 7),
+            "the sub-call's own reason reaches sDGNRS");
+        (uint128 a,) = sdgnrs.pendingRedemptions(game.walletIdOf(alice), day);
+        assertGt(a, 0, "parked claim keeps its record");
+
+        vm.etch(ContractAddresses.GAME_BOON_MODULE, original);
+        vm.prank(alice);
+        sdgnrs.claimParkedRedemption(alice, day);
+        (a,) = sdgnrs.pendingRedemptions(game.walletIdOf(alice), day);
+        assertEq(a, 0, "the parked claim settles once the dependency answers");
+    }
+
+    /// @dev A nested box sub-call that runs out of gas returns no data: the Lootbox module
+    ///      re-raises it as EmptyRevert(), and settlement reverts instead of parking, so a caller
+    ///      cannot starve a sub-call to skip a claim.
+    function test_NestedBoxSubcallOutOfGasRevertsInsteadOfParking() public {
+        uint32 day = _openBatchId();
+        _burn(alice, sdgnrs.totalSupply() / 1000);
+        _resolve(day, 100, 99);
+        uint32 cursorBefore = _cursor();
+        vm.etch(ContractAddresses.GAME_BOON_MODULE, type(RedemptionGasBurningBoonModule).runtimeCode);
+        vm.expectRevert(abi.encodeWithSignature("EmptyRevert()"));
+        vm.prank(address(game));
+        _process(9_000_000);
+        assertEq(_cursor(), cursorBefore, "nothing settled or parked");
+        assertTrue(sdgnrs.redemptionSettlementPending());
+    }
+
     function _logDigest(bytes32 digest, Vm.Log[] memory logs) internal view returns (bytes32) {
         for (uint256 i; i < logs.length; ++i) {
             // Player awards and every Game/sDGNRS event must remain identical across
@@ -230,16 +300,21 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
 
     function test_LiveSettlementDoesNotPushEthToRecipient() public {
         RedemptionRejectEth receiver = new RedemptionRejectEth();
+        // A burner holds a wallet ID: the receiver gets one with a one-ticket purchase.
+        vm.deal(address(receiver), 1 ether);
+        vm.prank(address(receiver));
+        game.purchase{value: 0.01 ether}(address(receiver), 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         uint256 amount = sdgnrs.totalSupply() / 1000;
         vm.prank(address(game));
         assertEq(sdgnrs.transferFromPool(sDGNRS.Pool.Whale, address(receiver), amount), amount);
         uint32 day = _openBatchId();
         _burn(address(receiver), sdgnrs.balanceOf(address(receiver)));
         _resolve(day, 100, 99);
+        uint256 held = address(receiver).balance;
         vm.prank(address(game));
         assertTrue(_process(9_000_000));
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
-        assertEq(address(receiver).balance, 0);
+        assertEq(address(receiver).balance, held, "settlement pushes no ETH to the recipient");
     }
 
     function test_MaxCapMaximumRollAutoSettlementFitsGasCeiling() public {

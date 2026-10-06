@@ -46,12 +46,14 @@ abstract contract DegenerusGameRngUtils is DegenerusGameStorage {
     }
 
     /// @dev Daily request and the one terminal swap only: a mid-day request never moves
-    ///      foil packs, so every pack generates from a daily word.
+    ///      foil packs, so every pack generates from a daily word. The two counts swap with
+    ///      their cohorts; a drained read cohort's zero count becomes the new write count.
     function _swapFoilSlot() internal {
         foilWriteSlot = !foilWriteSlot;
         foilCursor = 0;
         foilGenerationDay = 0;
         foilFirstDrawDay = 0;
+        (foilWriteCount, foilReadCount) = (foilReadCount, foilWriteCount);
     }
 
     function _finalizeLootboxRng(uint256 rngWord) internal {

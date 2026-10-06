@@ -25,15 +25,15 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///           on the 100-ticket floor.
 ///         A claim pays flip credit inside Coinflip; the box itself is never inflated.
 contract BigRecordArmingTest is DeployProtocol {
-    uint256 private constant LOOTBOX_ETH_SLOT = GameSlots.LOOTBOX_ORDER;
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
     uint256 private constant LOOTBOX_RNG_WORD_SLOT = GameSlots.RNG_WORD_CURRENT;
     /// @dev degeneretteRecordBounty mapping root slot, keyed (index << 64) | betId.
     uint256 private constant RECORD_BOUNTY_SLOT = GameSlots.DEGENERETTE_RECORD_BOUNTY;
     uint48 private constant BET_INDEX = 1;
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED;
-    uint256 private constant LB_COVER_SHIFT = 161; // coverWei [161:209] @1e12 (lootboxOrder word)
-    uint256 private constant LB_CUSTOM_SCALE = 1e12;
+    uint256 private constant LB_COVER_FLAG = uint256(1) << 184;
+    uint256 private constant LB_SIZE_SHIFT = 128;
+    uint256 private constant LB_LEVEL_SHIFT = 32;
 
     /// @dev Bet-word flag: a biggest-spin record claim waits in the side slot.
     uint256 private constant BET_RECORD_FLAG = uint256(1) << 171;
@@ -193,9 +193,6 @@ contract BigRecordArmingTest is DeployProtocol {
         _buyBox(player, 3 ether);
         assertEq(coinflip.biggestLuckboxEver(), 0, "sub-floor deposits never arm");
 
-        // Fresh index: BOX_MIN_ETH differs from the 3-ether custom size already frozen at the
-        // current index (a same-index differently-sized buy reverts E(), see _advanceLootboxIndex).
-        _advanceLootboxIndex();
         _buyBox(player, BOX_MIN_ETH);
         assertEq(
             coinflip.biggestLuckboxEver(),
@@ -205,7 +202,7 @@ contract BigRecordArmingTest is DeployProtocol {
     }
 
     /// @notice ETH already sitting in a box is invisible: whale-pass and afking covers
-    ///         write the same (index, player) box slot without arming, so the candidate
+    ///         append their own queue entries without arming, so the candidate
     ///         must be the deposit, never the box total.
     function testPreExistingBoxEthIsInvisible() public {
         _buyBox(player, 10 ether); // standing record
@@ -235,7 +232,7 @@ contract BigRecordArmingTest is DeployProtocol {
             10 ether,
             "neither half beat the standing record"
         );
-        assertEq(_boxOf(rival), 12 ether, "the box still accumulated both halves");
+        assertEq(_boxOf(rival), 12 ether, "both halves queued as their own entries");
     }
 
     /// @notice A claim pays flip credit and leaves the box exactly at its deposits —
@@ -321,19 +318,6 @@ contract BigRecordArmingTest is DeployProtocol {
 
     function _skipDays(uint256 numDays) internal {
         vm.warp(vm.getBlockTimestamp() + numDays * 1 days);
-    }
-
-    /// @dev Deliver and drain the current purchase buffer before moving to another custom size.
-    function _advanceLootboxIndex() internal {
-        uint48 buffer = RecyclingState.writeBuffer(address(game));
-        RecyclingState.seedWord(address(game), buffer, bytes32(uint256(0xB16B00)));
-        _finishReadConsumers();
-        // The engine may already request the next cohort, so the old physical
-        // index is no longer the current completion certificate. Check this
-        // owner's actual settled order instead of asking about a recycled index.
-        bytes32 inner = keccak256(abi.encode(buffer, LOOTBOX_ETH_SLOT));
-        uint256 oldOrder = uint256(vm.load(address(game), keccak256(abi.encode(player, inner))));
-        assertTrue(oldOrder & (uint256(1) << 255) != 0, "the earlier custom order must settle before reuse");
     }
 
     function _seedFuturePrizePool(uint256 targetFuture) internal {
@@ -429,27 +413,29 @@ contract BigRecordArmingTest is DeployProtocol {
         return RecyclingState.writeBuffer(address(game));
     }
 
-    function _boxSlot(address who) internal view returns (bytes32) {
-        bytes32 inner = keccak256(abi.encode(_lootboxIndex(), LOOTBOX_ETH_SLOT));
-        return keccak256(abi.encode(who, inner));
+    /// @dev Nominal wei of `who`'s queued entries in the write buffer (each purchase is its own entry).
+    function _boxOf(address who) internal view returns (uint256 total) {
+        uint48 buffer = RecyclingState.writeBuffer(address(game));
+        uint256 n = RecyclingState.boxCount(address(game), buffer);
+        uint32 id = game.walletIdOf(who);
+        for (uint256 i; i < n; ++i) {
+            uint256 word = RecyclingState.boxEntry(address(game), buffer, i);
+            if (BoxOrderLib.boId(word) != id) continue;
+            total += BoxOrderLib.boNominal(word, PriceLookupLib.priceForLevel(BoxOrderLib.boLevel(word)));
+        }
     }
 
-    /// @dev Nominal wei the stored box order represents (the migration replacement for the old
-    ///      lootboxEth low-128-bit amount) — the frozen level decodes off the word itself.
-    function _boxOf(address who) internal view returns (uint256) {
-        uint256 word = uint256(vm.load(address(game), _boxSlot(who)));
-        if (word == 0) return 0;
-        return BoxOrderLib.boNominal(word, PriceLookupLib.priceForLevel(uint24(word & 0xFFFFFF)));
-    }
-
-    /// @dev Stand in for a whale-pass / afking-cover deposit: put ETH in the box's dedicated
-    ///      cover lane (coverWei [161:209], scaled x1e12 — box value the player did not
-    ///      choose/purchase) without going through the purchase path that arms the record.
+    /// @dev Stand in for a whale-pass / afking-cover delivery: append a cover entry of `amount`
+    ///      to the write buffer without going through the purchase path that arms the record.
     function _presetBox(address who, uint256 amount) internal {
-        bytes32 slot = _boxSlot(who);
-        uint256 word = uint256(vm.load(address(game), slot));
-        word &= ~(uint256(0xFFFFFFFFFFFF) << LB_COVER_SHIFT);
-        word |= ((amount / LB_CUSTOM_SCALE) << LB_COVER_SHIFT);
-        vm.store(address(game), slot, bytes32(word));
+        uint48 buffer = RecyclingState.writeBuffer(address(game));
+        uint256 n = RecyclingState.boxCount(address(game), buffer);
+        uint256 word = uint256(game.walletIdOf(player)) | (uint256(1) << LB_LEVEL_SHIFT) | LB_COVER_FLAG
+            | ((amount / 1 gwei) << LB_SIZE_SHIFT);
+        bytes32 data = keccak256(abi.encode(keccak256(abi.encode(uint256(buffer), GameSlots.BOX_QUEUE))));
+        vm.store(address(game), bytes32(uint256(data) + n), bytes32(word));
+        uint256 lr = uint256(vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED)));
+        vm.store(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED), bytes32(lr + (uint256(1) << 120)));
+        who;
     }
 }

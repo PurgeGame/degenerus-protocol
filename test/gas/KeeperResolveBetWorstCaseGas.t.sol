@@ -562,15 +562,10 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
 
     /// @dev Inject a lootbox RNG word for an index (lootboxRngWordByIndex mapping at slot 35).
     function _injectLootboxRngWord(uint48 index, uint256 rngWord) internal {
+        // Sealing the write buffer latches its bet and box counts into the read lengths, restarts
+        // both read cursors and starts the new write buffer's counts at zero, as the request's seal
+        // does, so a later cohort's bets sit at positions the Degenerette cursor reads.
         RecyclingState.seedWord(address(game), uint48(index), bytes32(rngWord));
-        // What the request's seal also does: the consumer cursors restart and the new write tag's
-        // queues are emptied, so a later cohort's bets sit at positions the Degenerette cursor reads.
-        uint256 s14 = uint256(vm.load(address(game), bytes32(GameSlots.TICKET_CURSOR)));
-        vm.store(address(game), bytes32(GameSlots.TICKET_CURSOR), bytes32(s14 & ~(uint256(type(uint48).max) << 160)));
-        uint256 s56 = uint256(vm.load(address(game), bytes32(GameSlots.SUB_CURSOR)));
-        vm.store(address(game), bytes32(GameSlots.SUB_CURSOR), bytes32(s56 & ~(uint256(type(uint48).max) << 56)));
-        vm.store(address(game), keccak256(abi.encode(uint256((index ^ 1) & 1), DQ.QUEUE_SLOT)), bytes32(0));
-        vm.store(address(game), keccak256(abi.encode(uint256((index ^ 1) & 1), GameSlots.BOX_PLAYERS)), bytes32(0));
         // The day itself is sealed, as after a mid-day request: the delivered cohort's read
         // consumers are the engine's only work, so a measured call ends when the cohort completes.
         uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
@@ -595,12 +590,13 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
 
     /// @dev Resolve the delivered cohort with one cold mineFlip. Bets resolve only as the engine's
     ///      Degenerette read consumer; `stageGas` isolates that stage: the same call against the
-    ///      same state with the read bet queue emptied is the baseline every other stage shares.
+    ///      same state with the read bet count zeroed is the baseline every other stage shares.
     ///      Logs are recorded for the measured call only.
     function _crankResolve() internal returns (uint256 gasUsed, uint256 stageGas) {
-        uint48 read = RecyclingState.readBuffer(address(game));
         uint256 snap = vm.snapshotState();
-        vm.store(address(game), keccak256(abi.encode(uint256(read & 1), DQ.QUEUE_SLOT)), bytes32(0));
+        uint256 readSlot = uint256(vm.load(address(game), bytes32(GameSlots.DEGENERETTE_READ_COUNT)));
+        vm.store(address(game), bytes32(GameSlots.DEGENERETTE_READ_COUNT),
+            bytes32(readSlot & ~(uint256(type(uint32).max) << (GameSlots.DEGENERETTE_READ_COUNT_OFFSET * 8))));
         _cool();
         vm.prank(cranker);
         uint256 g = gasleft();

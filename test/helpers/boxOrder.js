@@ -1,13 +1,13 @@
-// Test-side encoders for the packed box order that purchase()'s third parameter now
-// carries: [small:8][med:8][large:8][customCount:8][customSize:48 @1e12].
+// Test-side encoders for the box purchase input that purchase()'s third parameter carries:
+// [small:8][med:8][large:8][customCount:8][customSize:56 gwei], every bit at or above 88 zero.
+// Decoders read the stored queue entry (LB_* layout in DegenerusGameStorage). Each purchase is
+// its own entry.
 //
 // Migration rule: an old test that passed X wei of lootbox spend buys the SAME wei as ONE
-// custom box of size X — boCustom(X) — the closest semantic match to the old accumulated
-// single box (same spend, same pool contribution; one roll at full size instead of the old
-// 0.5-ETH auto-split pair).
+// custom box of size X — boCustom(X).
 "use strict";
 
-const SCALE = 10n ** 12n; // LB_CUSTOM_SCALE
+const SCALE = 10n ** 9n; // LB_SIZE_UNIT (1 gwei)
 
 function boCustom(wei) {
   const w = BigInt(wei);
@@ -45,39 +45,39 @@ function boOrder({ small = 0n, med = 0n, large = 0n, customCount = 0n, customSiz
   );
 }
 
-// ---- storage-word decoders (LB_* layout in DegenerusGameStorage) ----
+// ---- stored entry decoders (LB_* layout in DegenerusGameStorage) ----
 
 function boDecode(word) {
   const x = BigInt(word);
   return {
-    level: x & 0xffffffn,
-    score: (x >> 24n) & 0x7fffn,
-    boostBps: (x >> 39n) & 0x3fffn,
-    distressBps: (x >> 53n) & 0x3fffn,
-    adjBps: (x >> 67n) & 0x3fffn,
-    small: (x >> 81n) & 0xffn,
-    med: (x >> 89n) & 0xffn,
-    large: (x >> 97n) & 0xffn,
-    customCount: (x >> 105n) & 0xffn,
-    customSizeWei: ((x >> 113n) & 0xffffffffffffn) * SCALE,
-    coverWei: ((x >> 161n) & 0xffffffffffffn) * SCALE,
+    walletId: x & 0xffffffffn,
+    level: (x >> 32n) & 0xffffffn,
+    score: (x >> 56n) & 0x7fffn,
+    boostBps: (x >> 71n) & 0x3fffn,
+    evBps: (x >> 85n) & 0x3fffn,
+    distress: ((x >> 99n) & 1n) === 1n,
+    small: (x >> 100n) & 0x7fn,
+    med: (x >> 107n) & 0x7fn,
+    large: (x >> 114n) & 0x7fn,
+    customCount: (x >> 121n) & 0x7fn,
+    sizeWei: ((x >> 128n) & 0xffffffffffffffn) * SCALE,
+    cover: ((x >> 184n) & 1n) === 1n,
+    presaleWei: (x >> 185n) & 0x3ffffffffffffffffn,
+    presaleTier: (x >> 251n) & 7n,
+    presaleClosing: ((x >> 254n) & 1n) === 1n,
   };
 }
 
 function boCount(word) {
   const d = boDecode(word);
-  return d.small + d.med + d.large + d.customCount + (d.coverWei === 0n ? 0n : 1n);
+  return d.small + d.med + d.large + d.customCount + (d.cover ? 1n : 0n);
 }
 
-// Nominal wei a stored order represents — replacement for the old lootboxEth word's
-// low-128-bit amount. NOTE: excludes the boon boost the old amount included.
+// Nominal wei a stored entry's ordinary leg represents at its own level's ticket price.
 function boNominal(word, levelPriceWei) {
   const d = boDecode(word);
-  return (
-    (d.small + 5n * d.med + 25n * d.large) * BigInt(levelPriceWei) +
-    d.customCount * d.customSizeWei +
-    d.coverWei
-  );
+  if (d.cover) return d.sizeWei;
+  return (d.small + 5n * d.med + 25n * d.large) * BigInt(levelPriceWei) + d.customCount * d.sizeWei;
 }
 
 // ESM named export — this file lives under the project's "type": "module" scope,

@@ -653,9 +653,14 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
     }
 
     function _drainIsolated() private {
-        for (uint256 i; i < 100 && _midday() != 0; ++i) {
+        // The drain ends when this cohort completes. A completed cohort can be followed by the
+        // engine's next mid-day request in the same call (e.g. a write-side Craps window with
+        // freshly queued tickets); that request's own latch is not this cohort's work.
+        uint256 startId = mockVRF.lastRequestId();
+        for (uint256 i; i < 100 && _midday() != 0 && mockVRF.lastRequestId() == startId; ++i) {
             game.mineFlip{gas: 16_777_216}();
         }
+        if (mockVRF.lastRequestId() != startId) return; // a new request needs the cohort complete
         assertEq(_midday(), 0, "isolated drain completes in bounded calls");
         assertTrue(_fullyProcessed(), "completion releases the ticket work latch");
     }

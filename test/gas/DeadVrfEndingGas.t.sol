@@ -17,8 +17,7 @@ contract DeadVrfGasSeeder is DeadVrfSeeder {
     function seedFoilBatch(uint24 lvl, uint24 day, uint256 count) external {
         for (uint256 i; i < count; ++i) {
             address owner = address(uint160(0xF0110000 + i));
-            uint256 id = uint256(_seedWallet(owner));
-        foilQueue[day & 1].push((id << 192) | (uint256(lvl) << 160) | uint160(owner));
+            this.seedFoil(lvl, day, owner);
         }
         foilGenerationDay = day;
         foilFirstDrawDay = day;

@@ -5,14 +5,14 @@ import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
-import {C1Viewer} from "../repro/C1BoxAutoOpen.t.sol";
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 /// @title LootboxCoverBoxOpen -- a pass purchase's boxes open one per pass at their value
-/// @notice A whale pass records a custom box worth 10% of its price through `recordCoverBox`,
-///         one per pass bought; the entry's open resolves that many equal boxes, each on the
-///         same EV scaling a bought custom box of the same size gets, plus whatever boost the
-///         buyer earned. Mutation v78 deleted the pass box roll and nothing in foundry noticed.
-///         A fresh wallet's 0.24 ETH custom box opened at the same index is the yardstick; the
+/// @notice A whale pass appends its own entry through `recordCoverBox`: one custom box worth
+///         10% of a pass per pass bought; the entry's open resolves that many equal boxes, each
+///         on the same EV scaling a bought custom box of the same size gets, plus whatever boost
+///         the buyer earned. Mutation v78 deleted the pass box roll and nothing in foundry noticed.
+///         A fresh wallet's 0.24 ETH custom box opened in the same buffer is the yardstick; the
 ///         word is searched until no box draws a spin, so a missing box can never hide behind
 ///         a spin.
 contract LootboxCoverBoxOpen is DeployProtocol {
@@ -29,18 +29,17 @@ contract LootboxCoverBoxOpen is DeployProtocol {
         vm.deal(actor, 100 ether);
     }
 
-    function _idx() internal returns (uint48 v) {
-        bytes memory real = address(game).code;
-        vm.etch(address(game), type(C1Viewer).runtimeCode);
-        v = C1Viewer(payable(address(game))).lrIndexView();
-        vm.etch(address(game), real);
+    function _idx() internal view returns (uint48) {
+        return RecyclingState.writeBuffer(address(game));
     }
 
-    function _word(uint48 index) internal returns (uint256 v) {
-        bytes memory real = address(game).code;
-        vm.etch(address(game), type(C1Viewer).runtimeCode);
-        v = C1Viewer(payable(address(game))).rngWordFor(index);
-        vm.etch(address(game), real);
+    function _word(uint48 index) internal view returns (uint256) {
+        return RecyclingState.word(address(game), index);
+    }
+
+    /// @dev The `LootBoxOpened` tag of queued entry `position` in `buffer`.
+    function _tag(uint48 buffer, uint256 position) internal pure returns (uint48) {
+        return uint48((uint256(1) << 46) | (position << 1) | buffer);
     }
 
     /// @dev The mid-day request, issued by `caller`'s mineFlip as the engine's next action (the
@@ -102,8 +101,8 @@ contract LootboxCoverBoxOpen is DeployProtocol {
         assertTrue(game.rngComplete(), "harness: the day's cohorts all completed");
     }
 
-    /// @dev Count the opens for `who` at `index`, with the smallest and largest amount opened.
-    function _openedOf(Vm.Log[] memory logs, address who, uint48 index)
+    /// @dev Count the opens for `who` under entry tag `tag`, with the smallest and largest amount opened.
+    function _openedOf(Vm.Log[] memory logs, address who, uint48 tag)
         internal
         pure
         returns (uint256 n, uint256 lo, uint256 hi)
@@ -111,7 +110,7 @@ contract LootboxCoverBoxOpen is DeployProtocol {
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].topics[0] != OPENED) continue;
             if (address(uint160(uint256(logs[i].topics[1]))) != who) continue;
-            if (uint48(uint256(logs[i].topics[2])) != index) continue;
+            if (uint48(uint256(logs[i].topics[2])) != tag) continue;
             (uint256 a,,,,) = abi.decode(logs[i].data, (uint256, uint24, uint32, uint256, bool));
             if (n == 0 || a < lo) lo = a;
             if (a > hi) hi = a;
@@ -130,8 +129,11 @@ contract LootboxCoverBoxOpen is DeployProtocol {
         address plain = makeAddr("plainBuyer");
         vm.deal(whale, 20 ether);
         vm.deal(plain, 10 ether);
+        uint256 whalePos = RecyclingState.boxCount(address(game), N);
         vm.prank(whale);
         game.purchaseWhalePass{value: 12 ether}(whale, 5, bytes32(0));
+        uint256 plainPos = RecyclingState.boxCount(address(game), N);
+        assertEq(plainPos, whalePos + 1, "the pass purchase is one entry");
         vm.prank(plain);
         game.purchase{value: 0.24 ether + 1 ether}(plain, 400, BoxOrderLib.boOrder(0, 0, 0, 1, 0.24 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         uint256 reqId = _mineMiddayRequest(actor);
@@ -150,10 +152,10 @@ contract LootboxCoverBoxOpen is DeployProtocol {
             vm.prank(actor);
             game.mineFlip();
             Vm.Log[] memory logs = vm.getRecordedLogs();
-            assertGt(_word(N), 0, "the word landed at the entries' index");
+            assertGt(_word(N), 0, "the word landed for the entries' buffer");
             assertTrue(game.boxIndexComplete(N), "the walk opened the entries");
-            (uint256 nCover, uint256 cLo, uint256 cHi) = _openedOf(logs, whale, N);
-            (uint256 nPlain, uint256 q,) = _openedOf(logs, plain, N);
+            (uint256 nCover, uint256 cLo, uint256 cHi) = _openedOf(logs, whale, _tag(N, whalePos));
+            (uint256 nPlain, uint256 q,) = _openedOf(logs, plain, _tag(N, plainPos));
             assertLe(nCover, 5, "one box per pass, never more");
             assertLe(nPlain, 1, "one custom box was bought");
             if (nCover == 5 && nPlain == 1) {

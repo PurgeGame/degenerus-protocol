@@ -4,6 +4,7 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
+import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
 /// @title WhaleBoonExpiry -- Regression test for the whale-boon time-expiry fix in
 ///        checkAndClearExpiredBoon (DegenerusGameBoonModule, whale section, ~line 303-318).
@@ -38,17 +39,15 @@ contract WhaleBoonExpiry is DeployProtocol {
     // post Stage B Game-storage packing).
     // ──────────────────────────────────────────────────────────────────────
     uint256 constant SLOT_BOON_PACKED  = GameSlots.BOON_PACKED;   // mapping(address => BoonPacked)
-    uint256 constant SLOT_LOOTBOX_ETH  = GameSlots.LOOTBOX_ORDER;   // mapping(uint48 => mapping(address => uint256)) (packed order word)
     uint256 constant SLOT_LOOTBOX_WORD = GameSlots.RNG_DAY_TAGS;   // mapping(uint48 => uint256) lootboxRngWordByIndex
-    uint256 constant SLOT_LOOTBOX_RNG_IDX = GameSlots.LOOTBOX_RNG_PACKED; // lootboxRngPacked (low 48 bits = lootboxRngIndex)
-    uint256 constant SLOT_BOX_PLAYERS = GameSlots.BOX_PLAYERS;     // mapping(uint48 => address[]) boxPlayers (sweep's discovery queue)
-    uint256 constant SLOT_BOX_CURSORS = GameSlots.BOX_CURSOR;     // packed (boxCursor @ byte 7, humanReadComplete @ byte 13)
+    uint256 constant SLOT_BOX_QUEUE = GameSlots.BOX_QUEUE;         // mapping(uint48 => uint256[]) boxQueue (manually addressed)
 
-    // Packed lootboxOrder bit layout (mirrors DegenerusGameStorage lootboxOrder -- see LB_* there).
-    uint256 constant LB_SCORE_SHIFT        = 24;  // score        [24:39]
-    uint256 constant LB_CUSTOM_COUNT_SHIFT = 105; // customCount  [105:113]
-    uint256 constant LB_CUSTOM_SIZE_SHIFT  = 113; // customSize   [113:161] @1e12
-    uint256 constant LB_CUSTOM_SCALE       = 1e12;
+    // Queue entry bit layout (mirrors the LB_* constants in DegenerusGameStorage).
+    uint256 constant LB_LEVEL_SHIFT        = 32;
+    uint256 constant LB_SCORE_SHIFT        = 56;
+    uint256 constant LB_CUSTOM_COUNT_SHIFT = 121;
+    uint256 constant LB_SIZE_SHIFT         = 128;
+    uint256 constant LB_SIZE_UNIT          = 1 gwei;
 
     // BoonPacked slot0 whale-lane bit layout (DegenerusGameStorage.sol).
     uint256 constant BP_WHALE_DAY_SHIFT       = 200; // uint24 whaleDay
@@ -119,35 +118,32 @@ contract WhaleBoonExpiry is DeployProtocol {
         return whaleDay == 0 && deityWhaleDay == 0 && tier == 0;
     }
 
-    /// @dev Set up a lootbox ready to open: one CUSTOM box of `ethAmount`, score=1, frozen to
+    /// @dev Set up a lootbox ready to open: one queued CUSTOM-box entry of `ethAmount`, score=1, at
     ///      the live level -- identical shape to LootboxBoonCoexistence.t.sol's _setupLootbox.
     function _setupLootbox(address player, uint48 index, uint256 ethAmount) internal {
-        uint256 customUnits = ethAmount / LB_CUSTOM_SCALE;
-        uint256 packed = uint256(game.level())
+        if (game.walletIdOf(player) == 0) {
+            (, , , , uint256 priceWei) = game.purchaseInfo();
+            vm.prank(player);
+            game.purchase{value: priceWei}(player, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        }
+        uint256 entry = uint256(game.walletIdOf(player))
+            | (uint256(game.level()) << LB_LEVEL_SHIFT)
             | (uint256(1) << LB_SCORE_SHIFT)
             | (uint256(1) << LB_CUSTOM_COUNT_SHIFT)
-            | (customUnits << LB_CUSTOM_SIZE_SHIFT);
-        vm.store(address(game), _nestedMappingSlot(SLOT_LOOTBOX_ETH, index, player), bytes32(packed));
+            | ((ethAmount / LB_SIZE_UNIT) << LB_SIZE_SHIFT);
+        bytes32 dataBase = keccak256(abi.encode(keccak256(abi.encode(uint256(index), SLOT_BOX_QUEUE))));
+        vm.store(address(game), dataBase, bytes32(entry)); // position 0: previous case was fully consumed
 
         uint256 vrfWord = uint256(keccak256(abi.encode("whaleBoonExpiry", player, index)));
         RecyclingState.seedWord(address(game), index, bytes32(vrfWord));
 
-        // mineFlip's human-box stage only ever finds a box by walking boxPlayers[index & 1] on the
-        // delivered read buffer. Enqueue + park the frontier so the stage reaches exactly this
-        // one entry.
-        bytes32 lenSlot = keccak256(abi.encode(uint256(index), uint256(SLOT_BOX_PLAYERS)));
-        uint256 len = 0; // one fixture entry; previous case was fully consumed
-        bytes32 dataBase = keccak256(abi.encode(lenSlot));
-        vm.store(address(game), bytes32(uint256(dataBase) + len), bytes32(uint256(uint160(player))));
-        vm.store(address(game), lenSlot, bytes32(len + 1));
-
-        uint256 mask48 = (uint256(1) << 48) - 1;
-        RecyclingState.seedWriteBuffer(address(game), index ^ 1);
-
-        bytes32 cursorSlot = bytes32(SLOT_BOX_CURSORS);
+        // mineFlip's human-box stage only ever finds a box by walking boxQueue[read] on the
+        // delivered read buffer. Park the frontier so the stage reaches exactly this one entry.
+        bytes32 cursorSlot = bytes32(GameSlots.BOX_CURSOR);
         uint256 cur = uint256(vm.load(address(game), cursorSlot));
-        cur &= ~(mask48 << (7 * 8));
-        cur &= ~(uint256(0xff) << (13 * 8)); // humanReadComplete = false
+        cur &= ~((uint256(type(uint48).max) << (GameSlots.BOX_CURSOR_OFFSET * 8))
+            | (uint256(type(uint32).max) << (GameSlots.BOX_READ_COUNT_OFFSET * 8)));
+        cur |= uint256(1) << (GameSlots.BOX_READ_COUNT_OFFSET * 8);
         vm.store(address(game), cursorSlot, bytes32(cur));
 
         // The day itself is sealed (dailyIdx = today, tickets drained), as after a mid-day request:

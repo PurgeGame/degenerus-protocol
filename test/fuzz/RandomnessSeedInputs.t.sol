@@ -23,17 +23,18 @@ contract SeedInputSeeder is DegenerusGame, WalletSeed {
         // (consumer order: tickets, redemption, AFKing, human boxes; 60d31f775).
         ticketsFullyProcessed = true;
         humanReadComplete = false;
+        // One sealed entry for `player` at read buffer 1, position 0: a presale-only entry or one
+        // custom box of `amount`, at level 10.
+        uint256 entry = uint256(_seedWallet(player)) | (uint256(10) << LB_LEVEL_SHIFT);
+        if (presale) entry |= amount << LB_PRESALE_SHIFT;
+        else entry |= (uint256(1) << LB_CUSTOM_COUNT_SHIFT) | ((amount / LB_SIZE_UNIT) << LB_SIZE_SHIFT);
+        uint256[] storage q = boxQueue[1];
+        assembly ("memory-safe") {
+            mstore(0x00, q.slot)
+            sstore(keccak256(0x00, 0x20), entry)
+        }
+        boxReadCount = 1;
         boxCursor = 0;
-        if (presale) presaleBoxEth[1][player] = amount;
-        else lootboxOrder[1][player] = (uint256(10) << LB_LEVEL_SHIFT) |
-            (uint256(1) << LB_CUSTOM_COUNT_SHIFT) |
-            ((amount / LB_CUSTOM_SCALE) << LB_CUSTOM_SIZE_SHIFT);
-        // Box-order migration: the removed per-(player,index) `openBox` read the leg mappings
-        // above directly; its sweep replacement only ever finds a box by walking
-        // boxPlayers[index & 1], which a real purchase pushes to on first deposit. This seeder
-        // forges the leg mappings straight, so enqueue here too (index 1 is already finalized
-        // above via LR_INDEX = 2, and index/cursor default to 1/0 on a fresh deploy).
-        boxPlayers[1].push(player);
     }
 
     function afking(address player, uint256 amount, uint256 word) external {
@@ -48,6 +49,9 @@ contract SeedInputSeeder is DegenerusGame, WalletSeed {
 ///      awards; it must not choose a different target-level roll or presale reward branch.
 contract RandomnessSeedInputsTest is DeployProtocol {
     address private constant PLAYER = address(0xB0B);
+    uint256 private constant QUEUED_ORDER_DOMAIN = 0x5175657565644f72646572;
+    uint256 private constant BOX_OPEN_TAG = 0x426f784f70656e;
+    uint256 private constant AFKING_BOX_TAG = 0x41666b696e67426f78;
     bytes32 private constant OPENED = keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
     bytes32 private constant PRESALE = keccak256("PresaleBoxOpened(address,uint48,uint256,uint256,uint256,uint256,bool,uint32,uint32)");
     bytes32 private constant SPIN = keccak256("BoxSpin(address,uint64,uint256,uint256,uint256)");
@@ -57,6 +61,7 @@ contract RandomnessSeedInputsTest is DeployProtocol {
         vm.etch(address(game), type(SeedInputSeeder).runtimeCode);
         vm.deal(address(game), 100 ether);
         vm.deal(address(sdgnrs), 100 ether);
+        _giveWalletId(PLAYER);
     }
 
     function _resolve(uint8 route, uint256 word, uint256 amount) private returns (uint256 result) {
@@ -66,8 +71,9 @@ contract RandomnessSeedInputsTest is DeployProtocol {
         if (route == 0 || route == 3) game.mineFlip();
         else if (route == 1) host.afking(PLAYER, amount, word);
         else {
+            uint32 id = game.walletIdOf(PLAYER);
             vm.prank(address(sdgnrs));
-            game.resolveRedemptionLootbox{value: amount}(PLAYER, game.walletIdOf(PLAYER), amount, word, 0, 1);
+            game.resolveRedemptionLootbox{value: amount}(PLAYER, id, amount, word, 0, 1);
         }
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool found;
@@ -100,11 +106,15 @@ contract RandomnessSeedInputsTest is DeployProtocol {
         word = word < 2 ? word + 2 : word;
         uint8 route = routeSeed % 4;
         if (route != 3) {
+            // First-box seeds by route, keyed by the wallet ID: the queued entry at (buffer 1,
+            // position 0), the AFKing box at its frozen day 100, the redemption order's box 1.
+            uint256 id = game.walletIdOf(PLAYER);
             uint256 seed = route == 0
-                ? uint256(keccak256(abi.encode(word, PLAYER, uint256(0x426f784f70656e), uint256(1))))
+                ? uint256(keccak256(abi.encode(
+                    uint256(keccak256(abi.encode(QUEUED_ORDER_DOMAIN, word, uint256(1), uint256(0)))), id, BOX_OPEN_TAG, uint256(1))))
                 : route == 1
-                    ? uint256(keccak256(abi.encode(word, PLAYER, uint256(0x41666b696e67426f78), uint256(100))))
-                    : uint256(keccak256(abi.encode(word, PLAYER, uint256(0x426f784f70656e), uint256(1))));
+                    ? uint256(keccak256(abi.encode(word, id, AFKING_BOX_TAG, uint256(100))))
+                    : uint256(keccak256(abi.encode(word, id, BOX_OPEN_TAG, uint256(1))));
             uint256 rewardRoll = uint16(seed >> 40) % 20;
             // Pass denomination intentionally chooses passes or a fallback spin from
             // the award size. Compare identity only when both sizes take the same branch.
@@ -116,8 +126,10 @@ contract RandomnessSeedInputsTest is DeployProtocol {
         assertEq(_resolve(route, word, 2 ether), first, "amount must not change the draw");
     }
 
-    /// @dev Pinned seed whose ETH spin caps at 2 ETH and recirculates the excess into a further box.
+    /// @dev Pinned queued-entry word (route 0) whose first box draws the ETH spin and recirculates
+    ///      part of its payout into a further box; found from the seed formula for the player's
+    ///      wallet ID at (buffer 1, position 0).
     function test_BoxAmountIdentityWithCappedSpinRecirculation() public {
-        testFuzz_BoxAmountDoesNotRerollIdentity(18720, 108);
+        testFuzz_BoxAmountDoesNotRerollIdentity(3, 108);
     }
 }

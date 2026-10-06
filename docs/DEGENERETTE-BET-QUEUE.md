@@ -11,34 +11,35 @@ dedicated resolver paying to settle each bet. This replaces the old per-player
 
 ## Queue and bet id
 
-Each bet is one storage word appended to `degeneretteQueue[index]`
-(`contracts/storage/DegenerusGameStorage.sol`), where `index` is the lootbox
-RNG index active when the bet is placed. A bet's id is its queue position + 1,
-scoped to that index (not global, and no longer per-player). Placement only
-appends while `index`'s RNG word is still unset; once the word lands the queue
-for that index is frozen (no further placements) and resolves only through
-the sweep, in queue order.
+Each bet is one storage word appended to `degeneretteQueue[buffer]`
+(`contracts/storage/DegenerusGameStorage.sol`), where `buffer` is the physical
+RNG write buffer (0/1) when the bet is placed. A bet's id is its position + 1,
+scoped to that buffer. Placement appends only to the write buffer; the request's
+seal freezes it, and the sealed read buffer resolves only through the miner
+chain, in queue order, after its box entries.
 
-`degeneretteQueue` occupies the storage slot vacated by the retired WWXRP
-whale-pass mapping (`wwxrpJackpotWhalePassBracketAwarded`, slot 21). The old
-per-player `degeneretteBets` / `degeneretteBetNonce` mappings are gone; the
-biggest-spin record bounty now lives in `degeneretteRecordBounty` (slot 37,
-keyed `(index << 64) | betId`), and `earlyTicketLevel` moved into the freed
-space right after it (slot 38; its old slot, 75, is now unused). Nothing else
-in the storage layout shifted.
+The queue is manually addressed: bet `p` sits at
+`keccak256(degeneretteQueue[buffer].slot) + p` and the Solidity array length is
+never written. The write buffer's bet count lives in `lootboxRngPacked` bits
+152..183 and commits in the same write that adds the bet's pending ETH or FLIP;
+the seal copies it into `degeneretteReadCount` (beside `degeneretteCursor`) and
+restarts the write count at zero. The biggest-spin record bounty lives in
+`degeneretteRecordBounty`, keyed `(buffer << 64) | betId`.
 
 ### Bet word layout (LSB -> MSB)
 
 | Bits | Field | Notes |
 | --- | --- | --- |
-| 0..159 | owner | bet payee |
+| 0..31 | owner | bet owner's wallet ID |
+| 32..159 | zero | |
 | 160..164 | symbol | chosen hero symbol 0..23; quadrant = symbol >> 3; Dice excluded |
 | 165..169 | spinCount | 1..25 |
 | 170 | currency | 0 = ETH, 1 = FLIP |
 | 171 | record flag | set when a biggest-spin record bounty is armed in `degeneretteRecordBounty` |
 | 172..187 | activity | activity score in whole points |
 | 188..251 | stake per spin | in currency units: ETH = gwei, FLIP = whole FLIP |
-| 252..255 | reserved | always zero |
+| 252..254 | reserved | always zero |
+| 255 | processed | set when the bet resolves |
 
 ## Placement rules
 
@@ -55,66 +56,14 @@ to the stake unit — the player never spins on an un-funded fractional unit.
 
 ## Sweep integration
 
-The human-box sweep, `GameAfkingModule.runHumanBoxWork`, walks a
-monotonic cursor `(boxCursorIndex, boxCursor)` across finalized RNG indices.
-At each index it opens every ready box in `boxPlayers[index]` first, then —
-once that index's box entries are exhausted (`cur - qlen`, where `qlen =
-boxPlayers[index].length`) — continues the same cursor into
-`degeneretteQueue[index]`, delegatecalling
-`DegenerusGameDegeneretteModule.sweepDegeneretteBets(index, pos, budget,
-mustRunFirst, rngWord)` for the remaining walk budget. Both lists are frozen
-once the index's word lands (placement and box deposits both require an unset
-word), so the combined position stays stable across calls. The sweep only
-advances past an index once both its boxes and its bets are drained; an
-un-worded index halts the whole walk so nothing downstream is orphaned.
-
-One entry point reaches this sweep: `mineFlip()`, the permissionless keeper
-crank (`DegenerusGame.sol`, routed through `GameAfkingModule`), which opens
-AFKing boxes first and then runs the human-box sweep, and pays the caller a
-bounty for the work it runs.
-
-`sweepDegeneretteBets` is resumable mid-queue: it resolves bets from `pos`
-while `unitsSpent < budget`, and the first bet of a call always runs
-(`mustRunFirst`) so no oversized bet can wedge the cursor for later callers —
-every other bet that would exceed the remaining budget breaks (not skips),
-leaving the cursor exactly there for the next call.
-
-### Frozen-pool hold
-
-`sweepDegeneretteBets` returns immediately (no-op) while `prizePoolFrozen` is
-set, because the frozen-pool ETH path can revert `Insolvent` when the pending
-buffer runs short, and a revert there would stall the whole box-open frontier
-behind the bet queue. This is safe only because the freeze itself only ever
-runs inside the RNG lock the sweep already waits out (an un-worded index halts
-the walk before it), so the sweep never observes a freeze mid-walk that it
-also needs to walk through.
-
-### Budget vs credited work
-
-Each queued bet is priced into the sweep's walk-unit budget at a **worst-case**
-rate from its own word, so a call can bound its total gas without simulating
-the resolution:
-
-| Charge | Constant | Value |
-| --- | --- | --- |
-| ETH bet entry | `BET_ENTRY_WEIGHT_ETH` | 36 units (prices a cold 1-spin win that scores 7+: box + sDGNRS award, up to ~169k) |
-| FLIP bet entry | `BET_ENTRY_WEIGHT_FLIP` | 4 units |
-| Per ETH spin | `BET_SPIN_WEIGHT_ETH` | 2 units |
-| Per FLIP spin | `BET_SPIN_WEIGHT_FLIP` | 1 unit |
-| Armed record | `BET_RECORD_WEIGHT` | +6 units |
-| Zeroed/skip slot | — | 1 unit |
-
-The keeper bounty, however, credits each resolved bet only a small flat
-amount, whatever its spins or win box, and a zeroed (already resolved) slot
-nothing:
-
-| Credit | Constant | Value |
-| --- | --- | --- |
-| Per resolved bet | `BET_WORK_CREDIT_GAS` | 1,500 gas (~0.3 unit) |
-| Unit divisor (floor) | `BET_WORK_UNIT_GAS` | 4,700 gas/unit |
-
-The `KeeperFaucetResistance` tests compare placement costs and keeper credits
-across cheap bet shapes. See [Verification](VERIFICATION.md) for execution.
+`mineFlip()` runs the read cohort's consumers in a fixed order: sDGNRS
+redemption settlement, AFKing boxes, human box entries
+(`GameAfkingModule.runHumanBoxWork`), then Degenerette bets
+(`DegenerusGameDegeneretteModule.runDegeneretteWork`), the Decimator and
+read-bound Craps. The bet worker walks `degeneretteCursor` up to
+`degeneretteReadCount`, admits each bet against its declared gas bound, marks it
+processed and resolves it against the buffer's published session word, and
+stores the advanced cursor at the end of the call.
 
 ## Bet view
 

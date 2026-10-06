@@ -34,11 +34,15 @@ contract GoldSixFoilGasHarness is DegenerusGameFoilPackModule, WalletSeed {
             address who = address(uint160(0x1000 + i));
             uint256 owner = uint256(_seedWallet(who));
             foilRecord[1][_seedWallet(who)] = (uint256(20_000) << _FOIL_MULT_SHIFT) | (uint256(1) << _FOIL_LEVEL_SHIFT);
-            foilQueue[_foilWriteKey()].push((owner << 192) | (uint256(1) << 160) | uint160(who));
+            uint256 slot = _foilSlot(_foilWriteKey(), i);
+            uint256 pack = (owner << 192) | (uint256(1) << 160) | uint160(who);
+            assembly ("memory-safe") { sstore(slot, pack) }
         }
+        foilWriteCount = 8;
         // The daily request swaps both cohorts; foil keys follow foilWriteSlot (017ac4cdf).
         ticketWriteSlot = !ticketWriteSlot;
         foilWriteSlot = !foilWriteSlot;
+        (foilWriteCount, foilReadCount) = (foilReadCount, foilWriteCount);
         rngWordCurrent = 0xabcdef123456;
         _setRngSessionPublished(true);
     }

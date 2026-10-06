@@ -67,7 +67,7 @@ contract SerializedMidnightProgressTest is MiddayFrozenPoolLatch {
         assertTrue(game.rngLocked(), "the fresh daily request reached its lock");
         assertFalse(game.rngComplete(), "a fresh request clears the completion marker");
         assertFalse(game.boxIndexComplete(RecyclingState.readBuffer(address(game))), "fresh read buffer needs its new word");
-        assertEq(uint256(game.extsload(keccak256(abi.encode(RecyclingState.writeBuffer(address(game)), GameSlots.BOX_PLAYERS)))), 0, "old read header reset once at seal");
+        assertEq(RecyclingState.boxCount(address(game), RecyclingState.writeBuffer(address(game))), 0, "old read buffer's box count restarts once at seal");
     }
 
     function _crossMidnight(uint256 subscribers) private {

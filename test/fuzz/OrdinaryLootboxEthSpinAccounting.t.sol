@@ -6,6 +6,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {IsDGNRS} from "../../contracts/interfaces/IsDGNRS.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 
@@ -29,6 +30,9 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
     bytes32 private constant DGNRS_BATCH = keccak256("LootBoxDgnrsBatch(address,uint256,uint256)");
     bytes32 private constant CAPPED = keccak256("PayoutCapped(address,uint256,uint256)");
     bytes32 private constant MINER_WORK = keccak256("MinerWork(address,uint8,uint256,uint256)");
+    uint256 private constant QUEUED_ORDER_DOMAIN = 0x5175657565644f72646572;
+    /// @dev PLAYER's committed entry position, recorded at its purchase.
+    uint256 private position;
 
     struct Expected {
         uint256 spinSeed;
@@ -120,12 +124,25 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         return RecyclingState.writeBuffer(address(game));
     }
 
-    /// @dev The live order word; an opened order keeps its fields under the BOX_PROCESSED marker
-    ///      (bit 255) rather than being deleted (6d0e64b09 storage recycling), and reads as spent.
-    function _order(uint48 index) private view returns (uint256) {
-        bytes32 outer = keccak256(abi.encode(uint256(index), uint256(15)));
-        uint256 order = uint256(vm.load(address(game), keccak256(abi.encode(PLAYER, outer))));
-        return order & (uint256(1) << 255) != 0 ? 0 : order;
+    /// @dev The stored entry; settlement never rewrites it, only the read cursor passes it.
+    function _entry(uint48 index, uint256 pos) private view returns (uint256) {
+        return RecyclingState.boxEntry(address(game), index, pos);
+    }
+
+    /// @dev Queried only after `index` was sealed: once a later request has sealed the other
+    ///      buffer, the cohort at `index` completed first, so every entry in it is spent.
+    function _spent(uint48 index, uint256 pos) private view returns (bool) {
+        if (RecyclingState.readBuffer(address(game)) != index) return true;
+        uint256 cursor = (uint256(vm.load(address(game), bytes32(GameSlots.BOX_CURSOR)))
+            >> (GameSlots.BOX_CURSOR_OFFSET * 8)) & type(uint48).max;
+        return cursor > pos;
+    }
+
+    /// @dev Digest of a buffer's entries (count and words).
+    function _entries(uint48 index) private view returns (bytes32 digest) {
+        uint256 n = RecyclingState.boxCount(address(game), index);
+        digest = bytes32(n);
+        for (uint256 p; p < n; ++p) digest = keccak256(abi.encode(digest, _entry(index, p)));
     }
 
     function _buy(uint256 size) private {
@@ -164,14 +181,16 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
 
     /// @dev Independent oracle for the ordinary ETH-spin carrier at `word_`: `ok` is false unless the
     ///      word is an ordinary ETH spin whose win reaches the quarter-cash band, binds the live cash
-    ///      cap at `future` and whose recirculated child pays sDGNRS.
-    function _reference(uint256 word_, uint256 future, uint256 inventory)
+    ///      cap at `future` and whose recirculated child pays sDGNRS. The box seed is the queued
+    ///      entry's: H(H(QUEUED_ORDER_DOMAIN, word, buffer, position), walletId, BOX_OPEN_TAG, 1); the
+    ///      recirculated child's is H(H(spinSeed, "Recir"), walletId).
+    function _reference(uint256 word_, uint48 index, uint256 pos, uint32 id, uint256 future, uint256 inventory)
         private
         pure
         returns (Expected memory e, bool ok)
     {
-        uint256 seed =
-            uint256(keccak256(abi.encode(word_, uint256(uint160(PLAYER)), uint256(0x426f784f70656e), uint256(1))));
+        uint256 root = uint256(keccak256(abi.encode(QUEUED_ORDER_DOMAIN, word_, uint256(index), pos)));
+        uint256 seed = uint256(keccak256(abi.encode(root, uint256(id), uint256(0x426f784f70656e), uint256(1))));
         if (uint16(seed >> 40) % 20 != 19) return (e, false);
         // Frozen score 1 gives 90.16% box EV; 10% is reserved for the boon draw.
         uint256 budget = 0.811_44 ether * 19_678 / 10_000;
@@ -193,7 +212,7 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         if (e.gross <= e.stake * 10 || e.gross / 4 <= future / 10) return (e, false);
         e.cash = future / 10;
         e.recirculated = e.gross - e.cash;
-        uint256 childSeed = _hash(_hash(e.spinSeed, 0x5265636972), uint256(uint160(PLAYER)));
+        uint256 childSeed = _hash(_hash(e.spinSeed, 0x5265636972), uint256(id));
         uint256 path = uint16(childSeed >> 40) % 20;
         if (path < 8 || path >= 11) return (e, false);
         e.childTarget = _target(childSeed);
@@ -210,12 +229,37 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         ok = e.childDgnrs > 0;
     }
 
-    /// @dev The first word (searched deterministically) that yields the carrier. The live future may
-    ///      still grow by the second purchase, so the cap must bind at `future + 3 ether`.
-    function _carrierWord(uint256 future, uint256 inventory) private pure returns (uint256 w) {
+    /// @dev keccak256(abi.encode(a, b, c, d)) in scratch memory: the search below runs hundreds of
+    ///      thousands of candidates, and allocating for each would exhaust memory.
+    function _h4(uint256 a, uint256 b, uint256 c, uint256 d) private pure returns (uint256 r) {
+        assembly ("memory-safe") {
+            let p := mload(0x40)
+            mstore(p, a)
+            mstore(add(p, 0x20), b)
+            mstore(add(p, 0x40), c)
+            mstore(add(p, 0x60), d)
+            r := keccak256(p, 0x80)
+        }
+    }
+
+    /// @dev The first word (searched deterministically: keccak256(abi.encode("eth-spin-carrier", k)))
+    ///      that yields the carrier. An allocation-free prefilter passes only first boxes that draw
+    ///      the ETH spin, and of those only spins scoring six or more reach the full oracle. The live
+    ///      future may still grow by the second purchase, so the cap must bind at `future + 3 ether`.
+    function _carrierWord(uint48 index, uint32 id, uint256 future, uint256 inventory) private view returns (uint256 w) {
         for (uint256 k = 1;; ++k) {
-            w = uint256(keccak256(abi.encode("eth-spin-carrier", k)));
-            (, bool ok) = _reference(w, future + 3 ether, inventory);
+            // abi.encode("eth-spin-carrier", k): string offset, k, length 16, the padded bytes.
+            w = _h4(0x40, k, 16, uint256(bytes32("eth-spin-carrier")));
+            uint256 seed = _h4(_h4(QUEUED_ORDER_DOMAIN, w, index, position), id, 0x426f784f70656e, 1);
+            if (uint16(seed >> 40) % 20 != 19) continue;
+            uint256 spinSeed = _hash(seed, 0x4574685370696e);
+            uint256 hero = Ref.randomHero(spinSeed);
+            uint32 playerTraits = Ref.ordinary(_hash(spinSeed, 0x446567656e506c61796572));
+            uint256 shift = (hero / 8) * 8;
+            playerTraits = (playerTraits & ~(uint32(0xFF) << shift)) | (uint32(0x40 | (hero & 7)) << shift);
+            (uint256 score,) = Ref.score(playerTraits, Ref.traits(_hash(spinSeed, 0x446567656e526573756c74)));
+            if (score < 6) continue;
+            (, bool ok) = _reference(w, index, position, id, future + 3 ether, inventory);
             if (ok) return w;
         }
     }
@@ -314,34 +358,39 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
 
     function _run(bool laterPurchase) private {
         uint48 index = _index();
+        position = RecyclingState.boxCount(address(game), index);
         _buy(1 ether);
-        uint256 committed = 1 | (uint256(1) << 24) | (uint256(1) << 105) | (uint256(1_000_000) << 113);
-        assertEq(_order(index), committed, "real purchase committed level one, score one, one unboosted box");
+        uint32 id = game.walletIdOf(PLAYER);
+        uint256 committed =
+            uint256(id) | (uint256(1) << 32) | (uint256(1) << 56) | (uint256(1) << 121) | (uint256(1e9) << 128);
+        assertEq(_entry(index, position), committed, "real purchase committed level one, score one, one unboosted box");
         // The purchase's pending ETH clears the threshold: the engine's mid-day request.
         game.mineFlip();
         uint256 request = mockVRF.lastRequestId();
         assertGt(request, 0);
         (,, bool fulfilled) = mockVRF.pendingRequests(request);
         assertFalse(fulfilled);
-        word = _carrierWord(game.futurePrizePoolView(), IsDGNRS(address(sdgnrs)).poolBalance(IsDGNRS.Pool(2)));
+        word = _carrierWord(index, id, game.futurePrizePoolView(), IsDGNRS(address(sdgnrs)).poolBalance(IsDGNRS.Pool(2)));
         mockVRF.fulfillRandomWords(request, word);
         // Publish the delivered midday word, in minimal checkpoints, up to the cohort's
         // human-box stage: the committed order is then mineFlip's next read consumer.
         for (uint256 i; i < 100 && game.nextMinerAction() != 10; ++i) _stepMinimal(); // HumanBoxes
         assertEq(game.nextMinerAction(), 10, "the committed order is the next read consumer");
-        assertEq(_order(index), committed, "publication alone opens nothing");
+        assertEq(_entry(index, position), committed, "publication alone opens nothing");
+        assertFalse(_spent(index, position), "publication alone opens nothing");
         assertEq(_index(), (index ^ 1));
         uint256 initialFuture = game.futurePrizePoolView();
         if (laterPurchase) {
+            uint256 nextPos = RecyclingState.boxCount(address(game), index ^ 1);
             _buy(2 ether);
             assertGt(game.futurePrizePoolView(), initialFuture, "second public purchase changed live cash inventory");
-            assertGt(_order((index ^ 1)), 0, "second purchase remains an unrevealed order");
+            assertEq(BoxOrderLib.boId(_entry(index ^ 1, nextPos)), id, "second purchase remains an unrevealed entry");
         }
-        assertEq(_order(index), committed);
+        assertEq(_entry(index, position), committed);
         assertEq(game.level(), 0, "fixed live denomination");
-        uint256 nextOrder = _order((index ^ 1));
+        bytes32 nextEntries = _entries(index ^ 1);
         Balances memory beforeState = _balances();
-        (Expected memory e, bool carrier) = _reference(word, beforeState.future, beforeState.pools[2]);
+        (Expected memory e, bool carrier) = _reference(word, index, position, id, beforeState.future, beforeState.pools[2]);
         assertTrue(carrier, "searched word is the ordinary ETH-spin carrier");
         assertGt(e.cash, 0);
         assertGt(e.childDgnrs, 0);
@@ -385,8 +434,9 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         assertEq(game.claimableWinningsOf(KEEPER), 0);
         assertEq(sdgnrs.balanceOf(KEEPER), 0);
         assertEq(coinflip.coinflipAmount(KEEPER), keeperFlip + keeperReward, "the keeper's only FLIP is its measured miner reward");
-        assertEq(_order(index), 0);
-        assertEq(_order((index ^ 1)), nextOrder, "unrevealed second purchase survives child settlement");
+        assertTrue(_spent(index, position), "the committed entry settled");
+        assertEq(_entry(index, position), committed, "settlement never rewrites the entry");
+        assertEq(_entries(index ^ 1), nextEntries, "unrevealed second purchase survives child settlement");
         // Replay probe: whatever the engine does next (or NoWork / a pending word), it opens nothing.
         vm.recordLogs();
         vm.prank(KEEPER);

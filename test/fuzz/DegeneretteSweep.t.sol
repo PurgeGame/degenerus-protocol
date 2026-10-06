@@ -223,7 +223,7 @@ contract DegeneretteSweep is DeployProtocol {
         assertEq(seen, 2, "two placements");
 
         uint256 a = game.degeneretteBetInfo(IDX, 1);
-        assertEq(address(uint160(a)), alice, "owner");
+        assertEq(uint32(a), game.walletIdOf(alice), "owner id");
         assertEq((a >> 160) & 0x1F, SYMBOL, "symbol");
         assertEq((a >> 165) & 0x1F, 3, "spins");
         assertEq((a >> 170) & 1, ETH, "currency");
@@ -232,7 +232,7 @@ contract DegeneretteSweep is DeployProtocol {
         assertEq(a >> 252, 0, "reserved bits");
 
         uint256 b = game.degeneretteBetInfo(IDX, 2);
-        assertEq(address(uint160(b)), bob, "second owner");
+        assertEq(uint32(b), game.walletIdOf(bob), "second owner id");
         assertEq((b >> 170) & 1, FLIP, "FLIP currency");
         assertEq((b >> 188) & type(uint64).max, 200, "FLIP stake in whole FLIP");
         assertEq(game.degeneretteBetInfo(IDX, 3), 0, "past the queue reads zero");

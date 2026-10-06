@@ -33,9 +33,6 @@ contract RngLockDeterminism is DeployProtocol {
     // lootboxRngPacked = slot 34 (the lootbox RNG index lives in bits[0:47]), lootboxRngWordByIndex = slot 35.
     uint256 constant SLOT_LOOTBOX_RNG_INDEX = GameSlots.LOOTBOX_RNG_PACKED;
     uint256 constant SLOT_LOOTBOX_RNG_WORD_BY_INDEX = GameSlots.RNG_DAY_TAGS;
-    // lootboxOrder (the packed box-order word) = slot 15; the whole word is zeroed on open, so
-    // nonzero/zero is still the box-owed signal regardless of the internal bit layout.
-    uint256 constant SLOT_LOOTBOX_ETH = GameSlots.LOOTBOX_ORDER;
     VRFHandler public vrfHandler;
     uint256 private _lastFulfilledReqId;
     uint256 constant DRAIN_MAX_ITERATIONS = 50;
@@ -993,18 +990,45 @@ contract RngLockDeterminism is DeployProtocol {
         vm.prank(keeperCaller);
         try game.mineFlip() {} catch {} // must not abort the lock
         assertTrue(game.rngLocked(), "autoOpen-noop: the keeper call does not abort the lock");
-        assertEq(_lootboxEthBase(boxIndex, buyer) >> 255, 0, "autoOpen-noop: no box opens during rngLock");
-        assertGt(_lootboxEthBase(boxIndex, buyer), 0, "autoOpen-noop: the queued box is deferred, not dropped");
+        assertFalse(_boxSettled(boxIndex, buyer), "autoOpen-noop: no box opens during rngLock");
+        assertTrue(_boxQueued(boxIndex, buyer), "autoOpen-noop: the queued box is deferred, not dropped");
     }
 
-    /// @dev Read the raw lootboxOrder word for [index][who] — the box-owed signal, zeroed on open
-    ///      (the un-opened/opened oracle for a box). The whole word goes non-zero on first deposit
-    ///      (level/counts land together) and is cleared in one SSTORE on a successful open, so
-    ///      nonzero/zero is the same signal it always was regardless of the packed layout inside.
-    function _lootboxEthBase(uint48 index, address who) internal view returns (uint256) {
-        bytes32 inner = keccak256(abi.encode(uint256(index), uint256(SLOT_LOOTBOX_ETH)));
-        bytes32 leaf = keccak256(abi.encode(who, uint256(inner)));
-        return uint256(vm.load(address(game), leaf));
+    /// @dev Position of `who`'s first queue entry in physical buffer `index` (within that buffer's
+    ///      write count or sealed read count); (false, 0) when it holds none.
+    function _boxPosition(uint48 index, address who) internal view returns (bool found, uint256 pos) {
+        uint32 id = game.walletIdOf(who);
+        uint256 n = RecyclingState.boxCount(address(game), index);
+        for (; pos < n; ++pos) {
+            if (id != 0 && BoxOrderLib.boId(RecyclingState.boxEntry(address(game), index, pos)) == id) return (true, pos);
+        }
+        return (false, 0);
+    }
+
+    /// @dev The box-owed signal: `who` has an entry queued in buffer `index`.
+    function _boxQueued(uint48 index, address who) internal view returns (bool found) {
+        (found,) = _boxPosition(index, who);
+    }
+
+    /// @dev The opened oracle over a log window that starts after the box was queued: the game emitted
+    ///      an event indexed by `who` (the entry's resolution reports rewards, spins or the open
+    ///      itself to its wallet; the keeper's calls emit nothing else for that wallet). Not state
+    ///      based: the same call that completes the cohort may seal the next one and reset the cursor.
+    function _boxOpened(Vm.Log[] memory logs, address who) internal view returns (bool) {
+        for (uint256 i; i < logs.length; i++) {
+            if (logs[i].emitter == address(game) && logs[i].topics.length > 1
+                && address(uint160(uint256(logs[i].topics[1]))) == who) return true;
+        }
+        return false;
+    }
+
+    /// @dev State oracle: `index` is the sealed read buffer and its cursor has moved past `who`'s entry.
+    function _boxSettled(uint48 index, address who) internal view returns (bool) {
+        (bool found, uint256 pos) = _boxPosition(index, who);
+        if (!found || index != RecyclingState.readBuffer(address(game))) return false;
+        uint256 cursor = (uint256(vm.load(address(game), bytes32(GameSlots.BOX_CURSOR))) >> (GameSlots.BOX_CURSOR_OFFSET * 8))
+            & type(uint48).max;
+        return cursor > pos;
     }
 
     /// @notice TST-01 — no marooned boxes (no open during the lock + post-unlock engine open).
@@ -1033,8 +1057,8 @@ contract RngLockDeterminism is DeployProtocol {
         game.purchase{value: 1.01 ether}(
             boxOwner, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
-        assertGt(
-            _lootboxEthBase(boxIndex, boxOwner), 0,
+        assertTrue(
+            _boxQueued(boxIndex, boxOwner),
             "no-maroon: box queued + un-opened (first-deposit signal present)"
         );
 
@@ -1044,28 +1068,30 @@ contract RngLockDeterminism is DeployProtocol {
         assertFalse(game.boxesPending(), "no-maroon: boxesPending() false during lock (RD-3)");
         vm.prank(keeper);
         try game.mineFlip() {} catch {} // the engine: must not abort the lock (box stages never run under it)
-        assertGt(
-            _lootboxEthBase(boxIndex, boxOwner), 0,
+        assertTrue(
+            _boxQueued(boxIndex, boxOwner),
             "no-maroon: the queued box is NOT consumed by the lock (deferred, not dropped)"
         );
 
         // ---- (2) AFTER the lock clears: the box's word landed (not orphaned), the box opens ----
         vm.recordLogs();
         _deliverMockVrf(reqId, uint256(keccak256("tst01-no-maroon-word")));
+        Vm.Log[] memory deliverLogs = vm.getRecordedLogs();
         assertFalse(game.rngLocked(), "no-maroon: lock cleared post-VRF");
         assertTrue(
-            _publishedWord(vm.getRecordedLogs(), boxIndex) != 0,
+            _publishedWord(deliverLogs, boxIndex) != 0,
             "no-maroon: the box index's per-index word landed (not orphaned/zeroed by the lock)"
         );
         // The box is openable at its index — it materializes post-unlock; none stranded. The
         // keeper's own human-box stage opens the read cohort before any later request may
         // retire the buffer, and further mining must not revert unexpectedly on the drained
-        // cohort. An open marks the order word BOX_PROCESSED (bit 255) instead of zeroing it.
+        // cohort. An open advances boxCursor past the entry.
+        vm.recordLogs();
         vm.startPrank(boxOwner);
         _mineAll(16);
         vm.stopPrank();
         assertTrue(
-            _lootboxEthBase(boxIndex, boxOwner) >> 255 == 1,
+            _boxOpened(deliverLogs, boxOwner) || _boxOpened(vm.getRecordedLogs(), boxOwner),
             "no-maroon: the deferred box materializes post-unlock (first-deposit signal zeroed)"
         );
         _settleMidday();
@@ -1080,7 +1106,7 @@ contract RngLockDeterminism is DeployProtocol {
         game.purchase{value: 1.01 ether}(
             boxOwner2, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
-        assertGt(_lootboxEthBase(queuedIndex, boxOwner2), 0, "no-maroon: 2nd box queued at the round's index");
+        assertTrue(_boxQueued(queuedIndex, boxOwner2), "no-maroon: 2nd box queued at the round's index");
         // Two physical buffers: the seeded session makes queuedIndex the read side (the write
         // side flips to queuedIndex ^ 1), with its word landed there.
         _injectActiveLootboxWord(queuedIndex, uint256(keccak256("tst01-no-maroon-word2")));
@@ -1089,10 +1115,11 @@ contract RngLockDeterminism is DeployProtocol {
         _parkBoxFrontier(queuedIndex); // start the human-box stage at this buffer's first entry
         assertFalse(game.rngLocked(), "no-maroon: unlocked for the cursor-open");
         assertTrue(game.boxesPending(), "no-maroon: boxesPending() true once the finalized-index word lands");
+        vm.recordLogs();
         vm.prank(keeper);
         game.mineFlip();
         assertTrue(
-            _lootboxEthBase(queuedIndex, boxOwner2) >> 255 == 1,
+            _boxOpened(vm.getRecordedLogs(), boxOwner2),
             "no-maroon: the cursor-opened box materialized (signal zeroed) - none marooned"
         );
     }
@@ -1111,15 +1138,16 @@ contract RngLockDeterminism is DeployProtocol {
         assertGt(RecyclingState.currentWord(address(game)), 1);
     }
 
-    /// @dev Park the human-box frontier (humanReadComplete byte 13, boxCursor byte 7 — both in
-    ///      slot 56) at `index`'s first entry, as a fresh seal leaves it.
-    uint256 constant SLOT_BOX_CURSORS = GameSlots.BOX_CURSOR;
+    /// @dev Park the human-box frontier (boxCursor at 0 and humanReadComplete false) at `index`'s
+    ///      first entry, as a fresh seal leaves it. The read count was latched by the seeded seal.
     function _parkBoxFrontier(uint48 index) internal {
         require(index == RecyclingState.readBuffer(address(game)), "fixture read tag");
-        bytes32 slot = bytes32(uint256(SLOT_BOX_CURSORS));
+        bytes32 slot = bytes32(GameSlots.BOX_CURSOR);
         uint256 packed = uint256(vm.load(address(game), slot));
-        packed &= ~(((uint256(1) << 48) - 1) << 56);
-        packed &= ~(uint256(0xff) << 104);
+        packed &= ~(((uint256(1) << 48) - 1) << (GameSlots.BOX_CURSOR_OFFSET * 8));
         vm.store(address(game), slot, bytes32(packed));
+        bytes32 flags = bytes32(GameSlots.HUMAN_READ_COMPLETE);
+        uint256 w = uint256(vm.load(address(game), flags));
+        vm.store(address(game), flags, bytes32(w & ~(uint256(0xff) << (GameSlots.HUMAN_READ_COMPLETE_OFFSET * 8))));
     }
 }

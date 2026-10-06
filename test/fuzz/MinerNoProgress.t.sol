@@ -44,7 +44,7 @@ contract MinerProgressHarness is DegenerusGameMinerModule {
         }
         if (action == MinerAction.Afking) _pendingBoxCount = 1;
         if (action == MinerAction.HumanBoxes) humanReadComplete = false;
-        if (action == MinerAction.Degenerette) degeneretteQueue[_rngReadBuffer()].push(0);
+        if (action == MinerAction.Degenerette) degeneretteReadCount = 1;
         if (action == MinerAction.Decimator) decBattleQueue = 1;
         if (action == MinerAction.Craps) lootboxRngPacked |= uint256(1) << (LR_CRAPS_PENDING_SHIFT + _rngReadBuffer());
         if (action == MinerAction.PrepareSubscriptions || action == MinerAction.RequestDaily) {

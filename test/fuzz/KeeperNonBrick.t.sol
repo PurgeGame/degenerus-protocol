@@ -52,10 +52,6 @@ contract KeeperNonBrick is DeployProtocol {
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
     /// @dev lootboxRngWordByIndex mapping root slot.
     uint256 private constant LOOTBOX_RNG_WORD_SLOT = GameSlots.RNG_WORD_CURRENT;
-    /// @dev lootboxEth (the single folded box word) mapping root slot. The amount sub-field (low 128
-    ///      bits) is the box-owed signal that replaced the removed lootboxEthBase mapping.
-    uint256 private constant LOOTBOX_ETH_SLOT = GameSlots.LOOTBOX_ORDER;
-    uint256 private constant LB_AMOUNT_MASK = (uint256(1) << 128) - 1;
     /// @dev rngLockedFlag is bool at slot 0 offset 19 bytes = bit 152.
     uint256 private constant RNG_LOCKED_SHIFT = 152;
     /// @dev gameOver is bool at slot 0 offset 21 bytes = bit 168.
@@ -234,6 +230,7 @@ contract KeeperNonBrick is DeployProtocol {
     }
 
     function _fundPool(address who, uint256 amount) internal {
+        _giveWalletId(who);
         vm.deal(address(this), amount);
         game.depositAfkingFunding{value: amount}(who);
     }

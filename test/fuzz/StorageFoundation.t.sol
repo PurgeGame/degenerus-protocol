@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title StorageHarness -- Exposes internal DegenerusGameStorage helpers for testing.
 contract StorageHarness is DegenerusGameAdvanceModule, WalletSeed {
@@ -120,7 +121,7 @@ contract StorageFoundationTest is Test {
 
     /// @dev Verify ticketWriteSlot at Slot 0, offset 25; prizePoolFrozen at offset 26.
     ///      ticketsFullyProcessed at Slot 0 offset 24. presaleOver (offset 27),
-    ///      subsFullyProcessed (offset 28), presaleDrained (offset 29) and
+    ///      subsFullyProcessed (offset 28), humanReadComplete (offset 29) and
     ///      ticketRedemptionOpen (offset 30) occupy the high bytes of slot 0 above these flags.
     function testSlot0FieldOffsets() public {
         // ticketWriteSlot at slot 0 offset 25 (bit 200)
@@ -245,15 +246,15 @@ contract StorageFoundationTest is Test {
         assertEq(uint256(f), 3 ether, "a clamped next must not disturb future");
     }
 
-    /// @dev Pin the post-v62 consolidated tail pack `levelDgnrsPacked` to slot 25 with the
+    /// @dev Pin the post-v62 consolidated tail pack `levelDgnrsPacked` to its compiled slot (GameSlots) with the
     ///      documented alloc[0:128) / claimed[128:256) split. Writing a sentinel directly into
-    ///      the keccak256(abi.encode(lvl, 25)) mapping element and reading both halves back through
-    ///      the contract's own `_getLevelDgnrs` getter proves the field still lives at slot 25 under
+    ///      the keccak256(abi.encode(lvl, slot)) mapping element and reading both halves back through
+    ///      the contract's own `_getLevelDgnrs` getter proves the field still lives at its slot under
     ///      the new layout — a future tail re-pack that moved it would break this assertion rather
     ///      than silently masking a slot-hardcoded harness that pokes the wrong field.
     function testLevelDgnrsPackedTailSlot() public {
         uint24 lvl = 50;
-        uint256 LEVEL_DGNRS_PACKED_SLOT = 25;
+        uint256 LEVEL_DGNRS_PACKED_SLOT = GameSlots.LEVEL_DGNRS_PACKED;
         uint256 allocSentinel = 0x0000000000000000000000000000000123456789ABCDEF0123456789ABCDEF01;
         uint256 claimedSentinel = 0x00000000000000000000000000000002FEDCBA9876543210FEDCBA9876543210;
         uint256 packed = (claimedSentinel << 128) | uint256(uint128(allocSentinel));
@@ -265,12 +266,12 @@ contract StorageFoundationTest is Test {
         assertEq(
             allocation,
             uint256(uint128(allocSentinel)),
-            "levelDgnrsPacked allocation half not at slot 25 low 128"
+            "levelDgnrsPacked allocation half not at its slot low 128"
         );
         assertEq(
             claimed,
             uint256(uint128(claimedSentinel)),
-            "levelDgnrsPacked claimed half not at slot 25 high 128"
+            "levelDgnrsPacked claimed half not at its slot high 128"
         );
     }
 

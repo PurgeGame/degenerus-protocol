@@ -399,9 +399,12 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
     }
 
     function _foilProducer(bool terminal) private view returns (uint24, bool, bool) {
-        uint256[] storage packs = foilQueue[_foilReadKey()];
-        if (foilCursor >= packs.length) return (0, false, false);
-        uint24 lvl = uint24(packs[foilCursor] >> 160);
+        uint256 cursor = foilCursor;
+        if (cursor >= foilReadCount) return (0, false, false);
+        uint256 slot = _foilSlot(_foilReadKey(), cursor);
+        uint256 pack;
+        assembly ("memory-safe") { pack := sload(slot) }
+        uint24 lvl = uint24(pack >> 160);
         uint24 old = _ticketBufferLevel(lvl);
         if (!terminal && old != 0 && old < lvl) {
             uint24 readKey = _tqReadKey(old);

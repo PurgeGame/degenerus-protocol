@@ -759,7 +759,6 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         uint24 currentLevel,
         uint256 seed
     ) external payable {
-        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (countsPacked == 0) return;
 
         (uint256 expectedPerBoon, uint24 currentDay) = _boxBoonContext(player, currentLevel);

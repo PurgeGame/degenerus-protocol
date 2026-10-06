@@ -28,9 +28,13 @@ contract BudgetReadFixture is DegenerusGame {
         ticketsFullyProcessed = stage != 0;
         _pendingBoxCount = stage == 2 ? 1 : 0;
     }
-    function order(address owner) external view returns (uint256) { return _boxOrder(_rngReadBuffer(), owner); }
+    /// @dev The read buffer's first entry while the cursor has not passed it (0 once settled).
+    function order() external view returns (uint256) { return boxCursor == 0 ? _boxEntryAt(_rngReadBuffer(), 0) : 0; }
     function cursor() external view returns (uint256) { return boxCursor; }
-    function bet() external view returns (uint256) { return degeneretteQueue[_rngReadBuffer()][0]; }
+    function bet() external view returns (uint256 word) {
+        uint256 slot = _betSlot(_rngReadBuffer(), 0);
+        assembly ("memory-safe") { word := sload(slot) }
+    }
     function workHuman(uint256 allowance) external returns (MineFlipGas.Result memory) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
             abi.encodeWithSignature("runHumanBoxWork(uint256)", allowance)
@@ -64,29 +68,30 @@ contract MineFlipHumanBudgetTest is DeployProtocol {
         vm.prank(BUYER);
         game.purchase{value: 1 ether}(BUYER, 0, BoxOrderLib.boCustoms(100, 0.01 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         host.publishRead();
-        assertEq(BoxOrderLib.boCount(host.order(BUYER)), 100);
+        assertEq(BoxOrderLib.boCount(host.order()), 100);
+        assertEq(BoxOrderLib.boId(host.order()), game.walletIdOf(BUYER));
     }
     function test_FirstWideBoxWaitsForItsAtomicAllowance() public {
         _queueWideBox();
-        uint256 beforeOrder = host.order(BUYER);
+        uint256 beforeOrder = host.order();
         MineFlipGas.Result memory result = host.workHuman(2_000_000);
         assertFalse(result.progressed);
-        assertEq(host.order(BUYER), beforeOrder);
+        assertEq(host.order(), beforeOrder);
         assertEq(host.cursor(), 0);
         result = host.workHuman{gas: 10_000_000}(9_000_000);
         assertEq(result.rewardBasis, 100);
         assertTrue(result.done);
-        assertEq(host.order(BUYER), 0);
+        assertEq(host.order(), 0);
     }
     function test_HumanCannotBypassEarlierConsumers() public {
         _queueWideBox();
-        uint256 beforeOrder = host.order(BUYER);
+        uint256 beforeOrder = host.order();
         for (uint8 stage; stage <= 2; ++stage) {
             host.priorWork(stage);
             vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(stage == 1));
             MineFlipGas.Result memory result = host.workHuman(9_000_000);
             assertFalse(result.progressed);
-            assertEq(host.order(BUYER), beforeOrder);
+            assertEq(host.order(), beforeOrder);
             assertEq(host.cursor(), 0);
         }
     }
@@ -105,19 +110,19 @@ contract MineFlipHumanBudgetTest is DeployProtocol {
     }
     function test_LowGasBoxCallWaitsForTheAtomicEntry() public {
         _queueWideBox();
-        uint256 beforeOrder = host.order(BUYER);
+        uint256 beforeOrder = host.order();
         (bool ok,) = address(host).call{gas: 2_000_000}(abi.encodeCall(host.workHuman, (9_000_000)));
         assertTrue(ok);
-        assertEq(host.order(BUYER), beforeOrder);
+        assertEq(host.order(), beforeOrder);
         assertEq(host.cursor(), 0);
     }
     function test_DownstreamFailureRollsBackBoxMarkerAndCursor() public {
         _queueWideBox();
-        uint256 beforeOrder = host.order(BUYER);
+        uint256 beforeOrder = host.order();
         bytes memory code = ContractAddresses.GAME_BOON_MODULE.code;
         vm.etch(ContractAddresses.GAME_BOON_MODULE, hex"fe");
         vm.expectRevert(); host.workHuman(9_000_000);
-        assertEq(host.order(BUYER), beforeOrder);
+        assertEq(host.order(), beforeOrder);
         assertEq(host.cursor(), 0);
         vm.etch(ContractAddresses.GAME_BOON_MODULE, code);
         MineFlipGas.Result memory result = host.workHuman{gas: 10_000_000}(9_000_000);

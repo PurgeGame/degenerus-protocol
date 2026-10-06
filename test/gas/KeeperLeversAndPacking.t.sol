@@ -181,9 +181,9 @@ contract KeeperLeversAndPacking is DeployProtocol {
     // GAS-04 — Sub 1-slot + boxCursor uint48 + no new hot-path storage (SOURCE-PRESENCE)
     // =========================================================================
 
-    /// @notice GAS-04: the game-resident `Sub` struct packs to ONE slot (RE-DERIVED), `boxCursor`/
-    ///         `boxCursorIndex` are uint48, and the crank adds storage ONLY via the first-deposit
-    ///         `boxPlayers` push (inlined at the module first-deposit sites).
+    /// @notice GAS-04: the game-resident `Sub` struct packs to ONE slot (RE-DERIVED), `boxCursor` is
+    ///         uint48, and the crank adds storage ONLY via the purchase-time box entry append
+    ///         (`_appendBoxEntry`, one complete word per purchase or grant).
     /// @dev    The game-resident `Sub` is eleven fields summing to 28 used bytes (one 256-bit slot,
     ///         4 free bytes). The in-slot accumulator section is `affiliateBase` uint32 + `pendingFlip` uint24 +
     ///         `subStreakLatch` uint16 = 72 bits, ending at byte 27:
@@ -228,12 +228,12 @@ contract KeeperLeversAndPacking is DeployProtocol {
         assertGt(_countOccurrences(storage_, "uint48 internal boxCursor;"), 0, "GAS-04: boxCursor is uint48");
         assertGt(_countOccurrences(storage_, "bool internal humanReadComplete = true;"), 0, "GAS-04: binary read completion replaces the old index frontier");
 
-        // No new hot-path storage: the first-deposit enqueue is the ONLY crank-added storage
-        // write, inlined at the module first-deposit sites as a direct `boxPlayers[...].push`
-        // (the Game-side enqueueBoxForAutoOpen self-call stub was removed with its round trip).
+        // No new hot-path storage: the purchase-time entry append is the ONLY crank-added storage
+        // write, made by the module that completes the entry (the Game-side enqueueBoxForAutoOpen
+        // self-call stub was removed with its round trip).
         assertEq(_countOccurrences(game_, "function enqueueBoxForAutoOpen("), 0, "GAS-04: no Game-side enqueue stub (enqueue inlined in modules)");
         string memory lootboxModule_ = vm.readFile("contracts/modules/DegenerusGameLootboxModule.sol");
-        assertGt(_countOccurrences(lootboxModule_, "boxPlayers[idx & 1].push(buyer);"), 0, "GAS-04: first-deposit enqueue push present in LootboxModule");
+        assertGt(_countOccurrences(lootboxModule_, "= _appendBoxEntry(word, amountWei);"), 0, "GAS-04: grant entry append present in LootboxModule");
     }
 
     // =========================================================================
@@ -248,7 +248,6 @@ contract KeeperLeversAndPacking is DeployProtocol {
         string memory game_ = _strippedGame();
         string memory storage_ = _stripComments(vm.readFile(STORAGE_SRC));
         string memory degenerette = _stripComments(vm.readFile(DEGENERETTE_SRC));
-        string memory lootbox = _stripComments(vm.readFile(LOOTBOX_SRC));
         string memory afking = _stripComments(vm.readFile(AFKING_SRC));
 
         // G1 — RngNotReady freeze guard: placement (reject a bet at an already-worded index) + resolve.
@@ -265,17 +264,22 @@ contract KeeperLeversAndPacking is DeployProtocol {
         assertGt(_countOccurrences(afking, "uint256 indexWord = _lootboxWord(idx);"), 0, "G2: sweep per-index word load (threaded into every open at this index)");
         assertGt(_countOccurrences(afking, "if (indexWord == 0) return result;"), 0, "G2: no open on an un-worded buffer");
         assertGt(_countOccurrences(afking, "if (_rngConsumerStage() != 3) return result;"), 0, "G2: human boxes open only at their consumer stage");
-        assertGt(_countOccurrences(lootbox, "revert RngNotReady()"), 0, "G2: LootboxModule open RngNotReady guard byte-present");
+        // The queued-entry resolver has no route but that guarded worker.
+        assertEq(_countOccurrences(afking, "IDegenerusGameLootboxModule.resolveHumanBoxOrder.selector"), 1, "G2: the entry resolver is reached only from the word-guarded worker");
+        assertEq(_countOccurrences(game_, "resolveHumanBoxOrder"), 0, "G2: no Game facade replays an entry");
 
-        // G3 — one-reward-per-item: the queue word is zeroed before the bet resolves.
-        assertGt(_countOccurrences(degenerette, "queue[pos] = bet | BET_PROCESSED;"), 0, "G3: sweep marks the bet processed before resolution");
+        // G3 — one-reward-per-item: the queue word is marked processed before the bet resolves.
+        assertGt(_countOccurrences(degenerette, "uint256 marked = bet | BET_PROCESSED;"), 0, "G3: sweep marks the bet processed before resolution");
+        assertGt(_countOccurrences(degenerette, "assembly (\"memory-safe\") { sstore(slot, marked) }"), 0, "G3: the processed mark is stored in the bet's own slot");
 
-        // G4 — one-reward-per-item: box zeroing + autoOpen already-emptied skip. Post-repack the box
-        // lives in the single packed lootboxOrder word; open clears it in one SSTORE, and the sweep
-        // skips an entry whose box order AND presale leg are both already zero (already drained).
-        assertGt(_countOccurrences(lootbox, "lootboxOrder[index & 1][player] = word | BOX_PROCESSED;"), 0, "G4: box zeroing one-reward guard (single packed word)");
-        assertGt(_countOccurrences(lootbox, "uint256 word = _boxOrder(idx, player);"), 0, "G4: sweep per-entry box-word load (the skip-check read doubles as the open's input)");
-        assertGt(_countOccurrences(afking, "if (boxes == 0 && stored == 0) continue;"), 0, "G4: sweep already-opened skip (both legs zero -> continue)");
+        // G4 — one-reward-per-item: entries are never marked; the sweep stores the advanced cursor
+        // BEFORE it delegates the entry's rewards, so an entry settles at most once.
+        string memory humanWork = _functionBody(afking, "function _runHumanBoxWork(uint256 gasAllowance) private returns (MineFlipGas.Result memory result) {");
+        assertGt(_countOccurrences(humanWork, "uint256 entry = _boxEntryAt(idx, cur);"), 0, "G4: sweep per-entry word load (threaded into the resolver)");
+        uint256 cursorStore = _indexOf(humanWork, "boxCursor = uint48(cur + 1);");
+        uint256 rewardCall = _indexOf(humanWork, "GAME_LOOTBOX_MODULE.delegatecall(");
+        assertLt(cursorStore, rewardCall, "G4: cursor stored before the entry's rewards run");
+        assertLt(rewardCall, bytes(humanWork).length, "G4: the entry's reward call is present");
 
         // G6 — (v49 batchPurchase per-player slice try/catch) DROPPED, D-351-02 (removed surface). The
         // afking per-sub STAGE is revert-free by construction (D-348-04 no valve); asserted ABSENT.
@@ -289,9 +293,10 @@ contract KeeperLeversAndPacking is DeployProtocol {
         assertGt(_countOccurrences(degenerette, "if (!MineFlipGas.canRun(meter, skip ? BET_SKIP_GAS : _betGasMaximum(bet), BET_TAIL_GAS)) break;"), 0, "G7: bet sweep breaks (never skips) on a bet that does not fit");
         assertGt(_countOccurrences(degenerette, "if (result.progressed) degeneretteCursor = uint48(pos);"), 0, "G7: bet sweep resumes from its cursor");
         assertGt(_countOccurrences(storage_, "if (gameOver || rngLockedFlag || _rngRequestActive()"), 0, "G7: consumer stages close under the lock (frozen pool holds the bet queue)");
-        assertGt(_countOccurrences(afking, "if (!MineFlipGas.canRun(meter, maximum, HUMAN_TAIL_GAS)) break;"), 0, "G7: box sweep breaks on an order that does not fit");
-        assertGt(_countOccurrences(afking, "boxCursor = uint48(cur);"), 0, "G7: box sweep resumes from its cursor next call");
-        assertGt(_countOccurrences(lootbox, "_openLootBoxLegWith(player, idx, word, indexWord, currentLevel);"), 0, "G7: per-entry box-open isolation (the sweep opens one entry at a time)");
+        assertGt(_countOccurrences(humanWork, "meter, HUMAN_ENTRY_GAS + boxes * HUMAN_BOX_GAS + (presale ? HUMAN_PRESALE_GAS : 0), HUMAN_TAIL_GAS"), 0, "G7: box sweep admits each entry against its declared bound");
+        assertEq(_countOccurrences(humanWork, ")) break;"), 1, "G7: box sweep breaks on an entry that does not fit");
+        assertGt(_countOccurrences(humanWork, "uint256 cur = boxCursor;"), 0, "G7: box sweep resumes from its cursor next call");
+        assertGt(_countOccurrences(humanWork, "idx, cur, entry, indexWord, currentLevel)"), 0, "G7: per-entry box-open isolation (the sweep opens one entry at a time)");
         assertGt(_countOccurrences(game_, "if (msg.sender != address(this)) revert OnlySelf();"), 0, "G7: onlySelf (msg.sender == self) guard byte-present");
 
         // G9 — (v49 batchPurchase AF_KING keeper gate) DROPPED, D-351-02. v55: the afking auth is the
@@ -373,6 +378,20 @@ contract KeeperLeversAndPacking is DeployProtocol {
             }
         }
         return "";
+    }
+
+    /// @dev Byte offset of the first `needle` in `haystack`, or type(uint256).max when absent.
+    function _indexOf(string memory haystack, string memory needle) internal pure returns (uint256) {
+        bytes memory hb = bytes(haystack);
+        bytes memory n = bytes(needle);
+        for (uint256 i; n.length != 0 && i + n.length <= hb.length; ++i) {
+            bool matched = true;
+            for (uint256 j; j < n.length; ++j) {
+                if (hb[i + j] != n[j]) { matched = false; break; }
+            }
+            if (matched) return i;
+        }
+        return type(uint256).max;
     }
 
     function _strippedGame() internal view returns (string memory) {

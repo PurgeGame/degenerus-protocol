@@ -8,6 +8,7 @@ import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
+import {DegeneretteQueue as DQ} from "../helpers/DegeneretteQueue.sol";
 
 /// @dev Test overlay: exercises real module bytecode in the Game's storage and forwards
 ///      ordinary Game calls to its original runtime. No storage-layout slot constants.
@@ -34,10 +35,16 @@ contract WinLootboxCapProbe is DegenerusGameStorage, WalletSeed {
         _setPrizePools(0, uint128(1_000_000 ether));
     }
 
+    function walletId(address who) external returns (uint32) {
+        return _seedWallet(who);
+    }
+
     function seedBetScore(uint48 index, uint256 pos, uint16 score) external {
-        uint256 word = degeneretteQueue[index & 1][pos];
-        degeneretteQueue[index & 1][pos] =
-            (word & ~(uint256(type(uint16).max) << 172)) | (uint256(score) << 172);
+        uint256 slot = _betSlot(index & 1, pos);
+        uint256 word;
+        assembly ("memory-safe") { word := sload(slot) }
+        word = (word & ~(uint256(type(uint16).max) << 172)) | (uint256(score) << 172);
+        assembly ("memory-safe") { sstore(slot, word) }
     }
 
     function dispatch(address module, bytes calldata payload) external payable {
@@ -65,6 +72,7 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
     uint8 private constant SYMBOL = 9;
     uint48 private constant INDEX = 1;
     address private player;
+    uint32 private playerId;
     WinLootboxCapProbe private probe;
     uint256 private directWord;
 
@@ -76,9 +84,10 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
         vm.etch(address(game), address(overlay).code);
         probe = WinLootboxCapProbe(payable(address(game)));
         player = makeAddr("winCapPlayer");
+        playerId = probe.walletId(player);
         // Ticket rolls emit LootBoxOpened even for a cold bust. Spin rolls use BoxSpin.
         for (uint256 word = 1; ; ++word) {
-            uint256 seed = uint256(keccak256(abi.encode(word, uint256(uint160(player)))));
+            uint256 seed = uint256(keccak256(abi.encode(word, uint256(playerId))));
             if (uint16(seed >> 40) % 20 < 8) { directWord = word; break; }
         }
         vm.deal(player, 10_000 ether);
@@ -91,7 +100,7 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
 
     function _resolve(bytes4 selector, uint256 amount, uint16 score) private returns (uint256 scaled, uint24 target) {
         vm.recordLogs();
-        probe.dispatch(address(lootboxModule), abi.encodeWithSelector(selector, player, amount, directWord, score));
+        probe.dispatch(address(lootboxModule), abi.encodeWithSelector(selector, player, playerId, amount, directWord, score));
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 count;
         for (uint256 i; i < logs.length; ++i) {
@@ -179,7 +188,7 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
     function test_DirectModuleCallRejectsValueEvenForZeroAmount() public {
         vm.expectRevert(bytes4(keccak256("OnlyDelegatecall()")));
         (bool ok,) = address(lootboxModule).call{value: 1 ether}(
-            abi.encodeWithSelector(WIN, player, uint256(0), uint256(1), MAX_SCORE)
+            abi.encodeWithSelector(WIN, player, playerId, uint256(0), uint256(1), MAX_SCORE)
         );
         assertTrue(ok); // expectRevert makes the observed low-level call succeed
     }
@@ -196,7 +205,7 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
             bool tickets = true;
             for (uint256 betId = 1; betId <= 2; ++betId) {
                 uint256 boxWord = uint256(keccak256(abi.encode(word, betId)));
-                uint256 seed = uint256(keccak256(abi.encode(boxWord, uint256(uint160(player)))));
+                uint256 seed = uint256(keccak256(abi.encode(boxWord, uint256(playerId))));
                 if (uint16(seed >> 40) % 20 >= 8) tickets = false;
             }
             if (tickets) return word;
@@ -206,7 +215,7 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
     function _place(uint8 spins, uint16 score) private {
         vm.prank(player);
         game.placeDegeneretteBet{value: uint256(spins) * 10 ether}(address(0), 0, 10 ether, spins, SYMBOL);
-        uint64 id = uint64(uint256(vm.load(address(game), keccak256(abi.encode(uint256(INDEX & 1), GameSlots.DEGENERETTE_QUEUE)))));
+        uint64 id = DQ.lastBetId(vm, address(game), INDEX);
         probe.seedBetScore(INDEX, id - 1, score);
     }
 
@@ -346,7 +355,7 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
         vm.cool(address(game));
         vm.cool(address(lootboxModule));
         uint256 beforeGas = gasleft();
-        probe.dispatch(address(lootboxModule), abi.encodeWithSelector(NORMAL, player, 60 ether, uint256(12345), MAX_SCORE));
+        probe.dispatch(address(lootboxModule), abi.encodeWithSelector(NORMAL, player, playerId, 60 ether, uint256(12345), MAX_SCORE));
         emit log_named_uint("cap_normal_recirc", beforeGas - gasleft());
     }
 

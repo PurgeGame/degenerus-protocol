@@ -49,11 +49,17 @@ contract DeadVrfSeeder is DegenerusGame, BucketSeed {
         return ticketPending[_walletIdOf(player)];
     }
 
+    /// @dev Append a pack to cohort `resolveDay & 1` at that cohort's count (the foil queue is
+    ///      manually addressed; its counts live in the foil cursor slot).
     function seedFoil(uint24 lvl, uint24 resolveDay, address player) external returns (uint256 index) {
-        uint256 ownerIdx = uint256(_seedWallet(player));
-        foilQueue[resolveDay & 1].push(((ownerIdx + 1) << 192) | (uint256(lvl) << 160) | uint256(uint160(player)));
-        index = foilQueue[resolveDay & 1].length - 1;
-
+        uint24 key = resolveDay & 1;
+        uint256 id = uint256(_seedWallet(player));
+        index = _foilCount(key);
+        uint256 slot = _foilSlot(key, index);
+        uint256 pack = (id << 192) | (uint256(lvl) << 160) | uint256(uint160(player));
+        assembly ("memory-safe") { sstore(slot, pack) }
+        if (key == _foilWriteKey()) foilWriteCount = uint32(index + 1);
+        else foilReadCount = uint32(index + 1);
     }
 
     function deadState()

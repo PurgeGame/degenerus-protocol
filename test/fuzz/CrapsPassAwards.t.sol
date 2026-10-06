@@ -22,7 +22,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///         coinflip credit; a sub-pass roll whose fraction loses pays the WWXRP dud.
 contract CrapsPassAwards is DeployProtocol {
     event CrapsPassesCredited(address indexed player, bool highRoller, uint256 count);
-    event LootBoxBuy(address indexed buyer, uint48 indexed index, uint256 amount);
+    event LootBoxBuy(address indexed buyer, uint48 indexed index, uint32 position, uint256 amount);
 
     uint256 private constant WHALE_EARLY_PRICE = 2.4 ether;
     uint256 private constant WHALE_STANDARD_PRICE = 4 ether;
@@ -96,7 +96,7 @@ contract CrapsPassAwards is DeployProtocol {
     function testDeityHighPassAndHalvedLootboxBelowLevel10() public {
         // The lootbox leg lands first (5% of the 24 ETH price), then the table credit.
         vm.expectEmit(true, false, false, true, address(game));
-        emit LootBoxBuy(buyer, 0, DEITY_FIRST_PRICE / 20);
+        emit LootBoxBuy(buyer, 0, 0, DEITY_FIRST_PRICE / 20);
         vm.expectEmit(address(crapsBattle));
         emit CrapsPassesCredited(buyer, true, 1);
         _buyDeity(buyer, 4);
@@ -118,7 +118,7 @@ contract CrapsPassAwards is DeployProtocol {
     function testDeityNormalPassAndFullLootboxFromLevel10() public {
         _setLevel(10);
         vm.expectEmit(true, false, false, true, address(game));
-        emit LootBoxBuy(buyer, 0, DEITY_FIRST_PRICE / 10);
+        emit LootBoxBuy(buyer, 0, 0, DEITY_FIRST_PRICE / 10);
         vm.expectEmit(address(crapsBattle));
         emit CrapsPassesCredited(buyer, false, 1);
         _buyDeity(buyer, 7);
@@ -231,8 +231,11 @@ contract CrapsPassAwards is DeployProtocol {
         vm.store(address(game), bytes32(uint256(0)), bytes32(slot0 | (uint256(1) << 192)));
     }
 
+    /// @dev The presale leg's seed for the buffer's first entry: hash4(root, walletId, PRESALE_BOX, buffer)
+    ///      with root = hash4(QueuedOrder, word, buffer, position 0).
     function _seedOf(uint256 word, address who) private view returns (uint256) {
-        return uint256(keccak256(abi.encodePacked(word, keccak256("PRESALE_BOX"), who, presaleBuffer)));
+        uint256 root = EntropyLib.hash4(0x5175657565644f72646572, word, presaleBuffer, 0);
+        return EntropyLib.hash4(root, game.walletIdOf(who), uint256(keccak256("PRESALE_BOX")), presaleBuffer);
     }
 
     /// @dev A word landing the FLIP branch (outcome < 50) on the requested variance band and
@@ -297,7 +300,7 @@ contract CrapsPassAwards is DeployProtocol {
         uint256 flipOut = _mirrorFlipOut(word, p, amount);
         _finalizeIndex(index);
         vm.expectEmit(address(game));
-        emit PresaleBoxOpened(p, index, amount, flipOut, 0, 0, false, 0, 0);
+        emit PresaleBoxOpened(p, (uint48(1) << 46) | index, amount, flipOut, 0, 0, false, 0, 0);
         game.mineFlip();
 
         (uint256 cn, uint256 ch) = crapsBattle.passCreditsOf(p);
@@ -321,7 +324,7 @@ contract CrapsPassAwards is DeployProtocol {
         vm.expectEmit(address(crapsBattle));
         emit CrapsPassesCredited(p, false, n);
         vm.expectEmit(address(game));
-        emit PresaleBoxOpened(p, index, amount, 0, 0, 0, false, n, 0);
+        emit PresaleBoxOpened(p, (uint48(1) << 46) | index, amount, 0, 0, 0, false, n, 0);
         game.mineFlip();
 
         (uint256 cn, uint256 ch) = crapsBattle.passCreditsOf(p);
@@ -346,7 +349,7 @@ contract CrapsPassAwards is DeployProtocol {
         vm.expectEmit(address(crapsBattle));
         emit CrapsPassesCredited(p, true, h);
         vm.expectEmit(address(game));
-        emit PresaleBoxOpened(p, index, amount, 0, 0, 0, false, 0, h);
+        emit PresaleBoxOpened(p, (uint48(1) << 46) | index, amount, 0, 0, 0, false, 0, h);
         game.mineFlip();
 
         (uint256 cn, uint256 ch) = crapsBattle.passCreditsOf(p);
@@ -371,7 +374,7 @@ contract CrapsPassAwards is DeployProtocol {
         vm.expectEmit(address(crapsBattle));
         emit CrapsPassesCredited(p, true, HIGH_CAP);
         vm.expectEmit(address(game));
-        emit PresaleBoxOpened(p, index, amount, flipLeft, 0, 0, false, 0, uint32(HIGH_CAP));
+        emit PresaleBoxOpened(p, (uint48(1) << 46) | index, amount, flipLeft, 0, 0, false, 0, uint32(HIGH_CAP));
         game.mineFlip();
 
         (, uint256 ch) = crapsBattle.passCreditsOf(p);
@@ -404,7 +407,7 @@ contract CrapsPassAwards is DeployProtocol {
         _finalizeIndex(index);
 
         vm.expectEmit(address(game));
-        emit PresaleBoxOpened(p, index, amount, 0, 0, 0, false, 1, 0);
+        emit PresaleBoxOpened(p, (uint48(1) << 46) | index, amount, 0, 0, 0, false, 1, 0);
         game.mineFlip();
 
         (uint256 cn,) = crapsBattle.passCreditsOf(p);
@@ -420,7 +423,7 @@ contract CrapsPassAwards is DeployProtocol {
         _finalizeIndex(index);
 
         vm.expectEmit(address(game));
-        emit PresaleBoxOpened(p, index, amount, 0, 0, WWXRP_DUD, false, 0, 0);
+        emit PresaleBoxOpened(p, (uint48(1) << 46) | index, amount, 0, 0, WWXRP_DUD, false, 0, 0);
         game.mineFlip();
 
         (uint256 cn, uint256 ch) = crapsBattle.passCreditsOf(p);

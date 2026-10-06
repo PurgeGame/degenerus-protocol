@@ -5,7 +5,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
-import {C1Viewer} from "../repro/C1BoxAutoOpen.t.sol";
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 /// @title LootboxTicketLanesFlush -- every box's announced future level receives exactly its entries
 /// @notice A box open announces each box's target level and whole-ticket roll in `LootBoxOpened`
@@ -20,6 +20,8 @@ contract LootboxTicketLanesFlush is DeployProtocol {
     bytes32 internal constant OPENED =
         keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
     bytes32 internal constant QUEUED = keccak256("EntriesQueued(uint32,uint24,uint32)");
+    /// @dev Event-tag bit of a queued entry: QUEUED_ENTRY_TAG | position << 1 | buffer.
+    uint48 internal constant QUEUED_ENTRY_TAG = uint48(1) << 46;
 
     function setUp() public {
         _deployProtocol();
@@ -29,18 +31,12 @@ contract LootboxTicketLanesFlush is DeployProtocol {
         vm.deal(actor, 100 ether);
     }
 
-    function _idx() internal returns (uint48 v) {
-        bytes memory real = address(game).code;
-        vm.etch(address(game), type(C1Viewer).runtimeCode);
-        v = C1Viewer(payable(address(game))).lrIndexView();
-        vm.etch(address(game), real);
+    function _idx() internal view returns (uint48) {
+        return RecyclingState.writeBuffer(address(game));
     }
 
-    function _word(uint48 index) internal returns (uint256 v) {
-        bytes memory real = address(game).code;
-        vm.etch(address(game), type(C1Viewer).runtimeCode);
-        v = C1Viewer(payable(address(game))).rngWordFor(index);
-        vm.etch(address(game), real);
+    function _word(uint48 index) internal view returns (uint256) {
+        return RecyclingState.word(address(game), index);
     }
 
     /// @dev The mid-day request, issued by `caller`'s mineFlip as the engine's next action (the
@@ -102,22 +98,24 @@ contract LootboxTicketLanesFlush is DeployProtocol {
         assertTrue(game.rngComplete(), "harness: the day's cohorts all completed");
     }
 
-    /// @dev Tally one open's announcements and queue writes per level offset from `base`.
-    function _tally(Vm.Log[] memory logs, uint48 N, uint256 base)
+    /// @dev Tally one open's announcements (tagged with the entry's `ref`) and the actor's queue
+    ///      writes (keyed by wallet ID) per level offset from `base`.
+    function _tally(Vm.Log[] memory logs, uint48 ref, uint256 base)
         internal
         returns (uint256[64] memory announced, uint256[64] memory queued, uint256 boxes)
     {
+        uint32 actorId = game.walletIdOf(actor);
         for (uint256 i; i < logs.length; i++) {
-            if (logs[i].emitter != address(game)) continue;
+            if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
             if (logs[i].topics[0] == OPENED && address(uint160(uint256(logs[i].topics[1]))) == actor
-                && uint48(uint256(logs[i].topics[2])) == N) {
+                && uint48(uint256(logs[i].topics[2])) == ref) {
                 (, uint24 lvl, uint32 scaled,, bool up) = abi.decode(logs[i].data, (uint256, uint24, uint32, uint256, bool));
                 uint256 whole = scaled / 100 + (up ? 1 : 0);
                 assertGe(lvl, base, "a box targets the live level or later");
                 assertLt(lvl - base, 64, "and within the band");
                 announced[lvl - base] += whole * 4;
                 boxes++;
-            } else if (logs[i].topics[0] == QUEUED && address(uint160(uint256(logs[i].topics[1]))) == actor) {
+            } else if (logs[i].topics[0] == QUEUED && uint32(uint256(logs[i].topics[1])) == actorId) {
                 (uint24 lvl, uint32 entries) = abi.decode(logs[i].data, (uint24, uint32));
                 assertGe(lvl, base, "queued at the live level or later");
                 assertLt(lvl - base, 64, "and within the band");
@@ -143,6 +141,8 @@ contract LootboxTicketLanesFlush is DeployProtocol {
         assertFalse(game.rngLocked(), "stage: mid-day path reachable");
         (, , , , uint256 priceWei) = game.purchaseInfo();
         uint48 N = _idx();
+        uint256 position = RecyclingState.boxCount(address(game), N);
+        uint48 ref = QUEUED_ENTRY_TAG | (uint48(position) << 1) | N;
         // Thirty smalls spread over the target band, plus a one-ETH custom so the pending ETH
         // clears the mid-day request threshold.
         vm.prank(actor);
@@ -163,7 +163,7 @@ contract LootboxTicketLanesFlush is DeployProtocol {
             vm.recordLogs();
             vm.prank(actor);
             game.mineFlip();
-            (announced, queued, boxes) = _tally(vm.getRecordedLogs(), N, base);
+            (announced, queued, boxes) = _tally(vm.getRecordedLogs(), ref, base);
             assertGt(_word(N), 0, "the word landed at the order's index");
             assertTrue(game.boxIndexComplete(N), "the walk opened the order");
             if (_hasIsolatedHighNibbleLane(announced)) found = true;

@@ -12,6 +12,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
@@ -97,11 +98,6 @@ contract KeeperRouterOneCategory is DeployProtocol {
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
     /// @dev lootboxRngWordByIndex mapping root slot.
     uint256 private constant LOOTBOX_RNG_WORD_SLOT = GameSlots.RNG_WORD_CURRENT;
-    /// @dev lootboxOrder (the packed box-order word) mapping root slot. The whole word is the
-    ///      first-deposit / box-owed signal that replaced the removed lootboxEthBase (zeroed in
-    ///      one SSTORE on open).
-    uint256 private constant LOOTBOX_ETH_SLOT = GameSlots.LOOTBOX_ORDER;
-
     /// @dev ticketQueue mapping root (uint24 => address[]) + entriesOwedPacked
     ///      (uint24 => address => uint40) — for forcing advanceDue via a read-slot backlog.
     uint256 private constant TICKET_QUEUE_SLOT = GameSlots.TICKET_QUEUE;
@@ -300,7 +296,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         assertEq(_countOccurrences(dispatch, "coinflip.creditFlip(msg.sender, reward);"), 1, "single credit in the dispatcher");
         assertEq(_countOccurrences(miner, "creditFlip("), 1, "sole keeper-credit site in the engine");
         assertEq(_countOccurrences(afking, "creditFlip(msg.sender,"), 0, "the retired router credit site stays gone");
-        assertEq(_countOccurrences(dispatch, "if (reward != 0) {"), 1, "zero credit is skipped");
+        assertEq(_countOccurrences(dispatch, "if (numerator >= (denominator - 1) / 1e18 + 1) {"), 1, "zero credit is skipped");
         // CEI-last: the credit follows the loop's exit check and the gas measurement.
         uint256 credit = _indexOf(dispatch, "coinflip.creditFlip(msg.sender, reward);");
         uint256 measured = _indexOf(dispatch, "uint256 used = rewardStart - gasleft() - unpaidAttemptGas;");
@@ -338,7 +334,6 @@ contract KeeperRouterOneCategory is DeployProtocol {
         }
         // Finalize the boxes' index + land its word.
         _advanceLootboxRngIndexByOne();
-        _parkBoxFrontier(index);
         _injectLootboxRngWord(index, FIXED_WORD);
         for (uint256 i; i < PAID_BOX_OWNERS; ++i) {
             assertGt(_lootboxEthBase(index, owners[i]), 0, "pre: human box queued + un-opened");
@@ -647,24 +642,19 @@ contract KeeperRouterOneCategory is DeployProtocol {
         assertGt(RecyclingState.currentWord(address(game)), 1, "fixture delivered word");
     }
 
-    /// @dev Park the auto-open frontier (humanReadComplete byte 13 + boxCursor byte 7, both slot 56)
-    ///      at `index` so the human-box stage begins at this buffer's first entry.
-    function _parkBoxFrontier(uint48 index) internal {
-        bytes32 slot = bytes32(uint256(56));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        uint256 cursorMask = (uint256(1) << 48) - 1;
-        packed &= ~(cursorMask << (7 * 8));   // boxCursor = 0
-        packed &= ~(uint256(0xff) << (13 * 8)); // humanReadComplete = false
-        require(index < 2, "binary buffer fixture");
-        vm.store(address(game), slot, bytes32(packed));
-    }
-
-    /// @dev Read the live order from its parity buffer; a processed order has no remaining obligation.
-    function _lootboxEthBase(uint48 index, address who) internal view returns (uint256) {
-        bytes32 inner = keccak256(abi.encode(uint256(index & 1), uint256(LOOTBOX_ETH_SLOT)));
-        bytes32 leaf = keccak256(abi.encode(who, uint256(inner)));
-        uint256 order = uint256(vm.load(address(game), leaf));
-        return order & (uint256(1) << 255) == 0 ? order : 0;
+    /// @dev Nominal wei of `who`'s queue entries in `index`'s buffer that the human-box cursor has not
+    ///      yet settled (zero once every one of them is opened). Entry positions are bounded by the
+    ///      buffer's count (write count while accumulating, read count once sealed).
+    function _lootboxEthBase(uint48 index, address who) internal view returns (uint256 total) {
+        uint256 n = RecyclingState.boxCount(address(game), index);
+        uint256 cursor = (uint256(vm.load(address(game), bytes32(GameSlots.BOX_CURSOR))) >> (GameSlots.BOX_CURSOR_OFFSET * 8)) & type(uint48).max;
+        bool sealed_ = index == RecyclingState.readBuffer(address(game));
+        uint32 id = game.walletIdOf(who);
+        for (uint256 i = sealed_ ? cursor : 0; i < n; ++i) {
+            uint256 word = RecyclingState.boxEntry(address(game), index, i);
+            if (BoxOrderLib.boId(word) != id) continue;
+            total += BoxOrderLib.boNominal(word, PriceLookupLib.priceForLevel(BoxOrderLib.boLevel(word)));
+        }
     }
 
     // ---- read-slot ticket seeding (force advanceDue via a non-empty current-level read slot) ----

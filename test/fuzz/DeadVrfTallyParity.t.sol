@@ -36,9 +36,13 @@ contract DeadVrfTallyParityHarness is DegenerusGameGameOverModule, WalletSeed {
         foilGenerationDay = 0;
         foilFirstDrawDay = 0;
         foilCursor = 1;
+        foilWriteCount = 7;
+        foilReadCount = 7;
         for (uint24 day; day < 2; ++day) {
             for (uint256 i; i < 7; ++i) {
-                foilQueue[day].push((uint256(i % 2 == 0 ? 5 : 6) << 160) | uint160(i + 1));
+                uint256 pack = (uint256(i % 2 == 0 ? 5 : 6) << 160) | uint160(i + 1);
+                uint256 packSlot = _foilSlot(day, i);
+                assembly ("memory-safe") { sstore(packSlot, pack) }
             }
         }
         _setTicketBufferLevel(5);
@@ -99,8 +103,7 @@ contract DeadVrfTallyParityHarness is DegenerusGameGameOverModule, WalletSeed {
         if (stage == 1) {
             uint24 last = 2;
             while (dd != 0 && dd <= last) {
-                uint256[] storage bucket = foilQueue[dd - 1];
-                uint256 n = bucket.length;
+                uint256 n = _foilCount(dd - 1);
                 while (idx < n) {
                     if (units == 0) {
                         _legacySave(1, dd, idx, uncreated);
@@ -109,7 +112,12 @@ contract DeadVrfTallyParityHarness is DegenerusGameGameOverModule, WalletSeed {
                     unchecked {
                         --units;
                     }
-                    if (uint24(bucket[idx] >> 160) == lvl) {
+                    uint256 pack;
+                    {
+                        uint256 packSlot = _foilSlot(dd - 1, idx);
+                        assembly ("memory-safe") { pack := sload(packSlot) }
+                    }
+                    if (uint24(pack >> 160) == lvl) {
                         uncreated += FOIL_PACK_ENTRIES * QTY_SCALE;
                     }
                     unchecked {

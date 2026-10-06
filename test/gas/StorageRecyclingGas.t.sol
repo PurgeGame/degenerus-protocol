@@ -12,28 +12,30 @@ contract RecyclingGasHarness is TicketLevelPrep {
     }
     function prepare() external returns (bool) { return _prepareTicketLevel(3); }
     function append() external { _bucketAppendRun(_traitBufferBase(3), 7, 2, 1024, 3); }
+    /// @dev The read cohort holds `count` consumed entries and bets, and the write cohort `count`
+    ///      appended ones (its counts in lootboxRngPacked), each queue with backing at position 0.
     function seedConsumedQueues(uint256 count) external {
-        address[] storage boxes = boxPlayers[_rngReadBuffer()];
-        uint256[] storage bets = degeneretteQueue[_rngReadBuffer()];
+        uint48 read = _rngReadBuffer();
+        uint256[] storage boxes = boxQueue[read];
+        uint256 betSlot = _betSlot(read, 0);
         assembly ("memory-safe") {
-            sstore(boxes.slot, count)
             mstore(0, boxes.slot)
             sstore(keccak256(0, 32), 0xB011)
-            sstore(bets.slot, count)
-            mstore(0, bets.slot)
-            sstore(keccak256(0, 32), 0xB022)
+            sstore(betSlot, 0xB022)
         }
+        (boxReadCount, boxCursor) = (uint32(count), uint48(count));
+        (degeneretteReadCount, degeneretteCursor) = (uint32(count), uint48(count));
+        lootboxRngPacked |= (count << LR_BOX_COUNT_SHIFT) | (count << LR_BET_COUNT_SHIFT);
     }
     function sealQueues() external {
         require(_lootboxReadComplete());
         _swapRngBuffers();
-        _resetLootboxWriteBuffer(_rngWriteBuffer());
     }
     function queueState() external view returns(uint256 boxes, uint256 bets, uint256 backing) {
-        address[] storage b = boxPlayers[_rngWriteBuffer()];
-        uint256[] storage d = degeneretteQueue[_rngWriteBuffer()];
-        boxes = b.length; bets = d.length;
-        assembly ("memory-safe") { mstore(0, d.slot) backing := sload(keccak256(0, 32)) }
+        boxes = uint32(lootboxRngPacked >> LR_BOX_COUNT_SHIFT);
+        bets = uint32(lootboxRngPacked >> LR_BET_COUNT_SHIFT);
+        uint256 slot = _betSlot(_rngWriteBuffer(), 0);
+        assembly ("memory-safe") { backing := sload(slot) }
     }
     function huge() external { lvlTraitEntry[1][7] = 1_000_000; traitBucketLive[1] |= uint256(1) << 7; }
 }

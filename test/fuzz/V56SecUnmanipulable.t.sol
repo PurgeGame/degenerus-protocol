@@ -8,6 +8,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IGameAfkingModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
+import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title Subscription churn accounting and streak regressions
@@ -303,7 +304,7 @@ contract V56SecUnmanipulable is DeployProtocol {
         bool presale = game.lootboxPresaleActiveFlag();
         uint256 fundingBefore = game.afkingFundingOf(ledger.player);
         uint256 price = game.mintPrice();
-        uint256 playerOwed = action == 3 ? 0 : uint256(_pendingFlipOf(ledger.player)) * 1 ether;
+        uint256 playerOwed = action == 3 ? 0 : uint256(_pendingFlipOf(ledger.player));
         uint256 base = action == 2 || action == 3 ? _affiliateBaseOf(ledger.player) : 0;
         // Upserting a tombstone has nothing pending; an active upsert pays under its old terms.
         if (action == 0 && _dailyQtyOf(ledger.player) == 0) playerOwed = 0;
@@ -321,14 +322,14 @@ contract V56SecUnmanipulable is DeployProtocol {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256[5] memory expected;
         expected[0] = playerOwed;
-        expected[2] = (base * 20 / 100) * 1 ether;
-        expected[3] = (base * 5 / 100) * 1 ether;
-        expected[1] = base * 1 ether - expected[2] - expected[3];
+        expected[2] = base * 20 / 100;
+        expected[3] = base * 5 / 100;
+        expected[1] = base - expected[2] - expected[3];
         for (uint256 i; i < 5; ++i) {
             uint256 received = _flipAssets(_ledgerRecipient(ledger, i)) - beforeAssets[i];
             assertEq(received, expected[i], "all automatic/explicit payments must reach the exact entitled recipient");
             uint256 presaleDelta = game.presaleBoxCreditOf(_ledgerRecipient(ledger, i)) - beforePresale[i];
-            assertEq(presaleDelta, i == 0 && presale ? playerOwed * 0.0025 ether / (100 ether) : 0,
+            assertEq(presaleDelta, i == 0 && presale ? playerOwed * 1 ether * 0.0025 ether / (100 ether) : 0,
                 "automatic settlement grants presale credit once and only to the subscriber");
             if (i == 0) ledger.playerPaid += received;
             else if (i < 4) ledger.affiliatePaid += received;
@@ -355,14 +356,15 @@ contract V56SecUnmanipulable is DeployProtocol {
         private
     {
         bytes32 delivered = keccak256("AfkingDelivered(address,uint256)");
-        bytes32 cover = keccak256("LootBoxBuy(address,uint48,uint256)");
+        bytes32 cover = keccak256("LootBoxBuy(address,uint48,uint32,uint256)");
         uint256 cost;
         uint256 count;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2
                 || address(uint160(uint256(logs[i].topics[1]))) != ledger.player) continue;
             if (logs[i].topics[0] == cover) {
-                cost += abi.decode(logs[i].data, (uint256));
+                (, uint256 coverWei) = abi.decode(logs[i].data, (uint32, uint256));
+                cost += coverWei;
             } else if (logs[i].topics[0] == delivered) {
                 uint256 packed = abi.decode(logs[i].data, (uint256));
                 uint256 day = uint24(packed >> 128);
@@ -377,13 +379,13 @@ contract V56SecUnmanipulable is DeployProtocol {
         assertEq(cost, count * price, "one-unit lootbox subscription buys exactly one priced unit per delivery");
         ledger.delivered += count;
         ledger.spent += cost;
-        ledger.affiliateEarned += (cost * 1000 / price * 7 / 100) * 1 ether;
+        ledger.affiliateEarned += cost * 1000 / price * 7 / 100;
     }
 
     function _assertChurnLedger(ChurnLedger memory ledger) private view {
-        assertEq(ledger.playerPaid + uint256(_pendingFlipOf(ledger.player)) * 1 ether,
-            ledger.delivered * SLOT0_FLIP_PER_BUY * 1 ether, "paid plus pending includes every automatic player payment");
-        assertEq(ledger.affiliatePaid + uint256(_affiliateBaseOf(ledger.player)) * 1 ether,
+        assertEq(ledger.playerPaid + uint256(_pendingFlipOf(ledger.player)),
+            ledger.delivered * SLOT0_FLIP_PER_BUY, "paid plus pending includes every automatic player payment");
+        assertEq(ledger.affiliatePaid + uint256(_affiliateBaseOf(ledger.player)),
             ledger.affiliateEarned, "paid plus pending includes every automatic upline payment");
     }
 
@@ -395,7 +397,7 @@ contract V56SecUnmanipulable is DeployProtocol {
     ///         (`s.pendingFlip = 0;` precedes `coinflip.creditFlip`, GameAfkingModule.sol:1277) means a
     ///         double-call in one block credits the FLIP on the first call and ZERO on the second (the
     ///         second sees owed == 0 and `creditFlip(_, 0)` early-returns). Observed via the recipient's
-    ///         next-day coinflip stake delta: it rises by exactly `owed * 1e18` once, then not again.
+    ///         next-day coinflip stake delta: it rises by exactly `owed` whole FLIP once, then not again.
     function testDoubleClaimPaysExactlyOnceCEI() public {
         address p = makeAddr("dbl_p");
         _grantSeat(p);
@@ -407,9 +409,9 @@ contract V56SecUnmanipulable is DeployProtocol {
         // member, so subscribe + one delivered day = TWO paid buys = 200 whole FLIP.
         uint256 owedWhole = _pendingFlipOf(p);
         assertEq(owedWhole, 2 * SLOT0_FLIP_PER_BUY, "non-vacuity: cover-buy + one delivered STAGE buy = 200 whole FLIP");
-        uint256 expectedCredit = owedWhole * 1 ether;
+        uint256 expectedCredit = owedWhole;
 
-        // FIRST claim: credits owed * 1e18 to the recipient's flip stake and zeroes pendingFlip.
+        // FIRST claim: credits owed whole FLIP to the recipient's flip stake and zeroes pendingFlip.
         uint256 stakeBefore = coinflip.coinflipAmount(p);
         game.claimAfkingFlip(_singleton(p));
         uint256 stakeAfter1 = coinflip.coinflipAmount(p);
@@ -426,7 +428,7 @@ contract V56SecUnmanipulable is DeployProtocol {
         uint256 stakeBefore2 = coinflip.coinflipAmount(p);
         game.claimAfkingFlip(_singleton(p)); // claim
         uint256 stakeAfterClaim2 = coinflip.coinflipAmount(p);
-        assertEq(stakeAfterClaim2 - stakeBefore2, SLOT0_FLIP_PER_BUY * 1 ether, "claim credited the re-accrued FLIP once");
+        assertEq(stakeAfterClaim2 - stakeBefore2, SLOT0_FLIP_PER_BUY, "claim credited the re-accrued FLIP once");
         vm.prank(p);
         game.subscribe(address(0), false, false, 0, address(0)); // unsub (pendingFlip persists at 0)
         game.claimAfkingFlip(_singleton(p)); // re-claim after unsub
@@ -656,6 +658,7 @@ contract V56SecUnmanipulable is DeployProtocol {
     }
 
     function _fundPool(address who, uint256 amount) internal {
+        _giveWalletId(who);
         vm.deal(address(this), amount);
         game.depositAfkingFunding{value: amount}(who);
     }
@@ -675,9 +678,9 @@ contract V56SecUnmanipulable is DeployProtocol {
     ///      flow itself (trapped seat -> reclaimSeat -> vault) is proven in
     ///      AfKingSeatToken; these streak tests only need the re-entry.
     function _settleForfeit(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(9)));
+        bytes32 slot = keccak256(abi.encode(who, GameSlots.MINT_PACKED));
         uint256 packed = uint256(vm.load(address(game), slot));
-        vm.store(address(game), slot, bytes32(packed & ~(uint256(1) << 155)));
+        vm.store(address(game), slot, bytes32(packed & ~(uint256(1) << BitPackingLib.SEAT_ENCUMBERED_SHIFT)));
     }
 
     /// @dev Count the SubscriptionExpired(player, reason) events recorded since the last vm.recordLogs()

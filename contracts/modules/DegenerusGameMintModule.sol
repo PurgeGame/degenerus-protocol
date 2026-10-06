@@ -28,7 +28,6 @@ import {IDegenerusGame, MintPaymentKind} from "../interfaces/IDegenerusGame.sol"
 import {RECORD_KIND_BUY, RECORD_KIND_LUCKBOX} from "../interfaces/ICoinflip.sol";
 import {
     IDegenerusGameBoonModule,
-    IDegenerusGameFoilPackModule,
     IDegenerusGameLootboxModule
 } from "../interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
@@ -136,27 +135,30 @@ contract DegenerusGameMintModule is
     // Events
     // -------------------------------------------------------------------------
 
-    /// @notice Emitted when ETH is applied to a lootbox order, whether bought directly
-    ///         (`beginBoxOrder`) or system-granted (`recordCoverBox`: pass purchases and
-    ///         the afking auto-buy).
-    /// @param buyer The player whose lootbox order this ETH applies to.
-    /// @param index The shared lootbox RNG index the order queued at.
-    /// @param amount The ETH value applied to the order for this call.
+    /// @notice Emitted when a purchase's box entry is appended, whether bought directly or
+    ///         system-granted (`recordCoverBox`: pass purchases and the afking auto-buy).
+    /// @param buyer The player whose entry this is.
+    /// @param index The physical write buffer (0/1) the entry joined.
+    /// @param position The entry's zero-based position in that buffer.
+    /// @param amount The entry's ordinary box ETH.
     event LootBoxBuy(
         address indexed buyer,
         uint48 indexed index,
+        uint32 position,
         uint256 amount
     );
-    /// @notice Emitted when a coin-presale box is bought and queued for resolution.
+    /// @notice Emitted when a coin-presale box joins a purchase's entry.
     /// @param buyer The player who bought the box.
-    /// @param index The shared lootbox RNG index the box queued at.
+    /// @param index The physical write buffer (0/1) the entry joined.
+    /// @param position The entry's zero-based position in that buffer (shared with the same
+    ///        call's ordinary boxes).
     /// @param amount The applied box ETH (post-clamp).
-    /// @param closing True iff this buy crossed the 50-ETH cap (latches presaleOver and
-    ///        records this buyer as presaleCloser, who receives the Pool.PresaleBox remainder
-    ///        once the human-box sweep has opened every presale box).
+    /// @param closing True iff this buy crossed the 50-ETH cap. It latches presaleOver, and
+    ///        this box's own resolution pays the Pool.PresaleBox remainder to the buyer.
     event PresaleBoxBuy(
         address indexed buyer,
         uint48 indexed index,
+        uint32 position,
         uint256 amount,
         bool closing
     );
@@ -303,7 +305,7 @@ contract DegenerusGameMintModule is
     /// @dev Delegatecalled by DegenerusGame. Handles payment routing, affiliates, and queues.
     /// @param buyer Recipient of the purchased items.
     /// @param entryQuantityScaled Purchase units: 100 = one entry (a quarter ticket), 400 = one whole ticket.
-    /// @param boxOrder Packed box order: [small:8][med:8][large:8][customCount:8][customSize:48 @1e12].
+    /// @param boxOrder Packed box order: [small:8][med:8][large:8][customCount:8][customSize:56 gwei].
     /// @param affiliateCode Referral code for affiliate attribution.
     /// @param payKind Payment kind selector (ETH/claimable/combined).
     function purchase(
@@ -677,13 +679,13 @@ contract DegenerusGameMintModule is
         // Single-tx path: cap fresh ETH at the mint cost and credit any overpay to the
         // payer's withdrawable afking, so excess never reverts or strands. The afking
         // ticket-buy path (purchaseWith) bypasses this, so it is unaffected.
-        uint256 cost = ticketCost + _quoteBoxOrder(buyer, boxOrder);
+        uint256 cost = ticketCost + _boxQuote(boxOrder);
         (uint32 buyerId, ) = _registerWallet(buyer, cost);
         uint256 fresh = payKind == MintPaymentKind.Claimable
             ? 0
             : (msg.value < cost ? msg.value : cost);
         if (msg.value > fresh) _creditAfkingValue(_payerId(buyer, buyerId), msg.value - fresh);
-        _purchaseForWithCached(
+        uint256 boxWord = _purchaseForWithCached(
             buyer,
             entryQuantityScaled,
             boxOrder,
@@ -695,6 +697,8 @@ contract DegenerusGameMintModule is
             priceWei,
             ticketCost
         );
+        // The ordinary leg's cost is the quote above: same input, same active level.
+        if (boxWord != 0) _appendBoxOrder(buyer, boxWord, cost - ticketCost);
     }
 
     /// @dev Phase flag, level, whole-ticket price at the active purchase level, and the
@@ -733,7 +737,7 @@ contract DegenerusGameMintModule is
             uint256 priceWei,
             uint256 ticketCost
         ) = _purchaseCostInputs(entryQuantityScaled);
-        _purchaseForWithCached(
+        uint256 boxWord = _purchaseForWithCached(
             buyer,
             entryQuantityScaled,
             boxOrder,
@@ -745,28 +749,31 @@ contract DegenerusGameMintModule is
             priceWei,
             ticketCost
         );
+        if (boxWord != 0) _appendBoxOrder(buyer, boxWord, _boxQuote(boxOrder));
     }
 
-    // ---- Box-order legs, delegatecalled into the Lootbox module ----
-    // The order codec, the three bps lanes and the boon-boost consume live there: they belong
-    // with the rest of the box logic, and this module sits ~250 bytes under the EIP-170 ceiling
-    // while that one has room. Three calls per purchase, all to the same (warm after the first)
-    // address — noise against a path that already delegatecalls the ticket and boon legs.
+    // ---- Box-order legs ----
+    // The boost consume, distress snapshot, bounty and EV draw are delegatecalled into the
+    // Lootbox module, which owns the rest of the box logic. Each purchase builds one entry
+    // word in flight and appends it once, after its last leg.
 
-    /// @dev Price an order without touching state, for the single-tx overpay cap.
-    function _quoteBoxOrder(address buyer, uint256 boxOrder) private returns (uint256) {
-        if (boxOrder == 0) return 0;
-        return abi.decode(_lootboxLeg(
-            abi.encodeWithSelector(
-                IDegenerusGameLootboxModule.quoteBoxOrder.selector,
-                buyer,
-                boxOrder
-            )
-        ), (uint256));
+    /// @dev Price a purchase's ordinary leg at the active level, for the overpay cap and the
+    ///      paid-admission spend. Validates the input exactly as `beginBoxOrder` will.
+    function _boxQuote(uint256 boxOrder) private view returns (uint256 cost) {
+        if (boxOrder != 0) (, cost) = _decodeBoxOrder(boxOrder, _activeTicketLevel());
+    }
+
+    /// @dev Append a purchase's completed entry and announce its ordinary leg.
+    function _appendBoxOrder(address buyer, uint256 word, uint256 ordinaryCost)
+        private
+        returns (uint48 index, uint32 position)
+    {
+        (index, position) = _appendBoxEntry(word, ordinaryCost);
+        if (ordinaryCost != 0) emit LootBoxBuy(buyer, index, position, ordinaryCost);
     }
 
     /// @dev Delegatecall the Lootbox module in the Game's storage context, bubbling its revert
-    ///      reason so an over-cap or custom-size-change surfaces as itself.
+    ///      reason so an invalid order surfaces as itself.
     function _lootboxLeg(bytes memory payload) private returns (bytes memory) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(payload);
         if (!ok) _revertDelegate(data);
@@ -787,7 +794,7 @@ contract DegenerusGameMintModule is
         uint24 cachedLevel,
         uint256 priceWei,
         uint256 ticketCost
-    ) private {
+    ) private returns (uint256 boxWord) {
         if (_livenessTriggered()) revert E();
         // Every caller registered the buyer before this frame; the mint word is warm.
         uint32 buyerId = _walletIdOf(buyer);
@@ -813,19 +820,19 @@ contract DegenerusGameMintModule is
         }
 
         // --- Box-order leg (delegatecalled into the Lootbox module) ---
-        // Runs before the payment split because the split needs the cost, and the cost depends
-        // on stored state: the tier sizes come off the order's FROZEN level, not the live one.
-        // Its writes unwind with the rest of the purchase if anything below reverts.
+        // Builds this purchase's entry in flight before the payment split, which needs its
+        // cost. The caller appends the finished word once; every effect here unwinds with the
+        // rest of the purchase if anything below reverts.
         uint256 lootBoxAmount;
         uint256 lbShares; // (future << 128) | next
-        uint256 lbPriorNominal;
         if (boxOrder != 0) {
             uint256 lbCredit;
-            (lootBoxAmount, lbShares, lbCredit, lbPriorNominal) = abi.decode(
+            (lootBoxAmount, lbShares, lbCredit, boxWord) = abi.decode(
                 _lootboxLeg(
                     abi.encodeWithSelector(
                         IDegenerusGameLootboxModule.beginBoxOrder.selector,
                         buyer,
+                        buyerId,
                         boxOrder
                     )
                 ),
@@ -1025,19 +1032,19 @@ contract DegenerusGameMintModule is
             _queuePurchaseEntries(buyerId, targetLevel, adjustedQty);
         }
 
-        // --- Box-order EV lane (delegatecalled; needs the post-action score) ---
-        // A second warm write to the order slot rather than deferring the pool split past the
-        // point the buy path publishes it.
+        // --- Box-order score and EV fraction (delegatecalled; needs the post-action score) ---
         if (lootBoxAmount != 0) {
-            _lootboxLeg(
-                abi.encodeWithSelector(
-                    IDegenerusGameLootboxModule.applyBoxOrderScore.selector,
-                    buyer,
-                    cachedScore,
-                    cachedLevel + 1,
-                    lootBoxAmount,
-                    lbPriorNominal
-                )
+            boxWord = abi.decode(
+                _lootboxLeg(
+                    abi.encodeWithSelector(
+                        IDegenerusGameLootboxModule.applyBoxOrderScore.selector,
+                        boxWord,
+                        cachedScore,
+                        cachedLevel + 1,
+                        lootBoxAmount
+                    )
+                ),
+                (uint256)
             );
         }
 
@@ -1110,17 +1117,17 @@ contract DegenerusGameMintModule is
         // deployed module would trap the in-flight msg.value against empty local state.
         if (address(this) != ContractAddresses.GAME) revert E();
         (uint32 buyerId, ) = _registerWallet(buyer, boxAmount);
-        _buyPresaleBoxFor(buyer, buyerId, boxAmount, msg.value);
+        _buyPresaleBoxFor(buyer, buyerId, boxAmount, msg.value, 0, 0);
     }
 
     /// @notice Buy tickets/lootbox (earning 25% presale-box credit) AND a presale box
-    ///         in one call, sharing one RNG index. The mint leg takes fresh ETH up to its
+    ///         in one call, sharing one queue entry. The mint leg takes fresh ETH up to its
     ///         own cost (none for Claimable payKind); the rest of msg.value funds the box,
     ///         with any shortfall drawn from the buyer's claimable, then afking balance. The
     ///         box is gated by the just-earned + banked presale-box credit.
     /// @param buyer Player receiving both legs (already operator-resolved by the entrypoint).
     /// @param entryQuantityScaled Tickets to buy (0 to skip).
-    /// @param boxOrder Packed box order (0 to skip): [small:8][med:8][large:8][customCount:8][customSize:48 @1e12].
+    /// @param boxOrder Packed box order (0 to skip): [small:8][med:8][large:8][customCount:8][customSize:56 gwei].
     /// @param affiliateCode Affiliate/referral code for the mint leg.
     /// @param payKind Payment method for the mint leg.
     /// @param boxAmount Requested presale-box ETH (>= PRESALE_BOX_MIN; leftover msg.value
@@ -1145,13 +1152,13 @@ contract DegenerusGameMintModule is
             uint256 priceWei,
             uint256 ticketCost
         ) = _purchaseCostInputs(entryQuantityScaled);
-        uint256 mintCost = ticketCost + _quoteBoxOrder(buyer, boxOrder);
+        uint256 mintCost = ticketCost + _boxQuote(boxOrder);
         (uint32 buyerId, ) = _registerWallet(buyer, mintCost + boxAmount);
         uint256 mintFresh = payKind == MintPaymentKind.Claimable
             ? 0
             : (msg.value < mintCost ? msg.value : mintCost);
         // Mint leg first: accrues the 25% presale-box credit that gates the box below.
-        _purchaseForWithCached(
+        uint256 boxWord = _purchaseForWithCached(
             buyer,
             entryQuantityScaled,
             boxOrder,
@@ -1163,21 +1170,27 @@ contract DegenerusGameMintModule is
             priceWei,
             ticketCost
         );
-        // Both box legs use the write buffer; no request swaps it within this purchase.
-        _buyPresaleBoxFor(buyer, buyerId, boxAmount, msg.value - mintFresh);
+        // Both box legs share this call's one entry; the presale leg appends it.
+        _buyPresaleBoxFor(buyer, buyerId, boxAmount, msg.value - mintFresh, boxWord, mintCost - ticketCost);
     }
 
     /// @dev Core credit-gated presale-box buy: clamp-to-50 close, 1:1 credit consume,
     ///      msg.value + claimable-shortfall payment, 80/20 ETH routing via
-    ///      _creditBoxProceeds, queue-at-index, last-buyer latch.
+    ///      _creditBoxProceeds, then the presale fields join the purchase's entry and the
+    ///      entry is appended. Independent presale purchases are independent entries.
     /// @param buyer Player receiving the box.
+    /// @param buyerId The buyer's wallet ID.
     /// @param boxAmount Requested box ETH (the MIN floor + no-overpay checks key on this).
     /// @param valueForBox The fresh-ETH (msg.value) portion available to fund the box.
+    /// @param word The same call's ordinary entry, or zero for a presale-only entry.
+    /// @param ordinaryCost The ordinary leg's box ETH (its RNG-pending ETH), or zero.
     function _buyPresaleBoxFor(
         address buyer,
         uint32 buyerId,
         uint256 boxAmount,
-        uint256 valueForBox
+        uint256 valueForBox,
+        uint256 word,
+        uint256 ordinaryCost
     ) private {
         if (presaleOver) revert E();
         if (_livenessTriggered()) revert E();
@@ -1217,38 +1230,21 @@ contract DegenerusGameMintModule is
         // re-credited here); the fresh-ETH portion bumps the pool by that ETH.
         _creditBoxProceeds(applied);
 
-        // Queue at the current lootbox RNG index (shared with a same-tx mint lootbox).
-        // The word for the current index is uncommitted until the index advances, so
-        // the box is always queued pre-entropy (RNG freeze).
-        uint48 index = _rngWriteBuffer();
-        // One box per (index, player): the buy-time cumulative position (sold) is
-        // frozen into the record for the DGNRS-tier roll, so accumulation would make
-        // that snapshot ambiguous. Open this box (or wait for the next index) first.
-        (bool recorded, bytes memory recordData) = ContractAddresses.GAME_FOILPACK_MODULE.delegatecall(
-            abi.encodeWithSelector(
-                IDegenerusGameFoilPackModule.recordPresaleBox.selector, buyer, index,
-                uint256(uint96(applied)) | (uint256(uint96(sold)) << PRESALE_BOX_SOLD_SHIFT)
-                    | (closing ? PRESALE_BOX_CLOSING_FLAG : 0)
-            )
+        // The DGNRS tier freezes off the purchase's starting position (sold), so a box crossing
+        // a tier boundary keeps its starting tier. The closing purchase is the last presale box
+        // ever appended; its own resolution pays the Pool.PresaleBox remainder.
+        (uint48 index, uint32 position) = _appendBoxOrder(
+            buyer,
+            word | buyerId | (applied << LB_PRESALE_SHIFT) | (_presaleTier(sold) << LB_TIER_SHIFT)
+                | (closing ? LB_CLOSING : 0),
+            ordinaryCost
         );
-        if (!recorded) _revertDelegate(recordData);
 
         presaleBoxEthSold = uint96(sold + applied);
-        if (closing) {
-            // Latch the terminal in the crossing buy (stops further credit accrual
-            // and box buys). The pool remainder is paid to this buyer when the sweep
-            // drains presale, not at this box's open: a box opens per (player, index)
-            // in any order, so a sweep at the open could run ahead of unresolved boxes
-            // and take the DGNRS their rolls are about to draw.
-            presaleOver = true;
-            presaleCloser = buyer;
-            // This crossing buy sits at the highest index any presale box can occupy. The sweep
-            // flips presaleDrained once it advances past this index (all presale boxes opened),
-            // after which the open paths skip the cold presaleBoxEth SLOAD.
-            presaleCloseBuffer = index;
-        }
+        // Latch the terminal in the crossing buy (stops further credit accrual and box buys).
+        if (closing) presaleOver = true;
 
-        emit PresaleBoxBuy(buyer, index, applied, closing);
+        emit PresaleBoxBuy(buyer, index, position, applied, closing);
 
         // Fresh ETH the clamp-to-50 left unused is credited to the payer's afking, not
         // sent back via a value call (no reentrancy surface, consistent with overpay).

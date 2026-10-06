@@ -15,7 +15,12 @@ import {WalletSeed} from "../helpers/WalletSeed.sol";
 contract FoilHeroSpinStub {
     event FoilHeroSpin(bytes4 selector, uint8 symbol);
     fallback() external {
-        (,,,, uint8 symbol) = abi.decode(msg.data[4:], (address, uint256, uint16, uint256, uint8));
+        uint8 symbol;
+        if (msg.sig == IDegenerusGameDegeneretteModule.resolveEthSpinFromBox.selector) {
+            (,,,,, symbol) = abi.decode(msg.data[4:], (address, uint32, uint256, uint16, uint256, uint8));
+        } else {
+            (,,,, symbol) = abi.decode(msg.data[4:], (address, uint256, uint16, uint256, uint8));
+        }
         require(symbol < 24, "foil award selected Dice");
         emit FoilHeroSpin(msg.sig, symbol);
         assembly ("memory-safe") { mstore(0, 0) return(0, 32) }
@@ -50,8 +55,12 @@ contract FoilCohortHarness is DegenerusGameFoilPackModule, WalletSeed {
         uint24 lvl = 1;
         require(_foilRecordWord(_seedWallet(player), lvl) == 0);
         foilRecord[lvl & 3][_seedWallet(player)] = (uint256(20_000) << _FOIL_MULT_SHIFT) | (uint256(lvl) << _FOIL_LEVEL_SHIFT);
-        uint256 pos = uint256(_seedWallet(player));
-        foilQueue[_foilWriteKey()].push(((pos + 1) << 192) | (uint256(lvl) << 160) | uint160(player));
+        uint256 id = uint256(_seedWallet(player));
+        uint32 position = foilWriteCount;
+        uint256 slot = _foilSlot(_foilWriteKey(), position);
+        uint256 pack = (id << 192) | (uint256(lvl) << 160) | uint160(player);
+        assembly ("memory-safe") { sstore(slot, pack) }
+        foilWriteCount = position + 1;
     }
     function commit(uint256 word) external {
         require(!_foilDrainPending());
@@ -60,6 +69,7 @@ contract FoilCohortHarness is DegenerusGameFoilPackModule, WalletSeed {
         foilCursor = 0;
         foilGenerationDay = 0;
         foilFirstDrawDay = 0;
+        (foilWriteCount, foilReadCount) = (foilReadCount, foilWriteCount);
         rngWordCurrent = word;
         _setRngSessionPublished(true);
     }
@@ -67,7 +77,7 @@ contract FoilCohortHarness is DegenerusGameFoilPackModule, WalletSeed {
     function lines(address player) external view returns (uint32[4] memory) { return _foilStoredLines(_walletIdOf(player), 1); }
     function pending() external view returns (bool) { return _foilDrainPending(); }
     function length(bool read) external view returns (uint256) {
-        return foilQueue[read ? _foilReadKey() : _foilWriteKey()].length;
+        return read ? foilReadCount : foilWriteCount;
     }
     function entries(uint8 trait) external view returns (uint256) { return _bucketLength(1, trait); }
     function seedWord(uint24 day, uint256 word) external { _recordDailyRng(day, word); }

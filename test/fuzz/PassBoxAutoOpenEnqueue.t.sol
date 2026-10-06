@@ -2,42 +2,23 @@
 pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
-import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
-
-/// @dev Read-only view overlay etched onto the live game to inspect internal box-queue state.
-contract BoxQueueViewer is DegenerusGame {
-    function lrIndexView() external view returns (uint48) {
-        return _rngWriteBuffer();
-    }
-
-    function boxPlayersContains(uint48 index, address who) external view returns (bool) {
-        address[] storage q = boxPlayers[index & 1];
-        for (uint256 i; i < q.length; ++i) {
-            if (q[i] == who) return true;
-        }
-        return false;
-    }
-
-    function lootboxAmountFor(uint48 index, address who) external view returns (uint256) {
-        return _boxOrder(index, who);
-    }
-}
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 /// @title PassBoxAutoOpenEnqueue — WHALE-01: pass-bundled lootboxes must enqueue for auto-open
-/// @notice Mint, presale, and afking-cover lootboxes are enqueued into boxPlayers[index & 1] so the
-///         mineFlip's HumanBoxes stage resolves them. Pass-bundled lootboxes
-///         (whale/lazy/deity, created in WhaleModule._recordLootboxEntry) were NOT enqueued, so
-///         their owner — the only party who can open them (manual openLootBox is operator-gated) —
-///         could hold the box closed and time the open to a favorable live level/boon state. That
-///         defeats the "permissionless economically-incentivized open" premise of the
-///         lootbox-resolution-timing by-design ruling for this one box class.
+/// @notice Mint, presale, afking-cover and pass-bundled lootboxes all append an entry to the
+///         write buffer's box queue, which the mineFlip HumanBoxes stage settles in FIFO order.
+///         A pass-bundled box recorded but NOT queued could be held closed by its owner
+///         and opened at a favorable live level/boon state, defeating the "permissionless
+///         economically-incentivized open" premise of the lootbox-resolution-timing ruling.
 ///
-///         This drives the REAL whale-pass purchase and asserts the box is enqueued for
-///         auto-open. PRE-FIX the buyer is absent from boxPlayers[index & 1] and this FAILS; POST-FIX it
-///         is present and this PASSES.
-/// @dev Test-only. No contracts/*.sol is mutated. A read-only viewer is etched (type().runtimeCode,
-///      no constructor) to inspect the internal boxPlayers/lootboxOrder maps, then real code restored.
+///         This drives the REAL whale-pass purchase and asserts the box is appended to the queue
+///         as its own entry carrying the buyer's wallet ID.
+/// @dev Test-only. No contracts/*.sol is mutated. The entry is read through the queue's storage
+///      location (RecyclingState.boxEntry / boxCount).
 contract PassBoxAutoOpenEnqueue is DeployProtocol {
+    using BoxOrderLib for uint256;
+
     function setUp() public {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
@@ -48,23 +29,22 @@ contract PassBoxAutoOpenEnqueue is DeployProtocol {
         address buyer = makeAddr("whaleBuyer");
         vm.deal(buyer, 10 ether);
 
+        uint48 idx = RecyclingState.writeBuffer(address(game));
+        uint256 before = RecyclingState.boxCount(address(game), idx);
+
         // Whale pass at level 0: passLevel = 1 -> early price 2.4 ETH, quantity 1, no century gate.
         // The pass deposits a 10%-of-price lootbox via _recordLootboxEntry.
         vm.prank(buyer);
         game.purchaseWhalePass{value: 2.4 ether}(buyer, 1, bytes32(0));
 
-        // Inspect internal box-queue state via an etched read-only viewer (no storage change).
-        bytes memory realCode = address(game).code;
-        vm.etch(address(game), type(BoxQueueViewer).runtimeCode);
-        uint48 idx = BoxQueueViewer(payable(address(game))).lrIndexView();
-        uint256 boxAmt = BoxQueueViewer(payable(address(game))).lootboxAmountFor(idx, buyer);
-        bool enqueued = BoxQueueViewer(payable(address(game))).boxPlayersContains(idx, buyer);
-        vm.etch(address(game), realCode);
-
-        assertGt(boxAmt, 0, "fixture: whale pass created a lootbox box at the active index");
-        assertTrue(
-            enqueued,
-            "WHALE-01: pass-bundled lootbox must be enqueued for the permissionless auto-open (else the owner can hold + time the open)"
+        assertEq(
+            RecyclingState.boxCount(address(game), idx),
+            before + 1,
+            "WHALE-01: the pass-bundled lootbox must be appended to the auto-open queue"
         );
+        uint256 word = RecyclingState.boxEntry(address(game), idx, before);
+        assertEq(word.boId(), game.walletIdOf(buyer), "the queued entry is the buyer's");
+        assertEq(word.boCount(), 1, "one box for one pass");
+        assertEq(word.boSizeWei(), 0.24 ether, "the box is 10% of the pass");
     }
 }

@@ -381,7 +381,8 @@ interface IDegenerusGame {
     /// @param buyer Player address to receive purchases (address(0) = msg.sender).
     /// @param entryQuantityScaled Scaled entry quantity (400 units = 1 whole ticket; 0 to skip).
     /// @param boxOrder Packed box order (0 to skip):
-    ///        [small:8][med:8][large:8][customCount:8][customSize:48 in 1e12-wei units].
+    ///        [small:8][med:8][large:8][customCount:8][customSize:56 in gwei]; at most 100 boxes,
+    ///        every bit at or above 88 zero.
     /// @param affiliateCode Affiliate/referral code for all purchases.
     /// @param payKind Payment method (DirectEth, Claimable, or Combined).
     /// @param foil True to additively buy one foil pack (10x price) in the same tx; the

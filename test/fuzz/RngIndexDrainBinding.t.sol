@@ -14,13 +14,6 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 /// The ordinary ticket oracle independently reconstructs generated traits and checks
 /// their persisted bucket counts and owners; no event entropy field is assumed.
 contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
-    /// @dev Base slot for `boxPlayers` mapping(uint48 => address[]). Authoritative
-    ///      at the working tree (confirmed at runtime: boxPlayers[idx & 1][0] == buyer).
-    uint256 internal constant SLOT_BOX_PLAYERS_MAPPING = GameSlots.BOX_PLAYERS;
-    /// @dev Base slot for `presaleBoxEth` mapping(uint48 => mapping(address => uint256)).
-    ///      Authoritative at the working tree (confirmed at runtime: low-96 cell == applied box ETH).
-    uint256 internal constant SLOT_PRESALE_BOX_ETH_MAPPING = 15;
-
     address internal buyer;
     uint256 internal lastFulfilledReqId;
 
@@ -32,27 +25,24 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         mockVRF.fundSubscription(1, 100e18);
     }
 
-    /// @dev Read the player recorded at boxPlayers[index & 1][0]. boxPlayers is the
-    ///      `mapping(uint48 => address[])` queued by a presale-box purchase
-    ///      (DegenerusGameMintModule:1965 `boxPlayers[index & 1].push(buyer)`), so element
-    ///      [0] is the FIRST buyer keyed at `index`. Authoritative mapping base = slot 57.
-    function _boxPlayerAt0(uint48 index) internal view returns (address) {
-        bytes32 arrSlot = keccak256(abi.encode(uint256(index & 1), SLOT_BOX_PLAYERS_MAPPING));
-        bytes32 elem0 = keccak256(abi.encode(arrSlot));
-        return address(uint160(uint256(vm.load(address(game), elem0))));
+    /// @dev Wallet ID recorded in queue entry 0 of physical buffer `index & 1` (the FIRST
+    ///      purchase appended there); 0 when the buffer holds no entry.
+    function _boxIdAt0(uint48 index) internal view returns (uint32) {
+        if (RecyclingState.boxCount(address(game), index & 1) == 0) return 0;
+        return BoxOrderLib.boId(RecyclingState.boxEntry(address(game), index & 1, 0));
     }
 
-    /// @dev Read lootboxOrder[index][player] (nested mapping base = slot 15) and decode its
-    ///      nominal applied box ETH. A box buy records itself at the LIVE LR_INDEX
-    ///      (DegenerusGameMintModule:1949/1960), so a nonzero cell at (index, player) proves the
-    ///      box bound to that exact index. (Despite the name — pre-dating the box-order migration
-    ///      — this reads the lootboxOrder slot, not presaleBoxEth.)
-    function _presaleBoxEth(uint48 index, address player) internal view returns (uint256) {
-        bytes32 inner = keccak256(abi.encode(uint256(index & 1), SLOT_PRESALE_BOX_ETH_MAPPING));
-        bytes32 cell = keccak256(abi.encode(player, inner));
-        uint256 word = uint256(vm.load(address(game), cell));
-        if (word == 0) return 0;
-        return BoxOrderLib.boNominal(word, PriceLookupLib.priceForLevel(uint24(word & 0xFFFFFF)));
+    /// @dev Nominal ordinary-leg ETH of every queued entry of `player` in buffer `index & 1`.
+    ///      A box buy appends one entry at the LIVE buffer, so a nonzero total proves the box
+    ///      bound to that exact buffer.
+    function _presaleBoxEth(uint48 index, address player) internal view returns (uint256 total) {
+        uint32 id = game.walletIdOf(player);
+        uint256 n = RecyclingState.boxCount(address(game), index & 1);
+        for (uint256 p; p < n; ++p) {
+            uint256 word = RecyclingState.boxEntry(address(game), index & 1, p);
+            if (BoxOrderLib.boId(word) != id) continue;
+            total += BoxOrderLib.boNominal(word, PriceLookupLib.priceForLevel(BoxOrderLib.boLevel(word)));
+        }
     }
 
     /// @dev Read _lootboxWord(index) directly from storage.
@@ -206,8 +196,8 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         //    1-ether mid-day threshold) and keys itself at the LIVE index N.
         _purchase(400, 1 ether);
         uint48 idxN = _lrIndex();
-        assertEq(_boxPlayerAt0(idxN), buyer, "box A not keyed at live LR_INDEX");
-        assertEq(uint96(_presaleBoxEth(idxN, buyer)), 1 ether, "box A applied-ETH mis-keyed");
+        assertEq(_boxIdAt0(idxN), game.walletIdOf(buyer), "box A not keyed at live LR_INDEX");
+        assertEq(_presaleBoxEth(idxN, buyer), 1 ether, "box A applied-ETH mis-keyed");
         assertEq(_lootboxWord(idxN), 0, "live index already worded before request");
 
         // ── Mid-day VRF request: bumps LR_INDEX N -> N+1 and reserves the in-flight
@@ -236,8 +226,8 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         game.purchase{value: ticketCost + 1 ether}(
             buyerB, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
-        assertEq(_boxPlayerAt0(idxLive), buyerB, "box B not keyed at the LIVE post-request index");
-        assertEq(uint96(_presaleBoxEth(idxLive, buyerB)), 1 ether, "box B applied-ETH not at live index");
+        assertEq(_boxIdAt0(idxLive), game.walletIdOf(buyerB), "box B not keyed at the LIVE post-request index");
+        assertEq(_presaleBoxEth(idxLive, buyerB), 1 ether, "box B applied-ETH not at live index");
         assertEq(_presaleBoxEth(idxN, buyerB), 0, "box B leaked onto the in-flight index N");
 
         // ── Deliver the in-flight mid-day word. It lands ONLY at index N (LR_INDEX-1).

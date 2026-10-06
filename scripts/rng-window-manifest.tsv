@@ -27,7 +27,7 @@
 #   rngWordByDay[day & 1]   the two authenticated ring words            (slot 10)
 #   _nudgeCount             frozen daily nudge input in slot-0 bytes30..31
 #   rngRequestDay           pinned logical request/application identity (slot 5 low24)
-#   lootboxRngPacked        read-work flags and pending values (slot 33)
+#   lootboxRngPacked        read-work flags, pending values and queue write counts (slot 30)
 #
 # CROSS-CONTRACT READERS (_wordAt, _dailyWordAt). A satellite outside the game — CRAPS — reads
 # the same three slots through `DegenerusGame.extsload`, naming NUMERIC SLOTS and never a storage
@@ -117,8 +117,8 @@ EXEMPT-ADVANCE	rngRequestDay	runDailyPhase	modules/DegenerusGameAdvanceModule.so
 CONSUMER-SEALED	_recordedDailyWord	issueDeityBoon	modules/DegenerusGameBoonModule.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
 CONSUMER-SEALED	_recordedDailyWord	resolveProtocolBoonDraws	modules/DegenerusGameBoonModule.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
 CONSUMER-SEALED	_lootboxWord	_runDecimatorWork	modules/DegenerusGameDecimatorModule.sol	READ
-CURSOR	lootboxRngPacked	_collectBetFunds	modules/DegenerusGameDegeneretteModule.sol	READ	ETH bet merges hero-ring day/valid bits (0..29) and pending ETH; neither is entropy, a buffer index or a readiness flag.
-PRODUCER	lootboxRngPacked	_collectBetFunds	modules/DegenerusGameDegeneretteModule.sol	WRITE	Writes only hero-ring metadata and pending ETH; a bet can recycle a hero buffer only for days <= dailyIdx+1, never the frozen dailyIdx pool.
+CURSOR	lootboxRngPacked	_collectBetFunds	modules/DegenerusGameDegeneretteModule.sol	READ	ETH bet merges hero-ring day/valid bits (0..29) and pending ETH, FLIP bet pending FLIP; both commit the bet write count in the same write. Neither is entropy, a buffer index or a readiness flag; the count only positions the write-buffer append.
+PRODUCER	lootboxRngPacked	_collectBetFunds	modules/DegenerusGameDegeneretteModule.sol	WRITE	Writes hero-ring metadata, pending ETH/FLIP and the write-buffer bet count +1; a bet can recycle a hero buffer only for days <= dailyIdx+1, never the frozen dailyIdx pool. The sealed read count lives in degeneretteReadCount, which bets never write.
 GATE	_lootboxWord	runDecimatorJackpot	modules/DegenerusGameDecimatorModule.sol	READ
 CONSUMER-SEALED	_lootboxWord	_runDegeneretteWork	modules/DegenerusGameDegeneretteModule.sol	READ
 CONSUMER-SEALED	_lootboxWord	_runFoilWork	modules/DegenerusGameFoilPackModule.sol	READ	normal frozen read cohort generates and stores all foil lines once
@@ -131,7 +131,6 @@ PRODUCER	rngRequestDay	_handleGameOverAdvance	modules/DegenerusGameGameOverModul
 EXEMPT-ADVANCE	rngWordCurrent	_handleGameOverAdvance	modules/DegenerusGameGameOverModule.sol	READ
 PRODUCER	rngWordCurrent	_latchDeadEnding	modules/DegenerusGameGameOverModule.sol	WRITE	clears the buffer when the deterministic ending latches (from the terminal advance on a dead VRF, or from the drain when distributable funds meet no terminal word); the normal ending's terminal word is always its own later request
 EXEMPT-ADVANCE	_lootboxWord	_handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	READ
-PRODUCER	lootboxRngPacked	_requestTerminalRng	modules/DegenerusGameGameOverModule.sol	WRITE
 EXEMPT-ADVANCE	rngRequestDay	_requestTerminalRng	modules/DegenerusGameGameOverModule.sol	READ	Logical commitment/application identity: set only on fresh normal/terminal boundary, preserved by callback/retry and all consumer checkpoints.
 PRODUCER	rngRequestDay	_requestTerminalRng	modules/DegenerusGameGameOverModule.sol	WRITE	Logical commitment/application identity: set only on fresh normal/terminal boundary, preserved by callback/retry and all consumer checkpoints.
 PRODUCER	rngWordCurrent	_requestTerminalRng	modules/DegenerusGameGameOverModule.sol	WRITE
@@ -140,13 +139,8 @@ GATE	rngRequestDay	_terminalWordApplied	modules/DegenerusGameGameOverModule.sol	
 EXEMPT-ADVANCE	rngWordCurrent	updateVrfCoordinatorAndSub	modules/DegenerusGameGameOverModule.sol	READ
 EXEMPT-ADVANCE	dailyFoilDraw	_emitDailyWinningTraits	modules/DegenerusGameJackpotModule.sol	READ	Same-day retries and stale writes against a newer stored day are idempotent no-ops.
 PRODUCER	dailyFoilDraw	_emitDailyWinningTraits	modules/DegenerusGameJackpotModule.sol	WRITE	Seal the committed logical-day board/level/seed with its exact day tag; recycle only an older parity slot.
-CURSOR	lootboxRngPacked	beginBoxOrder	modules/DegenerusGameLootboxModule.sol	READ
-PRODUCER	lootboxRngPacked	beginBoxOrder	modules/DegenerusGameLootboxModule.sol	WRITE
-CURSOR	lootboxRngPacked	recordCoverBox	modules/DegenerusGameLootboxModule.sol	READ
-PRODUCER	lootboxRngPacked	recordCoverBox	modules/DegenerusGameLootboxModule.sol	WRITE
 CONSUMER-SEALED	_recordedDailyWord	_farFutureSeed	modules/DegenerusGameMintStreakUtils.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
 GATE	rngWordCurrent	_rngRetryDue	modules/DegenerusGameRngModule.sol	READ	Retry only an active unanswered request; retained delivered payload cannot be discarded.
-EXEMPT-ADVANCE	lootboxRngPacked	_sealRngWriteBuffer	modules/DegenerusGameRngModule.sol	WRITE	Successful normal request clears pending purchase values once before the binary seal; retry preserves both buffers.
 EXEMPT-ADVANCE	_currentRngWord	publishRng	modules/DegenerusGameRngModule.sol	READ
 PRODUCER	rngFlagsAndNudges	rawFulfillRandomWords	DegenerusGame.sol	READ	One slot0 SLOAD authenticates activity, identifies daily lock and supplies frozen nudge; callback never writes it.
 EXEMPT-ADVANCE	rngWordCurrent	rawFulfillRandomWords	DegenerusGame.sol	READ
@@ -220,3 +214,11 @@ GATE	_dailyWordAt	_reservableDay	storage/CrapsBattleStorage.sol	READ
 CONSUMER-SEALED	_lootboxWord	mineFlip	modules/DegenerusGameMinerModule.sol	READ	Stage 1 passes the published read word to the batch closed by its request; every later request waits for that stage to drain.
 
 # Decimator jackpot integration (2026-10-05)
+
+# 2026-10-06 Phase C: queue write counts ride lootboxRngPacked; the seal latches them
+CURSOR	lootboxRngPacked	_appendBoxEntry	storage/DegenerusGameStorage.sol	READ	Reads pending ETH and the write-buffer box count: the count is the entry position. Purchases append only to the write buffer; the sealed read length lives in boxReadCount, which appends never write.
+PRODUCER	lootboxRngPacked	_appendBoxEntry	storage/DegenerusGameStorage.sol	WRITE	Adds the entry's pending ETH and increments the write-buffer box count in one write; no entropy, read-buffer or readiness field.
+ACCESSOR	lootboxRngPacked	degeneretteBetInfo	DegenerusGame.sol	READ	View bound for a write-buffer bet id (the write count); no RNG consumer.
+CURSOR	lootboxRngPacked	_placeDegeneretteBetCore	modules/DegenerusGameDegeneretteModule.sol	READ	Reads the write-buffer bet count to fix the bet id (position + 1) before the buffer is sealed; _collectBetFunds commits the increment.
+EXEMPT-ADVANCE	lootboxRngPacked	_swapRngBuffers	storage/DegenerusGameStorage.sol	READ	Seal (normal request or terminal request): latches the write counts into the read lengths. Retry never swaps.
+EXEMPT-ADVANCE	lootboxRngPacked	_swapRngBuffers	storage/DegenerusGameStorage.sol	WRITE	Seal clears pending ETH/FLIP and both write counts in one write; the new write buffer starts empty. Retry never swaps.

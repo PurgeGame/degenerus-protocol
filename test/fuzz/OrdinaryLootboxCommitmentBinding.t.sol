@@ -7,6 +7,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {IsDGNRS} from "../../contracts/interfaces/IsDGNRS.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @notice Public purchase/request/fulfill/open commitment proof for ordinary boxes.
 /// Two unrelated owners and fixed words cover ticket, sDGNRS, flat FLIP and normal
@@ -25,13 +26,18 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 /// activity score, four ordinary reward lanes. Spins, boon formulas, presale,
 /// AFKing/direct/redemption boxes, high-pass conversion and level changes are
 /// outside this proof. Unsupported reward rolls fail rather than silently skip.
+///
+/// Each purchase is its own queue entry at a fixed (buffer, position); settlement only moves
+/// `boxCursor`, so a settled entry keeps its stored word and reads as spent by position. The
+/// fixed words are found deterministically from the queued-entry seed formula (root =
+/// H(QUEUED_ORDER_DOMAIN, word, buffer, position), box n = H(root, walletId, BOX_OPEN_TAG, n)) for
+/// the owners' actual wallet IDs and positions, so the reference shares no code with the resolver.
 contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
     address private constant ALICE = address(0xA11CE);
     address private constant BOB = address(0xB0B);
     address private constant KEEPER_ONE = address(0xC0DE);
     address private constant KEEPER_TWO = address(0xD00D);
-    uint256 private constant TICKET_DGNRS_WORD = 23_784;
-    uint256 private constant FLIP_PASS_WORD = 461;
+    uint256 private constant QUEUED_ORDER_DOMAIN = 0x5175657565644f72646572;
     uint256 private constant BOX_TAG = 0x426f784f70656e;
     uint256 private constant FLIP_ROUND_TAG = 0x466c6970526f756e64;
     uint256 private constant PASS_ROUND_TAG = 0x50617373526f756e64;
@@ -44,6 +50,10 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         uint256 dgnrs;
         uint256 normal;
     }
+
+    /// @dev The owners' entry positions in the committed buffer, set by `_prepare`.
+    uint256 private posA;
+    uint256 private posB;
 
     struct Balance {
         uint256[51] entries;
@@ -80,12 +90,27 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         return RecyclingState.word(address(game), index);
     }
 
-    function _order(uint48 index, address owner) private view returns (uint256) {
-        uint48 active = _index();
-        if (index > 1) return 0;
-        bytes32 outer = keccak256(abi.encode(uint256(index & 1), uint256(15)));
-        uint256 order = uint256(vm.load(address(game), keccak256(abi.encode(owner, outer))));
-        return order & (uint256(1) << 255) != 0 ? 0 : order;
+    function _entry(uint48 index, uint256 position) private view returns (uint256) {
+        return RecyclingState.boxEntry(address(game), index, position);
+    }
+
+    /// @dev An entry is spent once the read cursor of its sealed buffer has passed it. Queried only
+    ///      after `index` was sealed: if a later request has since sealed the other buffer, the
+    ///      cohort at `index` completed first (a request waits for every read consumer), so all its
+    ///      entries are spent.
+    function _spent(uint48 index, uint256 position) private view returns (bool) {
+        if (RecyclingState.readBuffer(address(game)) != index) return true;
+        uint256 cursor = (uint256(vm.load(address(game), bytes32(GameSlots.BOX_CURSOR)))
+            >> (GameSlots.BOX_CURSOR_OFFSET * 8)) & type(uint48).max;
+        return cursor > position;
+    }
+
+    /// @dev Digest of the write buffer's entries: later purchases append there, never to the
+    ///      committed buffer.
+    function _writeSide(uint48 index) private view returns (bytes32 digest) {
+        uint256 n = RecyclingState.boxCount(address(game), index);
+        digest = bytes32(n);
+        for (uint256 p; p < n; ++p) digest = keccak256(abi.encode(digest, _entry(index, p)));
     }
 
     function _pool() private view returns (uint256) {
@@ -175,8 +200,8 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
     }
 
     function _drained(uint48 index) private view returns (uint256 n) {
-        if (_order(index, ALICE) == 0) ++n;
-        if (_order(index, BOB) == 0) ++n;
+        if (_spent(index, posA)) ++n;
+        if (_spent(index, posB)) ++n;
     }
 
     /// @dev The smallest mineFlip allowance that drains the next `entries` owner entries (bisection
@@ -208,30 +233,35 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
 
     function _prepare(uint256 count) private returns (uint48 index, uint256[2] memory orders) {
         index = _index();
+        posA = RecyclingState.boxCount(address(game), index);
         _buy(ALICE, count, 1 ether);
+        posB = RecyclingState.boxCount(address(game), index);
         _buy(BOB, count, 1 ether);
-        orders[0] = _order(index, ALICE);
-        orders[1] = _order(index, BOB);
-        // Exact full words: level 1, score 1, no boost/distress/EV-cap/cover lane,
-        // `count` customs of 1 ETH (1e6 stored units). The fresh purchase supplies
+        assertEq(posB, posA + 1, "each purchase appends its own entry");
+        assertEq(RecyclingState.boxCount(address(game), index), posB + 1);
+        orders[0] = _entry(index, posA);
+        orders[1] = _entry(index, posB);
+        // Exact full words: the owner's wallet ID, level 1, score 1, no boost/distress/EV-cap/
+        // cover/presale lane, `count` customs of 1 ETH (1e9 gwei). The fresh purchase supplies
         // this score; it is not injected by the test.
-        uint256 expected = 1 | (uint256(1) << 24) | (count << 105) | (uint256(1_000_000) << 113);
-        assertEq(orders[0], expected, "Alice's exact committed order fields");
-        assertEq(orders[1], expected, "Bob's exact committed order fields");
+        uint256 lanes = (uint256(1) << 32) | (uint256(1) << 56) | (count << 121) | (uint256(1e9) << 128);
+        assertEq(orders[0], uint256(game.walletIdOf(ALICE)) | lanes, "Alice's exact committed entry fields");
+        assertEq(orders[1], uint256(game.walletIdOf(BOB)) | lanes, "Bob's exact committed entry fields");
         assertEq(_word(index), 0, "purchase must precede word revelation");
         assertGt(_pool(), 0, "funded reward inventory");
     }
 
     function _assertOrders(uint48 index, uint256[2] memory orders, bool aliceSpent) private view {
-        assertEq(_order(index, ALICE), aliceSpent ? 0 : orders[0], "old Alice order cannot be rewritten or replayed");
-        assertEq(_order(index, BOB), orders[1], "old Bob order cannot be rewritten");
+        assertEq(_entry(index, posA), orders[0], "old Alice entry cannot be rewritten");
+        assertEq(_entry(index, posB), orders[1], "old Bob entry cannot be rewritten");
+        assertEq(_spent(index, posA), aliceSpent, "Alice's entry is spent exactly when settled");
+        assertFalse(_spent(index, posB), "Bob's entry is not yet spent");
         assertEq(_index(), (index ^ 1), "new actions remain on the subsequent index");
     }
 
     function _perturb(uint48 index, uint256[2] memory orders, bool aliceSpent) private {
         assertEq(_index(), (index ^ 1));
-        uint256 nextAlice = _order((index ^ 1), ALICE);
-        uint256 nextBob = _order((index ^ 1), BOB);
+        uint256 next = RecyclingState.boxCount(address(game), index ^ 1);
         uint256 ethBefore = address(game).balance + mockStETH.balanceOf(address(game));
         // Different custom denomination, plus new paid tickets and a competing bet.
         // These are successful public writes, not a set of swallowed reverts.
@@ -242,8 +272,9 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         if (game.rngLocked()) vm.expectRevert(bytes4(keccak256("BetLocked()")));
         vm.prank(BOB);
         crapsBattle.setPreferredBoard(uint32(1 << 9));
-        assertGt(_order((index ^ 1), ALICE), nextAlice, "next-index Alice order really grew");
-        assertGt(_order((index ^ 1), BOB), nextBob, "next-index Bob order really grew");
+        assertEq(RecyclingState.boxCount(address(game), index ^ 1), next + 2, "two next-index entries really appended");
+        assertEq(BoxOrderLib.boId(_entry(index ^ 1, next)), game.walletIdOf(ALICE), "next-index Alice entry");
+        assertEq(BoxOrderLib.boId(_entry(index ^ 1, next + 1)), game.walletIdOf(BOB), "next-index Bob entry");
         assertGt(
             address(game).balance + mockStETH.balanceOf(address(game)), ethBefore, "public mutation moved real backing"
         );
@@ -252,8 +283,13 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         vm.warp(block.timestamp + 1);
     }
 
-    function _seed(uint256 word, address owner, uint256 nonce) private pure returns (uint256) {
-        return uint256(keccak256(abi.encode(word, uint256(uint160(owner)), BOX_TAG, nonce)));
+    function _seed(uint256 word, uint48 index, uint256 position, uint32 id, uint256 nonce)
+        private
+        pure
+        returns (uint256)
+    {
+        uint256 root = uint256(keccak256(abi.encode(QUEUED_ORDER_DOMAIN, word, uint256(index), position)));
+        return uint256(keccak256(abi.encode(root, uint256(id), BOX_TAG, nonce)));
     }
 
     function _target(uint256 seed) private pure returns (uint256) {
@@ -288,17 +324,19 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         return (0.811_44 ether * bps / 10_000) * 1000 ether / 0.01 ether;
     }
 
-    function _reference(uint256 word, address owner, uint256 count, uint256 inventory)
+    /// @dev `supported` is false when a box leaves the reference's scope (a spin, a ticket target
+    ///      above the .01 ETH tier, a high-pass conversion or a zero-pass fallback).
+    function _reference(uint256 word, uint48 index, uint256 position, uint32 id, uint256 count, uint256 inventory)
         private
         pure
-        returns (Outcome memory expected)
+        returns (Outcome memory expected, bool supported)
     {
         for (uint256 nonce = 1; nonce <= count; ++nonce) {
-            uint256 seed = _seed(word, owner, nonce);
+            uint256 seed = _seed(word, index, position, id, nonce);
             uint256 roll = uint16(seed >> 40) % 20;
             if (roll < 8) {
                 uint256 target = _target(seed);
-                require(target <= 4, "reference fixtures use the .01 ETH ticket tier");
+                if (target > 4) return (expected, false); // reference fixtures use the .01 ETH ticket tier
                 uint256 budget = (0.811_44 ether * 19_678 / 10_000) * 8750 / 10_000;
                 uint256 scaled = (budget * _variance(seed) / 10_000) * 100 / 0.01 ether;
                 uint256 whole = scaled / 100;
@@ -320,7 +358,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
                 }
             } else if (roll == 15 || roll == 16) {
                 uint256 budget = _largeFlip(seed);
-                require(budget <= 22 * NORMAL_PASS_VALUE, "reference excludes high-pass conversion");
+                if (budget > 22 * NORMAL_PASS_VALUE) return (expected, false); // high-pass conversion
                 uint256 passes = budget / NORMAL_PASS_VALUE;
                 if (
                     uint256(keccak256(abi.encode(seed, PASS_ROUND_TAG))) % NORMAL_PASS_VALUE
@@ -328,11 +366,37 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
                 ) {
                     ++passes;
                 }
-                require(passes != 0, "reference excludes the zero-pass spin fallback");
+                if (passes == 0) return (expected, false); // zero-pass spin fallback
                 expected.normal += passes;
             } else {
-                revert("reference fixture entered an unsupported spin");
+                return (expected, false); // a spin
             }
+        }
+        supported = true;
+    }
+
+    /// @dev The first word (searched deterministically) whose draws for the owners' committed
+    ///      entries exercise the fixture's lanes: with two boxes each, an Alice ticket at the fourth
+    ///      level, a Bob ticket at the first, and an sDGNRS award for both owners whose later award
+    ///      distinguishes live from stale inventory; with one box each, Alice's flat FLIP and Bob's
+    ///      normal passes. Every box stays inside the reference's scope.
+    function _findWord(uint48 index, uint256 count) private view returns (uint256 word) {
+        uint32 idA = game.walletIdOf(ALICE);
+        uint32 idB = game.walletIdOf(BOB);
+        uint256 inventory = _pool();
+        for (uint256 k;; ++k) {
+            word = uint256(keccak256(abi.encode("commitment-binding", count, k)));
+            (Outcome memory alice, bool okA) = _reference(word, index, posA, idA, count, inventory);
+            if (!okA) continue;
+            (Outcome memory bob, bool okB) = _reference(word, index, posB, idB, count, inventory - alice.dgnrs);
+            if (!okB) continue;
+            if (count == 2) {
+                if (alice.entries[3] == 0 || bob.entries[0] == 0 || alice.dgnrs == 0 || bob.dgnrs == 0) continue;
+                if (bob.dgnrs == _dgnrs(_seed(word, index, posB, idB, 1), inventory)) continue;
+            } else if (alice.flip == 0 || bob.normal == 0) {
+                continue;
+            }
+            return word;
         }
     }
 
@@ -393,8 +457,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
     /// @dev One mineFlip by `caller`. `boxesPerOrder` is each owner's committed box count, so the
     ///      owners' consumed orders give the exact number of consumed boxes.
     function _open(uint256 budget, address caller, uint256 expectedCount, uint48 index, uint256 boxesPerOrder) private {
-        uint256 nextAlice = _order((index ^ 1), ALICE);
-        uint256 nextBob = _order((index ^ 1), BOB);
+        bytes32 writeSide = _writeSide(index ^ 1);
         uint256 next = game.nextPrizePoolView();
         uint256 future = game.futurePrizePoolView();
         uint256 current = game.currentPrizePoolView();
@@ -421,8 +484,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
             assertEq(bytes4(ret), bytes4(keccak256("NoWork()")), "an idle engine reports NoWork");
         }
         assertEq((_drained(index) - drainedBefore) * boxesPerOrder, expectedCount, "exact number of consumed boxes");
-        assertEq(_order((index ^ 1), ALICE), nextAlice, "unrevealed Alice order survives old-index opening");
-        assertEq(_order((index ^ 1), BOB), nextBob, "unrevealed Bob order survives old-index opening");
+        assertEq(_writeSide(index ^ 1), writeSide, "unrevealed next-index entries survive old-index opening");
         assertEq(game.nextPrizePoolView(), next, "ordinary reward does not spend ticket backing");
         assertEq(game.futurePrizePoolView(), future, "ordinary reward does not spend live ETH inventory");
         assertEq(game.currentPrizePoolView(), current);
@@ -467,15 +529,19 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         _assertOrders(index, orders, false);
 
         uint256 inventory = _pool();
-        Outcome memory alice = _reference(word, ALICE, count, inventory);
-        Outcome memory bob = _reference(word, BOB, count, inventory - alice.dgnrs);
+        (Outcome memory alice, bool okA) = _reference(word, index, posA, game.walletIdOf(ALICE), count, inventory);
+        (Outcome memory bob, bool okB) =
+            _reference(word, index, posB, game.walletIdOf(BOB), count, inventory - alice.dgnrs);
+        assertTrue(okA && okB, "every committed box stays inside the reference's scope");
         if (count == 2) {
             assertGt(alice.entries[3], 0, "known Alice ticket roll exercised");
             assertGt(bob.entries[0], 0, "known Bob ticket roll exercised");
             assertGt(alice.dgnrs, 0, "known mega-tier sDGNRS roll exercised");
             assertGt(bob.dgnrs, 0, "second owner sDGNRS roll exercised");
             assertNotEq(
-                bob.dgnrs, _dgnrs(_seed(word, BOB, 1), inventory), "fixture distinguishes live from stale inventory"
+                bob.dgnrs,
+                _dgnrs(_seed(word, index, posB, game.walletIdOf(BOB), 1), inventory),
+                "fixture distinguishes live from stale inventory"
             );
         } else {
             assertGt(alice.flip, 0, "known flat FLIP branch exercised");
@@ -485,8 +551,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         Balance memory beforeBob = _balance(BOB);
         if (perturb) {
             _open(2, KEEPER_ONE, count, index, count);
-            assertEq(_order(index, ALICE), 0, "first owner consumed exactly once");
-            assertEq(_order(index, BOB), orders[1], "budget break preserves second owner");
+            _assertOrders(index, orders, true); // first owner consumed exactly once; budget break preserves Bob
             _assertDelta(ALICE, beforeAlice, alice);
             Outcome memory none;
             _assertDelta(BOB, beforeBob, none);
@@ -504,8 +569,9 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
             _assertDelta(ALICE, beforeAlice, alice);
             _assertDelta(BOB, beforeBob, bob);
         }
-        assertEq(_order(index, ALICE), 0);
-        assertEq(_order(index, BOB), 0);
+        assertTrue(_spent(index, posA) && _spent(index, posB), "both entries spent");
+        assertEq(_entry(index, posA), orders[0], "settlement never rewrites an entry");
+        assertEq(_entry(index, posB), orders[1], "settlement never rewrites an entry");
         assertEq(
             _pool(), inventory - alice.dgnrs - bob.dgnrs, "actual pool debit equals both independently priced awards"
         );
@@ -520,8 +586,9 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         outcome = keccak256(abi.encode(alice, bob));
     }
 
-    function _compare(bool daily, uint256 count, uint256 word) private {
+    function _compare(bool daily, uint256 count) private {
         (uint48 index, uint256[2] memory orders) = _prepare(count);
+        uint256 word = _findWord(index, count);
         uint256 snapshot = vm.snapshotState();
         bytes32 baseline = _run(index, orders, count, word, daily, false);
         assertTrue(vm.revertToState(snapshot));
@@ -530,18 +597,18 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
     }
 
     function testMiddayTicketAndSequentialDgnrsBinding() public {
-        _compare(false, 2, TICKET_DGNRS_WORD);
+        _compare(false, 2);
     }
 
     function testDailyTicketAndSequentialDgnrsBinding() public {
-        _compare(true, 2, TICKET_DGNRS_WORD);
+        _compare(true, 2);
     }
 
     function testMiddayFlipAndPassBinding() public {
-        _compare(false, 1, FLIP_PASS_WORD);
+        _compare(false, 1);
     }
 
     function testDailyFlipAndPassBinding() public {
-        _compare(true, 1, FLIP_PASS_WORD);
+        _compare(true, 1);
     }
 }

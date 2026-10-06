@@ -78,10 +78,9 @@ library MineFlipGasBounds {
     // them: ENTRY + 100 x BOX = 4.05M.
     uint256 internal constant HUMAN_ENTRY_GAS = 1_300_000;
     uint256 internal constant HUMAN_BOX_GAS = 27_500;
-    // Cold presale resolution: 0.09M measured.
+    // Cold presale resolution: 0.09M measured; the closing entry's remainder transfer rides
+    // inside its entry bound.
     uint256 internal constant HUMAN_PRESALE_GAS = 110_000;
-    uint256 internal constant HUMAN_SKIP_GAS = 20_000;
-    // Cold completion with the presale remainder sweep: 0.05M measured.
     uint256 internal constant HUMAN_TAIL_GAS = 80_000;
 
     // BET

@@ -10,7 +10,7 @@ import {DegenerusGameMinerModule} from "../../contracts/modules/DegenerusGameMin
 import {IVRFCoordinator} from "../../contracts/interfaces/IVRFCoordinator.sol";
 
 contract MinerMiddayEligibilityHarness is MinerProgressHarness {
-    function seedValue(uint64 pendingEth, uint64 threshold, uint64 pendingFlip, bool crapsWork) external {
+    function seedValue(uint40 pendingEth, uint32 threshold, uint40 pendingFlip, bool crapsWork) external {
         _lrWrite(LR_PENDING_ETH_SHIFT, LR_PENDING_ETH_MASK, pendingEth);
         _lrWrite(LR_THRESHOLD_SHIFT, LR_THRESHOLD_MASK, threshold);
         _lrWrite(LR_PENDING_FLIP_SHIFT, LR_PENDING_FLIP_MASK, pendingFlip);
@@ -67,20 +67,20 @@ contract MinerMiddayEligibilityTest is Test {
         assertEq(work, 1, "productive call emits work exactly once");
     }
 
-    function testFuzz_ThresholdBoundary(uint64 threshold) public {
-        threshold = uint64(bound(threshold, 1, type(uint64).max));
-        game.seedValue(threshold - 1, threshold, type(uint64).max, false);
+    function testFuzz_ThresholdBoundary(uint32 threshold) public {
+        threshold = uint32(bound(threshold, 1, type(uint32).max));
+        game.seedValue(threshold - 1, threshold, type(uint40).max, false);
         assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.Idle), "FLIP cannot fill ETH shortfall");
         game.seedValue(threshold, threshold, 0, false);
         assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.RequestMidday));
-        if (threshold < type(uint64).max) {
+        if (threshold < type(uint32).max) {
             game.seedValue(threshold + 1, threshold, 0, false);
             assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.RequestMidday));
         }
     }
 
     function test_FlipOnlyAndEmptyQueues() public {
-        game.seedValue(0, 1, type(uint64).max, false);
+        game.seedValue(0, 1, type(uint40).max, false);
         assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.Idle));
         game.seedValue(0, 0, 1, false);
         assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.RequestMidday));
@@ -89,7 +89,7 @@ contract MinerMiddayEligibilityTest is Test {
     }
 
     function test_CrapsExemptionPreservesGasPriceGate() public {
-        game.seedValue(0, type(uint64).max, 0, true);
+        game.seedValue(0, type(uint32).max, 0, true);
         assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.RequestMidday));
         game.maxBasefee(1);
         vm.fee(1 gwei + 1);
@@ -106,7 +106,7 @@ contract MinerMiddayEligibilityTest is Test {
 
     function test_DailyRequestStillRunsBelowMiddayThreshold() public {
         game.seed(DegenerusGameStorage.MinerAction.RequestDaily);
-        game.seedValue(1, type(uint64).max, 1, false);
+        game.seedValue(1, type(uint32).max, 1, false);
         assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.RequestDaily));
     }
 }

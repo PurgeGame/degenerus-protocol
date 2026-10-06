@@ -1195,7 +1195,8 @@ contract sDGNRS {
             // with the request that word answers. Live callers pass that word (the miner's
             // session word, or the word kept with a parked claim).
             if (word <= 1) revert NotResolved();
-            uint256 entropy = EntropyLib.hash2(word, uint256(uint160(player)));
+            // The claim's beneficiary ID, committed at the burn, is the owner input.
+            uint256 entropy = EntropyLib.hash2(word, uint256(walletId));
             uint256 bal = address(this).balance;
             uint256 ethForLootbox = bal < lootboxEth ? bal : lootboxEth;
             game.resolveRedemptionLootbox{value: ethForLootbox}(

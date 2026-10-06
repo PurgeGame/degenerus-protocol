@@ -52,6 +52,19 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
         return DQ.lastBetId(vm, address(game), BET_INDEX);
     }
 
+    /// @dev A bet word's low 32 bits are the owner's permanent wallet ID.
+    function _assertOwnedBy(uint256 bet, address who, string memory err) internal view {
+        uint32 id = game.walletIdOf(who);
+        assertTrue(id != 0, err);
+        assertEq(uint32(bet), id, err);
+    }
+
+    /// @dev claimBingo needs a registered player; a minimum ETH bet registers one.
+    function _register(address who) internal {
+        vm.prank(who);
+        game.placeDegeneretteBet{value: BET_ETH}(address(0), CURRENCY_ETH, BET_ETH, 1, 0);
+    }
+
     function _fundFlip(address who, uint256 amount) internal {
         vm.prank(address(game));
         coin.mintForGame(who, amount);
@@ -74,7 +87,7 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
         assertLt(coin.balanceOf(gifter), gifterBefore, "funder paid the bet");
         uint64 idAfter = _lastBetId();
         assertEq(idAfter, idBefore + 1, "one bet queued");
-        assertEq(DQ.owner(game.degeneretteBetInfo(BET_INDEX, idAfter)), player, "the player owns the gifted bet");
+        _assertOwnedBy(game.degeneretteBetInfo(BET_INDEX, idAfter), player, "the player owns the gifted bet");
     }
 
     /// @notice An ETH gift is funded by the caller's msg.value; the player's ETH is untouched.
@@ -89,7 +102,7 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
         assertEq(gifter.balance, gifterEthBefore - BET_ETH, "funder's ETH funded the bet");
         assertEq(player.balance, playerEthBefore, "no drain: player ETH untouched");
         assertEq(_lastBetId(), idBefore + 1, "one bet queued");
-        assertEq(DQ.owner(game.degeneretteBetInfo(BET_INDEX, idBefore + 1)), player, "bet recorded under the player");
+        _assertOwnedBy(game.degeneretteBetInfo(BET_INDEX, idBefore + 1), player, "bet recorded under the player");
     }
 
     /// @notice WWXRP is unsupported even when an unrelated caller tries to gift the bet.
@@ -143,6 +156,7 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
     /// @notice A non-approved third party may settle another player's bingo: there is no approval
     ///         gate, so the call falls through to the 8-color slot-ownership check.
     function testClaimBingoThirdPartyPassesGate() public {
+        _register(player);
         uint32[8] memory slots;
         vm.prank(gifter);
         vm.expectRevert(NotSlotOwner.selector);
@@ -151,6 +165,7 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
 
     /// @notice Self-claim (address(0)) resolves to msg.sender (fails later on slot ownership).
     function testClaimBingoSelfPassesGate() public {
+        _register(player);
         uint32[8] memory slots;
         vm.prank(player);
         vm.expectRevert(NotSlotOwner.selector);
@@ -159,6 +174,7 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
 
     /// @notice Operator approval is neither required nor harmful on the permissionless path.
     function testClaimBingoApprovedOperatorPassesGate() public {
+        _register(player);
         vm.prank(player);
         game.setOperatorApproval(gifter, true);
         uint32[8] memory slots;

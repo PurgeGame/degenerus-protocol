@@ -119,16 +119,26 @@ contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
     function seedFoilWrite(uint24 lvl, address player) external {
         uint80 ownerBits = (uint80(_seedWallet(player)) << OWNER_IDX_SHIFT);
         uint256 id = uint32(ownerBits >> OWNER_IDX_SHIFT);
-        foilQueue[_foilWriteKey()].push((id << 192) | (uint256(lvl) << 160) | uint256(uint160(player)));
+        _appendFoil(true, (id << 192) | (uint256(lvl) << 160) | uint256(uint160(player)));
         foilRecord[lvl & 3][_seedWallet(player)] = (uint256(20000) << _FOIL_MULT_SHIFT)
             | (uint256(100) << _FOIL_SCORE_SHIFT) | (uint256(lvl) << _FOIL_LEVEL_SHIFT);
+    }
+
+    /// @dev Append a pack to the write or read foil cohort at that cohort's count.
+    function _appendFoil(bool write, uint256 pack) private {
+        uint24 key = write ? _foilWriteKey() : _foilReadKey();
+        uint32 position = uint32(_foilCount(key));
+        uint256 slot = _foilSlot(key, position);
+        assembly ("memory-safe") { sstore(slot, pack) }
+        if (write) foilWriteCount = position + 1;
+        else foilReadCount = position + 1;
     }
 
     function setFoilParity(bool writeSlot) external { ticketWriteSlot = writeSlot; foilWriteSlot = writeSlot; }
 
     function seedFoilRead(uint24 lvl, address player, bool processed) external {
         uint80 ownerBits = (uint80(_seedWallet(player)) << OWNER_IDX_SHIFT);
-        foilQueue[_foilReadKey()].push((uint256(uint32(ownerBits >> OWNER_IDX_SHIFT)) << 192)
+        _appendFoil(false, (uint256(uint32(ownerBits >> OWNER_IDX_SHIFT)) << 192)
             | (uint256(lvl) << 160) | uint256(uint160(player)));
         uint256 record = (uint256(20000) << _FOIL_MULT_SHIFT) | (uint256(100) << _FOIL_SCORE_SHIFT);
         if (processed) {
@@ -142,7 +152,7 @@ contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
     function foilCursorState() external view returns (uint256) { return foilCursor; }
 
     function foilState(uint24 lvl, address player) external view returns (uint256 writeLength, uint256 readLength, bool ready) {
-        return (foilQueue[_foilWriteKey()].length, foilQueue[_foilReadKey()].length, _foilRecordWord(_walletIdOf(player), lvl) & _FOIL_READY != 0);
+        return (foilWriteCount, foilReadCount, _foilRecordWord(_walletIdOf(player), lvl) & _FOIL_READY != 0);
     }
 
     function seedEveryTrait(uint24 lvl, address player) external {
