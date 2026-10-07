@@ -101,8 +101,8 @@ contract BattleConstructionTableSeed is CrapsBattleStorage {
             | (_BG_TERMS_FROZEN << _BG_TERM_TIER_SHIFT);
         _highField[bytes32(uint256(slot))] = 25;
         for (uint256 i = 1; i <= 50; ++i) {
-            _storeBet((uint256(slot) << 64) | i, uint160(0x310000 + i));
-            _storeBet((daySlot << 64) | i, uint160(0x320000 + i));
+            _appendBet((uint256(slot) << 64) | i, uint160(0x310000 + i));
+            _appendBet((daySlot << 64) | i, uint160(0x320000 + i));
         }
     }
 

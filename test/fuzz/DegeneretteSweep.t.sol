@@ -10,13 +10,39 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
+interface IDegeneretteCallbackGame {
+    function degeneretteBetInfo(uint48 index, uint64 betId) external view returns (uint256);
+    function boxIndexComplete(uint48 index) external view returns (bool);
+    function mineFlip() external;
+}
+
+/// @dev Adversarial replacement for the trusted mint sink, installed only after placement.
+contract DegeneretteCallbackMint {
+    IDegeneretteCallbackGame immutable game;
+    uint256 public calls;
+    bool public reentrySucceeded;
+    bool public exposedLiveBet;
+    bool public exposedComplete;
+    bool public failMint;
+
+    constructor(address target) { game = IDegeneretteCallbackGame(target); }
+    function setFail(bool fail) external { failMint = fail; }
+    function mintForGame(address, uint256) external {
+        require(!failMint, "mint failed");
+        ++calls;
+        exposedLiveBet = game.degeneretteBetInfo(1, 1) != 0;
+        exposedComplete = game.boxIndexComplete(1);
+        if (calls == 1) (reentrySucceeded,) = address(game).call(abi.encodeCall(game.mineFlip, ()));
+    }
+}
+
 /// @title DegeneretteSweep -- queued Degenerette bets resolve inside the box-open sweep.
-/// @notice A bet is one word appended to degeneretteQueue[index & 1]; its id is the queue
+/// @notice A bet is one paired lane appended to degeneretteQueue[index & 1]; its id is the queue
 ///         position + 1. mineFlip's Degenerette read-consumer stage resolves every bet queued
 ///         at an index after that index's box entries, admitted per bet against its gas bound
 ///         and resumable mid-queue. This suite owns:
 ///
-///         1. PLACEMENT: one word per bet with the documented layout; whole stake units only.
+///         1. PLACEMENT: two bets per word with the documented logical layout; whole stake units only.
 ///         2. EQUIVALENCE: a queue swept in one call resolves every bet in order, and sweeping
 ///            it across many small-budget calls pays exactly what one full-budget call pays.
 ///         3. EVENT: DegeneretteResolved carries every spin as five packed bytes.
@@ -206,7 +232,7 @@ contract DegeneretteSweep is DeployProtocol {
     // 1. Placement
     // =========================================================================
 
-    function testPlacementQueuesOneWordPerBet() public {
+    function testPlacementQueuesLogicalBetsInPairedWords() public {
         vm.recordLogs();
         _place(alice, ETH, 0.01 ether, 3);
         _place(bob, FLIP, 200, 2);
@@ -224,17 +250,19 @@ contract DegeneretteSweep is DeployProtocol {
 
         uint256 a = game.degeneretteBetInfo(IDX, 1);
         assertEq(uint32(a), game.walletIdOf(alice), "owner id");
-        assertEq((a >> 160) & 0x1F, SYMBOL, "symbol");
-        assertEq((a >> 165) & 0x1F, 3, "spins");
-        assertEq((a >> 170) & 1, ETH, "currency");
-        assertEq((a >> 171) & 1, 0, "no record");
-        assertEq((a >> 188) & type(uint64).max, 0.01 ether / 1 gwei, "ETH stake in gwei");
-        assertEq(a >> 252, 0, "reserved bits");
+        assertEq((a >> 32) & 0x1F, SYMBOL, "symbol");
+        assertEq((a >> 37) & 0x1F, 3, "spins");
+        assertEq((a >> 42) & 1, ETH, "currency");
+        assertEq((a >> 43) & 1, 0, "no record");
+        assertEq((a >> 60) & type(uint64).max, 0.01 ether / 1 gwei, "ETH stake in gwei");
+        assertEq(a >> 124, 0, "reserved bits");
 
         uint256 b = game.degeneretteBetInfo(IDX, 2);
         assertEq(uint32(b), game.walletIdOf(bob), "second owner id");
-        assertEq((b >> 170) & 1, FLIP, "FLIP currency");
-        assertEq((b >> 188) & type(uint64).max, 200, "FLIP stake in whole FLIP");
+        assertEq((b >> 42) & 1, FLIP, "FLIP currency");
+        assertEq((b >> 60) & type(uint64).max, 200, "FLIP stake in whole FLIP");
+        bytes32 base = keccak256(abi.encode(keccak256(abi.encode(uint256(IDX), QUEUE_SLOT))));
+        assertEq(uint256(vm.load(address(game), base)), a | (b << 128), "storage, events and views use identical lanes");
         assertEq(game.degeneretteBetInfo(IDX, 3), 0, "past the queue reads zero");
         assertEq(game.degeneretteBetInfo(IDX, 0), 0, "id zero reads zero");
     }
@@ -245,7 +273,7 @@ contract DegeneretteSweep is DeployProtocol {
         game.placeDegeneretteBet{value: 0.01 ether + 1}(0, ETH, 0.01 ether + 1, 1, SYMBOL);
 
         _place(alice, FLIP, 101, 1); // any whole FLIP is fine
-        assertEq((game.degeneretteBetInfo(IDX, 1) >> 188) & type(uint64).max, 101, "whole FLIP accepted");
+        assertEq((game.degeneretteBetInfo(IDX, 1) >> 60) & type(uint64).max, 101, "whole FLIP accepted");
     }
 
     // =========================================================================
@@ -459,8 +487,7 @@ contract DegeneretteSweep is DeployProtocol {
     /// @dev Run mineFlip as `keeper`; return bets resolved, the bounty paid and the measured gas.
     function _crank(address keeper) private returns (uint256 resolved, uint256 bounty, uint256 used) {
         vm.recordLogs();
-        vm.prank(keeper);
-        game.mineFlip();
+        this.crankAtBasefee(keeper);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] == RESOLVED_SIG) ++resolved;
@@ -476,6 +503,15 @@ contract DegeneretteSweep is DeployProtocol {
         }
         emit log_named_uint("measured mineFlip execution gas", used);
         emit log_named_uint("bounty paid", bounty);
+    }
+
+    /// @dev --isolate resets basefee on each promoted call. Set it inside that transaction,
+    ///      matching the existing paid-miner gas probes instead of silently pricing at zero.
+    function crankAtBasefee(address keeper) external {
+        require(msg.sender == address(this));
+        vm.fee(1 gwei);
+        vm.prank(keeper);
+        game.mineFlip();
     }
 
     /// @notice A plain mineFlip resolves the whole queue. Pay is priced on measured gas, and the
@@ -504,15 +540,15 @@ contract DegeneretteSweep is DeployProtocol {
     }
 
     /// @notice A Degenerette walk that resolves nothing still reports the slots it stepped past
-    ///         (here ten zeroed bet slots) as progress, so mineFlip commits the walk and finishes
+    ///         (here ten zeroed bet lanes) as progress, so mineFlip commits the walk and finishes
     ///         the cohort instead of refusing the call as workless.
     function testSweepThatOpensNothingStillProgresses() public {
         for (uint256 i; i < 10; ++i) _place(alice, FLIP, 100, 1);
         _landWord(IDX, uint256(keccak256("hole_word")));
-        // Holes ahead of the cursor: zero the ten queued words in place, leaving the cursor
+        // Holes ahead of the cursor: zero the five words holding ten queued bets, leaving the cursor
         // where it stands, to reach the walk's zeroed-bet skip.
         uint256 base = uint256(keccak256(abi.encode(keccak256(abi.encode(uint256(IDX), QUEUE_SLOT)))));
-        for (uint256 i; i < 10; ++i) vm.store(address(game), bytes32(base + i), bytes32(0));
+        for (uint256 i; i < 5; ++i) vm.store(address(game), bytes32(base + i), bytes32(0));
         for (uint64 id = 1; id <= 10; ++id) assertEq(game.degeneretteBetInfo(IDX, id), 0, "hole forged");
         assertFalse(game.boxIndexComplete(IDX), "the holes sit ahead of the cursor");
         vm.recordLogs();
@@ -522,4 +558,45 @@ contract DegeneretteSweep is DeployProtocol {
         assertTrue(game.boxIndexComplete(IDX), "the walk stepped past every zeroed slot");
         assertTrue(game.rngComplete(), "the cohort completed behind the walk");
     }
+    function testResolutionNeverWritesBetStorage() public {
+        for (uint256 i; i < 3; ++i) _place(alice, FLIP, 100, 1);
+        _landWord(IDX, uint256(keccak256("immutable queued bets")));
+        uint256 base = uint256(keccak256(abi.encode(keccak256(abi.encode(uint256(IDX), QUEUE_SLOT)))));
+        bytes32 first = vm.load(address(game), bytes32(base));
+        bytes32 second = vm.load(address(game), bytes32(base + 1));
+        vm.record();
+        _resolveCohort();
+        (, bytes32[] memory writes) = vm.accesses(address(game));
+        for (uint256 i; i < writes.length; ++i) {
+            assertTrue(writes[i] != bytes32(base) && writes[i] != bytes32(base + 1), "bet storage written on resolution");
+        }
+        assertEq(vm.load(address(game), bytes32(base)), first);
+        assertEq(vm.load(address(game), bytes32(base + 1)), second);
+        for (uint64 id = 1; id <= 3; ++id) assertEq(game.degeneretteBetInfo(IDX, id), 0);
+    }
+
+    function testCallbackCannotReplayAndFailedMintDoesNotConsumeBets() public {
+        _place(alice, FLIP, 100, 15);
+        _place(bob, FLIP, 100, 15);
+        _landWord(IDX, uint256(keccak256("keeper_word")));
+        DegeneretteCallbackMint implementation = new DegeneretteCallbackMint(address(game));
+        vm.etch(address(coin), address(implementation).code);
+        DegeneretteCallbackMint sink = DegeneretteCallbackMint(address(coin));
+        uint256 first = game.degeneretteBetInfo(IDX, 1);
+        sink.setFail(true);
+        vm.expectRevert(bytes("mint failed"));
+        game.mineFlip();
+        assertEq(game.degeneretteBetInfo(IDX, 1), first, "failed payout consumed a bet");
+        assertFalse(game.boxIndexComplete(IDX));
+        sink.setFail(false);
+        vm.recordLogs();
+        _resolveCohort();
+        assertEq(_countResolved(vm.getRecordedLogs()), 2, "callback replayed a bet");
+        assertGt(sink.calls(), 0, "callback not exercised");
+        assertFalse(sink.reentrySucceeded(), "nested worker advanced");
+        assertFalse(sink.exposedLiveBet(), "in-flight settled prefix still visible");
+        assertFalse(sink.exposedComplete(), "completion published before payout");
+        assertTrue(game.boxIndexComplete(IDX));
+    }
+
 }

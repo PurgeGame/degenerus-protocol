@@ -1797,7 +1797,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice View a queued Degenerette bet word (zero once resolved or unknown).
     /// @param index Lootbox RNG index the bet was placed at.
     /// @param betId Bet id within `index` (queue position + 1).
-    /// @return packed The raw bet word, unchanged from storage.
+    /// @return packed The logical bet word, matching its placement event.
     function degeneretteBetInfo(
         uint48 index,
         uint64 betId
@@ -1805,10 +1805,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!_lootboxBufferValid(index) || betId == 0
             || betId > (index == _rngWriteBuffer() ? uint32(lootboxRngPacked >> LR_BET_COUNT_SHIFT) : degeneretteReadCount)
         ) return 0;
-        uint256 slot = _betSlot(index, betId - 1);
-        uint256 word;
-        assembly ("memory-safe") { word := sload(slot) }
-        return word & BET_PROCESSED == 0 ? word : 0;
+        if (index == _rngReadBuffer()) {
+            uint256 active = _activeDegeneretteCursor();
+            uint256 cursor = active == 0 ? degeneretteCursor : active - 1;
+            if (betId <= cursor) return 0;
+        }
+        return _loadDegeneretteBet(index, betId - 1);
     }
 
     /// @notice Check whether lootbox presale mode is currently active.

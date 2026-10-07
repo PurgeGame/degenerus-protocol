@@ -869,7 +869,6 @@ contract ParimutuelSettlementSelectorTest is Test {
         game = GrowthSelectorHarness(ContractAddresses.GAME);
         _mockSdgnrs(false);
         _mockMaintenance(false);
-        vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenanceDueAt()"), abi.encode(uint256(0)));
         vm.mockCall(ContractAddresses.COINFLIP, abi.encodeWithSignature("creditFlip(uint32,uint256)"), bytes(""));
         vm.mockCall(
             ContractAddresses.VRF_COORDINATOR,

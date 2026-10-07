@@ -1,0 +1,14 @@
+{
+  "composition": {
+    "returncode": 0,
+    "log": "/home/zak/Dev/PurgeGame/degenerus-audit/scripts/audit/id-packing-review/implementation/final-b-composition.log"
+  },
+  "rng-terminal": {
+    "returncode": 0,
+    "log": "/home/zak/Dev/PurgeGame/degenerus-audit/scripts/audit/id-packing-review/implementation/final-b-rng-terminal.log"
+  },
+  "wallet-invariant": {
+    "returncode": 0,
+    "log": "/home/zak/Dev/PurgeGame/degenerus-audit/scripts/audit/id-packing-review/implementation/final-b-wallet-invariant.log"
+  }
+}

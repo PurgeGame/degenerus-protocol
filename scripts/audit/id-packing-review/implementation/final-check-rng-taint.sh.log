@@ -1,0 +1,3 @@
+manifest classes: PURE-DERIVE=134, PRODUCER=7, CONSUMER-SEALED=92, EXEMPT-ADVANCE=65, NOT-RNG=29
+live sites: 327   manifest rows: 327
+PASS RNG-word taint registry matches source

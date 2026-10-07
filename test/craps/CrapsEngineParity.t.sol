@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {Test} from "forge-std/Test.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
+import {LegacyCrapsEngine} from "../helpers/LegacyCrapsEngine.sol";
 
 /// @dev Test-only inline wrapper with explicit bounds, including the historical 8,192-roll limit.
 contract InlineCrapsReference is Craps {
@@ -25,6 +26,25 @@ contract CrapsEngineParity is Test {
     // covered by CrapsHotDuration and CrapsShooterBoost, including bounded runs.
     bytes32 internal constant INLINE_ENGINE_DIGEST =
         0x9f1d8924e3c2482c6be7f34b7ce0dd9ae2497ddb2feaaddcce01730ad777aff2;
+
+    function testFuzz_CompactHeaderPreservesEveryOutcome(
+        uint32 owner, uint256 word, uint8 chipsRaw, bool awarded, bool custom
+    ) public {
+        owner = uint32(bound(owner, 1, type(uint32).max));
+        uint256 chips = (uint256(chipsRaw) % 8) << ((word % 10) * 3);
+        uint48 slot = custom ? uint48((1 << 40) + 7) : 86;
+        uint256 betId = (uint256(slot) << 64) | 3;
+        uint256 oldHeader = owner | (chips << 160) | (uint256(4) << 206) | (uint256(0x7f) << 217);
+        uint256 compact = owner | (chips << 32) | (uint256(4) << 62) | (uint256(0x7f) << 65);
+        if (awarded) { oldHeader |= uint256(1) << 224; compact |= uint256(1) << 72; }
+        CrapsEngine engine = new CrapsEngine();
+        LegacyCrapsEngine legacy = new LegacyCrapsEngine();
+        Craps.SlipResult memory before = legacy.settleBattle(
+            betId, oldHeader, 30, 1500, 7500, slot, (uint256(9) << 64) | 3, word);
+        Craps.SlipResult memory after_ = engine.settleBattle(
+            betId, compact, 30, 1500, 7500, slot, (uint256(9) << 64) | 3, word);
+        assertEq(keccak256(abi.encode(before)), keccak256(abi.encode(after_)), "compact header changed a run");
+    }
 
     /// forge-config: default.fuzz.runs = 64
     function testFuzz_directAndRankedRunsUseSharedRollCeiling(bytes32 seed, bool latched) public {

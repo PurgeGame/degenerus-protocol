@@ -114,7 +114,7 @@ contract MinerMaintenanceTable is CrapsBattle {
         if (remainder == 0) {
             _dayTickets[_keeperSlot] = entrants;
             for (uint256 i = 1; i <= entrants; ++i) {
-                _storeBet((uint256(_keeperSlot) << 64) | i, 0xA000 + i);
+                _appendBet((uint256(_keeperSlot) << 64) | i, 0xA000 + i);
             }
         } else _battles[bytes32(uint256(_keeperSlot))] = entrants;
     }
@@ -139,7 +139,6 @@ contract MinerNoProgressTest is Test {
         game = MinerProgressHarness(ContractAddresses.GAME);
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
         vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending()"), abi.encode(false));
-        vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenanceDueAt()"), abi.encode(uint256(0)));
         vm.mockCall(ContractAddresses.COINFLIP, abi.encodeWithSignature("creditFlip(uint32,uint256)"), bytes(""));
     }
 

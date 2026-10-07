@@ -5,12 +5,12 @@ import {Vm} from "forge-std/Vm.sol";
 import {GameSlots} from "./GameSlots.sol";
 
 /// @title DegeneretteQueue -- test-side readers for queued Degenerette bets.
-/// @notice A bet is one word at keccak256(degeneretteQueue[index & 1].slot) + position; its id is
+/// @notice A bet is a 128-bit lane at keccak256(degeneretteQueue[index & 1].slot) + position / 2; its id is
 ///         the position + 1, so the buffer's bet count is the newest bet's id. The write buffer's
 ///         count lives in lootboxRngPacked bits 152..183, the sealed read buffer's in
-///         degeneretteReadCount. The word packs owner wallet ID [0..31] | symbol [160..164] |
-///         spins [165..169] | currency [170] |
-///         record flag [171] | activity [172..187] | stake units [188..251] (ETH gwei, FLIP
+///         degeneretteReadCount. The word packs owner wallet ID [0..31] | symbol [32..36] |
+///         spins [37..41] | currency [42] |
+///         record flag [43] | activity [44..59] | stake units [60..123] (ETH gwei, FLIP
 ///         whole). DegeneretteResolved carries five bytes per spin: player traits (big-endian)
 ///         then score | house wilds << 4.
 library DegeneretteQueue {
@@ -34,29 +34,32 @@ library DegeneretteQueue {
     /// @dev Bet word with id `betId` at `index`.
     function betAt(Vm vm, address game, uint48 index, uint64 betId) internal view returns (uint256) {
         bytes32 data = keccak256(abi.encode(uint256(keccak256(abi.encode(uint256(index & 1), QUEUE_SLOT)))));
-        return uint256(vm.load(game, bytes32(uint256(data) + betId - 1)));
+        if (betId == 0) return 0;
+        uint256 p = uint256(betId) - 1;
+        uint128 lane = uint128(uint256(vm.load(game, bytes32(uint256(data) + (p >> 1)))) >> ((p & 1) * 128));
+        return lane;
     }
 
     function owner(uint256 bet) internal pure returns (address) {
-        return address(uint160(bet));
+        return address(uint160(uint32(bet)));
     }
 
     function spinCount(uint256 bet) internal pure returns (uint8) {
-        return uint8((bet >> 165) & 0x1F);
+        return uint8((bet >> 37) & 0x1F);
     }
 
     function currency(uint256 bet) internal pure returns (uint8) {
-        return uint8((bet >> 170) & 1);
+        return uint8((bet >> 42) & 1);
     }
 
     function activity(uint256 bet) internal pure returns (uint16) {
-        return uint16(bet >> 172);
+        return uint16(bet >> 44);
     }
 
     /// @dev Per-spin stake in wei.
     function stake(uint256 bet) internal pure returns (uint128) {
         uint256 unit = currency(bet) == 0 ? 1 gwei : 1;
-        return uint128(((bet >> 188) & type(uint64).max) * unit);
+        return uint128(((bet >> 60) & type(uint64).max) * unit);
     }
 
     /// @dev Spin `i` of a DegeneretteResolved `spins` payload.

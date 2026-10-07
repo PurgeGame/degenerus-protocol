@@ -71,8 +71,9 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
     function _entryOwner(uint32 id, uint24 lvl) internal view returns (uint32) {
         uint256 latest = uint256(vm.load(address(game), GameSlotKeys.byId(id, GameSlots.DEC_BATTLE_PLAYERS)));
         if (uint24(latest >> 64) != lvl) return 0;
-        bytes32 entrySlot = keccak256(abi.encode((uint256(lvl) << 64) | uint64(latest), GameSlots.DEC_BATTLE_ENTRIES));
-        return uint32(uint256(vm.load(address(game), entrySlot)));
+        uint256 p = uint64(latest) - 1;
+        bytes32 entrySlot = keccak256(abi.encode((uint256(lvl) << 64) | (p >> 1), GameSlots.DEC_BATTLE_ENTRIES));
+        return uint32(uint256(vm.load(address(game), entrySlot)) >> ((p & 1) * 128));
     }
 
     /// @dev Stamp a live, non-deity craps lane (slot1 bits 0..23) of `tier` for wallet `id` today.

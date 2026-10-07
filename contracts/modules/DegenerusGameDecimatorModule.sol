@@ -78,10 +78,9 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
     // runs across every strategy reached 511 rolls. The complete run remains atomic across keeper checkpoints.
     uint256 private constant RUN_BOUNDS = (511 << 16) | 48;
 
-    // An entry word: owner in bits 0..159, the chosen board's thirty chip bits at 160, and the
-    // stack in whole FLIP of virtual chips in the top 66 bits.
-    uint256 private constant CHIPS_SHIFT = 160;
-    uint256 private constant STACK_SHIFT = 190;
+    // A compact entry: owner ID32, board30, then the stack in whole FLIP (66 bits).
+    uint256 private constant CHIPS_SHIFT = 32;
+    uint256 private constant STACK_SHIFT = 62;
     // A node's score sits above the 64-bit id. With ten 60-FLIP chips, at most 511 rolls,
     // 48 shooters (escalation <= 2^27) and at most 30% boost, peak < 2^110.
     // Even a full 66-bit stack therefore produces a score below the 192-bit lane.
@@ -142,7 +141,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         uint256 stack;
         if (uint24(latest >> 64) == lvl) {
             id = uint64(latest);
-            stack = decBattleEntries[_entryKey(lvl, id)] >> STACK_SHIFT;
+            stack = _loadDecEntry(lvl, id) >> STACK_SHIFT;
         } else {
             id = ++round.count;
             decBattlePlayers[playerId] = (uint256(lvl) << 64) | id;
@@ -152,8 +151,8 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         if (total > type(uint64).max) revert E();
         stack += credited;
         round.totalCreditedStack = uint64(total);
-        decBattleEntries[_entryKey(lvl, id)] =
-            (stack << STACK_SHIFT) | (uint256(chips) << CHIPS_SHIFT) | uint256(playerId);
+        _storeDecEntry(lvl, id,
+            (stack << STACK_SHIFT) | (uint256(chips) << CHIPS_SHIFT) | uint256(playerId));
         emit DecBurnRecorded(playerId, lvl, id, baseAmount, credited, stack, chips);
     }
 
@@ -384,7 +383,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
                 if (!MineFlipGas.canRun(meter, PAYMENT_GAS_MAX, WORK_TAIL_GAS)) break;
                 uint64 id = uint64(heap[paid]);
                 uint32 owner = id > round.count ? decGeneratedOwners[id - round.count]
-                    : uint32(decBattleEntries[_entryKey(lvl, id)]);
+                    : uint32(_loadDecEntry(lvl, id));
                 if (paid == 0) {
                     if (champPasses != 0) _addHalfPasses(owner, champPasses);
                     uint256 eth = champ - champPasses * HALF_WHALE_PASS_PRICE;
@@ -446,7 +445,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         returns (uint256)
     {
         // Only sampled survivors reach the engine; original IDs are never scanned.
-        uint256 entry = decBattleEntries[_entryKey(lvl, id)];
+        uint256 entry = _loadDecEntry(lvl, id);
         // The board was checked at burn, so settlement only counts its named chips. The owner's
         // wallet ID, committed with the burn, salts the survival coin.
         uint256 chips = (entry >> CHIPS_SHIFT) & 0x3FFFFFFF;
@@ -580,7 +579,4 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         _tryCompleteRng();
     }
 
-    function _entryKey(uint24 lvl, uint64 id) private pure returns (uint256) {
-        return (uint256(lvl) << 64) | id;
-    }
 }

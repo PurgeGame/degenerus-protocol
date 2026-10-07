@@ -511,10 +511,9 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         }
     }
 
-    /// @dev Raw BET_PROCESSED bit (255) of bet `betId` in degeneretteQueue[index & 1]. A later seal
-    ///      only resets the counts, so the element word stays readable.
+    /// @dev Resolution is the retired FIFO prefix, without modifying the bet word.
     function _betProcessed(uint48 index, uint64 betId) internal view returns (bool) {
-        return DQ.betAt(vm, address(game), index, betId) >> 255 == 1;
+        return game.degeneretteBetInfo(index, betId) == 0;
     }
 
     /// @dev Resolve queued bets through the permissionless crank. Degenerette resolution is the

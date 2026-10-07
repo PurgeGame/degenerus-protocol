@@ -1,0 +1,797 @@
+{
+  "test_FullMatchEightThousandThroughRealMiner()": {
+    "locked-at-start total gas": [
+      {
+        "baseline": 70110158,
+        "candidate": 70120048,
+        "saved": -9890
+      }
+    ],
+    "whole FLIP bounty credited": [
+      {
+        "baseline": 0,
+        "candidate": 0,
+        "saved": 0
+      }
+    ],
+    "original and generated count each": [
+      {
+        "baseline": 8000,
+        "candidate": 8000,
+        "saved": 0
+      }
+    ],
+    "sampled natural runs": [
+      {
+        "baseline": 500,
+        "candidate": 500,
+        "saved": 0
+      }
+    ],
+    "largest external call gas incl wrapper": [
+      {
+        "baseline": 9407449,
+        "candidate": 9420141,
+        "saved": -12692
+      }
+    ],
+    "unlocked-at-start calls (10M supplied)": [
+      {
+        "baseline": 5,
+        "candidate": 5,
+        "saved": 0
+      }
+    ],
+    "sampled generated runs": [
+      {
+        "baseline": 500,
+        "candidate": 500,
+        "saved": 0
+      }
+    ],
+    "locked-at-start calls (10M supplied)": [
+      {
+        "baseline": 8,
+        "candidate": 8,
+        "saved": 0
+      }
+    ],
+    "unlocked-at-start total gas": [
+      {
+        "baseline": 36530043,
+        "candidate": 36622991,
+        "saved": -92948
+      }
+    ],
+    "total settlement gas": [
+      {
+        "baseline": 106640201,
+        "candidate": 106743039,
+        "saved": -102838
+      }
+    ],
+    "actual transaction basefee wei": [
+      {
+        "baseline": 0,
+        "candidate": 0,
+        "saved": 0
+      }
+    ]
+  },
+  "testResolutionGasIsLogarithmic()": {
+    "resolve_gas_4096": [
+      {
+        "baseline": 40080,
+        "candidate": 40200,
+        "saved": -120
+      }
+    ],
+    "resolve_gas_512": [
+      {
+        "baseline": 32513,
+        "candidate": 32118,
+        "saved": 395
+      }
+    ],
+    "resolve_gas_16": [
+      {
+        "baseline": 20662,
+        "candidate": 19457,
+        "saved": 1205
+      }
+    ]
+  },
+  "test_RealEngineBatchesStayBelowKeeperEnvelope()": {
+    "total batches": [
+      {
+        "baseline": 18,
+        "candidate": 18,
+        "saved": 0
+      }
+    ],
+    "real engine maximum batch gas (3 x 2000 entries)": [
+      {
+        "baseline": 13848537,
+        "candidate": 13871405,
+        "saved": -22868
+      }
+    ]
+  },
+  "testArmedDayEntryGasProfile()": {
+    "armed_first_entry_deposit": [
+      {
+        "baseline": 217944,
+        "candidate": 218152,
+        "saved": -208
+      }
+    ],
+    "armed_appended_entry_deposit": [
+      {
+        "baseline": 116597,
+        "candidate": 99705,
+        "saved": 16892
+      }
+    ],
+    "unarmed_first_deposit": [
+      {
+        "baseline": 175424,
+        "candidate": 175427,
+        "saved": -3
+      }
+    ],
+    "unarmed_repeat_deposit": [
+      {
+        "baseline": 86677,
+        "candidate": 86680,
+        "saved": -3
+      }
+    ],
+    "armed_first_entry_overhead": [
+      {
+        "baseline": 42520,
+        "candidate": 42725,
+        "saved": -205
+      }
+    ],
+    "armed_appended_entry_overhead": [
+      {
+        "baseline": 29920,
+        "candidate": 13025,
+        "saved": 16895
+      }
+    ]
+  },
+  "test_SealGasIndependentOfPopulation()": {
+    "seal, uint64 max entrants": [
+      {
+        "baseline": 114960,
+        "candidate": 114960,
+        "saved": 0
+      }
+    ]
+  },
+  "test_ScaleFullMatchHundredThousand()": {
+    "locked-at-start total gas": [
+      {
+        "baseline": 69800027,
+        "candidate": 69810701,
+        "saved": -10674
+      }
+    ],
+    "whole FLIP bounty credited": [
+      {
+        "baseline": 0,
+        "candidate": 0,
+        "saved": 0
+      }
+    ],
+    "original and generated count each": [
+      {
+        "baseline": 100000,
+        "candidate": 100000,
+        "saved": 0
+      }
+    ],
+    "sampled natural runs": [
+      {
+        "baseline": 500,
+        "candidate": 500,
+        "saved": 0
+      }
+    ],
+    "largest external call gas incl wrapper": [
+      {
+        "baseline": 9422725,
+        "candidate": 9411331,
+        "saved": 11394
+      }
+    ],
+    "unlocked-at-start calls (10M supplied)": [
+      {
+        "baseline": 5,
+        "candidate": 5,
+        "saved": 0
+      }
+    ],
+    "sampled generated runs": [
+      {
+        "baseline": 500,
+        "candidate": 500,
+        "saved": 0
+      }
+    ],
+    "locked-at-start calls (10M supplied)": [
+      {
+        "baseline": 8,
+        "candidate": 8,
+        "saved": 0
+      }
+    ],
+    "unlocked-at-start total gas": [
+      {
+        "baseline": 37870799,
+        "candidate": 37968573,
+        "saved": -97774
+      }
+    ],
+    "total settlement gas": [
+      {
+        "baseline": 107670826,
+        "candidate": 107779274,
+        "saved": -108448
+      }
+    ],
+    "actual transaction basefee wei": [
+      {
+        "baseline": 0,
+        "candidate": 0,
+        "saved": 0
+      }
+    ]
+  },
+  "testNormalDepositGasProfile()": {
+    "deposit_gas_repeat_same_day": [
+      {
+        "baseline": 86677,
+        "candidate": 86680,
+        "saved": -3
+      }
+    ],
+    "deposit_gas_repeat_next_day": [
+      {
+        "baseline": 86677,
+        "candidate": 86680,
+        "saved": -3
+      }
+    ],
+    "deposit_gas_first_ever": [
+      {
+        "baseline": 126625,
+        "candidate": 126628,
+        "saved": -3
+      }
+    ],
+    "deposit_estimated_transaction_state_allowance": [
+      {
+        "baseline": 70800,
+        "candidate": 70800,
+        "saved": 0
+      },
+      {
+        "baseline": 64000,
+        "candidate": 64000,
+        "saved": 0
+      },
+      {
+        "baseline": 64000,
+        "candidate": 64000,
+        "saved": 0
+      }
+    ],
+    "deposit_cold_storage_writes": [
+      {
+        "baseline": 4,
+        "candidate": 4,
+        "saved": 0
+      },
+      {
+        "baseline": 3,
+        "candidate": 3,
+        "saved": 0
+      },
+      {
+        "baseline": 3,
+        "candidate": 3,
+        "saved": 0
+      }
+    ],
+    "deposit_cold_storage_reads": [
+      {
+        "baseline": 22,
+        "candidate": 22,
+        "saved": 0
+      },
+      {
+        "baseline": 20,
+        "candidate": 20,
+        "saved": 0
+      },
+      {
+        "baseline": 20,
+        "candidate": 20,
+        "saved": 0
+      }
+    ]
+  },
+  "test_ScaleFullMatchMillion()": {
+    "locked-at-start total gas": [
+      {
+        "baseline": 70039736,
+        "candidate": 70049999,
+        "saved": -10263
+      }
+    ],
+    "whole FLIP bounty credited": [
+      {
+        "baseline": 0,
+        "candidate": 0,
+        "saved": 0
+      }
+    ],
+    "original and generated count each": [
+      {
+        "baseline": 1000000,
+        "candidate": 1000000,
+        "saved": 0
+      }
+    ],
+    "sampled natural runs": [
+      {
+        "baseline": 499,
+        "candidate": 499,
+        "saved": 0
+      }
+    ],
+    "largest external call gas incl wrapper": [
+      {
+        "baseline": 9421601,
+        "candidate": 9407571,
+        "saved": 14030
+      }
+    ],
+    "unlocked-at-start calls (10M supplied)": [
+      {
+        "baseline": 5,
+        "candidate": 5,
+        "saved": 0
+      }
+    ],
+    "sampled generated runs": [
+      {
+        "baseline": 501,
+        "candidate": 501,
+        "saved": 0
+      }
+    ],
+    "locked-at-start calls (10M supplied)": [
+      {
+        "baseline": 8,
+        "candidate": 8,
+        "saved": 0
+      }
+    ],
+    "unlocked-at-start total gas": [
+      {
+        "baseline": 37129559,
+        "candidate": 37225779,
+        "saved": -96220
+      }
+    ],
+    "total settlement gas": [
+      {
+        "baseline": 107169295,
+        "candidate": 107275778,
+        "saved": -106483
+      }
+    ],
+    "actual transaction basefee wei": [
+      {
+        "baseline": 0,
+        "candidate": 0,
+        "saved": 0
+      }
+    ]
+  },
+  "test_FullMatchThousandThroughRealMiner()": {
+    "locked-at-start total gas": [
+      {
+        "baseline": 70105712,
+        "candidate": 70114426,
+        "saved": -8714
+      }
+    ],
+    "whole FLIP bounty credited": [
+      {
+        "baseline": 0,
+        "candidate": 0,
+        "saved": 0
+      }
+    ],
+    "original and generated count each": [
+      {
+        "baseline": 1000,
+        "candidate": 1000,
+        "saved": 0
+      }
+    ],
+    "sampled natural runs": [
+      {
+        "baseline": 500,
+        "candidate": 500,
+        "saved": 0
+      }
+    ],
+    "largest external call gas incl wrapper": [
+      {
+        "baseline": 9401991,
+        "candidate": 9417682,
+        "saved": -15691
+      }
+    ],
+    "unlocked-at-start calls (10M supplied)": [
+      {
+        "baseline": 5,
+        "candidate": 5,
+        "saved": 0
+      }
+    ],
+    "sampled generated runs": [
+      {
+        "baseline": 500,
+        "candidate": 500,
+        "saved": 0
+      }
+    ],
+    "locked-at-start calls (10M supplied)": [
+      {
+        "baseline": 8,
+        "candidate": 8,
+        "saved": 0
+      }
+    ],
+    "unlocked-at-start total gas": [
+      {
+        "baseline": 37202408,
+        "candidate": 37298962,
+        "saved": -96554
+      }
+    ],
+    "total settlement gas": [
+      {
+        "baseline": 107308120,
+        "candidate": 107413388,
+        "saved": -105268
+      }
+    ],
+    "actual transaction basefee wei": [
+      {
+        "baseline": 0,
+        "candidate": 0,
+        "saved": 0
+      }
+    ]
+  },
+  "test_ScaleFullMatchTenThousand()": {
+    "locked-at-start total gas": [
+      {
+        "baseline": 70025847,
+        "candidate": 69961169,
+        "saved": 64678
+      }
+    ],
+    "whole FLIP bounty credited": [
+      {
+        "baseline": 0,
+        "candidate": 0,
+        "saved": 0
+      }
+    ],
+    "original and generated count each": [
+      {
+        "baseline": 10000,
+        "candidate": 10000,
+        "saved": 0
+      }
+    ],
+    "sampled natural runs": [
+      {
+        "baseline": 499,
+        "candidate": 499,
+        "saved": 0
+      }
+    ],
+    "largest external call gas incl wrapper": [
+      {
+        "baseline": 9422843,
+        "candidate": 9416091,
+        "saved": 6752
+      }
+    ],
+    "unlocked-at-start calls (10M supplied)": [
+      {
+        "baseline": 5,
+        "candidate": 5,
+        "saved": 0
+      }
+    ],
+    "sampled generated runs": [
+      {
+        "baseline": 501,
+        "candidate": 501,
+        "saved": 0
+      }
+    ],
+    "locked-at-start calls (10M supplied)": [
+      {
+        "baseline": 8,
+        "candidate": 8,
+        "saved": 0
+      }
+    ],
+    "unlocked-at-start total gas": [
+      {
+        "baseline": 37017574,
+        "candidate": 37199445,
+        "saved": -181871
+      }
+    ],
+    "total settlement gas": [
+      {
+        "baseline": 107043421,
+        "candidate": 107160614,
+        "saved": -117193
+      }
+    ],
+    "actual transaction basefee wei": [
+      {
+        "baseline": 0,
+        "candidate": 0,
+        "saved": 0
+      }
+    ]
+  },
+  "test_ScaleItemCeilingsKeepGeneratedAdmission()": {
+    "scale largest generated item ceiling": [
+      {
+        "baseline": 454188,
+        "candidate": 454169,
+        "saved": 19
+      },
+      {
+        "baseline": 454188,
+        "candidate": 454169,
+        "saved": 19
+      },
+      {
+        "baseline": 454188,
+        "candidate": 454169,
+        "saved": 19
+      },
+      {
+        "baseline": 454188,
+        "candidate": 454169,
+        "saved": 19
+      }
+    ],
+    "scale item original count": [
+      {
+        "baseline": 1000,
+        "candidate": 1000,
+        "saved": 0
+      },
+      {
+        "baseline": 10000,
+        "candidate": 10000,
+        "saved": 0
+      },
+      {
+        "baseline": 100000,
+        "candidate": 100000,
+        "saved": 0
+      },
+      {
+        "baseline": 1000000,
+        "candidate": 1000000,
+        "saved": 0
+      }
+    ],
+    "cold 511-roll engine ceiling": [
+      {
+        "baseline": 327232,
+        "candidate": 327232,
+        "saved": 0
+      }
+    ],
+    "scale cold item including worker frame ceiling": [
+      {
+        "baseline": 468882,
+        "candidate": 468863,
+        "saved": 19
+      },
+      {
+        "baseline": 468875,
+        "candidate": 468856,
+        "saved": 19
+      },
+      {
+        "baseline": 468875,
+        "candidate": 468856,
+        "saved": 19
+      },
+      {
+        "baseline": 468875,
+        "candidate": 468856,
+        "saved": 19
+      }
+    ]
+  },
+  "test_FullMatchActivePassAndEscalatedRate()": {
+    "locked-at-start total gas": [
+      {
+        "baseline": 70110022,
+        "candidate": 70119912,
+        "saved": -9890
+      }
+    ],
+    "whole FLIP bounty credited": [
+      {
+        "baseline": 0,
+        "candidate": 0,
+        "saved": 0
+      }
+    ],
+    "original and generated count each": [
+      {
+        "baseline": 8000,
+        "candidate": 8000,
+        "saved": 0
+      }
+    ],
+    "sampled natural runs": [
+      {
+        "baseline": 500,
+        "candidate": 500,
+        "saved": 0
+      }
+    ],
+    "largest external call gas incl wrapper": [
+      {
+        "baseline": 9407432,
+        "candidate": 9420124,
+        "saved": -12692
+      }
+    ],
+    "unlocked-at-start calls (10M supplied)": [
+      {
+        "baseline": 5,
+        "candidate": 5,
+        "saved": 0
+      }
+    ],
+    "sampled generated runs": [
+      {
+        "baseline": 500,
+        "candidate": 500,
+        "saved": 0
+      }
+    ],
+    "locked-at-start calls (10M supplied)": [
+      {
+        "baseline": 8,
+        "candidate": 8,
+        "saved": 0
+      }
+    ],
+    "unlocked-at-start total gas": [
+      {
+        "baseline": 36529975,
+        "candidate": 36622923,
+        "saved": -92948
+      }
+    ],
+    "total settlement gas": [
+      {
+        "baseline": 106639997,
+        "candidate": 106742835,
+        "saved": -102838
+      }
+    ],
+    "actual transaction basefee wei": [
+      {
+        "baseline": 0,
+        "candidate": 0,
+        "saved": 0
+      }
+    ]
+  },
+  "test_ColdSoloPassAndGoldResumeFitExistingAdmission()": {
+    "first admitted solo resume allowance": [
+      {
+        "baseline": 416867,
+        "candidate": 416641,
+        "saved": 226
+      }
+    ],
+    "solo award plus completion beyond refused frame": [
+      {
+        "baseline": 128984,
+        "candidate": 128984,
+        "saved": 0
+      }
+    ],
+    "cold solo cash/pass/gold and daily completion frame": [
+      {
+        "baseline": 175736,
+        "candidate": 175510,
+        "saved": 226
+      }
+    ]
+  },
+  "testNormalDepositWarmSingleTransactionRegression()": {
+    "deposit_gas_repeat_next_day": [
+      {
+        "baseline": 24945,
+        "candidate": 24948,
+        "saved": -3
+      }
+    ],
+    "deposit_gas_repeat_same_day": [
+      {
+        "baseline": 24945,
+        "candidate": 24948,
+        "saved": -3
+      }
+    ],
+    "deposit_gas_first_ever": [
+      {
+        "baseline": 88193,
+        "candidate": 88196,
+        "saved": -3
+      }
+    ]
+  },
+  "test_SkippedNaturalStratumFitsSmallAllowanceAndGeneratedWaits()": {
+    "incremental skipped stratum gas": [
+      {
+        "baseline": 4973,
+        "candidate": 4973,
+        "saved": 0
+      }
+    ],
+    "cold skipped natural stratum and worker frame": [
+      {
+        "baseline": 19660,
+        "candidate": 19660,
+        "saved": 0
+      }
+    ]
+  },
+  "test_ColdPlanInitializationFitsAdmission()": {
+    "cold plan initialization and worker frame": [
+      {
+        "baseline": 59977,
+        "candidate": 59977,
+        "saved": 0
+      }
+    ]
+  },
+  "testFirstDepositWithRegistrationGas()": {
+    "deposit_gas_first_ever_with_registration": [
+      {
+        "baseline": 175424,
+        "candidate": 175427,
+        "saved": -3
+      }
+    ]
+  }
+}

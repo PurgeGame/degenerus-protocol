@@ -225,8 +225,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
         return _betOf(betId);
     }
 
-    /// @dev The RAW stored bet word, so a suite can grade the packed slices — the boon mask at
-    ///      206..208 above all — rather than only the decoded struct.
+    /// @dev Compact 72-bit slip plus the derived awarded bit at 72, for codec assertions.
     function betWordOf(uint256 betId) external view returns (uint256) {
         return _loadBet(betId);
     }
@@ -454,7 +453,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
 
     /// @dev Whether the day-lane seat `player` holds on `day` is a HIGH one. The lane lives on the
     ///      ticket itself rather than in the day state, so it is read off the bet the day holds.
-    ///      Bit 217 is period zero's flag, which every whole-day high ticket sets.
+    ///      Bit 65 is period zero's flag, which every whole-day high ticket sets.
     function daySeatIsHigh(uint24 day, address player) external view returns (bool) {
         uint256 daySlot = uint256(day) * BONUS_SLOTS_PER_DAY;
         uint64 n = uint32(_dayTickets[daySlot]);

@@ -302,26 +302,21 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      this and the board scatter and the boost rung without any two seeing the same bits.
     uint256 internal constant HIGH_TAG = 0x48696768526f6c6c6572; // "HighRoller"
 
-    // One stored bet word:
-    //   bits   0.. 31  the owner's Game wallet ID (never zero)
-    //   bits  32..159  zero
-    //   bits 160..189  ten three-bit chip counts; all ten zero means draw all ten
-    //   bits 190..205  scheduled day tag, low 16 bits (unused for custom bets)
-    //   bits 206..208  the craps boon riding this slip, one-hot (see _BET_BOON_SHIFT)
-    //   bits 209..216  scheduled day tag, high 8 bits (unused for custom bets)
-    //   bits 217..223  high-roller flags: bit 217 alone on a window-local slip, bit 217 + p per
-    //                  period on a day ticket
-    //   bits 224..255  jackpot award units
-    // Logical IDs are `(slot << 64) | seat`. Scheduled storage uses day modulo 64;
-    // _loadBet authenticates the real day and removes the tag before decoding game fields.
-    // Custom storage uses the full ID. Slot terms and resolution cursors keep logical keys.
+    // One compact slip, used directly by storage, settlement and views:
+    //   bits  0..31  owner wallet ID
+    //   bits 32..61  ten three-bit chip counts (zero means draw all ten)
+    //   bits 62..64  one-hot boon
+    //   bits 65..71  high-roller flags (one per period on day tickets)
+    // Bit72 is added in memory for an awarded jackpot seat; it is never stored.
+    // Three 72-bit lanes and one shared uint24 day occupy each physical word.
+    // Scheduled keys recycle the day modulo 64; custom keys retain the full slot.
     /// @dev The ten legs, three bits each, as chip counts, in the CANONICAL order — the identical
     ///      thirty-bit word `CrapsSlipPlaced` carries in its low bits, so storage and the log
     ///      agree without a translation anywhere. All ten zero leaves the whole round to the draw;
     ///      the submitted counts may sum to at most seven, and settlement scatters the complement.
     ///      Three bits is the right width because the per-leg cap fits and no submitted total may
     ///      exceed seven.
-    uint256 internal constant _BET_CHIPS_SHIFT = 160;
+    uint256 internal constant _BET_CHIPS_SHIFT = 32;
     uint256 internal constant _BET_CHIPS_MASK = 0x3FFFFFFF;
     /// @dev The entry multiple MINUS ONE, carried on `CrapsSlipPlaced` alone and never stored: a
     ///      seat's scale is derived from its high flag at settlement, not read back from the word.
@@ -329,17 +324,16 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      the id ends at 159 and a byte does not fit in two bits.
     uint256 internal constant _EV_MULT_SHIFT = 160;
 
-    /// @dev Bits 206..208: the craps boon riding this slip, ONE-HOT — 1 = 5%, 2 = 10%, 4 = 15%,
-    ///      0 = none. Carried at the SAME shift in storage and on `CrapsSlipPlaced`, so the log
-    ///      and the word cannot drift.
+    /// @dev Bits 62..64: the craps boon riding this slip, ONE-HOT — 1 = 5%, 2 = 10%, 4 = 15%,
+    ///      0 = none. The placement event carries the same value at its documented event offset.
     ///
     ///      A one-hot tier rather than a two-bit index because an invalid word must fail CLOSED:
     ///      3, 5, 6 and 7 are unreachable through the trusted writer and pay nothing if a value
     ///      ever reached storage another way, where a two-bit field would silently mean something.
     ///
-    ///      Bits 209..216 are unused. A day-wide entry is ONE slip — the whole day or a single
+    ///      A day-wide entry is ONE slip — the whole day or a single
     ///      window — so no slip carries a set to be locked as one, and nothing stamps a span.
-    uint256 internal constant _BET_BOON_SHIFT = 206;
+    uint256 internal constant _BET_BOON_SHIFT = 62;
     uint256 internal constant _BET_BOON_MASK = 7;
 
     /// @dev A seat took the high-roller lane. Stored as a FLAG rather than inferred from the
@@ -348,12 +342,12 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      reader re-derives from an argument.
     ///
     ///      A WINDOW-LOCAL slip stores exactly this one bit. A DAY ticket stores SEVEN — bit
-    ///      `217 + p` for period `p` — so one ticket can be high in the windows it chose and
+    ///      `65 + p` for period `p` — so one ticket can be high in the windows it chose and
     ///      ordinary in the rest. A whole-day high entry sets all seven, which is what keeps it
     ///      byte-for-byte the seat it always was; `_highOn` is the one reader of either shape.
-    uint256 internal constant _BET_HIGH_BIT = 1 << 217;
-    uint256 internal constant _BET_HIGH_SHIFT = 217;
-    uint256 internal constant _BET_DAYHIGH_MASK = 0x3F << 217;
+    uint256 internal constant _BET_HIGH_BIT = 1 << 65;
+    uint256 internal constant _BET_HIGH_SHIFT = 65;
+    uint256 internal constant _BET_DAYHIGH_MASK = 0x3F << 65;
 
     /// @dev Bit 0 of every one of the ten three-bit legs. Shifting each leg's `4` bit onto this
     ///      mask makes the three-chip ceiling one board-wide test.
@@ -511,7 +505,9 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         uint256 hottestHand;
     }
 
-    /// @dev One word per bet: owner, board, flags, award units and a scheduled day tag.
+    /// @dev Three 72-bit slips per word: owner32, board30, boon3, high7.
+    ///      Bits216..239 hold the shared day; bits240..255 are reserved.
+    ///      Day identity is shared by each word; award status derives from frozen counts.
     ///      Logical IDs are `(slot << 64) | n`, with dense indices 1..entrants. Only the
     ///      scheduled day component of the physical key is recycled; counts stay logical.
     mapping(uint256 => uint256) internal _bets;
@@ -520,7 +516,6 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      days of settlement fit without aliasing. Custom battle IDs are not recycled.
     uint256 internal constant _RESERVATION_DAYS = 30;
     uint256 internal constant _SETTLEMENT_DAYS = 30;
-    uint256 private constant _BET_DAY_MASK = (uint256(0xffff) << 190) | (uint256(0xff) << 209);
     uint256 private constant _DAY_SEAT_VALUE_MASK = (uint256(1) << 39) - 1;
 
     function _scheduledExpired(uint256 slot) internal view returns (bool) {
@@ -532,29 +527,71 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         return day > today && day <= today + _RESERVATION_DAYS && _dailyWordAt(day) == 0;
     }
 
+    /// @dev Three 72-bit lanes per word. Position zero remains reserved.
     function _betStorageKey(uint256 id) internal pure returns (uint256) {
-        return id >> 64 < _CUSTOM_SLOT_BASE ? id & ((uint256(1) << 73) - 1) : id;
+        uint256 slot = id >> 64;
+        uint256 seat = uint64(id);
+        if (seat == 0) return slot < _CUSTOM_SLOT_BASE ? (slot & 511) << 64 : slot << 64;
+        return ((slot < _CUSTOM_SLOT_BASE ? slot & 511 : slot) << 64) | (1 + (seat - 1) / 3);
     }
 
-    /// @dev The two unused bit ranges carry the exact uint24 day. Never truncate the
-    ///      requested day when checking it: oversized forged IDs must not alias a live bet.
-    function _loadBet(uint256 id) internal view returns (uint256 word) {
-        word = _bets[_betStorageKey(id)];
+    // One contiguous day tag above the three lanes avoids a separate header access.
+    uint256 private constant _PACKED_BET_DAY_MASK = uint256(type(uint24).max) << 216;
+
+    /// @dev Caller supplies the paid/awarded classification and a nonzero seat. Authenticate the
+    ///      shared day tag and return the compact header; unappended lanes are zero.
+    function _loadBetUnchecked(uint256 id, bool awarded) internal view returns (uint256 word) {
+        uint256 shift = ((uint256(uint64(id)) - 1) % 3) * 72;
+        uint256 packed = _bets[_betStorageKey(id)];
         if (id >> 64 < _CUSTOM_SLOT_BASE) {
-            uint256 day = ((word >> 190) & 0xffff) | (((word >> 209) & 0xff) << 16);
+            uint256 day = uint24(packed >> 216);
             if (day != id >> 67) return 0;
-            word &= ~_BET_DAY_MASK;
+        }
+        word = uint72(packed >> shift);
+        if (awarded && word != 0) word |= uint256(1) << _AWARD_UNITS_SHIFT;
+    }
+
+    function _loadBet(uint256 id) internal view returns (uint256 word) {
+        if (uint64(id) == 0) return 0;
+        word = _loadBetUnchecked(id, false);
+        uint256 slot = id >> 64;
+        if (word != 0 && slot < _CUSTOM_SLOT_BASE && slot & 7 >= _BONUS_PERIODS_PER_DAY) {
+            JackpotRound storage r = _jackpotRounds[slot];
+            uint256 dayCount = slot & 7 == 7 ? 0 : uint32(_dayTickets[slot & ~uint256(7)]);
+            if (r.requestDay != 0 && uint256(uint64(id)) + dayCount > r.paidCount) {
+                word |= uint256(1) << _AWARD_UNITS_SHIFT;
+            }
         }
     }
 
-    function _storeBet(uint256 id, uint256 word) internal {
+    /// @dev Dense appends start each physical word afresh, zeroing its unwritten tail lanes.
+    ///      Older untouched words keep their old day tag, so readers need no separate count load.
+    function _appendBet(uint256 id, uint256 word) internal {
+        if (uint64(id) == 0) revert NoSuchBet();
+        _writeBetLane(id, word, _betWriteDay(id), (uint256(uint64(id)) - 1) % 3 == 0);
+    }
+
+    function _betWriteDay(uint256 id) private view returns (uint256 day) {
         if (id >> 64 < _CUSTOM_SLOT_BASE) {
-            uint256 day = id >> 67;
+            day = id >> 67;
             uint256 today = _currentDayIndex();
-            if (day > today + _RESERVATION_DAYS || day + _SETTLEMENT_DAYS < today) revert DayNotReservable();
-            word = (word & ~_BET_DAY_MASK) | ((day & 0xffff) << 190) | ((day >> 16) << 209);
+            if (day > type(uint24).max || day > today + _RESERVATION_DAYS || day + _SETTLEMENT_DAYS < today) revert DayNotReservable();
         }
-        _bets[_betStorageKey(id)] = word;
+    }
+
+    /// @dev Caller has loaded and authorized the live slip. Retain the write-window check so an
+    ///      expired logical ID cannot alter a replacement book; preserve both neighboring lanes.
+    function _storeBet(uint256 id, uint256 word) internal {
+        _writeBetLane(id, word, _betWriteDay(id), false);
+    }
+
+    function _writeBetLane(uint256 id, uint256 word, uint256 day, bool fresh) private {
+        uint256 lane = uint72(word);
+        uint256 key = _betStorageKey(id);
+        uint256 shift = ((uint256(uint64(id)) - 1) % 3) * 72;
+        uint256 old = fresh ? 0 : _bets[key];
+        uint256 packed = (old & ~((uint256(type(uint72).max) << shift) | _PACKED_BET_DAY_MASK)) | (lane << shift);
+        _bets[key] = packed | (day << 216);
     }
 
     function _loadDaySeat(uint256 daySlot, uint32 id) internal view returns (uint256 word) {
@@ -800,13 +837,14 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///            - bits 0..29   the TEN leg counts, three bits each, low bits first: passLine,
     ///              place4, place5, place6, place8, place9, place10, hard4, hard8, dontPass. Bits
     ///              30..31 are unused. Zero is a blank ticket, so the draw places all ten chips.
-    ///              Bit for bit the same word the bet stores at 160..189, so an indexer and the
+    ///              Bit for bit the same board the bet stores at 32..61, so an indexer and the
     ///              contract never disagree about where a chip went.
     ///            - bits 32..159 the bet id, itself `(slot << 64) | seat`.
     ///            - bits 160..167 the entry multiple MINUS ONE, so 0 reads as one copy of the run.
     ///            - bits 190..205 are unused.
+    ///            - bits 206..208 the one-hot boon.
     ///            - bit 217 the high flag on a window seat; bits 217..223 a day ticket's per-period
-    ///              high mask, bit `217 + p` for period `p` — the same bits the bet stores, so a
+    ///              high mask, bit `217 + p` for period `p`, so a
     ///              banked high pass seated at one copy of the run still reads as high.
     ///
     ///            The slot is the only term the slip carries: everything it PLAYS by — bankroll,
@@ -1061,7 +1099,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     uint256 internal constant HIGH_RESERVE_WINNER_TAG = uint256(keccak256("CrapsHighReserveWinner"));
     uint256 internal constant _JACKPOT_BANKROLL_UNIT = 300;
     uint256 internal constant _JACKPOT_PRICE = CrapsPriceLib.JACKPOT_FEE;
-    uint256 internal constant _AWARD_UNITS_SHIFT = 224;
+    uint256 internal constant _AWARD_UNITS_SHIFT = 72;
     uint256 internal constant JACKPOT_MULT_TAG = 0x436f696e447261774d756c7469706c696572;
     uint256 internal constant JACKPOT_SUBSIDY_TAG = uint256(keccak256("CrapsJackpotSubsidy"));
 

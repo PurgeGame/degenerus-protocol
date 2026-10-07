@@ -296,16 +296,17 @@ contract CrapsBattle is CrapsBattleStorage {
         uint256 boonMask
     ) private {
         uint256 boon = boonMask << _BET_BOON_SHIFT;
-        _storeBet(betId, uint256(id) | (chips << _BET_CHIPS_SHIFT)
+        _appendBet(betId, uint256(id) | (chips << _BET_CHIPS_SHIFT)
             | boon | highBits);
-        // The high flag rides in the echo too: `highBits` already sits at bit 217 (window seat) or
-        // 217..223 (day ticket, one per period), above every other field of the event word. A
+        // Keep the event's wire offsets separate from the compact slip: boon at 206, highs at
+        // 217..223 (day ticket, one per period), above the bet ID and multiple. A
         // banked HIGH pass spent by `_seatBody` carries `evMult = 0`, so without this an indexer
         // reads the house's high day seat as an ordinary 1x ticket and can only learn otherwise
         // from storage.
         emit CrapsSlipPlaced(
             id,
-            chips | (betId << _EV_BET_SHIFT) | (evMult << _EV_MULT_SHIFT) | boon | highBits
+            chips | (betId << _EV_BET_SHIFT) | (evMult << _EV_MULT_SHIFT)
+                | (boonMask << 206) | ((highBits >> _BET_HIGH_SHIFT) << 217)
         );
     }
 
@@ -642,7 +643,8 @@ contract CrapsBattle is CrapsBattleStorage {
             if (!MineFlipGas.canRun(meter, _SEAT_GAS_MAX, _SETTLE_TAIL_GAS + (k + 1) * _CREDIT_GAS_MAX)) break;
             assembly ("memory-safe") { mstore(0x40, freePtr) }
             uint256 id = _seatId(slot, n, ownN, dayBase, w.entrants - ownN - w.drawn);
-            SeatResult memory result = _resolve(id, n, _loadBet(id), w, word);
+            SeatResult memory result = _resolve(id, n,
+                _loadBetUnchecked(id, id >> 64 == slot && uint64(id) > ownN), w, word);
             staked += result.staked;
             high += result.high;
             if (result.paid != 0) {
@@ -678,55 +680,6 @@ contract CrapsBattle is CrapsBattleStorage {
         }
         uint256 entrants = uint32(board);
         return entrants == 0 || uint32(board >> _BG_RESOLVED_SHIFT) == entrants;
-    }
-
-    /// @notice When the oldest substantive scheduled maintenance became due, or zero.
-    /// @dev Uses only the current head: cheap cursor cleanup cannot borrow the age of a
-    ///      resolved battle. Lapsed refunds retain their original midnight across batches.
-    function minerMaintenanceDueAt() external view returns (uint256 due) {
-        uint256 cur = _keeperSlot;
-        if (_scheduledExpired(cur)) return 0;
-        uint256 boundary = ContractAddresses.DEPLOY_DAY_BOUNDARY;
-        // Five ordinary close offsets in 17-bit lanes; the sixth is the daily jackpot.
-        uint256 closes = uint256(20 minutes) | (uint256(6 hours + 3 minutes) << 17)
-            | (uint256(12 hours + 3 minutes) << 34) | (uint256(18 hours + 3 minutes) << 51)
-            | (uint256(1 days - 20 minutes) << 68);
-        assembly ("memory-safe") {
-            // Scratch-only mapping reads. Masks match the declared packed value widths.
-            function read(key, slot) -> value {
-                mstore(0, key)
-                mstore(32, slot)
-                value := sload(keccak256(0, 64))
-            }
-            let day := and(shr(3, cur), 0xffffff)
-            let period := and(cur, 7)
-            let midnight := add(mul(add(boundary, day), 86400), 82620)
-            switch period
-            case 0 {
-                if and(iszero(read(day, _boostBudget.slot)), iszero(lt(timestamp(), midnight))) {
-                    // One day field plus six window fields, independent of seat count.
-                    for { let p := 0 } lt(p, 7) { p := add(p, 1) } {
-                        let slot := add(cur, p)
-                        let map := _battles.slot
-                        if iszero(p) { map := _dayTickets.slot }
-                        let count := and(read(slot, map), 0xffffffff)
-                        if lt(and(shr(48, read(slot, _slotState.slot)), 0xffffffffffffffff), count) {
-                            due := midnight
-                            break
-                        }
-                    }
-                }
-            }
-            default {
-                if and(lt(period, 6), iszero(and(read(cur, _slotState.slot), 0xffffffffffff))) {
-                    let count := or(read(cur, _battles.slot), read(sub(cur, period), _dayTickets.slot))
-                    if and(count, 0xffffffff) {
-                        let close := add(sub(midnight, 86400), and(shr(mul(sub(period, 1), 17), closes), 0x1ffff))
-                        if iszero(lt(timestamp(), close)) { due := close }
-                    }
-                }
-            }
-        }
     }
 
     function runCrapsMaintenance(uint256) external returns (MineFlipGas.Result memory) {
@@ -885,9 +838,9 @@ contract CrapsBattle is CrapsBattleStorage {
     }
 
     /// @dev Whether `header` takes the high lane in the window at `windowSlot`. A window-local or
-    ///      custom slip stores ONE flag at bit 217. A DAY ticket — the one case where the bet's
+    ///      custom slip stores ONE flag at bit 65. A DAY ticket — the one case where the bet's
     ///      own slot differs from the window settling it — stores seven, and the window's period
-    ///      picks its own: bit `217 + p`, where `p + 1` is the slot's remainder.
+    ///      picks its own: bit `65 + p`, where `p + 1` is the slot's remainder.
     function _highOn(uint256 header, uint256 betId, uint256 windowSlot) private pure returns (bool) {
         uint256 bit = _BET_HIGH_BIT;
         unchecked {

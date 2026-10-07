@@ -1,0 +1,101 @@
+{
+  "status": "PASS",
+  "test_executions": 1007,
+  "unique_tests": 887,
+  "fuzz_properties": 46,
+  "fuzz_runs_per_property": 1000,
+  "invariant_runs": 256,
+  "invariant_depth": 128,
+  "groups": [
+    {
+      "label": "final-a",
+      "group": "degenerette",
+      "returncode": 0,
+      "tests": 127,
+      "log": "final-a-degenerette.log"
+    },
+    {
+      "label": "final-a",
+      "group": "packing",
+      "returncode": 0,
+      "tests": 7,
+      "log": "final-a-packing.log"
+    },
+    {
+      "label": "final-a",
+      "group": "degenerette-extra",
+      "returncode": 0,
+      "tests": 84,
+      "log": "final-a-degenerette-extra.log"
+    },
+    {
+      "label": "final-b",
+      "group": "composition",
+      "returncode": 0,
+      "tests": 150,
+      "log": "final-b-composition.log"
+    },
+    {
+      "label": "final-b",
+      "group": "rng-terminal",
+      "returncode": 0,
+      "tests": 22,
+      "log": "final-b-rng-terminal.log"
+    },
+    {
+      "label": "final-b",
+      "group": "wallet-invariant",
+      "returncode": 0,
+      "tests": 15,
+      "log": "final-b-wallet-invariant.log"
+    },
+    {
+      "label": "final-c",
+      "group": "decimator-baf",
+      "returncode": 0,
+      "tests": 97,
+      "log": "final-c-decimator-baf.log"
+    },
+    {
+      "label": "final-c",
+      "group": "range",
+      "returncode": 0,
+      "tests": 32,
+      "log": "final-c-range.log"
+    },
+    {
+      "label": "final-c",
+      "group": "lifecycle",
+      "returncode": 0,
+      "tests": 14,
+      "log": "final-c-lifecycle.log"
+    },
+    {
+      "label": "final-d",
+      "group": "craps",
+      "returncode": 0,
+      "tests": 262,
+      "log": "final-d-craps.log"
+    },
+    {
+      "label": "final-d",
+      "group": "craps-compact",
+      "returncode": 0,
+      "tests": 197,
+      "log": "final-d-craps-compact.log"
+    }
+  ],
+  "static_gates": {
+    "check-write-owners.sh": 0,
+    "check-unchecked.sh": 0,
+    "check-rng-taint.sh": 0,
+    "check-pool-writes.sh": 0,
+    "check-rng-window.sh": 0,
+    "check-advance-calls.sh": 0,
+    "check-gasleft.sh": 0,
+    "check-interface-coverage.sh": 0,
+    "check-delegatecall-alignment.sh": 0
+  },
+  "storage_layout": "PASS",
+  "deployment_sizes": "PASS"
+}

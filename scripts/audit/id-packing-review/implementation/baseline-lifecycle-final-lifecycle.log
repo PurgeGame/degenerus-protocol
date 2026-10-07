@@ -1,0 +1,498 @@
+Warning: This is a nightly build of Foundry. It is recommended to use the latest stable version. To mute this warning set `FOUNDRY_DISABLE_NIGHTLY_WARNING` in your environment.
+
+Compiling 2 files with Solc 0.8.34
+Solc 0.8.34 finished in 42.13s
+Compiler run successful with warnings:
+Warning (2519): This declaration shadows an existing declaration.
+  --> contracts/libraries/MineFlipGas.sol:59:9:
+   |
+59 |         uint256 available = gasleft();
+   |         ^^^^^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> contracts/libraries/MineFlipGas.sol:29:5:
+   |
+29 |     function available() internal view returns (uint256) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+    --> contracts/storage/DegenerusGameStorage.sol:3420:43:
+     |
+3420 |     function _lootboxEvUsedFor(uint32 id, uint24 level)
+     |                                           ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> contracts/storage/DegenerusGameStorage.sol:378:5:
+    |
+378 |     uint24 public level = 0;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+    --> contracts/storage/DegenerusGameStorage.sol:3436:9:
+     |
+3436 |         uint24 level,
+     |         ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> contracts/storage/DegenerusGameStorage.sol:378:5:
+    |
+378 |     uint24 public level = 0;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+    --> contracts/storage/DegenerusGameStorage.sol:3594:41:
+     |
+3594 |     function _centuryUsedFor(uint32 id, uint256 level) internal view returns (uint256) {
+     |                                         ^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> contracts/storage/DegenerusGameStorage.sol:378:5:
+    |
+378 |     uint24 public level = 0;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+    --> contracts/storage/DegenerusGameStorage.sol:3600:44:
+     |
+3600 |     function _setCenturyUsedFor(uint32 id, uint256 level, uint256 used) internal {
+     |                                            ^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> contracts/storage/DegenerusGameStorage.sol:378:5:
+    |
+378 |     uint24 public level = 0;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+  --> contracts/libraries/TicketEntropy.sol:32:54:
+   |
+32 |     function identity(uint24 queueKey, uint24 level, uint256 queueIndex, uint32 walletId)
+   |                                                      ^^^^^^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> contracts/libraries/TicketEntropy.sol:23:5:
+   |
+23 |     function queueIndex(uint256 logical, uint256 start, uint256 total) internal pure returns (uint256 physical) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> contracts/DegenerusVault.sol:715:9:
+    |
+715 |         uint8 symbol,
+    |         ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> contracts/DegenerusVault.sol:512:5:
+    |
+512 |     string public constant symbol = "DGV";
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/storage/DegenerusGameStorage.sol:1232:22:
+     |
+1232 |             packed = uint80(id) << OWNER_IDX_SHIFT;
+     |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/storage/DegenerusGameStorage.sol:1301:22:
+     |
+1301 |             packed = uint80(id) << OWNER_IDX_SHIFT;
+     |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/storage/DegenerusGameStorage.sol:1372:25:
+     |
+1372 |         uint80 idBits = uint80(id) << OWNER_IDX_SHIFT;
+     |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/storage/DegenerusGameStorage.sol:1767:25:
+     |
+1767 |                 return (uint80(id) << OWNER_IDX_SHIFT) | uint80((lane & 0x3fffffff) << 8)
+     |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/modules/DegenerusGameWhaleModule.sol:1014:26:
+     |
+1014 |                 packed = uint80(id) << OWNER_IDX_SHIFT;
+     |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint64) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+   --> contracts/modules/DegenerusGameDecimatorModule.sol:263:24:
+    |
+263 |             weights |= uint64(weight) << (uint256(q) * 16);
+    |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+  --> contracts/modules/DegenerusGameFoilPackModule.sol:93:26:
+   |
+93 |                 packed = uint80(id) << OWNER_IDX_SHIFT;
+   |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint32) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/Coinflip.sol:1563:32:
+     |
+1563 |             bool win = wins & (uint32(1) << offset) != 0;
+     |                                ^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint128) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/sDGNRS.sol:1326:44:
+     |
+1326 |             players.push(uint128(units) | (uint128(walletId) << BATCH_PLAYER_ID_SHIFT)
+     |                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint128) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/sDGNRS.sol:1327:20:
+     |
+1327 |                 | (uint128(uint16(score) + 1) << BATCH_PLAYER_SCORE_SHIFT));
+     |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/modules/DegenerusGameGameOverModule.sol:610:36:
+    |
+610 |     function _resumeTerminalPayout(uint24 day, MineFlipGas.Meter memory meter, TerminalWork memory work) private returns (bool done) {
+    |                                    ^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:812:9:
+    |
+812 |         uint32 played,
+    |         ^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:813:9:
+    |
+813 |         uint8 bankMult,
+    |         ^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:814:9:
+    |
+814 |         uint16 goalMult,
+    |         ^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:815:9:
+    |
+815 |         uint24 stakeUnits,
+    |         ^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:816:9:
+    |
+816 |         uint40 closeTime,
+    |         ^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:817:9:
+    |
+817 |         bool multiEntry,
+    |         ^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:818:9:
+    |
+818 |         uint16 highRollerMult
+    |         ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:819:25:
+    |
+819 |     ) external returns (uint64 slot) {
+    |                         ^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:883:31:
+    |
+883 |     function setBattleCreator(address account, bool allowed) external {
+    |                               ^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:883:48:
+    |
+883 |     function setBattleCreator(address account, bool allowed) external {
+    |                                                ^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/CrapsBattle.sol:1278:34:
+     |
+1278 |     function convertNormalToHigh(uint32 id, uint32 highCount) external { _delegateJackpot(); }
+     |                                  ^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/CrapsBattle.sol:1278:45:
+     |
+1278 |     function convertNormalToHigh(uint32 id, uint32 highCount) external { _delegateJackpot(); }
+     |                                             ^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/CrapsBattle.sol:1299:33:
+     |
+1299 |     function upgradeReservedDay(uint32 id, uint24 day) external { _delegateJackpot(); }
+     |                                 ^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/CrapsBattle.sol:1299:44:
+     |
+1299 |     function upgradeReservedDay(uint32 id, uint24 day) external { _delegateJackpot(); }
+     |                                            ^^^^^^^^^^
+
+Warning (2072): Unused local variable.
+    --> contracts/Coinflip.sol:1703:9:
+     |
+1703 |         address s = ContractAddresses.SDGNRS;
+     |         ^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/DegenerusGame.sol:1399:13:
+     |
+1399 |             uint256 totalFaceWei,
+     |             ^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/DegenerusGame.sol:1400:13:
+     |
+1400 |             uint256 totalBudget,
+     |             ^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/DegenerusGame.sol:1401:13:
+     |
+1401 |             uint256 ticketWei,
+     |             ^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/DegenerusGame.sol:1402:13:
+     |
+1402 |             uint256 ethCashWei,
+     |             ^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/DegenerusGame.sol:1403:13:
+     |
+1403 |             uint256 flipTokens
+     |             ^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/DegenerusAffiliate.sol:1085:28:
+     |
+1085 |     function _payoutUpline(bytes32 code, uint32 ownerId, bool second, uint256 cache)
+     |                            ^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+  --> test/gas/RangeAwardGas.t.sol:26:32:
+   |
+26 |         vm.etch(address(game), type(RangeAwardSeeder).runtimeCode);
+   |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> contracts/modules/DegenerusGameMintStreakUtils.sol:183:5:
+    |
+183 |     function _quoteFarFutureSwap(
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> contracts/DegenerusRecordBounty.sol:441:5:
+    |
+441 |     function getApproved(uint256 tokenId) external view returns (address) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> contracts/CrapsBattle.sol:991:5:
+    |
+991 |     function _settlementOf(uint256 betId, uint256 header, Window memory w, uint256 word)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+    --> contracts/CrapsBattle.sol:1075:5:
+     |
+1075 |     function _windowTermsOn(uint24 day, uint256 period, uint256 word) internal view returns (Window memory w) {
+     |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+    --> contracts/JackpotBattle.sol:1087:5:
+     |
+1087 |     function _windowTermsOn(uint24 day, uint256 period, uint256 word) internal view returns (Window memory w) {
+     |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+    --> contracts/DegenerusAffiliate.sol:1085:5:
+     |
+1085 |     function _payoutUpline(bytes32 code, uint32 ownerId, bool second, uint256 cache)
+     |     ^ (Relevant source part starts here and spans across multiple lines).
+
+
+Ran 8 tests for test/gas/RangeAwardGas.t.sol:RangeAwardGasTest
+[PASS] test_DeityBuy100() (gas: 3606404)
+Logs:
+  deity-buy-100: 2234858
+
+[PASS] test_LazyBuy10() (gas: 693533)
+Logs:
+  lazy-buy-10: 555940
+
+[PASS] test_OneHalfPass25() (gas: 2171920)
+Logs:
+  claim-stride4-25: 684051
+
+[PASS] test_SevenHalfPasses175() (gas: 3240241)
+Logs:
+  claim-mixed-175: 1741202
+
+[PASS] test_ThreeHalfPasses75() (gas: 2802515)
+Logs:
+  claim-mixed-75: 1303080
+
+[PASS] test_TwoHalfPasses50() (gas: 2481588)
+Logs:
+  claim-stride2-50: 992409
+
+[PASS] test_WhaleClaim100() (gas: 3023791)
+Logs:
+  claim-100: 1613028
+
+[PASS] test_WhaleClaimTopup100() (gas: 3513254)
+Logs:
+  claim-topup-100: 502353
+
+Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 12.26ms (13.17ms CPU time)
+
+Ran 6 tests for test/gas/IdPackingLifecycleGas.t.sol:IdPackingLifecycleGasTest
+[PASS] test_CrapsOneFreshAndReused() (gas: 8865385)
+Logs:
+  craps-one-fresh-place-1: 190444
+  craps-one-fresh-amend: 50162
+  craps-one-fresh-resolve-window-1: 427604
+  craps-one-fresh-resolve-window-2: 352461
+  craps-one-fresh-resolve-window-3: 295769
+  craps-one-fresh-resolve-window-4: 342555
+  craps-one-fresh-resolve-window-5: 275758
+  craps-one-fresh-lifecycle: 1934753
+  craps-one-reused-place-1: 118799
+  craps-one-reused-amend: 50248
+  craps-one-reused-resolve-window-1: 429669
+  craps-one-reused-resolve-window-2: 285128
+  craps-one-reused-resolve-window-3: 338227
+  craps-one-reused-resolve-window-4: 298129
+  craps-one-reused-resolve-window-5: 369801
+  craps-one-reused-lifecycle: 1890001
+
+[PASS] test_CrapsThreeFreshAndReused() (gas: 10617269)
+Logs:
+  craps-three-fresh-place-1: 190444
+  craps-three-fresh-place-2: 173344
+  craps-three-fresh-place-3: 173344
+  craps-three-fresh-amend: 50162
+  craps-three-fresh-resolve-window-1: 560031
+  craps-three-fresh-resolve-window-2: 473721
+  craps-three-fresh-resolve-window-3: 400693
+  craps-three-fresh-resolve-window-4: 478749
+  craps-three-fresh-resolve-window-5: 354715
+  craps-three-fresh-lifecycle: 2855203
+  craps-three-reused-place-1: 118799
+  craps-three-reused-place-2: 94290
+  craps-three-reused-place-3: 94290
+  craps-three-reused-amend: 50248
+  craps-three-reused-resolve-window-1: 598895
+  craps-three-reused-resolve-window-2: 366264
+  craps-three-reused-resolve-window-3: 479755
+  craps-three-reused-resolve-window-4: 373415
+  craps-three-reused-resolve-window-5: 489055
+  craps-three-reused-lifecycle: 2665011
+
+[PASS] test_DecimatorBurnsAndTopup() (gas: 650727)
+Logs:
+  dec-burn-1: 158501
+  dec-burn-2: 158501
+  dec-burn-3: 158501
+  dec-topup: 100870
+
+[PASS] test_DegeneretteOneFreshAndReused() (gas: 541447)
+Logs:
+  deg-one-fresh-place-1: 117383
+  deg-one-fresh-resolve: 114059
+  deg-one-fresh-lifecycle: 231442
+  deg-one-reused-place-1: 79949
+  deg-one-reused-resolve: 114059
+  deg-one-reused-lifecycle: 194008
+
+[PASS] test_DegeneretteThirtyTwoFreshAndReused() (gas: 7534025)
+Logs:
+  deg-32-fresh-place-1: 117383
+  deg-32-fresh-place-2: 97049
+  deg-32-fresh-place-3: 97049
+  deg-32-fresh-place-4: 97049
+  deg-32-fresh-place-5: 97049
+  deg-32-fresh-place-6: 97049
+  deg-32-fresh-place-7: 97049
+  deg-32-fresh-place-8: 97049
+  deg-32-fresh-place-9: 97049
+  deg-32-fresh-place-10: 97049
+  deg-32-fresh-place-11: 97049
+  deg-32-fresh-place-12: 97049
+  deg-32-fresh-place-13: 97049
+  deg-32-fresh-place-14: 97049
+  deg-32-fresh-place-15: 97049
+  deg-32-fresh-place-16: 97049
+  deg-32-fresh-place-17: 97049
+  deg-32-fresh-place-18: 97049
+  deg-32-fresh-place-19: 97049
+  deg-32-fresh-place-20: 97049
+  deg-32-fresh-place-21: 97049
+  deg-32-fresh-place-22: 97049
+  deg-32-fresh-place-23: 97049
+  deg-32-fresh-place-24: 97049
+  deg-32-fresh-place-25: 97049
+  deg-32-fresh-place-26: 97049
+  deg-32-fresh-place-27: 97049
+  deg-32-fresh-place-28: 97049
+  deg-32-fresh-place-29: 97049
+  deg-32-fresh-place-30: 97049
+  deg-32-fresh-place-31: 97049
+  deg-32-fresh-place-32: 97049
+  deg-32-fresh-resolve: 503044
+  deg-32-fresh-lifecycle: 3628946
+  deg-32-reused-place-1: 79949
+  deg-32-reused-place-2: 79949
+  deg-32-reused-place-3: 79949
+  deg-32-reused-place-4: 79949
+  deg-32-reused-place-5: 79949
+  deg-32-reused-place-6: 79949
+  deg-32-reused-place-7: 79949
+  deg-32-reused-place-8: 79949
+  deg-32-reused-place-9: 79949
+  deg-32-reused-place-10: 79949
+  deg-32-reused-place-11: 79949
+  deg-32-reused-place-12: 79949
+  deg-32-reused-place-13: 79949
+  deg-32-reused-place-14: 79949
+  deg-32-reused-place-15: 79949
+  deg-32-reused-place-16: 79949
+  deg-32-reused-place-17: 79949
+  deg-32-reused-place-18: 79949
+  deg-32-reused-place-19: 79949
+  deg-32-reused-place-20: 79949
+  deg-32-reused-place-21: 79949
+  deg-32-reused-place-22: 79949
+  deg-32-reused-place-23: 79949
+  deg-32-reused-place-24: 79949
+  deg-32-reused-place-25: 79949
+  deg-32-reused-place-26: 79949
+  deg-32-reused-place-27: 79949
+  deg-32-reused-place-28: 79949
+  deg-32-reused-place-29: 79949
+  deg-32-reused-place-30: 79949
+  deg-32-reused-place-31: 79949
+  deg-32-reused-place-32: 79949
+  deg-32-reused-resolve: 503044
+  deg-32-reused-lifecycle: 3061412
+
+[PASS] test_DegeneretteThreeFreshAndReused() (gas: 992120)
+Logs:
+  deg-three-fresh-place-1: 117383
+  deg-three-fresh-place-2: 97049
+  deg-three-fresh-place-3: 97049
+  deg-three-fresh-resolve: 139133
+  deg-three-fresh-lifecycle: 450614
+  deg-three-reused-place-1: 79949
+  deg-three-reused-place-2: 79949
+  deg-three-reused-place-3: 79949
+  deg-three-reused-resolve: 139133
+  deg-three-reused-lifecycle: 378980
+
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 23.57ms (33.68ms CPU time)
+
+Ran 2 test suites in 24.19ms (35.83ms CPU time): 14 tests passed, 0 failed, 0 skipped (14 total tests)

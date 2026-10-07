@@ -1,0 +1,14 @@
+{
+  "degenerette": {
+    "returncode": 0,
+    "log": "/home/zak/Dev/PurgeGame/degenerus-audit/scripts/audit/id-packing-review/implementation/final-a-degenerette.log"
+  },
+  "packing": {
+    "returncode": 0,
+    "log": "/home/zak/Dev/PurgeGame/degenerus-audit/scripts/audit/id-packing-review/implementation/final-a-packing.log"
+  },
+  "degenerette-extra": {
+    "returncode": 0,
+    "log": "/home/zak/Dev/PurgeGame/degenerus-audit/scripts/audit/id-packing-review/implementation/final-a-degenerette-extra.log"
+  }
+}

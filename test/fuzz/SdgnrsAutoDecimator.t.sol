@@ -71,7 +71,7 @@ contract AutoDecimatorGameHarness is DegenerusGame {
         uint256 latest = decBattlePlayers[_walletIdOf(owner)];
         if (uint24(latest >> 64) != lvl) return (0, 0);
         id = uint64(latest);
-        stack = (decBattleEntries[(uint256(lvl) << 64) | id] >> 190);
+        stack = (_loadDecEntry(lvl, uint64(id)) >> 62);
     }
 
     function entry(uint24 lvl) external view returns (uint256 stack, uint64 id) {

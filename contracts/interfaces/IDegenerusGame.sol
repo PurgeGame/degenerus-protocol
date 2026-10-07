@@ -432,7 +432,7 @@ interface IDegenerusGame {
     /// @notice View a queued Degenerette bet word (zero once resolved or unknown).
     /// @param index Lootbox RNG index the bet was placed at.
     /// @param betId Bet id within `index` (queue position + 1).
-    /// @return packed The bet word (owner, symbol, spins, currency, activity, stake units).
+    /// @return packed Compact lane: owner32, symbol5, spins5, currency1, record1, activity16, stake64.
     function degeneretteBetInfo(
         uint48 index,
         uint64 betId

@@ -5,6 +5,7 @@ import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {CrapsPins, MockGame, MockFlip, MockQuests, MockCoinflip} from "./CrapsPins.sol";
 import {CrapsViews} from "./CrapsViews.sol";
 import {Craps} from "../../contracts/Craps.sol";
+import {LegacyCrapsEngine} from "../helpers/LegacyCrapsEngine.sol";
 import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
@@ -41,7 +42,7 @@ contract WalletIdTable is CrapsViews {
     ///      shipped fold and payout.
     function standField(bytes32 key, uint64 slot, uint32 id, uint256 score, uint256 bankrollFlip) external {
         _battles[key] = 1;
-        _storeBet((uint256(slot) << 64) | 1, uint256(id));
+        _appendBet((uint256(slot) << 64) | 1, uint256(id));
         Window memory w;
         w.key = key;
         w.bound = uint48(slot);
@@ -73,6 +74,7 @@ contract WalletIdTable is CrapsViews {
 ///         ID-keyed word, and every payout credits by ID.
 contract CrapsWalletIdsTest is CrapsPins {
     WalletIdTable internal c;
+    LegacyCrapsEngine private legacyEngine;
     uint256 internal dayStart;
     uint24 internal day;
 
@@ -83,10 +85,10 @@ contract CrapsWalletIdsTest is CrapsPins {
     uint256 internal constant ID_SLOT = 14;
     uint256 internal constant INIT = 1 << 84;
     uint256 internal constant ID_SHIFT = 85;
-    uint256 internal constant HIGH_BIT = 1 << 217;
-    uint256 internal constant DAY_HIGH_MASK = 0x3F << 217;
-    uint256 internal constant AWARD_UNIT_BIT = 1 << 224;
-    uint256 internal constant MID_MASK = ((uint256(1) << 160) - 1) & ~uint256(type(uint32).max);
+    uint256 internal constant HIGH_BIT = 1 << 65;
+    uint256 internal constant DAY_HIGH_MASK = 0x3F << 65;
+    uint256 internal constant AWARD_UNIT_BIT = 1 << 72;
+    uint256 internal constant MID_MASK = ~((uint256(1) << 73) - 1);
 
     address internal alice = makeAddr("wid-alice");
     address internal bob = makeAddr("wid-bob");
@@ -96,6 +98,7 @@ contract CrapsWalletIdsTest is CrapsPins {
 
     function setUp() public {
         _installPins();
+        legacyEngine = new LegacyCrapsEngine();
         c = WalletIdTable(deployCode("CrapsWalletIds.t.sol:WalletIdTable"));
         flip.setCompLane(1e30);
         uint256 elapsed = (vm.getBlockTimestamp() - 82_620) % 1 days;
@@ -152,7 +155,7 @@ contract CrapsWalletIdsTest is CrapsPins {
     function _assertOwnerWord(uint256 betId, uint32 id) internal view {
         uint256 w = c.betWordOf(betId);
         assertEq(uint32(w), id, "bet word bits 0..31 are the owner's wallet ID");
-        assertEq(w & MID_MASK, 0, "bet word bits 32..159 are zero");
+        assertEq(w & MID_MASK, 0, "bet word reserved bits are zero");
     }
 
     function _code(uint256 kind, address to, bool high, uint256 arg, uint256 count) internal view returns (uint256) {
@@ -168,7 +171,7 @@ contract CrapsWalletIdsTest is CrapsPins {
 
     /// @dev The stored chip slice, read off the raw bet word (no window terms needed).
     function _chipsOf(uint256 betId) internal view returns (uint256) {
-        return (c.betWordOf(betId) >> 160) & ((uint256(1) << 30) - 1);
+        return (c.betWordOf(betId) >> 32) & ((uint256(1) << 30) - 1);
     }
 
     function _t0(Vm.Log memory l) internal pure returns (bytes32) {
@@ -408,7 +411,7 @@ contract CrapsWalletIdsTest is CrapsPins {
 
     function test_constructorSeedsTwentyNormalPassesAtIdsTwoAndOne() public {
         vm.recordLogs();
-        WalletIdTable fresh = WalletIdTable(deployCode("CrapsWalletIds.t.sol:WalletIdTable"));
+        WalletIdTable fresh = WalletIdTable(vm.deployCode("CrapsWalletIds.t.sol:WalletIdTable"));
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(fresh.idWord(2), 20, "sDGNRS ID word: twenty normal passes");
         assertEq(fresh.idWord(1), 20, "Vault ID word: twenty normal passes");
@@ -951,8 +954,11 @@ contract CrapsWalletIdsTest is CrapsPins {
         view
         returns (Craps.SlipResult memory)
     {
+        if (owner > type(uint32).max) return legacyEngine.settleBattle(
+            betId, owner | (uint256(BOARD) << 160), w.played / 10, w.bankroll, w.goal, w.bound,
+            (uint256(1) << 64) | 1, word);
         return CrapsEngine(ContractAddresses.CRAPS_ENGINE).settleBattle(
-            betId, owner | (uint256(BOARD) << 160), w.played / 10, w.bankroll, w.goal, w.bound, (uint256(1) << 64) | 1, word
+            betId, owner | (uint256(BOARD) << 32), w.played / 10, w.bankroll, w.goal, w.bound, (uint256(1) << 64) | 1, word
         );
     }
 
@@ -983,8 +989,8 @@ contract CrapsWalletIdsTest is CrapsPins {
         assertEq(seen, 1);
         Craps.SlipResult memory byId = _engineRun(betId, n, w, word);
         Craps.SlipResult memory byAddress = _engineRun(betId, uint160(alice), w, word);
-        assertEq(paid, byId.bankrollIn, "table paid == engine(betId, N | chips << 160)");
-        assertEq(won, byId.bankrollOut, "table won == engine(betId, N | chips << 160)");
+        assertEq(paid, byId.bankrollIn, "table paid == engine(betId, N | chips << 32)");
+        assertEq(won, byId.bankrollOut, "table won == engine(betId, N | chips << 32)");
         assertEq(byAddress.bankrollIn, 32_900, "golden: the same header salted with the address");
         assertTrue(byAddress.bankrollIn != paid, "the address-salted header pays differently");
         assertEq(paid, GOLDEN_PAID, "golden paid");

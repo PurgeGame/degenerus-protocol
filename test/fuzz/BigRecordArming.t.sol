@@ -36,7 +36,7 @@ contract BigRecordArmingTest is DeployProtocol {
     uint256 private constant LB_LEVEL_SHIFT = 32;
 
     /// @dev Bet-word flag: a biggest-spin record claim waits in the side slot.
-    uint256 private constant BET_RECORD_FLAG = uint256(1) << 171;
+    uint256 private constant BET_RECORD_FLAG = uint256(1) << 43;
     /// @dev BoxSpin betId spin-type tag for a record bounty (bits 62-60).
     uint256 private constant BOX_SPIN_TYPE_RECORD = 3;
 

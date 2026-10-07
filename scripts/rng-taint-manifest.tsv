@@ -354,3 +354,6 @@ NOT-RNG	PARAM	word	applyBoxOrderScore	modules/DegenerusGameLootboxModule.sol	in-
 NOT-RNG	PARAM	word	_boxEntryCount	storage/DegenerusGameStorage.sol	counts the boxes of a packed box entry; not a VRF value
 NOT-RNG	PARAM	word	_buyPresaleBoxFor	modules/DegenerusGameMintModule.sol	the same call's in-flight ordinary entry the presale fields join; not a VRF value
 NOT-RNG	PARAM	word	_rememberBoard	CrapsBattle.sol	The account's Craps address word (board, INITIALIZED, cached wallet ID) from the door prologue; contains no RNG value.
+NOT-RNG	PARAM	word	_appendBet	storage/CrapsBattleStorage.sol	Logical slip fields compressed into a lane; no entropy.
+NOT-RNG	PARAM	word	_writeBetLane	storage/CrapsBattleStorage.sol	Logical slip fields and calendar generation, not RNG.
+NOT-RNG	PARAM	word	_storeDecEntry	storage/DegenerusGameStorage.sol	Logical entry account, board and stack, not RNG.

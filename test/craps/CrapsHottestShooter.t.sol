@@ -45,7 +45,7 @@ contract CrapsHottestShooterTest is CrapsPins {
 
     function _bet(uint256 slot, uint256 seat, address player, bool high) private returns (uint256 id) {
         id = (slot << 64) | seat;
-        table.setBetWord(id, uint256(_idFor(player)) | (high ? 1 << 217 : 0));
+        table.setBetWord(id, uint256(_idFor(player)) | (high ? 1 << 65 : 0));
     }
 
     // payBattlePot must creditFlip exactly the two conserved liquid shares.

@@ -1,0 +1,74 @@
+Delegatecall target alignment check
+===================================
+scanning: contracts
+
+OK   interface <-> address map: 16 LIVE pair(s) validated, 0 known-dead constant(s) skipped
+
+sites discovered: 64
+
+OK   contracts/DegenerusGame.sol:1127  IGameAfkingModule -> GAME_AFKING_MODULE
+OK   contracts/DegenerusGame.sol:2180  IDegenerusGameMinerModule -> GAME_MINER_MODULE
+OK   contracts/DegenerusGame.sol:348  IDegenerusGameMinerModule -> GAME_MINER_MODULE
+OK   contracts/DegenerusGame.sol:631  IDegenerusGameFoilPackModule -> GAME_FOILPACK_MODULE
+OK   contracts/DegenerusGame.sol:662  IDegenerusGameMintModule -> GAME_MINT_MODULE
+OK   contracts/DegenerusGame.sol:881  IDegenerusGameBoonModule -> GAME_BOON_MODULE
+OK   contracts/modules/DegenerusGameAdvanceModule.sol:214  IDegenerusGameBoonModule -> GAME_BOON_MODULE
+WARN contracts/modules/DegenerusGameAdvanceModule.sol:248  orphan selector (justified): IDegenerusGameJackpotModule
+WARN contracts/modules/DegenerusGameAdvanceModule.sol:268  orphan selector (justified): IDegenerusGameJackpotModule
+WARN contracts/modules/DegenerusGameAdvanceModule.sol:274  orphan selector (justified): IDegenerusGameJackpotModule
+WARN contracts/modules/DegenerusGameAdvanceModule.sol:284  orphan selector (justified): IDegenerusGameJackpotModule
+WARN contracts/modules/DegenerusGameAdvanceModule.sol:297  orphan selector (justified): IDegenerusGameJackpotModule
+WARN contracts/modules/DegenerusGameAdvanceModule.sol:329  orphan selector (justified): IDegenerusGameJackpotModule
+WARN contracts/modules/DegenerusGameAdvanceModule.sol:334  orphan selector (justified): IDegenerusGameJackpotModule
+WARN contracts/modules/DegenerusGameAdvanceModule.sol:347  orphan selector (justified): IDegenerusGameJackpotModule
+OK   contracts/modules/DegenerusGameAdvanceModule.sol:503  IDegenerusGameGameOverModule -> GAME_GAMEOVER_MODULE
+OK   contracts/modules/DegenerusGameAdvanceModule.sol:553  IDegenerusGameJackpotModule -> GAME_JACKPOT_MODULE
+OK   contracts/modules/DegenerusGameAdvanceModule.sol:815  IDegenerusGameJackpotModule -> GAME_JACKPOT_MODULE
+OK   contracts/modules/DegenerusGameAdvanceModule.sol:872  IDegenerusGameFoilPackModule -> GAME_FOILPACK_MODULE
+OK   contracts/modules/DegenerusGameDegeneretteModule.sol:1117  IDegenerusGameBoonModule -> GAME_BOON_MODULE
+OK   contracts/modules/DegenerusGameDegeneretteModule.sol:1139  IDegenerusGameLootboxModule -> GAME_LOOTBOX_MODULE
+OK   contracts/modules/DegenerusGameDegeneretteModule.sol:1158  IDegenerusGameLootboxModule -> GAME_LOOTBOX_MODULE
+OK   contracts/modules/DegenerusGameFoilPackModule.sol:1122  IDegenerusGameJackpotModule -> GAME_JACKPOT_MODULE
+WARN contracts/modules/DegenerusGameFoilPackModule.sol:274  orphan selector (justified): IDegenerusGameMintModule
+WARN contracts/modules/DegenerusGameFoilPackModule.sol:797  orphan selector (justified): IDegenerusGameDegeneretteModule
+WARN contracts/modules/DegenerusGameFoilPackModule.sol:808  orphan selector (justified): IDegenerusGameDegeneretteModule
+WARN contracts/modules/DegenerusGameFoilPackModule.sol:818  orphan selector (justified): IDegenerusGameDegeneretteModule
+OK   contracts/modules/DegenerusGameFoilPackModule.sol:848  IDegenerusGameDegeneretteModule -> GAME_DEGENERETTE_MODULE
+WARN contracts/modules/DegenerusGameFoilPackModule.sol:852  orphan selector (justified): IDegenerusGameDegeneretteModule
+OK   contracts/modules/DegenerusGameGameOverModule.sol:429  IDegenerusGameTicketModule -> GAME_TICKET_MODULE
+WARN contracts/modules/DegenerusGameJackpotModule.sol:1420  orphan selector (justified): IDegenerusGameJackpotDrawModule
+OK   contracts/modules/DegenerusGameJackpotModule.sol:500  IDegenerusGameDecimatorModule -> GAME_DECIMATOR_MODULE
+WARN contracts/modules/DegenerusGameJackpotModule.sol:676  orphan selector (justified): IDegenerusGameTicketModule
+OK   contracts/modules/DegenerusGameJackpotModule.sol:782  IDegenerusGameWhaleModule -> GAME_WHALE_MODULE
+OK   contracts/modules/DegenerusGameLootboxModule.sol:1843  IDegenerusGameDegeneretteModule -> GAME_DEGENERETTE_MODULE
+OK   contracts/modules/DegenerusGameLootboxModule.sol:1863  IDegenerusGameDegeneretteModule -> GAME_DEGENERETTE_MODULE
+OK   contracts/modules/DegenerusGameLootboxModule.sol:1880  IDegenerusGameDegeneretteModule -> GAME_DEGENERETTE_MODULE
+OK   contracts/modules/DegenerusGameLootboxModule.sol:730  IDegenerusGameBoonModule -> GAME_BOON_MODULE
+OK   contracts/modules/DegenerusGameLootboxModule.sol:845  IDegenerusGameBoonModule -> GAME_BOON_MODULE
+OK   contracts/modules/DegenerusGameLootboxModule.sol:931  IDegenerusGameBoonModule -> GAME_BOON_MODULE
+OK   contracts/modules/DegenerusGameMinerModule.sol:120  IDegenerusGameAdvanceModule -> GAME_ADVANCE_MODULE
+OK   contracts/modules/DegenerusGameMinerModule.sol:124  IDegenerusGameAdvanceModule -> GAME_ADVANCE_MODULE
+OK   contracts/modules/DegenerusGameMinerModule.sol:128  IDegenerusGameAdvanceModule -> GAME_ADVANCE_MODULE
+OK   contracts/modules/DegenerusGameMinerModule.sol:132  IDegenerusGameAdvanceModule -> GAME_ADVANCE_MODULE
+OK   contracts/modules/DegenerusGameMinerModule.sol:135  IDegenerusGameRngModule -> GAME_RNG_MODULE
+OK   contracts/modules/DegenerusGameMinerModule.sol:139  IDegenerusGameRngModule -> GAME_RNG_MODULE
+OK   contracts/modules/DegenerusGameMinerModule.sol:141  IDegenerusGameRngModule -> GAME_RNG_MODULE
+OK   contracts/modules/DegenerusGameMinerModule.sol:151  IDegenerusGameTicketModule -> GAME_TICKET_MODULE
+OK   contracts/modules/DegenerusGameMinerModule.sol:154  IGameAfkingModule -> GAME_AFKING_MODULE
+OK   contracts/modules/DegenerusGameMinerModule.sol:157  IGameAfkingModule -> GAME_AFKING_MODULE
+OK   contracts/modules/DegenerusGameMinerModule.sol:160  IGameAfkingModule -> GAME_AFKING_MODULE
+OK   contracts/modules/DegenerusGameMinerModule.sol:163  IDegenerusGameDegeneretteModule -> GAME_DEGENERETTE_MODULE
+OK   contracts/modules/DegenerusGameMinerModule.sol:166  IDegenerusGameDecimatorModule -> GAME_DECIMATOR_MODULE
+WARN contracts/modules/DegenerusGameMintModule.sol:1103  orphan selector (justified): IDegenerusGameLootboxModule
+OK   contracts/modules/DegenerusGameMintModule.sol:1399  IDegenerusGameBoonModule -> GAME_BOON_MODULE
+OK   contracts/modules/DegenerusGameMintModule.sol:394  IDegenerusGameMintModule -> GAME_MINT_MODULE
+WARN contracts/modules/DegenerusGameMintModule.sol:898  orphan selector (justified): IDegenerusGameLootboxModule
+OK   contracts/modules/DegenerusGameRngModule.sol:39  IDegenerusGameAdvanceModule -> GAME_ADVANCE_MODULE
+OK   contracts/modules/DegenerusGameTicketModule.sol:348  IDegenerusGameFoilPackModule -> GAME_FOILPACK_MODULE
+OK   contracts/modules/DegenerusGameWhaleModule.sol:1163  IDegenerusGameLootboxModule -> GAME_LOOTBOX_MODULE
+OK   contracts/modules/GameAfkingModule.sol:1079  IDegenerusGameLootboxModule -> GAME_LOOTBOX_MODULE
+OK   contracts/modules/GameAfkingModule.sol:1246  IDegenerusGameWhaleModule -> GAME_WHALE_MODULE
+OK   contracts/modules/GameAfkingModule.sol:1574  IDegenerusGameLootboxModule -> GAME_LOOTBOX_MODULE
+OK   contracts/modules/GameAfkingModule.sol:1671  IDegenerusGameLootboxModule -> GAME_LOOTBOX_MODULE
+
+PASS 47/64 delegatecall sites aligned (17 justified indirection(s))

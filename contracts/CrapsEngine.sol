@@ -98,13 +98,14 @@ contract CrapsEngine is Craps, CrapsCustomTerms {
     ///      hash of its own bet id rather than its wallet, so repeat awards to one wallet stay
     ///      separate runs. Every field uses the shared 600-roll
     ///      between-shooter budget and 1,111-roll absolute ceiling.
+    /// @dev Compact header: owner32, chips30, boon3, high7, then the derived awarded bit.
     function settleBattle(uint256 betId, uint256 header, uint256 chipFlip, uint256 bankroll,
         uint256 goal, uint48 bound, uint256 field, uint256 word) external pure returns (SlipResult memory r)
     {
-        uint256 key = header >> 224 == 0
-            ? uint160(header)
+        uint256 key = header >> 72 == 0
+            ? uint32(header)
             : uint160(_hash3(word, JACKPOT_AWARDED_TAG, betId));
-        uint256 chips = (header >> 160) & 0x3fffffff;
+        uint256 chips = (header >> 32) & 0x3fffffff;
         uint256 placed;
         for (uint256 i; i < 30; i += 3) placed += (chips >> i) & 7;
         bytes32 seed = bytes32(_hash3(uint256(_CRAPS_SEED_DOMAIN), word, bound));

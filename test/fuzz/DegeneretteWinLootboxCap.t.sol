@@ -40,11 +40,9 @@ contract WinLootboxCapProbe is DegenerusGameStorage, WalletSeed {
     }
 
     function seedBetScore(uint48 index, uint256 pos, uint16 score) external {
-        uint256 slot = _betSlot(index & 1, pos);
-        uint256 word;
-        assembly ("memory-safe") { word := sload(slot) }
-        word = (word & ~(uint256(type(uint16).max) << 172)) | (uint256(score) << 172);
-        assembly ("memory-safe") { sstore(slot, word) }
+        uint256 word = _loadDegeneretteBet(index & 1, pos);
+        word = (word & ~(uint256(type(uint16).max) << 44)) | (uint256(score) << 44);
+        _storeDegeneretteBet(index & 1, pos, word);
     }
 
     function dispatch(address module, bytes calldata payload) external payable {

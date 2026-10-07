@@ -1,0 +1,11 @@
+{
+  "check-write-owners.sh": 0,
+  "check-unchecked.sh": 0,
+  "check-rng-taint.sh": 0,
+  "check-pool-writes.sh": 0,
+  "check-rng-window.sh": 0,
+  "check-advance-calls.sh": 0,
+  "check-gasleft.sh": 0,
+  "check-interface-coverage.sh": 0,
+  "check-delegatecall-alignment.sh": 0
+}

@@ -105,9 +105,9 @@ contract CoinflipWalletIdsTest is DeployProtocol {
     }
 
     function _drawEntryRaw(uint24 day, uint32 index) internal view returns (uint256) {
-        return uint256(vm.load(
-            address(coinflip), keccak256(abi.encode((uint256(day) << 32) | index, BAF_DRAW_ENTRY_ROOT))
-        ));
+        return uint128(uint256(vm.load(
+            address(coinflip), keccak256(abi.encode((uint256(day) << 32) | (index >> 1), BAF_DRAW_ENTRY_ROOT))
+        )) >> ((index & 1) * 128));
     }
 
     function _bafTotal(uint24 lvl, uint32 id) internal view returns (uint256) {

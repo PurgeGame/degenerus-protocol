@@ -1,0 +1,10 @@
+{
+  "craps": {
+    "returncode": 0,
+    "log": "/home/zak/Dev/PurgeGame/degenerus-audit/scripts/audit/id-packing-review/implementation/final-d-craps.log"
+  },
+  "craps-compact": {
+    "returncode": 0,
+    "log": "/home/zak/Dev/PurgeGame/degenerus-audit/scripts/audit/id-packing-review/implementation/final-d-craps-compact.log"
+  }
+}

@@ -1364,32 +1364,73 @@ abstract contract DegenerusGameStorage {
         bool rngLockedCached,
         uint24 writeSlotBit
     ) internal {
-        // No liveness gate (see _queueEntries): post-liveness queued tickets are harmless.
         emit EntriesQueuedRange(id, startLevel, numLevels, stride, entriesPerLevel);
-        // level / rngLockedFlag / ticketWriteSlot are loop-invariant and threaded in by the
-        // caller (read once per award, not per stride-leg); none has a writer reachable from
-        // this body, so the per-level lock check observes the same value either way.
         uint80 idBits = uint80(id) << OWNER_IDX_SHIFT;
         uint24 lvl = startLevel;
-        for (uint24 i = 0; i < numLevels; ) {
-            bool isFarFuture = lvl > mintCeiling;
-            uint24 wk = isFarFuture ? _tqFarFutureKey(lvl) : (lvl | writeSlotBit);
-            uint80 packed = _entryPacked(wk, id);
-            uint32 owed = uint32(packed >> 8);
-            uint8 rem = uint8(packed);
-            if (packed == 0) {
-                if (isFarFuture && rngLockedCached) revert RngLocked();
-                packed = idBits;
-                _tqAppend(wk, id);
+        uint256 owedRoot;
+        assembly ("memory-safe") {
+            mstore(0, id)
+            mstore(32, farFutureOwed.slot)
+            owedRoot := keccak256(0, 64)
+        }
+        bool loaded;
+        uint256 cachedSlot;
+        uint256 cachedWord;
+        for (uint24 i; i < numLevels; ) {
+            if (lvl > mintCeiling) {
+                uint24 logicalLevel = lvl & 0x3fffff;
+                uint256 position = (uint256(logicalLevel) - 1) % 100;
+                uint256 slot;
+                unchecked { slot = owedRoot + (position >> 3); }
+                if (!loaded || slot != cachedSlot) {
+                    if (loaded) {
+                        assembly ("memory-safe") { sstore(cachedSlot, cachedWord) }
+                    }
+                    assembly ("memory-safe") { cachedWord := sload(slot) }
+                    cachedSlot = slot;
+                    loaded = true;
+                }
+                uint256 offset = (position & 7) << 5;
+                uint256 lane;
+                // Preserve the production cycle check before using a recycled lane.
+                assembly ("memory-safe") {
+                    mstore(0, or(add(position, 1), 0x400000))
+                    mstore(32, ticketQueue.slot)
+                    let occupying := and(shr(32, sload(keccak256(0, 64))), 0xffffff)
+                    if iszero(occupying) { occupying := add(position, 1) }
+                    if eq(occupying, logicalLevel) {
+                        lane := and(shr(offset, cachedWord), 0xffffffff)
+                    }
+                }
+                if (lane & 0x80000000 == 0) {
+                    if (rngLockedCached) revert RngLocked();
+                    _tqAppend(_tqFarFutureKey(lvl), id);
+                    lane = 0;
+                }
+                // Like the current credit sink, a top-up clears the snap marker.
+                uint256 nextLane = 0x80000000
+                    | _saturateFarFutureOwed((lane & 0x3fffffff) + uint256(entriesPerLevel));
+                cachedWord = (cachedWord & ~(uint256(0xffffffff) << offset)) | (nextLane << offset);
+            } else {
+                uint24 wk = lvl | writeSlotBit;
+                uint80 packed = _entryPacked(wk, id);
+                uint32 owed = uint32(packed >> 8);
+                uint8 rem = uint8(packed);
+                if (packed == 0) {
+                    packed = idBits;
+                    _tqAppend(wk, id);
+                }
+                owed = _addOwed(owed, entriesPerLevel, false);
+                _setEntryOwed(wk, id,
+                    (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem));
             }
-            owed = _addOwed(owed, entriesPerLevel, isFarFuture);
-            _setEntryOwed(wk, id,
-                (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem));
-
             unchecked {
                 lvl += stride;
                 ++i;
             }
+        }
+        if (loaded) {
+            assembly ("memory-safe") { sstore(cachedSlot, cachedWord) }
         }
     }
 
@@ -2610,23 +2651,22 @@ abstract contract DegenerusGameStorage {
     // Degenerette Bet Queue
     // =========================================================================
 
-    /// @dev Degenerette bets per physical RNG buffer, one word per bet in placement order.
+    /// @dev Degenerette bets per physical RNG buffer, two 128-bit lanes per word in placement order.
     ///      A bet's id is its position + 1. Placement appends only to the write buffer; the
-    ///      ordered miner chain resolves the read buffer after its box entries. A resolved bet
-    ///      carries BET_PROCESSED. Manually addressed like `boxQueue`: bet `p` sits at
-    ///      `keccak256(degeneretteQueue[buffer].slot) + p`, the write count lives in
+    ///      ordered miner chain resolves the read buffer after its box entries. The cursor authenticates
+    ///      the resolved prefix. Manually addressed like `boxQueue`: bet `p` sits at
+    ///      `keccak256(degeneretteQueue[buffer].slot) + (p >> 1)`, the write count lives in
     ///      lootboxRngPacked and the read length in `degeneretteReadCount`. Never use Solidity
     ///      length, push, pop or indexing on this mapping.
-    ///      Word layout (LSB → MSB):
+    ///      Compact layout used by storage, resolution, events and views (lane p & 1):
     ///      - [0..31]    owner wallet ID
-    ///      - [32..159]  zero
-    ///      - [160..164] chosen hero symbol (0..23; hero quadrant = symbol >> 3; Dice excluded)
-    ///      - [165..169] spin count (1..25)
-    ///      - [170]      currency (0 = ETH, 1 = FLIP)
-    ///      - [171]      record flag: a biggest-spin record bounty waits in degeneretteRecordBounty
-    ///      - [172..187] activity score in whole points
-    ///      - [188..251] stake per spin in currency units (ETH: gwei, FLIP: whole FLIP)
-    ///      - [252..255] reserved (always zero)
+    ///      - [32..36]   chosen hero symbol (0..23; hero quadrant = symbol >> 3; Dice excluded)
+    ///      - [37..41]   spin count (1..25)
+    ///      - [42]       currency (0 = ETH, 1 = FLIP)
+    ///      - [43]       record flag: a biggest-spin record bounty waits in degeneretteRecordBounty
+    ///      - [44..59]   activity score in whole points
+    ///      - [60..123]  stake per spin in currency units (ETH: gwei, FLIP: whole FLIP)
+    ///      - [124..127] reserved (always zero)
     mapping(uint48 => uint256[]) internal degeneretteQueue;
 
     // =========================================================================
@@ -3480,9 +3520,10 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev Four mapping roots replace the four retired bucket-system roots without moving
-    ///      unrelated storage. An entry is keyed (level << 64) | id, ids beginning at one, and packs
-    ///      its owner's wallet ID (bits 0..31; 32..159 zero), its chosen board's thirty chip bits (160..189) and its
-    ///      accumulated stack in whole FLIP of virtual chips (190..255). A wallet's slot, reused
+    ///      unrelated storage. Two entries share key (level << 64) | ((id - 1) >> 1), IDs starting
+    ///      at one. Each 128-bit lane packs wallet ID32, board30 and stack66, low to high.
+    ///      Resolution and lens readers consume this same compact lane directly.
+    ///      A wallet's slot, reused
     ///      window after window, holds its latest entry's level (bits 64..87) and id (0..63).
     mapping(uint256 => uint256) internal decBattleEntries;
     mapping(uint24 => DecBattleRound) internal decBattleRounds;
@@ -4547,8 +4588,34 @@ abstract contract DegenerusGameStorage {
     ///      Bit255 stays nonzero after all lanes and tags are consumed.
     mapping(uint32 => uint256) internal ticketPending;
 
-    /// @dev Resolved Degenerette bet marker, masked before every live decode.
-    uint256 internal constant BET_PROCESSED = uint256(1) << 255;
+    /// @dev Transient batch cursor plus one. Zero means no Degenerette worker is active.
+    ///      Serializes callbacks and keeps in-flight bet views consistent without entry writes.
+    bytes32 private constant DEGENERETTE_ACTIVE_CURSOR = keccak256("degenerus.degenerette.active.cursor");
+
+    function _activeDegeneretteCursor() internal view returns (uint256 active) {
+        bytes32 slot = DEGENERETTE_ACTIVE_CURSOR;
+        assembly ("memory-safe") { active := tload(slot) }
+    }
+
+    function _setActiveDegeneretteCursor(uint256 active) internal {
+        bytes32 slot = DEGENERETTE_ACTIVE_CURSOR;
+        assembly ("memory-safe") { tstore(slot, active) }
+    }
+
+    function _loadDecEntry(uint24 lvl, uint64 id) internal view returns (uint256) {
+        if (id == 0) return 0;
+        uint256 p = uint256(id) - 1;
+        return uint128(decBattleEntries[(uint256(lvl) << 64) | (p >> 1)] >> ((p & 1) * 128));
+    }
+
+    function _storeDecEntry(uint24 lvl, uint64 id, uint256 word) internal {
+        if (id == 0) revert E();
+        uint256 p = uint256(id) - 1;
+        uint256 key = (uint256(lvl) << 64) | (p >> 1);
+        uint256 shift = (p & 1) * 128;
+        uint256 lane = uint128(word);
+        decBattleEntries[key] = (decBattleEntries[key] & ~(uint256(type(uint128).max) << shift)) | (lane << shift);
+    }
 
     /// @dev The shared session payload is usable by lootbox consumers only after fulfillment.
     ///      Daily callback stores its final nudge; the keeper publishes readiness and unlock retains it.
@@ -4564,7 +4631,23 @@ abstract contract DegenerusGameStorage {
         uint256[] storage q = degeneretteQueue[buffer];
         assembly ("memory-safe") {
             mstore(0x00, q.slot)
-            slot := add(keccak256(0x00, 0x20), position)
+            slot := add(keccak256(0x00, 0x20), shr(1, position))
+        }
+    }
+
+    function _loadDegeneretteBet(uint48 buffer, uint256 position) internal view returns (uint256) {
+        uint256 slot = _betSlot(buffer, position);
+        uint256 word;
+        assembly ("memory-safe") { word := sload(slot) }
+        return uint128(word >> ((position & 1) * 128));
+    }
+
+    function _storeDegeneretteBet(uint48 buffer, uint256 position, uint256 bet) internal {
+        uint256 slot = _betSlot(buffer, position);
+        uint256 shift = (position & 1) * 128;
+        uint256 lane = uint128(bet);
+        assembly ("memory-safe") {
+            sstore(slot, or(and(sload(slot), not(shl(shift, 0xffffffffffffffffffffffffffffffff))), shl(shift, lane)))
         }
     }
 

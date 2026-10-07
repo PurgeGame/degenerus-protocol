@@ -320,8 +320,7 @@ contract JackpotBattle is CrapsBattleStorage {
             (uint32 chips,) = CrapsPreferenceLib.decode(
                 entry >> (JackpotBattleFieldLib.BOARD_SHIFT - CrapsPreferenceLib.SHIFT));
             uint256 id = (uint256(slot) << 64) | (ownN + ++drawn);
-            _storeBet(id, uint256(playerId) | (uint256(chips) << _BET_CHIPS_SHIFT)
-                | (uint256(1) << _AWARD_UNITS_SHIFT));
+            _appendBet(id, uint256(playerId) | (uint256(chips) << _BET_CHIPS_SHIFT));
             ++units;
             emit JackpotBattleEntry(slot, id, playerId, 1, chips);
         }

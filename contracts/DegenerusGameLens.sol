@@ -575,8 +575,11 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
     {
         uint256 root;
         assembly { root := decBattleEntries.slot }
-        uint256 entry = _sload(game, _mapSlot((uint256(lvl) << 64) | id, root));
-        return (_walletAddress(game, uint32(entry)), (entry >> 190), uint32((entry >> 160) & 0x3FFFFFFF));
+        if (id == 0) return (address(0), 0, 0);
+        uint256 p = uint256(id) - 1;
+        uint256 lane = _sload(game, _mapSlot((uint256(lvl) << 64) | (p >> 1), root));
+        uint256 entry = uint128(lane >> ((p & 1) * 128));
+        return (_walletAddress(game, uint32(entry)), (entry >> 62), uint32((entry >> 32) & 0x3FFFFFFF));
     }
 
     function decBattleRoundOf(address game, uint24 lvl)

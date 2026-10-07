@@ -17,7 +17,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 contract ProtocolCrapsTable is CrapsViews {
     function standField(bytes32 key, uint64 slot, uint32 id, uint256 score, uint256 bankrollFlip) external {
         _battles[key] = 1;
-        _storeBet((uint256(slot) << 64) | 1, uint256(id));
+        _appendBet((uint256(slot) << 64) | 1, uint256(id));
         Window memory w;
         w.key = key;
         w.bound = uint48(slot);
@@ -45,7 +45,7 @@ contract ProtocolCrapsTable is CrapsViews {
         JackpotRound storage r = _jackpotRounds[slot];
         r.word = word;
         r.paidCount = 1;
-        _storeBet((uint256(slot) << 64) | 1, uint256(id) | _BET_HIGH_BIT);
+        _appendBet((uint256(slot) << 64) | 1, uint256(id) | _BET_HIGH_BIT);
         _setBonusCursor(slot, 1);
         _highRollerReserve = reserve;
         (bool ok, bytes memory ret) = address(this).call(abi.encodeWithSignature("settleHighRollerReserve(uint64)", slot));
@@ -64,7 +64,7 @@ contract CrapsWalletIdsProtocolTest is DeployProtocol {
     uint32 internal constant BOARD = 3 | (3 << 12) | (1 << 15);
     bytes32 internal constant WALLET_REGISTERED = keccak256("WalletRegistered(uint32,address)");
     bytes32 internal constant TRANSFER = keccak256("Transfer(address,address,uint256)");
-    uint256 internal constant MID_MASK = ((uint256(1) << 160) - 1) & ~uint256(type(uint32).max);
+    uint256 internal constant MID_MASK = ~((uint256(1) << 73) - 1);
     uint256 internal constant DRAW_TAG = uint256(keccak256("CrapsHighReserveDraw"));
 
     address internal alice = makeAddr("proto-wid-alice");
@@ -129,7 +129,7 @@ contract CrapsWalletIdsProtocolTest is DeployProtocol {
 
         uint256 w = crapsBattle.betWordOf(betId);
         assertEq(uint32(w), id, "bet word bits 0..31 are the ID");
-        assertEq(w & MID_MASK, 0, "bet word bits 32..159 are zero");
+        assertEq(w & MID_MASK, 0, "bet word reserved bits are zero");
 
     }
 

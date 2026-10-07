@@ -66,8 +66,8 @@ contract DecimatorJackpotHarness is DegenerusGameDecimatorModule, WalletSeed {
         r.openedDay = dailyIdx;
         if (entries) {
             for (uint64 i = 1; i <= n; ++i) {
-                decBattleEntries[(uint256(lvl) << 64) | i] =
-                    (uint256(2000) << 190) | _seedWallet(address(uint160(0x1000 + i)));
+                _storeDecEntry(lvl, uint64(i),
+            (uint256(2000) << 62) | _seedWallet(address(uint160(0x1000 + i))));
             }
         }
         uint256 returned = this.runDecimatorJackpot(pot, lvl, word);

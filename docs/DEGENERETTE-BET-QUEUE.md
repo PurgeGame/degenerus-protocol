@@ -11,7 +11,7 @@ dedicated resolver paying to settle each bet. This replaces the old per-player
 
 ## Queue and bet id
 
-Each bet is one storage word appended to `degeneretteQueue[buffer]`
+Each bet is a 128-bit lane, two per storage word, appended to `degeneretteQueue[buffer]`
 (`contracts/storage/DegenerusGameStorage.sol`), where `buffer` is the physical
 RNG write buffer (0/1) when the bet is placed. A bet's id is its position + 1,
 scoped to that buffer. Placement appends only to the write buffer; the request's
@@ -19,27 +19,31 @@ seal freezes it, and the sealed read buffer resolves only through the miner
 chain, in queue order, after its box entries.
 
 The queue is manually addressed: bet `p` sits at
-`keccak256(degeneretteQueue[buffer].slot) + p` and the Solidity array length is
+`keccak256(degeneretteQueue[buffer].slot) + (p >> 1)`, shifted by
+`(p & 1) * 128`. The Solidity array length is
 never written. The write buffer's bet count lives in `lootboxRngPacked` bits
 152..183 and commits in the same write that adds the bet's pending ETH or FLIP;
 the seal copies it into `degeneretteReadCount` (beside `degeneretteCursor`) and
 restarts the write count at zero. The biggest-spin record bounty lives in
 `degeneretteRecordBounty`, keyed `(buffer << 64) | betId`.
 
-### Bet word layout (LSB -> MSB)
+### Compact bet lane (LSB -> MSB)
 
 | Bits | Field | Notes |
 | --- | --- | --- |
 | 0..31 | owner | bet owner's wallet ID |
-| 32..159 | zero | |
-| 160..164 | symbol | chosen hero symbol 0..23; quadrant = symbol >> 3; Dice excluded |
-| 165..169 | spinCount | 1..25 |
-| 170 | currency | 0 = ETH, 1 = FLIP |
-| 171 | record flag | set when a biggest-spin record bounty is armed in `degeneretteRecordBounty` |
-| 172..187 | activity | activity score in whole points |
-| 188..251 | stake per spin | in currency units: ETH = gwei, FLIP = whole FLIP |
-| 252..254 | reserved | always zero |
-| 255 | processed | set when the bet resolves |
+| 32..36 | symbol | chosen hero symbol 0..23; quadrant = symbol >> 3; Dice excluded |
+| 37..41 | spinCount | 1..25 |
+| 42 | currency | 0 = ETH, 1 = FLIP |
+| 43 | record flag | set when a biggest-spin record bounty is armed in `degeneretteRecordBounty` |
+| 44..59 | activity | activity score in whole points |
+| 60..123 | stake per spin | in currency units: ETH = gwei, FLIP = whole FLIP |
+| 124..127 | reserved | always zero |
+
+Storage, resolution, placement events and public views use this same 124-bit
+payload directly. Two lanes share one storage word. There is no stored processed
+bit or expansion into the old address layout. Event and view consumers must use
+these compact offsets for the fresh deployment.
 
 ## Placement rules
 
@@ -61,23 +65,28 @@ redemption settlement, AFKing boxes, human box entries
 (`GameAfkingModule.runHumanBoxWork`), then Degenerette bets
 (`DegenerusGameDegeneretteModule.runDegeneretteWork`), the Decimator and
 read-bound Craps. The bet worker walks `degeneretteCursor` up to
-`degeneretteReadCount`, admits each bet against its declared gas bound, marks it
-processed and resolves it against the buffer's published session word, and
-stores the advanced cursor at the end of the call.
+`degeneretteReadCount`, admits each bet against its declared gas bound, and
+resolves it against the buffer's published session word. It writes the advanced
+cursor once at the end of a progressing batch. Resolution never writes to the
+bet words. A transient cursor blocks worker reentry and hides the in-flight
+settled prefix during payout callbacks; a revert rolls back payouts and progress.
+
+Buffer reuse restarts counts and cursors without clearing the stored words.
+Placement overwrites each reused lane; the current count hides the old tail.
 
 ## Bet view
 
 `degeneretteBetInfo(uint48 index, uint64 betId)` is a view that returns the
-raw queued bet word (zero once resolved or if the id is unknown/out of
+compact bet lane (zero once resolved or if the id is unknown/out of
 range).
 
 ## Event format
 
-`DegeneretteBetPlaced(address indexed player, uint32 indexed index, uint64
+`DegeneretteBetPlaced(uint32 indexed player, uint32 indexed index, uint64
 indexed betId, uint256 packed)` is emitted at placement; `packed` is the
 queued bet word (layout above).
 
-`DegeneretteResolved(address indexed player, uint32 indexed index, uint64
+`DegeneretteResolved(uint32 indexed player, uint32 indexed index, uint64
 indexed betId, uint256 totalPayout, uint32 resultTraits, bytes spins)` is
 emitted once per resolved bet, always by the sweep. `spins` packs 5 bytes per spin (spin 0 first): 4
 bytes of big-endian player traits, then one byte of `score (bits 0-3) | house

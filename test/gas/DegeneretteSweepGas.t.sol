@@ -71,7 +71,7 @@ contract DegeneretteSweepGas is DeployProtocol {
                 bytes32((pools & ((uint256(1) << 128) - 1)) | (uint256(0.5 ether) << 128)));
         }
         if (n != 0) {
-            lastRecordFlag = (game.degeneretteBetInfo(IDX, 1) >> 171) & 1;
+            lastRecordFlag = (game.degeneretteBetInfo(IDX, 1) >> 43) & 1;
             emit log_named_uint("  first bet record flag", lastRecordFlag);
         }
         RecyclingState.seedWord(address(game), IDX, bytes32(word));

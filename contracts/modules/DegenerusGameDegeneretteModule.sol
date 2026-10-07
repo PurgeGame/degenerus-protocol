@@ -287,9 +287,9 @@ contract DegenerusGameDegeneretteModule is
     // Queued Bet Layout
     // -------------------------------------------------------------------------
     //
-    // A bet is one word in degeneretteQueue[index & 1] (full layout on the storage declaration):
-    // owner wallet ID [0..31] | symbol [160..164] | spinCount [165..169] | currency [170] |
-    // record flag [171] | activity score [172..187] | boosted stake units [188..251].
+    // A bet is a paired lane in degeneretteQueue[index & 1] (full layout on the storage declaration):
+    // owner wallet ID [0..31] | symbol [32..36] | spinCount [37..41] | currency [42] |
+    // record flag [43] | activity score [44..59] | boosted stake units [60..123].
     // The bet id is the queue position + 1, so the index and id need no bits.
     //
     /// Every symbol choice has the same distribution. The hero lane's color is wild, the
@@ -299,12 +299,12 @@ contract DegenerusGameDegeneretteModule is
     //
     // -------------------------------------------------------------------------
 
-    uint256 private constant BET_SYMBOL_SHIFT = 160;
-    uint256 private constant BET_COUNT_SHIFT = 165;
-    uint256 private constant BET_CURRENCY_SHIFT = 170;
-    uint256 private constant BET_RECORD_FLAG = uint256(1) << 171;
-    uint256 private constant BET_ACTIVITY_SHIFT = 172;
-    uint256 private constant BET_STAKE_SHIFT = 188;
+    uint256 private constant BET_SYMBOL_SHIFT = 32;
+    uint256 private constant BET_COUNT_SHIFT = 37;
+    uint256 private constant BET_CURRENCY_SHIFT = 42;
+    uint256 private constant BET_RECORD_FLAG = uint256(1) << 43;
+    uint256 private constant BET_ACTIVITY_SHIFT = 44;
+    uint256 private constant BET_STAKE_SHIFT = 60;
 
     /// @dev Stake units. An ETH stake is whole gwei and a FLIP stake whole FLIP, so 64 bits
     ///      cover any stake (about 1.8e10 ETH or 1.8e19 FLIP per spin). Placement rejects an
@@ -416,6 +416,7 @@ contract DegenerusGameDegeneretteModule is
 
     function _runDegeneretteWork(uint256 gasAllowance) private returns (MineFlipGas.Result memory result) {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        if (_activeDegeneretteCursor() != 0) return result;
         MineFlipGas.Meter memory meter = MineFlipGas.start(gasAllowance);
         uint48 index = _rngReadBuffer();
         uint256 pos = degeneretteCursor;
@@ -426,16 +427,14 @@ contract DegenerusGameDegeneretteModule is
         if (rngWord == 0) return result;
         ResolveAcc memory acc;
         uint256 startPos = pos;
-        uint256 base = _betSlot(index, 0);
+        _setActiveDegeneretteCursor(pos + 1);
         while (pos < qlen) {
-            uint256 bet;
-            assembly ("memory-safe") { bet := sload(add(base, pos)) }
-            bool skip = bet == 0 || bet & BET_PROCESSED != 0;
+            uint256 bet = _loadDegeneretteBet(index, pos);
+            bool skip = bet == 0;
             if (!MineFlipGas.canRun(meter, skip ? BET_SKIP_GAS : _betGasMaximum(bet), BET_TAIL_GAS)) break;
             if (skip) { ++pos; continue; }
-            uint256 marked = bet | BET_PROCESSED;
-            assembly ("memory-safe") { sstore(add(base, pos), marked) }
             ++pos;
+            _setActiveDegeneretteCursor(pos + 1);
             ++result.rewardBasis;
             _resolveBet(bet, uint32(index), uint64(pos), rngWord, acc);
         }
@@ -443,6 +442,7 @@ contract DegenerusGameDegeneretteModule is
         _flushPool(acc);
         result.progressed = pos != startPos;
         if (result.progressed) degeneretteCursor = uint48(pos);
+        _setActiveDegeneretteCursor(0);
         result.done = pos == qlen;
         if (result.done) _tryCompleteRng();
         MineFlipGas.finish(meter);
@@ -663,7 +663,7 @@ contract DegenerusGameDegeneretteModule is
         }
         if (stakeUnits > MASK_64) revert InvalidBet();
 
-        // The bet itself is the sweep's queue entry: one word, appended at this index. Its
+        // The bet itself is the sweep's queue entry: a paired lane, appended at this index. Its
         // id is the queue position + 1, fixed here while the index word is still unset. The
         // position is the buffer's write count, which `_collectBetFunds` commits in the
         // lootboxRngPacked write it makes for every bet.
@@ -680,8 +680,7 @@ contract DegenerusGameDegeneretteModule is
             bet |= BET_RECORD_FLAG;
             degeneretteRecordBounty[(uint256(index) << 64) | betId] = recordBounty;
         }
-        uint256 slot = _betSlot(index, position);
-        assembly ("memory-safe") { sstore(slot, bet) }
+        _storeDegeneretteBet(index, position, bet);
         emit DegeneretteBetPlaced(playerId, uint32(index), betId, bet);
     }
 

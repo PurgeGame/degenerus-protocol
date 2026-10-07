@@ -1665,7 +1665,7 @@ contract WalletIdTruthHandler is Test {
     }
 
     /// @dev Every slip the table announced: stored owner field and the announced ID agree and
-    ///      are registered; bits 32..159 stay zero.
+    ///      are registered; bits above the compact header stay zero.
     function _checkCraps() internal view {
         for (uint256 i; i < _slips.length; ++i) {
             Slip memory s = _slips[i];
@@ -1673,7 +1673,7 @@ contract WalletIdTruthHandler is Test {
             uint256 w = IWidCraps(CRAPS).betWordOf(s.betId);
             if (w == 0) continue;
             if (uint32(w) != s.playerId) _fail("CRAPSBET", "stored bet owner != announced ID", _keyOf(s.playerId), uint32(w), s.playerId);
-            if ((w >> 32) & type(uint128).max != 0) _fail("CRAPSBET", "bet word bits 32..159 nonzero", _keyOf(s.playerId), w, 0);
+            if (w >> 73 != 0) _fail("CRAPSBET", "bet word reserved bits nonzero", _keyOf(s.playerId), w, 0);
         }
     }
 
@@ -1693,15 +1693,16 @@ contract WalletIdTruthHandler is Test {
         }
     }
 
-    /// @dev Decimator entries: owner ID in bits 0..31 (32..159 zero), canonical for the burner.
+    /// @dev Compact Decimator entries: owner ID32, board30, stack66; two lanes per word.
     function _checkDecimator() internal view {
         for (uint256 i; i < _dec.length; ++i) {
             DecEntry memory e = _dec[i];
-            uint256 key = (uint256(e.lvl) << 64) | e.entryId;
-            uint256 w = uint256(vm.load(GAME, keccak256(abi.encode(key, GameSlots.DEC_BATTLE_ENTRIES))));
+            uint256 p = uint256(e.entryId) - 1;
+            uint256 key = (uint256(e.lvl) << 64) | (p >> 1);
+            uint128 lane = uint128(uint256(vm.load(GAME, keccak256(abi.encode(key, GameSlots.DEC_BATTLE_ENTRIES)))) >> ((p & 1) * 128));
+            uint256 w = lane;
             if (w == 0) continue;
             if (uint32(w) != e.burner || uint32(w) == 0) _fail("DECIMATOR", "entry differs from emitted ID", address(0), uint32(w), e.burner);
-            if ((w >> 32) & type(uint128).max != 0) _fail("DECIMATOR", "entry bits 32..159 nonzero", address(0), w, 0);
         }
     }
 

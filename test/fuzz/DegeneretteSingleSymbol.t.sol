@@ -462,8 +462,8 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
     function testHeroIsStoredOnlyInTheSelectedSymbol() public {
         uint64 id = _place(alice, 0, 1, 23, 0.005 ether);
         uint256 packed = game.degeneretteBetInfo(1, id);
-        assertEq((packed >> 160) & 0x1F, 23, "symbol field holds the chosen hero");
-        assertEq(packed >> 252, 0, "no separate hero field: the reserved tail stays zero");
+        assertEq((packed >> 32) & 0x1F, 23, "symbol field holds the chosen hero");
+        assertEq(packed >> 124, 0, "no separate hero field: the reserved tail stays zero");
         uint256 word = uint256(keccak256("last hero quadrant"));
         _land(word);
         _resolve(alice, id, 23, word);

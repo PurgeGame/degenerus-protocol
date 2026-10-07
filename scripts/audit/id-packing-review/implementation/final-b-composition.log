@@ -1,0 +1,745 @@
+Warning: This is a nightly build of Foundry. It is recommended to use the latest stable version. To mute this warning set `FOUNDRY_DISABLE_NIGHTLY_WARNING` in your environment.
+
+Compiling 140 files with Solc 0.8.34
+Solc 0.8.34 finished in 250.38s
+Compiler run successful with warnings:
+Warning (2519): This declaration shadows an existing declaration.
+  --> contracts/libraries/MineFlipGas.sol:59:9:
+   |
+59 |         uint256 available = gasleft();
+   |         ^^^^^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> contracts/libraries/MineFlipGas.sol:29:5:
+   |
+29 |     function available() internal view returns (uint256) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+    --> contracts/storage/DegenerusGameStorage.sol:3460:43:
+     |
+3460 |     function _lootboxEvUsedFor(uint32 id, uint24 level)
+     |                                           ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> contracts/storage/DegenerusGameStorage.sol:378:5:
+    |
+378 |     uint24 public level = 0;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+    --> contracts/storage/DegenerusGameStorage.sol:3476:9:
+     |
+3476 |         uint24 level,
+     |         ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> contracts/storage/DegenerusGameStorage.sol:378:5:
+    |
+378 |     uint24 public level = 0;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+    --> contracts/storage/DegenerusGameStorage.sol:3635:41:
+     |
+3635 |     function _centuryUsedFor(uint32 id, uint256 level) internal view returns (uint256) {
+     |                                         ^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> contracts/storage/DegenerusGameStorage.sol:378:5:
+    |
+378 |     uint24 public level = 0;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+    --> contracts/storage/DegenerusGameStorage.sol:3641:44:
+     |
+3641 |     function _setCenturyUsedFor(uint32 id, uint256 level, uint256 used) internal {
+     |                                            ^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> contracts/storage/DegenerusGameStorage.sol:378:5:
+    |
+378 |     uint24 public level = 0;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+  --> contracts/libraries/TicketEntropy.sol:32:54:
+   |
+32 |     function identity(uint24 queueKey, uint24 level, uint256 queueIndex, uint32 walletId)
+   |                                                      ^^^^^^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> contracts/libraries/TicketEntropy.sol:23:5:
+   |
+23 |     function queueIndex(uint256 logical, uint256 start, uint256 total) internal pure returns (uint256 physical) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> contracts/DegenerusVault.sol:715:9:
+    |
+715 |         uint8 symbol,
+    |         ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> contracts/DegenerusVault.sol:512:5:
+    |
+512 |     string public constant symbol = "DGV";
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/fuzz/helpers/TicketQueueStorage.sol:122:13:
+    |
+122 |             uint256 lane = uint32(uint256(vm.load(host, _future(key, id))) >> ((position & 7) * 32));
+    |             ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> test/fuzz/helpers/TicketQueueStorage.sol:129:9:
+    |
+129 |         uint256 lane = (word >> shift) & ((uint256(1) << 42) - 1);
+    |         ^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/fuzz/helpers/TicketQueueStorage.sol:145:13:
+    |
+145 |             uint256 prior = uint256(vm.load(host, target));
+    |             ^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> test/fuzz/helpers/TicketQueueStorage.sol:157:9:
+    |
+157 |         uint256 prior = uint256(vm.load(host, slot));
+    |         ^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/fuzz/helpers/TicketQueueStorage.sol:148:13:
+    |
+148 |             uint256 lane = value == 0 ? 0 : 0x80000000 | count | ((uint256(value) >> 10) & 0x40000000);
+    |             ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> test/fuzz/helpers/TicketQueueStorage.sol:161:9:
+    |
+161 |         uint256 lane = value == 0 ? 0 : (uint256(value) & ((uint256(1) << 41) - 1)) | (uint256(1) << 41);
+    |         ^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/storage/DegenerusGameStorage.sol:1232:22:
+     |
+1232 |             packed = uint80(id) << OWNER_IDX_SHIFT;
+     |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/storage/DegenerusGameStorage.sol:1301:22:
+     |
+1301 |             packed = uint80(id) << OWNER_IDX_SHIFT;
+     |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/storage/DegenerusGameStorage.sol:1368:25:
+     |
+1368 |         uint80 idBits = uint80(id) << OWNER_IDX_SHIFT;
+     |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/storage/DegenerusGameStorage.sol:1808:25:
+     |
+1808 |                 return (uint80(id) << OWNER_IDX_SHIFT) | uint80((lane & 0x3fffffff) << 8)
+     |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/modules/DegenerusGameWhaleModule.sol:1014:26:
+     |
+1014 |                 packed = uint80(id) << OWNER_IDX_SHIFT;
+     |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint64) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+   --> contracts/modules/DegenerusGameDecimatorModule.sol:262:24:
+    |
+262 |             weights |= uint64(weight) << (uint256(q) * 16);
+    |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+  --> contracts/modules/DegenerusGameFoilPackModule.sol:93:26:
+   |
+93 |                 packed = uint80(id) << OWNER_IDX_SHIFT;
+   |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint32) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/Coinflip.sol:1567:32:
+     |
+1567 |             bool win = wins & (uint32(1) << offset) != 0;
+     |                                ^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint128) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/sDGNRS.sol:1326:44:
+     |
+1326 |             players.push(uint128(units) | (uint128(walletId) << BATCH_PLAYER_ID_SHIFT)
+     |                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint128) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/sDGNRS.sol:1327:20:
+     |
+1327 |                 | (uint128(uint16(score) + 1) << BATCH_PLAYER_SCORE_SHIFT));
+     |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+  --> test/helpers/BucketSeed.sol:36:34:
+   |
+36 |         _seedOwedAt(rk, player, (uint80(id) << OWNER_IDX_SHIFT) | packedOwedRem);
+   |                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/modules/DegenerusGameGameOverModule.sol:610:36:
+    |
+610 |     function _resumeTerminalPayout(uint24 day, MineFlipGas.Meter memory meter, TerminalWork memory work) private returns (bool done) {
+    |                                    ^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:765:9:
+    |
+765 |         uint32 played,
+    |         ^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:766:9:
+    |
+766 |         uint8 bankMult,
+    |         ^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:767:9:
+    |
+767 |         uint16 goalMult,
+    |         ^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:768:9:
+    |
+768 |         uint24 stakeUnits,
+    |         ^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:769:9:
+    |
+769 |         uint40 closeTime,
+    |         ^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:770:9:
+    |
+770 |         bool multiEntry,
+    |         ^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:771:9:
+    |
+771 |         uint16 highRollerMult
+    |         ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:772:25:
+    |
+772 |     ) external returns (uint64 slot) {
+    |                         ^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:836:31:
+    |
+836 |     function setBattleCreator(address account, bool allowed) external {
+    |                               ^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:836:48:
+    |
+836 |     function setBattleCreator(address account, bool allowed) external {
+    |                                                ^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/CrapsBattle.sol:1231:34:
+     |
+1231 |     function convertNormalToHigh(uint32 id, uint32 highCount) external { _delegateJackpot(); }
+     |                                  ^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/CrapsBattle.sol:1231:45:
+     |
+1231 |     function convertNormalToHigh(uint32 id, uint32 highCount) external { _delegateJackpot(); }
+     |                                             ^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/CrapsBattle.sol:1252:33:
+     |
+1252 |     function upgradeReservedDay(uint32 id, uint24 day) external { _delegateJackpot(); }
+     |                                 ^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/CrapsBattle.sol:1252:44:
+     |
+1252 |     function upgradeReservedDay(uint32 id, uint24 day) external { _delegateJackpot(); }
+     |                                            ^^^^^^^^^^
+
+Warning (2072): Unused local variable.
+    --> contracts/Coinflip.sol:1707:9:
+     |
+1707 |         address s = ContractAddresses.SDGNRS;
+     |         ^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/DegenerusGame.sol:1399:13:
+     |
+1399 |             uint256 totalFaceWei,
+     |             ^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/DegenerusGame.sol:1400:13:
+     |
+1400 |             uint256 totalBudget,
+     |             ^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/DegenerusGame.sol:1401:13:
+     |
+1401 |             uint256 ticketWei,
+     |             ^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/DegenerusGame.sol:1402:13:
+     |
+1402 |             uint256 ethCashWei,
+     |             ^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/DegenerusGame.sol:1403:13:
+     |
+1403 |             uint256 flipTokens
+     |             ^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/DegenerusAffiliate.sol:1085:28:
+     |
+1085 |     function _payoutUpline(bytes32 code, uint32 ownerId, bool second, uint256 cache)
+     |                            ^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+  --> test/repro/MineFlipWorkerBudget.t.sol:64:32:
+   |
+64 |         vm.etch(address(game), type(BudgetReadFixture).runtimeCode);
+   |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+  --> test/gas/NativeAtomicWork.t.sol:34:32:
+   |
+34 |         vm.etch(address(game), type(NativeAtomicReadFixture).runtimeCode);
+   |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2072): Unused local variable.
+   --> test/fuzz/RngFreezeAndRemovalProofs.t.sol:320:9:
+    |
+320 |         uint32 claimantId = _giveWalletId(claimant); // the wallet ID is the only prior state
+    |         ^^^^^^^^^^^^^^^^^
+
+Warning (2072): Unused local variable.
+   --> test/fuzz/RngFreezeAndRemovalProofs.t.sol:466:9:
+    |
+466 |         uint256 packed = uint256(
+    |         ^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+   --> test/fuzz/JackpotCommitmentFreeze.t.sol:103:32:
+    |
+103 |         vm.etch(address(game), type(JackpotCommitmentSeeder).runtimeCode);
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+   --> test/fuzz/DecimatorJackpotIntegration.t.sol:116:41:
+    |
+116 |         vm.etch(ContractAddresses.GAME, type(DecimatorJackpotHarness).runtimeCode);
+    |                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+   --> test/fuzz/DecimatorJackpotIntegration.t.sol:117:56:
+    |
+117 |         vm.etch(ContractAddresses.GAME_JACKPOT_MODULE, type(DegenerusGameJackpotModule).runtimeCode);
+    |                                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+   --> test/fuzz/DecimatorJackpotIntegration.t.sol:118:58:
+    |
+118 |         vm.etch(ContractAddresses.GAME_DECIMATOR_MODULE, type(DegenerusGameDecimatorModule).runtimeCode);
+    |                                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+   --> test/fuzz/DecimatorJackpotIntegration.t.sol:119:54:
+    |
+119 |         vm.etch(ContractAddresses.GAME_WHALE_MODULE, type(DegenerusGameWhaleModule).runtimeCode);
+    |                                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> test/fuzz/SdgnrsAutoDecimator.t.sol:25:58:
+   |
+25 |     function setDecReference(uint64 stack, uint40 count, uint24 lvl) external {
+   |                                                          ^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+  --> test/fuzz/SdgnrsAutoDecimator.t.sol:97:32:
+   |
+97 |         vm.etch(address(game), type(AutoDecimatorGameHarness).runtimeCode);
+   |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+  --> test/fuzz/SdgnrsAutoDecimator.t.sol:98:41:
+   |
+98 |         vm.etch(address(advanceModule), type(AutoDecimatorAdvanceHarness).runtimeCode);
+   |                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+  --> test/fuzz/helpers/RedemptionCloseTools.sol:22:32:
+   |
+22 |         vm.etch(address(game), type(RedemptionCloseHarness).runtimeCode);
+   |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+   --> test/fuzz/ReviewFixes0924.t.sol:120:32:
+    |
+120 |         vm.etch(address(game), type(ReviewDeadlineSeeder).runtimeCode);
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+   --> test/fuzz/ReviewFixes0924.t.sol:126:32:
+    |
+126 |         vm.etch(address(game), type(ReviewDeadlineSeeder).runtimeCode);
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+   --> test/fuzz/ReviewFixes0924.t.sol:142:32:
+    |
+142 |         vm.etch(address(game), type(ReviewDeadlineSeeder).runtimeCode);
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+   --> test/fuzz/ReviewFixes0924.t.sol:283:32:
+    |
+283 |         vm.etch(address(game), type(ReviewClaimSeeder).runtimeCode);
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+   --> test/fuzz/ReviewFixes0924.t.sol:292:32:
+    |
+292 |         vm.etch(address(game), type(ReviewClaimSeeder).runtimeCode);
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+   --> test/fuzz/ReviewFixes0924.t.sol:299:32:
+    |
+299 |         vm.etch(address(game), type(ReviewClaimSeeder).runtimeCode);
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+   --> test/fuzz/ReviewFixes0924.t.sol:310:32:
+    |
+310 |         vm.etch(address(game), type(ReviewClaimSeeder).runtimeCode);
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+   --> test/fuzz/ReviewFixes0924.t.sol:385:36:
+    |
+385 |             vm.etch(address(game), type(ReviewClaimSeeder).runtimeCode);
+    |                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> contracts/modules/DegenerusGameMintStreakUtils.sol:183:5:
+    |
+183 |     function _quoteFarFutureSwap(
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> contracts/DegenerusRecordBounty.sol:441:5:
+    |
+441 |     function getApproved(uint256 tokenId) external view returns (address) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> contracts/CrapsBattle.sol:944:5:
+    |
+944 |     function _settlementOf(uint256 betId, uint256 header, Window memory w, uint256 word)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+    --> contracts/CrapsBattle.sol:1028:5:
+     |
+1028 |     function _windowTermsOn(uint24 day, uint256 period, uint256 word) internal view returns (Window memory w) {
+     |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+    --> contracts/JackpotBattle.sol:1086:5:
+     |
+1086 |     function _windowTermsOn(uint24 day, uint256 period, uint256 word) internal view returns (Window memory w) {
+     |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+    --> contracts/DegenerusAffiliate.sol:1085:5:
+     |
+1085 |     function _payoutUpline(bytes32 code, uint32 ownerId, bool second, uint256 cache)
+     |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/fuzz/MinerNoProgress.t.sol:173:5:
+    |
+173 |     function _assertWorkUnpaid() private {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+
+Ran 2 tests for test/fuzz/ReviewFixes0924.t.sol:RecoveredStallLivenessUnitTest
+[PASS] test_gapWaitsWhateverTheLastWord() (gas: 120446)
+[PASS] test_recoveredStallWordTodayIsNotTriggered() (gas: 120356)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 477.22µs (203.74µs CPU time)
+
+Ran 1 test for test/fuzz/ReviewFixes0924.t.sol:FoilDrainTerminalFlagTest
+[PASS] test_drainTerminalFlagKeysOnTheLatchNotLiveness() (gas: 11177320)
+Logs:
+  drain gas: live: 2675546
+  drain gas: liveness true, no latch: 2675546
+  drain gas: ending latched: 2657527
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 6.70ms (5.93ms CPU time)
+
+Ran 5 tests for test/fuzz/CrapsWalletIdsProtocol.t.sol:CrapsWalletIdsGasTest
+[PASS] test_gasConvertNormalToHigh() (gas: 541501)
+Logs:
+  convertNormalToHigh uncached: 46195
+  convertNormalToHigh cached: 46195
+
+[PASS] test_gasDoors() (gas: 606416)
+Logs:
+  enterBattle first contact (registers, saves board): 250416
+  enterBattle cached, same board: 92702
+  applyCrapsPasses cached, same board: 116947
+
+[PASS] test_gasSettleBatch() (gas: 2287902)
+Logs:
+  settle a six-seat custom field: 571021
+
+[PASS] test_gasUpgradeReservedDay() (gas: 744295)
+Logs:
+  upgradeReservedDay uncached: 62780
+  upgradeReservedDay cached: 62780
+
+[PASS] test_gasVaultComp() (gas: 512216)
+Logs:
+  vaultComp kind 4 uncached recipient: 70971
+  vaultComp kind 4 cached recipient: 54459
+
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 21.10ms (5.90ms CPU time)
+
+Ran 1 test for test/fuzz/ReviewFixes0924.t.sol:RedemptionEndingPendingTest
+[PASS] test_claimWaitsWhileLivenessReadsTrueThenSettlesTerminal() (gas: 250937)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 22.74ms (203.06µs CPU time)
+
+Ran 6 tests for test/fuzz/CrapsWalletIdsProtocol.t.sol:CrapsWalletIdsProtocolTest
+[PASS] test_aBoardSaveRequiresAnExistingAccount() (gas: 213382)
+[PASS] test_firstContactOnACustomBattleRegistersBeforeTheBurn() (gas: 576323)
+[PASS] test_firstContactOnFutureDaysRegistersBeforeTheBurn() (gas: 455653)
+[PASS] test_theDiceRunTrophyFollowsTheGamesPayeeForTheId() (gas: 10027624)
+[PASS] test_theDiceRunTrophyGoesToTheWinnersAddressThroughThePayee() (gas: 9995018)
+[PASS] test_theHighRollerReserveCreditsTheNomineeIdOnTheRealCoinflip() (gas: 9786850)
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 23.06ms (6.13ms CPU time)
+
+Ran 5 tests for test/repro/MineFlipWorkerBudget.t.sol:MineFlipHumanBudgetTest
+[PASS] test_BetReservesWholeSlipBeforeMutation() (gas: 583386)
+[PASS] test_DownstreamFailureRollsBackBoxMarkerAndCursor() (gas: 28169849577)
+[PASS] test_FirstWideBoxWaitsForItsAtomicAllowance() (gas: 1885755)
+[PASS] test_HumanCannotBypassEarlierConsumers() (gas: 807254)
+[PASS] test_LowGasBoxCallWaitsForTheAtomicEntry() (gas: 593950)
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 25.40ms (10.91ms CPU time)
+
+Ran 1 test for test/fuzz/ReviewFixes0924.t.sol:VaultBurnStethFallbackTest
+[PASS] test_burnEthPaysInFullWhenTheGameHoldsMostlyStEth() (gas: 379069)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 25.51ms (1.84ms CPU time)
+
+Ran 8 tests for test/fuzz/FlipDecimatorWalletIds.t.sol:FlipDecimatorWalletIdsTest
+[PASS] test_AutoDecimatorBurn_GetsSdgnrsIdWithoutWrite() (gas: 244300)
+[PASS] test_CrapsBurn_ConsumesIdLane_RecordsActionById() (gas: 433939)
+[PASS] test_CrapsCompBurn_TouchesNeitherBoonNorQuests() (gas: 269432)
+[PASS] test_PastPaidAdmission_NewBurnerReverts_ExistingBurns() (gas: 482083)
+[PASS] test_QuestCompletingBurn_AfkingRun_UsesPostQuestActivityScore() (gas: 8767010)
+[PASS] test_QuestCompletingBurn_OffRun_RewardJoinsBaseCreditedById() (gas: 667485)
+[PASS] test_RegisteredBurner_RegistrationIsWriteFree() (gas: 406239)
+[PASS] test_UnregisteredBurner_RegistersOnce_BeforeQuestBoonAndEntry() (gas: 344508)
+Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 27.55ms (13.83ms CPU time)
+
+Ran 4 tests for test/fuzz/ReviewFixes0924.t.sol:DecimatorLegEndingIdleTest
+[PASS] test_SweepDoesNotWaitForPendingBattle() (gas: 5405999)
+[PASS] test_ZeroQuotaRunUsesNormalKeeperBountyPolicy() (gas: 2042525)
+Logs:
+  losing run mineFlip gas: 214241
+  losing run bounty: 0
+
+[PASS] test_legIdlesAfterGameOver() (gas: 3497531)
+Logs:
+  idle decimator leg gas: 35955
+
+[PASS] test_legIdlesDuringLiveness() (gas: 1822646)
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 47.20ms (6.11ms CPU time)
+
+Ran 1 test for test/fuzz/ReviewFixes0924.t.sol:RecoveredStallIntegrationTest
+[PASS] test_stallRecoveredPastDeadlineDoesNotEndTheLevel() (gas: 18642557)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 55.01ms (27.90ms CPU time)
+
+Ran 5 tests for test/fuzz/RngFreezeAndRemovalProofs.t.sol:RngFreezeAndRemovalProofs
+[PASS] testClaimWhalePassMaterializesFutureWindowAndAppliesStats() (gas: 817426)
+[PASS] testCrankBoxOpenStaysPostUnlock() (gas: 1033464)
+[PASS] testEthCreditPathIsDeterministicNoVrfWord() (gas: 945033)
+[PASS] testEthWinningsAlwaysLandInClaimable() (gas: 545784)
+[PASS] testPlacementNeverBindsToAWordedIndex() (gas: 288400)
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 55.29ms (6.35ms CPU time)
+
+Ran 1 test for test/gas/NativeAtomicWork.t.sol:NativeAtomicDecimatorTest
+[PASS] test_LongRealDiceRunWithHeapInsertionFitsOneStep() (gas: 48486609)
+Logs:
+  atomic_decimator_long_run_rolls: 424
+  cold_atomic_decimator_run_and_heap: 340584
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 79.21ms (78.86ms CPU time)
+
+Ran 1 test for test/fuzz/ReviewFixes0924.t.sol:TerminalExactSharesTest
+[PASS] test_oneWeiMovesEachWinnerByWeiNotAUnit() (gas: 116030310)
+Logs:
+  paid move (wei): 48
+  max per-holder move (wei): 2
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 84.66ms (84.22ms CPU time)
+
+Ran 2 tests for test/gas/NativeAtomicWork.t.sol:NativeAtomicDegeneretteTest
+[PASS] test_Max15FlipSpinsAndSurvivalMintFitOneStep() (gas: 886719)
+Logs:
+  cold_atomic_15_flip_spins_survival: 132639
+
+[PASS] test_Max25EthSpinsWithHighScoreAndWinBoxFitOneStep() (gas: 111249629)
+Logs:
+  cold_atomic_25_eth_spins_high_score_and_box: 343847
+
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 283.72ms (263.31ms CPU time)
+
+Ran 19 tests for test/fuzz/CoinflipWalletIds.t.sol:CoinflipWalletIdsTest
+[PASS] testFuzz_BafDrawWinner_MatchesReference(uint256,uint256) (runs: 64, μ: 899583, ~: 877753)
+[PASS] testFuzz_Credits_NeverWriteUnderIdZero(uint32[4],uint64[4]) (runs: 256, μ: 198660, ~: 201715)
+[PASS] test_BafDraw_EntryStoresId_WinnerById() (gas: 1268626)
+[PASS] test_BareRatchet_PaysShareZero_TrophyToPayee() (gas: 607331)
+[PASS] test_ClaimWalk_BafById_SkipsSdgnrs_VaultOffBoard() (gas: 641768)
+[PASS] test_CreditApis_SkipZeroIdAndZeroAmount() (gas: 408125)
+[PASS] test_CreditById_VisibleBeforeFirstClaim_MintsToCaller() (gas: 553544)
+[PASS] test_Credit_SaturatesAtCap_ManualDepositRevertsPastCap() (gas: 439348)
+[PASS] test_DiceRun_CreditsById_TrophyToPayee() (gas: 368872)
+[PASS] test_FirstSelfDeposit_RegistersOnce_StakesAndQuestsById() (gas: 278008)
+[PASS] test_GiftToRegisteredRecipient_RegistersFunderForQuest() (gas: 363767)
+[PASS] test_GiftToUnallocatedId_Reverts() (gas: 123647)
+[PASS] test_IdlessHolder_FlipTransfersUnchanged() (gas: 184712)
+[PASS] test_IdlessWallet_ClaimsAndCallbacksReturnZero_NeverRegisters() (gas: 439047)
+[PASS] test_OperatorDeposit_UsesPlayerIdNotOperator() (gas: 356840)
+[PASS] test_PastPaidAdmission_NewDepositorReverts_ExistingDeposits() (gas: 769332)
+[PASS] test_ProtocolPaths_NoGameLookup_SeedKeyedOnProtocolIds() (gas: 347315)
+[PASS] test_RecordTrophy_GoesToGameReturnedPayee() (gas: 370864)
+[PASS] test_ZeroDepositSkipsUnregisteredWallet_RebuyConfigurationRegisters() (gas: 563465)
+Suite result: ok. 19 passed; 0 failed; 0 skipped; finished in 453.53ms (449.37ms CPU time)
+
+Ran 6 tests for test/repro/MineFlipWorkerBudget.t.sol:MineFlipDecimatorBudgetTest
+[PASS] test_DecimatorCannotBypassAnyEarlierStage() (gas: 358285)
+[PASS] test_EngineFailurePreservesRoundAndReservation() (gas: 29069843681)
+[PASS] test_LowGasSimulationWaitsWithoutMutatingRound() (gas: 79194)
+[PASS] test_PaymentReservesBeforeMutation() (gas: 306377)
+[PASS] test_RankReservesBeforeMutationThenChainsPayment() (gas: 287275)
+[PASS] test_RunReservesBeforeMutationThenChainsRankAndPay() (gas: 261309)
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 903.64ms (1.01ms CPU time)
+
+Ran 2 tests for test/fuzz/JackpotCommitmentFreeze.t.sol:JackpotCommitmentFreezeTest
+[PASS] test_RequestThroughFourChunksFreezesFieldAndReserveMiss() (gas: 139227575)
+[PASS] test_RequestThroughFourChunksFreezesFieldAndReserveWin() (gas: 190882065)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 1.07s (1.08s CPU time)
+
+Ran 10 tests for test/fuzz/ExternalDoorAccounts.t.sol:ExternalDoorAccountsTest
+[PASS] test_ClaimBafConsolation_AnyoneForSmurf_PaysOwner() (gas: 302806)
+[PASS] test_ClaimBafConsolation_ZeroIsCaller_NoIdNothing_UnallocatedE() (gas: 338856)
+[PASS] test_DecimatorBurn_OwnerForSmurf_OwnerPays_StateOnSmurf() (gas: 282731)
+[PASS] test_DecimatorBurn_ShortWallet_UsesOwnerCoinflipNotSmurfs() (gas: 615783)
+[PASS] test_DecimatorBurn_StrangerNotApproved_UnallocatedE_Operator_Self() (gas: 682198)
+[PASS] test_Enter_OwnerForSmurf_EntryAndBoonOnSmurf() (gas: 257663)
+[PASS] test_Enter_StrangerNotApproved_UnallocatedE_Operator_SelfNoResolve() (gas: 551321)
+[PASS] test_Enter_X99Incinerator_CarriesSmurf() (gas: 271719)
+[PASS] test_PlaceBet_OperatorForSmurf_BurnsOwner_SelfNoResolve() (gas: 735795)
+[PASS] test_PlaceBet_OwnerForSmurf_RecordedOnSmurf_SettlementCreditsSmurf() (gas: 998553)
+Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 1.07s (4.89ms CPU time)
+
+Ran 11 tests for test/fuzz/LensParity.t.sol:LensParityTest
+[PASS] testFuzz_activeTicketLevel_parity(uint24,bool,bool,bool,uint8,uint8) (runs: 1000, μ: 52676, ~: 52672)
+[PASS] testFuzz_activityBreakdown_reconcilesToAggregate(uint24,uint24,uint24,uint24,uint8,bool,uint24,uint8,uint8,uint24,uint32,bool) (runs: 1000, μ: 210229, ~: 210291)
+[PASS] testFuzz_decBurnOf(uint24,uint64,address,uint64,uint32) (runs: 1000, μ: 262388, ~: 262509)
+[PASS] testFuzz_decRound(uint24,(uint96,uint40,uint64,uint24,uint8,uint8,uint8,uint8,uint64,uint64,uint24)) (runs: 1000, μ: 97273, ~: 97257)
+[PASS] testFuzz_decSettleCursorOf(uint24,uint24) (runs: 1000, μ: 62871, ~: 62914)
+[PASS] testFuzz_decWinner(uint24,uint8,uint256,uint192,uint64,address,bool,uint40) (runs: 1000, μ: 718728, ~: 718778)
+[PASS] testFuzz_foilRecordOf(uint24,address,uint24,uint16,uint16,uint8) (runs: 1000, μ: 126051, ~: 126109)
+[PASS] testFuzz_levelDgnrsInfo(uint24,uint128,uint128) (runs: 1000, μ: 63815, ~: 63811)
+[PASS] testFuzz_subInfoFull_decodesWrittenRecord(address,uint8,uint8,uint16,uint24,uint24,uint24,uint24,uint24,uint32,uint24,uint16) (runs: 1000, μ: 170805, ~: 170928)
+[PASS] testFuzz_subInfoFull_effectiveStreak_afkingParity(uint24,uint24,uint24,uint16,uint32,uint48,bool) (runs: 1000, μ: 238459, ~: 211302)
+[PASS] test_RegistryOwedWritesPreserveLensSlots() (gas: 2325694)
+Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 1.60s (10.65s CPU time)
+
+Ran 16 tests for test/fuzz/SdgnrsAutoDecimator.t.sol:SdgnrsAutoDecimatorTest
+[PASS] testFuzz_BankrollCapAndMinimum(uint256) (runs: 1000, μ: 455003, ~: 470196)
+[PASS] test_CenturyOpeningTargetsLevel100() (gas: 1323968)
+[PASS] test_ConsumesClaimablesBeforeCarry() (gas: 524542)
+[PASS] test_EmptyBackingSkipsAndStillOpensCraps() (gas: 637702)
+[PASS] test_ManualBurnUsesFullMultiplierAndLateTopupDecay() (gas: 1076892)
+[PASS] test_ManualMinimumIncludesEveryTopup() (gas: 1099983)
+[PASS] test_MinimumEntryCompletesDecimatorQuest() (gas: 568842)
+[PASS] test_NoOpeningLatchLeavesBackingForCraps() (gas: 682408)
+[PASS] test_OnlyGameMaySpendHouseBacking() (gas: 54339)
+[PASS] test_OpeningBurnsCarryBeforeCrapsAndCompletesTodaysQuest() (gas: 1037403)
+[PASS] test_PendingLossCannotEscapeIntoDecimator() (gas: 1291391)
+[PASS] test_PreviousReferenceAboveOldCapControlsOpeningBurn() (gas: 932132)
+[PASS] test_RealAdvanceGameReachesTheOpeningEntry() (gas: 1417350)
+[PASS] test_RepeatedAdvancesCannotBurnTwice() (gas: 1634649)
+[PASS] test_SubminimumReferenceSkipsWithoutConsuming() (gas: 292457)
+[PASS] test_UnderfundedAttemptCannotRetryInTheSameWindow() (gas: 4771925)
+Suite result: ok. 16 passed; 0 failed; 0 skipped; finished in 1.60s (1.38s CPU time)
+
+Ran 20 tests for test/fuzz/MinerNoProgress.t.sol:MinerNoProgressTest
+[PASS] test_DailyJackpotIsExcludedAndDayRolloverAdvancesOnce() (gas: 11203942)
+[PASS] test_EveryResultWorkerStopsOnUnchangedDoneOrGasCheckpoint() (gas: 2650382)
+[PASS] test_ExhaustedWorkerGasRevertsWithoutWorkAndKeepsAUsefulPrefix() (gas: 425654)
+[PASS] test_GrowthSettleClearsItsBitOnlyWhenDone() (gas: 383646)
+[PASS] test_GrowthSettleRejectsGasBeforeCallingParimutuel() (gas: 196661)
+[PASS] test_GrowthSettleSelectedAfterRequestDailyAndBeforeRequestMidday() (gas: 428068)
+[PASS] test_IdleAndWaitRevertBeforeDispatchAtLowAndHighGas() (gas: 346899)
+[PASS] test_IndivisibleActionsRejectGasBeforeCallingTheirWorker() (gas: 927829)
+[PASS] test_IneligibleOptionalRequestIsNeverAttempted() (gas: 581260)
+[PASS] test_IneligibleOptionalRequestKeepsEarlierWorkWithoutAttempt() (gas: 378636)
+[PASS] test_InvariantFailureStillRollsBackEarlierWork() (gas: 248326)
+[PASS] test_LapsedRefundsMatchAcrossGasLimitsIncluding167M() (gas: 23637291)
+[PASS] test_MaintenanceCannotBypassAnOutstandingRngRequest() (gas: 10924839)
+[PASS] test_ObservedMaintenanceDoneWithoutProgressStopsAfterOneDispatch() (gas: 232415)
+[PASS] test_OptionalRequestRefusalsBubbleWithoutWorkButKeepCertification() (gas: 1091091)
+[PASS] test_RealMaintenanceAtEveryWindowBoundaryAndIdleBeforeClose() (gas: 13476453)
+[PASS] test_TerminalLatchCommitsOnceThenWaitingRevertsEarly() (gas: 8892188)
+[PASS] test_TerminalLowGasCannotMasqueradeAsWork() (gas: 8732149)
+[PASS] test_TerminalRefusalTimerIsRealOnlyOnItsFirstWrite() (gas: 9052401)
+[PASS] test_UsefulCertificationCommitsWhenNextWorkerDeclines() (gas: 646395)
+Suite result: ok. 20 passed; 0 failed; 0 skipped; finished in 1.60s (26.57ms CPU time)
+
+Ran 23 tests for test/fuzz/DecimatorJackpotIntegration.t.sol:DecimatorJackpotIntegrationTest
+[PASS] testFuzz_LensPlanPacking(uint24,(uint128,uint64,uint40,uint16,uint8)) (runs: 1000, μ: 68364, ~: 68335)
+[PASS] testFuzz_PartialFundingAndFixedAllocation(uint40,uint96,uint96) (runs: 1000, μ: 977661, ~: 921932)
+[PASS] testFuzz_SharedHeapMatchesIndependentFieldAndConservesPool(uint8,uint256) (runs: 1000, μ: 6872498, ~: 4674833)
+[PASS] testFuzz_SoloPassConservationAndExcludedAllocation(uint96,uint96,uint40,uint8,uint256) (runs: 1000, μ: 14004522, ~: 7263682)
+[PASS] test_AllTiedScoresAndLensMatchSharedIdentityOrder() (gas: 523200487)
+[PASS] test_EmptyCohortsDoNotContributeOrDraw() (gas: 4713443)
+[PASS] test_EmptySoloAndMixedCohortsFinishAndSweepUnpaidBudget() (gas: 5352781)
+[PASS] test_FailedPreferenceLookupRevertsItemWithoutRepeatingFunding() (gas: 1081885)
+[PASS] test_MatchMayReduceSoloBelowPassThreshold() (gas: 1972419)
+[PASS] test_NoCandidateRunsBeforeFinalFieldIsFixed() (gas: 2112867)
+[PASS] test_NoNonSoloCohortCannotGenerateFromSoloExcess() (gas: 810574)
+[PASS] test_OneOriginalGetsFinalCapacityOnlyAfterGeneratedPlan() (gas: 1056050)
+[PASS] test_OneOriginalWithoutMatchSamplesOneButPaysNobody() (gas: 945148)
+[PASS] test_PinnedThousandEthExampleFundsOnceBeforeAnyOriginal() (gas: 27497220)
+[PASS] test_RealEnginePreferredBoardsAndCallerPartitionsKeepTranscript() (gas: 29683160)
+[PASS] test_RealPreferredBoardCannotChangeWhileGeneratedWorkIsPending() (gas: 10812573)
+[PASS] test_RepeatedRecipientKeepsSeparateRunKeysAndFrozenChips() (gas: 11686493)
+[PASS] test_SoloAtPassThresholdRetainsOneWholePass() (gas: 2000917)
+[PASS] test_SoloBelowPassThresholdKeepsNormalShareAndSweepsSurplus() (gas: 1987572)
+[PASS] test_UncappedFullMatchThroughUint40Maximum() (gas: 10266906)
+[PASS] test_UncappedGeneratedFieldMatchesIndependentTop200() (gas: 768298740)
+[PASS] test_ZeroEntriesAndSubWeiReferenceStillUseWholeEntryMath() (gas: 3800358)
+[PASS] test_ZeroReferenceKeepsNormalCashAndPassFallback() (gas: 5922798)
+Suite result: ok. 23 passed; 0 failed; 0 skipped; finished in 1.60s (6.60s CPU time)
+
+Ran 22 test suites in 1.60s (10.65s CPU time): 150 tests passed, 0 failed, 0 skipped (150 total tests)

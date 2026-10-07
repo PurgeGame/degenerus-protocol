@@ -858,7 +858,7 @@ contract CrapsPassesTest is CrapsPins {
 
     event CrapsDayWindowsUpgraded(uint32 indexed playerId, uint24 indexed day, uint8 upgradedMask, uint256 burned);
 
-    uint256 internal constant DAYHIGH_MASK = 0x3F << 217;
+    uint256 internal constant DAYHIGH_MASK = 0x3F << 65;
 
     /// @dev A normal reservation on a future day swaps to the high lane for one banked high
     ///      credit, and the normal credit it was taken with comes back: the bet word carries the

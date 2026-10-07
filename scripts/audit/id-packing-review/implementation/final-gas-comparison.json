@@ -1,0 +1,2395 @@
+{
+  "method": "Isolated production calls, solc 0.8.34, viaIR, optimizer 1000, Osaka. Lifecycle Sample charged = execution gas minus capped positive refund. Intrinsic gas and unmeasured fixture/RNG setup excluded. Range metrics use snapshotGasLastCall for complete public calls, not a synthetic storage loop. Write slots cover the Sample target contract only, not every callee.",
+  "metrics": {
+    "deity-buy-100": {
+      "baseline": 2234858,
+      "candidate": 2107391,
+      "saved": 127467,
+      "percent_saved": 5.7036
+    },
+    "lazy-buy-10": {
+      "baseline": 555940,
+      "candidate": 548399,
+      "saved": 7541,
+      "percent_saved": 1.3564
+    },
+    "claim-stride4-25": {
+      "baseline": 684051,
+      "candidate": 664452,
+      "saved": 19599,
+      "percent_saved": 2.8651
+    },
+    "claim-mixed-175": {
+      "baseline": 1741202,
+      "candidate": 1599350,
+      "saved": 141852,
+      "percent_saved": 8.1468
+    },
+    "claim-mixed-75": {
+      "baseline": 1303080,
+      "candidate": 1238913,
+      "saved": 64167,
+      "percent_saved": 4.9243
+    },
+    "claim-stride2-50": {
+      "baseline": 992409,
+      "candidate": 948635,
+      "saved": 43774,
+      "percent_saved": 4.4109
+    },
+    "claim-100": {
+      "baseline": 1613028,
+      "candidate": 1529268,
+      "saved": 83760,
+      "percent_saved": 5.1927
+    },
+    "claim-topup-100": {
+      "baseline": 502353,
+      "candidate": 419620,
+      "saved": 82733,
+      "percent_saved": 16.4691
+    },
+    "craps-one-fresh-place-1": {
+      "baseline": 190444,
+      "candidate": 190951,
+      "saved": -507,
+      "percent_saved": -0.2662
+    },
+    "craps-one-fresh-amend": {
+      "baseline": 50162,
+      "candidate": 51110,
+      "saved": -948,
+      "percent_saved": -1.8899
+    },
+    "craps-one-fresh-resolve-window-1": {
+      "baseline": 427604,
+      "candidate": 427183,
+      "saved": 421,
+      "percent_saved": 0.0985
+    },
+    "craps-one-fresh-resolve-window-2": {
+      "baseline": 352461,
+      "candidate": 352040,
+      "saved": 421,
+      "percent_saved": 0.1194
+    },
+    "craps-one-fresh-resolve-window-3": {
+      "baseline": 295769,
+      "candidate": 295348,
+      "saved": 421,
+      "percent_saved": 0.1423
+    },
+    "craps-one-fresh-resolve-window-4": {
+      "baseline": 342555,
+      "candidate": 342134,
+      "saved": 421,
+      "percent_saved": 0.1229
+    },
+    "craps-one-fresh-resolve-window-5": {
+      "baseline": 275758,
+      "candidate": 275337,
+      "saved": 421,
+      "percent_saved": 0.1527
+    },
+    "craps-one-fresh-lifecycle": {
+      "baseline": 1934753,
+      "candidate": 1934103,
+      "saved": 650,
+      "percent_saved": 0.0336
+    },
+    "craps-one-reused-place-1": {
+      "baseline": 118799,
+      "candidate": 119306,
+      "saved": -507,
+      "percent_saved": -0.4268
+    },
+    "craps-one-reused-amend": {
+      "baseline": 50248,
+      "candidate": 51196,
+      "saved": -948,
+      "percent_saved": -1.8866
+    },
+    "craps-one-reused-resolve-window-1": {
+      "baseline": 429669,
+      "candidate": 429248,
+      "saved": 421,
+      "percent_saved": 0.098
+    },
+    "craps-one-reused-resolve-window-2": {
+      "baseline": 285128,
+      "candidate": 284707,
+      "saved": 421,
+      "percent_saved": 0.1477
+    },
+    "craps-one-reused-resolve-window-3": {
+      "baseline": 338227,
+      "candidate": 337806,
+      "saved": 421,
+      "percent_saved": 0.1245
+    },
+    "craps-one-reused-resolve-window-4": {
+      "baseline": 298129,
+      "candidate": 297708,
+      "saved": 421,
+      "percent_saved": 0.1412
+    },
+    "craps-one-reused-resolve-window-5": {
+      "baseline": 369801,
+      "candidate": 369404,
+      "saved": 397,
+      "percent_saved": 0.1074
+    },
+    "craps-one-reused-lifecycle": {
+      "baseline": 1890001,
+      "candidate": 1889375,
+      "saved": 626,
+      "percent_saved": 0.0331
+    },
+    "craps-three-fresh-place-1": {
+      "baseline": 190444,
+      "candidate": 190951,
+      "saved": -507,
+      "percent_saved": -0.2662
+    },
+    "craps-three-fresh-place-2": {
+      "baseline": 173344,
+      "candidate": 156824,
+      "saved": 16520,
+      "percent_saved": 9.5302
+    },
+    "craps-three-fresh-place-3": {
+      "baseline": 173344,
+      "candidate": 156824,
+      "saved": 16520,
+      "percent_saved": 9.5302
+    },
+    "craps-three-fresh-amend": {
+      "baseline": 50162,
+      "candidate": 51110,
+      "saved": -948,
+      "percent_saved": -1.8899
+    },
+    "craps-three-fresh-resolve-window-1": {
+      "baseline": 560031,
+      "candidate": 558660,
+      "saved": 1371,
+      "percent_saved": 0.2448
+    },
+    "craps-three-fresh-resolve-window-2": {
+      "baseline": 473721,
+      "candidate": 472350,
+      "saved": 1371,
+      "percent_saved": 0.2894
+    },
+    "craps-three-fresh-resolve-window-3": {
+      "baseline": 400693,
+      "candidate": 399322,
+      "saved": 1371,
+      "percent_saved": 0.3422
+    },
+    "craps-three-fresh-resolve-window-4": {
+      "baseline": 478749,
+      "candidate": 477378,
+      "saved": 1371,
+      "percent_saved": 0.2864
+    },
+    "craps-three-fresh-resolve-window-5": {
+      "baseline": 354715,
+      "candidate": 353344,
+      "saved": 1371,
+      "percent_saved": 0.3865
+    },
+    "craps-three-fresh-lifecycle": {
+      "baseline": 2855203,
+      "candidate": 2816763,
+      "saved": 38440,
+      "percent_saved": 1.3463
+    },
+    "craps-three-reused-place-1": {
+      "baseline": 118799,
+      "candidate": 119306,
+      "saved": -507,
+      "percent_saved": -0.4268
+    },
+    "craps-three-reused-place-2": {
+      "baseline": 94290,
+      "candidate": 94858,
+      "saved": -568,
+      "percent_saved": -0.6024
+    },
+    "craps-three-reused-place-3": {
+      "baseline": 94290,
+      "candidate": 94858,
+      "saved": -568,
+      "percent_saved": -0.6024
+    },
+    "craps-three-reused-amend": {
+      "baseline": 50248,
+      "candidate": 51196,
+      "saved": -948,
+      "percent_saved": -1.8866
+    },
+    "craps-three-reused-resolve-window-1": {
+      "baseline": 598895,
+      "candidate": 597524,
+      "saved": 1371,
+      "percent_saved": 0.2289
+    },
+    "craps-three-reused-resolve-window-2": {
+      "baseline": 366264,
+      "candidate": 364893,
+      "saved": 1371,
+      "percent_saved": 0.3743
+    },
+    "craps-three-reused-resolve-window-3": {
+      "baseline": 479755,
+      "candidate": 478384,
+      "saved": 1371,
+      "percent_saved": 0.2858
+    },
+    "craps-three-reused-resolve-window-4": {
+      "baseline": 373415,
+      "candidate": 372044,
+      "saved": 1371,
+      "percent_saved": 0.3672
+    },
+    "craps-three-reused-resolve-window-5": {
+      "baseline": 489055,
+      "candidate": 487708,
+      "saved": 1347,
+      "percent_saved": 0.2754
+    },
+    "craps-three-reused-lifecycle": {
+      "baseline": 2665011,
+      "candidate": 2660771,
+      "saved": 4240,
+      "percent_saved": 0.1591
+    },
+    "dec-burn-1": {
+      "baseline": 158501,
+      "candidate": 158752,
+      "saved": -251,
+      "percent_saved": -0.1584
+    },
+    "dec-burn-2": {
+      "baseline": 158501,
+      "candidate": 141652,
+      "saved": 16849,
+      "percent_saved": 10.6302
+    },
+    "dec-burn-3": {
+      "baseline": 158501,
+      "candidate": 158752,
+      "saved": -251,
+      "percent_saved": -0.1584
+    },
+    "dec-topup": {
+      "baseline": 100870,
+      "candidate": 101420,
+      "saved": -550,
+      "percent_saved": -0.5453
+    },
+    "deg-one-fresh-place-1": {
+      "baseline": 117383,
+      "candidate": 117560,
+      "saved": -177,
+      "percent_saved": -0.1508
+    },
+    "deg-one-fresh-resolve": {
+      "baseline": 114059,
+      "candidate": 111840,
+      "saved": 2219,
+      "percent_saved": 1.9455
+    },
+    "deg-one-fresh-lifecycle": {
+      "baseline": 231442,
+      "candidate": 229400,
+      "saved": 2042,
+      "percent_saved": 0.8823
+    },
+    "deg-one-reused-place-1": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-one-reused-resolve": {
+      "baseline": 114059,
+      "candidate": 111840,
+      "saved": 2219,
+      "percent_saved": 1.9455
+    },
+    "deg-one-reused-lifecycle": {
+      "baseline": 194008,
+      "candidate": 189166,
+      "saved": 4842,
+      "percent_saved": 2.4958
+    },
+    "deg-32-fresh-place-1": {
+      "baseline": 117383,
+      "candidate": 117560,
+      "saved": -177,
+      "percent_saved": -0.1508
+    },
+    "deg-32-fresh-place-2": {
+      "baseline": 97049,
+      "candidate": 80126,
+      "saved": 16923,
+      "percent_saved": 17.4376
+    },
+    "deg-32-fresh-place-3": {
+      "baseline": 97049,
+      "candidate": 97226,
+      "saved": -177,
+      "percent_saved": -0.1824
+    },
+    "deg-32-fresh-place-4": {
+      "baseline": 97049,
+      "candidate": 80126,
+      "saved": 16923,
+      "percent_saved": 17.4376
+    },
+    "deg-32-fresh-place-5": {
+      "baseline": 97049,
+      "candidate": 97226,
+      "saved": -177,
+      "percent_saved": -0.1824
+    },
+    "deg-32-fresh-place-6": {
+      "baseline": 97049,
+      "candidate": 80126,
+      "saved": 16923,
+      "percent_saved": 17.4376
+    },
+    "deg-32-fresh-place-7": {
+      "baseline": 97049,
+      "candidate": 97226,
+      "saved": -177,
+      "percent_saved": -0.1824
+    },
+    "deg-32-fresh-place-8": {
+      "baseline": 97049,
+      "candidate": 80126,
+      "saved": 16923,
+      "percent_saved": 17.4376
+    },
+    "deg-32-fresh-place-9": {
+      "baseline": 97049,
+      "candidate": 97226,
+      "saved": -177,
+      "percent_saved": -0.1824
+    },
+    "deg-32-fresh-place-10": {
+      "baseline": 97049,
+      "candidate": 80126,
+      "saved": 16923,
+      "percent_saved": 17.4376
+    },
+    "deg-32-fresh-place-11": {
+      "baseline": 97049,
+      "candidate": 97226,
+      "saved": -177,
+      "percent_saved": -0.1824
+    },
+    "deg-32-fresh-place-12": {
+      "baseline": 97049,
+      "candidate": 80126,
+      "saved": 16923,
+      "percent_saved": 17.4376
+    },
+    "deg-32-fresh-place-13": {
+      "baseline": 97049,
+      "candidate": 97226,
+      "saved": -177,
+      "percent_saved": -0.1824
+    },
+    "deg-32-fresh-place-14": {
+      "baseline": 97049,
+      "candidate": 80126,
+      "saved": 16923,
+      "percent_saved": 17.4376
+    },
+    "deg-32-fresh-place-15": {
+      "baseline": 97049,
+      "candidate": 97226,
+      "saved": -177,
+      "percent_saved": -0.1824
+    },
+    "deg-32-fresh-place-16": {
+      "baseline": 97049,
+      "candidate": 80126,
+      "saved": 16923,
+      "percent_saved": 17.4376
+    },
+    "deg-32-fresh-place-17": {
+      "baseline": 97049,
+      "candidate": 97226,
+      "saved": -177,
+      "percent_saved": -0.1824
+    },
+    "deg-32-fresh-place-18": {
+      "baseline": 97049,
+      "candidate": 80126,
+      "saved": 16923,
+      "percent_saved": 17.4376
+    },
+    "deg-32-fresh-place-19": {
+      "baseline": 97049,
+      "candidate": 97226,
+      "saved": -177,
+      "percent_saved": -0.1824
+    },
+    "deg-32-fresh-place-20": {
+      "baseline": 97049,
+      "candidate": 80126,
+      "saved": 16923,
+      "percent_saved": 17.4376
+    },
+    "deg-32-fresh-place-21": {
+      "baseline": 97049,
+      "candidate": 97226,
+      "saved": -177,
+      "percent_saved": -0.1824
+    },
+    "deg-32-fresh-place-22": {
+      "baseline": 97049,
+      "candidate": 80126,
+      "saved": 16923,
+      "percent_saved": 17.4376
+    },
+    "deg-32-fresh-place-23": {
+      "baseline": 97049,
+      "candidate": 97226,
+      "saved": -177,
+      "percent_saved": -0.1824
+    },
+    "deg-32-fresh-place-24": {
+      "baseline": 97049,
+      "candidate": 80126,
+      "saved": 16923,
+      "percent_saved": 17.4376
+    },
+    "deg-32-fresh-place-25": {
+      "baseline": 97049,
+      "candidate": 97226,
+      "saved": -177,
+      "percent_saved": -0.1824
+    },
+    "deg-32-fresh-place-26": {
+      "baseline": 97049,
+      "candidate": 80126,
+      "saved": 16923,
+      "percent_saved": 17.4376
+    },
+    "deg-32-fresh-place-27": {
+      "baseline": 97049,
+      "candidate": 97226,
+      "saved": -177,
+      "percent_saved": -0.1824
+    },
+    "deg-32-fresh-place-28": {
+      "baseline": 97049,
+      "candidate": 80126,
+      "saved": 16923,
+      "percent_saved": 17.4376
+    },
+    "deg-32-fresh-place-29": {
+      "baseline": 97049,
+      "candidate": 97226,
+      "saved": -177,
+      "percent_saved": -0.1824
+    },
+    "deg-32-fresh-place-30": {
+      "baseline": 97049,
+      "candidate": 80126,
+      "saved": 16923,
+      "percent_saved": 17.4376
+    },
+    "deg-32-fresh-place-31": {
+      "baseline": 97049,
+      "candidate": 97226,
+      "saved": -177,
+      "percent_saved": -0.1824
+    },
+    "deg-32-fresh-place-32": {
+      "baseline": 97049,
+      "candidate": 80126,
+      "saved": 16923,
+      "percent_saved": 17.4376
+    },
+    "deg-32-fresh-resolve": {
+      "baseline": 503044,
+      "candidate": 391976,
+      "saved": 111068,
+      "percent_saved": 22.0792
+    },
+    "deg-32-fresh-lifecycle": {
+      "baseline": 3628946,
+      "candidate": 3249942,
+      "saved": 379004,
+      "percent_saved": 10.4439
+    },
+    "deg-32-reused-place-1": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-2": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-3": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-4": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-5": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-6": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-7": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-8": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-9": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-10": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-11": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-12": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-13": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-14": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-15": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-16": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-17": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-18": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-19": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-20": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-21": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-22": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-23": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-24": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-25": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-26": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-27": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-28": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-29": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-30": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-31": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-place-32": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-32-reused-resolve": {
+      "baseline": 503044,
+      "candidate": 391976,
+      "saved": 111068,
+      "percent_saved": 22.0792
+    },
+    "deg-32-reused-lifecycle": {
+      "baseline": 3061412,
+      "candidate": 2866408,
+      "saved": 195004,
+      "percent_saved": 6.3697
+    },
+    "deg-three-fresh-place-1": {
+      "baseline": 117383,
+      "candidate": 117560,
+      "saved": -177,
+      "percent_saved": -0.1508
+    },
+    "deg-three-fresh-place-2": {
+      "baseline": 97049,
+      "candidate": 80126,
+      "saved": 16923,
+      "percent_saved": 17.4376
+    },
+    "deg-three-fresh-place-3": {
+      "baseline": 97049,
+      "candidate": 97226,
+      "saved": -177,
+      "percent_saved": -0.1824
+    },
+    "deg-three-fresh-resolve": {
+      "baseline": 139133,
+      "candidate": 129956,
+      "saved": 9177,
+      "percent_saved": 6.5958
+    },
+    "deg-three-fresh-lifecycle": {
+      "baseline": 450614,
+      "candidate": 424868,
+      "saved": 25746,
+      "percent_saved": 5.7135
+    },
+    "deg-three-reused-place-1": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-three-reused-place-2": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-three-reused-place-3": {
+      "baseline": 79949,
+      "candidate": 77326,
+      "saved": 2623,
+      "percent_saved": 3.2808
+    },
+    "deg-three-reused-resolve": {
+      "baseline": 139133,
+      "candidate": 129956,
+      "saved": 9177,
+      "percent_saved": 6.5958
+    },
+    "deg-three-reused-lifecycle": {
+      "baseline": 378980,
+      "candidate": 361934,
+      "saved": 17046,
+      "percent_saved": 4.4979
+    }
+  },
+  "samples": {
+    "craps-one-fresh-place-1": {
+      "baseline": {
+        "gross": 190444,
+        "refund_counter": 0,
+        "charged": 190444,
+        "target_write_slots": 4
+      },
+      "candidate": {
+        "gross": 190951,
+        "refund_counter": 0,
+        "charged": 190951,
+        "target_write_slots": 4
+      }
+    },
+    "craps-one-fresh-amend": {
+      "baseline": {
+        "gross": 50162,
+        "refund_counter": 0,
+        "charged": 50162,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 51110,
+        "refund_counter": 0,
+        "charged": 51110,
+        "target_write_slots": 2
+      }
+    },
+    "craps-one-fresh-resolve-window-1": {
+      "baseline": {
+        "gross": 427604,
+        "refund_counter": 0,
+        "charged": 427604,
+        "target_write_slots": 8
+      },
+      "candidate": {
+        "gross": 427183,
+        "refund_counter": 0,
+        "charged": 427183,
+        "target_write_slots": 8
+      }
+    },
+    "craps-one-fresh-resolve-window-2": {
+      "baseline": {
+        "gross": 352461,
+        "refund_counter": 0,
+        "charged": 352461,
+        "target_write_slots": 8
+      },
+      "candidate": {
+        "gross": 352040,
+        "refund_counter": 0,
+        "charged": 352040,
+        "target_write_slots": 8
+      }
+    },
+    "craps-one-fresh-resolve-window-3": {
+      "baseline": {
+        "gross": 295769,
+        "refund_counter": 0,
+        "charged": 295769,
+        "target_write_slots": 8
+      },
+      "candidate": {
+        "gross": 295348,
+        "refund_counter": 0,
+        "charged": 295348,
+        "target_write_slots": 8
+      }
+    },
+    "craps-one-fresh-resolve-window-4": {
+      "baseline": {
+        "gross": 342555,
+        "refund_counter": 0,
+        "charged": 342555,
+        "target_write_slots": 8
+      },
+      "candidate": {
+        "gross": 342134,
+        "refund_counter": 0,
+        "charged": 342134,
+        "target_write_slots": 8
+      }
+    },
+    "craps-one-fresh-resolve-window-5": {
+      "baseline": {
+        "gross": 280558,
+        "refund_counter": 4800,
+        "charged": 275758,
+        "target_write_slots": 8
+      },
+      "candidate": {
+        "gross": 280137,
+        "refund_counter": 4800,
+        "charged": 275337,
+        "target_write_slots": 8
+      }
+    },
+    "craps-one-reused-place-1": {
+      "baseline": {
+        "gross": 118799,
+        "refund_counter": 0,
+        "charged": 118799,
+        "target_write_slots": 4
+      },
+      "candidate": {
+        "gross": 119306,
+        "refund_counter": 0,
+        "charged": 119306,
+        "target_write_slots": 4
+      }
+    },
+    "craps-one-reused-amend": {
+      "baseline": {
+        "gross": 50248,
+        "refund_counter": 0,
+        "charged": 50248,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 51196,
+        "refund_counter": 0,
+        "charged": 51196,
+        "target_write_slots": 2
+      }
+    },
+    "craps-one-reused-resolve-window-1": {
+      "baseline": {
+        "gross": 429669,
+        "refund_counter": 0,
+        "charged": 429669,
+        "target_write_slots": 8
+      },
+      "candidate": {
+        "gross": 429248,
+        "refund_counter": 0,
+        "charged": 429248,
+        "target_write_slots": 8
+      }
+    },
+    "craps-one-reused-resolve-window-2": {
+      "baseline": {
+        "gross": 285128,
+        "refund_counter": 0,
+        "charged": 285128,
+        "target_write_slots": 8
+      },
+      "candidate": {
+        "gross": 284707,
+        "refund_counter": 0,
+        "charged": 284707,
+        "target_write_slots": 8
+      }
+    },
+    "craps-one-reused-resolve-window-3": {
+      "baseline": {
+        "gross": 338227,
+        "refund_counter": 0,
+        "charged": 338227,
+        "target_write_slots": 8
+      },
+      "candidate": {
+        "gross": 337806,
+        "refund_counter": 0,
+        "charged": 337806,
+        "target_write_slots": 8
+      }
+    },
+    "craps-one-reused-resolve-window-4": {
+      "baseline": {
+        "gross": 298129,
+        "refund_counter": 0,
+        "charged": 298129,
+        "target_write_slots": 8
+      },
+      "candidate": {
+        "gross": 297708,
+        "refund_counter": 0,
+        "charged": 297708,
+        "target_write_slots": 8
+      }
+    },
+    "craps-one-reused-resolve-window-5": {
+      "baseline": {
+        "gross": 374601,
+        "refund_counter": 4800,
+        "charged": 369801,
+        "target_write_slots": 8
+      },
+      "candidate": {
+        "gross": 374204,
+        "refund_counter": 4800,
+        "charged": 369404,
+        "target_write_slots": 8
+      }
+    },
+    "craps-three-fresh-place-1": {
+      "baseline": {
+        "gross": 190444,
+        "refund_counter": 0,
+        "charged": 190444,
+        "target_write_slots": 4
+      },
+      "candidate": {
+        "gross": 190951,
+        "refund_counter": 0,
+        "charged": 190951,
+        "target_write_slots": 4
+      }
+    },
+    "craps-three-fresh-place-2": {
+      "baseline": {
+        "gross": 173344,
+        "refund_counter": 0,
+        "charged": 173344,
+        "target_write_slots": 4
+      },
+      "candidate": {
+        "gross": 156824,
+        "refund_counter": 0,
+        "charged": 156824,
+        "target_write_slots": 4
+      }
+    },
+    "craps-three-fresh-place-3": {
+      "baseline": {
+        "gross": 173344,
+        "refund_counter": 0,
+        "charged": 173344,
+        "target_write_slots": 4
+      },
+      "candidate": {
+        "gross": 156824,
+        "refund_counter": 0,
+        "charged": 156824,
+        "target_write_slots": 4
+      }
+    },
+    "craps-three-fresh-amend": {
+      "baseline": {
+        "gross": 50162,
+        "refund_counter": 0,
+        "charged": 50162,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 51110,
+        "refund_counter": 0,
+        "charged": 51110,
+        "target_write_slots": 2
+      }
+    },
+    "craps-three-fresh-resolve-window-1": {
+      "baseline": {
+        "gross": 560031,
+        "refund_counter": 0,
+        "charged": 560031,
+        "target_write_slots": 10
+      },
+      "candidate": {
+        "gross": 558660,
+        "refund_counter": 0,
+        "charged": 558660,
+        "target_write_slots": 10
+      }
+    },
+    "craps-three-fresh-resolve-window-2": {
+      "baseline": {
+        "gross": 473721,
+        "refund_counter": 0,
+        "charged": 473721,
+        "target_write_slots": 10
+      },
+      "candidate": {
+        "gross": 472350,
+        "refund_counter": 0,
+        "charged": 472350,
+        "target_write_slots": 10
+      }
+    },
+    "craps-three-fresh-resolve-window-3": {
+      "baseline": {
+        "gross": 400693,
+        "refund_counter": 0,
+        "charged": 400693,
+        "target_write_slots": 10
+      },
+      "candidate": {
+        "gross": 399322,
+        "refund_counter": 0,
+        "charged": 399322,
+        "target_write_slots": 10
+      }
+    },
+    "craps-three-fresh-resolve-window-4": {
+      "baseline": {
+        "gross": 478749,
+        "refund_counter": 0,
+        "charged": 478749,
+        "target_write_slots": 10
+      },
+      "candidate": {
+        "gross": 477378,
+        "refund_counter": 0,
+        "charged": 477378,
+        "target_write_slots": 10
+      }
+    },
+    "craps-three-fresh-resolve-window-5": {
+      "baseline": {
+        "gross": 359515,
+        "refund_counter": 4800,
+        "charged": 354715,
+        "target_write_slots": 10
+      },
+      "candidate": {
+        "gross": 358144,
+        "refund_counter": 4800,
+        "charged": 353344,
+        "target_write_slots": 10
+      }
+    },
+    "craps-three-reused-place-1": {
+      "baseline": {
+        "gross": 118799,
+        "refund_counter": 0,
+        "charged": 118799,
+        "target_write_slots": 4
+      },
+      "candidate": {
+        "gross": 119306,
+        "refund_counter": 0,
+        "charged": 119306,
+        "target_write_slots": 4
+      }
+    },
+    "craps-three-reused-place-2": {
+      "baseline": {
+        "gross": 94290,
+        "refund_counter": 0,
+        "charged": 94290,
+        "target_write_slots": 3
+      },
+      "candidate": {
+        "gross": 94858,
+        "refund_counter": 0,
+        "charged": 94858,
+        "target_write_slots": 3
+      }
+    },
+    "craps-three-reused-place-3": {
+      "baseline": {
+        "gross": 94290,
+        "refund_counter": 0,
+        "charged": 94290,
+        "target_write_slots": 3
+      },
+      "candidate": {
+        "gross": 94858,
+        "refund_counter": 0,
+        "charged": 94858,
+        "target_write_slots": 3
+      }
+    },
+    "craps-three-reused-amend": {
+      "baseline": {
+        "gross": 50248,
+        "refund_counter": 0,
+        "charged": 50248,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 51196,
+        "refund_counter": 0,
+        "charged": 51196,
+        "target_write_slots": 2
+      }
+    },
+    "craps-three-reused-resolve-window-1": {
+      "baseline": {
+        "gross": 598895,
+        "refund_counter": 0,
+        "charged": 598895,
+        "target_write_slots": 10
+      },
+      "candidate": {
+        "gross": 597524,
+        "refund_counter": 0,
+        "charged": 597524,
+        "target_write_slots": 10
+      }
+    },
+    "craps-three-reused-resolve-window-2": {
+      "baseline": {
+        "gross": 366264,
+        "refund_counter": 0,
+        "charged": 366264,
+        "target_write_slots": 10
+      },
+      "candidate": {
+        "gross": 364893,
+        "refund_counter": 0,
+        "charged": 364893,
+        "target_write_slots": 10
+      }
+    },
+    "craps-three-reused-resolve-window-3": {
+      "baseline": {
+        "gross": 479755,
+        "refund_counter": 0,
+        "charged": 479755,
+        "target_write_slots": 10
+      },
+      "candidate": {
+        "gross": 478384,
+        "refund_counter": 0,
+        "charged": 478384,
+        "target_write_slots": 10
+      }
+    },
+    "craps-three-reused-resolve-window-4": {
+      "baseline": {
+        "gross": 373415,
+        "refund_counter": 0,
+        "charged": 373415,
+        "target_write_slots": 10
+      },
+      "candidate": {
+        "gross": 372044,
+        "refund_counter": 0,
+        "charged": 372044,
+        "target_write_slots": 10
+      }
+    },
+    "craps-three-reused-resolve-window-5": {
+      "baseline": {
+        "gross": 493855,
+        "refund_counter": 4800,
+        "charged": 489055,
+        "target_write_slots": 10
+      },
+      "candidate": {
+        "gross": 492508,
+        "refund_counter": 4800,
+        "charged": 487708,
+        "target_write_slots": 10
+      }
+    },
+    "dec-burn-1": {
+      "baseline": {
+        "gross": 158501,
+        "refund_counter": 0,
+        "charged": 158501,
+        "target_write_slots": 4
+      },
+      "candidate": {
+        "gross": 158752,
+        "refund_counter": 0,
+        "charged": 158752,
+        "target_write_slots": 4
+      }
+    },
+    "dec-burn-2": {
+      "baseline": {
+        "gross": 158501,
+        "refund_counter": 0,
+        "charged": 158501,
+        "target_write_slots": 4
+      },
+      "candidate": {
+        "gross": 141652,
+        "refund_counter": 0,
+        "charged": 141652,
+        "target_write_slots": 4
+      }
+    },
+    "dec-burn-3": {
+      "baseline": {
+        "gross": 158501,
+        "refund_counter": 0,
+        "charged": 158501,
+        "target_write_slots": 4
+      },
+      "candidate": {
+        "gross": 158752,
+        "refund_counter": 0,
+        "charged": 158752,
+        "target_write_slots": 4
+      }
+    },
+    "dec-topup": {
+      "baseline": {
+        "gross": 100870,
+        "refund_counter": 0,
+        "charged": 100870,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 101420,
+        "refund_counter": 0,
+        "charged": 101420,
+        "target_write_slots": 2
+      }
+    },
+    "deg-one-fresh-place-1": {
+      "baseline": {
+        "gross": 117383,
+        "refund_counter": 0,
+        "charged": 117383,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 117560,
+        "refund_counter": 0,
+        "charged": 117560,
+        "target_write_slots": 2
+      }
+    },
+    "deg-one-fresh-resolve": {
+      "baseline": {
+        "gross": 114059,
+        "refund_counter": 0,
+        "charged": 114059,
+        "target_write_slots": 4
+      },
+      "candidate": {
+        "gross": 111840,
+        "refund_counter": 0,
+        "charged": 111840,
+        "target_write_slots": 3
+      }
+    },
+    "deg-one-reused-place-1": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-one-reused-resolve": {
+      "baseline": {
+        "gross": 114059,
+        "refund_counter": 0,
+        "charged": 114059,
+        "target_write_slots": 4
+      },
+      "candidate": {
+        "gross": 111840,
+        "refund_counter": 0,
+        "charged": 111840,
+        "target_write_slots": 3
+      }
+    },
+    "deg-32-fresh-place-1": {
+      "baseline": {
+        "gross": 117383,
+        "refund_counter": 0,
+        "charged": 117383,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 117560,
+        "refund_counter": 0,
+        "charged": 117560,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-2": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 80126,
+        "refund_counter": 0,
+        "charged": 80126,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-3": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 97226,
+        "refund_counter": 0,
+        "charged": 97226,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-4": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 80126,
+        "refund_counter": 0,
+        "charged": 80126,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-5": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 97226,
+        "refund_counter": 0,
+        "charged": 97226,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-6": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 80126,
+        "refund_counter": 0,
+        "charged": 80126,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-7": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 97226,
+        "refund_counter": 0,
+        "charged": 97226,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-8": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 80126,
+        "refund_counter": 0,
+        "charged": 80126,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-9": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 97226,
+        "refund_counter": 0,
+        "charged": 97226,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-10": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 80126,
+        "refund_counter": 0,
+        "charged": 80126,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-11": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 97226,
+        "refund_counter": 0,
+        "charged": 97226,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-12": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 80126,
+        "refund_counter": 0,
+        "charged": 80126,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-13": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 97226,
+        "refund_counter": 0,
+        "charged": 97226,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-14": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 80126,
+        "refund_counter": 0,
+        "charged": 80126,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-15": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 97226,
+        "refund_counter": 0,
+        "charged": 97226,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-16": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 80126,
+        "refund_counter": 0,
+        "charged": 80126,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-17": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 97226,
+        "refund_counter": 0,
+        "charged": 97226,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-18": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 80126,
+        "refund_counter": 0,
+        "charged": 80126,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-19": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 97226,
+        "refund_counter": 0,
+        "charged": 97226,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-20": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 80126,
+        "refund_counter": 0,
+        "charged": 80126,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-21": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 97226,
+        "refund_counter": 0,
+        "charged": 97226,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-22": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 80126,
+        "refund_counter": 0,
+        "charged": 80126,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-23": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 97226,
+        "refund_counter": 0,
+        "charged": 97226,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-24": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 80126,
+        "refund_counter": 0,
+        "charged": 80126,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-25": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 97226,
+        "refund_counter": 0,
+        "charged": 97226,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-26": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 80126,
+        "refund_counter": 0,
+        "charged": 80126,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-27": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 97226,
+        "refund_counter": 0,
+        "charged": 97226,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-28": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 80126,
+        "refund_counter": 0,
+        "charged": 80126,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-29": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 97226,
+        "refund_counter": 0,
+        "charged": 97226,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-30": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 80126,
+        "refund_counter": 0,
+        "charged": 80126,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-31": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 97226,
+        "refund_counter": 0,
+        "charged": 97226,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-place-32": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 80126,
+        "refund_counter": 0,
+        "charged": 80126,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-fresh-resolve": {
+      "baseline": {
+        "gross": 503044,
+        "refund_counter": 0,
+        "charged": 503044,
+        "target_write_slots": 35
+      },
+      "candidate": {
+        "gross": 391976,
+        "refund_counter": 0,
+        "charged": 391976,
+        "target_write_slots": 3
+      }
+    },
+    "deg-32-reused-place-1": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-2": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-3": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-4": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-5": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-6": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-7": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-8": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-9": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-10": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-11": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-12": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-13": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-14": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-15": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-16": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-17": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-18": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-19": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-20": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-21": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-22": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-23": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-24": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-25": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-26": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-27": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-28": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-29": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-30": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-31": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-place-32": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-32-reused-resolve": {
+      "baseline": {
+        "gross": 503044,
+        "refund_counter": 0,
+        "charged": 503044,
+        "target_write_slots": 35
+      },
+      "candidate": {
+        "gross": 391976,
+        "refund_counter": 0,
+        "charged": 391976,
+        "target_write_slots": 3
+      }
+    },
+    "deg-three-fresh-place-1": {
+      "baseline": {
+        "gross": 117383,
+        "refund_counter": 0,
+        "charged": 117383,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 117560,
+        "refund_counter": 0,
+        "charged": 117560,
+        "target_write_slots": 2
+      }
+    },
+    "deg-three-fresh-place-2": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 80126,
+        "refund_counter": 0,
+        "charged": 80126,
+        "target_write_slots": 2
+      }
+    },
+    "deg-three-fresh-place-3": {
+      "baseline": {
+        "gross": 97049,
+        "refund_counter": 0,
+        "charged": 97049,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 97226,
+        "refund_counter": 0,
+        "charged": 97226,
+        "target_write_slots": 2
+      }
+    },
+    "deg-three-fresh-resolve": {
+      "baseline": {
+        "gross": 139133,
+        "refund_counter": 0,
+        "charged": 139133,
+        "target_write_slots": 6
+      },
+      "candidate": {
+        "gross": 129956,
+        "refund_counter": 0,
+        "charged": 129956,
+        "target_write_slots": 3
+      }
+    },
+    "deg-three-reused-place-1": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-three-reused-place-2": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-three-reused-place-3": {
+      "baseline": {
+        "gross": 79949,
+        "refund_counter": 0,
+        "charged": 79949,
+        "target_write_slots": 2
+      },
+      "candidate": {
+        "gross": 77326,
+        "refund_counter": 0,
+        "charged": 77326,
+        "target_write_slots": 2
+      }
+    },
+    "deg-three-reused-resolve": {
+      "baseline": {
+        "gross": 139133,
+        "refund_counter": 0,
+        "charged": 139133,
+        "target_write_slots": 6
+      },
+      "candidate": {
+        "gross": 129956,
+        "refund_counter": 0,
+        "charged": 129956,
+        "target_write_slots": 3
+      }
+    }
+  }
+}

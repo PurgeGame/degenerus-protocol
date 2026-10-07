@@ -31,9 +31,9 @@ contract BudgetReadFixture is DegenerusGame {
     /// @dev The read buffer's first entry while the cursor has not passed it (0 once settled).
     function order() external view returns (uint256) { return boxCursor == 0 ? _boxEntryAt(_rngReadBuffer(), 0) : 0; }
     function cursor() external view returns (uint256) { return boxCursor; }
+    function betCursor() external view returns (uint256) { return degeneretteCursor; }
     function bet() external view returns (uint256 word) {
-        uint256 slot = _betSlot(_rngReadBuffer(), 0);
-        assembly ("memory-safe") { word := sload(slot) }
+        word = _loadDegeneretteBet(_rngReadBuffer(), 0);
     }
     function workHuman(uint256 allowance) external returns (MineFlipGas.Result memory) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
@@ -106,7 +106,8 @@ contract MineFlipHumanBudgetTest is DeployProtocol {
         result = host.workBet{gas: 10_000_000}(9_000_000);
         assertEq(result.rewardBasis, 1);
         assertTrue(result.done);
-        assertTrue(host.bet() != beforeBet);
+        assertEq(host.bet(), beforeBet, "resolution does not write the bet");
+        assertEq(host.betCursor(), 1);
     }
     function test_LowGasBoxCallWaitsForTheAtomicEntry() public {
         _queueWideBox();
@@ -145,8 +146,8 @@ contract BudgetDecimatorFixture is DecimatorBattleHarness {
         uint24 lvl = uint24(decBattleQueue);
         DecBattleRound storage round = decBattleRounds[lvl];
         require(round.count == 2 && round.cursor == 0 && round.phase == 1);
-        uint256 entry = decBattleEntries[(uint256(lvl) << 64) | 1];
-        decBattleHeap[0] = (((entry >> 190) * 3000e18) << 64) | 1;
+        uint256 entry = _loadDecEntry(lvl, uint64(1));
+        decBattleHeap[0] = (((entry >> 62) * 3000e18) << 64) | 1;
         round.cursor = 1;
         round.winners = 1;
         if (ranked) {

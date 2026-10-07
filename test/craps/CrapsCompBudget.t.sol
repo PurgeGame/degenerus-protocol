@@ -407,7 +407,7 @@ contract CrapsCompBudgetTest is CrapsPins {
         uint256 paid = craps.betWordOf(paidId);
         uint256 comp = craps.betWordOf(compId);
         assertEq(uint32(comp), game.walletIdOf(dave), "the comped seat belongs to somebody else");
-        assertEq(comp >> 160, paid >> 160, "the comped seat differs from the paid one above the owner");
+        assertEq(comp >> 32, paid >> 32, "the comped seat differs from the paid one above the owner");
     }
 
     function test_aCompedHighSeatCountsInTheHighLane() public {
@@ -437,8 +437,8 @@ contract CrapsCompBudgetTest is CrapsPins {
         assertEq(flip.compFor(dave), paid, "the lane was charged other than the day's price");
         assertTrue(craps.daySeatNumberOf(day, dave) != 0, "the recipient holds no day seat");
         assertEq(
-            craps.betWordOf(((uint256(day) * craps.BONUS_SLOTS_PER_DAY()) << 64) | craps.daySeatNumberOf(day, dave)) >> 160,
-            craps.betWordOf(((uint256(day) * craps.BONUS_SLOTS_PER_DAY()) << 64) | craps.daySeatNumberOf(day, bob)) >> 160,
+            craps.betWordOf(((uint256(day) * craps.BONUS_SLOTS_PER_DAY()) << 64) | craps.daySeatNumberOf(day, dave)) >> 32,
+            craps.betWordOf(((uint256(day) * craps.BONUS_SLOTS_PER_DAY()) << 64) | craps.daySeatNumberOf(day, bob)) >> 32,
             "the comped day seat differs from the paid one above the owner"
         );
     }

@@ -53,7 +53,8 @@ contract JackpotCommitmentSeeder is DegenerusGame, WalletSeed {
         decBattleRounds[5].winners = 1;
         decBattleRounds[5].champion = 1;
         decBattlePlayers[_seedWallet(attacker)] = (uint256(5) << 64) | 1;
-        decBattleEntries[(uint256(5) << 64) | 1] = (uint256(1) << 190) | uint256(_seedWallet(attacker));
+        _storeDecEntry(5, uint64(1),
+            (uint256(1) << 62) | uint256(_seedWallet(attacker)));
         decBattleHeap[0] = 1;
         decBattleQueue = 5 | (uint256(5) << 24);
 
@@ -78,7 +79,7 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
     uint256 private salvagePosition;
     uint24 private paidDay;
     /// @dev Admits one 50-entry field group (JACKPOT_BATTLE_DRAW 3.3M + tails) but not a second.
-    uint256 private constant ONE_GROUP_GAS = 5_000_000;
+    uint256 private constant ONE_GROUP_GAS = 4_600_000;
 
     struct Result {
         bytes32 transcript;
@@ -192,8 +193,8 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
             if (perturb) _perturb();
             (CrapsBattleStorage.JackpotRound memory beforeRound,,) = reader.jackpotBattleOf(slot);
             vm.recordLogs();
-            // A call keeps drawing 50-entry field groups while another 3.3M group bound fits
-            // (984b8e7d8); this allowance admits at most one group per call so the probe runs
+            // A call keeps drawing 50-entry field groups while another 3.3M group bound fits.
+            // Packed appends made the old 5M allowance fit two; keep this probe at one so it runs
             // between every pair of actual field chunks.
             game.mineFlip{gas: ONE_GROUP_GAS}();
             Vm.Log[] memory logs = vm.getRecordedLogs();

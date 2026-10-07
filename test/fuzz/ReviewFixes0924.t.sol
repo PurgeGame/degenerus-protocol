@@ -221,7 +221,8 @@ contract ReviewClaimSeeder is DegenerusGame, WalletSeed {
         decBattleRounds[lvl].winners = 1;
         decBattleRounds[lvl].champion = 1;
         decBattlePlayers[_seedWallet(player)] = (uint256(lvl) << 64) | 1;
-        decBattleEntries[(uint256(lvl) << 64) | 1] = (uint256(1) << 190) | uint256(_seedWallet(player));
+        _storeDecEntry(lvl, uint64(1),
+            (uint256(1) << 62) | uint256(_seedWallet(player)));
         decBattleHeap[0] = 1;
         decBattleQueue = uint256(lvl) | uint256(lvl) << 24;
         // Back the credit a settle would write (claimablePool is the ledger total).

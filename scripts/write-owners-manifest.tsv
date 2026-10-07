@@ -55,7 +55,7 @@ OWNER	deadTotal	modules/DegenerusGameGameOverModule.sol	_handleGameOverDrain fix
 OWNER	deadTraitCount	modules/DegenerusGameGameOverModule.sol	_tallyDeadVrf counts the non-empty trait buckets in its stage 2; sole writer, dead-VRF ending (LR_GO_DEAD latched, terminal)
 OWNER	deadUncreated	modules/DegenerusGameGameOverModule.sol	_tallyDeadVrf accumulates and _saveDeadTally persists the uncreated weight; sole writer, dead-VRF ending (LR_GO_DEAD latched, terminal)
 OWNER	deadUncreatedLeft	modules/DegenerusGameGameOverModule.sol	_handleGameOverDrain seeds the unclaimed uncreated weight; claimDeadVrf draws it down per claim; dead-VRF ending (LR_GO_DEAD latched, terminal)
-OWNER	decBattleEntries	modules/DegenerusGameDecimatorModule.sol	recordDecBurn writes an entry's owner, board and stack; only its own wallet's burns rewrite it, and settlement only reads it
+HELPER	decBattleEntries	storage/DegenerusGameStorage.sol	_storeDecEntry masks one 128-bit lane; recordDecBurn is the production caller, and settlement only reads entries
 OWNER	decBattlePlayers	modules/DegenerusGameDecimatorModule.sol	recordDecBurn points a wallet at its latest entry; a new event's first burn repoints it, and settlement never reads it
 OWNER	decBattleQueue	modules/DegenerusGameDecimatorModule.sol	Sealing appends FIFO rounds; completion advances head (clears the queue when it was the last)
 OWNER	decimatorFlags	storage/DegenerusGameStorage.sol	Shared masked setters preserve independent burn-window and opening-day bits at slot-0 byte 18; used by Advance and terminal workers.

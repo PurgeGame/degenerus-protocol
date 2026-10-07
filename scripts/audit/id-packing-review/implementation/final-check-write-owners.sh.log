@@ -1,0 +1,3 @@
+awk: warning: escape sequence `\.' treated as plain `.'
+live pairings: 196   manifest rows: 196
+PASS every shared-storage writer is registered

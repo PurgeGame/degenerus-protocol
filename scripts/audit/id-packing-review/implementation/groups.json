@@ -1,0 +1,103 @@
+{
+  "degenerette": [
+    "test/fuzz/DegeneretteSweep.t.sol",
+    "test/fuzz/DegeneretteFreezeResolution.t.sol",
+    "test/fuzz/DegeneretteFlipRoundAntiGrind.t.sol",
+    "test/fuzz/DegeneretteGiftByAccount.t.sol",
+    "test/fuzz/DegeneretteResolveRepeg.t.sol",
+    "test/fuzz/DegeneretteWinLootboxCap.t.sol",
+    "test/fuzz/ProtocolBoonDraw.t.sol",
+    "test/fuzz/RngCohortRecycling.t.sol",
+    "test/gas/DegeneretteSweepGas.t.sol",
+    "test/gas/KeeperResolveBetWorstCaseGas.t.sol",
+    "test/gas/StorageRecyclingGas.t.sol",
+    "test/repro/MineFlipWorkerBudget.t.sol"
+  ],
+  "decimator-baf": [
+    "test/fuzz/DecimatorBattle.t.sol",
+    "test/fuzz/DecimatorReference.t.sol",
+    "test/fuzz/DecimatorSampling.t.sol",
+    "test/gas/DecimatorBattleGas.t.sol",
+    "test/gas/DecimatorJackpotGas.t.sol",
+    "test/fuzz/BafWeightedDraw.t.sol",
+    "test/repro/BafDrawArming.t.sol",
+    "test/gas/BafDrawGas.t.sol"
+  ],
+  "craps": [
+    "test/craps/CrapsStorageReuse.t.sol",
+    "test/craps/CrapsAliasedSlot.t.sol",
+    "test/craps/CrapsDayUpgrade.t.sol",
+    "test/craps/CrapsEngineParity.t.sol",
+    "test/craps/JackpotBattle.t.sol",
+    "test/craps/CrapsJackpotBattleAwards.t.sol",
+    "test/craps/CrapsWalletIds.t.sol",
+    "test/craps/CrapsSlip.t.sol",
+    "test/craps/CrapsPreferredBoard.t.sol",
+    "test/craps/CrapsNewcomer.t.sol",
+    "test/craps/CrapsLapsedDayArm.t.sol",
+    "test/gas/JackpotBattleConstructionGas.t.sol",
+    "test/gas/JackpotBattleAwardsGas.t.sol",
+    "test/craps/CrapsHighWater.t.sol"
+  ],
+  "range": [
+    "test/fuzz/FarFutureOwedPacking.t.sol",
+    "test/gas/OwedEightBaseline.t.sol",
+    "test/gas/QueuePackingGas.t.sol",
+    "test/gas/RangeAwardGas.t.sol",
+    "test/fuzz/RangeAwardDifferential.t.sol"
+  ],
+  "packing": [
+    "test/fuzz/IdEntryPacking.t.sol",
+    "test/gas/IdPackingLifecycleGas.t.sol"
+  ],
+  "composition": [
+    "test/fuzz/LensParity.t.sol",
+    "test/fuzz/CoinflipWalletIds.t.sol",
+    "test/fuzz/FlipDecimatorWalletIds.t.sol",
+    "test/fuzz/ExternalDoorAccounts.t.sol",
+    "test/fuzz/CrapsWalletIdsProtocol.t.sol",
+    "test/gas/NativeAtomicWork.t.sol",
+    "test/fuzz/RngFreezeAndRemovalProofs.t.sol",
+    "test/fuzz/MinerNoProgress.t.sol",
+    "test/fuzz/JackpotCommitmentFreeze.t.sol",
+    "test/fuzz/DecimatorJackpotIntegration.t.sol",
+    "test/fuzz/SdgnrsAutoDecimator.t.sol",
+    "test/fuzz/ReviewFixes0924.t.sol"
+  ],
+  "lifecycle": [
+    "test/gas/IdPackingLifecycleGas.t.sol",
+    "test/gas/RangeAwardGas.t.sol"
+  ],
+  "craps-compact": [
+    "test/craps/CrapsEngineParity.t.sol",
+    "test/craps/CrapsWalletIds.t.sol",
+    "test/craps/JackpotBattle.t.sol",
+    "test/craps/CrapsStorageReuse.t.sol",
+    "test/craps/CrapsBoonPayout.t.sol",
+    "test/craps/CrapsAccounts.t.sol",
+    "test/craps/CrapsCompBudget.t.sol",
+    "test/craps/CrapsPasses.t.sol",
+    "test/craps/CrapsHottestShooter.t.sol",
+    "test/repro/UnpushedSidegameRngSafety.t.sol"
+  ],
+  "rng-terminal": [
+    "test/fuzz/RandomnessSeedInputs.t.sol",
+    "test/gas/AdvanceColdTerminalGas.t.sol",
+    "test/repro/TerminalRngCheckpoints.t.sol",
+    "test/repro/TerminalPayoutCheckpoints.t.sol",
+    "test/repro/TerminalJackpotCohortIsolation.t.sol",
+    "test/repro/TerminalDrainPostSwapStarvation.t.sol"
+  ],
+  "degenerette-extra": [
+    "test/fuzz/DegeneretteSingleSymbol.t.sol",
+    "test/fuzz/DegeneretteBoonStake.t.sol",
+    "test/fuzz/WalletIdEntropyDegenerette.t.sol",
+    "test/fuzz/BigRecordArming.t.sol",
+    "test/fuzz/DegeneretteV73SolvencyFuzz.t.sol",
+    "test/fuzz/PermissionlessGiftAndApproval.t.sol",
+    "test/fuzz/LootboxPurchaseQueue.t.sol"
+  ],
+  "wallet-invariant": [
+    "test/fuzz/invariant/WalletIdTruth.inv.t.sol"
+  ]
+}

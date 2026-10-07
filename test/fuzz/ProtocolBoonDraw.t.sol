@@ -46,8 +46,7 @@ contract ProtocolBoonFixture is DegenerusGameStorage, WalletSeed {
         protocolBoonPools[_walletIdOf(issuer)][day & 1].totalWeight = type(uint64).max;
     }
     function bet(uint48 index, uint64 id) external view returns (uint256 word) {
-        uint256 slot = _betSlot(index & 1, id - 1);
-        assembly ("memory-safe") { word := sload(slot) }
+        word = _loadDegeneretteBet(index & 1, id - 1);
     }
     function heroWeight(uint24 day, uint8 symbol) external view returns (uint32) {
         return uint32(_dailyHeroWagerWord(day, symbol >> 3) >> ((symbol & 7) * 32));
@@ -544,7 +543,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         vm.etch(address(game), address(fixture).code);
         uint256 bet = ProtocolBoonFixture(address(game)).bet(1, 1);
         assertEq(uint32(bet), bettorId, "the bettor owns queue position 0");
-        assertEq(((bet >> 188) & type(uint64).max) * 1 gwei, 0.0112 ether, "effective stake actually received the boon");
+        assertEq(((bet >> 60) & type(uint64).max) * 1 gwei, 0.0112 ether, "effective stake actually received the boon");
         assertEq(ProtocolBoonFixture(address(game)).heroWeight(day, 6), 300);
         vm.etch(address(game), original);
     }

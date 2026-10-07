@@ -17,6 +17,7 @@ import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {FlipRoundLib} from "../../contracts/libraries/FlipRoundLib.sol";
 import {CrapsPriceLib} from "../../contracts/libraries/CrapsPriceLib.sol";
+import {LegacyCrapsEngine} from "../helpers/LegacyCrapsEngine.sol";
 import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 
 /// @dev An independent recomputation of one battle run: the same engine entry, driven with the
@@ -109,8 +110,11 @@ contract JackpotBattleTest is CrapsPins {
     address internal alice = address(0xA11CE);
     address internal bob = address(0xB0B);
 
+    LegacyCrapsEngine private legacyEngine;
+
     function setUp() public {
         _installPins();
+        legacyEngine = new LegacyCrapsEngine();
         // Deployed from the artifact: embedding its creation code here overflows solc's tag width.
         table = JackpotTableHarness(deployCode("JackpotBattle.t.sol:JackpotTableHarness"));
         api = IJackpotBattle(address(table));
@@ -308,8 +312,8 @@ contract JackpotBattleTest is CrapsPins {
         // seed is the field's. So it is exactly a paid seat played by that key on the same word.
         uint256 key = uint160(uint256(keccak256(abi.encode(word, uint256(0x4a61636b706f7441776172646564), betId))));
         Craps.SlipResult memory awarded = engine.settleBattle(
-            betId, uint160(bob) | (chips << 160) | (uint256(1) << 224), 30, 1_500, 7_500, uint48(slot), field, word);
-        Craps.SlipResult memory paid = engine.settleBattle(
+            betId, uint32(uint160(bob)) | (chips << 32) | (uint256(1) << 72), 30, 1_500, 7_500, uint48(slot), field, word);
+        Craps.SlipResult memory paid = legacyEngine.settleBattle(
             betId, key | (chips << 160), 30, 1_500, 7_500, uint48(slot), field, word);
         assertEq(keccak256(abi.encode(awarded)), keccak256(abi.encode(paid)));
     }

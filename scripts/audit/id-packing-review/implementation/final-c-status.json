@@ -1,0 +1,14 @@
+{
+  "decimator-baf": {
+    "returncode": 0,
+    "log": "/home/zak/Dev/PurgeGame/degenerus-audit/scripts/audit/id-packing-review/implementation/final-c-decimator-baf.log"
+  },
+  "range": {
+    "returncode": 0,
+    "log": "/home/zak/Dev/PurgeGame/degenerus-audit/scripts/audit/id-packing-review/implementation/final-c-range.log"
+  },
+  "lifecycle": {
+    "returncode": 0,
+    "log": "/home/zak/Dev/PurgeGame/degenerus-audit/scripts/audit/id-packing-review/implementation/final-c-lifecycle.log"
+  }
+}

@@ -621,12 +621,12 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     }
 
     /// @dev One bet's declared admission: currency base + per-spin, plus the record-claim spin
-    ///      when the bet armed one (record flag, bit 171 of the queued word).
+    ///      when the bet armed one (record flag, bit 43 of the queued word).
     function _betBound(uint8 currency, uint8 spins, uint256 betWord) internal pure returns (uint256 b) {
         b = currency == 0
             ? GasBounds.DEGENERETTE_ETH_BASE_GAS + uint256(spins) * GasBounds.DEGENERETTE_ETH_SPIN_GAS
             : GasBounds.DEGENERETTE_FLIP_BASE_GAS + uint256(spins) * GasBounds.DEGENERETTE_FLIP_SPIN_GAS;
-        if ((betWord >> 171) & 1 != 0) b += GasBounds.DEGENERETTE_RECORD_GAS;
+        if ((betWord >> 43) & 1 != 0) b += GasBounds.DEGENERETTE_RECORD_GAS;
     }
 
     /// @dev Set the futurePrizePool (future half, bits 128-255 of slot 2), keeping next intact.
@@ -639,7 +639,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         );
     }
 
-    /// @dev Decode the spinCount from the bet word at `INDEX` (DQ.spinCount, bits 165..169).
+    /// @dev Decode the spinCount from the bet word at `INDEX` (DQ.spinCount, bits 37..41).
     function _betTicketCount(uint64 id) internal view returns (uint8) {
         return DQ.spinCount(game.degeneretteBetInfo(INDEX, id));
     }

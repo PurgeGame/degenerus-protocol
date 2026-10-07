@@ -61,7 +61,7 @@ contract WaterHarness is CrapsViews {
         board = _boardFrom(packed, chipFlip);
         _scatterInto(
             board,
-            uint256(keccak256(abi.encode(_wordAt(_indexOf(slot)), SCATTER_TAG, address(uint160(header))))),
+            uint256(keccak256(abi.encode(_wordAt(_indexOf(slot)), SCATTER_TAG, address(uint160(uint32(header)))))),
             chipFlip,
             BONUS_CHIPS - placed
         );
@@ -85,7 +85,7 @@ contract WaterHarness is CrapsViews {
     function writeBet(uint256 betId, address player, uint256 standing) external {
         uint32 id = _idOf(player);
         require(id != 0, "writeBet: no wallet ID");
-        _storeBet(betId, uint256(id) | (standing << _BET_SCORE_SHIFT));
+        _appendBet(betId, uint256(id) | (standing << _BET_SCORE_SHIFT));
     }
 
     /// @dev THE SHIPPED FOLD, and — on the seat that completes the field — the shipped payout,

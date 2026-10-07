@@ -116,8 +116,8 @@ contract LensStorageHarness is DegenerusGameMintStreakUtils, WalletSeed {
 
     function setDecEntry(uint24 lvl, uint64 id, address owner, uint64 stackFlip, uint32 chips) external {
         decBattlePlayers[_seedWallet(owner)] = (uint256(lvl) << 64) | id;
-        decBattleEntries[(uint256(lvl) << 64) | id] =
-            (uint256(stackFlip) << 190) | (uint256(chips) << 160) | uint256(_walletIdOf(owner));
+        _storeDecEntry(lvl, uint64(id),
+            (uint256(stackFlip) << 62) | (uint256(chips) << 32) | uint256(_walletIdOf(owner)));
     }
 
     function setDecRound(uint24 lvl, DecBattleRound calldata round) external {

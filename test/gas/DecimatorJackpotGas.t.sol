@@ -105,8 +105,8 @@ contract DecimatorGasHost is DecimatorJackpotHarness, BucketSeed {
         for (uint256 i; i < Sample.count(total); ++i) {
             uint64 id = Sample.at(word, 5, total, i);
             if (id <= n) {
-                decBattleEntries[(uint256(5) << 64) | id] =
-                    (uint256(2000) << 190) | _seedWallet(address(uint160(0x1000 + id)));
+                _storeDecEntry(5, uint64(id),
+            (uint256(2000) << 62) | _seedWallet(address(uint160(0x1000 + id))));
             }
         }
     }

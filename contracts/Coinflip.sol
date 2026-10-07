@@ -384,10 +384,11 @@ contract Coinflip {
     ///      biggestBuyEver's free half, so it moves no slot.
     uint128 public biggestDiceRunEver;
 
-    /// @dev One packed interval entry per (armed day, index):
+    /// @dev Two 128-bit intervals per word, with each lane containing:
     ///      bits [0..95]   cumulative weight endpoint (exclusive, whole FLIP)
     ///      bits [96..127] depositor wallet ID
-    ///      Key: (day << 32) | index. Never zero for a recorded entry — MIN is
+    ///      Key: (day << 32) | (index >> 1), shift: (index & 1) * 128.
+    ///      Never zero for a recorded entry — MIN is
     ///      100 FLIP, so every weight is at least 100.
     mapping(uint256 => uint256) internal bafDrawEntry;
 
@@ -1095,7 +1096,10 @@ contract Coinflip {
         uint256 header = bafDrawHeader[day];
         uint256 newTotal = (header & type(uint96).max) + weight;
         uint32 index = uint32(header >> 96);
-        bafDrawEntry[(uint256(day) << 32) | index] = (uint256(id) << 96) | newTotal;
+        uint256 key = (uint256(day) << 32) | (index >> 1);
+        uint256 shift = (index & 1) * 128;
+        uint256 entry = (uint256(id) << 96) | newTotal;
+        bafDrawEntry[key] = (bafDrawEntry[key] & ~(uint256(type(uint128).max) << shift)) | (entry << shift);
         bafDrawHeader[day] = (uint256(index + 1) << 96) | newTotal;
         emit BafDrawEntered(day, id, index, weight, uint96(newTotal));
     }
@@ -1846,13 +1850,13 @@ contract Coinflip {
         uint32 hi = uint32(header >> 96) - 1;
         while (lo < hi) {
             uint32 mid = lo + (hi - lo) / 2;
-            if ((bafDrawEntry[(uint256(day) << 32) | mid] & type(uint96).max) > roll) {
+            if ((_bafDrawEntry(day, mid) & type(uint96).max) > roll) {
                 hi = mid;
             } else {
                 lo = mid + 1;
             }
         }
-        winnerId = uint32(bafDrawEntry[(uint256(day) << 32) | lo] >> 96);
+        winnerId = uint32(_bafDrawEntry(day, lo) >> 96);
     }
 
     /// @notice The armed BAF draw day and its book totals.
@@ -1867,12 +1871,17 @@ contract Coinflip {
         entryCount = uint32(header >> 96);
     }
 
+    /// @dev Two cumulative-weight/account intervals share each physical word.
+    function _bafDrawEntry(uint24 day, uint32 index) private view returns (uint256) {
+        return uint128(bafDrawEntry[(uint256(day) << 32) | (index >> 1)] >> ((index & 1) * 128));
+    }
+
     /// @notice A recorded draw entry's depositor wallet ID and cumulative endpoint (whole FLIP).
     function bafDrawEntryAt(
         uint24 day,
         uint32 index
     ) external view returns (uint32 id, uint96 cumulativeWeight) {
-        uint256 entry = bafDrawEntry[(uint256(day) << 32) | index];
+        uint256 entry = _bafDrawEntry(day, index);
         id = uint32(entry >> 96);
         cumulativeWeight = uint96(entry);
     }

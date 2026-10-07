@@ -234,7 +234,7 @@ contract CrapsPreferredBoardTest is CrapsPins {
         _save(bob, 0);
         for (uint256 i = 1; i <= 2; ++i) {
             uint256 slot = (uint256(day) + i) * 8 + 1;
-            assertEq((c.betWordOf((slot << 64) | 1) >> 160) & 0x3FFFFFFF, BOARD, "window-ahead snapshot changed");
+            assertEq((c.betWordOf((slot << 64) | 1) >> 32) & 0x3FFFFFFF, BOARD, "window-ahead snapshot changed");
         }
     }
 

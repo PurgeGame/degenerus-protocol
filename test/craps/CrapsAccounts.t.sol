@@ -43,7 +43,7 @@ contract CrapsAccountsTest is CrapsPins {
     uint8 internal constant UPGRADE_MASK = 1 << 1;
     uint256 internal constant ID_SHIFT = 85;
     uint256 internal constant INIT = 1 << 84;
-    uint256 internal constant DAY_HIGH_MASK = uint256(0x3F) << 217;
+    uint256 internal constant DAY_HIGH_MASK = uint256(0x3F) << 65;
 
     uint8 internal constant SET_BOARD = 0;
     uint8 internal constant AMEND = 1;
@@ -286,7 +286,7 @@ contract CrapsAccountsTest is CrapsPins {
             assertEq(uint256(logs[i].topics[1]), id, "CrapsSlipPlaced carries the account ID");
             uint256 w = c.betWordOf(_betIdOf(logs[i]));
             assertEq(uint32(w), id, "bet word bits 0..31 are the account ID");
-            assertEq(w & (((uint256(1) << 160) - 1) & ~uint256(type(uint32).max)), 0, "bet word bits 32..159 are zero");
+            assertEq(w >> 73, 0, "bet word reserved bits are zero");
             ++slips;
         }
         assertEq(slips, 1, "one slip per door");
@@ -312,7 +312,7 @@ contract CrapsAccountsTest is CrapsPins {
             if (door == PASSES) assertEq(_normal(w), _normal(b.accountWord) - 1, "the pass came off the account's ID word");
         } else if (door == UPGRADE) {
             uint256 seat = c.daySeatOfId(day, id);
-            assertTrue(c.betWordOf(_dayBet(day, seat)) & (uint256(UPGRADE_MASK) << 217) != 0, "the account's ticket upgraded");
+            assertTrue(c.betWordOf(_dayBet(day, seat)) & (uint256(UPGRADE_MASK) << 65) != 0, "the account's ticket upgraded");
             uint256 seen;
             for (uint256 i; i < logs.length; ++i) {
                 if (logs[i].topics.length < 2 || logs[i].topics[0] != CrapsBattleStorage.CrapsDayWindowsUpgraded.selector) continue;
@@ -548,7 +548,7 @@ contract CrapsAccountsTest is CrapsPins {
         assertGt(charged, 0);
         assertEq(flip.compFor(owner) - seated, charged, "the upgrade comp charged the lane for the smurf key");
         uint256 seat = c.daySeatOfId(day, smurfId);
-        assertTrue(c.betWordOf(_dayBet(day, seat)) & (uint256(UPGRADE_MASK) << 217) != 0, "the smurf's seat upgraded");
+        assertTrue(c.betWordOf(_dayBet(day, seat)) & (uint256(UPGRADE_MASK) << 65) != 0, "the smurf's seat upgraded");
         assertEq(flip.burned(owner), 0);
     }
 

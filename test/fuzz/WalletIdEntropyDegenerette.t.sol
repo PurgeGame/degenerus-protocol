@@ -73,7 +73,7 @@ contract WalletIdEntropyDegeneretteTest is DeployProtocol {
         }
         uint256 bet = game.degeneretteBetInfo(INDEX, betId);
         assertEq(uint32(bet), playerId, "bet word low 32 bits are the owner's wallet ID");
-        activity = uint16(bet >> 172);
+        activity = uint16(bet >> 44);
     }
 
     /// @dev Resolve the queued bet on `word`; returns the settled payout from its event.

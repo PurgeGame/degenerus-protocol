@@ -22,7 +22,7 @@ contract DegeneretteGiftByAccountTest is SmurfFixture {
     uint8 private constant HERO = 3;
     uint256 private constant BP_DEGEN_LANE0_SHIFT = 184;
     uint256 private constant BP_LANE_MASK = 0xFFFFFF;
-    uint256 private constant BET_STAKE_SHIFT = 188;
+    uint256 private constant BET_STAKE_SHIFT = 60;
 
     address private owner;
     uint32 private ownerId;

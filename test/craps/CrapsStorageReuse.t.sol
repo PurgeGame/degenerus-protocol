@@ -14,7 +14,12 @@ contract CrapsReuseHarness is CrapsViews {
     function rawBet(uint256 id) external view returns (uint256) { return _bets[_betStorageKey(id)]; }
     function physicalKey(uint256 id) external pure returns (uint256) { return _betStorageKey(id); }
     function pending(uint48 index) external view returns (uint256) { return _rngPending[index]; }
-    function put(uint256 id, uint256 word) external { _storeBet(id, word); }
+    function put(uint256 id, uint256 word) external {
+        uint256 slot = id >> 64;
+        require(slot & 7 == 0, "day fixture");
+        _dayTickets[slot] = uint64(id);
+        _appendBet(id, word);
+    }
     function resolveOne(uint64 slot) external returns (MineFlipGas.Result memory) {
         return _resolveSlotRange(slot, 9_000_000, 1);
     }
@@ -25,7 +30,6 @@ contract CrapsStorageReuseTest is CrapsPins {
     address alice = address(0xA11CE);
     address bob = address(0xB0B);
     uint256 constant WORD = 123456789;
-    uint256 constant DAY_TAG_MASK = (uint256(0xffff) << 190) | (uint256(0xff) << 209);
 
     function setUp() public {
         _installPins();
@@ -93,7 +97,7 @@ contract CrapsStorageReuseTest is CrapsPins {
         vm.expectRevert(); vm.prank(alice); table.amendSlip(oldId, uint32(1));
         assertEq(table.betWordOf(newId), original);
         vm.prank(alice); table.amendSlip(newId, uint32(1));
-        assertEq((table.betWordOf(newId) >> 160) & 3, 1);
+        assertEq((table.betWordOf(newId) >> 32) & 3, 1);
     }
 
     function test_ExpiredReadCohortCannotPayReusedBetsAndDrainsOnce() public {
@@ -237,9 +241,33 @@ contract CrapsStorageReuseTest is CrapsPins {
         _warp(day);
         uint256 id = _id(day, seat);
         table.put(id, word);
-        assertEq(table.betWordOf(id), word & ~DAY_TAG_MASK);
+        uint256 fields = uint256(type(uint72).max);
+        assertEq(table.betWordOf(id), word & fields);
         assertEq(table.betWordOf(_id(day + 64, seat)), 0);
         assertEq(table.betWordOf(id + (uint256(1) << 91)), 0, "uint24 truncation accepted forged day");
-        assertEq(table.rawBet(id) >> 224, word >> 224, "day tag leaked into awarded units");
+        uint256 raw = table.rawBet(id);
+        assertEq(uint24(raw >> 216), day, "shared word day");
+        assertEq(table.betWordOf(id) >> 72, 0, "day tickets are paid entries");
     }
+    function test_ThreeLanesShareWordAndAmendPreservesBothNeighbors() public {
+        uint24 day = _today();
+        uint256 a = uint256(1) | (uint256(3) << 32);
+        uint256 b = uint256(2) | (uint256(5) << 62);
+        uint256 c = uint256(3) | (uint256(0x7f) << 65);
+        table.put(_id(day, 1), a);
+        table.put(_id(day, 2), b);
+        table.put(_id(day, 3), c);
+        assertEq(table.physicalKey(_id(day, 1)), table.physicalKey(_id(day, 3)));
+        table.setBetWord(_id(day, 2), b | (uint256(7) << 32));
+        assertEq(table.betWordOf(_id(day, 1)), a);
+        assertEq(table.betWordOf(_id(day, 2)), b | (uint256(7) << 32));
+        assertEq(table.betWordOf(_id(day, 3)), c);
+        assertEq(table.betWordOf(_id(day, 4)), 0);
+        _warp(day + 64);
+        table.put(_id(day + 64, 1), a);
+        assertEq(table.betWordOf(_id(day, 1)), 0);
+        assertEq(table.betWordOf(_id(day + 64, 2)), 0);
+        assertEq(table.betWordOf(_id(day + 64, 3)), 0);
+    }
+
 }

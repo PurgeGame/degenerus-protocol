@@ -68,10 +68,10 @@ contract DecimatorBattleHarness is DegenerusGameDecimatorModule, WalletSeed {
 
     /// @dev The stack in wei of virtual chips, as the Lens reports it.
     function entryOf(uint24 lvl, uint64 id) external view returns (Entry memory e) {
-        uint256 entry = decBattleEntries[(uint256(lvl) << 64) | id];
+        uint256 entry = _loadDecEntry(lvl, uint64(id));
         e.owner = _walletKey(uint32(entry));
-        e.stack = (entry >> 190);
-        e.chips = uint32((entry >> 160) & 0x3FFFFFFF);
+        e.stack = (entry >> 62);
+        e.chips = uint32((entry >> 32) & 0x3FFFFFFF);
     }
 
     function passesOf(address p) external view returns (uint256) {

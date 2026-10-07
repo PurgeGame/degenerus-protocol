@@ -1,0 +1,933 @@
+Warning: This is a nightly build of Foundry. It is recommended to use the latest stable version. To mute this warning set `FOUNDRY_DISABLE_NIGHTLY_WARNING` in your environment.
+
+Compiling 138 files with Solc 0.8.34
+Solc 0.8.34 finished in 188.29s
+Compiler run successful with warnings:
+Warning (2519): This declaration shadows an existing declaration.
+  --> contracts/libraries/MineFlipGas.sol:59:9:
+   |
+59 |         uint256 available = gasleft();
+   |         ^^^^^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> contracts/libraries/MineFlipGas.sol:29:5:
+   |
+29 |     function available() internal view returns (uint256) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+    --> contracts/storage/DegenerusGameStorage.sol:3460:43:
+     |
+3460 |     function _lootboxEvUsedFor(uint32 id, uint24 level)
+     |                                           ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> contracts/storage/DegenerusGameStorage.sol:378:5:
+    |
+378 |     uint24 public level = 0;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+    --> contracts/storage/DegenerusGameStorage.sol:3476:9:
+     |
+3476 |         uint24 level,
+     |         ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> contracts/storage/DegenerusGameStorage.sol:378:5:
+    |
+378 |     uint24 public level = 0;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+    --> contracts/storage/DegenerusGameStorage.sol:3635:41:
+     |
+3635 |     function _centuryUsedFor(uint32 id, uint256 level) internal view returns (uint256) {
+     |                                         ^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> contracts/storage/DegenerusGameStorage.sol:378:5:
+    |
+378 |     uint24 public level = 0;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+    --> contracts/storage/DegenerusGameStorage.sol:3641:44:
+     |
+3641 |     function _setCenturyUsedFor(uint32 id, uint256 level, uint256 used) internal {
+     |                                            ^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> contracts/storage/DegenerusGameStorage.sol:378:5:
+    |
+378 |     uint24 public level = 0;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+  --> contracts/libraries/TicketEntropy.sol:32:54:
+   |
+32 |     function identity(uint24 queueKey, uint24 level, uint256 queueIndex, uint32 walletId)
+   |                                                      ^^^^^^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> contracts/libraries/TicketEntropy.sol:23:5:
+   |
+23 |     function queueIndex(uint256 logical, uint256 start, uint256 total) internal pure returns (uint256 physical) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> contracts/DegenerusVault.sol:715:9:
+    |
+715 |         uint8 symbol,
+    |         ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> contracts/DegenerusVault.sol:512:5:
+    |
+512 |     string public constant symbol = "DGV";
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (8760): This declaration has the same name as another declaration.
+  --> contracts/mocks/DegeneretteMathHarness.sol:14:9:
+   |
+14 |         SpinResult memory spin;
+   |         ^^^^^^^^^^^^^^^^^^^^^^
+Note: The other declaration is here:
+  --> contracts/mocks/DegeneretteMathHarness.sol:56:5:
+   |
+56 |     function spin(uint256 seed, uint256 houseSeed, uint8 symbol, uint8 currency)
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (8760): This declaration has the same name as another declaration.
+  --> test/fuzz/ProtocolBoonDraw.t.sol:48:66:
+   |
+48 |     function bet(uint48 index, uint64 id) external view returns (uint256 word) {
+   |                                                                  ^^^^^^^^^^^^
+Note: The other declaration is here:
+  --> test/fuzz/ProtocolBoonDraw.t.sol:20:5:
+   |
+20 |     function word(uint24 day, uint256 value) external { _recordDailyRng(day, value); }
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (8760): This declaration has the same name as another declaration.
+  --> test/fuzz/RngCohortRecycling.t.sol:29:9:
+   |
+29 |         uint256 word = (order_ << 32) | _seedWallet(player);
+   |         ^^^^^^^^^^^^
+Note: The other declaration is here:
+  --> test/fuzz/RngCohortRecycling.t.sol:18:5:
+   |
+18 |     function word(uint48 buffer) external view returns(uint256) { return _lootboxWord(buffer); }
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3628): This contract has a payable fallback function, but no receive ether function. Consider adding a receive ether function.
+  --> test/fuzz/DegeneretteWinLootboxCap.t.sol:15:1:
+   |
+15 | contract WinLootboxCapProbe is DegenerusGameStorage, WalletSeed {
+   | ^ (Relevant source part starts here and spans across multiple lines).
+Note: The payable fallback function is defined here.
+  --> test/fuzz/DegeneretteWinLootboxCap.t.sol:53:5:
+   |
+53 |     fallback() external payable {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/storage/DegenerusGameStorage.sol:1232:22:
+     |
+1232 |             packed = uint80(id) << OWNER_IDX_SHIFT;
+     |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/storage/DegenerusGameStorage.sol:1301:22:
+     |
+1301 |             packed = uint80(id) << OWNER_IDX_SHIFT;
+     |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/storage/DegenerusGameStorage.sol:1368:25:
+     |
+1368 |         uint80 idBits = uint80(id) << OWNER_IDX_SHIFT;
+     |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/storage/DegenerusGameStorage.sol:1808:25:
+     |
+1808 |                 return (uint80(id) << OWNER_IDX_SHIFT) | uint80((lane & 0x3fffffff) << 8)
+     |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/modules/DegenerusGameWhaleModule.sol:1014:26:
+     |
+1014 |                 packed = uint80(id) << OWNER_IDX_SHIFT;
+     |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint64) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+   --> contracts/modules/DegenerusGameDecimatorModule.sol:262:24:
+    |
+262 |             weights |= uint64(weight) << (uint256(q) * 16);
+    |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+  --> contracts/modules/DegenerusGameFoilPackModule.sol:93:26:
+   |
+93 |                 packed = uint80(id) << OWNER_IDX_SHIFT;
+   |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint32) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/Coinflip.sol:1567:32:
+     |
+1567 |             bool win = wins & (uint32(1) << offset) != 0;
+     |                                ^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint128) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/sDGNRS.sol:1326:44:
+     |
+1326 |             players.push(uint128(units) | (uint128(walletId) << BATCH_PLAYER_ID_SHIFT)
+     |                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint128) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/sDGNRS.sol:1327:20:
+     |
+1327 |                 | (uint128(uint16(score) + 1) << BATCH_PLAYER_SCORE_SHIFT));
+     |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/modules/DegenerusGameGameOverModule.sol:610:36:
+    |
+610 |     function _resumeTerminalPayout(uint24 day, MineFlipGas.Meter memory meter, TerminalWork memory work) private returns (bool done) {
+    |                                    ^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:765:9:
+    |
+765 |         uint32 played,
+    |         ^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:766:9:
+    |
+766 |         uint8 bankMult,
+    |         ^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:767:9:
+    |
+767 |         uint16 goalMult,
+    |         ^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:768:9:
+    |
+768 |         uint24 stakeUnits,
+    |         ^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:769:9:
+    |
+769 |         uint40 closeTime,
+    |         ^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:770:9:
+    |
+770 |         bool multiEntry,
+    |         ^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:771:9:
+    |
+771 |         uint16 highRollerMult
+    |         ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:772:25:
+    |
+772 |     ) external returns (uint64 slot) {
+    |                         ^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:836:31:
+    |
+836 |     function setBattleCreator(address account, bool allowed) external {
+    |                               ^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:836:48:
+    |
+836 |     function setBattleCreator(address account, bool allowed) external {
+    |                                                ^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/CrapsBattle.sol:1231:34:
+     |
+1231 |     function convertNormalToHigh(uint32 id, uint32 highCount) external { _delegateJackpot(); }
+     |                                  ^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/CrapsBattle.sol:1231:45:
+     |
+1231 |     function convertNormalToHigh(uint32 id, uint32 highCount) external { _delegateJackpot(); }
+     |                                             ^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/CrapsBattle.sol:1252:33:
+     |
+1252 |     function upgradeReservedDay(uint32 id, uint24 day) external { _delegateJackpot(); }
+     |                                 ^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/CrapsBattle.sol:1252:44:
+     |
+1252 |     function upgradeReservedDay(uint32 id, uint24 day) external { _delegateJackpot(); }
+     |                                            ^^^^^^^^^^
+
+Warning (2072): Unused local variable.
+    --> contracts/Coinflip.sol:1707:9:
+     |
+1707 |         address s = ContractAddresses.SDGNRS;
+     |         ^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/DegenerusGame.sol:1399:13:
+     |
+1399 |             uint256 totalFaceWei,
+     |             ^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/DegenerusGame.sol:1400:13:
+     |
+1400 |             uint256 totalBudget,
+     |             ^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/DegenerusGame.sol:1401:13:
+     |
+1401 |             uint256 ticketWei,
+     |             ^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/DegenerusGame.sol:1402:13:
+     |
+1402 |             uint256 ethCashWei,
+     |             ^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/DegenerusGame.sol:1403:13:
+     |
+1403 |             uint256 flipTokens
+     |             ^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/DegenerusAffiliate.sol:1085:28:
+     |
+1085 |     function _payoutUpline(bytes32 code, uint32 ownerId, bool second, uint256 cache)
+     |                            ^^^^^^^^^^^^
+
+Warning (2072): Unused local variable.
+  --> test/gas/DegeneretteSweepGas.t.sol:35:9:
+   |
+35 |         uint256 lr = uint256(vm.load(address(game), bytes32(LR_PACKED_SLOT)));
+   |         ^^^^^^^^^^
+
+Warning (6417): The constructor of the contract (or its base) uses inline assembly. Because of that, it might be that the deployed bytecode is different from type(...).runtimeCode.
+  --> test/repro/MineFlipWorkerBudget.t.sol:64:32:
+   |
+64 |         vm.etch(address(game), type(BudgetReadFixture).runtimeCode);
+   |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> contracts/modules/DegenerusGameMintStreakUtils.sol:183:5:
+    |
+183 |     function _quoteFarFutureSwap(
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> contracts/DegenerusRecordBounty.sol:441:5:
+    |
+441 |     function getApproved(uint256 tokenId) external view returns (address) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> contracts/CrapsBattle.sol:944:5:
+    |
+944 |     function _settlementOf(uint256 betId, uint256 header, Window memory w, uint256 word)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+    --> contracts/CrapsBattle.sol:1028:5:
+     |
+1028 |     function _windowTermsOn(uint24 day, uint256 period, uint256 word) internal view returns (Window memory w) {
+     |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+    --> contracts/JackpotBattle.sol:1086:5:
+     |
+1086 |     function _windowTermsOn(uint24 day, uint256 period, uint256 word) internal view returns (Window memory w) {
+     |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+    --> contracts/DegenerusAffiliate.sol:1085:5:
+     |
+1085 |     function _payoutUpline(bytes32 code, uint32 ownerId, bool second, uint256 cache)
+     |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/fuzz/DegeneretteFreezeResolution.t.sol:885:5:
+    |
+885 |     function _rawPayouts(bytes memory spins, uint8 currency, uint128 stake, uint16 activity)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/fuzz/DegeneretteFreezeResolution.t.sol:961:5:
+    |
+961 |     function _countResolvedAndCapped(uint64 betA, uint64 betB)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/gas/KeeperResolveBetWorstCaseGas.t.sol:656:5:
+    |
+656 |     function _countResolveEffects(uint64[] memory realBetIds)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+
+Ran 3 tests for test/gas/StorageRecyclingGas.t.sol:StorageRecyclingGasTest
+[PASS] test_ColdNonzeroBackingReuseSavesGas() (gas: 3717405)
+Logs:
+  fresh append gas: 2911740
+  reused append gas: 700721
+
+[PASS] test_QueueSealGasIndependentOfMillionLengthsAndLeavesBackingIntact() (gas: 343354)
+Logs:
+  one-entry queue seal gas: 41351
+  million-entry queue seal gas: 41351
+
+[PASS] test_ResetGasIndependentOfMillionCount() (gas: 132718)
+Logs:
+  small reset gas: 46415
+  million reset gas: 44415
+
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 1.64ms (536.30µs CPU time)
+
+Ran 6 tests for test/repro/MineFlipWorkerBudget.t.sol:MineFlipDecimatorBudgetTest
+[PASS] test_DecimatorCannotBypassAnyEarlierStage() (gas: 358285)
+[PASS] test_EngineFailurePreservesRoundAndReservation() (gas: 29069843681)
+[PASS] test_LowGasSimulationWaitsWithoutMutatingRound() (gas: 79194)
+[PASS] test_PaymentReservesBeforeMutation() (gas: 306377)
+[PASS] test_RankReservesBeforeMutationThenChainsPayment() (gas: 287275)
+[PASS] test_RunReservesBeforeMutationThenChainsRankAndPay() (gas: 261309)
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 3.05ms (1.28ms CPU time)
+
+Ran 8 tests for test/fuzz/DegeneretteGiftByAccount.t.sol:DegeneretteGiftByAccountTest
+[PASS] test_GiftToUnallocatedId_RevertsE() (gas: 50606)
+[PASS] test_OperatorFlipBetForSmurf_BurnsFromThePayee() (gas: 338374)
+[PASS] test_OwnerEthBetForSmurf_SmurfClaimableFundsIt() (gas: 346718)
+[PASS] test_OwnerFlipBetForSmurf_BurnsOwnerFlipAndSpendsSmurfBoon() (gas: 236959)
+[PASS] test_OwnerIdOperatorBetForSmurf_IsAGift() (gas: 428517)
+[PASS] test_StrangerEthBetForWallet_IsAGiftFundedByTheCaller() (gas: 315972)
+[PASS] test_StrangerFlipBetForSmurf_IsAGiftFundedByTheCaller() (gas: 325839)
+[PASS] test_UnregisteredGiverRegistersAndEarnsTheQuest() (gas: 255673)
+Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 14.56ms (1.81ms CPU time)
+
+Ran 2 tests for test/fuzz/RngCohortRecycling.t.sol:GameCrapsPendingMirrorTest
+[PASS] test_KeeperHintIncludesEmptyFrontierAndCrapsOnlyReadWork() (gas: 247197)
+[PASS] test_OnlyPinnedCrapsCanMutateIndependentPendingBits() (gas: 235768)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 20.49ms (434.20µs CPU time)
+
+Ran 1 test for test/fuzz/DegeneretteResolveRepeg.t.sol:DegeneretteResolveRepeg
+[PASS] testResolutionDeltasIndependentOfBatchPartitioning() (gas: 6801971)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 30.23ms (16.85ms CPU time)
+
+Ran 8 tests for test/fuzz/DegeneretteFreezeResolution.t.sol:DegeneretteFreezeResolutionTest
+[PASS] testBatchedPayoutEqualsPerSpinExpectation_Tier1() (gas: 732705)
+Logs:
+  tier1_eth_claimable_delta: 4500000000000000
+  tier1_flip_delta: 1800
+  tier1_wwxrp_delta: 0
+
+[PASS] testDegeneretteUnfrozenPathRegression() (gas: 388349)
+[PASS] testDgnrsAwardStaysPerSpin() (gas: 1177595)
+Logs:
+  dgnrs_parent_per_spin: 4037939777760000000000
+  dgnrs_parent_stale_hypothetical: 4079551200000000000000
+  dgnrs_nested_box_awards: 0
+
+[PASS] testEthCapBindsOnIdenticalSpin_Tier2() (gas: 524085)
+Logs:
+  tier2_eth_credited: 95000000000000000
+  tier2_spins_capped: 1
+
+[PASS] testFlipSurvivalFlipLossZeroesMint() (gas: 411664)
+[PASS] testLootboxSummedPerBetIdNotAcrossBets() (gas: 4232342)
+Logs:
+  perbetid_eth_one_call: 95000000000000000
+  perbetid_eth_two_calls: 95000000000000000
+
+[PASS] testResolveBetsRevertsPostGameOver_InsolvencyReproClosed() (gas: 623086)
+[PASS] test_SharedBoardAcrossPlayersCurrenciesAndBets() (gas: 858957)
+Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 34.89ms (33.81ms CPU time)
+
+Ran 1 test for test/fuzz/DegeneretteFlipRoundAntiGrind.t.sol:DegeneretteFlipRoundAntiGrind
+[PASS] testSweepCallGroupingCannotMoveTheFlipTotal() (gas: 13869973)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 37.29ms (24.10ms CPU time)
+
+Ran 22 tests for test/fuzz/DegeneretteWinLootboxCap.t.sol:DegeneretteWinLootboxCap
+[PASS] testFuzz_WinCapMatchesReference(uint256,uint256,uint16) (runs: 1000, μ: 231477, ~: 240803)
+[PASS] testGas_Exhausted() (gas: 11434813)
+Logs:
+  cap_exhausted: 288262
+
+[PASS] testGas_Neutral() (gas: 11432229)
+Logs:
+  cap_neutral: 286488
+
+[PASS] testGas_NormalRecirculation() (gas: 149704)
+Logs:
+  cap_normal_recirc: 138560
+
+[PASS] testGas_Penalty() (gas: 11429549)
+Logs:
+  cap_penalty: 286488
+
+[PASS] testGas_Placement() (gas: 333474)
+Logs:
+  cap_placement: 325232
+
+[PASS] testGas_SmallWin() (gas: 11235966)
+Logs:
+  cap_small_win: 268951
+
+[PASS] testGas_WarmBatch() (gas: 13650951)
+Logs:
+  cap_batch_11: 972829
+
+[PASS] testGas_Win1Spin() (gas: 11438592)
+Logs:
+  cap_win_1spin: 291849
+
+[PASS] testGas_Win25Spins() (gas: 11513960)
+Logs:
+  cap_win_25spins: 367050
+
+[PASS] test_AllowanceDoesNotChangeCommittedTargetLevel() (gas: 339169)
+[PASS] test_AllowanceIsReadAtSettlementAfterPlacement() (gas: 24999084)
+[PASS] test_DirectModuleCallRejectsValueEvenForZeroAmount() (gas: 41429)
+[PASS] test_ExactCeilingAndOneWeiOfRemainingAllowance() (gas: 274383)
+[PASS] test_FreshLevelPreservesOtherAllowanceWindow() (gas: 231331)
+[PASS] test_LargeWinUses50EthCeilingAndExhaustsNormalAllowance() (gas: 251497)
+[PASS] test_MultiSpinBetKeepsOneBoxAndOneCeiling() (gas: 25152979)
+[PASS] test_NeutralPenaltyAndZeroAmountDoNotConsumeAllowance() (gas: 304615)
+[PASS] test_NormalRecirculationKeeps10EthCap() (gas: 265312)
+[PASS] test_PartiallyUsedAllowanceIsDeductedFrom50Eth() (gas: 194895)
+[PASS] test_PurchasedBetRoutesToExceptionalCapAndQueuedFollowupIsNeutral() (gas: 11625418)
+[PASS] test_SmallWinsConsumeAllowanceBeforeOneExceptionalDraw() (gas: 388361)
+Suite result: ok. 22 passed; 0 failed; 0 skipped; finished in 498.29ms (983.05ms CPU time)
+
+Ran 13 tests for test/fuzz/DegeneretteSweep.t.sol:DegeneretteSweep
+[PASS] testBacklogPastTheUnpaidFirstMillionEarnsTheBounty() (gas: 13209277)
+Logs:
+  measured mineFlip execution gas: 1638575
+  bounty paid: 76
+
+[PASS] testCallbackCannotReplayAndFailedMintDoesNotConsumeBets() (gas: 1186561)
+[PASS] testFlipWinFlushesThroughMintForGame() (gas: 404742)
+[PASS] testFuzz_ResolvedEventCarriesEverySpin(uint256) (runs: 1000, μ: 702085, ~: 708741)
+[PASS] testFuzz_SweepResolvesFullMixedQueueInOrder(uint256) (runs: 1000, μ: 1343134, ~: 1339173)
+[PASS] testHighScoreEthSpinReachesAffiliateAndDgnrsLegs() (gas: 125900452)
+[PASS] testMineFlipResolvesShortQueueInsideTheUnpaidFirstMillion() (gas: 1421061)
+Logs:
+  measured mineFlip execution gas: 544868
+  bounty paid: 0
+
+[PASS] testPlacementQueuesLogicalBetsInPairedWords() (gas: 457446)
+[PASS] testPlacementRejectsPartialUnits() (gas: 278846)
+[PASS] testResolutionNeverWritesBetStorage() (gas: 551162)
+[PASS] testSweepHoldsQueueWhilePoolFrozen() (gas: 5187613)
+[PASS] testSweepResumesAcrossCallsWithoutPayingTwice() (gas: 8914723)
+Logs:
+  per-call allowance: 639888
+
+[PASS] testSweepThatOpensNothingStillProgresses() (gas: 1282366)
+Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 765.44ms (1.61s CPU time)
+
+Ran 7 tests for test/fuzz/RngCohortRecycling.t.sol:RngCohortRecyclingTest
+[PASS] testFuzz_LastConsumerSetsCompletion(uint256) (runs: 1000, μ: 326152, ~: 324949)
+[PASS] test_CompleteAtDeploymentAndClearOnReservation() (gas: 68381)
+[PASS] test_DailyLockMustReleaseBeforeCompletion() (gas: 237632)
+[PASS] test_DecimatorFlagsRemainIndependent() (gas: 277046)
+[PASS] test_InvalidPhysicalTagsNeverAliasARealBuffer() (gas: 217425)
+[PASS] test_RepeatedReuseResetsOnlyHeadersAndMasksProcessedOrders() (gas: 3451014)
+[PASS] test_WriteSideOrdersAndCrapsDoNotReopenCompletedRead() (gas: 681023)
+Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 781.62ms (783.55ms CPU time)
+
+Ran 35 tests for test/fuzz/ProtocolBoonDraw.t.sol:ProtocolBoonDrawTest
+[PASS] testAutomaticDrawWaitsForWordAndNeverIssuesLate() (gas: 627668)
+[PASS] testAutomaticWinningIntervalsMatchIndependentLinearModel() (gas: 6602726)
+[PASS] testBoonEntryAddsOnePackedHeaderAndOnePackedEntryWrite() (gas: 361685)
+[PASS] testCheckedEntryCountCannotPartiallyFundBet() (gas: 187910)
+[PASS] testClaimableEthFundsTheSameWeightWithoutFreshValue() (gas: 354077)
+[PASS] testEntryEventIdentifiesPaidStakeAndRecipient() (gas: 272628)
+[PASS] testEthEntriesStayOpenBeforeAndAfterDailyVrfFulfillmentWhileLocked() (gas: 9076283)
+[PASS] testFuzzAllSixCollisionsKeepStrongerBoonsWithoutReverting(uint256) (runs: 1000, μ: 1042462, ~: 1036122)
+[PASS] testFuzzMultiplierMonotoneAndBounded(uint16) (runs: 1000, μ: 9497, ~: 9486)
+[PASS] testFuzzPaidWeightMatchesQuote(uint128,uint16) (runs: 1000, μ: 484842, ~: 505203)
+[PASS] testFuzzRingMatchesPerDayModel(uint256) (runs: 1000, μ: 4359617, ~: 4330196)
+[PASS] testFuzzSplittingStakeCannotGainWeight(uint96,uint96,uint16) (runs: 1000, μ: 588217, ~: 588191)
+[PASS] testGameOverRejectsBetsAndNeverIssuesBoons() (gas: 604404)
+[PASS] testGeneratedSpinsDoNotEnrollEvenWithProtocolHeroes() (gas: 178073)
+[PASS] testGenesisBetsWorkWhenDeploymentCrossesAReset() (gas: 4964300)
+[PASS] testGiftAndApprovedOperatorUseRecipientAndTheirScore() (gas: 625526)
+[PASS] testInvalidOrUnfundedBetsCannotCreateEntries() (gas: 269518)
+[PASS] testLaunchDayEthBetsReceiveAllSixBoonsThroughRealAdvance() (gas: 4552657)
+[PASS] testLivenessDeadlineRejectsEthEntries() (gas: 191413)
+[PASS] testManualProtocolBoonsBlockedIncludingApprovedOperator() (gas: 373688)
+[PASS] testMissingPredecessorUsesAwardWordForMenuAndDoesNotReplay() (gas: 850359)
+[PASS] testNextDayBetCannotChangeTheClosedPool() (gas: 974722)
+[PASS] testOnlyEthAndProtocolSymbolsCreateEntries() (gas: 3324477)
+[PASS] testPaidEthWeightTruncatedAndEachIssuerIsolated() (gas: 557046)
+[PASS] testQuoteUsesCanonicalScoreDuringJackpotPhase() (gas: 397352)
+[PASS] testRawPaidTotalAcrossSpinsExcludesBoonBoostAndMatchesHeroLedger() (gas: 402908)
+[PASS] testRealAdvanceOverAStaleRingSlotAwardsNothing() (gas: 16686527)
+[PASS] testRealDailyAdvanceAutomaticallyAwardsAndContinues() (gas: 8738729)
+[PASS] testRecipientContractCannotRejectAutomaticDelivery() (gas: 1050555)
+[PASS] testRingSlotReusedTwoDaysLaterStartsEmpty() (gas: 1055163)
+[PASS] testScoresAreSnapshottedAndCapAtThreeTimes() (gas: 1508537)
+[PASS] testSingleBettorWinsAllSixWithoutDailyOrLifetimeCaps() (gas: 11579491)
+[PASS] testStaleUndrawnPoolNeverDrawsOnALaterAwardDay() (gas: 657219)
+[PASS] testUninitializedDeityDoesNotCreateEntries() (gas: 230599)
+[PASS] testWeightOverflowCannotTruncateOrPartiallyFundEntry() (gas: 217272)
+Suite result: ok. 35 passed; 0 failed; 0 skipped; finished in 781.59ms (3.74s CPU time)
+
+Ran 6 tests for test/gas/KeeperResolveBetWorstCaseGas.t.sol:KeeperResolveBetWorstCaseGas
+[PASS] testPerOneSpinItemMarginalBelowWorstCase() (gas: 231374977)
+Logs:
+  cold mineFlip gas: 856189
+  Degenerette stage gas (mineFlip minus empty-queue baseline): 775316
+  cold mineFlip gas: 260170
+  Degenerette stage gas (mineFlip minus empty-queue baseline): 179297
+  declared_n_item_admission: 2292000
+  per_1spin_item_resolve_marginal_gas: 96914
+  per_1spin_item_resolve_batch_total_gas: 775316
+  worst_case_resolve_bet_10spin_allmatch_gas: 179297
+
+[PASS] testWorstCaseMixedCurrencyBatchGasViaSweep() (gas: 1241424)
+Logs:
+  cold mineFlip gas: 444103
+  Degenerette stage gas (mineFlip minus empty-queue baseline): 363230
+  worst_case_mixed_currency_batch_via_sweep_gas: 363230
+  worst_case_mixed_currency_batch_mineflip_gas: 444103
+  mixed_batch_total_spins: 40
+  declared_mixed_admission: 1005000
+
+[PASS] testWorstCaseResolveBet10SpinAllMatchFitsBlockGasLimit() (gas: 1103810)
+Logs:
+  cold mineFlip gas: 367668
+  Degenerette stage gas (mineFlip minus empty-queue baseline): 286795
+  worst_case_resolve_bet_10spin_allmatch_gas: 286795
+  worst_case_resolve_bet_10spin_mineflip_gas: 367668
+  declared_10spin_admission: 640000
+  worst_case_resolve_bet_lootbox_materializations: 9
+
+[PASS] testWorstCaseResolveBet25SpinAllMatchFitsBlockGasLimit() (gas: 1659421655)
+Logs:
+  cold mineFlip gas: 365168
+  Degenerette stage gas (mineFlip minus empty-queue baseline): 284295
+  cold mineFlip gas: 303344
+  Degenerette stage gas (mineFlip minus empty-queue baseline): 222471
+  worst_case_resolve_bet_25spin_allmatch_gas: 222471
+  legacy_10spin_worst_case_gas: 284295
+  worst_case_resolve_bet_25spin_lootbox_materializations: 16
+  declared_25spin_admission: 850000
+
+[PASS] testWorstCaseResolveBet25SpinAllMatchViaSweepFitsBlockGasLimit() (gas: 1209658)
+Logs:
+  cold mineFlip gas: 424983
+  Degenerette stage gas (mineFlip minus empty-queue baseline): 344110
+  worst_case_resolve_bet_25spin_allmatch_via_sweep_gas: 344110
+  worst_case_resolve_bet_25spin_mineflip_gas: 424983
+  declared_25spin_admission: 850000
+
+[PASS] test_ColdMineFlipCorrelatedMaxSpinEthBetsStayUnderOrdinaryTier() (gas: 116253741)
+Logs:
+  correlated keeper gross call gas: 8974760
+  correlated keeper gross call gas: 1873651
+
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 1.60s (987.18ms CPU time)
+
+Ran 5 tests for test/repro/MineFlipWorkerBudget.t.sol:MineFlipHumanBudgetTest
+[PASS] test_BetReservesWholeSlipBeforeMutation() (gas: 583386)
+[PASS] test_DownstreamFailureRollsBackBoxMarkerAndCursor() (gas: 28169849577)
+[PASS] test_FirstWideBoxWaitsForItsAtomicAllowance() (gas: 1885755)
+[PASS] test_HumanCannotBypassEarlierConsumers() (gas: 807254)
+[PASS] test_LowGasBoxCallWaitsForTheAtomicEntry() (gas: 593950)
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 1.75s (16.48ms CPU time)
+
+Ran 10 tests for test/gas/DegeneretteSweepGas.t.sol:DegeneretteSweepGas
+[PASS] testGasEth1BigWinBox() (gas: 62061803)
+Logs:
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 7
+  DECLARED_PER_BET eth_1spin_win_s7_box: 254000
+  SWEEP_FIRST_BET cold eth_1spin_win_s7_box: 222955
+  SWEEP_PER_BET same-owner eth_1spin_win_s7_box: 66997
+    first bet record flag: 1
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 7
+  SWEEP_PER_BET distinct-owner eth_1spin_win_s7_box: 66997
+
+[PASS] testGasEth1Losing() (gas: 3903679)
+Logs:
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+  DECLARED_PER_BET eth_1spin_lose: 254000
+  SWEEP_FIRST_BET cold eth_1spin_lose: 34655
+  SWEEP_PER_BET same-owner eth_1spin_lose: 9041
+    first bet record flag: 0
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+  SWEEP_PER_BET distinct-owner eth_1spin_lose: 9041
+
+[PASS] testGasEth1Winning() (gas: 5782433)
+Logs:
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 1
+    first bet record flag: 0
+    win boxes opened: 6
+  DECLARED_PER_BET eth_1spin_win_s5: 254000
+  SWEEP_FIRST_BET cold eth_1spin_win_s5: 182527
+  SWEEP_PER_BET same-owner eth_1spin_win_s5: 50862
+    first bet record flag: 0
+    win boxes opened: 1
+    first bet record flag: 0
+    win boxes opened: 6
+  SWEEP_PER_BET distinct-owner eth_1spin_win_s5: 50862
+
+[PASS] testGasEth25() (gas: 6591394)
+Logs:
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 1
+    first bet record flag: 0
+    win boxes opened: 7
+  DECLARED_PER_BET eth_25spin: 590000
+  SWEEP_FIRST_BET cold eth_25spin: 202183
+  SWEEP_PER_BET same-owner eth_25spin: 104702
+    first bet record flag: 0
+    win boxes opened: 1
+    first bet record flag: 0
+    win boxes opened: 7
+  SWEEP_PER_BET distinct-owner eth_25spin: 104702
+
+[PASS] testGasEth25MaxWinCapped() (gas: 97239484)
+Logs:
+    stress word winning spins: 14
+    stress word high spins: 0
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 1
+    first bet record flag: 1
+    win boxes opened: 10
+  DECLARED_PER_BET eth_25spin_maxwin_capped: 590000
+  SWEEP_FIRST_BET cold eth_25spin_maxwin_capped: 366398
+  SWEEP_PER_BET same-owner eth_25spin_maxwin_capped: 162788
+    first bet record flag: 1
+    win boxes opened: 1
+    first bet record flag: 1
+    win boxes opened: 10
+  SWEEP_PER_BET distinct-owner eth_25spin_maxwin_capped: 162788
+
+[PASS] testGasEth25MaxWinHighCapped() (gas: 6396678000)
+Logs:
+    stress word winning spins: 14
+    stress word high spins: 1
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 9
+  DECLARED_PER_BET eth_25spin_maxwin_high_capped: 590000
+  SWEEP_FIRST_BET cold eth_25spin_maxwin_high_capped: 354624
+  SWEEP_PER_BET same-owner eth_25spin_maxwin_high_capped: 167231
+    first bet record flag: 1
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 9
+  SWEEP_PER_BET distinct-owner eth_25spin_maxwin_high_capped: 167231
+
+[PASS] testGasFlip15() (gas: 4645761)
+Logs:
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+  DECLARED_PER_BET flip_15spin: 155000
+  SWEEP_FIRST_BET cold flip_15spin: 93262
+  SWEEP_PER_BET same-owner flip_15spin: 49572
+    first bet record flag: 0
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+  SWEEP_PER_BET distinct-owner flip_15spin: 49572
+
+[PASS] testGasFlip1Losing() (gas: 3600233)
+Logs:
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+  DECLARED_PER_BET flip_1spin_lose: 85000
+  SWEEP_FIRST_BET cold flip_1spin_lose: 34706
+  SWEEP_PER_BET same-owner flip_1spin_lose: 9060
+    first bet record flag: 0
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+  SWEEP_PER_BET distinct-owner flip_1spin_lose: 9060
+
+[PASS] testGasFlip1Winning() (gas: 3981465)
+Logs:
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+  DECLARED_PER_BET flip_1spin_win_s5: 85000
+  SWEEP_FIRST_BET cold flip_1spin_win_s5: 36358
+  SWEEP_PER_BET same-owner flip_1spin_win_s5: 12756
+    first bet record flag: 0
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+  SWEEP_PER_BET distinct-owner flip_1spin_win_s5: 12756
+
+[PASS] testGasRecordClaimSpin() (gas: 32846559)
+Logs:
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+    win boxes opened: 0
+    first bet record flag: 1
+    win boxes opened: 0
+    first bet record flag: 0
+    win boxes opened: 0
+  RECORD cold claim spin delta, worst: 28950
+  RECORD cold first bet with claim, worst: 161248
+
+Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 1.75s (2.20s CPU time)
+
+Ran 14 test suites in 1.76s (8.08s CPU time): 127 tests passed, 0 failed, 0 skipped (127 total tests)

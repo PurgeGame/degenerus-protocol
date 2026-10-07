@@ -33,8 +33,7 @@ contract CohortRecyclingHarness is WalletSeed {
         uint256 lr = lootboxRngPacked;
         uint256 position = uint32(lr >> LR_BET_COUNT_SHIFT);
         lootboxRngPacked = lr + (uint256(1) << LR_BET_COUNT_SHIFT);
-        uint256 slot = _betSlot(_rngWriteBuffer(), position);
-        assembly { sstore(slot, bet) }
+        _storeDegeneretteBet(_rngWriteBuffer(), position, bet);
     }
     function processed() external { boxCursor = boxReadCount; }
     function entry(uint48 buffer, uint256 position) external view returns(uint256) { return _boxEntryAt(buffer, position); }

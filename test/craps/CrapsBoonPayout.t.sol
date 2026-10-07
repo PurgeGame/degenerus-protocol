@@ -14,10 +14,10 @@ contract BoonPayoutHarness is CrapsViews {}
 
 /// @title CrapsBoonPayout -- the craps boon as a BANKROLL-PAYOUT boost
 /// @notice The boon buys no discount and pays no entry-time credit. It rides the slip as a one-hot
-///         mask in bet-word bits 206..208 and lifts ONLY that slip's bankroll return when it
+///         mask in bet-word bits 62..64 and lifts ONLY that slip's bankroll return when it
 ///         settles. Four things this owns:
 ///
-///         1. THE SLICE. 206..208 was free space between the standing field and the day-span byte.
+///         1. THE SLICE. Bits 62..64 follow the board in the compact header.
 ///            A writer that spills into a neighbour would corrupt a standing or a high-lane flag
 ///            silently, so the surrounding word is graded, not just the mask.
 ///         2. THE FORMULA. `min(basePaid, 60,000) * bps`, so the tiers top out at 3,000 / 6,000 /

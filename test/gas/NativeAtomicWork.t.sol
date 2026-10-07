@@ -55,7 +55,7 @@ contract NativeAtomicDegeneretteTest is DeployProtocol {
         host.publishRead();
         host.setCommittedWord(word);
         uint256 packed = host.bet();
-        assertEq((packed >> 165) & 31, spins);
+        assertEq((packed >> 37) & 31, spins);
         vm.cool(address(game)); vm.cool(address(coin)); vm.cool(address(coinflip));
         vm.cool(address(sdgnrs)); vm.cool(address(crapsBattle));
         vm.cool(ContractAddresses.GAME_DEGENERETTE_MODULE);
@@ -65,7 +65,8 @@ contract NativeAtomicDegeneretteTest is DeployProtocol {
         used = beforeGas - gasleft();
         assertTrue(result.done);
         assertEq(result.rewardBasis, 1);
-        assertTrue(host.bet() >> 255 != 0, "whole bet completed atomically");
+        assertEq(host.bet(), packed, "resolution does not write the bet");
+        assertEq(host.betCursor(), 1, "whole bet completed atomically");
         assertLt(used, 10_000_000, "one immutable bet meets the chunk sizing guideline");
     }
 

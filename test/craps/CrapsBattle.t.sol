@@ -103,7 +103,7 @@ contract BattleHarness is CrapsViews {
         board = _boardFrom(packed, chipFlip);
         _scatterInto(
             board,
-            uint256(keccak256(abi.encode(_wordAt(_indexOf(slot)), address(uint160(header))))),
+            uint256(keccak256(abi.encode(_wordAt(_indexOf(slot)), address(uint160(uint32(header)))))),
             chipFlip,
             BONUS_CHIPS - placed
         );
