@@ -626,7 +626,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         (address source, bool allowed) = _stethSource(subscriber, funding);
         if (!allowed) return srcFunding;
         try IDegenerusGame(address(this)).pullAfkingSteth{gas: GasBounds.AFKING_STETH_PULL_GAS}(
-            address(uint160(subscriber)), source, ethValue - srcFunding
+            subscriber, source, ethValue - srcFunding
         ) returns (uint256 received) {
             return srcFunding + received;
         } catch {
@@ -662,17 +662,16 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @dev Each token operation is caught, and the caller catches this whole frame:
     ///      malformed return data or bad receipts therefore
     ///      roll back the token transfer and its allowance consumption as well.
-    /// @param subscriber The sub's account key.
+    /// @param subWord The sub's set element: its key (bits 0..159) and wallet ID (160..191).
     /// @param source The funding account's payee, where the stETH comes from.
-    function pullAfkingSteth(address subscriber, address source, uint256 shortfall)
+    function pullAfkingSteth(uint256 subWord, address source, uint256 shortfall)
         external returns (uint256 received)
     {
         if (address(this) != ContractAddresses.GAME || msg.sender != address(this)) revert E();
-        uint32 subId = _walletIdOf(subscriber);
+        // The self-call carries the sub's set element (key and wallet ID); the funding word
+        // carries the source's key and wallet ID, and a self-funded sub is its own source.
+        uint32 subId = uint32(subWord >> 160);
         Sub storage sub = _subOf[subId];
-        // The funding word carries the source's key and wallet ID; a self-funded sub is its
-        // own source.
-        uint256 subWord = uint256(uint160(subscriber)) | (uint256(subId) << 160);
         uint256 srcWord = (sub.flags & FLAG_EXTERNAL_FUNDING) != 0
             ? _fundingSourceOf[subId]
             : subWord;
@@ -719,7 +718,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         ) revert AfkingStethPullFailed();
 
         _creditAfkingValue(sourceId, received);
-        emit AfkingStethFunded(subscriber, address(uint160(srcWord)), shortfall, received);
+        emit AfkingStethFunded(address(uint160(subWord)), address(uint160(srcWord)), shortfall, received);
     }
 
     /*------------------------------------------------------------------
@@ -1783,9 +1782,11 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      Runs in the Game's storage context; `msg.sender` is the original caller.
     /// @param sub The subscriber whose affiliate base is drained.
     /// @return base The drained whole-FLIP affiliate base (0 if already drained / never accrued).
-    function drainAffiliateBase(address sub) external returns (uint256 base) {
+    /// @return id The sub's wallet ID, so the affiliate compares uplines by ID.
+    function drainAffiliateBase(address sub) external returns (uint256 base, uint32 id) {
         if (msg.sender != ContractAddresses.AFFILIATE) revert NotApproved();
-        Sub storage s = _subOf[_walletIdOf(sub)];
+        id = _walletIdOf(sub);
+        Sub storage s = _subOf[id];
         base = s.affiliateBase;
         if (base != 0) {
             s.affiliateBase = 0;

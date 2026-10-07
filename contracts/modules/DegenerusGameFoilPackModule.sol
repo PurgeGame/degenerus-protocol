@@ -472,7 +472,7 @@ contract DegenerusGameFoilPackModule is
         // Append at the write cohort's count, which shares the slot `_foilWriteKey` loaded.
         uint32 position = foilWriteCount;
         uint256 slot = _foilSlot(_foilWriteKey(), position);
-        uint256 pack = (uint256(buyerId) << 192) | (uint256(lvl) << 160) | uint256(uint160(buyer));
+        uint256 pack = (uint256(buyerId) << 192) | (uint256(lvl) << 160);
         assembly ("memory-safe") { sstore(slot, pack) }
         foilWriteCount = position + 1;
 
@@ -919,8 +919,8 @@ contract DegenerusGameFoilPackModule is
     ///      data this function has in hand — a fraction of a percent of the sixteen
     ///      entry writes it is here to do. Only the grand acts on it: the ladder and its
     ///      kicker stay a pull, off this budgeted path.
-    /// @param packedLvlBuyer Packed queue entry: buyer address (bits 0..159, read only by the
-    ///        grand's event), cycle level (160..183) and wallet ID (192..223).
+    /// @param packedLvlBuyer Packed queue entry: cycle level (bits 160..183) and the buyer's
+    ///        wallet ID (192..223); bits 0..159 are zero.
     /// @param entropy Committed normal cohort word driving the four boosted lines.
     /// @param terminal Whether liveness has triggered; suppresses the grand push, so the
     ///        terminal drain never carves a pool the terminal jackpot is settling from.
@@ -939,7 +939,6 @@ contract DegenerusGameFoilPackModule is
         uint32[256] memory counts,
         uint8[16] memory touchedTraits
     ) private returns (bool grandPaid, uint32 units) {
-        address buyer = address(uint160(packedLvlBuyer));
         uint32 buyerId = uint32(packedLvlBuyer >> 192);
         uint24 lvl = uint24(packedLvlBuyer >> 160);
         // Only the terminal payout level needs generated traits after the ending latches.
@@ -1008,7 +1007,7 @@ contract DegenerusGameFoilPackModule is
         if (!terminal) {
             (uint8 golds, uint8 allGold) = _packGold(lines);
             if (allGold >= 2) {
-                _pushFoilGrand(buyer, buyerId, lvl, golds, allGold);
+                _pushFoilGrand(buyerId, lvl, golds, allGold);
                 grandPaid = true;
             }
         }
@@ -1113,13 +1112,13 @@ contract DegenerusGameFoilPackModule is
     ///      buyer/entropy can construct. Same precedent as the jackpot module's
     ///      _pickSoloQuadrant, and no production contract derives from this module, so
     ///      the reachable surface is unchanged.
-    /// @param player The pack's buyer, who the grand credits.
+    /// @param id The pack buyer's wallet ID, which the grand credits; its key is decoded only
+    ///        for the event.
     /// @param lvl The pack's cycle level.
     /// @param golds The pack's total gold quadrants — 8 to 16 (at least two all-gold tickets,
     ///        the other tickets holding 0-3 golds each).
     /// @param allGold How many of the pack's four tickets came out all gold (2..4).
     function _pushFoilGrand(
-        address player,
         uint32 id,
         uint24 lvl,
         uint8 golds,
@@ -1144,7 +1143,7 @@ contract DegenerusGameFoilPackModule is
             assembly ("memory-safe") { revert(add(reason, 32), mload(reason)) }
         }
         // flipCredit 0: the grand's own legs are stamped by GoldenTicketWin.
-        emit GoldenTicketFoil(player, lvl, golds, allGold, 0);
+        emit GoldenTicketFoil(_walletKey(id), lvl, golds, allGold, 0);
     }
 
 }

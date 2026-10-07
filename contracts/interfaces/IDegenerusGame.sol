@@ -529,6 +529,11 @@ interface IDegenerusGame {
     /// @return Raw packed uint256 containing mint counts, streak, pass status.
     function mintPackedFor(address player) external view returns (uint256);
 
+    /// @notice Mint word of an allocated wallet ID (resolved through the wallet table).
+    /// @param id Allocated wallet ID.
+    /// @return Raw packed mint word for the ID's account key.
+    function mintPackedOfId(uint32 id) external view returns (uint256);
+
     /// @notice Purchase tickets and loot boxes with ETH or claimable for account `id`.
     /// @dev Main entry point for all ETH/claimable purchases.
     ///      Recycling at least 3 tickets' worth of claimable winnings earns a 10% FLIP flip-credit bonus.
@@ -764,10 +769,10 @@ interface IDegenerusGame {
     function subscriberSetLength() external view returns (uint256);
 
     /// @notice GAME-only atomic stETH pull; caller catches any failed funding attempt.
-    /// @dev Game self-call (caller and callee both live in the Game image). `subscriber` is the
-    ///      sub's account key and `source` the address the stETH comes from: the funding account's
-    ///      payee. The live consent re-check runs by ID inside.
-    function pullAfkingSteth(address subscriber, address source, uint256 shortfall) external returns (uint256);
+    /// @dev Game self-call (caller and callee both live in the Game image). `subWord` is the
+    ///      sub's set element (key bits 0..159, wallet ID 160..191) and `source` the address the
+    ///      stETH comes from: the funding account's payee. The live consent re-check runs by ID.
+    function pullAfkingSteth(uint256 subWord, address source, uint256 shortfall) external returns (uint256);
 
     /// @notice Permissionless FLIP claim — pays each listed account its accrued pendingFlip in one
     ///         creditFlip and zeroes it; always credits the account, never the caller.
@@ -779,7 +784,8 @@ interface IDegenerusGame {
     /// @notice Affiliate-only atomic read-and-zero of a sub's accrued affiliateBase.
     /// @param sub The subscriber whose affiliate base is drained.
     /// @return base The drained whole-FLIP affiliate base (0 if already drained).
-    function drainAffiliateBase(address sub) external returns (uint256 base);
+    /// @return id The sub's wallet ID (0 for an unregistered address, whose base is 0).
+    function drainAffiliateBase(address sub) external returns (uint256 base, uint32 id);
 
     /// @notice QUESTS-only: bump an afking sub's streak base for a secondary/level completion.
     /// @dev Keyed by wallet ID (Quests holds only IDs). A no-op unless `id` has a live afking

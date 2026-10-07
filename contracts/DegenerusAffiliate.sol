@@ -87,7 +87,8 @@ interface IGameAfkingDrain {
     /// @notice Atomic read-and-zero of a sub's accrued affiliate base (whole FLIP).
     /// @param sub The subscriber whose affiliate base is drained.
     /// @return base The drained whole-FLIP affiliate base (0 if already drained / never accrued).
-    function drainAffiliateBase(address sub) external returns (uint256 base);
+    /// @return id The sub's wallet ID (0 for an unregistered address, whose base is 0).
+    function drainAffiliateBase(address sub) external returns (uint256 base, uint32 id);
 
     /// @notice Current game level (the claim-time level basis for the leaderboard write).
     /// @return Current jackpot level (starts at 0).
@@ -866,21 +867,17 @@ contract DegenerusAffiliate {
         uint24 lvl = afkingDrain.level() + 1;
         uint256 earningsWord = affiliateCoinEarned[lvl][a];
         uint256 uplines;
-        address u1Key;
-        address u2Key;
         if (!noReferrer) {
             uint256 cache = _routeCache(routeCode, earningsWord);
             uint32 u;
             (u, cache) = _payoutUpline(routeCode, a, false, cache);
             uplines = u;
-            u1Key = _ownerKey(bytes32(0), u);
             (u, cache) = _payoutUpline(routeCode, a, true, cache);
             uplines |= uint256(u) << 32;
-            u2Key = _ownerKey(bytes32(0), u);
             earningsWord = (earningsWord & EARNINGS_MASK) | (cache << 128);
         }
 
-        (uint256 sumB, uint256 skipU1, uint256 skipU2) = _drainSubs(subs, a, u1Key, u2Key);
+        (uint256 sumB, uint256 skipU1, uint256 skipU2) = _drainSubs(subs, a, uplines);
         if (sumB == 0) return; // nothing accrued / already drained — no-op (idempotent re-claim)
 
         if (noReferrer) {
@@ -907,9 +904,10 @@ contract DegenerusAffiliate {
 
     /// @dev Drain every sub's accrued base, checking each resolves to the direct affiliate `a`.
     ///      An upline that IS the sub (the rare mutual-referral cycle) forfeits its cut of that
-    ///      sub's base into A's remainder; it is never paid back to the sub. The upline keys are
-    ///      zero for a no-referrer batch, which no sub matches.
-    function _drainSubs(address[] calldata subs, uint32 a, address u1Key, address u2Key)
+    ///      sub's base into A's remainder; it is never paid back to the sub. `uplines` packs the
+    ///      two upline IDs (zero for a no-referrer batch); only a sub with a nonzero base, and so a
+    ///      nonzero ID, is compared.
+    function _drainSubs(address[] calldata subs, uint32 a, uint256 uplines)
         private
         returns (uint256 sumB, uint256 skipU1, uint256 skipU2)
     {
@@ -924,11 +922,11 @@ contract DegenerusAffiliate {
             }
 
             // Atomic read-and-zero at the storage owner: a duplicate sub drains 0 the second time.
-            uint256 b = afkingDrain.drainAffiliateBase(sub);
+            (uint256 b, uint32 subId) = afkingDrain.drainAffiliateBase(sub);
             if (b != 0) {
                 sumB += b;
-                if (sub == u1Key) skipU1 += b;
-                if (sub == u2Key) skipU2 += b;
+                if (subId == uint32(uplines)) skipU1 += b;
+                if (subId == uint32(uplines >> 32)) skipU2 += b;
             }
 
             unchecked { ++i; }

@@ -342,7 +342,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Atomic stETH funding operation, callable only by GAME itself.
     /// @dev The AFKing caller catches this whole frame, including token return-data
     ///      decoding and post-transfer checks, so failure rolls back the token move.
-    function pullAfkingSteth(address, address, uint256) external returns (uint256) {
+    function pullAfkingSteth(uint256, address, uint256) external returns (uint256) {
         if (msg.sender != address(this)) revert OnlySelf();
         (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
@@ -395,12 +395,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Signature: drainAffiliateBase(address sub). The signature matches the module
     ///      function exactly (identical selector), so the calldata forwards as-is — re-encoding
     ///      here would cost contract-size headroom for no behavior change.
-    function drainAffiliateBase(address) external returns (uint256) {
+    function drainAffiliateBase(address) external returns (uint256, uint32) {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_AFKING_MODULE
             .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
-        return abi.decode(data, (uint256));
+        return abi.decode(data, (uint256, uint32));
     }
 
     /// @notice Permissionless paid cure of account `id`'s cashout/smite curse (100 FLIP from
@@ -1273,8 +1273,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert AlreadySwept();
         if (amount == 0) return;
         (address player, address payee) = _resolveAccount(id);
+        // An explicit ID is the account; only the self shorthand looks the caller's ID up.
+        uint32 wid = id == 0 ? _walletIdOf(player) : id;
         // One packed load: the guard reads the afking high half and the debit writes it back.
-        uint32 wid = _walletIdOf(player);
         uint256 packed = balancesPacked[wid];
         if (amount > (packed >> 128)) revert Insolvent();
         // Guard proved amount <= high half, so `amount << 128` subtracts only from the afking
@@ -2332,6 +2333,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @return Raw packed uint256 from mintPacked_.
     function mintPackedFor(address player) external view returns (uint256) {
         return mintPacked_[player];
+    }
+
+    /// @dev Mint word of an allocated wallet ID, resolved through the wallet table here so a
+    ///      caller holding only the ID needs one call (DegenerusQuests level-quest eligibility).
+    /// @param id Allocated wallet ID.
+    /// @return Raw packed uint256 from mintPacked_ for the ID's account key.
+    function mintPackedOfId(uint32 id) external view returns (uint256) {
+        return mintPacked_[_walletKey(id)];
     }
 
     /*+======================================================================+

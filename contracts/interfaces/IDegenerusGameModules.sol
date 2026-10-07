@@ -683,7 +683,7 @@ interface IDegenerusGameBingoModule {
 ///      the bounty payee read the original caller).
 interface IGameAfkingModule {
     /// @notice GAME-only atomic stETH fallback funding operation.
-    function pullAfkingSteth(address subscriber, address source, uint256 shortfall) external returns (uint256);
+    function pullAfkingSteth(uint256 subWord, address source, uint256 shortfall) external returns (uint256);
 
     function runSubscriberWork(uint24 processDay, uint256 gasAllowance) external returns (MineFlipGas.Result memory);
     function runAfkingWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
@@ -719,7 +719,7 @@ interface IGameAfkingModule {
     ///         read accessor.
     /// @param sub The subscriber whose affiliate base is drained.
     /// @return base The drained whole-FLIP affiliate base (0 if already drained).
-    function drainAffiliateBase(address sub) external returns (uint256 base);
+    function drainAffiliateBase(address sub) external returns (uint256 base, uint32 id);
 
     /// @notice Cashout-curse SET hook, delegatecalled from the Game's claimWinnings.
     function maybeCurse(address player) external;

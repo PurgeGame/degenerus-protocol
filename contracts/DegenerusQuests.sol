@@ -29,7 +29,6 @@ import "./interfaces/IDegenerusGame.sol";
 import {ICoinflip} from "./interfaces/ICoinflip.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 import {BitPackingLib} from "./libraries/BitPackingLib.sol";
-import {WalletTableLib} from "./libraries/WalletTableLib.sol";
 import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 import {PriceLookupLib} from "./libraries/PriceLookupLib.sol";
 import {EntropyLib} from "./libraries/EntropyLib.sol";
@@ -331,9 +330,6 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @dev Reference to the coinflip contract for crediting flip stakes.
     ICoinflip internal constant coinflip = ICoinflip(ContractAddresses.COINFLIP);
 
-    /// @dev Protocol wallet IDs (reserved by the Game at construction).
-    uint32 private constant VAULT_WALLET_ID = 1;
-    uint32 private constant SDGNRS_WALLET_ID = 2;
 
     // =========================================================================
     //                                 STRUCTS
@@ -2620,17 +2616,13 @@ contract DegenerusQuests is IDegenerusQuests {
         );
     }
 
-    /// @dev Checks if a wallet is eligible for the level quest: resolves the account key (the
-    ///      protocol wallets by constant, every other ID through the wallet table), then applies
-    ///      the gates to its mint word.
+    /// @dev Checks if a wallet is eligible for the level quest: one Game call returns the ID's
+    ///      mint word (the Game resolves the key), then the gates apply to it.
     /// @param id The wallet ID to check.
     /// @param lvl The current game level (fetched once by the caller).
     /// @return True if the wallet meets both gates.
     function _isLevelQuestEligible(uint32 id, uint24 lvl) internal view returns (bool) {
-        address key = id == VAULT_WALLET_ID
-            ? ContractAddresses.VAULT
-            : (id == SDGNRS_WALLET_ID ? ContractAddresses.SDGNRS : WalletTableLib.ownerOf(id));
-        return _levelQuestEligible(lvl, questGame.mintPackedFor(key));
+        return _levelQuestEligible(lvl, questGame.mintPackedOfId(id));
     }
 
     /// @dev The level-quest gates on a mint word: (levelStreak >= 5 OR any pass ever held) AND
