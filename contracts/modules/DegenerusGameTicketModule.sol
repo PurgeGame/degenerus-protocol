@@ -32,7 +32,7 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
     ///      Callers invoke it at most once per wallet and cache any nonzero result.
     function registerWallet(address owner, bool allocate) external returns (uint32 id) {
         if (msg.sender != ContractAddresses.AFFILIATE && msg.sender != ContractAddresses.COINFLIP
-            && msg.sender != ContractAddresses.CRAPS && msg.sender != ContractAddresses.JACKPOT_BATTLE
+            && msg.sender != ContractAddresses.CRAPS
             && msg.sender != ContractAddresses.PARIMUTUEL && msg.sender != ContractAddresses.WWXRP
             && msg.sender != ContractAddresses.ADMIN && msg.sender != ContractAddresses.COIN) revert E();
         if (!allocate) return _walletIdOf(owner);

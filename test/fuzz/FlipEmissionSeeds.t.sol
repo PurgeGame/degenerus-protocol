@@ -39,7 +39,7 @@ contract FlipEmissionSeeds is DeployProtocol {
     ///      and decode `day`'s lane back to wei.
     function _stakeOf(uint24 day, address player) internal view returns (uint256) {
         bytes32 inner = keccak256(abi.encode(uint256(day >> 3), uint256(0)));
-        bytes32 slot = keccak256(abi.encode(player, uint256(inner)));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(player)), uint256(inner)));
         uint256 word = uint256(vm.load(address(coinflip), slot));
         return uint256(uint32(word >> ((uint256(day) & 7) * 32))) * 1;
     }
@@ -153,7 +153,7 @@ contract FlipEmissionSeeds is DeployProtocol {
         );
         uint256 credit = 100_000;
         vm.prank(GAME);
-        coinflip.creditFlip(SDGNRS, credit);
+        coinflip.creditFlip(2, credit);
 
         // Day 21 WIN: the payout settles into the rolling carry (plus the flat
         // recycle bonus on the roll) - nothing mints, nothing becomes claimable.

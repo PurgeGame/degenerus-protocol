@@ -28,7 +28,7 @@ contract CursorProbe {
         SLOT = slot;
     }
 
-    function creditFlip(address, uint256) external {
+    function creditFlip(uint32, uint256) external {
         uint256 value = uint256(DegenerusGame(payable(GAME)).extsload(bytes32(SLOT)));
         uint256 base = BASE;
         assembly ("memory-safe") {
@@ -361,6 +361,7 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
     /// @notice A live boost is consumed by the first purchase only; distress is snapshotted per
     ///         purchase and routes that purchase's spend wholly to next.
     function test_Modifiers_BoostOnceAndDistressToggle() public {
+        _buy(alice, BoxOrderLib.boSmalls(1)); // registers alice
         host.seedBoost(alice, 3); // 25%
         (uint48 b, uint256 p) = _buy(alice, BoxOrderLib.boCustom(1 ether));
         assertEq(BoxOrderLib.boBoostBps(host.entryAt(b, p)), 2500);

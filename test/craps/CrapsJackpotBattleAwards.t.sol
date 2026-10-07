@@ -14,6 +14,7 @@ contract CrapsJackpotBattleAwardsTest is CrapsPins {
 
     function setUp() public {
         _installPins();
+        game.registerWallet(winner, true);
         vm.etch(ContractAddresses.JACKPOT_BATTLE, address(new JackpotBattleViews()).code);
         vm.cloneAccount(address(new MockCoinflip()), address(coinflip));
         c = new CrapsViews();
@@ -40,7 +41,7 @@ contract CrapsJackpotBattleAwardsTest is CrapsPins {
         c.setPreferredBoard(3 | (3 << 12) | (1 << 15));
         c.payProgressiveAt(KEY, winner, 7500, 250_000);
         assertEq(c.preferredBoardOf(game.walletIdOf(winner)), 3 | (3 << 12) | (1 << 15));
-        uint256 word = uint256(c.extsload(keccak256(abi.encode(winner, CrapsPreferenceLib.PASS_SLOT))));
+        uint256 word = uint256(c.extsload(keccak256(abi.encode(uint256(game.walletIdOf(winner)), CrapsPreferenceLib.PASS_SLOT))));
         assertNotEq(word & (uint256(1) << 84), 0);
     }
 

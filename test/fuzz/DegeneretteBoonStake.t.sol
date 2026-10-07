@@ -83,8 +83,8 @@ contract DegeneretteBoonStake is DeployProtocol {
     // Helpers
     // =========================================================================
 
-    function _boonSlot1(address who) internal pure returns (bytes32) {
-        return bytes32(uint256(keccak256(abi.encode(who, SLOT_BOON_PACKED))) + 1);
+    function _boonSlot1(address who) internal view returns (bytes32) {
+        return bytes32(uint256(keccak256(abi.encode(uint256(game.walletIdOf(who)), SLOT_BOON_PACKED))) + 1);
     }
 
     function _laneShift(uint8 currency) internal pure returns (uint256) {
@@ -112,6 +112,7 @@ contract DegeneretteBoonStake is DeployProtocol {
         uint24 stampDay,
         bool isDeity
     ) internal {
+        _giveWalletId(who);
         uint256 s1 = uint256(vm.load(address(game), _boonSlot1(who)));
         uint256 shift = _laneShift(currency);
         uint256 lane = (uint256(stampDay & 0x1FFFFF) << BP_DEGEN_LANE_DAY_SHIFT) |

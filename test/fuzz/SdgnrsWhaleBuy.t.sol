@@ -53,7 +53,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
     uint256 private constant LEVEL_OFFBYTES = 12; // `level` uint24 @ slot 0, byte 12
     uint256 private constant RNG_LOCKED_OFFBYTES = 19; // `rngLockedFlag` bool @ slot 0, byte 19
     uint256 private constant RNG_WORD_BY_DAY_SLOT = GameSlots.RNG_WORD_BY_DAY; // mapping(uint32 => uint256)
-    uint256 private constant BOON_SLOT = GameSlots.BOON_PACKED; // mapping(address => BoonPacked), slot0 first
+    uint256 private constant BOON_SLOT = GameSlots.BOON_PACKED; // mapping(uint32 => BoonPacked), slot0 first
     uint256 private constant BP_WHALE_DAY_SHIFT = 200;
     uint256 private constant BP_WHALE_TIER_SHIFT = 248;
     uint256 private constant BP_WHALE_CLEAR = ~(uint256(type(uint56).max) << BP_WHALE_DAY_SHIFT);
@@ -490,8 +490,8 @@ contract SdgnrsWhaleBuy is DeployProtocol {
         vm.store(address(game), s1, bytes32(p1));
     }
 
-    function _boonSlot0(address player) internal pure returns (bytes32) {
-        return keccak256(abi.encode(player, BOON_SLOT));
+    function _boonSlot0(address player) internal view returns (bytes32) {
+        return keccak256(abi.encode(_walletId(player), BOON_SLOT));
     }
 
     /// @dev Lootbox-rolled whale boon (deityWhaleDay 0 => 4-day window from `whaleDay`).

@@ -183,8 +183,9 @@ contract AfkingStethGasTest is DeployProtocol {
         host.addStethSubscriber(PLAYER, FUNDER, true);
         // Activate production quest bookkeeping so failure measures real handback.
         uint24 yesterday = game.currentDayView() - 1;
+        uint32 playerId = game.walletIdOf(PLAYER);
         vm.prank(address(game));
-        quests.beginAfking(PLAYER, yesterday);
+        quests.beginAfking(playerId, yesterday);
         if (followingSubscriber) {
             host.addStethSubscriber(PLAYER_TWO, PLAYER_TWO, true);
             host.creditSource(PLAYER_TWO, 100 ether, true);

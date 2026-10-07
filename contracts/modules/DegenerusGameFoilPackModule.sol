@@ -422,7 +422,7 @@ contract DegenerusGameFoilPackModule is
             ? PriceLookupLib.priceForLevel(level + 1)
             : priceWei;
         (uint256 reward, uint8 qType, bool questCompleted, uint32 streakSnapshot, bool afking) = quests
-            .handleFoilPurchase(buyer, cost, 0, 0, priceWei, levelQuestPrice);
+            .handleFoilPurchase(buyerId, cost, 0, 0, priceWei, levelQuestPrice);
         if (questCompleted) {
             kickback += reward;
             // questType 1 == MINT_ETH (the daily primary), matching the ticket leg's gate.
@@ -446,7 +446,7 @@ contract DegenerusGameFoilPackModule is
             kickback += (claimableUsed * PRICE_COIN_UNIT * 10) / (priceWei * 100);
         }
 
-        if (kickback != 0) coinflip.creditFlip(buyer, kickback);
+        if (kickback != 0) coinflip.creditFlip(buyerId, kickback);
 
         // Boost freeze off the buyer's post-action activity score (units + the streak the
         // primary just advanced are reflected via streakSnapshot). Mirror the mint path's
@@ -570,7 +570,7 @@ contract DegenerusGameFoilPackModule is
 
         // Mark before any payout (CEI).
         foilRecord[lvl & 3][id] = record | _FOIL_GOLD_CLAIMED;
-        _settleGoldenTicket(player, lvl, golds, allGold);
+        _settleGoldenTicket(player, id, lvl, golds, allGold);
     }
 
     /// @notice Permissionlessly resolve a batch of foil match claims.
@@ -852,7 +852,7 @@ contract DegenerusGameFoilPackModule is
         // routed by selector.
         if (selector == IDegenerusGameDegeneretteModule.resolveFlipSpinsFromBox.selector) {
             uint256 flipOut = abi.decode(data, (uint256));
-            if (flipOut != 0) coinflip.creditFlip(player, flipOut);
+            if (flipOut != 0) coinflip.creditFlip(id, flipOut);
         } else if (
             selector == IDegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox.selector
         ) {
@@ -1069,19 +1069,21 @@ contract DegenerusGameFoilPackModule is
     ///      No production contract derives from this module, so the reachable surface is
     ///      unchanged.
     /// @param player The pack's buyer, who every rung credits.
+    /// @param id The buyer's wallet ID (the FLIP credit key).
     /// @param lvl The pack's cycle level.
     /// @param golds The pack's total gold quadrants (3..7, or 8+ scattered across at
     ///        most one whole ticket).
     /// @param allGold How many of the pack's four tickets came out all gold (0 or 1).
     function _settleGoldenTicket(
         address player,
+        uint32 id,
         uint24 lvl,
         uint8 golds,
         uint8 allGold
     ) internal {
         uint256 flipCredit = _goldLadderFlip(golds);
         if (allGold == 1) flipCredit += GOLDEN_TICKET_FLIP;
-        coinflip.creditFlip(player, flipCredit);
+        coinflip.creditFlip(id, flipCredit);
         emit GoldenTicketFoil(player, lvl, golds, allGold, flipCredit);
     }
 

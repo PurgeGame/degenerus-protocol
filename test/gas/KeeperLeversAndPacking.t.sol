@@ -59,10 +59,10 @@ contract KeeperLeversAndPacking is DeployProtocol {
     // Constants
     // -------------------------------------------------------------------------
 
-    /// @dev keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)") — emitted once per
+    /// @dev keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)") — emitted once per
     ///      creditFlip via _addDailyFlip; used to count creditFlip emissions.
     bytes32 private constant COINFLIP_STAKE_UPDATED_SIG =
-        keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
+        keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)");
 
     uint48 private constant INDEX = 1;
     uint256 private constant LOOTBOX_WEI = 1 ether; // >= LOOTBOX_MIN
@@ -151,12 +151,12 @@ contract KeeperLeversAndPacking is DeployProtocol {
         assertEq(_countOccurrences(mineFlipBody, "priceForLevel("), 1, "GAS-02: no second price read in mineFlip");
         // mineFlip pays exactly ONE bounty creditFlip per tx, CEI-last, after the dispatch loop.
         assertEq(
-            _countOccurrences(miner, "coinflip.creditFlip(msg.sender, reward);"),
+            _countOccurrences(miner, "coinflip.creditFlip(minerId, reward);"),
             1,
             "GAS-02 (v55): mineFlip does ONE CEI-last bounty creditFlip per tx (one-category router)"
         );
         // The retired router credit no longer exists in the afking module.
-        assertEq(_countOccurrences(afking, "creditFlip(msg.sender,"), 0, "GAS-02: no second keeper-credit site in the afking module");
+        assertEq(_countOccurrences(afking, "creditFlip(minerId,"), 0, "GAS-02: no second keeper-credit site in the afking module");
         // The one-category early-return is replaced by one action per dispatch iteration, reselected
         // from storage, with the bounty credited once for the whole call.
         assertEq(

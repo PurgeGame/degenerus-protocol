@@ -49,7 +49,7 @@ contract RedemptionLootboxPayableForward is RedemptionCloseTools {
     uint256 internal constant GAME_CLAIMABLE_SLOT = GameSlots.BALANCES_PACKED;
     /// @dev claimablePool in the upper 128 bits of slot 1.
     uint256 internal constant GAME_SLOT1 = 1;
-    /// @dev boonPacked (DegenerusGame) mapping(address => BoonPacked{slot0, slot1}) at slot 51.
+    /// @dev boonPacked (DegenerusGame) mapping(uint32 => BoonPacked{slot0, slot1}) at slot 47.
     uint256 internal constant SLOT_BOON_PACKED = GameSlots.BOON_PACKED;
     /// @dev BoonPacked.slot0 bit layout (coinflip fields).
     uint256 internal constant BP_COINFLIP_DAY_SHIFT = 0;
@@ -68,6 +68,7 @@ contract RedemptionLootboxPayableForward is RedemptionCloseTools {
         vm.warp(block.timestamp + 1 days);
 
         player = makeAddr("redeemer");
+        _giveWalletId(player);
         vm.deal(player, 1 ether);
 
         // Fund the game with ETH backing and credit claimable[SDGNRS] so the submit-time
@@ -148,7 +149,7 @@ contract RedemptionLootboxPayableForward is RedemptionCloseTools {
     ///      (checkAndClearExpiredBoon via the any-bits gate) with the claim's msg.value in
     ///      flight.
     function _injectBoonState(address who) internal {
-        bytes32 base = keccak256(abi.encode(who, SLOT_BOON_PACKED));
+        bytes32 base = keccak256(abi.encode(uint256(_giveWalletId(who)), SLOT_BOON_PACKED));
         uint24 day = game.currentDayView();
         uint256 s0 = (uint256(day) << BP_COINFLIP_DAY_SHIFT) | (uint256(1) << BP_COINFLIP_TIER_SHIFT);
         vm.store(address(game), base, bytes32(s0));

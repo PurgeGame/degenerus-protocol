@@ -31,11 +31,11 @@ contract LensStorageHarness is DegenerusGameMintStreakUtils, WalletSeed {
     /// @dev Same body as DegenerusGame.playerActivityScore — the authoritative
     ///      aggregate the lens breakdown must reconcile against.
     function playerActivityScore(address player) external view returns (uint256) {
-        return _playerActivityScore(player, _effectiveQuestStreak(player));
+        return _playerActivityScore(player, _effectiveQuestStreak(_walletIdOf(player)));
     }
 
     function nativeEffectiveStreak(address player) external view returns (uint32) {
-        return _effectiveQuestStreak(player);
+        return _effectiveQuestStreak(_walletIdOf(player));
     }
 
     function nativeActiveTicketLevel() external view returns (uint24) {
@@ -76,6 +76,11 @@ contract LensStorageHarness is DegenerusGameMintStreakUtils, WalletSeed {
 
     function setMintPacked(address p, uint256 w) external {
         mintPacked_[p] = w;
+    }
+
+    /// @dev Register `p` and return its wallet ID (written into its mint word).
+    function seedId(address p) external returns (uint32) {
+        return _seedWallet(p);
     }
 
     function setSlot0(
@@ -153,18 +158,18 @@ contract LensParityTest is Test {
         vm.etch(ContractAddresses.AFFILIATE, hex"00");
     }
 
-    function _mockQuests(address player, uint32 manualStreak, bool afking) internal {
+    function _mockQuests(uint32 id, uint32 manualStreak, bool afking) internal {
         vm.mockCall(
             ContractAddresses.QUESTS,
-            abi.encodeWithSelector(IDegenerusQuests.effectiveBaseStreakAndAfking.selector, player),
+            abi.encodeWithSelector(IDegenerusQuests.effectiveBaseStreakAndAfking.selector, id),
             abi.encode(manualStreak, afking)
         );
     }
 
-    function _mockAffiliate(uint24 currLevel, address player, uint256 points) internal {
+    function _mockAffiliate(uint24 currLevel, uint32 id, uint256 points) internal {
         vm.mockCall(
             ContractAddresses.AFFILIATE,
-            abi.encodeWithSelector(IDegenerusAffiliate.affiliateBonusPointsBest.selector, currLevel, player),
+            abi.encodeWithSelector(IDegenerusAffiliate.affiliateBonusPointsBest.selector, currLevel, id),
             abi.encode(points)
         );
     }
@@ -201,7 +206,7 @@ contract LensParityTest is Test {
             pendingFlip,
             subStreakLatch
         );
-        _mockQuests(p, 7, false); // non-afking: effectiveStreak = manual streak
+        _mockQuests(harness.seedId(p), 7, false); // non-afking: effectiveStreak = manual streak
 
         DegenerusGameLens.SubFull memory s = lens.subInfoFull(game, p);
         assertEq(s.active, dailyQuantity != 0, "active");
@@ -241,7 +246,7 @@ contract LensParityTest is Test {
         harness.setSub(PLAYER, 1, 0, 0, 0, 0, 0, afkCoveredThroughDay, afkingStartDay, 0, 0, subStreakLatch);
         harness.setSlot0(dailyIdx_, 3, false, false, false, 0, 0);
         if (sealNextWord) harness.setRngWordByDay(dailyIdx_ + 1, 0xABCD);
-        _mockQuests(PLAYER, manualStreak, true);
+        _mockQuests(harness.seedId(PLAYER), manualStreak, true);
 
         assertEq(
             lens.subInfoFull(game, PLAYER).effectiveStreak,
@@ -282,10 +287,11 @@ contract LensParityTest is Test {
             (uint256(affCachePoints) << BitPackingLib.AFFILIATE_BONUS_POINTS_SHIFT) |
             (uint256(curse) << BitPackingLib.CURSE_COUNT_SHIFT);
 
-        harness.setMintPacked(PLAYER, packed);
+        uint32 id = harness.seedId(PLAYER);
+        harness.setMintPacked(PLAYER, packed | (uint256(id) << BitPackingLib.WALLET_ID_SHIFT));
         harness.setSlot0(0, level_, jackpotPhase, false, false, 0, 0);
-        _mockQuests(PLAYER, manualStreak, false);
-        _mockAffiliate(level_, PLAYER, 41); // cache-miss branch answer
+        _mockQuests(id, manualStreak, false);
+        _mockAffiliate(level_, id, 41); // cache-miss branch answer
 
         DegenerusGameLens.ActivityBreakdown memory b = lens.activityScoreBreakdown(game, PLAYER);
 

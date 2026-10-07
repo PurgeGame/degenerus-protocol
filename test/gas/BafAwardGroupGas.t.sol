@@ -67,8 +67,8 @@ contract BafGroupGasHost is DegenerusGame, WalletSeed {
     }
 
     /// @dev Reference seam: the production queue sink with one logged ticket roll's arguments.
-    function replayQueued(address buyer, uint24 targetLevel, uint32 entries) external {
-        _queueEntries(_seedWallet(buyer), targetLevel, entries, true);
+    function replayQueuedId(uint32 id, uint24 targetLevel, uint32 entries) external {
+        _queueEntries(id, targetLevel, entries, true);
     }
 
     /// @dev Re-points the armed stage at `cursor` under `word`; the reservation is left as seeded.
@@ -83,8 +83,8 @@ contract BafGroupGasHost is DegenerusGame, WalletSeed {
         return (work.kind, work.winner, work.traits, work.paid);
     }
 
-    function claimableOfProbe(address player) external view returns (uint256) {
-        return uint128(balancesPacked[_walletIdOf(player)]);
+    function claimableOfProbe(uint32 id) external view returns (uint256) {
+        return uint128(balancesPacked[id]);
     }
 
     /// @dev claimablePool and futurePool plus the pending future share a frozen pool accumulates.
@@ -161,7 +161,7 @@ abstract contract BafAwardGroupFixture is DeployProtocol {
         // Every queue through level 100 has drained at a level-100 BAF; the recycled roots for
         // levels 101..200 are free to bind.
         TQ.retireCompleted(address(game), 100);
-        CenturyBafScores.seedCandidates(address(jackpots));
+        CenturyBafScores.seedCandidates(address(jackpots), address(game));
         _seedHead();
         vm.etch(address(game), type(BafGroupGasHost).runtimeCode);
         host = BafGroupGasHost(payable(address(game)));
@@ -353,7 +353,7 @@ abstract contract BafAwardGroupFixture is DeployProtocol {
 
     /// @dev A reference run of the group from the seeded state, then the views' draw of each pair on
     ///      the state it starts from; the state is back at the seeded one afterwards.
-    function _referenceDraw() internal returns (address[] memory atStart, address[] memory expected, bytes32 digest) {
+    function _referenceDraw() internal returns (uint32[] memory atStart, uint32[] memory expected, bytes32 digest) {
         uint256 pre = vm.snapshotState();
         vm.recordLogs();
         host.dailyWith{gas: 12_000_000}(ONE_GROUP_ALLOWANCE);
@@ -377,7 +377,7 @@ abstract contract BafAwardGroupFixture is DeployProtocol {
         (,,, uint128 reservedBefore) = host.bafWork();
         (uint256 claimableBefore, uint256 futureBefore) = host.poolsProbe();
         uint256 levelBefore = CenturyBafScores.levelWord(address(jackpots));
-        (address[] memory atStart, address[] memory expected, bytes32 refDigest) = _referenceDraw();
+        (uint32[] memory atStart, uint32[] memory expected, bytes32 refDigest) = _referenceDraw();
 
         (uint256 used, MineFlipGas.Result memory result, Vm.Log[] memory logs) = _measure(ONE_GROUP_ALLOWANCE);
         emit log_named_uint(label, used);
@@ -389,7 +389,7 @@ abstract contract BafAwardGroupFixture is DeployProtocol {
         assertEq(BafSchedule.chain(bytes32(0), logs), refDigest, "the measured call repeats the reference run");
         (BafSchedule.Award[] memory got, bool tagged) = BafSchedule.awardsOf(logs);
         assertTrue(tagged, "BAF award events carry level 100 and the BAF sentinel");
-        address[] memory paid = new address[](end - start);
+        uint32[] memory paid = new uint32[](end - start);
         uint256 credited = BafSchedule.checkGroupR(got, pool, start, end, expected, paid, rounds);
         uint256 moved;
         for (uint256 i = start; i < end; ++i) {
@@ -577,7 +577,7 @@ contract BafAwardTailProbeGas is BafAwardGroupFixture {
         uint256 levelAfter = CenturyBafScores.levelWord(address(jackpots));
         assertEq(uint64(levelAfter), uint64(levelBefore) + 1, "the bracket epoch is bumped");
         assertEq(uint8(levelAfter >> 64), 0, "the board is emptied");
-        for (uint256 i; i < 4; ++i) assertEq(CenturyBafScores.topEntry(address(jackpots), i), 0, "board entry cleared");
+        for (uint256 i; i < 2; ++i) assertEq(CenturyBafScores.topEntry(address(jackpots), i), 0, "board entry cleared");
         assertLe(used, GasBounds.BAF_AWARD_GROUP, "the tail probe exceeds the group bound");
         _assertDeclaredFits();
     }

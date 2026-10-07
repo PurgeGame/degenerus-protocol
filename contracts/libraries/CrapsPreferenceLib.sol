@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
-/// @dev Board preference in CrapsBattle's pass-credit words. The address-keyed `_passCredits`
-///      word holds normal passes [0:31], high passes [32:63], the compact board [64:83], the
-///      initialized bit [84] and the holder's cached Game wallet ID [85:116]. The ID-keyed
-///      `_passCreditsById` word uses the same lanes below bit 85. PASS_SLOT is `_passCredits`'s
-///      root for the raw reader, pinned against the actual storage layout by tests.
+/// @dev Board preference in CrapsBattle's pass-credit words. The ID-keyed `_passCreditsById`
+///      word holds normal passes [0:31], high passes [32:63], the compact board [64:83] and the
+///      initialized bit [84]. The address-keyed `_passCredits` word holds the same board and
+///      initialized lanes plus the holder's cached Game wallet ID [85:116]; its pass lanes are
+///      zero. PASS_SLOT is `_passCreditsById`'s root for the raw reader, pinned against the
+///      compiled storage layout by tests.
 library CrapsPreferenceLib {
-    uint256 internal constant PASS_SLOT = 14;
+    uint256 internal constant PASS_SLOT = 15;
     uint256 internal constant SHIFT = 64;
     uint256 internal constant MASK = 0xFFFFF << SHIFT;
     uint256 internal constant INITIALIZED = 1 << 84;

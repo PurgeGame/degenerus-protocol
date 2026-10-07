@@ -230,8 +230,9 @@ contract DegeneretteSweepGas is DeployProtocol {
             (uint256 armed,) = _sweep(1, 0, 1 ether, 1, word);
             assertEq(_recordFlagOfLastPlaced(), 1, "the first bet armed a record claim");
             vm.revertToState(snap);
+            uint32 markHolder = _giveWalletId(address(0xDEAD));
             vm.prank(address(game));
-            coinflip.armRecord(1, address(0xDEAD), 1e30);
+            coinflip.armRecord(1, markHolder, 1e30);
             (uint256 plain,) = _sweep(1, 0, 1 ether, 1, word);
             assertEq(_recordFlagOfLastPlaced(), 0, "an out-of-reach mark arms nothing");
             vm.revertToState(snap);

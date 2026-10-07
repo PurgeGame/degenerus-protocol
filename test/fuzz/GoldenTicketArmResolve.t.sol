@@ -65,6 +65,14 @@ contract GoldenTicketHarness is DegenerusGameJackpotModule, BucketSeed {
         return goldenTicket;
     }
 
+    function walletKeyOf(uint32 id) external view returns (address) {
+        return _walletKey(id);
+    }
+
+    function walletIdOf(address who) external view returns (uint32) {
+        return _walletIdOf(who);
+    }
+
     function claimableOf(address who) external view returns (uint256) {
         return _claimableOf(_walletIdOf(who));
     }
@@ -92,11 +100,11 @@ contract GoldenTicketHarness is DegenerusGameJackpotModule, BucketSeed {
 
 /// @dev Recorder etched at ContractAddresses.COINFLIP: captures creditFlip calls.
 contract CoinflipRecorder {
-    address public lastPlayer;
+    uint32 public lastPlayer;
     uint256 public lastAmount;
     uint256 public calls;
 
-    function creditFlip(address p, uint256 a) external {
+    function creditFlip(uint32 p, uint256 a) external {
         lastPlayer = p;
         lastAmount = a;
         ++calls;
@@ -246,7 +254,7 @@ contract GoldenTicketArmResolve is Test {
 
         uint256 g = h.goldenTicketRaw();
         assertEq((g >> 189) & 1, 1, "armed flag set");
-        winner = address(uint160(g));
+        winner = h.walletKeyOf(uint32(g));
         quadrant = uint8((g >> 160) & 3);
         symbol = uint8((g >> 162) & 7);
         assertEq(uint256(uint24((g >> 165) & 0xFFFFFF)), ARM_IDX, "armedIdx == arm draw idx");
@@ -349,7 +357,7 @@ contract GoldenTicketArmResolve is Test {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] == topic) {
                 found = true;
-                assertEq(address(uint160(uint256(logs[i].topics[1]))), winner, "event winner");
+                assertEq(uint32(uint256(logs[i].topics[1])), h.walletIdOf(winner), "event winner");
                 (uint8 q, uint8 s) = abi.decode(logs[i].data, (uint8, uint8));
                 assertEq(q, quadrant, "event quadrant");
                 assertEq(s, symbol, "event symbol");
@@ -512,7 +520,7 @@ contract GoldenTicketArmResolve is Test {
         expFlip = (expFlip / 100) * 100;
         assertEq(flip, expFlip, "5% fp as flip credit at ticket rate");
         assertEq(flipRec.calls(), 1);
-        assertEq(flipRec.lastPlayer(), winner);
+        assertEq(flipRec.lastPlayer(), h.walletIdOf(winner));
         assertEq(flipRec.lastAmount(), expFlip);
     }
 

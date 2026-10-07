@@ -17,14 +17,16 @@ contract CrapsPackingHarness is CrapsBattleStorage {
     function index(uint256 slot, uint48 value) external { _setSlotIndex(slot, value); }
     function cursor(uint256 slot, uint64 value) external { _setBonusCursor(slot, value); }
     function state(uint256 slot) external view returns (uint48, uint64) { return (_slotIndexOf(slot), _bonusCursorOf(slot)); }
-    function reserve(uint24 day, uint8 period, address player) external { _claimScheduledSeat(uint256(day) * 8 + period + 1, player); }
-    function seated(uint24 day, uint8 period, address player) external view returns (bool) { return _loadDaySeat(uint256(day) * 8, player) & (uint256(1) << (33 + period)) != 0; }
-    function daySeat(uint24 day, address player, uint32 seat) external { _storeDaySeat(uint256(day) * 8, player, seat); }
-    function customSeat(bytes32 battleKey, address player) external { _bonusSeated[battleKey][player] = true; }
-    function customSeated(bytes32 battleKey, address player) external view returns (bool) { return _bonusSeated[battleKey][player]; }
+    function reserve(uint24 day, uint8 period, uint32 player) external { _claimScheduledSeat(uint256(day) * 8 + period + 1, player); }
+    function seated(uint24 day, uint8 period, uint32 player) external view returns (bool) { return _loadDaySeat(uint256(day) * 8, player) & (uint256(1) << (33 + period)) != 0; }
+    function daySeat(uint24 day, uint32 player, uint32 seat) external { _storeDaySeat(uint256(day) * 8, player, seat); }
+    function customSeat(bytes32 battleKey, uint32 player) external { _bonusSeated[battleKey][player] = true; }
+    function customSeated(bytes32 battleKey, uint32 player) external view returns (bool) { return _bonusSeated[battleKey][player]; }
 }
 
 contract StoragePackingTest is Test {
+    uint32 private constant SEAT_ID = 5;
+
     function testFuzz_ClaimSiblingStampsAndRollover(uint24 a, uint24 b, uint24 c, address player) public {
         ClaimPackingHarness h = new ClaimPackingHarness();
         a &= ~uint24(1);
@@ -70,21 +72,21 @@ contract StoragePackingTest is Test {
         CrapsPackingHarness h = new CrapsPackingHarness();
         uint24 day = type(uint24).max;
         for (uint8 p; p < 6; ++p) {
-            assertFalse(h.seated(day, p, address(this)));
-            h.reserve(day, p, address(this));
-            for (uint8 q; q < 6; ++q) assertEq(h.seated(day, q, address(this)), q <= p);
+            assertFalse(h.seated(day, p, SEAT_ID));
+            h.reserve(day, p, SEAT_ID);
+            for (uint8 q; q < 6; ++q) assertEq(h.seated(day, q, SEAT_ID), q <= p);
             vm.expectRevert(CrapsBattleStorage.AlreadyInBonus.selector);
-            h.reserve(day, p, address(this));
+            h.reserve(day, p, SEAT_ID);
         }
-        h.daySeat(day - 1, address(this), type(uint32).max);
+        h.daySeat(day - 1, SEAT_ID, type(uint32).max);
         for (uint8 p; p < 6; ++p) {
             vm.expectRevert(CrapsBattleStorage.AlreadyInBonus.selector);
-            h.reserve(day - 1, p, address(this));
+            h.reserve(day - 1, p, SEAT_ID);
         }
         bytes32 custom = keccak256("custom battle key");
-        assertFalse(h.customSeated(custom, address(this)));
-        h.customSeat(custom, address(this));
-        assertTrue(h.customSeated(custom, address(this)));
-        assertFalse(h.customSeated(keccak256("another custom battle key"), address(this)));
+        assertFalse(h.customSeated(custom, SEAT_ID));
+        h.customSeat(custom, SEAT_ID);
+        assertTrue(h.customSeated(custom, SEAT_ID));
+        assertFalse(h.customSeated(keccak256("another custom battle key"), SEAT_ID));
     }
 }

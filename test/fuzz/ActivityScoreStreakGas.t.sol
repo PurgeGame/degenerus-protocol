@@ -18,17 +18,18 @@ contract ActivityScoreStreakGasTest is DeployProtocol {
 
     function test_gas_streakReads() public {
         address p = makeAddr("streak_gas_probe");
+        uint32 id = _giveWalletId(p);
 
         uint256 g1 = gasleft();
-        quests.playerQuestStates(p);
+        quests.playerQuestStates(id);
         uint256 rawGas = g1 - gasleft();
 
         uint256 g2 = gasleft();
-        quests.effectiveBaseStreak(p);
+        quests.effectiveBaseStreak(id);
         uint256 effGas = g2 - gasleft();
 
         uint256 g3 = gasleft();
-        quests.getPlayerQuestView(p);
+        quests.getPlayerQuestView(id);
         uint256 fullGas = g3 - gasleft();
 
         emit log_named_uint("A) raw playerQuestStates gas (status quo)", rawGas);

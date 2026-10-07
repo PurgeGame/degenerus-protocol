@@ -234,7 +234,7 @@ describe("AffiliateHardening", function () {
         );
 
         // Alice's score is the full scaled amount (no cap)
-        const score = await affiliate.affiliateScore(lvl, alice.address);
+        const score = await affiliate.affiliateScore(lvl, await game.walletIdOf(alice.address));
         expect(score).to.equal(flip(1000000));
       });
 
@@ -282,7 +282,7 @@ describe("AffiliateHardening", function () {
           flip(2000000), aliceCode, bob.address, 1, true, 0
         );
 
-        const score = await affiliate.affiliateScore(1, alice.address);
+        const score = await affiliate.affiliateScore(1, await game.walletIdOf(alice.address));
         expect(score).to.equal(MAX_COMMISSION_PER_REFERRER_PER_LEVEL);
       });
 
@@ -297,7 +297,7 @@ describe("AffiliateHardening", function () {
         );
 
         const expected = computeScaledAmount(flip(1000000), 1n, true);
-        const score = await affiliate.affiliateScore(1, alice.address);
+        const score = await affiliate.affiliateScore(1, await game.walletIdOf(alice.address));
         expect(score).to.equal(expected);
         expect(score).to.be.lt(MAX_COMMISSION_PER_REFERRER_PER_LEVEL);
       });
@@ -318,7 +318,7 @@ describe("AffiliateHardening", function () {
           );
         }
 
-        const score = await affiliate.affiliateScore(1, alice.address);
+        const score = await affiliate.affiliateScore(1, await game.walletIdOf(alice.address));
         expect(score).to.equal(MAX_COMMISSION_PER_REFERRER_PER_LEVEL);
       });
 
@@ -334,7 +334,7 @@ describe("AffiliateHardening", function () {
           );
         }
 
-        const scoreBefore = await affiliate.affiliateScore(1, alice.address);
+        const scoreBefore = await affiliate.affiliateScore(1, await game.walletIdOf(alice.address));
 
         // 6th purchase: cap removed, so it adds another 0.1 ETH
         await payAffiliateAsGame(
@@ -342,7 +342,7 @@ describe("AffiliateHardening", function () {
           flip(400000), aliceCode, bob.address, 1, true, 0
         );
 
-        const scoreAfter = await affiliate.affiliateScore(1, alice.address);
+        const scoreAfter = await affiliate.affiliateScore(1, await game.walletIdOf(alice.address));
         expect(scoreAfter).to.equal(scoreBefore + flip(100000));
         expect(scoreAfter).to.equal(flip(600000));
       });
@@ -357,7 +357,7 @@ describe("AffiliateHardening", function () {
           flip(800000), aliceCode, bob.address, 1, true, 0
         );
 
-        const scoreAfterFirst = await affiliate.affiliateScore(1, alice.address);
+        const scoreAfterFirst = await affiliate.affiliateScore(1, await game.walletIdOf(alice.address));
         expect(scoreAfterFirst).to.equal(flip(200000));
 
         // Second: 4 ETH at 25% = 1 ETH; no cap so the full 1 ETH is added
@@ -366,7 +366,7 @@ describe("AffiliateHardening", function () {
           flip(4000000), aliceCode, bob.address, 1, true, 0
         );
 
-        const scoreAfterSecond = await affiliate.affiliateScore(1, alice.address);
+        const scoreAfterSecond = await affiliate.affiliateScore(1, await game.walletIdOf(alice.address));
         expect(scoreAfterSecond).to.equal(flip(1200000));
       });
 
@@ -380,7 +380,7 @@ describe("AffiliateHardening", function () {
           flip(10000000), aliceCode, bob.address, 1, false, 0
         );
 
-        const score = await affiliate.affiliateScore(1, alice.address);
+        const score = await affiliate.affiliateScore(1, await game.walletIdOf(alice.address));
         expect(score).to.equal(MAX_COMMISSION_PER_REFERRER_PER_LEVEL);
       });
 
@@ -400,7 +400,7 @@ describe("AffiliateHardening", function () {
           flip(5000000), aliceCode, bob.address, 1, false, 0
         );
 
-        const score = await affiliate.affiliateScore(1, alice.address);
+        const score = await affiliate.affiliateScore(1, await game.walletIdOf(alice.address));
         expect(score).to.equal(MAX_COMMISSION_PER_REFERRER_PER_LEVEL);
       });
     });
@@ -417,7 +417,7 @@ describe("AffiliateHardening", function () {
           hre.ethers, game, affiliate,
           flip(4000000), aliceCode, bob.address, 1, true, 0
         );
-        const scoreL1 = await affiliate.affiliateScore(1, alice.address);
+        const scoreL1 = await affiliate.affiliateScore(1, await game.walletIdOf(alice.address));
         expect(scoreL1).to.equal(flip(1000000));
 
         // Level 2: independent per-level tracking, should earn again
@@ -425,7 +425,7 @@ describe("AffiliateHardening", function () {
           hre.ethers, game, affiliate,
           flip(1000000), aliceCode, bob.address, 2, true, 0
         );
-        const scoreL2 = await affiliate.affiliateScore(2, alice.address);
+        const scoreL2 = await affiliate.affiliateScore(2, await game.walletIdOf(alice.address));
         const expectedL2 = computeScaledAmount(flip(1000000), 2n, true);
         expect(scoreL2).to.equal(expectedL2);
         expect(scoreL2).to.be.gt(0n);
@@ -447,7 +447,7 @@ describe("AffiliateHardening", function () {
           flip(1000000), aliceCode, bob.address, 0, true, 0
         );
 
-        const scoreL0 = await affiliate.affiliateScore(0, alice.address);
+        const scoreL0 = await affiliate.affiliateScore(0, await game.walletIdOf(alice.address));
         const expectedL0 = computeScaledAmount(flip(1000000), 0n, true);
         expect(scoreL0).to.equal(expectedL0);
       });
@@ -465,7 +465,7 @@ describe("AffiliateHardening", function () {
         }
 
         for (const lvl of [1, 2, 5]) {
-          const score = await affiliate.affiliateScore(lvl, alice.address);
+          const score = await affiliate.affiliateScore(lvl, await game.walletIdOf(alice.address));
           expect(score).to.equal(computeScaledAmount(flip(4000000), BigInt(lvl), true));
         }
       });
@@ -490,8 +490,8 @@ describe("AffiliateHardening", function () {
           flip(4000000), carolCode, dan.address, 1, true, 0
         );
 
-        const aliceScore = await affiliate.affiliateScore(1, alice.address);
-        const carolScore = await affiliate.affiliateScore(1, carol.address);
+        const aliceScore = await affiliate.affiliateScore(1, await game.walletIdOf(alice.address));
+        const carolScore = await affiliate.affiliateScore(1, await game.walletIdOf(carol.address));
         expect(aliceScore).to.equal(flip(1000000));
         expect(carolScore).to.equal(flip(1000000));
       });
@@ -511,7 +511,7 @@ describe("AffiliateHardening", function () {
           hre.ethers, game, affiliate,
           flip(1000000), aliceCode, bob.address, 1, true, 0
         );
-        const aliceScore = await affiliate.affiliateScore(1, alice.address);
+        const aliceScore = await affiliate.affiliateScore(1, await game.walletIdOf(alice.address));
         expect(aliceScore).to.equal(flip(1250000));
 
         // Dan -> Carol: still has full cap
@@ -519,7 +519,7 @@ describe("AffiliateHardening", function () {
           hre.ethers, game, affiliate,
           flip(1000000), carolCode, dan.address, 1, true, 0
         );
-        const carolScore = await affiliate.affiliateScore(1, carol.address);
+        const carolScore = await affiliate.affiliateScore(1, await game.walletIdOf(carol.address));
         expect(carolScore).to.equal(computeScaledAmount(flip(1000000), 1n, true));
         expect(carolScore).to.be.gt(0n);
       });
@@ -544,7 +544,7 @@ describe("AffiliateHardening", function () {
         );
 
         // Alice earned 1 ETH from bob + 1 ETH from carol = 2.0 total (no cap)
-        const aliceScore = await affiliate.affiliateScore(1, alice.address);
+        const aliceScore = await affiliate.affiliateScore(1, await game.walletIdOf(alice.address));
         expect(aliceScore).to.equal(flip(2000000));
       });
     });
@@ -568,7 +568,7 @@ describe("AffiliateHardening", function () {
           amount, aliceCode, bob.address, 1, true, 0
         );
 
-        const score = await affiliate.affiliateScore(1, alice.address);
+        const score = await affiliate.affiliateScore(1, await game.walletIdOf(alice.address));
         const expected = computeScaledAmount(amount, 1n, true);
         expect(score).to.equal(expected);
       });
@@ -584,7 +584,7 @@ describe("AffiliateHardening", function () {
         );
 
         // Leaderboard records full amount (99 < 100, so no taper applies)
-        const score = await affiliate.affiliateScore(1, alice.address);
+        const score = await affiliate.affiliateScore(1, await game.walletIdOf(alice.address));
         const expected = computeScaledAmount(amount, 1n, true);
         expect(score).to.equal(expected);
       });
@@ -599,7 +599,7 @@ describe("AffiliateHardening", function () {
           amount, aliceCode, bob.address, 2, true, 1
         );
 
-        const score = await affiliate.affiliateScore(2, alice.address);
+        const score = await affiliate.affiliateScore(2, await game.walletIdOf(alice.address));
         const expected = computeScaledAmount(amount, 2n, true);
         expect(score).to.equal(expected);
       });
@@ -624,7 +624,7 @@ describe("AffiliateHardening", function () {
         );
 
         // Leaderboard always gets full amount
-        const score = await affiliate.affiliateScore(lvl, alice.address);
+        const score = await affiliate.affiliateScore(lvl, await game.walletIdOf(alice.address));
         const fullScaled = computeScaledAmount(amount, BigInt(lvl), true);
         expect(score).to.equal(fullScaled);
 
@@ -658,7 +658,7 @@ describe("AffiliateHardening", function () {
         );
 
         // Leaderboard records the post-taper amount
-        const score = await affiliate.affiliateScore(lvl, alice.address);
+        const score = await affiliate.affiliateScore(lvl, await game.walletIdOf(alice.address));
         expect(score).to.equal(expectedTapered);
       });
 
@@ -712,7 +712,7 @@ describe("AffiliateHardening", function () {
         );
 
         // Leaderboard records the post-taper (25% floor) amount
-        const score = await affiliate.affiliateScore(1, alice.address);
+        const score = await affiliate.affiliateScore(1, await game.walletIdOf(alice.address));
         expect(score).to.equal(expected25pct);
 
         // Confirm the 25% floor: tapered = fullScaled / 4
@@ -748,7 +748,7 @@ describe("AffiliateHardening", function () {
           amount, aliceCode, bob.address, 1, true, 65535
         );
 
-        const score = await affiliate.affiliateScore(1, alice.address);
+        const score = await affiliate.affiliateScore(1, await game.walletIdOf(alice.address));
         expect(score).to.equal(expected25pct);
       });
     });
@@ -770,7 +770,7 @@ describe("AffiliateHardening", function () {
         );
 
         const fullScaled = computeScaledAmount(amount, BigInt(lvl), true);
-        const score = await affiliate.affiliateScore(lvl, alice.address);
+        const score = await affiliate.affiliateScore(lvl, await game.walletIdOf(alice.address));
         const expected25pct = (fullScaled * LOOTBOX_TAPER_MIN_BPS) / BPS_DENOMINATOR;
 
         // Leaderboard reflects the post-taper (25% floor) amount
@@ -818,7 +818,7 @@ describe("AffiliateHardening", function () {
           );
         }
 
-        const score = await affiliate.affiliateScore(lvl, alice.address);
+        const score = await affiliate.affiliateScore(lvl, await game.walletIdOf(alice.address));
         // Should be 3 x taperedOnce (post-taper accumulation)
         expect(score).to.equal(taperedOnce * 3n);
       });
@@ -839,7 +839,7 @@ describe("AffiliateHardening", function () {
           amount, aliceCode, bob.address, lvl, true, 0
         );
 
-        const score = await affiliate.affiliateScore(lvl, alice.address);
+        const score = await affiliate.affiliateScore(lvl, await game.walletIdOf(alice.address));
         const fullScaled = computeScaledAmount(amount, BigInt(lvl), true);
         expect(score).to.equal(fullScaled);
       });
@@ -857,7 +857,7 @@ describe("AffiliateHardening", function () {
           amount, aliceCode, bob.address, lvl, false, 25500
         );
 
-        const score = await affiliate.affiliateScore(lvl, alice.address);
+        const score = await affiliate.affiliateScore(lvl, await game.walletIdOf(alice.address));
         const fullScaled = computeScaledAmount(amount, BigInt(lvl), false);
         // score=25500 triggers 25% floor: leaderboard records post-taper amount
         const taperedScaled = computeTaperedAmount(fullScaled, 25500);
@@ -915,7 +915,7 @@ describe("AffiliateHardening", function () {
           flip(4000000), aliceCode, bob.address, 1, true, LOOTBOX_TAPER_END_SCORE
         );
 
-        const score = await affiliate.affiliateScore(1, alice.address);
+        const score = await affiliate.affiliateScore(1, await game.walletIdOf(alice.address));
         // 0.2 (untapered from call 1) + 0.25 (floored from call 2) = 0.45 ETH
         expect(score).to.equal(flip(450000));
       });
@@ -936,7 +936,7 @@ describe("AffiliateHardening", function () {
         0n, aliceCode, bob.address, 1, true, 0
       );
 
-      const score = await affiliate.affiliateScore(1, alice.address);
+      const score = await affiliate.affiliateScore(1, await game.walletIdOf(alice.address));
       expect(score).to.equal(0n);
     });
 
@@ -950,7 +950,7 @@ describe("AffiliateHardening", function () {
         1n, aliceCode, bob.address, 1, true, 0
       );
 
-      const score = await affiliate.affiliateScore(1, alice.address);
+      const score = await affiliate.affiliateScore(1, await game.walletIdOf(alice.address));
       expect(score).to.equal(0n);
     });
 
@@ -983,7 +983,7 @@ describe("AffiliateHardening", function () {
         flip(2500000), aliceCode, bob.address, 4, true, 0
       );
 
-      const score = await affiliate.affiliateScore(4, alice.address);
+      const score = await affiliate.affiliateScore(4, await game.walletIdOf(alice.address));
       expect(score).to.equal(MAX_COMMISSION_PER_REFERRER_PER_LEVEL);
     });
 
@@ -1020,7 +1020,7 @@ describe("AffiliateHardening", function () {
         amount, aliceCode, bob.address, 1, true, LOOTBOX_TAPER_START_SCORE
       );
 
-      const score = await affiliate.affiliateScore(1, alice.address);
+      const score = await affiliate.affiliateScore(1, await game.walletIdOf(alice.address));
       const fullScaled = computeScaledAmount(amount, 1n, true);
       expect(score).to.equal(fullScaled);
     });

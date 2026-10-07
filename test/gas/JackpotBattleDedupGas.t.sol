@@ -13,12 +13,12 @@ contract JackpotBattleDedupGasTest is Test {
     }
 
     function _measure(uint8 shape, uint256 n, uint256 limit) private {
-        address[] memory entrants = new address[](n);
+        uint32[] memory entrants = new uint32[](n);
         for (uint256 i; i < n; ++i) {
-            entrants[i] = shape == 0 ? address(uint160(i + 1))
-                : shape == 1 ? address(uint160((i + 1) << 8)) // distinct wallets on one low byte: the exact scan
-                : shape == 2 ? address(uint160(1))
-                : address(uint160((i % 10) << 8)); // collisions, repeats, and address(0)
+            entrants[i] = shape == 0 ? uint32(i + 1)
+                : shape == 1 ? uint32((i + 1) << 8) // distinct wallets on one low byte: the exact scan
+                : shape == 2 ? uint32(1)
+                : uint32((i % 10) << 8); // collisions, repeats, and ID 0
         }
         uint256 beforeGas = gasleft();
         uint256[] memory field = JackpotBattleFieldLib.prepare(entrants);
@@ -27,7 +27,7 @@ contract JackpotBattleDedupGasTest is Test {
         assertLt(used, limit, "bounded dedupe and one preference batch");
         assertEq(field.length, n, "one word per drawn entry");
         for (uint256 i; i < n; ++i) {
-            assertEq(address(uint160(field[i])), entrants[i], "draw order");
+            assertEq(uint32(field[i]), entrants[i], "draw order");
             assertEq(field[i] >> JackpotBattleFieldLib.UNITS_SHIFT, 1, "one unit per entry");
         }
     }

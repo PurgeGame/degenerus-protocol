@@ -53,12 +53,14 @@ interface IWWXRP {
 /// @notice The craps table's day-pass door. Called ONCE per lootbox entry that rolled any pass,
 ///         never once per box, and it never reverts on an unavailable day.
 interface ICrapsPassDelivery {
-    /// @notice Bank a rolled pass award as day-pass credits, revert-free (CrapsBattle, game-only).
-    function creditPasses(address player, uint32 normal, uint32 high) external;
+    /// @notice Bank a rolled pass award as day-pass credits for wallet `id`, revert-free
+    ///         (CrapsBattle, game-only; the Game passes the nonzero ID it holds).
+    function creditPasses(uint32 id, uint32 normal, uint32 high) external;
 
-    /// @notice Seat a rolled pass award on tomorrow when available, banking the rest as credit
-    ///         (CrapsBattle, game/vault-only).
-    function deliverPasses(address player, uint32 normal, uint32 high) external returns (uint24 day);
+    /// @notice Seat a rolled pass award for wallet `id` on tomorrow when available, banking the
+    ///         rest as credit (CrapsBattle, game/vault-only; revert-free; the Game passes the
+    ///         nonzero ID it holds).
+    function deliverPasses(uint32 id, uint32 normal, uint32 high) external returns (uint24 day);
 }
 
 /**
@@ -451,8 +453,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Consume the player's lootbox-boost boon, if live, and return the uplift in wei.
     ///      Deity-granted boosts are valid only on their grant day; others expire after
     ///      BOX_BOOST_EXPIRY_DAYS. Either way the boon is cleared here — it is one-shot.
-    function _consumeBoxBoost(address player, uint256 amount) private returns (uint256 extra) {
-        BoonPacked storage bp = boonPacked[player];
+    function _consumeBoxBoost(address player, uint32 id, uint256 amount) private returns (uint256 extra) {
+        BoonPacked storage bp = boonPacked[id];
         uint256 s0 = bp.slot0;
         uint8 tier = uint8(s0 >> BP_LOOTBOX_TIER_SHIFT);
         if (tier == 0) return 0;
@@ -497,7 +499,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         (word, costWei) = _decodeBoxOrder(boxOrder, _activeTicketLevel());
         // The boost is capped at a quarter of the spend, so the fraction fits its lane.
-        word |= uint256(buyerId) | ((_consumeBoxBoost(buyer, costWei) * 10_000 / costWei) << LB_BOOST_SHIFT);
+        word |= uint256(buyerId) | ((_consumeBoxBoost(buyer, buyerId, costWei) * 10_000 / costWei) << LB_BOOST_SHIFT);
         bool distress = _isDistressMode();
         if (distress) word |= LB_DISTRESS;
 
@@ -508,7 +510,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (((boxOrder >> BO_CUSTOM_COUNT_SHIFT) & BO_COUNT_MASK) != 0) {
             uint256 candidate = (boxOrder >> BO_SIZE_SHIFT) * LB_SIZE_UNIT;
             if (candidate >= BIGGEST_BOX_MIN_ETH) {
-                flipCredit = coinflip.armRecord(RECORD_KIND_LUCKBOX, buyer, candidate);
+                flipCredit = coinflip.armRecord(RECORD_KIND_LUCKBOX, buyerId, candidate);
             }
         }
 
@@ -573,7 +575,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 word = uint256(id) | (uint256(_activeTicketLevel()) << LB_LEVEL_SHIFT) | (capped << LB_SCORE_SHIFT)
             | (size << LB_SIZE_SHIFT) | (count == 0 ? LB_COVER : uint256(count) << LB_CUSTOM_COUNT_SHIFT);
         if (boost) {
-            word |= (_consumeBoxBoost(player, amountWei) * 10_000 / amountWei) << LB_BOOST_SHIFT;
+            word |= (_consumeBoxBoost(player, id, amountWei) * 10_000 / amountWei) << LB_BOOST_SHIFT;
             if (_isDistressMode()) word |= LB_DISTRESS;
         }
         word |= (_drawEvBenefit(id, capKey, amountWei, capped) * 10_000 / amountWei) << LB_EV_SHIFT;
@@ -719,12 +721,13 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      entry sweep (afking covers, degenerette auto-resolve, ETH-spin recirc).
     ///      Identical draw to the entry path's per-tier call;
     ///      `seed` is the box's own player-specific resolution seed, drawn at nonce 0.
-    function _rollSingleBoxBoons(address player, uint256 amount, uint24 currentLevel, uint256 seed) private {
+    function _rollSingleBoxBoons(address player, uint32 id, uint256 amount, uint24 currentLevel, uint256 seed) private {
         (bool ok, bytes memory data) = ContractAddresses.GAME_BOON_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameBoonModule.rollBoxBoons.selector,
                     player,
+                    id,
                     _lootboxBoonBudget(amount),
                     1,
                     amount,
@@ -781,9 +784,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             // read as box ETH.
             if (paid != 0) emit LootBoxDgnrsBatch(player, acc.dgnrs, paid);
         }
-        if (acc.flip != 0) coinflip.creditFlip(player, acc.flip);
+        if (acc.flip != 0) coinflip.creditFlip(id, acc.flip);
         if (acc.wwxrp != 0) wwxrp.mintPrize(player, acc.wwxrp);
-        if ((acc.passNormal | acc.passHigh) != 0) _deliverPasses(player, acc);
+        if ((acc.passNormal | acc.passHigh) != 0) _deliverPasses(player, id, acc);
     }
 
     /// @dev Hand the entry's whole pass award to the craps table in ONE call — not one per winning
@@ -795,9 +798,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      The roll is announced from HERE, and the table's own `CrapsPassesCredited` /
     ///      `CrapsDayReserved` logs say which disposition it landed in, so an indexer reconciles
     ///      every rolled pass.
-    function _deliverPasses(address player, BoxAcc memory acc) private {
+    function _deliverPasses(address player, uint32 id, BoxAcc memory acc) private {
         uint24 day = ICrapsPassDelivery(ContractAddresses.CRAPS).deliverPasses(
-            player, acc.passNormal, acc.passHigh
+            id, acc.passNormal, acc.passHigh
         );
         emit LootBoxCrapsPasses(player, acc.passNormal, acc.passHigh, day);
     }
@@ -840,6 +843,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 abi.encodeWithSelector(
                     IDegenerusGameBoonModule.rollBoxBoons.selector,
                     c.player,
+                    c.id,
                     _lootboxBoonBudget(scaled),
                     count,
                     scaled,
@@ -926,6 +930,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 abi.encodeWithSelector(
                     IDegenerusGameBoonModule.rollBoxBoonTiers.selector,
                     c.player,
+                    c.id,
                     amounts,
                     countsPacked,
                     c.currentLevel,
@@ -1049,8 +1054,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 }
                 flipOut = flipRest;
                 if (passCount != 0) {
+                    // The entry word's low 32 bits are the owner's wallet ID.
                     ICrapsPassDelivery(ContractAddresses.CRAPS).creditPasses(
-                        player,
+                        uint32(entry),
                         highPass ? 0 : uint32(passCount),
                         highPass ? uint32(passCount) : 0
                     );
@@ -1062,7 +1068,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 }
             }
             if (flipOut != 0) {
-                coinflip.creditFlip(player, flipOut);
+                coinflip.creditFlip(uint32(entry), flipOut);
             }
         } else if (outcome < 90) {
             // 40% DGNRS: 5-tier %-of-pool curve keyed on the tier frozen at purchase.
@@ -1177,7 +1183,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // The boon draw the box's 10% haircut paid for. The common resolver takes the
         // haircut for EVERY caller, so every caller must also draw — the entry sweep does
         // it per tier; the single-box resolvers do it here.
-        _rollSingleBoxBoons(player, scaledAmount, currentLevel, seed);
+        _rollSingleBoxBoons(player, id, scaledAmount, currentLevel, seed);
     }
 
     /// @dev Tag bit on a redemption order's index: the batch id rides below it, and a real
@@ -1368,7 +1374,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // The boon draw the box's 10% haircut paid for. The common resolver takes the
         // haircut for EVERY caller, so every caller must also draw — the entry sweep does
         // it per tier; the single-box resolvers do it here.
-        _rollSingleBoxBoons(player, scaledAmount, currentLevel, seed);
+        _rollSingleBoxBoons(player, id, scaledAmount, currentLevel, seed);
     }
 
     // =========================================================================

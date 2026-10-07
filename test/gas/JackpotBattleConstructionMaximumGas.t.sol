@@ -32,13 +32,13 @@ contract BattleMaximumTableSeed is BattleConstructionTableSeed {
         }
     }
 
-    function configureBoards(address[] calldata players, bool fullBoard) external {
+    function configureBoards(uint32[] calldata players, bool fullBoard) external {
         uint32 chips = uint32((3 << 9) | (3 << 12) | (1 << 27));
         // The inexpensive comparison is the default zero preference, not a malformed board.
         uint256 preference = fullBoard
             ? (CrapsPreferenceLib.compress(chips) << CrapsPreferenceLib.SHIFT) | CrapsPreferenceLib.INITIALIZED
             : 0;
-        for (uint256 i; i < players.length; ++i) _passCredits[players[i]] = preference;
+        for (uint256 i; i < players.length; ++i) _passCreditsById[players[i]] = preference;
     }
 }
 
@@ -112,10 +112,10 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
         ts.configurePaid(day - 1, c.paidMode);
         uint16[99] memory lengths = _lengths(c);
         for (uint24 offset; offset < 99; ++offset) {
-            address[] memory players = new address[](lengths[offset]);
+            uint32[] memory players = new uint32[](lengths[offset]);
             for (uint256 i; i < players.length; ++i) {
                 uint256 identity = c.sameWallet ? 0x100000 : 0x100000 + uint256(offset) * 1000 + i;
-                players[i] = address(uint160(c.collide ? identity << 8 : identity));
+                players[i] = uint32(c.collide ? identity << 8 : identity);
             }
             gs.seedQueue(CEILING + 1 + offset, players);
             ts.configureBoards(players, c.fullBoard);
@@ -176,14 +176,14 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
         assertEq(r.word != 0, c.target <= 50);
         assertEq(settled, 0);
         if (c.prefix) {
-            address[] memory winners = new address[](r.drawnCount);
+            uint32[] memory winners = new uint32[](r.drawnCount);
             uint256 n;
             for (uint256 i; i < logs.length; ++i) {
                 if (logs[i].topics.length == 0 || logs[i].topics[0]
-                    != keccak256("JackpotBattleEntry(uint64,uint256,address,uint256,uint32)")) continue;
-                address player = address(uint160(uint256(logs[i].topics[3])));
+                    != keccak256("JackpotBattleEntry(uint64,uint256,uint32,uint256,uint32)")) continue;
+                uint32 player = uint32(uint256(logs[i].topics[3]));
                 for (uint256 j; j < n; ++j) require(winners[j] != player, "prefix must preserve unique winners");
-                if (c.collide) assertEq(uint160(player) & 255, 0, "all dedup fingerprints collide");
+                if (c.collide) assertEq(player & 255, 0, "all dedup fingerprints collide");
                 winners[n++] = player;
             }
             assertEq(n, r.drawnCount);
@@ -371,7 +371,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
         digest = previous;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length != 0 && logs[i].topics[0]
-                == keccak256("JackpotBattleEntry(uint64,uint256,address,uint256,uint32)")) {
+                == keccak256("JackpotBattleEntry(uint64,uint256,uint32,uint256,uint32)")) {
                 digest = keccak256(abi.encode(digest, logs[i].topics, logs[i].data));
             }
         }
@@ -466,7 +466,9 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
         assertTrue(ok);
         assertEq(_round().drawnCount, 50);
         assertEq(_round().word, 0);
-        vm.prank(address(0x10000000));
+        address locked = address(0x10000000);
+        _giveWalletId(locked);
+        vm.prank(locked);
         vm.expectRevert(bytes4(keccak256("BetLocked()")));
         CrapsBattle(address(crapsBattle)).setPreferredBoard(0);
         assertTrue(game.rngLocked());

@@ -16,6 +16,7 @@ contract JackpotBattleAwardsGasTest is DeployProtocol {
         _deployProtocol();
         vm.etch(ContractAddresses.JACKPOT_BATTLE, address(new JackpotBattleViews()).code);
         crapsBattle.seedProgressive(500_000_000 ether);
+        _giveWalletId(WINNER);
     }
 
     function test_RealRiuCreditAndPasses() public {
@@ -25,7 +26,7 @@ contract JackpotBattleAwardsGasTest is DeployProtocol {
         emit log_named_uint("REAL_BATTLE_RIU_AWARD_GAS", used);
         assertEq(crapsBattle.progressivePool(), 450_000_000 ether);
         assertGt(coinflip.coinflipAmount(WINNER), 0);
-        uint256 passes = uint256(vm.load(ContractAddresses.CRAPS, keccak256(abi.encode(WINNER, CrapsSlots.PASS_CREDITS))));
+        uint256 passes = uint256(vm.load(ContractAddresses.CRAPS, keccak256(abi.encode(uint256(game.walletIdOf(WINNER)), CrapsSlots.PASS_CREDITS_BY_ID))));
         assertGt(uint64(passes), 0);
         assertLt(used, 400_000, "battle award path exceeded its gas allowance");
     }

@@ -122,8 +122,8 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         assertEq(game.level(), 0);
         _buyOne(CODE_ALICE);
 
-        assertEq(affiliate.affiliateScore(0, alice), 0, "No score at level 0");
-        assertTrue(affiliate.affiliateScore(1, alice) > 0, "Score at level 1");
+        assertEq(affiliate.affiliateScore(0, game.walletIdOf(alice)), 0, "No score at level 0");
+        assertTrue(affiliate.affiliateScore(1, game.walletIdOf(alice)) > 0, "Score at level 1");
     }
 
     /// @notice totalAffiliateScore accumulates across multiple buyers
@@ -131,8 +131,8 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         for (uint256 i = 0; i < 5; i++) _buyOne(CODE_ALICE);
         for (uint256 i = 0; i < 3; i++) _buyOne(CODE_BOB);
 
-        uint256 a = affiliate.affiliateScore(1, alice);
-        uint256 b = affiliate.affiliateScore(1, bob);
+        uint256 a = affiliate.affiliateScore(1, game.walletIdOf(alice));
+        uint256 b = affiliate.affiliateScore(1, game.walletIdOf(bob));
         uint256 total = affiliate.totalAffiliateScore(1);
 
         assertTrue(a > 0 && b > 0, "Both have scores");
@@ -174,7 +174,7 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         _setLevel(1);
         _setAllocation(1, 1_000_000 ether);
 
-        uint256 bobScore = affiliate.affiliateScore(1, bob);
+        uint256 bobScore = affiliate.affiliateScore(1, game.walletIdOf(bob));
         assertTrue(bobScore < 10, "Score below min");
 
         vm.expectRevert();
@@ -212,8 +212,8 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         // Alice: 40 buyers (~20 ETH score), Bob: 25 buyers (~12.5 ETH score)
         uint24 lvl = _buildScoresAndSetupClaim(CODE_ALICE, 40, CODE_BOB, 25);
 
-        uint256 aliceScore = affiliate.affiliateScore(lvl, alice);
-        uint256 bobScore   = affiliate.affiliateScore(lvl, bob);
+        uint256 aliceScore = affiliate.affiliateScore(lvl, game.walletIdOf(alice));
+        uint256 bobScore   = affiliate.affiliateScore(lvl, game.walletIdOf(bob));
 
         assertTrue(aliceScore > 10, "Alice above min");
         assertTrue(bobScore > 10, "Bob above min");
@@ -243,8 +243,8 @@ contract AffiliateDgnrsClaim is DeployProtocol {
     function test_orderIndependence() public {
         uint24 lvl = _buildScoresAndSetupClaim(CODE_ALICE, 30, CODE_BOB, 30);
 
-        uint256 aliceScore = affiliate.affiliateScore(lvl, alice);
-        uint256 bobScore   = affiliate.affiliateScore(lvl, bob);
+        uint256 aliceScore = affiliate.affiliateScore(lvl, game.walletIdOf(alice));
+        uint256 bobScore   = affiliate.affiliateScore(lvl, game.walletIdOf(bob));
 
         // Bob claims FIRST
         uint256 bobBefore = sdgnrs.balanceOf(bob);
@@ -376,9 +376,9 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         _setLevel(lvl);
         _setAllocation(lvl, 1_000_000 ether);
 
-        uint256 aScore = affiliate.affiliateScore(lvl, alice);
-        uint256 bScore = affiliate.affiliateScore(lvl, bob);
-        uint256 cScore = affiliate.affiliateScore(lvl, carol);
+        uint256 aScore = affiliate.affiliateScore(lvl, game.walletIdOf(alice));
+        uint256 bScore = affiliate.affiliateScore(lvl, game.walletIdOf(bob));
+        uint256 cScore = affiliate.affiliateScore(lvl, game.walletIdOf(carol));
         uint256 total  = affiliate.totalAffiliateScore(lvl);
 
         assertEq(total, aScore + bScore + cScore, "Total = sum (no other affiliates)");

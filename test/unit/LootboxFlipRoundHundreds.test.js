@@ -175,10 +175,10 @@ describe("LootboxFlipRoundHundreds — threshold-gated 100-FLIP collapse (§3c)"
       ).to.be.lessThan(accIdx);
 
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      const flushLine = "if (acc.flip != 0) coinflip.creditFlip(player, acc.flip);";
+      const flushLine = "if (acc.flip != 0) coinflip.creditFlip(id, acc.flip);";
       expect(
         source.includes(flushLine),
-        "the per-entry `if (acc.flip != 0) coinflip.creditFlip(player, acc.flip);` flush not found"
+        "the per-entry `if (acc.flip != 0) coinflip.creditFlip(id, acc.flip);` flush not found"
       ).to.equal(true);
     });
 
@@ -254,7 +254,7 @@ describe("LootboxFlipRoundHundreds — threshold-gated 100-FLIP collapse (§3c)"
         /flipOut\s*=\s*flipOut\s*>\s*FlipRoundLib\.FLIP_ROUND_THRESHOLD/
       );
       const guardIdx = body.search(/if\s*\(\s*flipOut\s*!=\s*0\s*\)/);
-      const creditIdx = body.indexOf("coinflip.creditFlip(player, flipOut)");
+      const creditIdx = body.indexOf("coinflip.creditFlip(uint32(entry), flipOut)");
       const emitIdx = body.indexOf("emit PresaleBoxOpened(");
 
       expect(collapseIdx, "the presale collapse not found").to.be.greaterThan(
@@ -265,7 +265,7 @@ describe("LootboxFlipRoundHundreds — threshold-gated 100-FLIP collapse (§3c)"
       );
       expect(
         creditIdx,
-        "`coinflip.creditFlip(player, flipOut)` call not found"
+        "`coinflip.creditFlip(uint32(entry), flipOut)` call not found"
       ).to.be.greaterThan(-1);
       expect(
         emitIdx,

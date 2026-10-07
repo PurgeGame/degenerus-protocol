@@ -45,8 +45,8 @@ contract AffiliateLevelAllocation is DeployProtocol {
     function test_LevelEndPaysHalfPercentTopAndRecordsTwoAndAHalfPercentPot() public {
         for (uint256 i; i < 3; ++i) _buyWithCode(CODE_ALICE);
         _buyWithCode(CODE_BOB);
-        uint256 aliceScore = affiliate.affiliateScore(1, alice);
-        uint256 bobScore = affiliate.affiliateScore(1, bob);
+        uint256 aliceScore = affiliate.affiliateScore(1, game.walletIdOf(alice));
+        uint256 bobScore = affiliate.affiliateScore(1, game.walletIdOf(bob));
         assertGt(aliceScore, bobScore, "fixture: alice leads level 1");
         assertGt(bobScore, 0, "fixture: bob also scored");
 

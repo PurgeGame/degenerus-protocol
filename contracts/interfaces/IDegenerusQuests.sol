@@ -61,7 +61,14 @@ struct PlayerQuestView {
 
 /// @title IDegenerusQuests
 /// @notice Interface for the daily quest system that rewards players for game actions
-/// @dev Quests reset daily and track player progress across mint, flip, and other actions
+/// @dev Quests reset daily and track player progress across mint, flip, and other actions.
+///      Every per-player quest record is keyed by the caller-supplied uint32 wallet ID; Quests
+///      has no player entry points and resolves no address except at a level-quest completion
+///      (eligibility reads the wallet's mint word through the wallet table). Wallet ID 0 means
+///      "no wallet". Callers always pass a nonzero ID they hold (Game modules, Coinflip's
+///      forward word, FLIP after registration, Affiliate's stored IDs, Parimutuel's
+///      `marketBetGates`). No handler reverts on any ID, and a view of an untouched ID
+///      (including 0) returns its zero/default result.
 interface IDegenerusQuests {
     /// @notice Rolls the daily quest for a given day using provided entropy.
     /// @dev Called by AdvanceModule (via GAME delegatecall) to determine which quests are active.
@@ -82,26 +89,31 @@ interface IDegenerusQuests {
     ) external;
 
     /// @notice Records player flip activity and checks quest completion
-    /// @dev Called by COINFLIP when a player stakes a coinflip (onlyCoin admits COIN, COINFLIP, GAME and AFFILIATE)
-    /// @param player The address of the player who flipped
+    /// @dev Called by COINFLIP when a player stakes a coinflip (onlyCoin admits COIN, COINFLIP, GAME and AFFILIATE).
+    ///      The quest belongs to the FUNDER of the deposit (the depositor for self and operator
+    ///      deposits, the paying sender for a gift); Coinflip folds the returned reward into the
+    ///      staked player's deposit.
+    /// @param id Wallet ID of the funder whose quest progresses
     /// @param flipCredit The amount of flip credit used
     /// @return reward The quest reward amount earned (0 if quest not completed)
     /// @return questType The type of quest that was completed
     /// @return streak The player's current quest streak
     /// @return completed Whether a quest was completed by this action
-    function handleFlip(address player, uint256 flipCredit)
+    function handleFlip(uint32 id, uint256 flipCredit)
         external
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed);
 
     /// @notice Records player decimator activity and checks quest completion
-    /// @dev Called by FLIP when a player burns into the decimator (onlyCoin admits COIN, COINFLIP, GAME and AFFILIATE)
-    /// @param player The address of the player
+    /// @dev Called by FLIP when a player burns into the decimator (onlyCoin admits COIN, COINFLIP, GAME and AFFILIATE).
+    ///      FLIP obtains the burner's ID first (Game `playerActivityScoreCached`, then
+    ///      `registerWallet(caller, true)` on zero). Quests credits the reward itself by ID.
+    /// @param id Wallet ID of the burner
     /// @param burnAmount The amount of tokens burned in the decimator
     /// @return reward The quest reward amount earned (0 if quest not completed)
     /// @return questType The type of quest that was completed
     /// @return streak The player's current quest streak
     /// @return completed Whether a quest was completed by this action
-    function handleDecimator(address player, uint256 burnAmount)
+    function handleDecimator(uint32 id, uint256 burnAmount)
         external
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed);
 
@@ -109,8 +121,9 @@ interface IDegenerusQuests {
     ///         secondary quest and streak floor, in one GAME call
     /// @dev Called by the game's foil module (GAME context) on a foil-pack buy. Runs the
     ///      shared primary purchase legs, the streak snapshot, then the foil secondary quest
-    ///      and streak floor.
-    /// @param player The address of the player who bought the foil pack
+    ///      and streak floor. Credits the foil-quest reward itself by ID and floors an afking
+    ///      buyer's streak through Game `floorAfkingStreakBase(id, ...)`.
+    /// @param id Wallet ID of the buyer
     /// @param ethMintSpendWei Gross ETH-denominated foil spend in wei (credited 1:1 to MINT_ETH)
     /// @param flipMintQty FLIP-paid ticket-equivalent mint units
     /// @param lootBoxAmount ETH spent on lootbox in wei
@@ -122,7 +135,7 @@ interface IDegenerusQuests {
     /// @return streakSnapshot Pre-floor reward streak for the foil-EV activity score
     /// @return afking Whether the buyer has an afking run (live streak resolved by Game)
     function handleFoilPurchase(
-        address player,
+        uint32 id,
         uint256 ethMintSpendWei,
         uint32 flipMintQty,
         uint256 lootBoxAmount,
@@ -132,20 +145,23 @@ interface IDegenerusQuests {
 
     /// @notice Records player affiliate activity and checks quest completion
     /// @dev Called by AFFILIATE when an affiliate's earnings are credited (onlyCoin admits COIN,
-    ///      COINFLIP, GAME and AFFILIATE)
-    /// @param player The address of the player
+    ///      COINFLIP, GAME and AFFILIATE). AFFILIATE passes the winning owner's or upline's
+    ///      stored ID (no decode); a level-quest completion resolves the wallet's address once
+    ///      through the wallet table. Affiliate credits the returned reward.
+    /// @param id Wallet ID of the affiliate (code owner or upline) earning the reward
     /// @param amount The amount of affiliate rewards earned
     /// @return reward The quest reward amount earned (0 if quest not completed)
     /// @return questType The type of quest that was completed
     /// @return streak The player's current quest streak
     /// @return completed Whether a quest was completed by this action
-    function handleAffiliate(address player, uint256 amount)
+    function handleAffiliate(uint32 id, uint256 amount)
         external
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed);
 
     /// @notice Records player Degenerette activity and checks quest completion
-    /// @dev Called by the game contract when a player places a Degenerette bet
-    /// @param player The address of the player
+    /// @dev Called by the game contract when a player places a Degenerette bet. The quest and
+    ///      the reward (credited here by ID) belong to the bet's FUNDER.
+    /// @param id Wallet ID of the funder
     /// @param amount The bet amount (wei for ETH, base units for FLIP)
     /// @param paidWithEth True if the bet was paid with ETH, false if paid with FLIP
     /// @param mintPrice Current ticket price in wei (0 for FLIP bets)
@@ -153,15 +169,15 @@ interface IDegenerusQuests {
     /// @return questType The type of quest that was completed
     /// @return streak The player's current quest streak
     /// @return completed Whether a quest was completed by this action
-    function handleDegenerette(address player, uint256 amount, bool paidWithEth, uint256 mintPrice)
+    function handleDegenerette(uint32 id, uint256 amount, bool paidWithEth, uint256 mintPrice)
         external
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed);
 
     /// @notice Records combined purchase-path activity (mint tickets + lootbox) and checks quest completion
     /// @dev Called by MintModule for the unified purchase path. Combines the mint + lootbox
     ///      quest legs into a single cross-contract call. Returns streak for compute-once
-    ///      score forwarding.
-    /// @param player The address of the player
+    ///      score forwarding. The caller credits the returned reward.
+    /// @param id Wallet ID of the buyer
     /// @param ethMintSpendWei Gross ETH-denominated spend on tickets + lootbox in wei
     ///        (fresh + recycled), credited 1:1 to MINT_ETH quest
     /// @param flipMintQty FLIP-paid ticket-equivalent mint units
@@ -174,7 +190,7 @@ interface IDegenerusQuests {
     /// @return completed Whether a quest was completed by this action
     /// @return afking Whether the buyer has an afking run (live streak resolved by Game)
     function handlePurchase(
-        address player,
+        uint32 id,
         uint256 ethMintSpendWei,
         uint32 flipMintQty,
         uint256 lootBoxAmount,
@@ -183,55 +199,59 @@ interface IDegenerusQuests {
     ) external returns (uint256 reward, uint8 questType, uint32 streak, bool completed, bool afking);
 
     /// @notice Awards bonus streak days to a player
-    /// @dev Directly increases the player's streak count
-    /// @param player The address of the player to award bonus to
+    /// @dev GAME only. Directly increases the player's streak count.
+    /// @param id Wallet ID of the player to award bonus to
     /// @param amount The number of bonus streak days to award
     /// @param currentDay The caller's current calendar day; quest state pins to the newest rolled day
-    function awardQuestStreakBonus(address player, uint16 amount, uint24 currentDay) external;
+    function awardQuestStreakBonus(uint32 id, uint16 amount, uint24 currentDay) external;
 
     /// @notice Record a paid craps action: quest progress and the whole-day streak credit.
     /// @dev Access: COIN only. FLIP is the single reporter for the whole craps surface, so no
     ///      other quest handler gains a caller comparison. Carries no boon value — a craps boon
     ///      boosts the slip's bankroll return at settlement, never entry-time coinflip credit.
-    /// @param player The player who paid for the action.
+    ///      CRAPS obtains the buyer's ID before the bet body and FLIP forwards it from
+    ///      `burnCoinForCraps`. Credits the join-quest reward itself by ID.
+    /// @param id Wallet ID of the player who paid for the action.
     /// @param actionFlags Bit 0 paid join, bit 1 paid day pass, bit 2 normal day streak,
     ///        bit 3 high day streak.
-    function recordCrapsAction(address player, uint8 actionFlags) external;
+    function recordCrapsAction(uint32 id, uint8 actionFlags) external;
 
     /// @notice Grant quest streak shields to a player (each absorbs one missed day)
     /// @dev GAME-only. Used by the lootbox quest-shield boon.
-    /// @param player The address of the player to grant shields to
+    /// @param id Wallet ID of the player to grant shields to
     /// @param amount The number of shields to add (uint8-saturating)
-    function awardQuestStreakShield(address player, uint16 amount) external;
+    function awardQuestStreakShield(uint32 id, uint16 amount) external;
 
     /// @notice Begins an afking run: snapshots the gap-synced streak and flips the afking flag
     /// @dev GAME-only. While afking, the Game-side compute-on-read owns the player's streak and
     ///      slot-0 completions are streak-neutral / reward-deferred; returns the synced streak
     ///      so the caller bases the run's snapshot on it.
-    /// @param player The subscriber starting an afking run
+    /// @param id Wallet ID of the subscriber starting an afking run
     /// @param currentDay The caller's current calendar day; quest state pins to the newest rolled day
     /// @return streak The player's gap-synced streak at the start of the run
-    function beginAfking(address player, uint24 currentDay) external returns (uint24 streak);
+    function beginAfking(uint32 id, uint24 currentDay) external returns (uint24 streak);
 
     /// @notice Ends an afking run: hands the afking-computed streak back to the manual system
     /// @dev GAME-only, called on every sub-ending path before the Sub slot is deleted.
     ///      Idempotent (a no-op unless the player is currently afking). Keeps the Game-computed
     ///      earned streak when no rolled quest day lies strictly between the newest valid mint
     ///      anchor and the current day; skipped stall days are never treated as playable misses.
-    /// @param player The subscriber whose run is ending
+    ///      Revert-free for any input (it runs on mineFlip sub-ending paths).
+    /// @param id Wallet ID of the subscriber whose run is ending
     /// @param earnedStreak The run's earned streak (snapshot + funded delivered days), Game-computed
     /// @param afkingCoveredDay The Game-side handback anchor: the day before the sub ended,
     ///        floored at the afking funded high-water day
     /// @param currentDay The current calendar day (the decay reference)
-    function finalizeAfking(address player, uint24 earnedStreak, uint24 afkingCoveredDay, uint24 currentDay) external;
+    function finalizeAfking(uint32 id, uint24 earnedStreak, uint24 afkingCoveredDay, uint24 currentDay) external;
 
     /// @notice Returns the quest state for a specific player
-    /// @param player The address of the player to query
+    /// @dev Zero results for an untouched ID (including 0).
+    /// @param id Wallet ID of the player to query
     /// @return streak The player's raw stored streak (not gap/shield-decayed; use getPlayerQuestView / effectiveBaseStreak for the effective value)
     /// @return lastCompletedDay The last day the player completed the primary (slot 0) quest
     /// @return progress The player's current progress on each of the two quests
     /// @return completed Whether the player has completed each of the two quests
-    function playerQuestStates(address player)
+    function playerQuestStates(uint32 id)
         external
         view
         returns (
@@ -250,57 +270,68 @@ interface IDegenerusQuests {
     /// @dev Called directly by PARIMUTUEL when a bet is placed, and gated on that identity.
     ///      Idempotence comes from PARIMUTUEL's one-bet-per-round gate, not this call itself —
     ///      the internal bit only short-circuits a repeat until level-quest progress rewrites
-    ///      the word within the same version epoch.
-    /// @param player The player who placed the bet.
+    ///      the word within the same version epoch. The address is kept because eligibility
+    ///      reads `player`'s mint word on every rewarded bet; `id` keys the quest record and the
+    ///      credit and must be the ID `marketBetGates(player, lvl)` returned in the same
+    ///      transaction (PARIMUTUEL is trusted to pass that pair; `mayBet` implies it is nonzero).
+    /// @param id Wallet ID of the bettor (from `marketBetGates`).
+    /// @param player The bettor's address (its mint word is the eligibility source).
     /// @param lvl The level the bet was placed on, which the caller already read from the
     ///        game in this same call — passing it through saves re-reading it.
     /// @param reward FLIP to credit on first completion this level.
     /// @return paid The FLIP actually credited (0 when ineligible or already completed).
-    function recordGrowthBet(address player, uint24 lvl, uint256 reward) external returns (uint256 paid);
+    function recordGrowthBet(uint32 id, address player, uint24 lvl, uint256 reward) external returns (uint256 paid);
 
     /// @notice The two gates the parimutuel growth market applies to a bet.
     /// @dev Read-only. earnsReward is recordGrowthBet's eligibility; mayBet is the weaker
-    ///      lifetime bar — has this address ever bought anything.
+    ///      lifetime bar — has this address ever bought anything. The wallet ID rides the mint
+    ///      word this view already reads (bits 224-255). Every door that writes a nonzero mint
+    ///      field registers the wallet first, so mayBet implies id != 0.
     /// @param player The player to test.
     /// @param lvl The level to test against.
     /// @return mayBet True if the player may place a bet at all.
     /// @return earnsReward True if the placement also earns the growth quest.
+    /// @return id The player's wallet ID (0 if unregistered; never allocates).
     function marketBetGates(address player, uint24 lvl)
         external
         view
-        returns (bool mayBet, bool earnsReward);
+        returns (bool mayBet, bool earnsReward, uint32 id);
 
     /// @notice Returns a player's level quest state for frontend display.
-    /// @param player The player address to query.
+    /// @dev `eligible` resolves the wallet's address through the wallet table and reads its
+    ///      mint word. Zero results for an untouched ID (including 0).
+    /// @param id Wallet ID of the player to query.
     /// @return questType The active level quest type (1-8, or 11 for the craps day-pass quest).
     /// @return progress The player's accumulated progress.
     /// @return target The target value for completion.
     /// @return completed Whether the player has completed the quest this level.
     /// @return eligible Whether the player is eligible for level quests.
-    function getPlayerLevelQuestView(address player)
+    function getPlayerLevelQuestView(uint32 id)
         external
         view
         returns (uint8 questType, uint128 progress, uint256 target, bool completed, bool eligible);
 
     /// @notice Returns the player's daily quest view, including the effective
     ///         (gap/shield-decayed) base streak. A pure view — no mutation.
-    /// @param player The player address to query.
+    /// @dev Per-player fields are zero for an untouched ID (including 0).
+    /// @param id Wallet ID of the player to query.
     /// @return viewData The player's quest view with the effective baseStreak.
-    function getPlayerQuestView(address player)
+    function getPlayerQuestView(uint32 id)
         external
         view
         returns (PlayerQuestView memory viewData);
 
     /// @notice The player's decay-aware effective reward streak (getPlayerQuestView's baseStreak),
     ///         computed without materializing the per-quest view structs — a cheap read for scoring.
-    /// @param player The player address to query.
+    /// @param id Wallet ID of the player to query (0 returns 0).
     /// @return The effective (decay-applied) reward streak.
-    function effectiveBaseStreak(address player) external view returns (uint32);
+    function effectiveBaseStreak(uint32 id) external view returns (uint32);
 
     /// @notice effectiveBaseStreak plus the player's afking-run flag, from one quest-state read.
-    /// @param player The player address to query.
+    /// @dev Game's activity score passes the ID from the mint word it already holds.
+    /// @param id Wallet ID of the player to query (0 returns (0, false)).
     /// @return streak The effective (decay-applied) reward streak.
     /// @return afking True while the player is mid afking-run.
-    function effectiveBaseStreakAndAfking(address player) external view returns (uint32 streak, bool afking);
+    function effectiveBaseStreakAndAfking(uint32 id) external view returns (uint32 streak, bool afking);
 
 }

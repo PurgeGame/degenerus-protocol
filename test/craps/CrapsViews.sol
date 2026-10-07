@@ -7,6 +7,12 @@ import {Craps} from "../../contracts/Craps.sol";
 import {IJackpotBattleViews} from "./JackpotBattleViews.sol";
 import {CrapsSeedViews} from "./CrapsSeedViews.sol";
 import {CrapsPriceLib} from "../../contracts/libraries/CrapsPriceLib.sol";
+import {CrapsPreferenceLib} from "../../contracts/libraries/CrapsPreferenceLib.sol";
+import {WalletTableLib} from "../../contracts/libraries/WalletTableLib.sol";
+
+interface ICrapsWalletIdView {
+    function walletIdOf(address player) external view returns (uint32);
+}
 
 /// @title The reader surface production no longer ships
 /// @notice `CrapsBattle` keeps its whole reader surface internal: nothing on chain calls a craps
@@ -35,6 +41,29 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     uint256 internal constant _SYBIL_SCORE_FLOOR = 12;
     uint256 internal constant _MAX_MIN_SCORE = 0xFFF;
     function entryPrice(address player, uint256 base) external view returns (uint256) { return _entryPrice(player, base); }
+
+    /// @dev The wallet ID the table keys `player` by: the address word's cached ID, else the
+    ///      Game's (0 when the address has none, which reads as empty state everywhere).
+    function _idOf(address player) internal view returns (uint32 id) {
+        id = uint32(_passCredits[player] >> CrapsPreferenceLib.ID_SHIFT);
+        if (id == 0) id = ICrapsWalletIdView(_GAME).walletIdOf(player);
+    }
+
+    /// @dev The account key of a stored bet owner ID (the Game's wallet table).
+    function _ownerOfId(uint32 id) internal view returns (address) {
+        return id == 0 ? address(0) : WalletTableLib.ownerOf(id);
+    }
+
+    /// @dev The RNG salt the table uses for `player`'s paid entries: the wallet ID when the Game
+    ///      has one, else the address (engine probes on arbitrary players).
+    function _saltOf(address player) internal view returns (uint256) {
+        uint32 id = _idOf(player);
+        return id != 0 ? id : uint256(uint160(player));
+    }
+
+    function walletIdOfPlayer(address player) external view returns (uint32) {
+        return _idOf(player);
+    }
 
     // ── Constants ───────────────────────────────────────────────────────────
     uint256 public constant MIN_BANKROLL_FLIP = _MIN_BANKROLL_FLIP;
@@ -293,7 +322,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     /// @dev A player's uncommitted pass credits, both lanes. Storage-internal on the contract —
     ///      the whole reader surface is — so a suite reads them back through here.
     function passCreditsOf(address player) external view returns (uint256 normal, uint256 high) {
-        uint256 w = _passCredits[player];
+        uint256 w = _passCreditsById[_idOf(player)];
         return (w & _PASS_MAX, (w >> _PASS_HIGH_SHIFT) & _PASS_MAX);
     }
 
@@ -305,8 +334,15 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
         assembly ("memory-safe") { slot := _passCredits.slot }
     }
 
+    /// @dev Root of the ID-keyed pass word (passes, board, initialized bit).
+    function passCreditsByIdSlot() external pure returns (uint256 slot) {
+        assembly ("memory-safe") { slot := _passCreditsById.slot }
+    }
+
     function setPassCredits(address player, uint32 normal, uint32 high) external {
-        _passCredits[player] = (_passCredits[player] & ~uint256(type(uint64).max))
+        uint32 id = _idOf(player);
+        require(id != 0, "setPassCredits: no wallet ID");
+        _passCreditsById[id] = (_passCreditsById[id] & ~uint256(type(uint64).max))
             | uint256(normal) | (uint256(high) << _PASS_HIGH_SHIFT);
     }
 
@@ -322,7 +358,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
         external
         returns (uint256 banked)
     {
-        return _splitAward(key, player, (uint256(source) << 248) | gross);
+        return _splitAward(key, _idOf(player), (uint256(source) << 248) | gross);
     }
 
     /// @dev The award split's denominations and cap, stated once for the suites.
@@ -364,17 +400,18 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     function dayStateOf(uint24 day, address player) external view returns (uint256) {
         // `_daySlotOf` is private on the contract; the derivation is one multiply, so the view
         // restates it rather than asking for a visibility change on production code.
-        return _loadDaySeat(uint256(day) * BONUS_SLOTS_PER_DAY, player) == 0 ? 0 : 1;
+        return _loadDaySeat(uint256(day) * BONUS_SLOTS_PER_DAY, _idOf(player)) == 0 ? 0 : 1;
     }
 
     /// @dev The holder's day-ticket seat number, or zero — the raw stored value.
     function daySeatNumberOf(uint24 day, address player) external view returns (uint256) {
-        return _loadDaySeat(uint256(day) * BONUS_SLOTS_PER_DAY, player) & _MASK32;
+        return _loadDaySeat(uint256(day) * BONUS_SLOTS_PER_DAY, _idOf(player)) & _MASK32;
     }
 
     function seatedIn(uint64 slot, address player) external view returns (bool) {
-        if (slot >= _CUSTOM_SLOT_BASE) return _bonusSeated[_slotWindow(slot).key][player];
-        return _loadDaySeat(uint256(slot) & ~uint256(7), player) & (uint256(1) << (32 + (slot & 7))) != 0;
+        uint32 id = _idOf(player);
+        if (slot >= _CUSTOM_SLOT_BASE) return _bonusSeated[_slotWindow(slot).key][id];
+        return _loadDaySeat(uint256(slot) & ~uint256(7), id) & (uint256(1) << (32 + (slot & 7))) != 0;
     }
 
     function windowReservedOf(uint64 slot) external view returns (uint256 count, uint256 high) {
@@ -392,9 +429,10 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     function daySeatIsHigh(uint24 day, address player) external view returns (bool) {
         uint256 daySlot = uint256(day) * BONUS_SLOTS_PER_DAY;
         uint64 n = uint32(_dayTickets[daySlot]);
+        uint32 id = _idOf(player);
         for (uint64 i = 1; i <= n; ++i) {
             uint256 w = _loadBet((daySlot << 64) | i);
-            if (address(uint160(w)) == player) return w & _BET_HIGH_BIT != 0;
+            if (id != 0 && uint32(w) == id) return w & _BET_HIGH_BIT != 0;
         }
         return false;
     }
@@ -402,7 +440,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     /// @dev The seven per-period high flags of `player`'s day ticket, bit `p` for period `p`.
     function daySeatHighMaskOf(uint24 day, address player) external view returns (uint256) {
         uint256 daySlot = uint256(day) * BONUS_SLOTS_PER_DAY;
-        uint256 seat = _loadDaySeat(daySlot, player);
+        uint256 seat = _loadDaySeat(daySlot, _idOf(player));
         if (seat == 0) return 0;
         return (_loadBet((daySlot << 64) | seat) >> _BET_HIGH_SHIFT)
             & (_BET_DAYHIGH_MASK >> _BET_HIGH_SHIFT);
@@ -530,7 +568,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     ///      suite compares it against the pre-conversion total, not against what lands liquid.
     function previewSettlement(uint256 betId) external view returns (uint256 won, uint256 paid) {
         uint256 header = _loadBet(betId);
-        if (address(uint160(header)) == address(0)) revert NoSuchBet();
+        if (uint32(header) == 0) revert NoSuchBet();
         // Through `_indexOf`, so a slip previews on the table its slot actually shut onto.
         uint256 word = _wordAt(_indexOf(betId >> 64));
         if (word == 0) revert RngNotReady();
@@ -579,7 +617,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     function payProgressiveAt(bytes32 key, address winner, uint256 peakFlip, uint256 score) external {
         Window memory w;
         w.key = key;
-        _payProgressive(w, peakFlip, score, 0, uint160(winner) | (_AWARD_STANDING << _BET_SCORE_SHIFT), winner);
+        _payProgressive(w, peakFlip, score, 0, uint256(_idOf(winner)) | (_AWARD_STANDING << _BET_SCORE_SHIFT));
     }
 
 
@@ -694,7 +732,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     ///      window that settles it. The harness bound is built on this figure.
     function settlementOn(uint256 betId, uint64 slot) external view returns (uint256 paid) {
         uint256 header = _loadBet(betId);
-        if (address(uint160(header)) == address(0)) return 0;
+        if (uint32(header) == 0) return 0;
         uint256 word = _wordAt(_indexOf(slot));
         if (word == 0) revert RngNotReady();
         Window memory w = _slotWindow(slot);
@@ -776,7 +814,8 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     // ── Readers production no longer carries ────────────────────────────────
     /// @notice A placed bet slip, decoded — what `_betOf` returns. Its logical ID is
     ///         `(slot << 64) | seat`; scheduled records become unavailable after bank reuse.
-    /// @param player        Who staked it, and the only address any payment can ever reach.
+    /// @param player        Who staked it: the account key of the stored owner wallet ID.
+    /// @param playerId      The owner's wallet ID as the bet word stores it (bits 0-31).
     /// @param slot          The battle this slip sits in. Its terms — bankroll, target, bounty,
     ///                      bar — are the SLOT's; read them with `_customBattleOf` or
     ///                      `_bonusTermsFor`.
@@ -792,6 +831,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     ///      settled mark.
     struct Bet {
         address player;
+        uint32 playerId;
         uint64 slot;
         uint64 seat;
         bool settled;
@@ -993,17 +1033,18 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     /// @param score That high point over the run's own starting bankroll, in basis points — the
     ///        same figure the finalization log carries, computed once by the caller.
     /// @param winnerId The winner's bet id, logged with the payout.
-    /// @param winnerWord The winner's settled bet header, carrying its owner address.
-    /// @param winner The winner's address, credited with the payout.
+    /// @param winnerWord The winner's settled bet header, carrying its owner wallet ID (bits 0-31),
+    ///        which the payout is credited to.
     ///      Reached by self-call through the table's delegate fallback, so the suite installs
     ///      `JackpotBattleViews` at `JACKPOT_BATTLE` before calling it.
-    function _payProgressive(Window memory w, uint256 peakFlip, uint256 score, uint256 winnerId, uint256 winnerWord, address winner) internal {
-        IJackpotBattleViews(address(this)).payProgressive(w, peakFlip, score, winnerId, winnerWord, winner);
+    function _payProgressive(Window memory w, uint256 peakFlip, uint256 score, uint256 winnerId, uint256 winnerWord) internal {
+        IJackpotBattleViews(address(this)).payProgressive(w, peakFlip, score, winnerId, winnerWord);
     }
 
     function _betOf(uint256 betId) internal view returns (Bet memory bet) {
         uint256 header = _loadBet(betId);
-        bet.player = address(uint160(header));
+        bet.playerId = uint32(header);
+        bet.player = _ownerOfId(bet.playerId);
         bet.slot = uint64(betId >> 64);
         bet.seat = uint64(betId);
         bet.settled = _settledOf(betId);
@@ -1022,7 +1063,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     /// @notice The battle a bet is entered in — its slot's, since that is the only battle a slip
     ///         at that slot can be in.
     function _battleKeyOf(uint256 betId) internal view returns (bytes32) {
-        if (address(uint160(_loadBet(betId))) == address(0)) revert NoSuchBet();
+        if (uint32(_loadBet(betId)) == 0) revert NoSuchBet();
         return _slotWindow(betId >> 64).key;
     }
 

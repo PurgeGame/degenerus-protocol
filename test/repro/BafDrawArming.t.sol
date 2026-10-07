@@ -56,7 +56,7 @@ contract BafDrawArming is DeployProtocol {
 
         // A minimum-size deposit inside the sealed last-purchase window enters.
         vm.prank(minnow);
-        coinflip.depositCoinflip(address(0), 100 ether);
+        coinflip.depositCoinflip(address(0), 100);
 
         (, uint96 total, uint32 count) = coinflip.bafDrawInfo();
         assertEq(count, 1, "the sealed-window deposit entered the draw");
@@ -72,7 +72,7 @@ contract BafDrawArming is DeployProtocol {
         assertTrue(word != 0, "harness: the transition word must be recorded");
         assertEq(
             coinflip.bafDrawWinner(word),
-            minnow,
+            game.walletIdOf(minnow),
             "the sole sealed-window entrant wins Slice A2's draw"
         );
     }
@@ -125,7 +125,7 @@ contract BafDrawArming is DeployProtocol {
 
     function _tryCoinflipDeposit() internal {
         vm.prank(buyer);
-        try coinflip.depositCoinflip(buyer, 500 ether) {} catch {}
+        try coinflip.depositCoinflip(buyer, 500) {} catch {}
     }
 
     /// @dev One driver step. The engine composes every admitted checkpoint into a call and the
@@ -149,7 +149,8 @@ contract BafDrawArming is DeployProtocol {
         if (reqId == 0) return;
         (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
         if (fulfilled) return;
-        uint256 word = uint256(keccak256(abi.encode(simTime, reqId)));
+        // Bit 0 set: every daily flip wins, so the level-10 BAF resolves instead of skipping.
+        uint256 word = uint256(keccak256(abi.encode(simTime, reqId))) | 1;
         try mockVRF.fulfillRandomWords(reqId, word) {} catch {}
     }
 

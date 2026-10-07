@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 // Permanently skipped historical cases were retired in the test review.
@@ -100,7 +101,7 @@ contract RouterWorstCaseGas is DeployProtocol {
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
     uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED;
-    uint256 private constant DEITY_SHIFT = 184;
+    uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT;
     uint256 private _lastFulfilledReqId;
 
     function setUp() public {

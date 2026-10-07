@@ -96,32 +96,40 @@ contract QuestShieldCrossDayDoubleConsume is DeployProtocol {
 
     // --------------------------------------------------------------------- helpers
 
+    function _qid(address who) private returns (uint32 id) {
+        id = game.walletIdOf(who);
+        if (id == 0) id = _giveWalletId(who);
+    }
+
     function _roll(uint24 day) private {
         vm.prank(ContractAddresses.GAME);
         quests.rollDailyQuest(day, uint256(keccak256(abi.encode("f3-quest", day))) | 1, false, false, false);
     }
 
     function _award(address player, uint16 amount, uint24 wallDay) private {
+        uint32 qid1 = _qid(player);
         vm.prank(ContractAddresses.GAME);
-        quests.awardQuestStreakBonus(player, amount, wallDay);
+        quests.awardQuestStreakBonus(qid1, amount, wallDay);
     }
 
     function _grantShields(address player, uint16 amount) private {
+        uint32 qid2 = _qid(player);
         vm.prank(ContractAddresses.GAME);
-        quests.awardQuestStreakShield(player, amount);
+        quests.awardQuestStreakShield(qid2, amount);
     }
 
     /// @dev A partial (non-completing) quest action: 1-wei FLIP credit, far below the FLIP target.
     ///      Drives the real `handleFlip` entrypoint, so `_questSyncState` runs exactly as it does
     ///      for any live below-target flip/decimator/affiliate action.
     function _partialFlip(address player) private {
+        uint32 qid3 = _qid(player);
         vm.prank(ContractAddresses.COIN);
-        (, , , bool completed) = quests.handleFlip(player, 1);
+        (, , , bool completed) = quests.handleFlip(qid3, 1);
         assertFalse(completed, "partial flip must not complete the quest");
     }
 
     function _questWord(address player) private view returns (uint256) {
-        return uint256(vm.load(address(quests), keccak256(abi.encode(player, QUEST_STATE_SLOT))));
+        return uint256(vm.load(address(quests), keccak256(abi.encode(uint256(game.walletIdOf(player)), QUEST_STATE_SLOT))));
     }
 
     function _streak(address player) private view returns (uint256) {

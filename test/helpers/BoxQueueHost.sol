@@ -149,12 +149,13 @@ contract QueueHost is DegenerusGame {
     }
 
     function seedBoost(address player, uint8 tier) external {
-        boonPacked[player].slot0 = (boonPacked[player].slot0 & BP_LOOTBOX_CLEAR)
+        uint32 id = _walletIdOf(player);
+        boonPacked[id].slot0 = (boonPacked[id].slot0 & BP_LOOTBOX_CLEAR)
             | (uint256(tier) << BP_LOOTBOX_TIER_SHIFT) | (uint256(_simulatedDayIndex()) << BP_LOOTBOX_DAY_SHIFT);
     }
 
     function boostTier(address player) external view returns (uint256) {
-        return (boonPacked[player].slot0 >> BP_LOOTBOX_TIER_SHIFT) & 0xFF;
+        return (boonPacked[_walletIdOf(player)].slot0 >> BP_LOOTBOX_TIER_SHIFT) & 0xFF;
     }
 
     /// @dev Put today on the purchase deadline (distress) or well before it, keeping the deadman,

@@ -23,7 +23,7 @@ contract RecycleBonusClaimablePurchase is DeployProtocol {
     uint256 private constant QTY_SCALE = 100;
 
     bytes32 private constant STAKE_UPDATED_SIG =
-        keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
+        keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)");
 
     function setUp() public {
         _deployProtocol();
@@ -43,6 +43,7 @@ contract RecycleBonusClaimablePurchase is DeployProtocol {
 
         // Arm the claimable buyer: per-player low-128 balance + the pool total (the purchase
         // folds its per-player draw into one claimablePool decrement, which must not underflow).
+        _giveWalletId(claimBuyer);
         _pokeClaimable(claimBuyer, cost + 1 ether);
         _bumpClaimablePool(cost + 1 ether);
 
@@ -79,7 +80,7 @@ contract RecycleBonusClaimablePurchase is DeployProtocol {
             if (
                 logs[i].topics.length > 1 &&
                 logs[i].topics[0] == STAKE_UPDATED_SIG &&
-                address(uint160(uint256(logs[i].topics[1]))) == buyer
+                uint256(logs[i].topics[1]) == game.walletIdOf(buyer)
             ) {
                 (uint256 amount, ) = abi.decode(logs[i].data, (uint256, uint256));
                 total += amount;

@@ -274,7 +274,7 @@ abstract contract FreshWordLeg is AdvanceStageStream {
         for (uint256 i = from; i < to; ++i) assertFalse(_isMarker(i), "no stage precedes the application");
         assertEq(_dailyLegLogs(logs), 0, "the word-apply tx pays no daily leg");
         assertEq(
-            _countTopic(logs, keccak256("JackpotBattleEntry(uint64,uint256,address,uint256,uint32)")),
+            _countTopic(logs, keccak256("JackpotBattleEntry(uint64,uint256,uint32,uint256,uint32)")),
             0,
             "the word-apply tx draws no battle entry"
         );
@@ -312,7 +312,7 @@ abstract contract PurchaseDailyFixture is AdvanceStageStream {
     bytes32 internal constant TICKET_WIN_SIG =
         keccak256("JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)");
     bytes32 internal constant FLIP_WIN_SIG = keccak256("JackpotFlipWin(uint32,uint24,uint8,uint256,uint256)");
-    bytes32 internal constant BATTLE_ENTRY_SIG = keccak256("JackpotBattleEntry(uint64,uint256,address,uint256,uint32)");
+    bytes32 internal constant BATTLE_ENTRY_SIG = keccak256("JackpotBattleEntry(uint64,uint256,uint32,uint256,uint32)");
     bytes32 internal constant BAF_ARMED_SIG = keccak256("BafDrawArmed(uint24)");
     bytes32 internal constant ADVANCE_SIG = keccak256("Advance(uint8,uint24)");
 

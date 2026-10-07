@@ -19,12 +19,11 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 contract OpenBountyCarry is DeployProtocol {
     uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;
     uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS;
-    uint256 private constant CURSOR_SLOT = GameSlots.SUB_CURSOR;
-    uint256 private constant PENDING_SHIFT = 184;
+    uint256 private constant PENDING_SHIFT = GameSlots.PENDING_BOX_COUNT_OFFSET * 8;
     uint256 private _lastFulfilledReqId;
 
     bytes32 private constant STAKE_UPDATED_SIG =
-        keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
+        keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)");
     bytes32 private constant MINER_WORK_SIG = keccak256("MinerWork(address,uint8,uint256,uint256)");
     /// @dev A realistic per-call allowance for the split leg.
     uint256 private constant SPLIT_ALLOWANCE = 3_000_000;
@@ -38,7 +37,7 @@ contract OpenBountyCarry is DeployProtocol {
     /// @notice Case 1: one AFKing backlog, drained by one call or split across realistic-allowance
     ///         calls: the split's aggregate bounty never exceeds the single call's.
     function testForcedSplitPaysSingleAggregateBounty() public {
-        _setupFundedSubs(100, "bc1_", 20 ether);
+        _setupFundedSubs(200, "bc1_", 20 ether);
         _backlogAtAfking(uint256(keccak256("bc1_w")) | 1);
         uint256 backlog = _pendingCount();
         require(backlog > 40, "fixture: a real AFKing backlog is the next work");
@@ -110,7 +109,7 @@ contract OpenBountyCarry is DeployProtocol {
             if (
                 logs[i].topics.length > 1 &&
                 logs[i].topics[0] == STAKE_UPDATED_SIG &&
-                address(uint160(uint256(logs[i].topics[1]))) == keeper
+                uint256(logs[i].topics[1]) == game.walletIdOf(keeper)
             ) {
                 (uint256 amount, ) = abi.decode(logs[i].data, (uint256, uint256));
                 total += amount;
@@ -181,7 +180,7 @@ contract OpenBountyCarry is DeployProtocol {
     }
 
     function _pendingCount() internal view returns (uint256) {
-        return (uint256(vm.load(address(game), bytes32(CURSOR_SLOT))) >> PENDING_SHIFT) & 0xFFFF;
+        return (uint256(vm.load(address(game), bytes32(GameSlots.PENDING_BOX_COUNT))) >> PENDING_SHIFT) & 0xFFFF;
     }
 
     function _setupFundedSubs(uint256 n, string memory prefix, uint256 poolEach)
@@ -193,6 +192,7 @@ contract OpenBountyCarry is DeployProtocol {
             address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
             subs[i] = who;
             _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (NoCoin without it)
+            _giveWalletId(who);
             vm.deal(address(this), poolEach);
             game.depositAfkingFunding{value: poolEach}(who);
             vm.prank(who);

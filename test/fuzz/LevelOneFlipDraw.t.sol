@@ -61,14 +61,14 @@ contract FlipDrawHarness is DegenerusGameJackpotModule, BucketSeed {
 
 /// @dev Records every FLIP credit that crosses the boundary.
 contract FlipDrawCoinflipDouble {
-    address[] public players;
+    uint32[] public players;
     uint256[] public amounts;
     uint256 public batches;
     uint256 public total;
 
-    function creditFlipBatch(address[] calldata p, uint256[] calldata a) external {
+    function creditFlipBatch(uint32[] calldata p, uint256[] calldata a) external {
         for (uint256 i; i < p.length; ++i) {
-            if (p[i] != address(0) && a[i] != 0) {
+            if (p[i] != 0 && a[i] != 0) {
                 players.push(p[i]);
                 amounts.push(a[i]);
                 total += a[i];
@@ -87,7 +87,7 @@ contract NoCrapsCallsDouble is CrapsPreferenceStore {
     uint256 public creditPassesCalls;
     uint256 public vaultCompCalls;
 
-    function creditPasses(address, uint32, uint32) external {
+    function creditPasses(uint32, uint32, uint32) external {
         ++creditPassesCalls;
     }
 
@@ -113,8 +113,8 @@ contract LevelOneFlipDrawTest is Test {
     uint256 internal constant CAP_MAX = 50;
 
     bytes32 internal constant FLIP_WIN_SIG = keccak256("JackpotFlipWin(uint32,uint24,uint8,uint256,uint256)");
-    bytes32 internal constant CRAPS_PASSES_CREDITED_SIG = keccak256("CrapsPassesCredited(address,bool,uint256)");
-    bytes32 internal constant CRAPS_SLIP_PLACED_SIG = keccak256("CrapsSlipPlaced(address,uint256)");
+    bytes32 internal constant CRAPS_PASSES_CREDITED_SIG = keccak256("CrapsPassesCredited(uint32,bool,uint256)");
+    bytes32 internal constant CRAPS_SLIP_PLACED_SIG = keccak256("CrapsSlipPlaced(uint32,uint256)");
 
     function setUp() public {
         vm.warp((uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) + 5) * 1 days + 82_620 + 1 hours);

@@ -257,7 +257,7 @@ contract V56FreezeSolvency is DeployProtocol {
         uint256 stakeBefore = coinflip.coinflipAmount(p);
         game.claimAfkingFlip(_singleton(p));
         assertEq(_claimablePool(), poolBefore, "FLIP claim: claimablePool byte-unchanged (OFF the ETH path)");
-        assertEq(coinflip.coinflipAmount(p) - stakeBefore, owed * 1 ether, "FLIP claim paid via creditFlip (not an ETH move)");
+        assertEq(coinflip.coinflipAmount(p) - stakeBefore, owed, "FLIP claim paid via creditFlip (not an ETH move)");
         assertEq(_pendingFlipOf(p), 0, "pendingFlip zeroed (paid exactly once, CEI)");
         _assertSolvent("post-flip-claim");
     }
@@ -544,6 +544,7 @@ contract V56FreezeSolvency is DeployProtocol {
     }
 
     function _fundPool(address who, uint256 amount) internal {
+        _giveWalletId(who);
         vm.deal(address(this), amount);
         game.depositAfkingFunding{value: amount}(who);
     }

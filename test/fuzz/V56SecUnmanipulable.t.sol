@@ -709,18 +709,19 @@ contract V56SecUnmanipulable is DeployProtocol {
 
     /// @dev The decay-applied streak DegenerusQuests.finalizeAfking wrote for `who` on its most recent
     ///      sub-ending finalize, read from the QuestStreakBonusAwarded event
-    ///      (player indexed, uint16 amount, uint24 newStreak, uint24 currentDay). The finalize emits with
+    ///      (player ID indexed, uint16 amount, uint24 newStreak, uint24 currentDay). The finalize emits with
     ///      amount == 0 and newStreak == the decay-applied final streak. Requires vm.recordLogs() first.
     ///      currentDay is uint24 at c4d48008 (DegenerusQuests:112-117), not uint32 — the topic-0 hash
     ///      diverges if the signature string mis-widths it.
     function _lastFinalizeStreakFor(address who) internal returns (uint24) {
-        bytes32 sig = keccak256("QuestStreakBonusAwarded(address,uint16,uint24,uint24)");
+        bytes32 sig = keccak256("QuestStreakBonusAwarded(uint32,uint16,uint24,uint24)");
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint24 found;
         bool any;
+        uint32 whoId = game.walletIdOf(who);
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].topics.length < 2 || logs[i].topics[0] != sig) continue;
-            if (address(uint160(uint256(logs[i].topics[1]))) != who) continue;
+            if (uint32(uint256(logs[i].topics[1])) != whoId) continue;
             (uint16 amount, uint24 newStreak, ) = abi.decode(logs[i].data, (uint16, uint24, uint24));
             if (amount == 0) {
                 found = newStreak;

@@ -17,22 +17,22 @@ contract TraitEntrySamplingHarness is DegenerusGame, BucketSeed {
 
     /// @dev Pre-optimization sampler, kept only as a behavior and gas reference.
     function referenceSample(bool nextLevel, uint256 entropy)
-        external view returns (uint8 traitSel, address[] memory entries)
+        external view returns (uint8 traitSel, uint32[] memory entries)
     {
         uint24 targetLvl = level + (nextLevel ? 1 : 0);
         traitSel = uint8(entropy >> 24);
-        if (_ticketLevelRetired(targetLvl)) return (traitSel, new address[](0));
+        if (_ticketLevelRetired(targetLvl)) return (traitSel, new uint32[](0));
         uint256 len = _bucketLength(targetLvl, traitSel);
-        if (len == 0) return (traitSel, new address[](0));
+        if (len == 0) return (traitSel, new uint32[](0));
         uint256 take = len > 4 ? 4 : len;
-        entries = new address[](take);
+        entries = new uint32[](take);
         PackedTicketSampleLib.Cursor memory cursor;
         uint256 base = PackedTicketSampleLib.begin(cursor, len, entropy >> 40);
         cursor.word = _bucketWordAtUnchecked(targetLvl, traitSel, base);
         for (uint256 i; i < take;) {
             (uint256 index, bool redrawn) = PackedTicketSampleLib.next(cursor, len);
             uint256 word = redrawn ? _bucketWordAtUnchecked(targetLvl, traitSel, index) : cursor.word;
-            entries[i] = _walletKey(_bucketIdFromWord(word, index));
+            entries[i] = _bucketIdFromWord(word, index);
             unchecked { ++i; }
         }
     }
@@ -43,6 +43,11 @@ contract TraitEntrySamplingGasTest is Test {
 
     function setUp() public { h = new TraitEntrySamplingHarness(); }
 
+    function _assertSame(uint32[] memory a, uint32[] memory b, string memory why) private pure {
+        assertEq(a.length, b.length, why);
+        for (uint256 i; i < a.length; ++i) assertEq(a[i], b[i], why);
+    }
+
     function _entropy(uint256 seed, uint8 trait) private pure returns (uint256) {
         return (seed << 40) | (uint256(trait) << 24);
     }
@@ -50,16 +55,16 @@ contract TraitEntrySamplingGasTest is Test {
     function testFuzz_CachedSamplerPreservesEntries(uint256 seed, uint16 length, uint8 trait, bool next) public {
         h.seed(42, next, trait, uint256(length) % 513);
         uint256 entropy = _entropy(seed, trait);
-        (uint8 beforeTrait, address[] memory beforeEntries) = h.referenceSample(next, entropy);
-        (uint8 afterTrait, address[] memory afterEntries) = h.sampleTraitEntries(next, entropy);
+        (uint8 beforeTrait, uint32[] memory beforeEntries) = h.referenceSample(next, entropy);
+        (uint8 afterTrait, uint32[] memory afterEntries) = h.sampleTraitEntries(next, entropy);
         assertEq(afterTrait, beforeTrait);
-        assertEq(afterEntries, beforeEntries, "sampling order and padding redraws must stay identical");
+        _assertSame(afterEntries, beforeEntries, "sampling order and padding redraws must stay identical");
     }
 
     function test_RetiredBucketRemainsHidden() public {
         h.seed(42, false, 7, 17);
         h.retire(42);
-        (uint8 trait, address[] memory entries) = h.sampleTraitEntries(false, _entropy(16, 7));
+        (uint8 trait, uint32[] memory entries) = h.sampleTraitEntries(false, _entropy(16, 7));
         assertEq(trait, 7);
         assertEq(entries.length, 0);
     }
@@ -68,12 +73,12 @@ contract TraitEntrySamplingGasTest is Test {
         h.seed(42, false, 7, length);
         uint256 entropy = _entropy(seed, 7);
         vm.cool(address(h));
-        (, address[] memory beforeEntries) = h.referenceSample(false, entropy);
+        (, uint32[] memory beforeEntries) = h.referenceSample(false, entropy);
         uint256 beforeGas = vm.snapshotGasLastCall("reference-sample");
         vm.cool(address(h));
-        (, address[] memory afterEntries) = h.sampleTraitEntries(false, entropy);
+        (, uint32[] memory afterEntries) = h.sampleTraitEntries(false, entropy);
         uint256 afterGas = vm.snapshotGasLastCall("cached-sample");
-        assertEq(afterEntries, beforeEntries);
+        _assertSame(afterEntries, beforeEntries, "entries");
         emit log_named_uint("reference cold sample gas", beforeGas);
         emit log_named_uint("cached cold sample gas", afterGas);
         assertLt(afterGas, beforeGas, "storage-root caching must save gas");

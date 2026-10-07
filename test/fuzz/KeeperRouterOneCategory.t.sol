@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 // Permanently skipped historical cases were retired in the test review.
@@ -75,10 +76,10 @@ contract KeeperRouterOneCategory is DeployProtocol {
     // creditFlip-count oracle (recipient-isolated)
     // -------------------------------------------------------------------------
 
-    /// @dev keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)") — emitted once per
+    /// @dev keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)") — emitted once per
     ///      creditFlip. The indexed `player` is topics[1] (recipient isolation).
     bytes32 private constant COINFLIP_STAKE_UPDATED_SIG =
-        keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
+        keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)");
 
     // -------------------------------------------------------------------------
     // Game-resident storage slots (RE-DERIVED via `solc --storage-layout` on the working tree after
@@ -92,7 +93,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
     uint256 private constant OFF_LASTOPENED = 10; // uint24 lastOpenedDay     (bytes 10..12)
     uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS; // _subscribers address[] (length here)
     uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED; // mintPacked_ mapping root (deity bit)
-    uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS_SHIFT in mintPacked_
+    uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT;
 
     /// @dev lootboxRngPacked at slot 34; index = low 48 bits.
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
@@ -293,12 +294,12 @@ contract KeeperRouterOneCategory is DeployProtocol {
         assertGt(bytes(dispatch).length, 0, "D-01: shared dispatcher extracted");
         assertEq(_countOccurrences(dispatch, "for (uint256 transitions; transitions < 32; ++transitions) {"), 1, "one bounded dispatch loop");
         assertEq(_countOccurrences(dispatch, "MinerAction action = transitions == 0 ? first : _nextMinerAction(msg.sender);"), 1, "every dispatch reselects from storage");
-        assertEq(_countOccurrences(dispatch, "coinflip.creditFlip(msg.sender, reward);"), 1, "single credit in the dispatcher");
+        assertEq(_countOccurrences(dispatch, "coinflip.creditFlip(minerId, reward);"), 1, "single credit in the dispatcher");
         assertEq(_countOccurrences(miner, "creditFlip("), 1, "sole keeper-credit site in the engine");
-        assertEq(_countOccurrences(afking, "creditFlip(msg.sender,"), 0, "the retired router credit site stays gone");
+        assertEq(_countOccurrences(afking, "creditFlip(minerId,"), 0, "the retired router credit site stays gone");
         assertEq(_countOccurrences(dispatch, "if (numerator >= (denominator - 1) / 1e18 + 1) {"), 1, "zero credit is skipped");
         // CEI-last: the credit follows the loop's exit check and the gas measurement.
-        uint256 credit = _indexOf(dispatch, "coinflip.creditFlip(msg.sender, reward);");
+        uint256 credit = _indexOf(dispatch, "coinflip.creditFlip(minerId, reward);");
         uint256 measured = _indexOf(dispatch, "uint256 used = rewardStart - gasleft() - unpaidAttemptGas;");
         uint256 loopExit = _indexOf(dispatch, "if (!moved) revert MineFlipGas.InsufficientExecutionGas();");
         assertGt(measured, loopExit, "gas is measured after every worker returned");
@@ -388,7 +389,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
                 logs[i].emitter == address(coinflip) &&
                 logs[i].topics.length > 1 &&
                 logs[i].topics[0] == COINFLIP_STAKE_UPDATED_SIG &&
-                logs[i].topics[1] == bytes32(uint256(uint160(who)))
+                logs[i].topics[1] == bytes32(uint256(game.walletIdOf(who)))
             ) count++;
         }
     }

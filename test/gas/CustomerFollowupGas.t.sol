@@ -16,14 +16,14 @@ contract CustomerFollowupSeeder is DegenerusGameStorage {
     }
     function sealToday() external { dailyIdx = _simulatedDayIndex(); }
     function decimator() external { _setDecWindowOpen(true); decBattleRounds[level + 1].openedDay = _simulatedDayIndex(); }
-    function decimatorBoon(address player, bool expired) external {
-        boonPacked[player].slot0 = (uint256(3) << BP_DECIMATOR_TIER_SHIFT)
+    function decimatorBoon(uint32 id, bool expired) external {
+        boonPacked[id].slot0 = (uint256(3) << BP_DECIMATOR_TIER_SHIFT)
             | (uint256(_simulatedDayIndex() - (expired ? 3 : 0)) << BP_DEITY_DECIMATOR_DAY_SHIFT);
     }
-    function seedBoon(address player, bool craps, bool expired) external {
+    function seedBoon(uint32 id, bool craps, bool expired) external {
         uint256 day = _simulatedDayIndex() - (expired ? 3 : 0);
-        if (craps) boonPacked[player].slot1 = 3 | (day << BP_LANE_DAY_SHIFT);
-        else boonPacked[player].slot0 = (uint256(3) << BP_COINFLIP_TIER_SHIFT) | day;
+        if (craps) boonPacked[id].slot1 = 3 | (day << BP_LANE_DAY_SHIFT);
+        else boonPacked[id].slot0 = (uint256(3) << BP_COINFLIP_TIER_SHIFT) | day;
     }
     function seed(address player) external {
         level = 24;
@@ -231,9 +231,10 @@ contract CustomerFollowupGasTest is DeployProtocol {
         vm.etch(address(game), code);
     }
     function _decBoon(bool expired) private {
+        uint32 id = game.walletIdOf(PLAYER);
         bytes memory code = address(game).code;
         vm.etch(address(game), type(CustomerFollowupSeeder).runtimeCode);
-        CustomerFollowupSeeder(address(game)).decimatorBoon(PLAYER, expired);
+        CustomerFollowupSeeder(address(game)).decimatorBoon(id, expired);
         vm.etch(address(game), code);
     }
     function _dec() private { vm.prank(PLAYER); coin.decimatorBurn(address(0), 2_000, 0); }
@@ -253,7 +254,8 @@ contract CustomerFollowupGasTest is DeployProtocol {
         _prepareDecimator(); _decBoon(true); _begin(); _dec(); _end("decimator_expired_boon");
     }
     function test_Gas_EmptyDecimatorDispatch() public {
-        _begin(); vm.prank(address(coin)); game.consumeDecimatorBoon(PLAYER); _end("decimator_empty_dispatch");
+        uint32 id = game.walletIdOf(PLAYER);
+        _begin(); vm.prank(address(coin)); game.consumeDecimatorBoon(id); _end("decimator_empty_dispatch");
     }
     function _fundWwxrp() private { vm.prank(address(game)); wwxrp.mintPrize(PLAYER, 10_000); }
     function _enter() private { vm.prank(PLAYER); wwxrp.enter(100); }

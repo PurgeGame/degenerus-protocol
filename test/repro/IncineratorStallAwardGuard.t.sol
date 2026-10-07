@@ -57,7 +57,7 @@ contract IncineratorStallAwardGuard is DeployProtocol {
 
     event IncineratorResolved(
         uint24 indexed bracket,
-        address indexed winner,
+        uint32 indexed winnerId,
         uint256 flipAward,
         uint256 roll,
         uint256 totalScore
@@ -260,7 +260,7 @@ contract IncineratorStallAwardGuard is DeployProtocol {
         assertTrue(rewardPercent != 0 || armedWin, "the armed day resolved");
 
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        bytes32 topic = keccak256("IncineratorResolved(uint24,address,uint256,uint256,uint256)");
+        bytes32 topic = keccak256("IncineratorResolved(uint24,uint32,uint256,uint256,uint256)");
         uint256 found;
         uint256 flipAward;
         for (uint256 i = 0; i < logs.length; i++) {
@@ -339,7 +339,7 @@ contract IncineratorStallAwardGuard is DeployProtocol {
         assertGt(armedDay, 0, "the x00 last-purchase day armed the draw");
 
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        bytes32 topic = keccak256("IncineratorResolved(uint24,address,uint256,uint256,uint256)");
+        bytes32 topic = keccak256("IncineratorResolved(uint24,uint32,uint256,uint256,uint256)");
         uint256 found;
         for (uint256 i2 = 0; i2 < logs.length; i2++) {
             if (logs[i2].emitter == address(wwxrp) && logs[i2].topics[0] == topic) found++;

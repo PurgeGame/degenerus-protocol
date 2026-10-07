@@ -92,10 +92,10 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
         vm.store(address(coinflip), slot, bytes32(w));
     }
 
-    /// @dev coinflipStakePacked slot 0: 8 days/slot, 32-bit whole-FLIP lanes, keyed by day>>3 then player.
-    function _stakeSlotByKey(uint24 key, address p) internal pure returns (bytes32) {
+    /// @dev coinflipStakePacked slot 0: 8 days/slot, 32-bit whole-FLIP lanes, keyed by day>>3 then wallet ID.
+    function _stakeSlotByKey(uint24 key, address p) internal view returns (bytes32) {
         bytes32 inner = keccak256(abi.encode(uint256(key), uint256(0)));
-        return keccak256(abi.encode(p, uint256(inner)));
+        return keccak256(abi.encode(uint256(game.walletIdOf(p)), uint256(inner)));
     }
 
     /// @dev Install a win (WIN_BYTE) for every day in [0, n] with a stake on each day,
@@ -119,13 +119,13 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
     }
 
     /// @dev playerState slot 2. word0: claimableStored(0) | lastClaim<<128 |
-    ///      autoRebuyStartDay<<152 | autoRebuyEnabled<<176. word1: autoRebuyStop |
+    ///      autoRebuyStartDay<<152 | autoRebuyEnabled<<176 | wallet ID<<184. word1: autoRebuyStop |
     ///      autoRebuyCarry(0)<<128.
     function _installPlayerState(address p, uint24 lastClaim, uint24 startDay, bool rebuyEnabled, uint128 takeProfit)
         internal
     {
         bytes32 base = keccak256(abi.encode(p, uint256(2)));
-        uint256 w0 = (uint256(lastClaim) << 128) | (uint256(startDay) << 152);
+        uint256 w0 = (uint256(lastClaim) << 128) | (uint256(startDay) << 152) | (uint256(game.walletIdOf(p)) << 184);
         if (rebuyEnabled) w0 |= uint256(1) << 176;
         vm.store(address(coinflip), base, bytes32(w0));
         vm.store(address(coinflip), bytes32(uint256(base) + 1), bytes32(uint256(takeProfit)));
@@ -149,6 +149,7 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
 
     function _prepareDeep(address target, uint24 latest) private {
         uint24 lossDay = DEEP_CAP; // day 1460 is the single loss
+        _giveWalletId(target);
 
         _installResolvedWinsWithStake(target, DEEP_CAP, lossDay);
         _installPlayerState(target, 0, 0, true, TAKE_PROFIT);
@@ -229,6 +230,7 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
 
     function _prepareRegular(address target, uint24 latest, uint24 lossDay) private {
         uint24 lastClaim = latest - WINDOW; // exactly WINDOW resolved days
+        _giveWalletId(target);
 
         _installResolvedWinsWithStake(target, latest, lossDay);
         _installPlayerState(target, lastClaim, 0, false, 0);

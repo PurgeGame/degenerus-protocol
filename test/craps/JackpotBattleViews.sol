@@ -10,8 +10,7 @@ interface IJackpotBattleViews {
         uint256 peak,
         uint256 score,
         uint256 winnerId,
-        uint256 winnerWord,
-        address winner
+        uint256 winnerWord
     ) external;
 }
 
@@ -25,10 +24,9 @@ contract JackpotBattleViews is JackpotBattle {
         uint256 peak,
         uint256 score,
         uint256 winnerId,
-        uint256 winnerWord,
-        address winner
+        uint256 winnerWord
     ) external {
         if (msg.sender != address(this)) revert OnlyTableSelf();
-        _payProgressive(w, peak, score, winnerId, winnerWord, winner);
+        _payProgressive(w, peak, score, winnerId, winnerWord);
     }
 }

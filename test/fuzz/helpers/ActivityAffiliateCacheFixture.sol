@@ -30,6 +30,7 @@ contract ActivityAffiliateCacheHost is DegenerusGameMintStreakUtils {
 abstract contract ActivityAffiliateCacheFixture is Test {
     uint256 internal constant CACHE_MASK = ((uint256(1) << 30) - 1) << 185;
     address internal constant PLAYER = address(0xA11CE);
+    uint32 internal constant PLAYER_ID = 0xA11CE;
     ActivityAffiliateCacheHost internal host;
     DegenerusAffiliate internal affiliate;
 
@@ -39,12 +40,17 @@ abstract contract ActivityAffiliateCacheFixture is Test {
         affiliate = DegenerusAffiliate(ContractAddresses.AFFILIATE);
     }
 
-    function _seedEarnings(uint24 lvl, address player, uint256 earned) internal {
-        // Root1 is the private affiliateCoinEarned mapping; verify its public view
-        // immediately so storage-layout drift cannot silently weaken this fixture.
+    function _seedEarnings(uint24 lvl, uint32 id, uint256 earned) internal {
+        // Root1 is the private affiliateCoinEarned mapping (level => wallet ID => word); verify
+        // its public view immediately so storage-layout drift cannot silently weaken this fixture.
         bytes32 root = keccak256(abi.encode(lvl, uint256(1)));
-        vm.store(address(affiliate), keccak256(abi.encode(player, root)), bytes32(earned));
-        assertEq(affiliate.affiliateScore(lvl, player), earned);
+        vm.store(address(affiliate), keccak256(abi.encode(uint256(id), root)), bytes32(earned));
+        assertEq(affiliate.affiliateScore(lvl, id), earned);
+    }
+
+    /// @dev The mint word carries the wallet ID (bits 224..255) the Game passes to Affiliate.
+    function _withId(uint256 packed, uint32 id) internal pure returns (uint256) {
+        return (packed & ~(uint256(type(uint32).max) << 224)) | (uint256(id) << 224);
     }
 
     function _stale(uint256 packed, uint24 lvl) internal pure returns (uint256) {

@@ -59,7 +59,7 @@ abstract contract PoolConsolidationFixture is FreshWordLeg {
     uint256 internal constant INCIN_ENTRY_SLOT = 7;
 
     CenturyNativeGasHost internal host;
-    address internal incineratorWinner;
+    uint32 internal incineratorWinner;
 
     function _level() internal pure virtual returns (uint24);
 
@@ -120,7 +120,7 @@ abstract contract PoolConsolidationFixture is FreshWordLeg {
     /// @dev A book of `count` unit-weight entries; only the binary search's probes and the found
     ///      entry are written (cum = (index + 1) ether, player 0x1C1E0000 + index), which yields the
     ///      same search path as a fully written book.
-    function _seedIncinerator(uint24 bracket, uint32 count, uint256 rngWord) private returns (address winner) {
+    function _seedIncinerator(uint24 bracket, uint32 count, uint256 rngWord) private returns (uint32 winner) {
         uint256 total = uint256(count) * 1 ether;
         vm.store(
             address(wwxrp),
@@ -139,19 +139,18 @@ abstract contract PoolConsolidationFixture is FreshWordLeg {
             else lo = mid + 1;
         }
         _storeIncinEntry(bracket, lo);
-        winner = address(uint160(0x1C1E0000 + uint256(lo)));
+        winner = 0x1C1E0000 + lo;
         (uint256 score, uint32 entries) = wwxrp.incineratorInfo(bracket);
         assertEq(score, total, "incinerator header layout");
         assertEq(entries, count, "incinerator header layout");
-        (address player, uint256 cum) = wwxrp.incineratorEntryAt(bracket, lo);
-        assertEq(player, winner, "incinerator entry layout");
+        (uint32 playerId, uint256 cum) = wwxrp.incineratorEntryAt(bracket, lo);
+        assertEq(playerId, winner, "incinerator entry layout");
         assertEq(cum, (uint256(lo) + 1) * 1 ether, "incinerator entry layout");
     }
 
     function _storeIncinEntry(uint24 bracket, uint32 index) private {
         bytes32 base = keccak256(abi.encode((uint256(bracket) << 32) | index, INCIN_ENTRY_SLOT));
-        vm.store(address(wwxrp), base, bytes32((uint256(index) + 1) * 1 ether));
-        vm.store(address(wwxrp), bytes32(uint256(base) + 1), bytes32(uint256(0x1C1E0000 + uint256(index))));
+        vm.store(address(wwxrp), base, bytes32(((uint256(0x1C1E0000) + index) << 192) | ((uint256(index) + 1) * 1 ether)));
     }
 
     /// @dev Every account the consolidation can touch starts the measured call cold.
@@ -177,8 +176,8 @@ abstract contract PoolConsolidationFixture is FreshWordLeg {
     function _housePasses(Vm.Log[] memory logs) private pure returns (uint256 passes) {
         for (uint256 i; i < logs.length; ++i) {
             if (
-                logs[i].topics.length > 1 && logs[i].topics[0] == keccak256("CrapsPassesCredited(address,bool,uint256)")
-                    && address(uint160(uint256(logs[i].topics[1]))) == ContractAddresses.SDGNRS
+                logs[i].topics.length > 1 && logs[i].topics[0] == keccak256("CrapsPassesCredited(uint32,bool,uint256)")
+                    && uint256(logs[i].topics[1]) == 2 // sDGNRS wallet ID
             ) {
                 (bool high, uint256 n) = abi.decode(logs[i].data, (bool, uint256));
                 if (high) passes += n;
@@ -220,7 +219,7 @@ abstract contract PoolConsolidationFixture is FreshWordLeg {
         (uint8 kind,,,) = host.bafWork();
         assertEq(kind, x0 && win ? 7 : 0, "a winning x0 flip arms the BAF award stage");
         assertEq(_countTopic(logs, keccak256("BafSkipped(uint24,uint24)")), x0 && !win ? 1 : 0, "a losing x0 flip skips");
-        uint256 resolved = _countTopic(logs, keccak256("IncineratorResolved(uint24,address,uint256,uint256,uint256)"));
+        uint256 resolved = _countTopic(logs, keccak256("IncineratorResolved(uint24,uint32,uint256,uint256,uint256)"));
         assertEq(resolved, lvl % 100 == 0 && !win ? 1 : 0, "a skipped century resolves the incinerator");
         if (resolved != 0) _checkIncinerator(logs);
         assertEq(
@@ -236,10 +235,10 @@ abstract contract PoolConsolidationFixture is FreshWordLeg {
     }
 
     function _checkIncinerator(Vm.Log[] memory logs) private {
-        bytes32 sig = keccak256("IncineratorResolved(uint24,address,uint256,uint256,uint256)");
+        bytes32 sig = keccak256("IncineratorResolved(uint24,uint32,uint256,uint256,uint256)");
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length == 0 || logs[i].topics[0] != sig) continue;
-            assertEq(address(uint160(uint256(logs[i].topics[2]))), incineratorWinner, "the seeded book's winner");
+            assertEq(uint32(uint256(logs[i].topics[2])), incineratorWinner, "the seeded book's winner");
             (uint256 award,,) = abi.decode(logs[i].data, (uint256, uint256, uint256));
             assertGt(award, 0, "the lost armed-day book funds a FLIP award");
             emit log_named_uint("incinerator_flip_award", award);

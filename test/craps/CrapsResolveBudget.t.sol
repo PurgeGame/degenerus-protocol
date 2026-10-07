@@ -175,7 +175,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
 
             vm.recordLogs();
             craps.settleGas(slot, 4_000_000);
-            uint256 settled = _countSig(vm.getRecordedLogs(), keccak256("CrapsBetSettled(uint256,address,uint256,uint256)"));
+            uint256 settled = _countSig(vm.getRecordedLogs(), keccak256("CrapsBetSettled(uint256,uint32,uint256,uint256)"));
             uint64 after_ = craps.bonusCursorOf(slot);
             // EXACTLY the seats that settled, and every one of them contiguous with the last.
             assertEq(after_ - seen, settled, "the cursor moved by other than the seats settled");
@@ -223,7 +223,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
             vm.recordLogs();
             craps.resolveSeats(slot, 1);
             Vm.Log[] memory logs = vm.getRecordedLogs();
-            bytes32 sig = keccak256("CrapsBetSettled(uint256,address,uint256,uint256)");
+            bytes32 sig = keccak256("CrapsBetSettled(uint256,uint32,uint256,uint256)");
             for (uint256 j = 0; j < logs.length; ++j) {
                 if (logs[j].topics[0] != sig) continue;
                 uint256 betId = uint256(logs[j].topics[1]);
@@ -274,7 +274,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
             vm.recordLogs();
             craps.settleGas(slot, 2_250_000);
             Vm.Log[] memory logs = vm.getRecordedLogs();
-            uint256 settled = _countSig(logs, keccak256("CrapsBetSettled(uint256,address,uint256,uint256)"));
+            uint256 settled = _countSig(logs, keccak256("CrapsBetSettled(uint256,uint32,uint256,uint256)"));
             uint256 paidSeats = _paidIn(logs);
             uint64 walked = craps.bonusCursorOf(slot);
             if (paidSeats == 0 && settled > 1) {
@@ -326,7 +326,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
 
     /// @dev How many settled seats in this stream actually paid — the reserve's own denominator.
     function _paidIn(Vm.Log[] memory logs) internal pure returns (uint256 n) {
-        bytes32 sig = keccak256("CrapsBetSettled(uint256,address,uint256,uint256)");
+        bytes32 sig = keccak256("CrapsBetSettled(uint256,uint32,uint256,uint256)");
         for (uint256 i = 0; i < logs.length; ++i) {
             if (logs[i].topics[0] != sig) continue;
             (, uint256 paid) = abi.decode(logs[i].data, (uint256, uint256));

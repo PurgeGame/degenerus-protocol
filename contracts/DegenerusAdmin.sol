@@ -181,17 +181,20 @@ interface ILinkTokenLike {
 /// @dev Game interface for minting mid-day RNG credit to LINK donors.
 interface IGameMiddayCredit {
     /// @notice Mint mid-day RNG credit earned by a LINK donation.
+    /// @dev The donation is a paying action: Game registers the donor and returns its ID.
+    ///      Reverts (Game `E`) for a new donor past paid admission.
     /// @param to Donor to credit.
     /// @param linkAmount LINK donated, in juels.
-    function creditMiddayRng(address to, uint256 linkAmount) external;
+    /// @return id The donor's wallet ID (never 0), used for the FLIP reward credit.
+    function creditMiddayRng(address to, uint256 linkAmount) external returns (uint32 id);
 }
 
 /// @dev Coinflip interface for LINK donation flip credits.
 interface ICoinflipLinkReward {
-    /// @notice Credit FLIP stake to a player as a LINK donation reward.
-    /// @param player Recipient address.
+    /// @notice Credit FLIP stake to a wallet as a LINK donation reward.
+    /// @param id Recipient wallet ID (the ID `creditMiddayRng` returned; 0 is a no-op).
     /// @param amount Amount of FLIP-denominated flip stake to credit (18 decimals).
-    function creditFlip(address player, uint256 amount) external;
+    function creditFlip(uint32 id, uint256 amount) external;
 }
 
 /// @dev Chainlink price feed interface (AggregatorV3).
@@ -1310,8 +1313,9 @@ contract DegenerusAdmin {
         // Mid-day RNG credit banks the donated LINK verbatim — no valuation, no reward
         // multiplier — so it is granted before the multiplier path returns. A donation
         // made while no price feed is installed still banks its credit, even though it
-        // earns no FLIP; the feed is only needed later, to price a redemption.
-        IGameMiddayCredit(ContractAddresses.GAME).creditMiddayRng(from, amount);
+        // earns no FLIP; the feed is only needed later, to price a redemption. The donation
+        // pays, so the Game registers the donor and returns its wallet ID for the reward.
+        uint32 donorId = IGameMiddayCredit(ContractAddresses.GAME).creditMiddayRng(from, amount);
 
         if (mult == 0) return;
 
@@ -1324,7 +1328,7 @@ contract DegenerusAdmin {
         uint256 credit = (baseCredit * mult) / 1e18;
         if (credit == 0) return;
 
-        coinflipReward.creditFlip(from, credit);
+        coinflipReward.creditFlip(donorId, credit);
         emit LinkCreditRecorded(from, credit);
     }
 

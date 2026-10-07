@@ -13,7 +13,7 @@ import {IDegenerusGame} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         cumulative interval weighted by its raw FLIP principal; the BAF slice pays
 ///         5% of the pool to ONE winner drawn over those intervals with a
 ///         domain-separated roll of the transition word, located by binary search.
-///         An empty book returns address(0): head slot 1 stays unfilled and its reserved
+///         An empty book returns wallet ID 0: head slot 1 stays unfilled and its reserved
 ///         ETH returns to the pending future pool when the award stage completes.
 ///
 /// @dev The behaviours pinned here are the ones a refactor would quietly break:
@@ -75,13 +75,12 @@ contract BafWeightedDrawTest is DeployProtocol {
         assertEq(total, 100, "weight is the whole-FLIP principal");
         assertEq(count, 1, "one entry recorded");
 
-        (address p, uint96 cum) = coinflip.bafDrawEntryAt(3, 0);
-        assertEq(p, alice, "the entry belongs to the depositor");
+        (uint32 p, uint96 cum) = coinflip.bafDrawEntryAt(3, 0);
+        assertEq(p, game.walletIdOf(alice), "the entry belongs to the depositor");
         assertEq(cum, 100, "cumulative endpoint equals the sole weight");
 
         assertEq(
-            coinflip.bafDrawWinner(uint256(keccak256("any_word"))),
-            alice,
+            coinflip.bafDrawWinner(uint256(keccak256("any_word"))), game.walletIdOf(alice),
             "a 100-FLIP entry can win"
         );
     }
@@ -112,10 +111,10 @@ contract BafWeightedDrawTest is DeployProtocol {
         (, uint96 total, ) = coinflip.bafDrawInfo();
         assertEq(total, 400, "total weight");
 
-        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 0)), alice, "roll 0");
-        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 99)), alice, "roll 99");
-        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 100)), bob, "roll 100");
-        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 399)), bob, "roll 399");
+        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 0)), game.walletIdOf(alice), "roll 0");
+        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 99)), game.walletIdOf(alice), "roll 99");
+        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 100)), game.walletIdOf(bob), "roll 100");
+        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 399)), game.walletIdOf(bob), "roll 399");
     }
 
     /// @notice Alice 100, Bob 100, Alice 200: three separate intervals, and alice's
@@ -131,12 +130,12 @@ contract BafWeightedDrawTest is DeployProtocol {
         assertEq(count, 3, "repeat deposits append separate intervals");
         assertEq(total, 400, "total weight");
 
-        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 0)), alice, "[0,100) alice");
-        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 99)), alice, "[0,100) alice hi");
-        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 100)), bob, "[100,200) bob");
-        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 199)), bob, "[100,200) bob hi");
-        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 200)), alice, "[200,400) alice");
-        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 399)), alice, "[200,400) alice hi");
+        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 0)), game.walletIdOf(alice), "[0,100) alice");
+        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 99)), game.walletIdOf(alice), "[0,100) alice hi");
+        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 100)), game.walletIdOf(bob), "[100,200) bob");
+        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 199)), game.walletIdOf(bob), "[100,200) bob hi");
+        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 200)), game.walletIdOf(alice), "[200,400) alice");
+        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 399)), game.walletIdOf(alice), "[200,400) alice hi");
     }
 
     /// @notice Binary search agrees with a linear reference walk over the recorded
@@ -157,15 +156,15 @@ contract BafWeightedDrawTest is DeployProtocol {
             keccak256(abi.encodePacked(TAG, address(coinflip), uint24(3), word))
         ) % uint256(total);
 
-        address expected;
+        uint32 expected;
         for (uint32 i; i < count; ++i) {
-            (address p, uint96 cum) = coinflip.bafDrawEntryAt(3, i);
+            (uint32 p, uint96 cum) = coinflip.bafDrawEntryAt(3, i);
             if (uint256(cum) > roll) {
                 expected = p;
                 break;
             }
         }
-        assertTrue(expected != address(0), "reference walk must find a winner");
+        assertTrue(expected != 0, "reference walk must find a winner");
         assertEq(coinflip.bafDrawWinner(word), expected, "binary == linear reference");
     }
 
@@ -183,8 +182,8 @@ contract BafWeightedDrawTest is DeployProtocol {
         assertEq(day, 0, "nothing armed");
         assertEq(total, 0, "no weight recorded");
         assertEq(count, 0, "no entries recorded");
-        (address p, uint96 cum) = coinflip.bafDrawEntryAt(3, 0);
-        assertEq(p, address(0), "no entry at the target day");
+        (uint32 p, uint96 cum) = coinflip.bafDrawEntryAt(3, 0);
+        assertEq(p, 0, "no entry at the target day");
         assertEq(cum, 0, "no endpoint at the target day");
         _assertNoDrawEnteredLog();
     }
@@ -204,8 +203,7 @@ contract BafWeightedDrawTest is DeployProtocol {
         assertEq(total, 100, "no late weight joined");
         _assertNoDrawEnteredLog();
         assertEq(
-            coinflip.bafDrawWinner(uint256(keccak256("boundary_word"))),
-            alice,
+            coinflip.bafDrawWinner(uint256(keccak256("boundary_word"))), game.walletIdOf(alice),
             "the sole in-window entry still wins"
         );
     }
@@ -218,6 +216,7 @@ contract BafWeightedDrawTest is DeployProtocol {
     ///         all carry zero draw weight on the armed day.
     function testGiftOperatorAndCreditsCarryNoWeight() public {
         _arm(3);
+        uint32 aliceId = _giveWalletId(alice);
 
         // Permissionless gift: bob funds a stake credited to alice.
         vm.prank(GAME);
@@ -235,7 +234,7 @@ contract BafWeightedDrawTest is DeployProtocol {
 
         // Protocol flip credit (quest-reward shape).
         vm.prank(ContractAddresses.QUESTS);
-        coinflip.creditFlip(alice, 1_000);
+        coinflip.creditFlip(aliceId, 1_000);
 
         // sDGNRS backing credit (FLIP de-circulation shape).
         vm.prank(ContractAddresses.COIN);
@@ -246,7 +245,7 @@ contract BafWeightedDrawTest is DeployProtocol {
         assertEq(total, 0, "no indirect weight recorded");
         assertEq(
             coinflip.bafDrawWinner(uint256(keccak256("excl_word"))),
-            address(0),
+            0,
             "an all-indirect day draws nobody"
         );
     }
@@ -330,7 +329,7 @@ contract BafWeightedDrawTest is DeployProtocol {
         _arm(3);
         _selfDeposit(alice, 100);
         uint256 word = uint256(keccak256("sole_word"));
-        assertEq(jackpots.bafHeadWinner(10, word, 1), alice, "the sole entrant wins the draw slot");
+        assertEq(jackpots.bafHeadWinner(10, word, 1), game.walletIdOf(alice), "the sole entrant wins the draw slot");
         _assertAllSlotsEmpty(word, false);
     }
 
@@ -340,22 +339,25 @@ contract BafWeightedDrawTest is DeployProtocol {
     function testOtherSlotsUnperturbedByTheDraw() public {
         _arm(3);
         // Build board + score state through the real credit path.
+        uint32 aliceId = _giveWalletId(alice);
+        uint32 bobId = _giveWalletId(bob);
+        uint32 carolId = _giveWalletId(carol);
         vm.startPrank(ContractAddresses.COINFLIP);
-        jackpots.recordBafFlip(alice, 10, 900);
-        jackpots.recordBafFlip(bob, 10, 700);
-        jackpots.recordBafFlip(carol, 10, 500);
+        jackpots.recordBafFlip(aliceId, 10, 900);
+        jackpots.recordBafFlip(bobId, 10, 700);
+        jackpots.recordBafFlip(carolId, 10, 500);
         vm.stopPrank();
 
         uint256 word = uint256(keccak256("isolation_word"));
         bytes32 before = _otherSlots(word);
-        assertEq(jackpots.bafHeadWinner(10, word, 1), address(0), "no entry, no draw winner");
+        assertEq(jackpots.bafHeadWinner(10, word, 1), 0, "no entry, no draw winner");
 
         _selfDeposit(alice, 100);
         _selfDeposit(bob, 300);
-        address drawn = jackpots.bafHeadWinner(10, word, 1);
-        assertTrue(drawn == alice || drawn == bob, "the draw names an entrant");
+        uint32 drawn = jackpots.bafHeadWinner(10, word, 1);
+        assertTrue(drawn == aliceId || drawn == bobId, "the draw names an entrant");
         assertEq(_otherSlots(word), before, "every other slot is unchanged by the draw");
-        assertEq(jackpots.bafHeadWinner(10, word, 0), alice, "slot 0 stays the top bettor");
+        assertEq(jackpots.bafHeadWinner(10, word, 0), aliceId, "slot 0 stays the top bettor");
     }
 
     /// @dev Every scatter pair of the 48-round schedule and head slots 0 and 2 for bracket 10.
@@ -368,12 +370,12 @@ contract BafWeightedDrawTest is DeployProtocol {
 
     function _assertAllSlotsEmpty(uint256 word, bool includeDraw) internal view {
         for (uint256 pair; pair < 24; ++pair) {
-            address[4] memory drawn = jackpots.bafPairWinners(10, word, pair, 48);
-            for (uint256 k; k < 4; ++k) assertEq(drawn[k], address(0), "no scored candidate takes a scatter place");
+            uint32[4] memory drawn = jackpots.bafPairWinners(10, word, pair, 48);
+            for (uint256 k; k < 4; ++k) assertEq(drawn[k], 0, "no scored candidate takes a scatter place");
         }
-        assertEq(jackpots.bafHeadWinner(10, word, 0), address(0), "no top bettor");
-        assertEq(jackpots.bafHeadWinner(10, word, 2), address(0), "no third or fourth place");
-        if (includeDraw) assertEq(jackpots.bafHeadWinner(10, word, 1), address(0), "an empty book draws nobody");
+        assertEq(jackpots.bafHeadWinner(10, word, 0), 0, "no top bettor");
+        assertEq(jackpots.bafHeadWinner(10, word, 2), 0, "no third or fourth place");
+        if (includeDraw) assertEq(jackpots.bafHeadWinner(10, word, 1), 0, "an empty book draws nobody");
     }
 
     // ---------------------------------------------------------------------
@@ -430,7 +432,7 @@ contract BafWeightedDrawTest is DeployProtocol {
 
     /// @dev Assert the recorded logs carry no BafDrawEntered event.
     function _assertNoDrawEnteredLog() internal {
-        bytes32 sig = keccak256("BafDrawEntered(uint24,address,uint32,uint96,uint96)");
+        bytes32 sig = keccak256("BafDrawEntered(uint24,uint32,uint32,uint96,uint96)");
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             assertTrue(logs[i].topics[0] != sig, "no draw entry may be recorded");

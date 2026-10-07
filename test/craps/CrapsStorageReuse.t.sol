@@ -29,6 +29,8 @@ contract CrapsStorageReuseTest is CrapsPins {
 
     function setUp() public {
         _installPins();
+        game.registerWallet(alice, true);
+        game.registerWallet(bob, true);
         // Start beyond bank 63, so even the first round exercises physical/logical separation.
         vm.warp((ContractAddresses.DEPLOY_DAY_BOUNDARY + 100) * 1 days + 82_620);
         table = new CrapsReuseHarness();
@@ -64,7 +66,7 @@ contract CrapsStorageReuseTest is CrapsPins {
         assertEq(table.daySeatNumberOf(today + 30, alice), 1);
         vm.expectRevert(CrapsBattleStorage.DayNotReservable.selector);
         _buy(bob, today + 31, 1);
-        vm.prank(ContractAddresses.GAME); table.creditPasses(bob, 2, 0);
+        vm.prank(ContractAddresses.GAME); table.creditPasses(_idFor(bob), 2, 0);
         vm.expectRevert(CrapsBattleStorage.DayNotReservable.selector);
         vm.prank(bob); table.applyCrapsPasses(today + 30, 2, false, uint32(0));
         (uint256 credits,) = table.passCreditsOf(bob);
@@ -200,7 +202,7 @@ contract CrapsStorageReuseTest is CrapsPins {
         assertEq(a, 0); assertEq(b, 0);
         assertEq(coinflip.totalCredited(), 0);
         assertGe(table.keeperSlot() / 8, _today() - 30);
-        assertEq(address(uint160(table.betWordOf(_id(day + 64, 1)))), bob);
+        assertEq(uint32(table.betWordOf(_id(day + 64, 1))), game.walletIdOf(bob));
     }
 
     function test_ExpiredJackpotCannotAppendOverNewSeatsOrPayReserve() public {
@@ -213,7 +215,7 @@ contract CrapsStorageReuseTest is CrapsPins {
         _warp(day + 34); _buy(bob, day + 64, 1);
         uint256 newWord = table.betWordOf(_id(day + 64, 1));
         uint256[] memory field = new uint256[](1);
-        field[0] = uint160(alice) | (uint256(1) << 160);
+        field[0] = uint256(game.walletIdOf(alice)) | (uint256(1) << 160);
         vm.startPrank(ContractAddresses.GAME);
         (,, uint256 remaining) = api.prepareJackpotBattle(2, WORD);
         assertEq(remaining, 0);

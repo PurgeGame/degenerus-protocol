@@ -38,6 +38,8 @@ contract CrapsPassesTest is CrapsPins {
         uint256 floor_ = craps.SYBIL_SCORE_FLOOR();
         game.setScore(alice, floor_);
         game.setScore(bob, floor_);
+        game.registerWallet(alice, true);
+        game.registerWallet(bob, true);
     }
 
     function _today() internal view returns (uint24) {
@@ -58,60 +60,61 @@ contract CrapsPassesTest is CrapsPins {
 
     // ── Delivery ────────────────────────────────────────────────────────────
 
-    /// @dev THE GAME AND THE VAULT, AND NOBODY ELSE, award passes. They are lootbox output and comp
-    ///      allowance, so a player who could mint their own would be minting free entries into the
-    ///      protocol's own windows. Both callers are pinned immutable contracts, and the table
-    ///      keeps no count of its own: what bounds the vault's comps is metered in the vault.
-    function test_onlyTheGameOrTheVaultMayDeliverPasses() public {
+    /// @dev THE GAME, AND NOBODY ELSE, awards passes. They are lootbox output, so a player who
+    ///      could mint their own would be minting free entries into the protocol's own windows.
+    ///      The caller is a pinned immutable contract; the vault comps through `vaultComp`, never
+    ///      through delivery.
+    function test_onlyTheGameMayDeliverPasses() public {
+        uint32 aliceId = _idFor(alice);
         vm.prank(alice);
         vm.expectRevert(CrapsBattleStorage.OnlyGame.selector);
-        craps.deliverPasses(alice, 1, 0);
+        craps.deliverPasses(aliceId, 1, 0);
+
+        vm.prank(ContractAddresses.VAULT);
+        vm.expectRevert(CrapsBattleStorage.OnlyGame.selector);
+        craps.deliverPasses(aliceId, 1, 0);
 
         vm.prank(ContractAddresses.GAME);
-        craps.deliverPasses(alice, 1, 0);
+        craps.deliverPasses(aliceId, 1, 0);
         (uint256 n,) = craps.passCreditsOf(alice);
         assertEq(n, 0, "the delivered pass was banked instead of seated");
         assertEq(craps.dayStateOf(_today() + 1, alice), craps.DAY_SEATED(), "tomorrow was not taken");
-
-        vm.prank(ContractAddresses.VAULT);
-        craps.deliverPasses(bob, 1, 0);
-        assertEq(craps.dayStateOf(_today() + 1, bob), craps.DAY_SEATED(), "the vault's comp did not seat");
     }
 
-    /// @dev A comped seat is an ORDINARY seat. Nothing on the ticket records that the vault paid
-    ///      for it, so it takes the same dense day-seat number a rolled award would have taken and
-    ///      every rule downstream — duplicates, refunds, conversion — reads one kind of pass.
-    function test_aCompedSeatIsIndistinguishableFromARolledOne() public {
+    /// @dev Two deliveries to two wallets take dense day-seat numbers in order, and a second
+    ///      delivery onto a taken day banks instead of seating.
+    function test_deliveredSeatsTakeDenseNumbersAndOneTicketADay() public {
+        uint32 aliceId = _idFor(alice);
+        uint32 bobId = _idFor(bob);
         vm.prank(ContractAddresses.GAME);
-        craps.deliverPasses(alice, 1, 0);
-        vm.prank(ContractAddresses.VAULT);
-        craps.deliverPasses(bob, 1, 0);
+        craps.deliverPasses(aliceId, 1, 0);
+        vm.prank(ContractAddresses.GAME);
+        craps.deliverPasses(bobId, 1, 0);
 
         uint24 day = _today() + 1;
-        assertEq(craps.daySeatNumberOf(day, alice), 1, "the rolled award did not take the first seat");
-        assertEq(craps.daySeatNumberOf(day, bob), 2, "the comp did not take the next dense seat");
+        assertEq(craps.daySeatNumberOf(day, alice), 1, "the first delivery did not take the first seat");
+        assertEq(craps.daySeatNumberOf(day, bob), 2, "the second delivery did not take the next dense seat");
 
-        // The comp is subject to the same one-ticket-a-day bar as anything else.
-        vm.prank(ContractAddresses.VAULT);
-        craps.deliverPasses(bob, 1, 0);
+        vm.prank(ContractAddresses.GAME);
+        craps.deliverPasses(bobId, 1, 0);
         (uint256 n,) = craps.passCreditsOf(bob);
-        assertEq(n, 1, "a second comp on a taken day should have banked, not seated");
+        assertEq(n, 1, "a second delivery on a taken day should have banked, not seated");
     }
 
-    /// @dev The CREDIT lane stays GAME-only. The vault comps through delivery, which reserves or
-    ///      banks on the table's own terms; a door that banked unconditionally would let a comp
-    ///      skip the strictly-future, unworded test that makes every commitment blind.
+    /// @dev The CREDIT lane stays GAME-only. The vault comps through `vaultComp`; a door that banked
+    ///      unconditionally would let a comp skip the strictly-future, unworded test that makes every commitment blind.
     function test_theVaultCannotReachTheBareCreditLane() public {
+        uint32 aliceId = _idFor(alice);
         vm.prank(ContractAddresses.VAULT);
         vm.expectRevert(CrapsBattleStorage.OnlyGame.selector);
-        craps.creditPasses(alice, 1, 0);
+        craps.creditPasses(aliceId, 1, 0);
     }
 
     /// @dev One pass goes straight onto tomorrow; everything else banks. That is what makes a box
     ///      feel like it paid out today rather than into an inventory screen.
     function test_deliverySeatsTomorrowAndBanksTheRest() public {
         vm.prank(ContractAddresses.GAME);
-        uint24 day = craps.deliverPasses(alice, 4, 0);
+        uint24 day = craps.deliverPasses(_idFor(alice), 4, 0);
 
         assertEq(day, _today() + 1, "the reservation did not land on tomorrow");
         assertEq(craps.dayStateOf(day, alice), craps.DAY_SEATED(), "tomorrow is not reserved");
@@ -125,7 +128,7 @@ contract CrapsPassesTest is CrapsPins {
     ///      the two outcomes for no reason.
     function test_aMixedBatchSeatsTheHighPassFirst() public {
         vm.prank(ContractAddresses.GAME);
-        uint24 day = craps.deliverPasses(alice, 5, 2);
+        uint24 day = craps.deliverPasses(_idFor(alice), 5, 2);
 
         assertEq(craps.dayStateOf(day, alice), craps.DAY_SEATED(), "tomorrow did not take the high pass");
         assertTrue(craps.daySeatIsHigh(day, alice), "the seated pass was not the high one");
@@ -138,12 +141,12 @@ contract CrapsPassesTest is CrapsPins {
     ///      is the fail-open rule that keeps a busy player's boxes paying out normally.
     function test_anOccupiedTomorrowBanksTheWholeAward() public {
         vm.prank(ContractAddresses.GAME);
-        craps.deliverPasses(alice, 1, 0);
+        craps.deliverPasses(_idFor(alice), 1, 0);
         uint24 tomorrow = _today() + 1;
         assertEq(craps.dayStateOf(tomorrow, alice), craps.DAY_SEATED(), "the first pass did not seat");
 
         vm.prank(ContractAddresses.GAME);
-        uint24 day = craps.deliverPasses(alice, 3, 0);
+        uint24 day = craps.deliverPasses(_idFor(alice), 3, 0);
         assertEq(day, 0, "a second delivery double-booked the same day");
         (uint256 n,) = craps.passCreditsOf(alice);
         assertEq(n, 3, "the whole second award should have banked");
@@ -156,7 +159,7 @@ contract CrapsPassesTest is CrapsPins {
         _setDailyWord(tomorrow, uint256(keccak256("early")));
 
         vm.prank(ContractAddresses.GAME);
-        uint24 day = craps.deliverPasses(alice, 2, 0);
+        uint24 day = craps.deliverPasses(_idFor(alice), 2, 0);
         assertEq(day, 0, "a worded day was reserved");
         (uint256 n,) = craps.passCreditsOf(alice);
         assertEq(n, 2, "the award did not bank instead");
@@ -168,14 +171,14 @@ contract CrapsPassesTest is CrapsPins {
     function test_aFullLaneSaturatesRatherThanReverting() public {
         uint32 max = type(uint32).max;
         vm.prank(ContractAddresses.GAME);
-        craps.deliverPasses(alice, max, 0);
+        craps.deliverPasses(_idFor(alice), max, 0);
         (uint256 n,) = craps.passCreditsOf(alice);
         assertEq(n, uint256(max) - 1, "the first award did not bank whole");
 
         // Over the ceiling: the excess is silently clamped and the call still returns — the cap
         // is unreachable by any real award, so nothing here is worth a log of its own.
         vm.prank(ContractAddresses.GAME);
-        craps.deliverPasses(alice, 10, 0);
+        craps.deliverPasses(_idFor(alice), 10, 0);
         (n,) = craps.passCreditsOf(alice);
         assertEq(n, max, "the lane did not saturate at its ceiling");
     }
@@ -194,25 +197,26 @@ contract CrapsPassesTest is CrapsPins {
     ) public {
         vm.warp(vm.getBlockTimestamp() + uint256(dayShift % 31) * 1 days);
         vm.prank(ContractAddresses.GAME);
-        craps.creditPasses(alice, priorNormal, priorHigh);
+        craps.creditPasses(_idFor(alice), priorNormal, priorHigh);
         if (tomorrowTaken) {
             vm.prank(ContractAddresses.GAME);
-            craps.deliverPasses(alice, 1, 0);
+            craps.deliverPasses(_idFor(alice), 1, 0);
         }
         if (tomorrowWorded) _setDailyWord(_today() + 1, uint256(keccak256("worded")));
 
+        uint32 aliceId = _idFor(alice);
         vm.prank(ContractAddresses.GAME);
-        (bool ok,) = address(craps).call(abi.encodeCall(craps.deliverPasses, (alice, normal, high)));
+        (bool ok,) = address(craps).call(abi.encodeCall(craps.deliverPasses, (aliceId, normal, high)));
         assertTrue(ok, "deliverPasses reverted for the game");
         vm.prank(ContractAddresses.GAME);
-        (ok,) = address(craps).call(abi.encodeCall(craps.creditPasses, (alice, normal, high)));
+        (ok,) = address(craps).call(abi.encodeCall(craps.creditPasses, (aliceId, normal, high)));
         assertTrue(ok, "creditPasses reverted for the game");
     }
 
     // ── The board a reservation names ───────────────────────────────────────
 
     /// @dev Restated for `expectEmit`; matched by topics and data, not by declaring contract.
-    event CrapsSlipPlaced(address indexed player, uint256 bet);
+    event CrapsSlipPlaced(uint32 indexed playerId, uint256 bet);
 
     /// @dev A seven-chip allocation in the packed shape the doors take: 3 on the pass line, 3 on
     ///      place 8 and 1 on place 9 — `_seven()` as the doors see it.
@@ -223,7 +227,7 @@ contract CrapsPassesTest is CrapsPins {
     ///      `CrapsSlipPlaced` carries them.
     function test_aReservationNamesOneBoardForTheWholeRun() public {
         vm.prank(ContractAddresses.GAME);
-        craps.creditPasses(alice, 2, 0);
+        craps.creditPasses(_idFor(alice), 2, 0);
         uint24 start = _today() + 2;
 
         vm.prank(alice);
@@ -243,7 +247,7 @@ contract CrapsPassesTest is CrapsPins {
         // The first seat on an untouched future day is seat one, so the slip event is exact.
         vm.expectEmit(address(craps));
         emit CrapsSlipPlaced(
-            alice,
+            _idFor(alice),
             uint256(PACKED_SEVEN) | (((daySlot << 64) | 1) << 32)
         );
         vm.prank(alice);
@@ -256,7 +260,7 @@ contract CrapsPassesTest is CrapsPins {
     ///      chips, three to a leg, one side of the line — vetted before anything burns or debits.
     function test_aReservedBoardAllowsUpToSevenLegalChips() public {
         vm.prank(ContractAddresses.GAME);
-        craps.creditPasses(alice, 4, 0);
+        craps.creditPasses(_idFor(alice), 4, 0);
         uint24 start = _today() + 2;
 
         // An intermediate count is an ordinary reservation, through both the credit and paid doors.
@@ -304,7 +308,7 @@ contract CrapsPassesTest is CrapsPins {
     ///      reserved day in its own period zero moves that day alone.
     function test_aReservedBoardStillAmendsDayByDay() public {
         vm.prank(ContractAddresses.GAME);
-        craps.creditPasses(alice, 2, 0);
+        craps.creditPasses(_idFor(alice), 2, 0);
         uint24 start = _today() + 1;
         vm.prank(alice);
         craps.applyCrapsPasses(start, 2, false, PACKED_SEVEN);
@@ -331,7 +335,7 @@ contract CrapsPassesTest is CrapsPins {
     function test_aFutureReservationsBoardAmendsUntilItsOwnOpenerCloses() public {
         _warpToDayStart();
         vm.prank(ContractAddresses.GAME);
-        craps.creditPasses(alice, 1, 0);
+        craps.creditPasses(_idFor(alice), 1, 0);
         uint24 target = _today() + 3;
         vm.prank(alice);
         craps.applyCrapsPasses(target, 1, false, PACKED_SEVEN);
@@ -374,7 +378,7 @@ contract CrapsPassesTest is CrapsPins {
     /// @dev A run of days, all or nothing, off the player's own balance.
     function test_creditsCommitToAConsecutiveRun() public {
         vm.prank(ContractAddresses.GAME);
-        craps.deliverPasses(alice, 6, 0);
+        craps.deliverPasses(_idFor(alice), 6, 0);
         // One already rode onto tomorrow, so five remain and the run starts past it.
         uint24 start = _today() + 2;
 
@@ -393,7 +397,7 @@ contract CrapsPassesTest is CrapsPins {
     ///      so there is no path where a partial run is written against a short balance.
     function test_aShortBalanceReservesNothing() public {
         vm.prank(ContractAddresses.GAME);
-        craps.deliverPasses(alice, 2, 0);
+        craps.deliverPasses(_idFor(alice), 2, 0);
         uint24 start = _today() + 2;
 
         vm.prank(alice);
@@ -410,7 +414,7 @@ contract CrapsPassesTest is CrapsPins {
     ///      spend passes on a different set of days than the one they named.
     function test_oneTakenDayVoidsTheWholeRun() public {
         vm.prank(ContractAddresses.GAME);
-        craps.deliverPasses(alice, 9, 0);
+        craps.deliverPasses(_idFor(alice), 9, 0);
         uint24 start = _today() + 2;
 
         // Take the middle day out from under the run.
@@ -431,7 +435,7 @@ contract CrapsPassesTest is CrapsPins {
     ///      holder see the terms before committing.
     function test_aRunMustBeStrictlyFutureAndUnworded() public {
         vm.prank(ContractAddresses.GAME);
-        craps.deliverPasses(alice, 8, 0);
+        craps.deliverPasses(_idFor(alice), 8, 0);
         // HOISTED. An inline `_today()` would be the call the expectation lands on, and the
         // application below would run unwatched.
         uint24 today = _today();
@@ -454,7 +458,7 @@ contract CrapsPassesTest is CrapsPins {
     /// @dev The two lanes are separate inventories: high credits cannot fund normal days.
     function test_theTwoLanesDoNotSubstituteForEachOther() public {
         vm.prank(ContractAddresses.GAME);
-        craps.deliverPasses(alice, 0, 3);
+        craps.deliverPasses(_idFor(alice), 0, 3);
         uint24 start = _today() + 2;
 
         vm.prank(alice);
@@ -536,7 +540,7 @@ contract CrapsPassesTest is CrapsPins {
     function test_fundingLeavesNoMarkOnTheDay() public {
         uint24 start = _today() + 1;
         vm.prank(ContractAddresses.GAME);
-        craps.deliverPasses(alice, 1, 0);
+        craps.deliverPasses(_idFor(alice), 1, 0);
 
         vm.prank(bob);
         craps.buyFutureCrapsDays(start, 1, false);
@@ -594,7 +598,7 @@ contract CrapsPassesTest is CrapsPins {
         craps.buyFutureCrapsDays(target, 1, false);
 
         vm.prank(ContractAddresses.GAME);
-        assertEq(craps.deliverPasses(alice, 1, 0), 0, "a delivery double-booked a seated day");
+        assertEq(craps.deliverPasses(_idFor(alice), 1, 0), 0, "a delivery double-booked a seated day");
         assertEq(craps.dayTicketsOf(target), 1, "the day took a second seat for one address");
     }
 
@@ -681,7 +685,7 @@ contract CrapsPassesTest is CrapsPins {
         vm.startPrank(ContractAddresses.GAME);
 
         vm.recordLogs();
-        craps.creditPasses(alice, 3, 0);
+        craps.creditPasses(_idFor(alice), 3, 0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(logs.length, 1, "a normal-only call did not log exactly once");
         (bool wasHigh0, uint256 c0) = abi.decode(logs[0].data, (bool, uint256));
@@ -689,7 +693,7 @@ contract CrapsPassesTest is CrapsPins {
         assertEq(c0, 3, "a clear normal lane did not bank the whole request");
 
         vm.recordLogs();
-        craps.creditPasses(alice, 0, 2);
+        craps.creditPasses(_idFor(alice), 0, 2);
         logs = vm.getRecordedLogs();
         assertEq(logs.length, 1, "a high-only call did not log exactly once");
         (bool wasHigh1, uint256 c1) = abi.decode(logs[0].data, (bool, uint256));
@@ -697,7 +701,7 @@ contract CrapsPassesTest is CrapsPins {
         assertEq(c1, 2, "a clear high lane did not bank the whole request");
 
         vm.recordLogs();
-        craps.creditPasses(alice, 5, 7);
+        craps.creditPasses(_idFor(alice), 5, 7);
         logs = vm.getRecordedLogs();
         assertEq(logs.length, 2, "a mixed call did not log both lanes");
         (, uint256 c2) = abi.decode(logs[0].data, (bool, uint256));
@@ -706,7 +710,7 @@ contract CrapsPassesTest is CrapsPins {
         assertEq(c3, 7, "a mixed call shorted the high lane's log");
 
         vm.recordLogs();
-        craps.creditPasses(alice, 0, 0);
+        craps.creditPasses(_idFor(alice), 0, 0);
         logs = vm.getRecordedLogs();
         assertEq(logs.length, 0, "an empty call logged a credit");
         vm.stopPrank();
@@ -722,7 +726,7 @@ contract CrapsPassesTest is CrapsPins {
         craps.setPassCredits(alice, type(uint32).max - 2, type(uint32).max);
         vm.recordLogs();
         vm.prank(ContractAddresses.GAME);
-        craps.creditPasses(alice, 9, 9);
+        craps.creditPasses(_idFor(alice), 9, 9);
 
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(logs.length, 2, "the two lane credits did not log once each");
@@ -739,7 +743,7 @@ contract CrapsPassesTest is CrapsPins {
 
     // ── Normal-to-high conversion ───────────────────────────────────────────
 
-    bytes32 internal constant _CONVERTED_SIG = keccak256("CrapsNormalPassesConverted(address,uint256,uint256)");
+    bytes32 internal constant _CONVERTED_SIG = keccak256("CrapsNormalPassesConverted(uint32,uint256,uint256)");
 
     /// @dev TWENTY-ONE NORMALS BUY ONE HIGH — the credits' own value ratio, so the conversion moves
     ///      value exactly. Retail premiums and discounts do not reprice the credit lanes.
@@ -815,7 +819,7 @@ contract CrapsPassesTest is CrapsPins {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(logs.length, 1, "a conversion logged other than once");
         assertEq(logs[0].topics[0], _CONVERTED_SIG, "the one log is not the conversion event");
-        assertEq(address(uint160(uint256(logs[0].topics[1]))), alice, "the log named another player");
+        assertEq(uint256(logs[0].topics[1]), uint256(_idFor(alice)), "the log named another player");
         (uint256 spent, uint256 received) = abi.decode(logs[0].data, (uint256, uint256));
         assertEq(spent, 63, "the log misstates the normals spent");
         assertEq(received, 3, "the log misstates the highs received");
@@ -852,7 +856,7 @@ contract CrapsPassesTest is CrapsPins {
         assertEq(coinflip.credits(), creditsBefore, "a conversion moved coinflip credit");
     }
 
-    event CrapsDayWindowsUpgraded(address indexed player, uint24 indexed day, uint8 upgradedMask, uint256 burned);
+    event CrapsDayWindowsUpgraded(uint32 indexed playerId, uint24 indexed day, uint8 upgradedMask, uint256 burned);
 
     uint256 internal constant DAYHIGH_MASK = 0x3F << 217;
 
@@ -862,7 +866,7 @@ contract CrapsPassesTest is CrapsPins {
     ///      stay, and the log is the day upgrade with the full mask and nothing burned.
     function test_aHighCreditUpgradesANormalReservation() public {
         vm.prank(ContractAddresses.GAME);
-        craps.creditPasses(alice, 1, 1);
+        craps.creditPasses(_idFor(alice), 1, 1);
         uint24 day = _today() + 2;
         vm.prank(alice);
         craps.applyCrapsPasses(day, 1, false, PACKED_SEVEN);
@@ -870,7 +874,7 @@ contract CrapsPassesTest is CrapsPins {
         assertEq(craps.betWordOf(betId) & DAYHIGH_MASK, 0, "a normal reservation started high");
 
         vm.expectEmit(address(craps));
-        emit CrapsDayWindowsUpgraded(alice, day, 0x3F, 0);
+        emit CrapsDayWindowsUpgraded(_idFor(alice), day, 0x3F, 0);
         vm.prank(alice);
         craps.upgradeReservedDay(day);
 
@@ -888,7 +892,7 @@ contract CrapsPassesTest is CrapsPins {
     /// @dev The debit is the balance test: no high credit, nothing moves.
     function test_upgradeWithoutAHighCreditReverts() public {
         vm.prank(ContractAddresses.GAME);
-        craps.creditPasses(alice, 1, 0);
+        craps.creditPasses(_idFor(alice), 1, 0);
         uint24 day = _today() + 2;
         vm.prank(alice);
         craps.applyCrapsPasses(day, 1, false, 0);
@@ -902,7 +906,7 @@ contract CrapsPassesTest is CrapsPins {
     /// @dev A reservation already on the high lane has nothing to buy.
     function test_upgradeOfAHighReservationReverts() public {
         vm.prank(ContractAddresses.GAME);
-        craps.creditPasses(alice, 0, 2);
+        craps.creditPasses(_idFor(alice), 0, 2);
         uint24 day = _today() + 2;
         vm.prank(alice);
         craps.applyCrapsPasses(day, 1, true, 0);
@@ -914,7 +918,7 @@ contract CrapsPassesTest is CrapsPins {
     /// @dev No ticket on the day, no upgrade — the seat lookup is the caller's own.
     function test_upgradeWithoutAReservationReverts() public {
         vm.prank(ContractAddresses.GAME);
-        craps.creditPasses(alice, 0, 1);
+        craps.creditPasses(_idFor(alice), 0, 1);
         uint24 day = _today() + 2;
         vm.expectRevert(CrapsBattleStorage.NoSuchBet.selector);
         vm.prank(alice);
@@ -925,7 +929,7 @@ contract CrapsPassesTest is CrapsPins {
     ///      at the word's price, never by a pass swap.
     function test_upgradeOfTodayReverts() public {
         vm.prank(ContractAddresses.GAME);
-        craps.creditPasses(alice, 0, 1);
+        craps.creditPasses(_idFor(alice), 0, 1);
         uint24 today = _today();
         vm.expectRevert(CrapsBattleStorage.DayNotReservable.selector);
         vm.prank(alice);
@@ -946,15 +950,17 @@ contract CrapsAwardSplitTest is CrapsPins {
     address internal bob = makeAddr("bob");
 
     bytes32 internal constant KEY = keccak256("split-under-test");
-    bytes32 internal constant _CREDITED_SIG = keccak256("CrapsPassesCredited(address,bool,uint256)");
+    bytes32 internal constant _CREDITED_SIG = keccak256("CrapsPassesCredited(uint32,bool,uint256)");
     bytes32 internal constant _SPLIT_SIG =
-        keccak256("CrapsProtocolAwardSplit(bytes32,address,uint8,uint256,uint256)");
+        keccak256("CrapsProtocolAwardSplit(bytes32,uint32,uint8,uint256,uint256)");
 
     uint256 internal N;
     uint256 internal H;
 
     function setUp() public {
         _installPins();
+        game.registerWallet(alice, true);
+        game.registerWallet(bob, true);
         craps = new CrapsViews();
         vm.warp(block.timestamp + 1 days);
         _setIndex(0);
@@ -966,6 +972,7 @@ contract CrapsAwardSplitTest is CrapsPins {
     ///      conservation `liquid + banked == gross` that every case below must close.
     function _grade(uint256 gross, uint256 wantNormal, uint256 wantHigh) internal {
         address player = makeAddr(string(abi.encodePacked("grade", gross)));
+        game.registerWallet(player, true);
         uint256 banked = craps.splitAward(KEY, player, 1, gross);
         (uint256 n, uint256 h) = craps.passCreditsOf(player);
         assertEq(n, wantNormal, "the normal pass count is wrong");
@@ -1069,14 +1076,14 @@ contract CrapsAwardSplitTest is CrapsPins {
         assertEq(logs.length, 2, "one converting award logged other than twice");
 
         assertEq(logs[0].topics[0], _CREDITED_SIG, "the first log is not the pass credit");
-        assertEq(address(uint160(uint256(logs[0].topics[1]))), alice, "the credit named another player");
+        assertEq(uint256(logs[0].topics[1]), uint256(_idFor(alice)), "the credit named another player");
         (bool high, uint256 count) = abi.decode(logs[0].data, (bool, uint256));
         assertFalse(high, "a normal award credited the high lane");
         assertEq(count, 1, "the credit misstates the count");
 
         assertEq(logs[1].topics[0], _SPLIT_SIG, "the second log is not the split");
         assertEq(logs[1].topics[1], KEY, "the split named another battle");
-        assertEq(address(uint160(uint256(logs[1].topics[2]))), alice, "the split named another player");
+        assertEq(uint256(logs[1].topics[2]), uint256(_idFor(alice)), "the split named another player");
         assertEq(uint256(logs[1].topics[3]), 4, "the split misnamed its source");
         (uint256 g, uint256 liquid) = abi.decode(logs[1].data, (uint256, uint256));
         assertEq(g, gross, "the split misstates the gross award");

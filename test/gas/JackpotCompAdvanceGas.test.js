@@ -26,12 +26,12 @@ const { ethers } = hre;
 const WORD = BigInt(ethers.keccak256(ethers.toUtf8Bytes("comp-advance-gas-word")));
 const TRAIT_BOARD_TAG = ethers.keccak256(ethers.toUtf8Bytes("degenerus.jackpot.trait-board"));
 const FLIP_WIN_TOPIC = ethers.id("JackpotFlipWin(uint32,uint24,uint8,uint256,uint256)");
-const BATTLE_ENTRY_TOPIC = ethers.id("JackpotBattleEntry(uint64,uint256,address,uint256,uint32)");
-const SETTLED_TOPIC = ethers.id("CrapsBetSettled(uint256,address,uint256,uint256)");
-const POT_TOPIC = ethers.id("CrapsBattlePaid(uint256,bytes32,address,uint256)");
-const PASS_TOPIC = ethers.id("CrapsPassesCredited(address,bool,uint256)");
+const BATTLE_ENTRY_TOPIC = ethers.id("JackpotBattleEntry(uint64,uint256,uint32,uint256,uint32)");
+const SETTLED_TOPIC = ethers.id("CrapsBetSettled(uint256,uint32,uint256,uint256)");
+const POT_TOPIC = ethers.id("CrapsBattlePaid(uint256,bytes32,uint32,uint256)");
+const PASS_TOPIC = ethers.id("CrapsPassesCredited(uint32,bool,uint256)");
 // 5214f7498 added the hottest-shooter award: 10% of a scheduled main pot, paid as liquid FLIP.
-const HOTTEST_TOPIC = ethers.id("CrapsHottestShooterPaid(uint256,bytes32,address,uint16,uint256)");
+const HOTTEST_TOPIC = ethers.id("CrapsHottestShooterPaid(uint256,bytes32,uint32,uint16,uint256)");
 const RNG_APPLIED_TOPIC = ethers.id("DailyRngApplied(uint24,uint256,uint256,uint256)");
 
 const SHARES = 50; // COIN_DRAW_SHARES
@@ -120,9 +120,16 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
   const queueRoot = storageRootOf("ticketQueue");
   const deityRoot = storageRootOf("deityBySymbol");
   const crapsLayout = JSON.parse(readFileSync(new URL("../../scripts/layout/golden/CrapsBattle.json", import.meta.url), "utf8"));
-  const passRoot = BigInt(crapsLayout.find((entry) => entry.label === "_passCredits").slot);
+  const passRoot = BigInt(crapsLayout.find((entry) => entry.label === "_passCreditsById").slot);
   const betRoot = BigInt(crapsLayout.find((entry) => entry.label === "_bets").slot);
   const traitOwners = new Set();
+  const ownerOfId = new Map();
+  const idOfOwner = new Map();
+  const registerFixtureOwners = async (lvl, owners) => {
+    const ids = await registerOwners(gameAddr, ownerRoot, lvl, owners);
+    ids.forEach((id, i) => { ownerOfId.set(id, owners[i].toLowerCase()); idOfOwner.set(owners[i].toLowerCase(), id); });
+    return ids;
+  };
   const fieldOwners = new Set();
 
   await setSlot(gameAddr, mapSlot(VAULT_DEITY_SYMBOL, deityRoot), 0n);
@@ -133,7 +140,7 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
   for (const t of traitsOf(WORD)) {
     const owners = Array.from({ length: TRAIT_HOLDERS }, (_, i) => holder(0xace000000n + BigInt(t) * 0x10000n + BigInt(i + 1)));
     owners.forEach((owner) => traitOwners.add(owner.toLowerCase()));
-    const positions = await registerOwners(gameAddr, ownerRoot, 1n, owners);
+    const positions = await registerFixtureOwners(1n, owners);
     await writeLanes(gameAddr, mapSlot(1n, bucketRoot) + BigInt(t), positions, 1n);
     traitLive |= 1n << BigInt(t);
   }
@@ -141,7 +148,7 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
   for (let lvl = 2n; lvl <= 100n; ++lvl) {
     const owners = Array.from({ length: FF_HOLDERS }, (_, i) => holder(0xb00000000n + lvl * 0x100n + BigInt(i + 1)));
     owners.forEach((owner) => fieldOwners.add(owner.toLowerCase()));
-    await writeLanes(gameAddr, mapSlot(lvl | FF_BIT, queueRoot), await registerOwners(gameAddr, ownerRoot, lvl, owners));
+    await writeLanes(gameAddr, mapSlot(lvl | FF_BIT, queueRoot), await registerFixtureOwners(lvl, owners));
     // Queue header: owner count in bits 0..31, occupying level tag in bits 32..55.
     await setSlot(gameAddr, mapSlot(lvl | FF_BIT, queueRoot), BigInt(FF_HOLDERS) | (lvl << 32n));
   }
@@ -195,7 +202,12 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
   expect(final.cursor).to.equal(BigInt(expectedAwards));
 
   const coder = ethers.AbiCoder.defaultAbiCoder();
-  const addressTopic = (topic) => ethers.getAddress(ethers.dataSlice(topic, 12)).toLowerCase();
+  // Event topics carry wallet IDs; the fixture registered every owner, so IDs map back to addresses.
+  const addressTopic = (topic) => {
+    const owner = ownerOfId.get(BigInt(topic));
+    if (owner === undefined) throw new Error(`unregistered wallet id ${BigInt(topic)}`);
+    return owner;
+  };
   const entries = new Map();
   const settled = new Set();
   const credits = new Map();
@@ -289,11 +301,11 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
   // Coinflip/pass balance. Reconcile all published run/pot/share payments to actual ownership.
   for (const [id, owner] of entries) {
     const stored = await getSlot(crapsAddr, mapSlot(BigInt(id), betRoot));
-    expect(stored & ((1n << 160n) - 1n), "settled seat retains its actual awarded owner").to.equal(BigInt(owner));
+    expect(stored & ((1n << 160n) - 1n), "settled seat retains its actual awarded owner id").to.equal(idOfOwner.get(owner));
   }
   for (const [owner, expected] of credits) expect(await coinflip.coinflipAmount(owner), `actual stake for ${owner}`).to.equal(expected);
   for (const owner of new Set(entries.values())) {
-    const packed = await getSlot(crapsAddr, mapSlot(BigInt(owner), passRoot));
+    const packed = await getSlot(crapsAddr, mapSlot(idOfOwner.get(owner), passRoot));
     expect(packed & 0xffffffffn, `normal passes for ${owner}`).to.equal(0n);
     expect((packed >> 32n) & 0xffffffffn, `high passes for ${owner}`).to.equal(0n);
   }

@@ -39,7 +39,7 @@ import {DegenerusGameRngUtils} from "./DegenerusGameRngUtils.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 
 interface ICrapsBonusDay { function openBonusDay() external; }
-interface ICrapsPassCredit { function creditPasses(address player, uint32 normal, uint32 high) external; }
+interface ICrapsPassCredit { function creditPasses(uint32 id, uint32 normal, uint32 high) external; }
 interface IGNRUSResolve { function pickCharity(uint24 level) external; }
 interface IWwxrpIncinerator { function resolveIncinerator(uint24 bracket, uint256 rngWord) external; }
 
@@ -309,9 +309,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
                 uint256 achieved = _getNextPrizePool();
                 levelPrizePool[purchaseLevel] = achieved;
                 if (purchaseLevel % 100 == 0) centuryPrizePools.push(uint128(achieved));
-                if (purchaseLevel >= 2) {
-                    parimutuel.recordGrowth(purchaseLevel - 1,
-                        _growthOver(_growthRatchet(purchaseLevel - 2), _growthRatchet(purchaseLevel - 1), achieved));
+                // A seal with unpaid winners arms the mining settlement stage; the bit rides the
+                // slot-0 write this transition makes anyway, and only the stage clears it.
+                if (purchaseLevel >= 2 && parimutuel.recordGrowth(purchaseLevel - 1,
+                        _growthOver(_growthRatchet(purchaseLevel - 2), _growthRatchet(purchaseLevel - 1), achieved))) {
+                    _setGrowthSettlePending(true);
                 }
                 _distributeYieldSurplus(word);
                 _consolidatePoolsAndRewardJackpots(lvl, purchaseLevel, day, word, purchaseStartDay);
@@ -524,10 +526,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
     }
 
     function _rewardTopAffiliate(uint24 lvl) private {
-        (address top,) = affiliate.affiliateTop(lvl);
+        (uint32 topId,) = affiliate.affiliateTop(lvl);
 
         uint256 poolBalance = dgnrs.poolBalance(IsDGNRS.Pool.Affiliate);
-        if (top != address(0)) {
+        if (topId != 0) {
+            // The leader is stored by wallet ID; decoded once per level for the token transfer.
+            address top = _payee(_walletElement(topId));
             uint256 dgnrsReward = (poolBalance * AFFILIATE_POOL_REWARD_BPS) / 10_000;
             uint256 paid = dgnrs.transferFromPool(IsDGNRS.Pool.Affiliate, top, dgnrsReward);
             emit AffiliateDgnrsReward(top, lvl, paid);
@@ -747,7 +751,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
             // Unreachable at any real pool — the cap merely makes the cast provable.
             if (highPasses > type(uint32).max) highPasses = type(uint32).max;
             ICrapsPassCredit(ContractAddresses.CRAPS).creditPasses(
-                ContractAddresses.SDGNRS, 0, uint32(highPasses)
+                SDGNRS_WALLET_ID, 0, uint32(highPasses)
             );
         }
 
@@ -954,7 +958,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         }
         uint256 prize = spanDays * SEAT_DRAW_FLIP_PER_DAY;
         if (prize > SEAT_DRAW_MAX_FLIP) prize = SEAT_DRAW_MAX_FLIP;
-        coinflip.creditFlip(winner, prize);
+        coinflip.creditFlip(uint32(element >> 160), prize);
         emit SubDrawWon(winner, day, uint24(spanDays), prize);
     }
 

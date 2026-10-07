@@ -13,6 +13,7 @@ contract CrapsCompLane is DeployProtocol {
     uint256 internal constant COMP = 0x10;
 
     address internal player = makeAddr("player");
+    uint32 internal constant PLAYER_ID = 77;
 
     function setUp() public {
         _deployProtocol();
@@ -39,7 +40,7 @@ contract CrapsCompLane is DeployProtocol {
         uint256 uncirculated = coin.supplyIncUncirculated();
         uint256 vaultAllowance = coin.vaultMintAllowance();
         vm.prank(ContractAddresses.CRAPS);
-        uint8 mask = coin.burnCoinForCraps(player, (1_000 << 8) | COMP);
+        uint8 mask = coin.burnCoinForCraps(player, PLAYER_ID, (1_000 << 8) | COMP);
         assertEq(mask, 0, "a comp consumed a boon");
         assertEq(coin.crapsCompAllowance(), INITIAL - 1_000, "the lane was not charged the gross");
         assertEq(coin.balanceOf(player), 0, "the recipient's balance moved");
@@ -51,16 +52,16 @@ contract CrapsCompLane is DeployProtocol {
     function test_theLaneRefusesWhatItCannotCover() public {
         vm.prank(ContractAddresses.CRAPS);
         vm.expectRevert(FLIP.Insufficient.selector);
-        coin.burnCoinForCraps(player, ((INITIAL + 1) << 8) | COMP);
+        coin.burnCoinForCraps(player, PLAYER_ID, ((INITIAL + 1) << 8) | COMP);
         assertEq(coin.crapsCompAllowance(), INITIAL, "a refused comp moved the lane");
     }
 
     function test_theCompBitIsTheTablesAlone() public {
         vm.expectRevert(FLIP.OnlyGame.selector);
-        coin.burnCoinForCraps(player, (1 << 8) | COMP);
+        coin.burnCoinForCraps(player, PLAYER_ID, (1 << 8) | COMP);
         vm.prank(ContractAddresses.VAULT);
         vm.expectRevert(FLIP.OnlyGame.selector);
-        coin.burnCoinForCraps(player, (1 << 8) | COMP);
+        coin.burnCoinForCraps(player, PLAYER_ID, (1 << 8) | COMP);
     }
 
     function test_theLaneIsNotTheVaultsMintAllowance() public {
@@ -79,7 +80,7 @@ contract CrapsCompLane is DeployProtocol {
         coin.mintForGame(player, 5_000);
         uint256 lane = coin.crapsCompAllowance();
         vm.prank(ContractAddresses.CRAPS);
-        coin.burnCoinForCraps(player, 1_000 << 8);
+        coin.burnCoinForCraps(player, PLAYER_ID, 1_000 << 8);
         assertEq(coin.balanceOf(player), 4_000, "the paid burn did not burn the player");
         assertEq(coin.crapsCompAllowance(), lane, "a paid burn touched the lane");
     }

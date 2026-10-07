@@ -7,6 +7,7 @@ import {
 } from "../helpers/deployFixture.js";
 import {
   eth,
+  flip,
   advanceToNextDay,
   getEvents,
   getLastVRFRequestId,
@@ -64,6 +65,8 @@ import {
 describe("BafCreditRouting", function () {
   this.timeout(180_000);
 
+  const BOB_ID = 500n;
+
   after(function () {
     restoreAddresses();
   });
@@ -119,7 +122,7 @@ describe("BafCreditRouting", function () {
     ]);
   }
 
-  async function mintFlipToAlice(coin, coinflip, alice, amount = eth(10000)) {
+  async function mintFlipToAlice(coin, coinflip, alice, amount = flip(10000)) {
     const minterAddr = await coinflip.getAddress();
     await hre.ethers.provider.send("hardhat_setBalance", [
       minterAddr,
@@ -173,7 +176,7 @@ describe("BafCreditRouting", function () {
     // coinflipBalance[nextDay][alice] mapping.
     await coinflip
       .connect(alice)
-      .depositCoinflip(alice.address, eth(100));
+      .depositCoinflip(alice.address, flip(100));
 
     // Drive day cycle with winning flip word (bit 0 = 1).
     await driveDailyCycleWinningFlip(game, deployer, mockVRF, 0xdeadbeefn);
@@ -225,11 +228,12 @@ describe("BafCreditRouting", function () {
       const balBefore = await coin.balanceOf(alice.address);
       const tx = await coinflip
         .connect(alice)
-        .claimCoinflips(alice.address, eth(10000));
+        .claimCoinflips(alice.address, flip(10000));
       expect(await coin.balanceOf(alice.address)).to.be.gt(balBefore);
       const events = await getEvents(tx, fixture.jackpots, "BafFlipRecorded");
+      const aliceId = await fixture.game.walletIdOf(alice.address);
       const aliceEvents = events.filter(
-        (e) => e.args.player.toLowerCase() === alice.address.toLowerCase()
+        (e) => e.args.id === aliceId
       );
       expect(aliceEvents.length).to.be.gte(1);
       expect(aliceEvents[0].args.lvl).to.equal(20n); // level 10 window -> bracket 20
@@ -253,7 +257,7 @@ describe("BafCreditRouting", function () {
       await expect(
         coinflip
           .connect(alice)
-          .depositCoinflip(alice.address, eth(100))
+          .depositCoinflip(alice.address, flip(100))
       ).to.not.be.reverted;
     });
 
@@ -273,7 +277,7 @@ describe("BafCreditRouting", function () {
       await setSlot0Bool(gameAddr, 15, false); // jackpotPhaseFlag
 
       await expect(
-        coinflip.connect(alice).claimCoinflips(alice.address, eth(10000))
+        coinflip.connect(alice).claimCoinflips(alice.address, flip(10000))
       ).to.not.be.reverted;
     });
   });
@@ -296,7 +300,7 @@ describe("BafCreditRouting", function () {
 
       // The predicate (level % 10 == 0) is false at level 5 — claim proceeds.
       await expect(
-        coinflip.connect(alice).claimCoinflips(alice.address, eth(10000))
+        coinflip.connect(alice).claimCoinflips(alice.address, flip(10000))
       ).to.not.be.reverted;
     });
 
@@ -315,7 +319,7 @@ describe("BafCreditRouting", function () {
       await expect(
         coinflip
           .connect(alice)
-          .depositCoinflip(alice.address, eth(100))
+          .depositCoinflip(alice.address, flip(100))
       ).to.not.be.reverted;
     });
 
@@ -332,7 +336,7 @@ describe("BafCreditRouting", function () {
       await setSlot0Bool(gameAddr, 15, false);
 
       await expect(
-        coinflip.connect(alice).claimCoinflips(alice.address, eth(10000))
+        coinflip.connect(alice).claimCoinflips(alice.address, flip(10000))
       ).to.not.be.reverted;
     });
   });
@@ -351,12 +355,13 @@ describe("BafCreditRouting", function () {
       // bafLevel = purchaseLevel_ = 1 → _bafBracketLevel(1) = 10.
       const tx = await coinflip
         .connect(alice)
-        .claimCoinflips(alice.address, eth(10000));
+        .claimCoinflips(alice.address, flip(10000));
       const events = await getEvents(tx, jackpots, "BafFlipRecorded");
 
       // Expect at least one BafFlipRecorded for alice into bracket 10.
+      const aliceId = await fixture.game.walletIdOf(alice.address);
       const aliceEvents = events.filter(
-        (e) => e.args.player.toLowerCase() === alice.address.toLowerCase()
+        (e) => e.args.id === aliceId
       );
       expect(aliceEvents.length).to.be.gte(1);
       expect(aliceEvents[0].args.lvl).to.equal(10n);
@@ -388,11 +393,12 @@ describe("BafCreditRouting", function () {
 
       const tx = await coinflip
         .connect(alice)
-        .claimCoinflips(alice.address, eth(10000));
+        .claimCoinflips(alice.address, flip(10000));
       const events = await getEvents(tx, jackpots, "BafFlipRecorded");
 
+      const aliceId = await fixture.game.walletIdOf(alice.address);
       const aliceEvents = events.filter(
-        (e) => e.args.player.toLowerCase() === alice.address.toLowerCase()
+        (e) => e.args.id === aliceId
       );
       expect(aliceEvents.length).to.be.gte(1);
       // The override forces bafLevel = cachedLevel + 1 = 11 → _bafBracketLevel(11) = 20.
@@ -415,10 +421,11 @@ describe("BafCreditRouting", function () {
 
       const tx = await coinflip
         .connect(alice)
-        .claimCoinflips(alice.address, eth(10000));
+        .claimCoinflips(alice.address, flip(10000));
       const events = await getEvents(tx, jackpots, "BafFlipRecorded");
+      const aliceId = await fixture.game.walletIdOf(alice.address);
       const aliceEvents = events.filter(
-        (e) => e.args.player.toLowerCase() === alice.address.toLowerCase()
+        (e) => e.args.id === aliceId
       );
       expect(aliceEvents.length).to.be.gte(1);
       expect(aliceEvents[0].args.lvl).to.equal(20n);
@@ -443,10 +450,11 @@ describe("BafCreditRouting", function () {
 
       const tx = await coinflip
         .connect(alice)
-        .claimCoinflips(alice.address, eth(10000));
+        .claimCoinflips(alice.address, flip(10000));
       const events = await getEvents(tx, jackpots, "BafFlipRecorded");
+      const aliceId = await fixture.game.walletIdOf(alice.address);
       const aliceEvents = events.filter(
-        (e) => e.args.player.toLowerCase() === alice.address.toLowerCase()
+        (e) => e.args.id === aliceId
       );
       expect(
         aliceEvents.length,
@@ -467,10 +475,11 @@ describe("BafCreditRouting", function () {
 
       const tx = await coinflip
         .connect(alice)
-        .claimCoinflips(alice.address, eth(10000));
+        .claimCoinflips(alice.address, flip(10000));
       const events = await getEvents(tx, jackpots, "BafFlipRecorded");
+      const aliceId = await fixture.game.walletIdOf(alice.address);
       const aliceEvents = events.filter(
-        (e) => e.args.player.toLowerCase() === alice.address.toLowerCase()
+        (e) => e.args.id === aliceId
       );
       expect(
         aliceEvents.length,
@@ -503,10 +512,11 @@ describe("BafCreditRouting", function () {
 
       const tx = await coinflip
         .connect(alice)
-        .claimCoinflips(alice.address, eth(10000));
+        .claimCoinflips(alice.address, flip(10000));
       const events = await getEvents(tx, jackpots, "BafFlipRecorded");
+      const aliceId = await fixture.game.walletIdOf(alice.address);
       const aliceEvents = events.filter(
-        (e) => e.args.player.toLowerCase() === alice.address.toLowerCase()
+        (e) => e.args.id === aliceId
       );
       expect(aliceEvents.length).to.be.gte(1);
       expect(aliceEvents[0].args.lvl).to.equal(20n);
@@ -534,10 +544,11 @@ describe("BafCreditRouting", function () {
 
       const tx = await coinflip
         .connect(alice)
-        .claimCoinflips(alice.address, eth(10000));
+        .claimCoinflips(alice.address, flip(10000));
       const events = await getEvents(tx, jackpots, "BafFlipRecorded");
+      const aliceId = await fixture.game.walletIdOf(alice.address);
       const aliceEvents = events.filter(
-        (e) => e.args.player.toLowerCase() === alice.address.toLowerCase()
+        (e) => e.args.id === aliceId
       );
       expect(aliceEvents.length).to.be.gte(1);
       expect(aliceEvents[0].args.lvl).to.equal(10n);
@@ -595,10 +606,11 @@ describe("BafCreditRouting", function () {
 
       const tx = await coinflip
         .connect(alice)
-        .claimCoinflips(alice.address, eth(10000));
+        .claimCoinflips(alice.address, flip(10000));
       const events = await getEvents(tx, jackpots, "BafFlipRecorded");
+      const aliceId = await fixture.game.walletIdOf(alice.address);
       const aliceEvents = events.filter(
-        (e) => e.args.player.toLowerCase() === alice.address.toLowerCase()
+        (e) => e.args.id === aliceId
       );
       // Identical boundary rule to the resolved path: credited to bracket 20.
       expect(aliceEvents.length).to.be.gte(1);
@@ -623,7 +635,7 @@ describe("BafCreditRouting", function () {
       await hre.ethers.provider.send("hardhat_setBalance", [coinflipAddr, "0x1000000000000000000"]);
       await hre.ethers.provider.send("hardhat_impersonateAccount", [coinflipAddr]);
       const coinflipSigner = await hre.ethers.getSigner(coinflipAddr);
-      await jackpots.connect(coinflipSigner).recordBafFlip(bob.address, 10, eth(500));
+      await jackpots.connect(coinflipSigner).recordBafFlip(BOB_ID, 10, flip(500));
       await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [coinflipAddr]);
 
       // The award stage runs after consolidation, inside the jackpot phase, under the
@@ -640,14 +652,15 @@ describe("BafCreditRouting", function () {
       const headBefore = await jackpots.bafHeadWinner(10, word, 0);
       const roundsBefore = [];
       for (let p = 0; p < 24; p++) roundsBefore.push(await jackpots.bafPairWinners(10, word, p, 48));
-      expect(headBefore).to.equal(bob.address);
+      expect(headBefore).to.equal(BOB_ID);
 
       const tx = await coinflip
         .connect(alice)
-        .claimCoinflips(alice.address, eth(10000));
+        .claimCoinflips(alice.address, flip(10000));
       const events = await getEvents(tx, jackpots, "BafFlipRecorded");
+      const aliceId = await fixture.game.walletIdOf(alice.address);
       const aliceEvents = events.filter(
-        (e) => e.args.player.toLowerCase() === alice.address.toLowerCase()
+        (e) => e.args.id === aliceId
       );
       expect(aliceEvents.length).to.be.gte(1);
       expect(aliceEvents[0].args.lvl).to.equal(20n);

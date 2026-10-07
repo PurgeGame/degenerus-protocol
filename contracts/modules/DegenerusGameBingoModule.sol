@@ -187,7 +187,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         );
 
         // FLIP credit is always paid, even when the Reward pool is empty.
-        coinflip.creditFlip(player, BINGO_FLIP);
+        coinflip.creditFlip(playerId, BINGO_FLIP);
 
         emit BingoClaimed(player, lvl, symbol, BINGO_FLIP, dgnrsPaid);
     }
@@ -224,7 +224,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         if (playerId == 0) revert ScoreTooLow();
         if (_affiliateDgnrsClaimed(currLevel, playerId)) revert AlreadyClaimed();
 
-        uint256 score = affiliate.affiliateScore(currLevel, player);
+        uint256 score = affiliate.affiliateScore(currLevel, playerId);
         bool isDeityHolder = word >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0;
         if (!isDeityHolder && score < AFFILIATE_DGNRS_MIN_SCORE) revert ScoreTooLow();
 
@@ -258,7 +258,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
                 bonus = cap;
             }
             if (bonus != 0) {
-                coinflip.creditFlip(player, bonus);
+                coinflip.creditFlip(playerId, bonus);
             }
         }
 

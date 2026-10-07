@@ -5,7 +5,7 @@
     "label": "bafPlayer",
     "offset": 0,
     "slot": 0,
-    "typeLabel": "mapping(uint24 => mapping(address => struct DegenerusJackpots.BafPlayer))"
+    "typeLabel": "mapping(uint24 => mapping(uint32 => struct DegenerusJackpots.BafPlayer))"
   },
   {
     "bytes": "32",
@@ -13,7 +13,7 @@
     "label": "bafTop",
     "offset": 0,
     "slot": 1,
-    "typeLabel": "mapping(uint24 => struct DegenerusJackpots.PlayerScore[4])"
+    "typeLabel": "mapping(uint24 => uint256[2])"
   },
   {
     "bytes": "32",

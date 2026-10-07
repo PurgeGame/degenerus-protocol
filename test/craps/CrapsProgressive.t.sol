@@ -96,10 +96,10 @@ contract ProgHarness is CrapsViews {
         (,, uint256 peak,) = _decodeBest(_compositeOf(st));
 
         uint256 before = _progressive;
-        uint256 winnerWord = uint256(uint160(winner)) | (standing << _BET_SCORE_SHIFT);
+        uint256 winnerWord = uint256(_idOf(winner)) | (standing << _BET_SCORE_SHIFT);
         if (w.bound < _CUSTOM_SLOT_BASE) {
             _payProgressive(
-                w, peak, (peak * BPS_DENOMINATOR) / bankrollFlip, (uint256(slot) << 64) | 1, winnerWord, winner
+                w, peak, (peak * BPS_DENOMINATOR) / bankrollFlip, (uint256(slot) << 64) | 1, winnerWord
             );
         }
         credited = before - _progressive;
@@ -186,7 +186,7 @@ contract CrapsProgressiveTest is CrapsPins {
     /// @dev The two progressive log signatures, named once. Spelled out at every site they would
     ///      wrap past the line budget and read as noise rather than as an assertion.
     bytes32 internal constant _PAID_SIG = keccak256(
-        "CrapsProgressivePaid(uint256,bytes32,address,bool,uint16,uint256,uint256,uint256,uint256,uint256)"
+        "CrapsProgressivePaid(uint256,bytes32,uint32,bool,uint16,uint256,uint256,uint256,uint256,uint256)"
     );
     bytes32 internal constant _ROLLED_SIG = keccak256("CrapsProgressiveRolled(bytes32,uint8,uint256,uint256)");
     uint256 internal constant PER = 1;
@@ -211,6 +211,8 @@ contract CrapsProgressiveTest is CrapsPins {
 
     function setUp() public {
         _installPins();
+        game.registerWallet(alice, true);
+        game.registerWallet(bob, true);
         vm.etch(ContractAddresses.JACKPOT_BATTLE, address(new JackpotBattleViews()).code);
         craps = new ProgHarness();
         // The deployment day is a Craps warm-up day with no windows; every fixture plays
@@ -691,7 +693,7 @@ contract CrapsProgressiveTest is CrapsPins {
         bool seen;
         for (uint256 i = 0; i < logs.length; ++i) {
             if (logs[i].topics[0] != _PAID_SIG) continue;
-            assertEq(address(uint160(uint256(logs[i].topics[3]))), alice, "the award named another player");
+            assertEq(uint256(logs[i].topics[3]), uint256(_idFor(alice)), "the award named another player");
             (
                 bool rare,
                 uint16 poolBps,
@@ -1100,7 +1102,7 @@ contract CrapsProgressiveTest is CrapsPins {
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         assertTrue(craps.battleOf(craps.keyOfSlot(slot)).finalized, "the batched field did not finalize");
-        bytes32 potSig = keccak256("CrapsBattlePaid(uint256,bytes32,address,uint256)");
+        bytes32 potSig = keccak256("CrapsBattlePaid(uint256,bytes32,uint32,uint256)");
         assertLe(_countSig(logs, potSig), 1, "the pot paid twice");
         assertLe(_countSig(logs, _PAID_SIG), 1, "the progressive paid twice");
         assertLe(_countSig(logs, _ROLLED_SIG), 3, "a rollover repeated");
@@ -1351,7 +1353,7 @@ contract CrapsProgressiveTest is CrapsPins {
         craps.settleSlot(slot, WHOLE_FIELD);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
-        bytes32 sig = keccak256("CrapsBetSettled(uint256,address,uint256,uint256)");
+        bytes32 sig = keccak256("CrapsBetSettled(uint256,uint32,uint256,uint256)");
         uint256 checked;
         for (uint256 i = 0; i < logs.length; ++i) {
             if (logs[i].topics[0] != sig) continue;
@@ -1537,7 +1539,7 @@ contract CrapsProgressiveTest is CrapsPins {
     // ════════════════════════════════════════════════════════════════════════
 
     bytes32 internal constant _SPLIT_SIG =
-        keccak256("CrapsProtocolAwardSplit(bytes32,address,uint8,uint256,uint256)");
+        keccak256("CrapsProtocolAwardSplit(bytes32,uint32,uint8,uint256,uint256)");
 
     /// @dev Every split a resolve announced for `source`: how many, and the summed gross/liquid.
     function _splitsIn(Vm.Log[] memory logs, uint8 source)
@@ -1555,10 +1557,10 @@ contract CrapsProgressiveTest is CrapsPins {
     }
 
     /// @dev The summed pass VALUE every split banked for `who`, whatever the source.
-    function _splitValueTo(Vm.Log[] memory logs, address who) internal pure returns (uint256 total) {
+    function _splitValueTo(Vm.Log[] memory logs, address who) internal view returns (uint256 total) {
         for (uint256 i = 0; i < logs.length; ++i) {
             if (logs[i].topics[0] != _SPLIT_SIG) continue;
-            if (address(uint160(uint256(logs[i].topics[2]))) != who) continue;
+            if (uint256(logs[i].topics[2]) != uint256(game.walletIdOf(who))) continue;
             (uint256 g, uint256 l) = abi.decode(logs[i].data, (uint256, uint256));
             total += g - l;
         }
@@ -1847,17 +1849,17 @@ contract PoolWatcher {
         table = t;
     }
 
-    function creditFlip(address, uint256) external {
+    function creditFlip(uint32, uint256) external {
         seen = ICrapsPool(table).progressivePool();
     }
 
-    function creditFlipBatch(address[] calldata, uint256[] calldata) external {
+    function creditFlipBatch(uint32[] calldata, uint256[] calldata) external {
         seen = ICrapsPool(table).progressivePool();
     }
 
     /// @dev The record door, present so a finalization that reaches it does not revert on this
     ///      double. It claims nothing: this watcher is about the progressive's ordering.
-    function armDiceRunRecord(address, uint256) external pure returns (uint256) {
+    function armDiceRunRecord(uint32, uint256) external pure returns (uint256) {
         return 0;
     }
 }

@@ -68,8 +68,8 @@ contract FSMEmptyDependencies {
         return 0;
     }
 
-    function affiliateTop(uint24) external pure returns (address, uint96) {
-        return (address(0), 0);
+    function affiliateTop(uint24) external pure returns (uint32, uint96) {
+        return (0, 0);
     }
 
     function closeRedemptionBatch(uint256) external pure returns (uint256) { return 0; }

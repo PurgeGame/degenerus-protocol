@@ -21,7 +21,7 @@ contract LootboxBoonCoexistence is DeployProtocol {
     // Storage slot constants (from `forge inspect DegenerusGame storage-layout`)
     // ──────────────────────────────────────────────────────────────────────
 
-    uint256 constant SLOT_BOON_PACKED     = GameSlots.BOON_PACKED;   // mapping(address => BoonPacked)
+    uint256 constant SLOT_BOON_PACKED     = GameSlots.BOON_PACKED;   // mapping(uint32 => BoonPacked)
 
     // Queue entry word (LB_* layout in DegenerusGameStorage): id[0:32) | level[32:56) |
     // score[56:71) | customCount[121:128) | customSize[128:184) in gwei.
@@ -72,13 +72,14 @@ contract LootboxBoonCoexistence is DeployProtocol {
     }
 
     /// @dev Compute the storage slot for boonPacked[player].slot0
-    function _boonSlot0(address player) internal pure returns (bytes32) {
-        return keccak256(abi.encode(player, SLOT_BOON_PACKED));
+    function _boonSlot0(address player) internal view returns (bytes32) {
+        return keccak256(abi.encode(uint256(game.walletIdOf(player)), SLOT_BOON_PACKED));
     }
 
     /// @dev Inject a coinflip boon (tier 1, day = currentDay) into boonPacked[player].slot0.
     ///      This simulates the player having an active coinflip boon from a prior lootbox/deity.
     function _injectCoinflipBoon(address player, uint48 day) internal {
+        _giveWalletId(player);
         bytes32 slot = _boonSlot0(player);
         uint256 current = uint256(vm.load(address(game), slot));
         // Set coinflipDay = day, coinflipTier = 1
@@ -250,6 +251,7 @@ contract LootboxBoonCoexistence is DeployProtocol {
         uint48 currentDay = uint48((block.timestamp - 86400) / 1 days);
 
         // Inject coinflip boon (tier 1) AND purchase boon (tier 1) via vm.store
+        _giveWalletId(player);
         bytes32 slot = _boonSlot0(player);
         uint256 s0 = 0;
         s0 |= uint256(currentDay) << BP_COINFLIP_DAY_SHIFT;     // coinflipDay

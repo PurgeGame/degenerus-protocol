@@ -42,7 +42,7 @@ contract V56QuestNonPerturb is DeployProtocol {
     // DegenerusQuests storage (RE-DERIVED via `forge inspect DegenerusQuests storageLayout`)
     // -------------------------------------------------------------------------
 
-    /// @dev questPlayerState mapping root (address => PlayerQuestState, one packed 256-bit slot).
+    /// @dev questPlayerState mapping root (uint32 wallet ID => PlayerQuestState, one packed 256-bit slot).
     uint256 private constant QUEST_PLAYER_STATE_SLOT = 1;
 
     // PlayerQuestState packed-field byte offsets within its single slot.
@@ -288,6 +288,12 @@ contract V56QuestNonPerturb is DeployProtocol {
         revert("fixture: no day within 96 rolled the wanted slot-1 quest");
     }
 
+    /// @dev The wallet ID the quest handlers take for `who`, registered on first use.
+    function _qid(address who) internal returns (uint32 id) {
+        id = game.walletIdOf(who);
+        if (id == 0) id = _giveWalletId(who);
+    }
+
     function _rollDay(uint32 day) internal returns (uint32) {
         vm.prank(ContractAddresses.GAME);
         quests.rollDailyQuest(uint24(day), uint256(keccak256(abi.encode(day, "v56qnp"))), false, false, false);
@@ -296,20 +302,23 @@ contract V56QuestNonPerturb is DeployProtocol {
 
     /// @dev Seed a player's streak via the shared manual/bingo/degenerette/boon caller.
     function _awardStreak(address player, uint16 amount, uint32 day) internal {
+        uint32 qid1 = _qid(player);
         vm.prank(ContractAddresses.GAME);
-        quests.awardQuestStreakBonus(player, amount, uint24(day));
+        quests.awardQuestStreakBonus(qid1, amount, uint24(day));
     }
 
     /// @dev Flip the afking flag for a player (snapshots the synced streak), pranked as GAME.
     function _beginAfking(address player, uint32 day) internal {
+        uint32 qid2 = _qid(player);
         vm.prank(ContractAddresses.GAME);
-        quests.beginAfking(player, uint24(day));
+        quests.beginAfking(qid2, uint24(day));
     }
 
     /// @dev End a player's afking run (hands the earned streak back), pranked as GAME.
     function _finalizeAfking(address player, uint24 earned, uint32 coveredDay, uint32 day) internal {
+        uint32 qid3 = _qid(player);
         vm.prank(ContractAddresses.GAME);
-        quests.finalizeAfking(player, earned, uint24(coveredDay), uint24(day));
+        quests.finalizeAfking(qid3, earned, uint24(coveredDay), uint24(day));
     }
 
     /// @dev Complete a LOOTBOX slot-1 quest via the COIN-gated handlePurchase (the O1 region) with the
@@ -317,10 +326,12 @@ contract V56QuestNonPerturb is DeployProtocol {
     ///      lootbox-only handlePurchase (ethMintSpendWei = 0) clears the slot-1 LOOTBOX target so the
     ///      returned reward is PURELY the single lootbox reward (the value the caller credits once).
     function _completeLootboxSlot1(address player, uint32 /*day*/) internal returns (uint256 reward) {
+        uint32 qid4 = _qid(player);
         vm.prank(ContractAddresses.COIN);
-        quests.handlePurchase(player, MINT_PRICE, 0, 0, MINT_PRICE, MINT_PRICE); // slot-0 pre-req (its reward is returned, not relevant here)
+        quests.handlePurchase(qid4, MINT_PRICE, 0, 0, MINT_PRICE, MINT_PRICE); // slot-0 pre-req (its reward is returned, not relevant here)
+        uint32 qid5 = _qid(player);
         vm.prank(ContractAddresses.COIN);
-        (reward, , , , ) = quests.handlePurchase(player, 0, 0, 1 ether, MINT_PRICE, MINT_PRICE);
+        (reward, , , , ) = quests.handlePurchase(qid5, 0, 0, 1 ether, MINT_PRICE, MINT_PRICE);
     }
 
     /// @dev Complete slot 0 (MINT_ETH) via the COIN-gated handlePurchase with a 1-ticket ETH mint sized
@@ -329,8 +340,9 @@ contract V56QuestNonPerturb is DeployProtocol {
         internal
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
+        uint32 qid6 = _qid(player);
         vm.prank(ContractAddresses.COIN);
-        (reward, questType, streak, completed, ) = quests.handlePurchase(player, MINT_PRICE, 0, 0, MINT_PRICE, MINT_PRICE);
+        (reward, questType, streak, completed, ) = quests.handlePurchase(qid6, MINT_PRICE, 0, 0, MINT_PRICE, MINT_PRICE);
     }
 
     /// @dev Complete the player's own slot 1 by reading its rolled type and routing the matching
@@ -343,36 +355,43 @@ contract V56QuestNonPerturb is DeployProtocol {
         // Volumes are sized well above every slot-1 target (FLIP types target 2000 whole FLIP,
         // ETH types target mintPrice * 20) so the completion clears in one call whatever type lands.
         if (t == QT_FLIP) {
+            uint32 qid7 = _qid(player);
             vm.prank(ContractAddresses.COIN);
-            (reward, qt, s, completed) = quests.handleFlip(player, 100_000 ether);
+            (reward, qt, s, completed) = quests.handleFlip(qid7, 100_000 ether);
         } else if (t == QT_DECIMATOR) {
+            uint32 qid8 = _qid(player);
             vm.prank(ContractAddresses.COIN);
-            (reward, qt, s, completed) = quests.handleDecimator(player, 100_000 ether);
+            (reward, qt, s, completed) = quests.handleDecimator(qid8, 100_000 ether);
         } else if (t == QT_AFFILIATE) {
+            uint32 qid9 = _qid(player);
             vm.prank(ContractAddresses.COIN);
-            (reward, qt, s, completed) = quests.handleAffiliate(player, 100_000 ether);
+            (reward, qt, s, completed) = quests.handleAffiliate(qid9, 100_000 ether);
         } else if (t == QT_DEGENERETTE_FLIP) {
+            uint32 qid10 = _qid(player);
             vm.prank(ContractAddresses.COIN);
-            (reward, qt, s, completed) = quests.handleDegenerette(player, 100_000 ether, false, MINT_PRICE);
+            (reward, qt, s, completed) = quests.handleDegenerette(qid10, 100_000 ether, false, MINT_PRICE);
         } else if (t == QT_DEGENERETTE_ETH) {
+            uint32 qid11 = _qid(player);
             vm.prank(ContractAddresses.COIN);
-            (reward, qt, s, completed) = quests.handleDegenerette(player, 10_000 ether, true, MINT_PRICE);
+            (reward, qt, s, completed) = quests.handleDegenerette(qid11, 10_000 ether, true, MINT_PRICE);
         } else if (t == QT_MINT_FLIP) {
+            uint32 qid12 = _qid(player);
             vm.prank(ContractAddresses.COIN);
-            (reward, qt, s, completed, ) = quests.handlePurchase(player, 0, 100, 0, MINT_PRICE, MINT_PRICE);
+            (reward, qt, s, completed, ) = quests.handlePurchase(qid12, 0, 100, 0, MINT_PRICE, MINT_PRICE);
         } else {
             // LOOTBOX / MINT_ETH share the purchase path; an ETH-mint spend + lootbox spend clears the
             // ETH-denominated target. handlePurchase credits the lootbox reward via the caller, so the
             // returned reward is the slot's QUEST_RANDOM_REWARD.
+            uint32 qid13 = _qid(player);
             vm.prank(ContractAddresses.COIN);
-            (reward, qt, s, completed, ) = quests.handlePurchase(player, 10 ether, 100, 10 ether, MINT_PRICE, MINT_PRICE);
+            (reward, qt, s, completed, ) = quests.handlePurchase(qid13, 10 ether, 100, 10 ether, MINT_PRICE, MINT_PRICE);
         }
     }
 
     // ---- PlayerQuestState reads (slot 2 mapping; single packed word) ----
 
     function _questStateWord(address who) internal view returns (uint256) {
-        return uint256(vm.load(ContractAddresses.QUESTS, keccak256(abi.encode(who, QUEST_PLAYER_STATE_SLOT))));
+        return uint256(vm.load(ContractAddresses.QUESTS, keccak256(abi.encode(uint256(game.walletIdOf(who)), QUEST_PLAYER_STATE_SLOT))));
     }
 
     function _streakOf(address who) internal view returns (uint16) {
@@ -389,7 +408,7 @@ contract V56QuestNonPerturb is DeployProtocol {
 
     /// @dev The streak as the public view reports it (cross-checks the direct slot read).
     function _streakViewOf(address who) internal view returns (uint16) {
-        (uint32 streak, , , ) = quests.playerQuestStates(who);
+        (uint32 streak, , , ) = quests.playerQuestStates(game.walletIdOf(who));
         return uint16(streak);
     }
 }

@@ -25,6 +25,7 @@ export const MINER_IDLE = 0n;
 export const MINER_WAIT = 2n;
 export const MINER_PUBLISH = 3n;
 export const MINER_TICKETS = 4n;
+export const MINER_GROWTH_SETTLE = 19n;
 
 /** Advance stages carried by one receipt, in emission order (advanceModule ABI). */
 export async function stagesOf(tx, advanceModule) {

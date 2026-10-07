@@ -11,15 +11,15 @@ import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 /// @dev Exposes the stake codec for lane-level checks. Deployed off the pinned address, so it
 ///      shares nothing with the protocol fixture.
 contract CoinflipCodecHarness is CoinflipStakeSetter {
-    function setStake(uint24 day, address p, uint256 weiAmount) external returns (uint256) {
+    function setStake(uint24 day, uint32 p, uint256 weiAmount) external returns (uint256) {
         return _setFlipStake(day, p, weiAmount);
     }
 
-    function stake(uint24 day, address p) external view returns (uint256) {
+    function stake(uint24 day, uint32 p) external view returns (uint256) {
         return _flipStake(day, p);
     }
 
-    function word(uint24 key, address p) external view returns (uint256) {
+    function word(uint24 key, uint32 p) external view returns (uint256) {
         return coinflipStakePacked[key][p];
     }
 }
@@ -40,7 +40,7 @@ contract CoinflipPackedStake is DeployProtocol {
     uint256 internal constant LANE_MAX = type(uint32).max;
     uint256 internal constant CAP = LANE_MAX * UNIT;
     uint256 internal constant SEED = 200_000;
-    bytes32 internal constant STAKE_SIG = keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
+    bytes32 internal constant STAKE_SIG = keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)");
 
     CoinflipCodecHarness internal codec;
     address internal player;
@@ -69,7 +69,7 @@ contract CoinflipPackedStake is DeployProtocol {
     /// @dev Raw lane read against the production contract: slot 0, key day >> 3, 32-bit lanes.
     function _rawStake(uint24 day, address p) internal view returns (uint256) {
         bytes32 inner = keccak256(abi.encode(uint256(day >> 3), uint256(0)));
-        bytes32 slot = keccak256(abi.encode(p, uint256(inner)));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(p)), uint256(inner)));
         uint256 w = uint256(vm.load(address(coinflip), slot));
         return uint256(uint32(w >> ((uint256(day) & 7) * 32))) * UNIT;
     }
@@ -84,8 +84,9 @@ contract CoinflipPackedStake is DeployProtocol {
     }
 
     function _credit(address p, uint256 amount) internal {
+        uint32 id = _giveWalletId(p);
         vm.prank(GAME);
-        coinflip.creditFlip(p, amount);
+        coinflip.creditFlip(id, amount);
     }
 
     /// @dev The single CoinflipStakeUpdated for `p` in the recorded logs.
@@ -94,7 +95,7 @@ contract CoinflipPackedStake is DeployProtocol {
         for (uint256 i; i < logs.length; ++i) {
             if (
                 logs[i].emitter == address(coinflip) && logs[i].topics[0] == STAKE_SIG
-                    && address(uint160(uint256(logs[i].topics[1]))) == p
+                    && uint32(uint256(logs[i].topics[1])) == game.walletIdOf(p)
             ) {
                 day = uint24(uint256(logs[i].topics[2]));
                 (amount, total) = abi.decode(logs[i].data, (uint256, uint256));
@@ -109,7 +110,7 @@ contract CoinflipPackedStake is DeployProtocol {
     // =====================================================================
 
     function test_EightLanesPerWordWithSlotBoundaries() public {
-        address p = address(0xA11CE);
+        uint32 p = 0xA11CE;
         // Days 16..31 span two words (keys 2 and 3): every lane holds its own value.
         for (uint24 d = 16; d < 32; ++d) {
             codec.setStake(d, p, uint256(d) * UNIT);
@@ -137,7 +138,7 @@ contract CoinflipPackedStake is DeployProtocol {
     }
 
     function test_WritePreservesWholeFlipAndSaturates() public {
-        address p = address(0xB0B);
+        uint32 p = 0xB0B;
         assertEq(codec.setStake(9, p, 1234), 1234, "write returns the stored whole FLIP");
         assertEq(codec.stake(9, p), 1234);
         assertEq(codec.setStake(9, p, 0), 0, "zero clears the lane");
@@ -152,28 +153,29 @@ contract CoinflipPackedStake is DeployProtocol {
         uint24 day,
         uint256 amount,
         uint24 otherDay,
-        address otherPlayer,
+        uint32 otherPlayer,
         uint256 otherAmount
     ) public {
-        vm.assume(otherPlayer != player);
+        uint32 pid = _giveWalletId(player);
+        vm.assume(otherPlayer != pid);
         vm.assume(day != otherDay);
-        codec.setStake(otherDay, player, otherAmount);
+        codec.setStake(otherDay, pid, otherAmount);
         codec.setStake(day, otherPlayer, otherAmount);
-        uint256 expectedOtherDay = codec.stake(otherDay, player);
+        uint256 expectedOtherDay = codec.stake(otherDay, pid);
         uint256 expectedOtherPlayer = codec.stake(day, otherPlayer);
 
-        uint256 stored = codec.setStake(day, player, amount);
+        uint256 stored = codec.setStake(day, pid, amount);
         uint256 expected = amount / UNIT > LANE_MAX ? CAP : _whole(amount);
         assertEq(stored, expected, "stored = min(floor(amount), cap)");
-        assertEq(codec.stake(day, player), expected);
-        assertEq(codec.stake(otherDay, player), expectedOtherDay, "another day of the same player is untouched");
+        assertEq(codec.stake(day, pid), expected);
+        assertEq(codec.stake(otherDay, pid), expectedOtherDay, "another day of the same player is untouched");
         assertEq(codec.stake(day, otherPlayer), expectedOtherPlayer, "the same day of another player is untouched");
         // Every lane except the written one is unchanged.
         for (uint24 i; i < 8; ++i) {
             uint24 sibling = (day & ~uint24(7)) | i;
             if (sibling == day) continue;
             if (sibling == otherDay) continue;
-            assertEq(codec.stake(sibling, player), 0, "sibling lane stays zero");
+            assertEq(codec.stake(sibling, pid), 0, "sibling lane stays zero");
         }
     }
 
@@ -219,10 +221,10 @@ contract CoinflipPackedStake is DeployProtocol {
     }
 
     function test_BatchAndPairDuplicatesCreditEachLeg() public {
-        address[] memory players = new address[](2);
+        uint32[] memory players = new uint32[](2);
         uint256[] memory amounts = new uint256[](2);
-        players[0] = player;
-        players[1] = player;
+        players[0] = _giveWalletId(player);
+        players[1] = players[0];
         amounts[0] = 1;
         amounts[1] = 1;
         vm.prank(GAME);
@@ -231,7 +233,7 @@ contract CoinflipPackedStake is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(GAME);
-        coinflip.creditFlipPair(player, 1, player, 1);
+        coinflip.creditFlipPair(players[0], 1, players[0], 1);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 events;
         for (uint256 i; i < logs.length; ++i) {

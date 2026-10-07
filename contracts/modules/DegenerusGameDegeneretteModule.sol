@@ -492,12 +492,19 @@ contract DegenerusGameDegeneretteModule is
         uint8 symbol
     ) private {
         uint24 lvl = level;
-        // The bet is a paying entry for its owner: register before the core loads the owner's
-        // mint word, at the stake's ETH equivalent (FLIP converts at PRICE_COIN_UNIT per ticket).
-        uint256 staked = uint256(amountPerSpin) * spinCount;
-        (uint32 playerId, ) = _registerWallet(player, currency == CURRENCY_ETH
-            ? staked
-            : staked * PriceLookupLib.priceForLevel(lvl + 1) / PRICE_COIN_UNIT);
+        // The bet is a paying entry for its owner and its funder: register both before anything
+        // loads their mint words, at the stake's ETH equivalent (FLIP converts at PRICE_COIN_UNIT
+        // per ticket). A self bet registers once.
+        uint32 playerId;
+        uint32 funderId;
+        {
+            uint256 spendWei = uint256(amountPerSpin) * spinCount;
+            if (currency != CURRENCY_ETH) spendWei = spendWei * PriceLookupLib.priceForLevel(lvl + 1) / PRICE_COIN_UNIT;
+            (playerId, ) = _registerWallet(player, spendWei);
+            funderId = playerId;
+            if (funder != player) (funderId, ) = _registerWallet(funder, spendWei);
+        }
+        // Distinct wallets hold distinct IDs, so equal IDs mean a self-funded bet.
         uint256 totalBet = _placeDegeneretteBetCore(
             player,
             playerId,
@@ -506,17 +513,17 @@ contract DegenerusGameDegeneretteModule is
             spinCount,
             symbol,
             lvl,
-            funder == player
+            funderId == playerId
         );
 
         // A gift funder's balance is touched only for a claimable shortfall or stray ETH on a
-        // FLIP bet; an unregistered funder reads the empty ID-0 word and those legs revert.
-        _collectBetFunds(funder, funder == player ? playerId : _walletIdOf(funder), currency, totalBet, symbol);
+        // FLIP bet.
+        _collectBetFunds(funder, funderId, currency, totalBet, symbol);
 
         // Quest progress for Degenerette bets (slot 1 only) — credited to the funder (the
         // spender earns the quest, e.g. a gifter advancing their own streak).
         quests.handleDegenerette(
-            funder,
+            funderId,
             totalBet,
             currency == CURRENCY_ETH,
             currency == CURRENCY_ETH
@@ -565,7 +572,7 @@ contract DegenerusGameDegeneretteModule is
         // lapsed past its shields reads 0, so a returning-inactive player can't snapshot a
         // stale-high streak into the bet's activityScore (which scales the ETH ROI and the
         // lootbox-share EV multiplier). This snapshot precedes the new bet's quest credit.
-        uint32 questStreak = _effectiveQuestStreak(player);
+        uint32 questStreak = _effectiveQuestStreak(playerId);
         uint16 activityScore = uint16(
             _playerActivityScoreCachedAt(player, questStreak, lvl + 1, lvl)
         );
@@ -589,7 +596,7 @@ contract DegenerusGameDegeneretteModule is
             if (totalBet >= BIGGEST_SPIN_MIN_ETH) {
                 uint256 whole = coinflip.armRecord(
                     RECORD_KIND_SPIN,
-                    player,
+                    playerId,
                     totalBet
                 );
                 recordBounty = whole;
@@ -626,10 +633,10 @@ contract DegenerusGameDegeneretteModule is
         uint16 boonBps;
         if (
             selfFunded &&
-            ((boonPacked[player].slot1 >> _degeneretteLaneShift(currency)) &
+            ((boonPacked[playerId].slot1 >> _degeneretteLaneShift(currency)) &
                 BP_LANE_TIER_MASK) != 0
         ) {
-            boonBps = _consumeDegeneretteBoon(player, currency);
+            boonBps = _consumeDegeneretteBoon(playerId, currency);
         }
         if (boonBps != 0) {
             uint256 boostBase = totalBet;
@@ -890,11 +897,12 @@ contract DegenerusGameDegeneretteModule is
         }
 
         // Affiliate reward: 4.26% of the box value from high-match (s>=5) ETH spins, as FLIP
-        // to the player's referrer (getReferrer returns VAULT when unreferred).
+        // to the player's referrer by wallet ID (VAULT when unreferred; 0, a no-op credit, for a
+        // referrer not yet registered).
         if (totals.affiliateBoxShare > 0) {
             uint256 refFlip = (totals.affiliateBoxShare * PRICE_COIN_UNIT) /
                 PriceLookupLib.priceForLevel(level + 1);
-            coinflip.creditFlip(affiliate.getReferrer(player), (refFlip * AFFILIATE_BOX_BPS) / 10_000);
+            coinflip.creditFlip(affiliate.getReferrerId(player), (refFlip * AFFILIATE_BOX_BPS) / 10_000);
         }
 
         emit DegeneretteResolved(
@@ -1079,7 +1087,7 @@ contract DegenerusGameDegeneretteModule is
     ///      bet's own currency lane. Returns 0 when the lane is empty or expired (an
     ///      expired lane is cleared); the other currencies' lanes are never touched.
     function _consumeDegeneretteBoon(
-        address player,
+        uint32 id,
         uint8 currency
     ) private returns (uint16 boonBps) {
         (bool ok, bytes memory data) = ContractAddresses
@@ -1087,7 +1095,7 @@ contract DegenerusGameDegeneretteModule is
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameBoonModule.consumeDegeneretteBoon.selector,
-                    player,
+                    id,
                     currency
                 )
             );

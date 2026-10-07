@@ -65,8 +65,9 @@ contract WholeTokenBoundaries is DeployProtocol {
             vm.prank(address(game));
             coin.mintForGame(player, amount);
             uint256 encoded = tags.tag(amount, 0);
+            uint32 id = _giveWalletId(player);
             vm.prank(ContractAddresses.CRAPS);
-            coin.burnCoinForCraps(player, encoded);
+            coin.burnCoinForCraps(player, id, encoded);
             assertEq(coin.balanceOf(player), 0, "decoded burn spends the exact principal");
         }
     }
@@ -83,7 +84,7 @@ contract WholeTokenBoundaries is DeployProtocol {
         tags.tag(1, 256);
         vm.prank(ContractAddresses.CRAPS);
         vm.expectRevert(FLIP.InvalidCrapsFlags.selector);
-        coin.burnCoinForCraps(address(this), (1 << 8) | 32);
+        coin.burnCoinForCraps(address(this), 0, (1 << 8) | 32);
     }
 
     function testFuzz_CrapsTagRoundTrip(uint248 amount, uint8 flags) public view {
@@ -105,7 +106,7 @@ contract WholeTokenBoundaries is DeployProtocol {
         vm.prank(player);
         wwxrp.enter(type(uint256).max);
         uint24 day = game.currentDayView();
-        uint8 bucket = wwxrp.bucketOf(day, player);
+        uint8 bucket = wwxrp.bucketOf(day, game.walletIdOf(player));
         (uint256 raw, uint256 total, uint32 count) = wwxrp.bucketInfo(day, bucket);
         assertEq(raw, type(uint96).max);
         assertEq(total, type(uint96).max);

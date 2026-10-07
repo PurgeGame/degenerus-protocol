@@ -2,73 +2,32 @@
 pragma solidity 0.8.34;
 
 import {GrowthFoilFixture} from "../gas/GrowthFoilHotPathGas.t.sol";
-import {DegenerusParimutuel} from "../../contracts/DegenerusParimutuel.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
 contract GrowthFoilStorageTest is GrowthFoilFixture {
-    function _assertPosition(uint24 round, bool over, bool paid) private view {
-        (, , , , uint8 side, bool claimed, , uint256 payout) = parimutuel.marketState(PLAYER, round);
-        assertEq(side, over ? 1 : 2);
-        assertEq(claimed, paid);
-        assertEq(payout, 0);
-    }
-
-    /// @dev Every possible lane is exercised, including bit 252 and the next word.
-    function test_AllRoundLanesRemainClaimableAcrossWords() public {
-        uint24[] memory rounds = new uint24[](65);
-        for (uint24 i; i < 65; ++i) {
-            rounds[i] = 64 + i;
-            _bet(rounds[i], true);
-            vm.prank(address(game)); parimutuel.recordGrowth(rounds[i], true);
-        }
-        assertEq(parimutuel.claim(PLAYER, rounds), 65_000);
-        for (uint24 i; i < 65; ++i) _assertPosition(rounds[i], true, true);
-        assertEq(parimutuel.claim(PLAYER, rounds), 0);
-    }
-
-    function testFuzz_AncientClaimsPreserveSiblingRounds(uint24 rawRound, uint8 rawLane, bool firstOver, bool secondOver) public {
-        // Exercise all uint24 storage keys, including the maximum; the live
-        // level-quest gate has its own checked level+1 ceiling below that value.
-        vm.mockCall(address(quests), abi.encodeWithSelector(quests.marketBetGates.selector, PLAYER), abi.encode(true, false));
-        uint24 first = uint24(bound(rawRound, 64, type(uint24).max));
-        uint24 second = (first & ~uint24(63)) | uint24(rawLane & 63);
-        if (second == first) second ^= 1;
-        uint24 distant = first ^ uint24(1 << 23);
-        if (distant == 0) distant = 1;
-        _bet(first, firstOver); _bet(second, secondOver); _bet(distant, true);
-        vm.prank(address(game)); parimutuel.recordGrowth(first, true);
-        vm.prank(address(game)); parimutuel.recordGrowth(second, true);
-        vm.prank(address(game)); parimutuel.recordGrowth(distant, true);
-        uint24[] memory rounds = new uint24[](5);
-        rounds[0] = distant; rounds[1] = first; rounds[2] = first; rounds[3] = second; rounds[4] = distant;
-        assertEq(parimutuel.claim(PLAYER, rounds), 1_000 * (1 + (firstOver ? 1 : 0) + (secondOver ? 1 : 0)));
-        _assertPosition(first, firstOver, firstOver);
-        _assertPosition(second, secondOver, secondOver);
-        _assertPosition(distant, true, true);
-        _open(first); vm.prank(PLAYER); vm.expectRevert(DegenerusParimutuel.AlreadyBet.selector);
-        parimutuel.placeBet(PLAYER, !firstOver);
-    }
-
     /// @dev The ineligible gate reuses a mint word; compare all combinations of
     /// activity/loyalty, curses-only, deity fallback, and afking against its policy.
     function testFuzz_MarketGatePolicy(uint256 mintData, uint24 rawLevel, bool afking, bool deity) public {
         uint24 lvl = uint24(bound(rawLevel, 0, type(uint24).max - 1));
+        mintData = (mintData & ~(uint256(type(uint32).max) << BitPackingLib.WALLET_ID_SHIFT)) | (uint256(pid) << BitPackingLib.WALLET_ID_SHIFT);
         vm.mockCall(address(game), abi.encodeWithSignature("mintPackedFor(address)", PLAYER), abi.encode(mintData));
         vm.mockCall(address(game), abi.encodeWithSignature("hasDeityPass(address)", PLAYER), abi.encode(deity));
-        vm.store(address(quests), keccak256(abi.encode(PLAYER, uint256(1))), bytes32(uint256(afking ? 1 : 0) << 104));
+        vm.store(address(quests), keccak256(abi.encode(uint256(pid), uint256(1))), bytes32(uint256(afking ? 1 : 0) << 104));
         uint24 unitsLevel = uint24(mintData >> BitPackingLib.LEVEL_UNITS_LEVEL_SHIFT);
         bool activity = (unitsLevel == lvl || unitsLevel == lvl + 1) && uint16(mintData >> BitPackingLib.LEVEL_UNITS_SHIFT) >= 400;
         bool loyalty = uint24(mintData >> 48) >= 5 || (uint24(mintData >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) != 0 && ((mintData >> BitPackingLib.WHALE_PASS_TYPE_SHIFT) & 3) != 0) || deity;
         bool expectedReward = (activity && loyalty) || afking;
-        (bool mayBet, bool earnsReward) = quests.marketBetGates(PLAYER, lvl);
+        (bool mayBet, bool earnsReward, uint32 gateId) = quests.marketBetGates(PLAYER, lvl);
         assertEq(earnsReward, expectedReward);
-        assertEq(mayBet, expectedReward || (mintData & ~(uint256(255) << BitPackingLib.CURSE_COUNT_SHIFT)) != 0);
+        assertEq(gateId, pid, "the gate returns the wallet ID from the mint word");
+        uint256 idMask = uint256(type(uint32).max) << BitPackingLib.WALLET_ID_SHIFT;
+        assertEq(mayBet, expectedReward || (mintData & ~((uint256(255) << BitPackingLib.CURSE_COUNT_SHIFT) | idMask)) != 0);
     }
 
     function test_FoilZeroSpendStillSyncsAndFloors() public {
         (, , , uint32 snapshot, ) = _foil(0);
         assertEq(snapshot, 0);
-        bytes32 word = vm.load(address(quests), keccak256(abi.encode(PLAYER, uint256(1))));
+        bytes32 word = vm.load(address(quests), keccak256(abi.encode(uint256(pid), uint256(1))));
         assertEq(uint24(uint256(word) >> 48), DAY);
         assertEq(uint16(uint256(word) >> 72), 12);
     }
@@ -90,7 +49,7 @@ contract GrowthFoilStorageTest is GrowthFoilFixture {
             | (uint256(uint16(seed >> 72)) << 160) | (uint256(uint16(seed >> 88)) << 176)
             | (((seed >> 104) & 3) << 192) | (uint256(uint8(seed >> 112)) << 200)
             | (uint256(uint8(seed >> 120)) << 208);
-        bytes32 playerWord = keccak256(abi.encode(PLAYER, uint256(1)));
+        bytes32 playerWord = keccak256(abi.encode(uint256(pid), uint256(1)));
         vm.store(address(quests), playerWord, bytes32(word));
         if ((seed & 8) != 0) _mintData(ELIGIBLE);
         // Days between the old anchor and today are actual rolled days, so lapse
@@ -100,12 +59,12 @@ contract GrowthFoilStorageTest is GrowthFoilFixture {
         }
         if ((seed & 7) == 0) { spend = 0; flipQty = 0; loot = 0; }
         bytes memory callData = abi.encodeWithSelector(quests.handleFoilPurchase.selector,
-            PLAYER, uint256(spend % 1 ether), uint32(flipQty), uint256(loot % 1 ether), 0.05 ether, 0.05 ether);
+            pid, uint256(spend % 1 ether), uint32(flipQty), uint256(loot % 1 ether), 0.05 ether, 0.05 ether);
         uint256 snapshot = vm.snapshotState();
         vm.recordLogs(); vm.prank(address(game));
         (bool okNew, bytes memory retNew) = address(quests).call(callData);
         bytes32 logsNew = keccak256(abi.encode(vm.getRecordedLogs()));
-        bytes32 levelWord = keccak256(abi.encode(PLAYER, uint256(3)));
+        bytes32 levelWord = keccak256(abi.encode(uint256(pid), uint256(2)));
         bytes32 stateNew = keccak256(abi.encode(
             vm.load(address(quests), playerWord), vm.load(address(quests), levelWord)
         ));

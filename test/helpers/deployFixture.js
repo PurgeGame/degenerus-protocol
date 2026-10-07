@@ -191,3 +191,19 @@ function getConstructorArgs(key, predicted) {
   }
   return [];
 }
+
+/**
+ * Register `addr` in the Game's wallet table through the Coinflip contract (an allow-listed
+ * `registerWallet` caller) and return its ID; an existing ID is returned unchanged.
+ */
+export async function giveWalletId(game, addr) {
+  const existing = await game.walletIdOf(addr);
+  if (existing !== 0n) return existing;
+  const registrar = _patchedAddresses.get("COINFLIP");
+  await hre.network.provider.send("hardhat_setBalance", [registrar, "0x1000000000000000000"]);
+  await hre.network.provider.send("hardhat_impersonateAccount", [registrar]);
+  const signer = await hre.ethers.getSigner(registrar);
+  await game.connect(signer).registerWallet(addr, true);
+  await hre.network.provider.send("hardhat_stopImpersonatingAccount", [registrar]);
+  return game.walletIdOf(addr);
+}

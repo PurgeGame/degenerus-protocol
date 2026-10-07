@@ -125,7 +125,8 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
         bytes32 base = keccak256(abi.encode(who, PLAYERSTATE_SLOT));
         uint256 slot0 = (uint256(type(uint24).max) << 128) // lastClaim = max -> settle is a no-op
             | (uint256(1) << 152) // autoRebuyStartDay
-            | (uint256(1) << 176); // autoRebuyEnabled = true
+            | (uint256(1) << 176) // autoRebuyEnabled = true
+            | (uint256(game.walletIdOf(who)) << 184); // cached wallet ID
         vm.store(address(coinflip), base, bytes32(slot0));
         vm.store(address(coinflip), bytes32(uint256(base) + 1), bytes32(uint256(carry) << 128));
     }
@@ -539,7 +540,7 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
         // slice seeded directly into claimableStored (the seed-reserve half the waterfall drains
         // first; a live transfer would ride tomorrow's stake instead of landing here).
         _seedRebuyCarry(ContractAddresses.SDGNRS, 5_000_000 ether);
-        uint256 claimable = 50 ether;
+        uint256 claimable = 50;
         bytes32 base = keccak256(abi.encode(ContractAddresses.SDGNRS, PLAYERSTATE_SLOT));
         uint256 s0 = uint256(vm.load(address(coinflip), base));
         vm.store(address(coinflip), base, bytes32(s0 | uint256(uint128(claimable))));

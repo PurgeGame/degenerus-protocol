@@ -110,7 +110,7 @@ abstract contract JackpotBattleStageFixture is AdvanceStageStream {
         keccak256("JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)");
     bytes32 internal constant TICKET_BATCH_SIG =
         keccak256("JackpotTicketBatchWin(uint24,uint24,uint16,uint16,uint8,uint32,uint256[4],uint256[4])");
-    bytes32 internal constant BATTLE_ENTRY_SIG = keccak256("JackpotBattleEntry(uint64,uint256,address,uint256,uint32)");
+    bytes32 internal constant BATTLE_ENTRY_SIG = keccak256("JackpotBattleEntry(uint64,uint256,uint32,uint256,uint32)");
 
     uint8 internal constant STAGE_JACKPOT_COIN_TICKETS = 8;
     uint8 internal constant STAGE_JACKPOT_PHASE_ENDED = 9;

@@ -42,6 +42,7 @@ CONTRACTS_DIR = os.environ.get("CONTRACTS_DIR", "contracts")
 DEFAULT_SCOPE = [
     "CrapsBattle.sol",
     "JackpotBattle.sol",
+    "storage/CrapsBattleStorage.sol",
     "libraries/JackpotBattleFieldLib.sol",
     "DegenerusGame.sol",
     "storage/DegenerusGameStorage.sol",

@@ -21,7 +21,11 @@ contract WordJackpotHarness is DegenerusGameJackpotModule, BucketSeed {
             JackpotBucketLib.packWinningTraits(traits), level, dailyIdx + 1, word);
         dailyTicketBudgetsPacked = (awards * 4) << 144;
         _seedBucketDistinct(42, trait, len, 0x10000);
-        deityBySymbol[(trait >> 6) * 8 + (trait & 7)] = _seedWallet(deity);
+        deityBySymbol[(trait >> 6) * 8 + (trait & 7)] = deity == address(0) ? 0 : _seedWallet(deity);
+    }
+
+    function idOf(address player) external view returns (uint32) {
+        return _walletIdOf(player);
     }
 
     function owed(address player) external view returns (uint32) {
@@ -33,6 +37,10 @@ contract WordScatterHarness is DegenerusGame, BucketSeed {
     function seed(uint256 len) external {
         level = 42;
         _seedBucketDistinct(42, 7, len, 0x10000);
+    }
+
+    function idOf(address player) external view returns (uint32) {
+        return _walletIdOf(player);
     }
 }
 
@@ -65,23 +73,23 @@ contract JackpotWordSamplingTest is Test {
     }
 
     function _checkWin(Vm.Log memory entry, ExpectedDraw memory expected, uint256 paid)
-        private pure returns (uint256 ownerIndex)
+        private view returns (uint256 ownerIndex)
     {
         assertGt(expected.effectiveLength, 0, "empty bucket must never pay");
         uint256 seed = uint256(keccak256(abi.encode(expected.entropy, expected.trait, uint8(239), (paid / 8) * 8)));
         uint256 idx = _index(seed, expected.effectiveLength, paid % 8);
-        address winner = address(uint160(uint256(entry.topics[1])));
+        uint32 winner = uint32(uint256(entry.topics[1]));
         (uint32 entries, uint24 source, uint256 ticketIndex, bool rounded) =
             abi.decode(entry.data, (uint32, uint24, uint256, bool));
         assertEq(entries, expected.entriesEach, "every award remains a whole ticket");
         assertEq(source, 42);
         assertFalse(rounded);
         if (idx < expected.length) {
-            assertEq(winner, address(uint160(0x10001 + idx)), "packed owner decoding");
+            assertEq(winner, h.idOf(address(uint160(0x10001 + idx))), "packed owner decoding");
             assertEq(ticketIndex, idx, "event names the actual source lane");
             return idx;
         }
-        assertEq(winner, expected.deity);
+        assertEq(winner, h.idOf(expected.deity));
         assertEq(ticketIndex, type(uint256).max, "deity sentinel");
         return expected.length;
     }
@@ -155,12 +163,12 @@ contract JackpotWordSamplingTest is Test {
         uint256 len = uint256(length) % 65;
         scatter.seed(len);
         entropy = (entropy & ~uint256(0xffffffffff)) | (uint256(7) << 24);
-        (uint8 trait, address[] memory players) = scatter.sampleTraitEntries(false, entropy);
+        (uint8 trait, uint32[] memory players) = scatter.sampleTraitEntries(false, entropy);
         assertEq(trait, 7);
         uint256 take = len < 4 ? len : 4;
         assertEq(players.length, take);
         for (uint256 i; i < take; ++i) {
-            assertEq(players[i], address(uint160(0x10001 + _index(entropy >> 40, len, i))));
+            assertEq(players[i], scatter.idOf(address(uint160(0x10001 + _index(entropy >> 40, len, i)))));
         }
     }
 

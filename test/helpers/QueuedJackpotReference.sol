@@ -1272,7 +1272,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
                 (flipCredit / FlipRoundLib.FLIP_ROUND_UNIT) *
                 FlipRoundLib.FLIP_ROUND_UNIT;
             if (flipCredit != 0) {
-                coinflip.creditFlip(winner, flipCredit);
+                coinflip.creditFlip(_seedWallet(winner), flipCredit);
             }
         }
         if (wwxrpAward != 0) {

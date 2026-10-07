@@ -148,7 +148,7 @@ abstract contract BoundaryGasFixture is AdvanceStageStream {
     bytes32 internal constant TICKET_BATCH_SIG =
         keccak256("JackpotTicketBatchWin(uint24,uint24,uint16,uint16,uint8,uint32,uint256[4],uint256[4])");
     bytes32 internal constant BATTLE_ENTRY_SIG =
-        keccak256("JackpotBattleEntry(uint64,uint256,address,uint256,uint32)");
+        keccak256("JackpotBattleEntry(uint64,uint256,uint32,uint256,uint32)");
     bytes32 internal constant SEED_ARMED_SIG =
         keccak256("SeedWindowArmed(uint24,uint24,uint24,uint256)");
     bytes32 internal constant ADVANCE_SIG = keccak256("Advance(uint8,uint24)");

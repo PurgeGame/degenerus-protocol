@@ -56,8 +56,9 @@ contract BafConsolationClaimTest is DeployProtocol {
     // ==================== Unit tests (pranked score/skip) ====================
 
     function _record(address player, uint24 lvl, uint256 amount) private {
+        uint32 id = _giveWalletId(player);
         vm.prank(address(coinflip));
-        jackpots.recordBafFlip(player, lvl, amount);
+        jackpots.recordBafFlip(id, lvl, amount);
     }
 
     function _skip(uint24 lvl) private {
@@ -134,13 +135,13 @@ contract BafConsolationClaimTest is DeployProtocol {
         assertEq(jackpots.bafConsolationOf(alice, 20), 0, "a resolving bracket is not claimable");
         vm.expectRevert(NothingToClaim.selector);
         jackpots.claimBafConsolation(alice, 20);
-        (address best,) = BafViews.round(address(jackpots), 20, uint256(keccak256("resolved_word")), 0, 48);
-        assertEq(best, address(0), "no sampled entry holds a bracket score");
-        assertEq(jackpots.bafHeadWinner(20, uint256(keccak256("resolved_word")), 0), alice,
+        (uint32 best,) = BafViews.round(address(jackpots), 20, uint256(keccak256("resolved_word")), 0, 48);
+        assertEq(best, 0, "no sampled entry holds a bracket score");
+        assertEq(jackpots.bafHeadWinner(20, uint256(keccak256("resolved_word")), 0), game.walletIdOf(alice),
             "the frozen board still names the top bettor mid-stage");
         vm.prank(address(game));
         jackpots.finalizeBaf(20);
-        assertEq(jackpots.bafHeadWinner(20, uint256(keccak256("resolved_word")), 0), address(0),
+        assertEq(jackpots.bafHeadWinner(20, uint256(keccak256("resolved_word")), 0), 0,
             "finalizeBaf clears the board");
 
         assertEq(jackpots.bafConsolationOf(alice, 20), 0, "resolved bracket not claimable");

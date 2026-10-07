@@ -10,17 +10,33 @@
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "growthBetWords",
+    "label": "growthOutcomeWords",
     "offset": 0,
     "slot": 1,
-    "typeLabel": "mapping(address => mapping(uint24 => uint256))"
+    "typeLabel": "mapping(uint24 => uint256)"
   },
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "growthOutcomeWords",
+    "label": "growthSideLanes",
     "offset": 0,
     "slot": 2,
-    "typeLabel": "mapping(uint24 => uint256)"
+    "typeLabel": "mapping(uint256 => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "lastBetRounds",
+    "offset": 0,
+    "slot": 3,
+    "typeLabel": "mapping(uint32 => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "inplace",
+    "label": "growthSettlement",
+    "offset": 0,
+    "slot": 4,
+    "typeLabel": "uint256"
   }
 ]

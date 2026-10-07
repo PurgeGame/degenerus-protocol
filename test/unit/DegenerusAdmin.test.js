@@ -7,6 +7,7 @@ import {
 } from "../helpers/deployFixture.js";
 import {
   eth,
+  flip,
   getEvents,
   getEvent,
   ZERO_ADDRESS,
@@ -237,8 +238,8 @@ describe("DegenerusAdmin", function () {
 
       expect(event).to.not.be.null;
       expect(event.args.player).to.equal(alice.address);
-      expect(event.args.amount).to.equal(eth("1198"));
-      expect(flipAfter).to.equal(eth("1198"));
+      expect(event.args.amount).to.equal(flip(1198));
+      expect(flipAfter).to.equal(flip(1198));
     });
 
     it("100 LINK in sub, 1 LINK → integrated ~2x = 798 FLIP flip stake", async function () {
@@ -253,15 +254,15 @@ describe("DegenerusAdmin", function () {
       });
 
       expect(event).to.not.be.null;
-      expect(event.args.amount).to.equal(eth("798"));
-      expect(flipAfter).to.equal(eth("798"));
+      expect(event.args.amount).to.equal(flip(798));
+      expect(flipAfter).to.equal(flip(798));
     });
 
     it("200 LINK in sub, 1 LINK → integrated ~1x = 399.75 FLIP flip stake", async function () {
       const { admin, sdgnrs, game, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice } =
         await loadFixture(deployFullProtocol);
 
-      // avg over [200,201]: (1 + 0.99875)/2 = 0.999375x → 399.75 FLIP
+      // avg over [200,201]: (1 + 0.99875)/2 = 0.999375x → 399.75, floored to 399 FLIP
       const { event, flipAfter } = await donateLink({
         admin, sdgnrs, game, mockLINK, mockVRF, mockFeed, coinflip, deployer, alice,
         subPrefund: eth("200"),
@@ -269,9 +270,9 @@ describe("DegenerusAdmin", function () {
       });
 
       expect(event).to.not.be.null;
-      expect(event.args.amount).to.equal(eth("399.75"));
-      // The stake lane holds whole FLIP; the event reports the nominal credit.
-      expect(flipAfter).to.equal(eth("399"));
+      expect(event.args.amount).to.equal(flip(399));
+      // Credits are whole FLIP, floored.
+      expect(flipAfter).to.equal(flip(399));
     });
 
     it("600 LINK in sub, 1 LINK → integrated ~0.5x = 199.75 FLIP flip stake", async function () {
@@ -286,9 +287,9 @@ describe("DegenerusAdmin", function () {
       });
 
       expect(event).to.not.be.null;
-      expect(event.args.amount).to.equal(eth("199.75"));
-      // The stake lane holds whole FLIP; the event reports the nominal credit.
-      expect(flipAfter).to.equal(eth("199"));
+      expect(event.args.amount).to.equal(flip(199));
+      // Credits are whole FLIP, floored.
+      expect(flipAfter).to.equal(flip(199));
     });
 
     it("0x tier (1000+ LINK in sub): no flip credit emitted", async function () {
@@ -318,8 +319,8 @@ describe("DegenerusAdmin", function () {
       });
 
       expect(event).to.not.be.null;
-      expect(event.args.amount).to.equal(eth("11800"));
-      expect(flipAfter).to.equal(eth("11800"));
+      expect(event.args.amount).to.equal(flip(11800));
+      expect(flipAfter).to.equal(flip(11800));
     });
 
     it("batch equals split: one 100-LINK donation = five 20-LINK donations", async function () {
@@ -365,8 +366,8 @@ describe("DegenerusAdmin", function () {
       });
 
       expect(event).to.not.be.null;
-      expect(event.args.amount).to.equal(eth("320000"));
-      expect(flipAfter).to.equal(eth("320000"));
+      expect(event.args.amount).to.equal(flip(320000));
+      expect(flipAfter).to.equal(flip(320000));
     });
 
     it("game-level value: formula is level-invariant — 3x at any level gives ~0.012 ETH ticket value per LINK", async function () {

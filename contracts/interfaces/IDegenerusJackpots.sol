@@ -35,17 +35,35 @@ interface IDegenerusJackpots {
     function finalizeBaf(uint24 lvl) external;
 
     /// @notice Head award `slot` (0 top bettor, 1 armed-day depositor draw, 2 word-picked 3rd/4th).
-    function bafHeadWinner(uint24 lvl, uint256 rngWord, uint8 slot) external view returns (address winner);
+    /// @dev View, pure in the frozen board, the word and the slot. Slot 1 forwards Coinflip's
+    ///      `bafDrawWinner(rngWord)` (also a wallet ID).
+    /// @param lvl BAF bracket level.
+    /// @param rngWord The BAF transition VRF word.
+    /// @param slot Head award slot (0, 1 or 2).
+    /// @return winnerId The winner's wallet ID, or 0 when the slot is empty (no winner).
+    function bafHeadWinner(uint24 lvl, uint256 rngWord, uint8 slot) external view returns (uint32 winnerId);
 
     /// @notice Best and second-best BAF score of scatter rounds 2 * pair and 2 * pair + 1 of `rounds`.
+    /// @dev View. Candidates are the wallet IDs Game's `sampleTraitEntries` and
+    ///      `sampleFarFutureTickets` return; scores are read from the ID-keyed BAF ledger.
+    /// @param lvl BAF bracket level.
+    /// @param rngWord The BAF transition VRF word.
+    /// @param pair Round pair index.
+    /// @param rounds Total scatter rounds (a multiple of 8).
+    /// @return winnerIds [best, second] of the even round, then of the odd round, as wallet
+    ///         IDs; 0 where no candidate qualifies (no winner).
     function bafPairWinners(uint24 lvl, uint256 rngWord, uint256 pair, uint256 rounds)
-        external view returns (address[4] memory winners);
+        external view returns (uint32[4] memory winnerIds);
 
     /// @notice Record a coinflip win for BAF score tracking.
-    /// @param player Address of the player.
+    /// @dev COINFLIP only. VAULT (wallet ID 1) accrues a score but stays off the top-4 board;
+    ///      sDGNRS (ID 2) is never reported. Coinflip reports only nonzero IDs and amounts (its
+    ///      claim walk runs only for a wallet that holds an ID), so no zero branch is needed.
+    /// @param id Wallet ID of the player whose winnings settled.
     /// @param lvl BAF bracket (level rounded up to the next multiple of 10).
     /// @param amount Winning coinflip payout credited to the player's BAF score.
-    function recordBafFlip(address player, uint24 lvl, uint256 amount) external;
+    /// @custom:reverts OnlyCoin If caller is not COINFLIP.
+    function recordBafFlip(uint32 id, uint24 lvl, uint256 amount) external;
 
     /// @notice Mark a BAF bracket as skipped when the daily flip loses.
     /// @dev Bumps lastBafResolvedDay so pre-skip winning-flip credit cannot

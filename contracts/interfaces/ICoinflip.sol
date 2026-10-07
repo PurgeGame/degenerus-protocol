@@ -72,8 +72,15 @@ interface ICoinflip {
     ///      winnings leg only.
     ///      Stakes and principal use whole FLIP. Each percentage bonus floors at its
     ///      calculation boundary before it is added to the day's stake. CoinflipStakeUpdated reports the accepted stake.
+    ///      The stake ledger is keyed by wallet ID, read from the player's coinflip state on a
+    ///      cache hit. On a miss a self or operator deposit registers the player (a paying action:
+    ///      Game `registerWallet(player, true)`); a gift needs the recipient's existing ID
+    ///      (`registerWallet(player, false)`) and registers the paying funder for its quest.
     /// @param player The player making the deposit (address(0) or msg.sender for direct deposit).
     /// @param amount Amount of FLIP to deposit (must be >= 100 FLIP minimum).
+    /// @custom:reverts NoWalletId If a gift's recipient has no wallet ID.
+    /// @custom:reverts E (Game) If a new wallet must register past paid admission
+    ///                 (PAID_ADMISSION_WALLETS registered wallets; the hook carries no spend).
     /// @custom:reverts AmountLTMin If amount is non-zero but less than 100 FLIP.
     /// @custom:reverts StakeAboveDailyCap If the stake with its bonuses would exceed the player's
     ///                 per-day cap of type(uint32).max whole FLIP; every prior mutation rolls back.
@@ -103,6 +110,8 @@ interface ICoinflip {
 
     /// @notice Claim coinflip winnings via FLIP contract to cover token transfers/burns.
     /// @dev Access restricted to FLIP contract only. Processes pending claims and mints tokens.
+    ///      Keeps its address parameter: a holder with no wallet ID has no stake and claims 0,
+    ///      exactly as an empty ledger does (plain FLIP holders never newly revert here).
     /// @param player The player claiming.
     /// @param amount Amount to claim.
     /// @return claimed The actual amount claimed and minted.
@@ -111,6 +120,8 @@ interface ICoinflip {
 
     /// @notice Consume coinflip winnings via FLIP for burns without minting new tokens.
     /// @dev Access restricted to FLIP contract only. Reduces claimable balance without minting.
+    ///      Keeps its address parameter: a holder with no wallet ID consumes 0, exactly as an
+    ///      empty ledger does (FLIP burns by plain holders never newly revert here).
     /// @param player The player whose balance to consume.
     /// @param amount Amount to consume.
     /// @return consumed The actual amount consumed.
@@ -177,60 +188,70 @@ interface ICoinflip {
       |                       CREDIT SYSTEM                                  |
       +======================================================================+*/
 
-    /// @notice Credit flip stake to a player without burning tokens.
+    /// @notice Credit flip stake to wallet `id` without burning tokens.
     /// @dev Called by authorized creditors (GAME, QUESTS, AFFILIATE, ADMIN, SDGNRS, WWXRP,
-    ///      PARIMUTUEL, CRAPS) for rewards.
+    ///      PARIMUTUEL, CRAPS) for rewards. Keyed by wallet ID only: writes the ID-keyed stake
+    ///      lane and never reads or fills the address-keyed PlayerCoinflipState, so a creditor
+    ///      needs nothing but the ID. `id == 0` or `amount == 0` is a silent no-op, never a
+    ///      revert: credits reached from a mineFlip stage cannot fail on a missing wallet.
     ///      Never touches the biggest-flip record (credits carry recordAmount 0).
     ///      Each credit floors to whole FLIP on its own (two sub-FLIP credits add nothing) and
-    ///      saturates at the player's per-day cap of type(uint32).max whole FLIP rather than
+    ///      saturates at the wallet's per-day cap of type(uint32).max whole FLIP rather than
     ///      reverting; CoinflipStakeUpdated reports the amount the lane accepted.
-    /// @param player The player receiving the flip credit.
+    /// @param id Wallet ID receiving the credit (0 = no wallet: no-op).
     /// @param amount Amount of flip credit to add to next day's stake, whole FLIP.
     /// @custom:reverts OnlyFlipCreditors If caller is not an authorized creditor.
-    function creditFlip(address player, uint256 amount) external;
+    function creditFlip(uint32 id, uint256 amount) external;
 
-    /// @notice Credit flips to multiple players in a single call.
-    /// @dev Batch version of creditFlip for gas efficiency. Skips zero addresses and amounts.
-    ///      Each leg floors and saturates on its own, as creditFlip does.
-    /// @param players Player addresses.
-    /// @param amounts Credit amounts corresponding to each player.
+    /// @notice Credit flips to multiple wallets in a single call.
+    /// @dev Batch version of creditFlip for gas efficiency. Legs with a zero ID or a zero
+    ///      amount are skipped. Each leg floors and saturates on its own, as creditFlip does.
+    ///      Callers pass equal-length arrays (a shorter `amounts` reverts on the index).
+    /// @param ids Wallet IDs to credit (0 entries are skipped).
+    /// @param amounts Credit amounts corresponding to each ID, whole FLIP (0 entries are skipped).
     /// @custom:reverts OnlyFlipCreditors If caller is not an authorized creditor.
     function creditFlipBatch(
-        address[] calldata players,
+        uint32[] calldata ids,
         uint256[] calldata amounts
     ) external;
 
-    /// @notice Credit flips to exactly two players in a single call.
+    /// @notice Credit flips to exactly two wallets in a single call.
     /// @dev Fixed-arity variant of creditFlipBatch — spares the caller the two array
-    ///      allocations and the dynamic ABI encode. Skips zero addresses and amounts.
-    /// @param player1 First recipient.
-    /// @param amount1 First credit amount.
-    /// @param player2 Second recipient.
-    /// @param amount2 Second credit amount.
+    ///      allocations and the dynamic ABI encode. Legs with a zero ID or a zero amount
+    ///      are skipped; each leg floors and saturates on its own.
+    /// @param id1 First recipient wallet ID (0 = skipped).
+    /// @param amount1 First credit amount, whole FLIP.
+    /// @param id2 Second recipient wallet ID (0 = skipped).
+    /// @param amount2 Second credit amount, whole FLIP.
     /// @custom:reverts OnlyFlipCreditors If caller is not an authorized creditor.
     function creditFlipPair(
-        address player1,
+        uint32 id1,
         uint256 amount1,
-        address player2,
+        uint32 id2,
         uint256 amount2
     ) external;
 
-    /// @notice Arm a game-side all-time record for `player` with `candidate` in the
+    /// @notice Arm a game-side all-time record for wallet `id` with `candidate` in the
     ///         record's own unit (spin and lootbox deposit: ETH wei; buy: whole tickets).
     /// @dev GAME only (delegatecall modules). Larger-than-mark candidates ratchet the
     ///      record; clearing the mark by a fifth also claims the category's accrued
     ///      share of the record pool, plus the sDGNRS leg at 1/500 scale. Callers gate
     ///      each record's entry floor before paying for the call. The flip record arms
     ///      internally on direct deposits, never here.
+    ///      Every ratchet calls Game `payRecordSdgnrs(id, shareBps)` (shareBps 0 when the
+    ///      candidate does not clear the claim bar) and hands the record trophy to the
+    ///      `payee` it returns, so the trophy always has a recipient without an address
+    ///      parameter. Game callers pass the nonzero ID they already hold.
     /// @param kind Which record (RECORD_KIND_*), excluding flip and dice run.
-    /// @param player The player whose candidate is being armed.
+    /// @param id Wallet ID whose candidate is being armed.
     /// @param candidate The candidate mark to ratchet the record with.
     /// @return The FLIP claimed from the record pool (0 when the candidate only ratcheted
     ///         the mark). Coinflip does NOT credit it — the caller folds it into the FLIP
     ///         its own path already pays, so a claim costs no second stake write.
+    /// @custom:reverts OnlyDegenerusGame If caller is not the DegenerusGame contract.
     function armRecord(
         uint8 kind,
-        address player,
+        uint32 id,
         uint256 candidate
     ) external returns (uint256);
 

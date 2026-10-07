@@ -207,9 +207,10 @@ contract DegenerusGameRngModule is DegenerusGameRngUtils {
     ///      PAID_ADMISSION_WALLETS registered wallets).
     /// @param to Donor to credit.
     /// @param linkAmount LINK donated, in juels.
-    function creditMiddayRng(address to, uint256 linkAmount) external {
+    /// @return id The donor's wallet ID, which Admin credits the donation's FLIP reward to.
+    function creditMiddayRng(address to, uint256 linkAmount) external returns (uint32 id) {
         if (msg.sender != ContractAddresses.ADMIN) revert OnlyAdmin();
-        (uint32 id, ) = _registerWallet(to, 0);
+        (id, ) = _registerWallet(to, 0);
         uint256 balance = middayRngCredit[id] + linkAmount;
         middayRngCredit[id] = balance;
         emit MiddayRngCredited(to, linkAmount, balance);

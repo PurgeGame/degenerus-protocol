@@ -208,6 +208,9 @@ contract CrapsRngSealHandler is Test {
             address a = address(uint160(uint256(keccak256(abi.encode("craps-seal-actor", i)))));
             actors.push(a);
             vm.deal(a, 2_000 ether);
+            // A wallet that bought through the Game holds an ID before it reaches the non-paying doors.
+            vm.prank(ContractAddresses.AFFILIATE);
+            game.registerWallet(a, true);
         }
     }
 

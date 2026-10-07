@@ -109,7 +109,7 @@ contract GoldenTicketFoilHarness is DegenerusGameFoilPackModule, WalletSeed {
         uint8 golds,
         uint8 allGold
     ) external {
-        _settleGoldenTicket(buyer, lvl, golds, allGold);
+        _settleGoldenTicket(buyer, _seedWallet(buyer), lvl, golds, allGold);
     }
 
     /// @dev Drive the grand push directly — the branch the DRAIN takes when a pack's
@@ -123,6 +123,10 @@ contract GoldenTicketFoilHarness is DegenerusGameFoilPackModule, WalletSeed {
         uint8 allGold
     ) external {
         _pushFoilGrand(buyer, _seedWallet(buyer), lvl, golds, allGold);
+    }
+
+    function walletIdOf(address who) external view returns (uint32) {
+        return _walletIdOf(who);
     }
 
     function goldenTicketClaimed(
@@ -177,11 +181,11 @@ contract GoldenTicketFoilHarness is DegenerusGameFoilPackModule, WalletSeed {
 
 /// @dev Recorder etched at ContractAddresses.COINFLIP: captures creditFlip calls.
 contract CoinflipRecorder {
-    address public lastPlayer;
+    uint32 public lastPlayer;
     uint256 public lastAmount;
     uint256 public calls;
 
-    function creditFlip(address p, uint256 a) external {
+    function creditFlip(uint32 p, uint256 a) external {
         lastPlayer = p;
         lastAmount = a;
         ++calls;
@@ -412,7 +416,7 @@ contract GoldenTicketFoilPack is Test {
         h.claimGoldenTicket(BUYER, LVL);
 
         assertEq(flipRec.calls(), 1, "one flip credit");
-        assertEq(flipRec.lastPlayer(), BUYER, "credited to the buyer");
+        assertEq(flipRec.lastPlayer(), h.walletIdOf(BUYER), "credited to the buyer");
         assertEq(flipRec.lastAmount(), EXPECTED_FLIP, "4-gold rung + all-gold kicker");
 
         (uint8 golds, uint8 allGold, uint256 flipCredit) = foilEventPayload(
@@ -443,7 +447,7 @@ contract GoldenTicketFoilPack is Test {
         seedAndDrain(ALL_GOLD_WORD);
         vm.prank(address(0xCAFE));
         h.claimGoldenTicket(BUYER, LVL);
-        assertEq(flipRec.lastPlayer(), BUYER, "credit follows the pack, not the caller");
+        assertEq(flipRec.lastPlayer(), h.walletIdOf(BUYER), "credit follows the pack, not the caller");
     }
 
     function testClaimPaysOnce() public {
@@ -581,7 +585,7 @@ contract GoldenTicketFoilPack is Test {
         assertEq(h.claimableOf(BUYER), expectedEth, "grand ETH = 25% of future");
         assertEq(h.whalePassOf(BUYER), expectedPasses, "grand half-passes");
         assertEq(flipRec.lastAmount(), expectedFlip, "grand flip credit");
-        assertEq(flipRec.lastPlayer(), BUYER, "flip credit to the winner");
+        assertEq(flipRec.lastPlayer(), h.walletIdOf(BUYER), "flip credit to the winner");
 
         (, uint128 futAfter) = h.poolsView();
         assertEq(futAfter, futBal - expectedEth, "future debited by the ETH leg");

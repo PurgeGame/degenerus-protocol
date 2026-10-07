@@ -32,6 +32,7 @@ contract WwxrpTrustedMintersTest is DeployProtocol {
         stranger = makeAddr("wwxrp_stranger");
         futureGame = makeAddr("wwxrp_future_game");
         player = makeAddr("wwxrp_player");
+        _giveWalletId(player);
         // Vault ownership is a DGVE-majority check on the vault; mock it for `owner` only.
         vm.mockCall(
             ContractAddresses.VAULT,
@@ -165,12 +166,12 @@ contract WwxrpTrustedMintersTest is DeployProtocol {
         return uint256(vm.load(address(game), _slot1Key(who)));
     }
 
-    function _slot0Key(address who) private pure returns (bytes32) {
-        return keccak256(abi.encode(who, SLOT_BOON_PACKED));
+    function _slot0Key(address who) private view returns (bytes32) {
+        return keccak256(abi.encode(uint256(game.walletIdOf(who)), SLOT_BOON_PACKED));
     }
 
-    function _slot1Key(address who) private pure returns (bytes32) {
-        return bytes32(uint256(keccak256(abi.encode(who, SLOT_BOON_PACKED))) + 1);
+    function _slot1Key(address who) private view returns (bytes32) {
+        return bytes32(uint256(keccak256(abi.encode(uint256(game.walletIdOf(who)), SLOT_BOON_PACKED))) + 1);
     }
 
     /// @dev Write a lootbox-rolled (non-deity) lane stamped today; other lanes are kept.

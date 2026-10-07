@@ -101,8 +101,9 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         PurchaseHotPathSeeder(address(game)).seedAfking(BUYER, lapsed);
         vm.etch(address(game), code);
         uint24 day = uint24(game.currentDayView());
+        uint32 buyerId = game.walletIdOf(BUYER);
         vm.prank(address(game));
-        quests.beginAfking(BUYER, day);
+        quests.beginAfking(buyerId, day);
     }
 
     function _buy(uint256 quantity, uint256 boxes, bytes32 referral, MintPaymentKind kind, uint256 fresh)
@@ -134,8 +135,8 @@ contract PurchaseHotPathGasTest is DeployProtocol {
             coinflip.coinflipAmount(BUYER), coinflip.coinflipAmount(REFERRER),
             coinflip.coinflipAmount(address(vault)), coinflip.coinflipAmount(address(sdgnrs)),
             vm.load(address(game), bytes32(uint256(2))), vm.load(address(game), bytes32(uint256(11))),
-            vm.load(address(quests), keccak256(abi.encode(BUYER, uint256(1)))),
-            vm.load(address(quests), keccak256(abi.encode(BUYER, uint256(3))))
+            vm.load(address(quests), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), uint256(1)))),
+            vm.load(address(quests), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), uint256(2))))
         ));
         digest = keccak256(abi.encode(digest,
             vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), GameSlots.BALANCES_PACKED))),

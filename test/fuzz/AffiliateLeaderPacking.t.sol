@@ -6,15 +6,16 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 /// @title AffiliateLeaderPacking -- the level total and the leader's score share one word
 /// @notice Drives payAffiliate and payAffiliateCombined as the Game, then checks the public
 ///         views against a reference model, the tie rule (an equal score keeps the earlier
-///         leader), the packed layout, and that an earning which does not take the lead never
-///         reads or writes the leader address slot.
+///         leader), the packed layout (total, leader score and leader ID in one word), the
+///         saturating total, and that an earning which does not take the lead leaves the
+///         leader fields untouched.
 contract AffiliateLeaderPacking is DeployProtocol {
     // forge inspect DegenerusAffiliate storage-layout
-    uint256 constant SLOT_TOP = 3; // affiliateTopByLevel: mapping(uint24 => address)
-    uint256 constant SLOT_TOTAL = 4; // _totalAffiliateScore: total [0:160) | leader score [160:256)
+    uint256 constant SLOT_TOTAL = 3; // _levelScore: total [0:128) | leader score [128:224) | leader ID [224:256)
     uint24 constant LVL = 5;
 
     address[4] affs;
+    uint32[4] ids;
     bytes32[4] codes;
     uint256 buyerNonce;
 
@@ -25,6 +26,8 @@ contract AffiliateLeaderPacking is DeployProtocol {
             codes[i] = bytes32(bytes.concat("AFF", bytes1(uint8(0x41 + i))));
             vm.prank(affs[i]);
             affiliate.createAffiliateCode(codes[i], 0);
+            ids[i] = game.walletIdOf(affs[i]);
+            assertGt(ids[i], 0);
         }
     }
 
@@ -48,8 +51,8 @@ contract AffiliateLeaderPacking is DeployProtocol {
         return keccak256(abi.encode(uint256(LVL), base));
     }
 
-    function _assertViews(address leader, uint256 leaderScore, uint256 total) internal view {
-        (address top, uint96 topScore) = affiliate.affiliateTop(LVL);
+    function _assertViews(uint32 leader, uint256 leaderScore, uint256 total) internal view {
+        (uint32 top, uint96 topScore) = affiliate.affiliateTop(LVL);
         assertEq(top, leader, "leader");
         assertEq(topScore, leaderScore, "leader score");
         assertEq(affiliate.totalAffiliateScore(LVL), total, "total");
@@ -59,21 +62,21 @@ contract AffiliateLeaderPacking is DeployProtocol {
     ///      to reach a strictly higher score than the standing leader.
     function testFuzz_ViewsMatchReferenceModel(uint256 seed) public {
         uint256 total;
-        address leader;
+        uint32 leader;
         uint256 leaderScore;
         for (uint256 i; i < 24; ++i) {
             uint256 r = uint256(keccak256(abi.encode(seed, i)));
             uint256 k = r % 4;
-            uint256 before = affiliate.affiliateScore(LVL, affs[k]);
+            uint256 before = affiliate.affiliateScore(LVL, ids[k]);
             if ((r >> 72) % 3 == 0) {
                 _earnCombined(k, (1 + (r >> 8) % 4000) * 1, ((r >> 40) % 3000) * 1);
             } else {
                 _earn(k, (1 + (r >> 8) % 5000) * 1, (r >> 64) & 1 == 0);
             }
-            uint256 afterScore = affiliate.affiliateScore(LVL, affs[k]);
+            uint256 afterScore = affiliate.affiliateScore(LVL, ids[k]);
             total += afterScore - before;
             if (afterScore > leaderScore) {
-                leader = affs[k];
+                leader = ids[k];
                 leaderScore = afterScore;
             }
             _assertViews(leader, leaderScore, total);
@@ -83,49 +86,56 @@ contract AffiliateLeaderPacking is DeployProtocol {
     function test_EqualScoreKeepsEarlierLeader() public {
         _earn(0, 1000, true);
         _earn(1, 1000, true);
-        uint256 s = affiliate.affiliateScore(LVL, affs[0]);
-        assertEq(affiliate.affiliateScore(LVL, affs[1]), s, "equal scores");
-        _assertViews(affs[0], s, 2 * s);
+        uint256 s = affiliate.affiliateScore(LVL, ids[0]);
+        assertEq(affiliate.affiliateScore(LVL, ids[1]), s, "equal scores");
+        _assertViews(ids[0], s, 2 * s);
 
         _earn(1, 5, true); // 20% of five whole FLIP adds one point and breaks the tie
-        uint256 s1 = affiliate.affiliateScore(LVL, affs[1]);
-        _assertViews(affs[1], s1, s + s1);
+        uint256 s1 = affiliate.affiliateScore(LVL, ids[1]);
+        _assertViews(ids[1], s1, s + s1);
+    }
+
+    function test_EmptyLevelHasNoLeader() public view {
+        _assertViews(0, 0, 0);
+        assertEq(uint256(vm.load(address(affiliate), _slot(SLOT_TOTAL))), 0);
     }
 
     function test_PackedWordLayout() public {
         _earn(0, 3000, true);
         _earn(1, 1000, true);
-        uint256 s0 = affiliate.affiliateScore(LVL, affs[0]);
-        uint256 s1 = affiliate.affiliateScore(LVL, affs[1]);
+        uint256 s0 = affiliate.affiliateScore(LVL, ids[0]);
+        uint256 s1 = affiliate.affiliateScore(LVL, ids[1]);
         uint256 word = uint256(vm.load(address(affiliate), _slot(SLOT_TOTAL)));
-        assertEq(word & type(uint160).max, s0 + s1, "low half = total");
-        assertEq(word >> 160, s0, "high half = leader score");
-        assertEq(address(uint160(uint256(vm.load(address(affiliate), _slot(SLOT_TOP))))), affs[0], "leader slot");
+        assertEq(word & type(uint128).max, s0 + s1, "total");
+        assertEq((word >> 128) & type(uint96).max, s0, "leader score");
+        assertEq(word >> 224, ids[0], "leader ID");
     }
 
-    function _touches(bytes32[] memory slots, bytes32 target) internal pure returns (bool) {
-        for (uint256 i; i < slots.length; ++i) {
-            if (slots[i] == target) return true;
-        }
-        return false;
+    function test_TotalSaturates() public {
+        _earn(0, 3000, true);
+        uint256 word = uint256(vm.load(address(affiliate), _slot(SLOT_TOTAL)));
+        uint256 saturated = (word & ~uint256(type(uint128).max)) | (uint256(type(uint128).max) - 1);
+        vm.store(address(affiliate), _slot(SLOT_TOTAL), bytes32(saturated));
+        _earn(1, 1000, true);
+        uint256 after_ = uint256(vm.load(address(affiliate), _slot(SLOT_TOTAL)));
+        assertEq(after_ & type(uint128).max, type(uint128).max, "total saturates");
+        assertEq(after_ >> 128, saturated >> 128, "leader fields untouched");
+        assertEq(affiliate.totalAffiliateScore(LVL), type(uint128).max);
     }
 
-    function test_NonLeadingEarningSkipsLeaderSlot() public {
+    function test_NonLeadingEarningLeavesLeaderFields() public {
         _earn(0, 5000, true);
-        bytes32 top = _slot(SLOT_TOP);
+        uint256 leaderBits = uint256(vm.load(address(affiliate), _slot(SLOT_TOTAL))) >> 128;
 
-        vm.record();
         _earn(1, 100, true);
-        (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(address(affiliate));
-        assertFalse(_touches(reads, top), "non-leading read the leader slot");
-        assertFalse(_touches(writes, top), "non-leading wrote the leader slot");
+        assertEq(uint256(vm.load(address(affiliate), _slot(SLOT_TOTAL))) >> 128, leaderBits, "leader fields moved");
+        (uint32 leader,) = affiliate.affiliateTop(LVL);
+        assertEq(leader, ids[0]);
 
-        vm.record();
         _earn(1, 50_000, true);
-        (, writes) = vm.accesses(address(affiliate));
-        assertTrue(_touches(writes, top), "a new leader writes the leader slot");
-        (address leader,) = affiliate.affiliateTop(LVL);
-        assertEq(leader, affs[1]);
+        assertTrue(uint256(vm.load(address(affiliate), _slot(SLOT_TOTAL))) >> 128 != leaderBits, "a new leader rewrites them");
+        (leader,) = affiliate.affiliateTop(LVL);
+        assertEq(leader, ids[1]);
     }
 
     /// @dev Cold gas of one ordinary earning that does not take the lead (A/B evidence).

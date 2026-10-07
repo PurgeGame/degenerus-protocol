@@ -92,7 +92,7 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
         uint24 range = maxLevel - minLevel + 1;
         PackedTicketSampleLib.Cursor[] memory cursors = new PackedTicketSampleLib.Cursor[](uint256(range) * 4);
 
-        address[] memory players = new address[](cap);
+        uint32[] memory players = new uint32[](cap);
         uint256[] memory amounts = new uint256[](cap);
         uint256 paid;
         for (uint256 i; i < cap; ) {
@@ -103,7 +103,7 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
             );
             if (winner != 0) {
                 emit JackpotFlipWin(winner, lvlPrime, trait_i, amount, ticketIdx);
-                players[paid] = _payee(_walletElement(winner));
+                players[paid] = winner;
                 amounts[paid] = amount;
                 unchecked { ++paid; }
             }
@@ -175,7 +175,7 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
         (uint256 word, uint256 cursor, uint256 remaining) = battle.prepareJackpotBattle(lvl, battleWord);
         JackpotDrawLevels memory levels = _jackpotDrawLevels(lvl, cursor);
         do {
-            (address[] memory winners, uint256 next, bool exhausted) =
+            (uint32[] memory winners, uint256 next, bool exhausted) =
                 _collectJackpotChunkWithLevels(lvl, word, cursor, remaining, levels);
             uint256[] memory field = JackpotBattleFieldLib.prepare(winners);
             bool last = exhausted || winners.length == remaining;
@@ -241,11 +241,11 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
     function _collectJackpotChunkWithLevels(
         uint24 lvl, uint256 word, uint256 cursor, uint256 remaining, JackpotDrawLevels memory snapshot
     )
-        internal view returns (address[] memory winners, uint256 next, bool exhausted)
+        internal view returns (uint32[] memory winners, uint256 next, bool exhausted)
     {
         uint256 wanted = remaining < JACKPOT_BATTLE_ENTRANTS ? remaining : JACKPOT_BATTLE_ENTRANTS;
-        if (snapshot.count == 0) return (new address[](0), 0, true);
-        winners = new address[](wanted);
+        if (snapshot.count == 0) return (new uint32[](0), 0, true);
+        winners = new uint32[](wanted);
         JackpotDrawWalk memory walk = JackpotDrawWalk(
             uint32(cursor), (cursor >> 131) & 127, uint32(cursor >> 138), uint32(cursor >> 170)
         );
@@ -268,7 +268,7 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
             }
             // A singleton completes its visit immediately; it needs no circular-walk setup.
             if (len == 1) {
-                winners[i++] = _walletKey(uint32(_tqWordAt(queue, 0)));
+                winners[i++] = uint32(_tqWordAt(queue, 0));
                 walk.position = 0;
                 walk.left = 0;
                 continue;
@@ -286,7 +286,7 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
                 if (lanes > len - walk.position) lanes = len - walk.position;
                 if (lanes > take) lanes = take;
                 for (uint256 j; j < lanes; ++j) {
-                    winners[i++] = _walletKey(uint32(packed));
+                    winners[i++] = uint32(packed);
                     packed >>= 32;
                 }
                 walk.position += lanes;
@@ -365,13 +365,13 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
         uint256 rounds = (n - 3) / 2;
         uint24 floorLvl = lvl + work.quadrant;
         uint256 credited;
-        address[4] memory drawn;
+        uint32[4] memory drawn;
         while (i < n) {
             if (!MineFlipGas.canRun(meter, GasBounds.BAF_AWARD_GROUP, GasBounds.BAF_AWARD_TAIL)) break;
             uint256 end = i + GasBounds.JACKPOT_ETH_AWARD_CHUNK;
             if (end > n) end = n;
             for (; i < end; ) {
-                address winner;
+                uint32 winner;
                 uint256 amount;
                 if (i < 2 * rounds) {
                     if (i & 3 == 0) drawn = jackpots.bafPairWinners(lvl, word, i >> 2, rounds);
@@ -447,11 +447,10 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
     }
 
     /// @dev Pays one drawn award. Returns the ETH credited to claimable, equal to `_bafEthTerm`
-    ///      for the award; an empty slot or a zero amount pays nothing. BAF awards go only to an
-    ///      existing wallet ID: a winner with none forfeits the whole award (every component),
-    ///      is not registered, and its reserved ETH returns through _releaseBafReserve.
+    ///      for the award; an empty slot (wallet ID 0) or a zero amount pays nothing, and its
+    ///      reserved ETH returns through _releaseBafReserve. Every BAF entrant holds a wallet ID.
     function _payBafAward(
-        address winnerAddress,
+        uint32 winner,
         uint256 amount,
         uint256 i,
         uint24 lvl,
@@ -459,9 +458,7 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
         uint24 floorLvl,
         uint256 word
     ) private returns (uint256 credited) {
-        if (winnerAddress == address(0) || amount == 0) return 0;
-        uint32 winner = _walletIdOf(winnerAddress);
-        if (winner == 0) return 0;
+        if (winner == 0 || amount == 0) return 0;
         if (amount >= threshold) {
             uint256 ethPortion = amount / 2;
             uint256 lootboxPortion = amount - ethPortion;

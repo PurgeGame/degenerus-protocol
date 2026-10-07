@@ -3,6 +3,7 @@ pragma solidity 0.8.34;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {Vm} from "forge-std/Vm.sol";
 
@@ -19,7 +20,8 @@ contract GrowthFoilGasSeeder is DegenerusGameStorage {
         rngRequestTime = uint48(block.timestamp);
         presaleOver = true;
         _setPrizePools(10 ether, 10 ether);
-        mintPacked_[player] = mintData;
+        (uint32 id, ) = _registerWallet(player, 0);
+        mintPacked_[player] = (mintData & ~(uint256(type(uint32).max) << 224)) | (uint256(id) << 224);
     }
 }
 
@@ -30,8 +32,9 @@ abstract contract GrowthFoilFixture is DeployProtocol {
     address internal constant PLAYER = address(0xA11CE);
     uint24 internal constant DAY = 21;
     bytes32 private mintSlot;
+    uint32 internal pid;
     uint256 private constant SCORE_CACHE_MASK = ((uint256(1) << 30) - 1) << 185;
-    uint256 internal constant ELIGIBLE = (uint256(5) << 48) | (uint256(24) << 104) | (uint256(400) << 228);
+    uint256 internal constant ELIGIBLE = (uint256(5) << BitPackingLib.LEVEL_STREAK_SHIFT) | (uint256(24) << BitPackingLib.LEVEL_UNITS_LEVEL_SHIFT) | (uint256(400) << BitPackingLib.LEVEL_UNITS_SHIFT);
 
     function setUp() public {
         _deployProtocol();
@@ -57,6 +60,7 @@ abstract contract GrowthFoilFixture is DeployProtocol {
         GrowthFoilGasSeeder(address(game)).seed(PLAYER, mintData);
         mintSlot = GrowthFoilGasSeeder(address(game)).mintSlot(PLAYER);
         vm.etch(address(game), code);
+        pid = game.walletIdOf(PLAYER);
     }
 
     function _daily(bool foil) internal {
@@ -145,7 +149,7 @@ abstract contract GrowthFoilFixture is DeployProtocol {
 
     function _foil(uint256 amount) internal returns (uint256, uint8, bool, uint32, bool) {
         vm.prank(address(game));
-        return quests.handleFoilPurchase(PLAYER, amount, 0, 0, 0.05 ether, 0.05 ether);
+        return quests.handleFoilPurchase(pid, amount, 0, 0, 0.05 ether, 0.05 ether);
     }
 }
 
@@ -162,31 +166,12 @@ contract GrowthFoilHotPathGasTest is GrowthFoilFixture {
     function test_Gas_GrowthEligible() public {
         _mintData(ELIGIBLE); _open(24); _begin(); vm.prank(PLAYER); parimutuel.placeBet(PLAYER, true); _end("growth_eligible", 24);
     }
-    function test_Gas_GrowthClaim() public {
-        _bet(64, true); vm.prank(address(game)); parimutuel.recordGrowth(64, true);
-        uint24[] memory rounds = new uint24[](1); rounds[0] = 64;
-        _begin(); parimutuel.claim(PLAYER, rounds); _end("growth_claim", 64);
-    }
-    function test_Gas_GrowthClaimBatch() public {
-        uint24[] memory rounds = new uint24[](8);
-        for (uint24 i; i < 8; ++i) {
-            rounds[i] = 64 + i; _bet(rounds[i], true);
-            vm.prank(address(game)); parimutuel.recordGrowth(rounds[i], true);
-        }
-        _begin(); parimutuel.claim(PLAYER, rounds); _end("growth_claim_8", 64);
-    }
-    function test_Gas_GrowthClaimRound() public {
-        _bet(64, true); vm.prank(address(game)); parimutuel.recordGrowth(64, true);
-        address[] memory players = new address[](2); players[0] = PLAYER; players[1] = PLAYER;
-        _begin(); parimutuel.claimRound(64, players); _end("growth_claim_round", 64);
-    }
-
     function test_Gas_FoilQuest() public { _begin(); _foil(0.5 ether); _end("foil_quest", 0); }
     function test_Gas_FoilQuestRepeat() public { _foil(0.5 ether); _begin(); _foil(0.5 ether); _end("foil_quest_repeat", 0); }
     function test_Gas_FoilQuestZeroSpend() public { _begin(); _foil(0); _end("foil_quest_zero_spend", 0); }
     function test_Gas_FoilQuestOtherDaily() public { _daily(false); _begin(); _foil(0.5 ether); _end("foil_quest_other_daily", 0); }
     function test_Gas_FoilQuestAfking() public {
-        bytes32 playerWord = keccak256(abi.encode(PLAYER, uint256(1)));
+        bytes32 playerWord = keccak256(abi.encode(uint256(pid), uint256(1)));
         vm.store(address(quests), playerWord, bytes32(uint256(1) << 104));
         _begin(); _foil(0.5 ether); _end("foil_quest_afking", 0);
     }

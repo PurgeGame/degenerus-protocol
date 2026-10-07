@@ -26,14 +26,34 @@ pragma solidity 0.8.34;
 
 /// @title IDegenerusParimutuel
 /// @author Burnie Degenerus
-/// @notice The game's view of the parimutuel market: the settlement push it receives.
+/// @notice The game's view of the parimutuel market: the seal it pushes and the in-order
+///         settlement stage it cranks.
 interface IDegenerusParimutuel {
     /// @notice Record the settled side of a growth round.
     /// @dev Called by GAME at the level transition that banks the successor ratchet entry —
     ///      the moment round `round`'s three terms are all final. Must run after every
     ///      ratchet write the transition performs, so a century entry reads its pushed
-    ///      achieved pool rather than zero.
+    ///      achieved pool rather than zero. Seals the outcome only; winners are paid later by
+    ///      `settleGrowth`. Game sets its settlement-pending bit when this returns true.
     /// @param round The growth round being settled.
     /// @param over True if the round resolved OVER, false for UNDER.
-    function recordGrowth(uint24 round, bool over) external;
+    /// @return settlementPending True when a sealed round now has unpaid winners (this round's
+    ///         winning side is non-empty, or an earlier sealed round is still settling); false
+    ///         when nothing is left to pay.
+    /// @custom:reverts OnlyGame If caller is not GAME.
+    function recordGrowth(uint24 round, bool over) external returns (bool settlementPending);
+
+    /// @notice Pay up to `maxWinners` winners of the sealed, unsettled growth rounds, oldest
+    ///         round first, from the settlement cursor (round and array position in one word).
+    /// @dev GAME only: the in-order mineFlip settlement stage, run only while Game's pending bit
+    ///      is set, never on the terminal path and never ahead of RNG-consumer work. Walks only
+    ///      the winning side's wallet-ID array (losers are never read) and credits each winner
+    ///      the round's uniform payout `STAKE * total / winCount` through one
+    ///      `creditFlipBatch(ids, amounts)` per call (Parimutuel is a flip creditor). The work is
+    ///      a pure function of state and `maxWinners` (no `gasleft`). Revert-free for any
+    ///      committed state; an empty winning side settles nothing.
+    /// @param maxWinners Fixed per-call winner bound chosen by the Game stage.
+    /// @return done True when every sealed round's winners are paid (Game clears its bit).
+    /// @custom:reverts OnlyGame If caller is not GAME.
+    function settleGrowth(uint256 maxWinners) external returns (bool done);
 }

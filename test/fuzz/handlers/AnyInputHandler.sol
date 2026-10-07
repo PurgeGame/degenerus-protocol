@@ -472,14 +472,6 @@ contract AnyInputHandler is Test {
         _call(50, PARIMUTUEL, 0, abi.encodeWithSignature("placeBet(address,bool)", _p(pSeed), over));
     }
 
-    function pm_claim(uint256 a, uint256 pSeed, uint24[] calldata rounds) external act(a) {
-        _call(51, PARIMUTUEL, 0, abi.encodeWithSignature("claim(address,uint24[])", _p(pSeed), rounds));
-    }
-
-    function pm_claimRound(uint256 a, uint24 round, uint256[] calldata pSeeds) external act(a) {
-        _call(52, PARIMUTUEL, 0, abi.encodeWithSignature("claimRound(uint24,address[])", round, _ps(pSeeds)));
-    }
-
     function af_createCode(uint256 a, bytes32 code, uint8 kickback) external act(a) {
         _call(53, AFFILIATE, 0, abi.encodeWithSignature("createAffiliateCode(bytes32,uint8)", code, kickback));
     }
@@ -993,8 +985,8 @@ contract AnyInputHandler is Test {
             "f_approve", "f_decimatorBurn", "d_transfer", "d_transferFrom",
             "d_approve", "d_burn", "s_burn", "s_burnWrapped",
             "s_claimRedemption", "s_claimParkedRedemption", "v_burnEth", "v_burnCoin",
-            "gn_burn", "gn_vote", "pm_placeBet", "pm_claim",
-            "pm_claimRound", "af_createAffiliateCode", "af_referPlayer", "af_claim",
+            "gn_burn", "gn_vote", "pm_placeBet", "unused_51",
+            "unused_52", "af_createAffiliateCode", "af_referPlayer", "af_claim",
             "wx_enter", "wx_claim", "cr_setPreferredBoard", "cr_enterBattle",
             "cr_enterBonusBattle", "cr_enterBonusDay", "cr_amendSlip", "cr_buyFutureCrapsDays",
             "cr_applyCrapsPasses", "cr_convertNormalToHigh", "cr_upgradeReservedDay", "cr_upgradeDayWindows",

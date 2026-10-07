@@ -82,6 +82,7 @@ contract AutoDecimatorGameHarness is DegenerusGame {
 
 contract SdgnrsAutoDecimatorTest is DeployProtocol {
     address private constant HOUSE = ContractAddresses.SDGNRS;
+    uint32 private constant HOUSE_ID = 2;
     uint256 private constant CAP = 8000;
     bytes32 private constant BURN_EVENT = keccak256("DecimatorBurn(address,uint256,uint64)");
     bytes32 private constant RECORDED_EVENT =
@@ -116,7 +117,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
 
     function _fund(uint256 amount) private {
         vm.prank(address(game));
-        coinflip.creditFlip(HOUSE, amount);
+        coinflip.creditFlip(HOUSE_ID, amount);
     }
 
     function _prepare(uint24 day, uint24 lvl, uint256 word, bool opening) private {
@@ -158,7 +159,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         _prepare(21, 4, 3, true);
         harness.applyOpeningWord(21);
         vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScore.selector, player), abi.encode(uint256(500), uint32(0)));
-        vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScoreCached.selector, player), abi.encode(uint256(500)));
+        vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScoreCached.selector, player), abi.encode(uint256(500), uint32(0)));
         vm.prank(address(game)); coin.mintForGame(player, 4_000_000);
         vm.recordLogs();
         vm.prank(player); coin.decimatorBurn(player, 2_000_000, 0);
@@ -191,9 +192,9 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         assertTrue(game.rngLocked(), "carry burn is safe before the broader game unlock");
         assertEq(coin.totalSupply(), supplyBefore, "backing is consumed without minting");
         assertEq(coin.balanceOf(HOUSE), 0);
-        (, bool secondary) = quests.questCompletionToday(HOUSE);
+        (, bool secondary) = quests.questCompletionToday(HOUSE_ID);
         assertTrue(secondary, "opening day's decimator quest completes");
-        (, bool afking) = quests.effectiveBaseStreakAndAfking(HOUSE);
+        (, bool afking) = quests.effectiveBaseStreakAndAfking(HOUSE_ID);
         assertTrue(afking, "activity reads the active afking run");
         uint256 questReward = coinflip.coinflipAmount(HOUSE);
         assertGt(questReward, 0, "quest pays a next-day flip credit");
@@ -380,9 +381,9 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         vm.prank(address(game));
         quests.rollDailyQuest(21, 3, false, false, true);
         assertEq(_autoBurn(), 2000);
-        (, bool secondary) = quests.questCompletionToday(HOUSE);
+        (, bool secondary) = quests.questCompletionToday(HOUSE_ID);
         assertTrue(secondary);
-        (,, uint128[2] memory progress,) = quests.playerQuestStates(HOUSE);
+        (,, uint128[2] memory progress,) = quests.playerQuestStates(HOUSE_ID);
         assertEq(progress[1], 2000);
     }
 

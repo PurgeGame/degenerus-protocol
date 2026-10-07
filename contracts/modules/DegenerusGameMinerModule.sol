@@ -38,10 +38,12 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
         return uint8(_nextMinerAction(msg.sender));
     }
 
-    /// @dev Permissionless cache refresh, executed against Game storage only.
-    function playerActivityScoreCached(address player) external returns (uint256) {
+    /// @dev Permissionless cache refresh, executed against Game storage only. Returns the
+    ///      wallet ID beside the score (0 for an unregistered wallet; never allocated here).
+    function playerActivityScoreCached(address player) external returns (uint256 score, uint32 id) {
         if (address(this) != ContractAddresses.GAME) revert E();
-        return _playerActivityScoreCached(player, _effectiveQuestStreak(player));
+        id = _walletIdOf(player);
+        score = _playerActivityScoreCached(player, _effectiveQuestStreak(id));
     }
 
     function mineFlip() external {
@@ -75,6 +77,17 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
                 // That selector read is the certificate's evidence, so certify from it:
                 // the action can never be reselected in the same state.
                 _setRngComplete(true);
+                moved = true;
+                continue;
+            }
+
+            if (action == MinerAction.GrowthSettle) {
+                // Selected only while the pending bit is set. Every call moves the settlement
+                // cursor at least one step (pays a winner or steps past a paid sealed round), or
+                // reports every sealed round paid and clears the bit, so the stage always
+                // progresses. Settlement is revert-free for committed state.
+                if (!MineFlipGas.canRun(meter, GasBounds.GROWTH_SETTLE_GAS, RETURN_RESERVE + WORKER_BOUNDARY)) break;
+                if (parimutuel.settleGrowth(GasBounds.GROWTH_SETTLE_WINNERS)) _setGrowthSettlePending(false);
                 moved = true;
                 continue;
             }
@@ -228,14 +241,24 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
             // Legacy raw reward was floor(numerator * 1e18 / denominator). Preserve its
             // zero cutoff without multiplying, then pay whole FLIP with the existing minimum.
             if (numerator >= (denominator - 1) / 1e18 + 1) {
-                reward = numerator / denominator;
-                if (reward == 0) reward = 1;
-                // Coinflip stakes are whole FLIP: a positive reward pays at least 1 FLIP, larger
-                // rewards floor to whole FLIP. Applied after the gas measurement, so the
-                // normalization cannot price itself. Both events report this figure; below the
-                // daily stake cap it is exactly what Coinflip credits.
-                coinflip.creditFlip(msg.sender, reward);
-                emit MinerBounty(MINER_BOUNTY_ADVANCE, msg.sender, reward);
+                // The stake ledger is keyed by wallet ID. A keeper without one is registered on
+                // its first bounty, after the measured work; past paid admission that bounty is
+                // dropped (no registration, no credit). Registration writes the keeper's mint
+                // word, and nothing after it in this call writes that word.
+                uint32 minerId = _walletIdOf(msg.sender);
+                if (minerId == 0 && wallets.length <= PAID_ADMISSION_WALLETS) {
+                    (minerId, ) = _registerWallet(msg.sender, 0);
+                }
+                if (minerId != 0) {
+                    reward = numerator / denominator;
+                    if (reward == 0) reward = 1;
+                    // Coinflip stakes are whole FLIP: a positive reward pays at least 1 FLIP,
+                    // larger rewards floor to whole FLIP. Applied after the gas measurement, so
+                    // the normalization cannot price itself. Both events report this figure;
+                    // below the daily stake cap it is exactly what Coinflip credits.
+                    coinflip.creditFlip(minerId, reward);
+                    emit MinerBounty(MINER_BOUNTY_ADVANCE, msg.sender, reward);
+                }
             }
         }
         emit MinerWork(msg.sender, uint8(first), used, reward);

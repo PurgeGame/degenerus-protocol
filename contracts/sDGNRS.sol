@@ -86,8 +86,9 @@ interface ICoinflipPlayer {
     function withdrawRedeemedFlip(uint256 base) external returns (uint256 removed);
     /// @notice Read a player's auto-rebuy config; `carry` is the rolling FLIP bankroll.
     function coinflipAutoRebuyInfo(address player) external view returns (bool enabled, uint256 stop, uint256 carry, uint24 startDay);
-    /// @notice Credit a FLIP flip stake to a player (sDGNRS is an authorized flip creditor).
-    function creditFlip(address player, uint256 amount) external;
+    /// @notice Credit a FLIP flip stake to wallet `id` (sDGNRS is an authorized flip creditor;
+    ///         0 is a no-op).
+    function creditFlip(uint32 id, uint256 amount) external;
 }
 
 /// @notice Interface for DGNRS wrapper contract used by sDGNRS.
@@ -1139,8 +1140,8 @@ contract sDGNRS {
     ///      claim. Callers must have verified the batch is resolved and (in terminal mode) that the
     ///      caller is `player` or an operator `player` approved on the Game, and pass `player`'s
     ///      wallet ID; the pending-claim existence check lives here, returning false on an empty
-    ///      (wallet ID, batch) slot. The claim and Game credits run by ID; `player` receives the
-    ///      FLIP credit, terminal ETH, events and the box resolver's address argument.
+    ///      (wallet ID, batch) slot. The claim, the Game credits and the FLIP credit run by ID;
+    ///      `player` receives terminal ETH, events and the box resolver's address argument.
     ///      The claim's share of the batch is pro rata by tokens: one close price for every token.
     function _claimRedemptionFor(address player, uint32 walletId, uint32 batchId, bool isTerminal, uint256 word)
         private returns (bool)
@@ -1172,7 +1173,7 @@ contract sDGNRS {
             uint256 principal = (uint256(batch.flipEscrow) * claim.tokens) / batch.tokens;
             if (principal != 0) {
                 flipPaid = principal + (principal * uint256(batch.flipReward)) / 100;
-                coinflip.creditFlip(player, flipPaid);
+                coinflip.creditFlip(walletId, flipPaid);
             }
         }
 

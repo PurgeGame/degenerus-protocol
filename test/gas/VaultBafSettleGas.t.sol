@@ -40,7 +40,7 @@ contract VaultSettleSeeder is CoinflipStakeSetter {
         s.autoRebuyCarry = 0;
         uint24 lossDay = last + gap / 2;
         for (uint24 d = last + 1; d <= latest; ++d) {
-            _setFlipStake(d, v, 5_000 ether);
+            _setFlipStake(d, 1, 5_000 ether);
             _storeDayResult(d, 150, d != lossDay);
         }
         flipsClaimableDay = latest;

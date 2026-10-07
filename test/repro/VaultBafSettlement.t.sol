@@ -18,9 +18,9 @@ abstract contract VaultBafRig is DeployProtocol {
     address internal buyer = address(0xB4A1);
 
     /// @dev Daily protocol-style flip credit to the vault (whole FLIP), staked tomorrow.
-    uint256 internal constant VAULT_CREDIT = 5_000 ether;
+    uint256 internal constant VAULT_CREDIT = 5_000;
 
-    bytes32 internal constant BAF_RECORDED = keccak256("BafFlipRecorded(address,uint24,uint256,uint256)");
+    bytes32 internal constant BAF_RECORDED = keccak256("BafFlipRecorded(uint32,uint24,uint256,uint256)");
     bytes32 internal constant DAY_RESOLVED = keccak256("CoinflipDayResolved(uint24,bool,uint16,uint128)");
     bytes32 internal constant DRAW_ARMED = keccak256("BafDrawArmed(uint24)");
 
@@ -44,6 +44,7 @@ abstract contract VaultBafRig is DeployProtocol {
         vm.deal(buyer, 500_000 ether);
         mockVRF.fundSubscription(1, 1_000 ether);
         deal(address(coin), buyer, 5_000_000 ether, true);
+        _giveWalletId(REF);
     }
 
     // ---------------------------------------------------------------------
@@ -73,7 +74,7 @@ abstract contract VaultBafRig is DeployProtocol {
     /// @dev One day's player and protocol actions, before the day boundary.
     function _stageDay() internal {
         vm.prank(address(game));
-        coinflip.creditFlip(VAULT, VAULT_CREDIT);
+        coinflip.creditFlip(1, VAULT_CREDIT);
         if (!game.jackpotPhase()) {
             (uint24 lvl, , , , ) = game.purchaseInfo();
             if (lvl != heldLevel) (heldLevel, heldDays) = (lvl, 0);
@@ -161,16 +162,16 @@ abstract contract VaultBafRig is DeployProtocol {
     // Jackpots: bafPlayer slot 0, bafLevel slot 2)
     // ---------------------------------------------------------------------
 
-    function _stakeSlot(uint24 key, address p) internal pure returns (bytes32) {
-        return keccak256(abi.encode(p, keccak256(abi.encode(uint256(key), uint256(0)))));
+    function _stakeSlot(uint24 key, address p) internal view returns (bytes32) {
+        return keccak256(abi.encode(uint256(game.walletIdOf(p)), keccak256(abi.encode(uint256(key), uint256(0)))));
     }
 
     function _stateSlot(address p) internal pure returns (bytes32) {
         return keccak256(abi.encode(p, uint256(2)));
     }
 
-    function _scoreSlot(address p, uint24 lvl) internal pure returns (bytes32) {
-        return keccak256(abi.encode(p, keccak256(abi.encode(uint256(lvl), uint256(0)))));
+    function _scoreSlot(address p, uint24 lvl) internal view returns (bytes32) {
+        return keccak256(abi.encode(uint256(game.walletIdOf(p)), keccak256(abi.encode(uint256(lvl), uint256(0)))));
     }
 
     /// @dev The claimer takes the vault's whole coinflip position: state words and every stake
@@ -178,7 +179,11 @@ abstract contract VaultBafRig is DeployProtocol {
     function _mirrorVault(uint24 throughDay) internal {
         bytes32 v = _stateSlot(VAULT);
         bytes32 r = _stateSlot(REF);
-        vm.store(address(coinflip), r, vm.load(address(coinflip), v));
+        // The state word carries the cached wallet ID (bits 184..215): the claimer keeps its own.
+        uint256 idMask = uint256(type(uint32).max) << 184;
+        uint256 stateA = (uint256(vm.load(address(coinflip), v)) & ~idMask)
+            | (uint256(game.walletIdOf(REF)) << 184);
+        vm.store(address(coinflip), r, bytes32(stateA));
         vm.store(address(coinflip), bytes32(uint256(r) + 1), vm.load(address(coinflip), bytes32(uint256(v) + 1)));
         for (uint24 k; k <= throughDay >> 3; ++k) {
             vm.store(address(coinflip), _stakeSlot(k, REF), vm.load(address(coinflip), _stakeSlot(k, VAULT)));
@@ -223,7 +228,7 @@ abstract contract VaultBafRig is DeployProtocol {
         uint256 w = uint256(vm.load(address(coinflip), _stakeSlot(day >> 3, p)));
         uint256 units = uint256(uint32(w >> ((uint256(day) & 7) << 5)));
         if (p == VAULT) units += _seedUnits(day);
-        return units * 1 ether;
+        return units;
     }
 
     function _lastClaim(address p) internal view returns (uint24) {
@@ -274,7 +279,7 @@ abstract contract VaultBafRig is DeployProtocol {
 
     function _isRecorded(Vm.Log memory l, address player, uint24 lvl) internal view returns (bool) {
         return l.emitter == address(jackpots) && l.topics.length == 3 && l.topics[0] == BAF_RECORDED
-            && l.topics[1] == bytes32(uint256(uint160(player))) && l.topics[2] == bytes32(uint256(lvl));
+            && l.topics[1] == bytes32(uint256(game.walletIdOf(player))) && l.topics[2] == bytes32(uint256(lvl));
     }
 
     function _logIndex(Vm.Log[] memory logs, address emitter, bytes32 sig, bytes32 topic1)
@@ -450,7 +455,7 @@ contract VaultBafSettlement is VaultBafRig {
 
         uint256 resolvedAt = _logIndex(logs, address(coinflip), DAY_RESOLVED, bytes32(uint256(latchDay)));
         uint256 armedAt = _logIndex(logs, address(coinflip), DRAW_ARMED, bytes32(uint256(latchDay + 1)));
-        uint256 recordedAt = _logIndex(logs, address(jackpots), BAF_RECORDED, bytes32(uint256(uint160(VAULT))));
+        uint256 recordedAt = _logIndex(logs, address(jackpots), BAF_RECORDED, bytes32(uint256(1)));
         assertLt(resolvedAt, armedAt, "the draw arms after the latch day's result is applied");
         assertLt(armedAt, recordedAt, "the vault settles at the arming, after the applied result");
         assertEq(_countRecorded(logs, VAULT, 10), 1, "one settlement on the latch day");

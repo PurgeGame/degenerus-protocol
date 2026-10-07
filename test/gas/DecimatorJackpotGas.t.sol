@@ -23,8 +23,8 @@ import {Craps} from "../../contracts/Craps.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 
 contract DecimatorGasCoinflip {
-    mapping(address => uint256) public credited;
-    function creditFlip(address owner, uint256 amount) external { credited[owner] += amount; }
+    mapping(uint32 => uint256) public credited;
+    function creditFlip(uint32 owner, uint256 amount) external { credited[owner] += amount; }
 }
 
 contract DecimatorGeneratedEngineMeter {
@@ -71,8 +71,10 @@ contract DecimatorGasHost is DecimatorJackpotHarness, BucketSeed {
         _recordDailyRng(day, rngWordCurrent);
         subsFullyProcessed = true;
         _afkingResetDay = day;
+        _seedWallet(msg.sender);
         if (activePass) mintPacked_[msg.sender] |= uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT;
     }
+    function idOf(address who) external view returns (uint32) { return _walletIdOf(who); }
     function seedRecipients(uint256 n) external {
         for (uint8 q; q < 4; ++q) {
             deityBySymbol[q * 8] = 0;
@@ -465,7 +467,7 @@ contract DecimatorJackpotGasTest is Test {
         assertEq(naturalRuns + receivedEntries, 1000);
         assertEq(h.round(5).cursor, 1000);
         assertEq(h.round(5).winners, 200);
-        assertEq(DecimatorGasCoinflip(ContractAddresses.COINFLIP).credited(address(this)), totalReward);
+        assertEq(DecimatorGasCoinflip(ContractAddresses.COINFLIP).credited(h.idOf(address(this))), totalReward);
         emit log_named_uint("original and generated count each", originals);
         emit log_named_uint("sampled generated runs", receivedEntries);
         emit log_named_uint("sampled natural runs", naturalRuns);

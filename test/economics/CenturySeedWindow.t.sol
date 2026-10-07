@@ -180,7 +180,7 @@ contract CenturySeedWindow is DeployProtocol {
         _leaveDeployWindow();
         // Give sDGNRS a standing stake on the window's first day, the way auto-rebuy would.
         vm.prank(address(game));
-        coinflip.creditFlip(ContractAddresses.SDGNRS, 12_345);
+        coinflip.creditFlip(2, 12_345);
 
         uint256 before = _stakeAtOffset(ContractAddresses.SDGNRS, 0);
         assertGt(before, 0, "non-vacuous: sDGNRS holds a stake before arming");
@@ -247,7 +247,7 @@ contract CenturySeedWindow is DeployProtocol {
     ///      cannot stall the crank; the seed rides on top of the stored lane.
     function testFlipLaneSaturatesRatherThanRevertingTheCrank() public {
         vm.prank(address(game));
-        coinflip.creditFlip(ContractAddresses.VAULT, type(uint128).max);
+        coinflip.creditFlip(1, type(uint128).max);
         uint256 cap = uint256(type(uint32).max);
         assertEq(_stakeAtOffset(ContractAddresses.VAULT, 0), cap + SEED_FLIP_DAILY, "deploy seed on a capped lane");
         for (uint24 century = 1; century <= 90; ++century) {

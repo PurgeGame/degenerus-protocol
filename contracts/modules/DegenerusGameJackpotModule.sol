@@ -1264,7 +1264,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
                 (flipCredit / FlipRoundLib.FLIP_ROUND_UNIT) *
                 FlipRoundLib.FLIP_ROUND_UNIT;
             if (flipCredit != 0) {
-                coinflip.creditFlip(_payee(_walletElement(winner)), flipCredit);
+                coinflip.creditFlip(winner, flipCredit);
             }
         }
         if (wwxrpAward != 0) {

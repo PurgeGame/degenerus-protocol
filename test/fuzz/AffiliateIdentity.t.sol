@@ -5,7 +5,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
-import {AffiliateIdentityLib} from "../../contracts/libraries/AffiliateIdentityLib.sol";
+import {WalletTableLib} from "../../contracts/libraries/WalletTableLib.sol";
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
@@ -13,11 +13,13 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 contract AffiliateIdentitySeeder is DegenerusGameStorage {
     function length(uint256 n) external { assembly ("memory-safe") { sstore(wallets.slot, add(n, 1)) } }
     function presale(bool value) external { presaleOver = !value; }
-    function rawOwner(uint32 id) external view returns (address) { return AffiliateIdentityLib.ownerOf(id); }
+    function rawOwner(uint32 id) external view returns (address) { return WalletTableLib.ownerOf(id); }
+    function setElement(uint32 id, uint256 word) external { wallets[id] = word; }
 }
 
 contract AffiliateIdentityTest is DeployProtocol {
     uint256 constant CAP = 3_000_000_000;
+    uint32 constant VAULT_ID = 1;
     bytes32 constant A = bytes32("ID_A");
     bytes32 constant B = bytes32("ID_B");
     bytes32 constant C = bytes32("ID_C");
@@ -52,13 +54,13 @@ contract AffiliateIdentityTest is DeployProtocol {
             if ((branch == 0 && roll < 15) || (branch == 1 && roll >= 15 && roll < 19) || (branch == 2 && roll == 19)) return (buyer, buyerId);
         }
     }
-    function _pay(bytes32 code, uint256 branch, uint256 nonce) private returns (address winner) {
+    function _pay(bytes32 code, uint256 branch, uint256 nonce) private returns (uint32 winnerId) {
         (address buyer, uint32 buyerId) = _buyer(code, branch, nonce);
         vm.prank(address(game));
-        (winner,,) = affiliate.payAffiliateCombined(code, buyer, buyerId, 5, 10000, 0, 0, 0, 0);
+        (winnerId,,) = affiliate.payAffiliateCombined(code, buyer, buyerId, 5, 10000, 0, 0, 0, 0);
     }
-    function _earningsSlot(uint24 lvl, address owner) private pure returns (bytes32) {
-        return keccak256(abi.encode(owner, keccak256(abi.encode(lvl, uint256(1)))));
+    function _earningsSlot(uint24 lvl, address owner) private view returns (bytes32) {
+        return keccak256(abi.encode(uint256(_id(owner)), keccak256(abi.encode(lvl, uint256(1)))));
     }
     function _earningsWord(uint24 lvl, address owner) private view returns (uint256) {
         return uint256(vm.load(address(affiliate), _earningsSlot(lvl, owner)));
@@ -79,14 +81,14 @@ contract AffiliateIdentityTest is DeployProtocol {
         for (uint256 i; i < logs.length; ++i) assertTrue(logs[i].topics[0] != entry, "identity emitted a ticket entry");
         uint32 id = _id(fresh);
         assertGt(id, 0);
-        assertEq(affiliate.affiliateWalletId(defaultCode), id);
+        (address defaultOwner, uint32 defaultOwnerId,) = affiliate.affiliateCode(defaultCode);
+        assertEq(defaultOwner, fresh); assertEq(defaultOwnerId, id);
         assertEq(game.entriesOwedView(1, fresh), 0);
         vm.prank(fresh); affiliate.createAffiliateCode(aliasCode, 12);
         vm.prank(c); affiliate.referPlayer(aliasCode);
-        assertEq(affiliate.affiliateWalletId(aliasCode), id);
-        (address owner, uint8 kickback) = affiliate.affiliateCode(aliasCode);
-        assertEq(owner, fresh); assertEq(kickback, 12);
-        (, kickback) = affiliate.affiliateCode(defaultCode);
+        (address owner, uint32 ownerId, uint8 kickback) = affiliate.affiliateCode(aliasCode);
+        assertEq(owner, fresh); assertEq(ownerId, id); assertEq(kickback, 12);
+        (,, kickback) = affiliate.affiliateCode(defaultCode);
         assertEq(kickback, 0);
         assertEq(_codeWord(defaultCode), 0, "default identity created a code slot");
     }
@@ -104,7 +106,8 @@ contract AffiliateIdentityTest is DeployProtocol {
         uint32 ticketId = _id(fresh);
         vm.prank(fresh); affiliate.createAffiliateCode(freshCode, 7);
         assertEq(_id(fresh), ticketId);
-        assertEq(affiliate.affiliateWalletId(freshCode), ticketId);
+        (, uint32 codeOwnerId,) = affiliate.affiliateCode(freshCode);
+        assertEq(codeOwnerId, ticketId);
     }
 
     function test_CapAllowsLastIdExistingAliasesAndAtomicFailure() public {
@@ -122,7 +125,7 @@ contract AffiliateIdentityTest is DeployProtocol {
         vm.expectRevert(bytes4(keccak256("E()")));
         vm.prank(rejected); affiliate.createAffiliateCode(rejectedCode, 0);
         assertEq(_id(rejected), 0);
-        (address owner,) = affiliate.affiliateCode(rejectedCode);
+        (address owner,,) = affiliate.affiliateCode(rejectedCode);
         assertEq(owner, address(0), "failed creation reserved a code");
         vm.expectRevert(bytes4(keccak256("E()")));
         vm.prank(b); affiliate.referPlayer(bytes32(uint256(uint160(rejected))));
@@ -131,37 +134,26 @@ contract AffiliateIdentityTest is DeployProtocol {
         assertEq(affiliate.getReferrer(b), lastOwner);
     }
 
-    function test_OptionalUnregisteredUplineStillPaysAtCapacity() public {
-        // A valid default-address referral can exist before its owner receives an ID.
-        address unregistered = address(0xF11);
-        vm.store(address(affiliate), keccak256(abi.encode(a, uint256(2))), bytes32(uint256(uint160(unregistered))));
-        _length(CAP);
-        assertEq(_pay(A, 1, 0), unregistered);
-        assertGt(_id(a), 0);
-        assertEq(_id(unregistered), 0);
-        assertEq((_earningsWord(5, a) >> 192) & 1, 0, "missing ID marked a cache valid");
-    }
-
     function test_LateReferralAndSecondHopAreNotFrozenByEarlierPayouts() public {
-        assertEq(_pay(A, 1, 0), ContractAddresses.VAULT);
+        assertEq(_pay(A, 1, 0), VAULT_ID);
         assertEq((_earningsWord(5, a) >> 192) & 3, 0);
         vm.prank(a); affiliate.referPlayer(B);
-        assertEq(_pay(A, 1, 100), b);
-        assertEq(_pay(A, 2, 200), ContractAddresses.VAULT);
+        assertEq(_pay(A, 1, 100), _id(b));
+        assertEq(_pay(A, 2, 200), VAULT_ID);
         assertEq((_earningsWord(5, a) >> 192) & 3, 1, "unset second hop cached a fallback");
         vm.prank(b); affiliate.referPlayer(C);
-        assertEq(_pay(A, 2, 300), c);
+        assertEq(_pay(A, 2, 300), _id(c));
         assertEq((_earningsWord(5, a) >> 192) & 3, 3);
-        assertEq(_pay(A, 1, 400), b);
-        assertEq(_pay(A, 2, 500), c);
-        (address owner, uint8 kickback) = affiliate.affiliateCode(A);
-        assertEq(owner, a); assertEq(kickback, 12);
+        assertEq(_pay(A, 1, 400), _id(b));
+        assertEq(_pay(A, 2, 500), _id(c));
+        (address owner, uint32 ownerId, uint8 kickback) = affiliate.affiliateCode(A);
+        assertEq(owner, a); assertEq(ownerId, _id(a)); assertEq(kickback, 12);
     }
 
     function test_PresaleVaultReferralIsPermanentAndCacheable() public {
         _seed(abi.encodeCall(AffiliateIdentitySeeder.presale, (true)));
         vm.prank(a); affiliate.referPlayer(bytes32("VAULT"));
-        assertEq(_pay(A, 1, 0), ContractAddresses.VAULT);
+        assertEq(_pay(A, 1, 0), VAULT_ID);
         assertEq((_earningsWord(5, a) >> 192) & 1, 1);
         vm.expectRevert(bytes4(keccak256("Insufficient()")));
         vm.prank(a); affiliate.referPlayer(B);
@@ -171,7 +163,7 @@ contract AffiliateIdentityTest is DeployProtocol {
         assertEq(affiliate.getReferrer(a), ContractAddresses.VAULT);
         vm.prank(address(game)); affiliate.payAffiliate(10000, C, a, aId, 5, true, 0);
         assertEq(affiliate.getReferrer(a), ContractAddresses.VAULT);
-        assertEq(_pay(A, 1, 100), ContractAddresses.VAULT);
+        assertEq(_pay(A, 1, 100), VAULT_ID);
     }
 
     function test_PresaleLockedDefaultCannotBeReplaced() public {
@@ -185,44 +177,32 @@ contract AffiliateIdentityTest is DeployProtocol {
         assertEq(affiliate.getReferrer(a), ContractAddresses.VAULT);
     }
 
-    function test_MissingUplineIdFallsBackWithoutAllocatingEvenBelowCap() public {
-        address unregistered = address(0xF11);
-        vm.store(address(affiliate), keccak256(abi.encode(a, uint256(2))), bytes32(uint256(uint160(unregistered))));
-        assertEq(_pay(A, 1, 0), unregistered);
-        assertEq(_id(unregistered), 0);
-        assertEq((_earningsWord(5, a) >> 192) & 1, 0);
-        // Once independently registered, the next hit can fill the same earnings word.
-        vm.prank(unregistered); affiliate.createAffiliateCode(bytes32("LATER_ID"), 0);
-        assertEq(_pay(A, 1, 100), unregistered);
-        assertEq(uint32(_earningsWord(5, a) >> 128), _id(unregistered));
-    }
-
     function test_DefaultCacheSharesEarningsWriteAndRefillsAcrossLevels() public {
         vm.prank(a); affiliate.referPlayer(B);
         vm.prank(b); affiliate.referPlayer(C);
         bytes32 code = bytes32(uint256(uint160(a)));
-        assertEq(_pay(code, 2, 0), c);
+        assertEq(_pay(code, 2, 0), _id(c));
         uint256 first = _earningsWord(5, a);
         assertEq(uint128(first), 2000);
         assertEq(uint32(first >> 128), _id(b));
         assertEq(uint32(first >> 160), _id(c));
         assertEq(first >> 192, 3);
         assertEq(_codeWord(code), 0, "default route wrote a code word");
-        assertEq(_pay(code, 0, 100), a);
+        assertEq(_pay(code, 0, 100), _id(a));
         assertEq(_earningsWord(5, a) >> 128, first >> 128, "direct hit erased cache");
-        assertEq(affiliate.affiliateScore(5, a), 4000);
+        assertEq(affiliate.affiliateScore(5, _id(a)), 4000);
         assertEq(affiliate.totalAffiliateScore(5), 4000);
         // Bonus points must ignore the high cache bits.
-        uint256 bonus = affiliate.affiliateBonusPointsBest(6, a);
+        uint256 bonus = affiliate.affiliateBonusPointsBest(6, _id(a));
         vm.store(address(affiliate), _earningsSlot(5, a), bytes32(uint256(4000)));
-        assertEq(affiliate.affiliateBonusPointsBest(6, a), bonus);
+        assertEq(affiliate.affiliateBonusPointsBest(6, _id(a)), bonus);
         vm.store(address(affiliate), _earningsSlot(5, a), bytes32(_earningsWord(5, a) | (first & ~uint256(type(uint128).max))));
         (address buyer, uint32 buyerId) = _buyer(code, 2, 200);
         vm.prank(address(game));
-        (address winner,,) = affiliate.payAffiliateCombined(code, buyer, buyerId, 6, 10000, 0, 0, 0, 0);
-        assertEq(winner, c);
+        (uint32 winner,,) = affiliate.payAffiliateCombined(code, buyer, buyerId, 6, 10000, 0, 0, 0, 0);
+        assertEq(winner, _id(c));
         assertEq(_earningsWord(6, a) >> 128, first >> 128);
-        assertEq(affiliate.affiliateScore(6, a), 2000);
+        assertEq(affiliate.affiliateScore(6, _id(a)), 2000);
         assertEq(_codeWord(code), 0);
     }
 
@@ -232,21 +212,24 @@ contract AffiliateIdentityTest is DeployProtocol {
         bytes32 code = bytes32("CACHED_AT_CREATION");
         vm.prank(a); affiliate.createAffiliateCode(code, 15);
         uint256 beforeWord = _codeWord(code);
-        assertEq(uint32(beforeWord >> 168), _id(b));
-        assertEq(uint32(beforeWord >> 200), _id(c));
-        assertEq((beforeWord >> 232) & 7, 7);
-        assertEq(_pay(code, 2, 0), c);
+        assertEq(uint32(beforeWord), _id(a));
+        assertEq(uint8(beforeWord >> 32), 15);
+        assertEq(uint32(beforeWord >> 40), _id(b));
+        assertEq(uint32(beforeWord >> 72), _id(c));
+        assertEq(beforeWord >> 104, 6, "both upline caches valid, not pending");
+        assertEq(uint256(vm.load(address(affiliate), bytes32(uint256(keccak256(abi.encode(code, uint256(0)))) + 1))), 0, "code info is one slot");
+        assertEq(_pay(code, 2, 0), _id(c));
         assertEq(_codeWord(code), beforeWord);
-        assertEq(affiliate.affiliateScore(5, a), 2000);
+        assertEq(affiliate.affiliateScore(5, _id(a)), 2000);
     }
 
     function test_EarningsWidthBoundaryRevertsWithoutCorruptingCache() public {
         vm.prank(a); affiliate.referPlayer(B);
-        assertEq(_pay(A, 1, 0), b);
+        assertEq(_pay(A, 1, 0), _id(b));
         uint256 cache = _earningsWord(5, a) & ~uint256(type(uint128).max);
         vm.store(address(affiliate), _earningsSlot(5, a), bytes32(cache | (uint256(type(uint128).max) - 2000)));
-        assertEq(_pay(A, 0, 100), a);
-        assertEq(affiliate.affiliateScore(5, a), type(uint128).max);
+        assertEq(_pay(A, 0, 100), _id(a));
+        assertEq(affiliate.affiliateScore(5, _id(a)), type(uint128).max);
         uint256 beforeWord = _earningsWord(5, a);
         (address buyer, uint32 buyerId) = _buyer(A, 1, 200);
         vm.expectRevert(bytes4(keccak256("EarningsOverflow()")));
@@ -262,6 +245,15 @@ contract AffiliateIdentityTest is DeployProtocol {
         vm.prank(b); affiliate.referPlayer(A);
         assertEq(seeder.rawOwner(_id(a)), a);
         assertEq(seeder.rawOwner(_id(c) + 1), address(0));
+    }
+
+    function test_OwnerOfDecodesOnlyTheLow160Bits() public {
+        uint32 aId = _id(a);
+        uint256 smurfAndCounts = uint256(0xDEADBEEF) << 160;
+        _seed(abi.encodeCall(AffiliateIdentitySeeder.setElement, (aId, uint256(uint160(a)) | smurfAndCounts)));
+        AffiliateIdentitySeeder seeder = new AffiliateIdentitySeeder();
+        assertEq(seeder.rawOwner(aId), a, "high bits do not leak into the owner");
+        assertEq(seeder.rawOwner(0), address(0), "element 0 is never written");
     }
 
     function test_UnauthorizedAllocationCannotConsumeAnId() public {
@@ -283,10 +275,10 @@ contract AffiliateIdentityTest is DeployProtocol {
         assertEq(game.entriesOwedView(1, fresh), 0);
         vm.prank(fresh); affiliate.createAffiliateCode(bytes32("NEW_ALIAS"), 25);
         assertEq(_id(fresh), id);
-        (address owner, uint8 kickback) = affiliate.affiliateCode(bytes32("NEW_CUSTOM"));
-        assertEq(owner, fresh); assertEq(kickback, 4);
-        (owner, kickback) = affiliate.affiliateCode(bytes32("NEW_ALIAS"));
-        assertEq(owner, fresh); assertEq(kickback, 25);
-        assertEq((_codeWord(bytes32("NEW_CUSTOM")) >> 232) & 1, 1);
+        (address owner, uint32 ownerId, uint8 kickback) = affiliate.affiliateCode(bytes32("NEW_CUSTOM"));
+        assertEq(owner, fresh); assertEq(ownerId, id); assertEq(kickback, 4);
+        (owner, ownerId, kickback) = affiliate.affiliateCode(bytes32("NEW_ALIAS"));
+        assertEq(owner, fresh); assertEq(ownerId, id); assertEq(kickback, 25);
+        assertEq(uint32(_codeWord(bytes32("NEW_CUSTOM"))), id);
     }
 }

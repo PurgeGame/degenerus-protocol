@@ -13,16 +13,20 @@ contract WwxrpRecyclingGameMock {
     uint24 public level;
     function setWord(uint24 day, uint256 word) external { rngWordForDay[day] = word; }
     function setActivity(address player, uint256 score) external { playerActivityScore[player] = score; }
-    function playerActivityScoreCached(address player) external view returns (uint256) { return playerActivityScore[player]; }
+    mapping(address => uint32) public walletIdOf;
+    function setId(address player, uint32 id) external { walletIdOf[player] = id; }
+    function playerActivityScoreCached(address player) external view returns (uint256, uint32) {
+        return (playerActivityScore[player], walletIdOf[player]);
+    }
     function setLevel(uint24 value) external { level = value; }
     function extsload(bytes32) external pure returns (bytes32) { return bytes32(0); }
 }
 
 contract WwxrpRecyclingCoinflipMock {
-    mapping(address => uint256) public credited;
+    mapping(uint32 => uint256) public credited;
     uint256 public totalCredited;
-    function creditFlip(address player, uint256 amount) external {
-        credited[player] += amount;
+    function creditFlip(uint32 id, uint256 amount) external {
+        credited[id] += amount;
         totalCredited += amount;
     }
 }
@@ -45,11 +49,18 @@ contract WWXRPRecyclingTest is Test {
         vm.warp((uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) + day - 1) * 1 days + 82620);
     }
 
-    function _actor(uint24 day, uint8 bucket, uint256 salt) private view returns (address player) {
+    function _actor(uint24 day, uint8 bucket, uint256 salt) private returns (address player) {
         for (uint256 i = salt + 1; ; ++i) {
-            player = address(uint160(uint256(keccak256(abi.encode(day, bucket, i)))));
-            if (token.bucketOf(day, player) == bucket) return player;
+            uint32 id = uint32(i);
+            if (token.bucketOf(day, id) != bucket) continue;
+            player = address(uint160(uint256(keccak256(abi.encode(day, bucket, id)))));
+            game.setId(player, id);
+            return player;
         }
+    }
+
+    function _id(address player) private view returns (uint32) {
+        return game.walletIdOf(player);
     }
 
     function _mint(address player, uint256 amount) private {
@@ -80,8 +91,8 @@ contract WWXRPRecyclingTest is Test {
         assertEq(raw, 0);
         assertEq(total, 0);
         assertEq(count, 0);
-        (address player, uint256 endpoint) = token.entryAt(day, bucket, index);
-        assertEq(player, address(0));
+        (uint32 player, uint256 endpoint) = token.entryAt(day, bucket, index);
+        assertEq(player, 0);
         assertEq(endpoint, 0);
     }
 
@@ -96,7 +107,7 @@ contract WWXRPRecyclingTest is Test {
         assertTrue(available && prize);
         uint256 snapshot = vm.snapshotState();
         token.claim(2, 0);
-        assertEq(coinflip.credited(player), 10_000);
+        assertEq(coinflip.credited(_id(player)), 10_000);
         vm.expectRevert(WWXRP.AlreadyClaimed.selector);
         token.claim(2, 0);
         assertTrue(vm.revertToState(snapshot));
@@ -104,7 +115,7 @@ contract WWXRPRecyclingTest is Test {
         // Both newer banks may be populated without affecting day 2's last claim day.
         _enter(_actor(4, 0, 0), 75);
         token.claim(2, 0);
-        assertEq(coinflip.credited(player), 10_000);
+        assertEq(coinflip.credited(_id(player)), 10_000);
         _day(5);
         _enter(_actor(5, 0, 0), 100);
         _assertEmpty(2, 0, 0);
@@ -128,7 +139,7 @@ contract WWXRPRecyclingTest is Test {
         assertEq(coinflip.totalCredited(), 0);
         game.setWord(6, _winningWord(5, 0));
         token.claim(5, 0);
-        assertEq(coinflip.credited(next), 10_000);
+        assertEq(coinflip.credited(_id(next)), 10_000);
         assertFalse(token.dayClaimed(2));
     }
 
@@ -138,21 +149,21 @@ contract WWXRPRecyclingTest is Test {
         _day(5);
         address next = _actor(5, 0, 0);
         _enter(next, 25);
-        (address tail, uint256 endpoint) = token.entryAt(5, 0, 1);
-        assertEq(tail, address(0));
+        (uint32 tail, uint256 endpoint) = token.entryAt(5, 0, 1);
+        assertEq(tail, 0);
         assertEq(endpoint, 0);
         _assertEmpty(2, 0, 3);
         _day(6);
         game.setWord(6, _winningWord(5, 0));
         vm.expectRevert(WWXRP.EntryMissing.selector);
         token.claim(5, 1);
-        (bool found, uint32 index, address winner) = token.findWinningEntry(5);
+        (bool found, uint32 index, uint32 winner) = token.findWinningEntry(5);
         assertTrue(found);
         assertEq(index, 0);
-        assertEq(winner, next);
+        assertEq(winner, _id(next));
         token.claim(5, index);
-        assertEq(coinflip.credited(previous), 0);
-        assertEq(coinflip.credited(next), 10_000);
+        assertEq(coinflip.credited(_id(previous)), 0);
+        assertEq(coinflip.credited(_id(next)), 10_000);
     }
 
     function test_AllReadersRejectWrongDayTagWithinClaimWindow() public {
@@ -164,9 +175,9 @@ contract WWXRPRecyclingTest is Test {
         assertTrue(available);
         assertFalse(prize);
         assertEq(total, 0);
-        (bool found,, address winner) = token.findWinningEntry(5);
+        (bool found,, uint32 winner) = token.findWinningEntry(5);
         assertFalse(found);
-        assertEq(winner, address(0));
+        assertEq(winner, 0);
         vm.expectRevert(WWXRP.EmptyWinningBucket.selector);
         token.claim(5, 0);
         assertEq(coinflip.totalCredited(), 0);
@@ -268,8 +279,8 @@ contract WWXRPRecyclingTest is Test {
         assertEq(count, newCount);
         for (uint32 i; i < oldCount; ++i) _assertEmpty(day, bucket, i);
         for (uint32 i; i < 9; ++i) {
-            (address player, uint256 endpoint) = token.entryAt(nextDay, bucket, i);
-            assertEq(player, i < newCount ? next : address(0));
+            (uint32 player, uint256 endpoint) = token.entryAt(nextDay, bucket, i);
+            assertEq(player, i < newCount ? _id(next) : 0);
             assertEq(endpoint, i < newCount ? (uint256(i) + 1) * 25 : 0);
         }
     }

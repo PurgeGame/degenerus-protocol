@@ -28,8 +28,8 @@ contract FoilHeroSpinStub {
 }
 
 contract FoilCohortCreditStub {
-    mapping(address => uint256) public credited;
-    function creditFlip(address player, uint256 amount) external { credited[player] += amount; }
+    mapping(uint32 => uint256) public credited;
+    function creditFlip(uint32 player, uint256 amount) external { credited[player] += amount; }
 }
 
 /// @dev Seed commitment state only; generation, storage and gold claims are production code.
@@ -74,6 +74,7 @@ contract FoilCohortHarness is DegenerusGameFoilPackModule, WalletSeed {
         rngWordCurrent = word;
         _setRngSessionPublished(true);
     }
+    function walletIdOf(address who) external view returns (uint32) { return _walletIdOf(who); }
     function record(address player) external view returns (uint256) { return _foilRecordWord(_walletIdOf(player), 1); }
     function lines(address player) external view returns (uint32[4] memory) { return _foilStoredLines(_walletIdOf(player), 1); }
     function pending() external view returns (bool) { return _foilDrainPending(); }
@@ -245,8 +246,8 @@ contract FoilGenerationCohortTest is Test {
         vm.warp(vm.getBlockTimestamp() + 1 days);
         h.live();
         h.claimGoldenTicket(B, 1);
-        assertGt(FoilCohortCreditStub(ContractAddresses.COINFLIP).credited(A), 0);
-        assertGt(FoilCohortCreditStub(ContractAddresses.COINFLIP).credited(B), 0);
+        assertGt(FoilCohortCreditStub(ContractAddresses.COINFLIP).credited(h.walletIdOf(A)), 0);
+        assertGt(FoilCohortCreditStub(ContractAddresses.COINFLIP).credited(h.walletIdOf(B)), 0);
         vm.expectRevert();
         h.claimGoldenTicket(A, 1);
     }

@@ -16,8 +16,8 @@ contract StoredSeedReference is CoinflipStakeSetter {
         uint24 start = seedWindowStart;
         for (uint24 i; i < 20; ++i) {
             uint24 d = start + i;
-            _setFlipStake(d, ContractAddresses.VAULT, _flipStake(d, ContractAddresses.VAULT) + 200_000);
-            _setFlipStake(d, ContractAddresses.SDGNRS, _flipStake(d, ContractAddresses.SDGNRS) + 200_000);
+            _setFlipStake(d, 1, _flipStake(d, 1) + 200_000);
+            _setFlipStake(d, 2, _flipStake(d, 2) + 200_000);
         }
         seedWindowStart = type(uint24).max;
     }
@@ -46,7 +46,7 @@ contract CoinflipSeedWindowTest is DeployProtocol {
     uint256 internal constant SEED = 200_000;
     uint24 internal constant SEED_DAYS = 20;
     uint256 internal constant FIELDS = 19;
-    bytes32 internal constant STAKE_SIG = keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
+    bytes32 internal constant STAKE_SIG = keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)");
     bytes32 internal constant ARMED_SIG = keccak256("SeedWindowArmed(uint24,uint24,uint24,uint256)");
 
     address internal stranger;
@@ -92,7 +92,7 @@ contract CoinflipSeedWindowTest is DeployProtocol {
 
     function _creditVault(uint256 amount) internal {
         vm.prank(GAME);
-        coinflip.creditFlip(VAULT, amount);
+        coinflip.creditFlip(1, amount);
     }
 
     function _creditSdgnrs(uint256 amount) internal {
@@ -107,7 +107,7 @@ contract CoinflipSeedWindowTest is DeployProtocol {
 
     function _rawStake(uint24 day, address p) internal view returns (uint256) {
         bytes32 inner = keccak256(abi.encode(uint256(day >> 3), uint256(0)));
-        uint256 w = uint256(vm.load(address(coinflip), keccak256(abi.encode(p, uint256(inner)))));
+        uint256 w = uint256(vm.load(address(coinflip), keccak256(abi.encode(uint256(game.walletIdOf(p)), uint256(inner)))));
         return uint256(uint32(w >> ((uint256(day) & 7) * 32)));
     }
 
@@ -126,7 +126,7 @@ contract CoinflipSeedWindowTest is DeployProtocol {
     /// @dev The vault's raw BAF word for bracket 10 (level 0 records to bracket 10).
     function _bafWord(address p) internal view returns (uint256) {
         bytes32 inner = keccak256(abi.encode(uint256(10), uint256(0)));
-        return uint256(vm.load(address(jackpots), keccak256(abi.encode(p, uint256(inner)))));
+        return uint256(vm.load(address(jackpots), keccak256(abi.encode(uint256(game.walletIdOf(p)), uint256(inner)))));
     }
 
     function _setResult(uint24 day, uint8 b) internal {
@@ -398,8 +398,9 @@ contract CoinflipSeedWindowTest is DeployProtocol {
 
         _warpToDay(5);
         _creditVault(1_234);
+        uint32 aliceId = _giveWalletId(alice);
         vm.prank(GAME);
-        coinflip.creditFlip(alice, 1_234);
+        coinflip.creditFlip(aliceId, 1_234);
         assertEq(coinflip.coinflipAmount(VAULT), 1_234 + SEED, "seed joins the stored stake");
         assertEq(coinflip.coinflipAmount(alice), 1_234);
 

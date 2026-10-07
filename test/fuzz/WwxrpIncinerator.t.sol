@@ -44,7 +44,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
 
     event IncineratorResolved(
         uint24 indexed bracket,
-        address indexed winner,
+        uint32 indexed winnerId,
         uint256 flipAward,
         uint256 roll,
         uint256 totalScore
@@ -54,6 +54,8 @@ contract WwxrpIncineratorTest is DeployProtocol {
     address private bob;
     address private buyer;
     address private depositor;
+    uint32 private aliceId;
+    uint32 private bobId;
 
     function setUp() public {
         _deployProtocol();
@@ -63,6 +65,8 @@ contract WwxrpIncineratorTest is DeployProtocol {
         bob = makeAddr("incin_bob");
         buyer = makeAddr("incin_buyer");
         depositor = makeAddr("incin_depositor");
+        aliceId = _giveWalletId(alice);
+        bobId = _giveWalletId(bob);
         vm.deal(buyer, 100_000 ether);
         vm.deal(address(game), 2_000 ether);
     }
@@ -150,8 +154,8 @@ contract WwxrpIncineratorTest is DeployProtocol {
         assertEq(total, amt, "whole-token score at 1.0x activity");
         assertEq(count, 1, "one entry");
 
-        (address p0, uint256 cum0) = wwxrp.incineratorEntryAt(100, 0);
-        assertEq(p0, alice, "entry player");
+        (uint32 p0, uint256 cum0) = wwxrp.incineratorEntryAt(100, 0);
+        assertEq(p0, aliceId, "entry player");
         assertEq(cum0, amt, "entry endpoint");
 
         // Second entrant appends a cumulative interval.
@@ -159,8 +163,8 @@ contract WwxrpIncineratorTest is DeployProtocol {
         (total, count) = wwxrp.incineratorInfo(100);
         assertEq(total, amt + 100, "cumulative total");
         assertEq(count, 2, "two entries");
-        (address p1, uint256 cum1) = wwxrp.incineratorEntryAt(100, 1);
-        assertEq(p1, bob, "second player");
+        (uint32 p1, uint256 cum1) = wwxrp.incineratorEntryAt(100, 1);
+        assertEq(p1, bobId, "second player");
         assertEq(cum1, amt + 100, "second endpoint");
     }
 
@@ -182,7 +186,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
         vm.mockCall(
             address(game),
             abi.encodeWithSignature("playerActivityScoreCached(address)", alice),
-            abi.encode(score)
+            abi.encode(score, aliceId)
         );
         uint256 mult = wwxrp.drawMultBps(score);
         assertGt(mult, BPS, "mocked score maps above 1.0x");
@@ -210,14 +214,14 @@ contract WwxrpIncineratorTest is DeployProtocol {
         (total, count) = wwxrp.incineratorInfo(100);
         assertEq(total, type(uint192).max, "total unchanged");
         assertEq(count, 2, "post-cap entry recorded");
-        (address p1, uint256 cum1) = wwxrp.incineratorEntryAt(100, 1);
-        assertEq(p1, bob, "post-cap player recorded");
+        (uint32 p1, uint256 cum1) = wwxrp.incineratorEntryAt(100, 1);
+        assertEq(p1, bobId, "post-cap player recorded");
         assertEq(cum1, type(uint192).max, "zero-width endpoint");
 
         // Any roll lands in alice's interval; bob can never win.
         vm.prank(address(game));
-        address winner = wwxrp.resolveIncinerator(100, uint256(keccak256("sat_word")));
-        assertEq(winner, alice, "zero-width entry cannot win");
+        uint32 winner = wwxrp.resolveIncinerator(100, uint256(keccak256("sat_word")));
+        assertEq(winner, aliceId, "zero-width entry cannot win");
     }
 
     // ==================== Unit: resolution ====================
@@ -230,8 +234,8 @@ contract WwxrpIncineratorTest is DeployProtocol {
 
     function testResolveEmptyBracketReturnsZero() public {
         vm.prank(address(game));
-        address winner = wwxrp.resolveIncinerator(100, uint256(keccak256("w")));
-        assertEq(winner, address(0), "empty bracket resolves to zero");
+        uint32 winner = wwxrp.resolveIncinerator(100, uint256(keccak256("w")));
+        assertEq(winner, 0, "empty bracket resolves to zero");
     }
 
     function testResolveWinnerMatchesIntervalRoll() public {
@@ -241,12 +245,12 @@ contract WwxrpIncineratorTest is DeployProtocol {
 
         uint256 word = uint256(keccak256("incin_resolve_word"));
         uint256 roll = _roll(100, word, 400);
-        address expected = roll < 100 ? alice : bob;
+        uint32 expected = roll < 100 ? aliceId : bobId;
 
         vm.expectEmit(true, true, false, true, address(wwxrp));
         emit IncineratorResolved(100, expected, 0, roll, 400); // no armed-day book -> zero award, winner still drawn
         vm.prank(address(game));
-        address winner = wwxrp.resolveIncinerator(100, word);
+        uint32 winner = wwxrp.resolveIncinerator(100, word);
         assertEq(winner, expected, "winner matches mirrored interval roll");
     }
 
@@ -268,9 +272,9 @@ contract WwxrpIncineratorTest is DeployProtocol {
         }
 
         vm.prank(address(game));
-        assertEq(wwxrp.resolveIncinerator(100, wordAlice), alice, "alice side");
+        assertEq(wwxrp.resolveIncinerator(100, wordAlice), aliceId, "alice side");
         vm.prank(address(game));
-        assertEq(wwxrp.resolveIncinerator(100, wordBob), bob, "bob side");
+        assertEq(wwxrp.resolveIncinerator(100, wordBob), bobId, "bob side");
     }
 
     // ==================== Driven e2e across the century transition ====================
@@ -358,21 +362,22 @@ contract WwxrpIncineratorTest is DeployProtocol {
         // Exactly one IncineratorResolved for bracket 100.
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 topic = keccak256(
-            "IncineratorResolved(uint24,address,uint256,uint256,uint256)"
+            "IncineratorResolved(uint24,uint32,uint256,uint256,uint256)"
         );
         uint256 found;
-        address winner;
+        uint32 winnerId;
         uint256 flipAward;
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].emitter != address(wwxrp)) continue;
             if (logs[i].topics[0] != topic) continue;
             assertEq(uint256(logs[i].topics[1]), 100, "bracket 100");
-            winner = address(uint160(uint256(logs[i].topics[2])));
+            winnerId = uint32(uint256(logs[i].topics[2]));
             (flipAward, , ) = abi.decode(logs[i].data, (uint256, uint256, uint256));
             found++;
         }
         assertEq(found, 1, "exactly one incinerator resolution");
-        assertTrue(winner == alice || winner == bob, "winner is an entrant");
+        assertTrue(winnerId == aliceId || winnerId == bobId, "winner is an entrant");
+        address winner = winnerId == aliceId ? alice : bob;
         assertGt(flipAward, 0, "non-zero award");
 
         // The award is 10% of the armed day's lost direct deposits (whole FLIP), paid as
@@ -380,21 +385,21 @@ contract WwxrpIncineratorTest is DeployProtocol {
         // loser is never credited, and no ETH moved claimable-side for either.
         (, uint96 bookTotal, ) = coinflip.bafDrawInfo();
         assertEq(flipAward, (uint256(bookTotal) * 1) / 10, "award is 10% of the lost book");
-        bytes32 stakeTopic = keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
-        address loser = winner == alice ? bob : alice;
+        bytes32 stakeTopic = keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)");
+        uint32 loserId = winnerId == aliceId ? bobId : aliceId;
         uint256 credits;
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].emitter != address(coinflip) || logs[i].topics[0] != stakeTopic) continue;
-            address who = address(uint160(uint256(logs[i].topics[1])));
-            assertTrue(who != loser, "loser never credited");
-            if (who != winner) continue;
+            uint32 who = uint32(uint256(logs[i].topics[1]));
+            assertTrue(who != loserId, "loser never credited");
+            if (who != winnerId) continue;
             (uint256 amount, ) = abi.decode(logs[i].data, (uint256, uint256));
             assertEq(amount, flipAward, "winner credited the award");
             credits++;
         }
         assertEq(credits, 1, "exactly one flip credit for the winner");
         assertEq(game.claimableWinningsOf(winner), 0, "no ETH for the winner");
-        assertEq(game.claimableWinningsOf(loser), 0, "no ETH for the loser");
+        assertEq(game.claimableWinningsOf(winner == alice ? bob : alice), 0, "no ETH for the loser");
     }
 
     function testDrivenCenturyFireLeavesIncineratorUnresolved() public {
@@ -406,7 +411,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
 
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 topic = keccak256(
-            "IncineratorResolved(uint24,address,uint256,uint256,uint256)"
+            "IncineratorResolved(uint24,uint32,uint256,uint256,uint256)"
         );
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].emitter == address(wwxrp) && logs[i].topics[0] == topic) {

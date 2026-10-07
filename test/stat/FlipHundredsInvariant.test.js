@@ -364,7 +364,7 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
       // The buyer credit and the rolled affiliate winner share one Coinflip write, so the
       // mint-boost leg is the first pair of `creditFlipPair` arguments.
       expect(
-        /creditFlipPair\(\s*buyer,\s*lootboxFlipCredit\b/.test(body),
+        /creditFlipPair\(\s*buyerId,\s*lootboxFlipCredit\b/.test(body),
         "the mint-boost credit call must still be present (positive pin to the right site)"
       ).to.equal(true);
       expect(

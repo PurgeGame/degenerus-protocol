@@ -348,7 +348,9 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
                 if (cachedLevel == uint256(currLevel)) {
                     affPoints = (packed >> BitPackingLib.AFFILIATE_BONUS_POINTS_SHIFT) & BitPackingLib.MASK_6;
                 } else {
-                    affPoints = affiliate.affiliateBonusPointsBest(currLevel, player);
+                    affPoints = affiliate.affiliateBonusPointsBest(
+                        currLevel, uint32(packed >> BitPackingLib.WALLET_ID_SHIFT)
+                    );
                 }
                 bonusPoints += affPoints;
             }
@@ -380,13 +382,15 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     /// @dev Current-level affiliate points only depend on earlier levels. All earning
     ///      writers credit the next level, so this cache remains valid until level advances.
     ///      Only cache bits change; participation, pass, and curse fields are preserved.
-    function _cacheAffiliateBonus(address player, uint24 currLevel, uint256 packed)
+    function _cacheAffiliateBonus(uint24 currLevel, uint256 packed)
         internal view returns (uint256)
     {
         if (((packed >> BitPackingLib.AFFILIATE_BONUS_LEVEL_SHIFT) & BitPackingLib.MASK_24) == currLevel) {
             return packed;
         }
-        uint256 points = affiliate.affiliateBonusPointsBest(currLevel, player);
+        uint256 points = affiliate.affiliateBonusPointsBest(
+            currLevel, uint32(packed >> BitPackingLib.WALLET_ID_SHIFT)
+        );
         packed = BitPackingLib.setPacked(
             packed, BitPackingLib.AFFILIATE_BONUS_LEVEL_SHIFT, BitPackingLib.MASK_24, currLevel
         );
@@ -409,7 +413,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         if ((previous & historyMask) == 0) {
             return _playerActivityScoreAt(player, questStreak, streakBaseLevel, currLevel);
         }
-        uint256 packed = _cacheAffiliateBonus(player, currLevel, previous);
+        uint256 packed = _cacheAffiliateBonus(currLevel, previous);
         if (packed != previous) mintPacked_[player] = packed;
         return _playerActivityScoreAt(player, questStreak, streakBaseLevel, currLevel);
     }
@@ -691,7 +695,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
 
         // Score at the actual game level; the recorded ticket level can be one ahead.
         // Piggyback the current-level affiliate cache on this existing SSTORE.
-        data = _cacheAffiliateBonus(player, level, data);
+        data = _cacheAffiliateBonus(level, data);
 
         // ---------------------------------------------------------------------
         // Commit to storage (only if changed)

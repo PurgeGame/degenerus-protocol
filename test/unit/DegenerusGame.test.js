@@ -293,9 +293,9 @@ describe("DegenerusGame", function () {
 
       const mintPrice = await game.mintPrice();
 
-      const [, , beforeProgress, beforeCompleted] = await quests.playerQuestStates(
-        alice.address
-      );
+      // alice holds no wallet ID before her first purchase, so no quest state exists for her.
+      expect(await game.walletIdOf(alice.address)).to.equal(0n);
+      const [, , beforeProgress, beforeCompleted] = await quests.playerQuestStates(0);
       expect(beforeProgress[0]).to.equal(0n);
       expect(beforeCompleted[0]).to.equal(false);
 
@@ -311,7 +311,7 @@ describe("DegenerusGame", function () {
       ).to.not.be.reverted;
 
       const [, , progress, completed] = await quests.playerQuestStates(
-        alice.address
+        await game.walletIdOf(alice.address)
       );
       expect(progress[0]).to.equal(mintPrice);
       expect(completed[0]).to.equal(true);
@@ -391,7 +391,7 @@ describe("DegenerusGame", function () {
     it("reverts when called by unauthorized address", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        game.connect(alice).payRecordSdgnrs(alice.address, 0)
+        game.connect(alice).payRecordSdgnrs(1, 0)
       ).to.be.reverted;
     });
   });
@@ -532,7 +532,7 @@ describe("DegenerusGame", function () {
     it("reverts when called by non-coin/non-coinflip address", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        game.connect(alice).consumeCoinflipBoon(alice.address)
+        game.connect(alice).consumeCoinflipBoon(1)
       ).to.be.reverted;
     });
   });
@@ -541,7 +541,7 @@ describe("DegenerusGame", function () {
     it("reverts when called by non-coin address", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        game.connect(alice).consumeDecimatorBoon(alice.address)
+        game.connect(alice).consumeDecimatorBoon(1)
       ).to.be.reverted;
     });
   });

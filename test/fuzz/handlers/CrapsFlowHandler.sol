@@ -83,8 +83,12 @@ contract CrapsFlowHandler {
             address a = address(uint160(0xA110 + i));
             actors.push(a);
             game.setScore(a, 400 + i * 900);
+            // Every actor already holds a Game wallet ID, as one that bought elsewhere does; the
+            // non-paying doors refuse a wallet without one.
+            game.registerWallet(a, true);
         }
         game.setScore(creator, 5_000);
+        game.registerWallet(creator, true);
     }
 
     // ── Internals ───────────────────────────────────────────────────────────

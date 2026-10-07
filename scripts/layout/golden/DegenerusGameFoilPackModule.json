@@ -629,7 +629,7 @@
     "label": "boonPacked",
     "offset": 0,
     "slot": 47,
-    "typeLabel": "mapping(address => struct DegenerusGameStorage.BoonPacked)"
+    "typeLabel": "mapping(uint32 => struct DegenerusGameStorage.BoonPacked)"
   },
   {
     "bytes": "32",

@@ -40,6 +40,8 @@ contract CrapsScheduledCursorTest is CrapsPins {
 
     function setUp() public {
         _installPins();
+        game.registerWallet(alice, true);
+        game.registerWallet(bob, true);
         craps = new CursorHarness();
         // The deployment day is a Craps warm-up day with no windows; every fixture plays
         // from genesis + 1, the first day the table opens.
@@ -203,7 +205,7 @@ contract CrapsScheduledCursorTest is CrapsPins {
         _setWord(index, uint256(keccak256("external")));
         vm.recordLogs();
         craps.settleSlot(winSlot, WHOLE_FIELD);
-        uint256 pots = _countSig(vm.getRecordedLogs(), keccak256("CrapsBattlePaid(uint256,bytes32,address,uint256)"));
+        uint256 pots = _countSig(vm.getRecordedLogs(), keccak256("CrapsBattlePaid(uint256,bytes32,uint32,uint256)"));
         assertTrue(craps.battleOf(craps.keyOfSlot(winSlot)).finalized, "the external settle did not finish");
 
         // The cursor crosses it as done work — no second settlement, no second pot.
@@ -212,7 +214,7 @@ contract CrapsScheduledCursorTest is CrapsPins {
         assertTrue(progressed, "crossing externally-done work is one-time progress");
         assertGt(slot, winSlot, "the cursor did not cross the finished window");
         assertEq(
-            _countSig(vm.getRecordedLogs(), keccak256("CrapsBattlePaid(uint256,bytes32,address,uint256)")),
+            _countSig(vm.getRecordedLogs(), keccak256("CrapsBattlePaid(uint256,bytes32,uint32,uint256)")),
             0,
             "crossing a finished field paid a second pot"
         );
@@ -233,9 +235,9 @@ contract CrapsScheduledCursorTest is CrapsPins {
 
         // Reservations on the two days after A: alice normal, bob high.
         vm.prank(ContractAddresses.GAME);
-        craps.creditPasses(alice, 1, 0);
+        craps.creditPasses(_idFor(alice), 1, 0);
         vm.prank(ContractAddresses.GAME);
-        craps.creditPasses(bob, 0, 1);
+        craps.creditPasses(_idFor(bob), 0, 1);
         vm.prank(alice);
         craps.applyCrapsPasses(dayA + 1, 1, false);
         vm.prank(bob);
@@ -283,8 +285,9 @@ contract CrapsScheduledCursorTest is CrapsPins {
         address[] memory owners = new address[](100);
         for (uint256 i; i < owners.length; ++i) {
             owners[i] = address(uint160(0xC1000 + i));
+            uint32 ownerId = _idFor(owners[i]);
             vm.prank(ContractAddresses.GAME);
-            craps.creditPasses(owners[i], 1, 0);
+            craps.creditPasses(ownerId, 1, 0);
             vm.prank(owners[i]);
             craps.applyCrapsPasses(dayA + 1, 1, false);
         }

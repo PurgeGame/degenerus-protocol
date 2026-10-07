@@ -103,7 +103,15 @@ interface IDegenerusGame {
     /// @return walletId The player's wallet ID (zero if unregistered).
     function playerActivityScore(address player) external view returns (uint256 scorePoints, uint32 walletId);
 
-    function playerActivityScoreCached(address player) external returns (uint256);
+    /// @notice Activity score for transactions; refreshes the current-level affiliate cache.
+    /// @dev Non-view twin of playerActivityScore. The wallet ID rides the mint word the score
+    ///      already reads, so a first-contact caller (WWXRP `enter`, FLIP `decimatorBurn`) learns
+    ///      the ID without a second call. Never allocates: a paying caller that gets 0 registers
+    ///      through `registerWallet(player, true)`.
+    /// @param player The player address to calculate for.
+    /// @return score Activity score in whole points.
+    /// @return id The player's wallet ID (0 if unregistered).
+    function playerActivityScoreCached(address player) external returns (uint256 score, uint32 id);
 
     /// @notice Check if an operator is approved to act on behalf of a player.
     /// @param owner The player who granted approval.
@@ -142,15 +150,19 @@ interface IDegenerusGame {
     /// @dev Access: COINFLIP, COIN or WWXRP. The caller selects its own lane: coinflip,
     ///      craps or WWXRP respectively. WWXRP exposes a separate consumption hook to
     ///      its trusted-minter applications; those applications cannot call this directly.
-    /// @param player The player consuming the boon.
+    ///      Boon state is keyed by wallet ID; `id == 0` returns 0 (no boon), never reverts.
+    /// @param id Wallet ID of the player consuming the boon.
     /// @return boostBps Boost amount in basis points.
-    function consumeCoinflipBoon(address player) external returns (uint16 boostBps);
+    /// @custom:reverts Unauthorized If caller is not COINFLIP, COIN or WWXRP.
+    function consumeCoinflipBoon(uint32 id) external returns (uint16 boostBps);
 
     /// @notice Consume decimator boon for burn boost.
-    /// @dev Grants bonus to next decimator burn.
-    /// @param player The player consuming the boon.
+    /// @dev Access: COIN only. Grants bonus to next decimator burn. Boon state is keyed by
+    ///      wallet ID; `id == 0` returns 0 (no boon), never reverts.
+    /// @param id Wallet ID of the player consuming the boon.
     /// @return boostBps Boost amount in basis points.
-    function consumeDecimatorBoon(address player) external returns (uint16 boostBps);
+    /// @custom:reverts Unauthorized If caller is not COIN.
+    function consumeDecimatorBoon(uint32 id) external returns (uint16 boostBps);
 
     /// @notice Get raw deity boon state for off-chain or viewer contract computation.
     /// @param deity The deity address to query.
@@ -241,13 +253,20 @@ interface IDegenerusGame {
     /// @param randWord VRF entropy for the board.
     function emitDailyWinningTraits(uint256 randWord) external;
 
-    /// @notice Pay the sDGNRS leg of an all-time record claim.
+    /// @notice Pay the sDGNRS leg of an all-time record claim and name the record's payee.
     /// @dev COINFLIP only. Pays the claim's accrued record-pool share at 1/500 scale
-    ///      from the sDGNRS reward pool.
-    /// @param player Recipient of the sDGNRS.
-    /// @param shareBps The claim's accrued record-pool share in bps.
+    ///      from the sDGNRS reward pool to the payee Game resolves for `id` (today the wallet's
+    ///      own address; Phase F resolves a smurf to its owner here). `payee` is returned on
+    ///      every call, including `shareBps == 0`, an empty pool and a zero payout: Coinflip
+    ///      calls this on every record ratchet and mints the record trophy to `payee`.
+    ///      Coinflip passes only nonzero IDs (its callers hold them).
+    /// @param id Wallet ID of the record holder.
+    /// @param shareBps The claim's accrued record-pool share in bps (0 for a ratchet that
+    ///        claims nothing).
     /// @return paid The sDGNRS actually transferred.
-    function payRecordSdgnrs(address player, uint256 shareBps) external returns (uint256 paid);
+    /// @return payee The address that received (or would receive) the sDGNRS and the trophy.
+    /// @custom:reverts Unauthorized If caller is not COINFLIP.
+    function payRecordSdgnrs(uint32 id, uint256 shareBps) external returns (uint256 paid, address payee);
 
     /// @notice Check if the daily RNG processing lock is set (request through day seal; not set for mid-day requests).
     /// @return True if RNG is locked, false otherwise.
@@ -265,9 +284,15 @@ interface IDegenerusGame {
     /// @notice Mint mid-day RNG credit to a LINK donor.
     /// @dev Access: ADMIN only. A donor's mineFlip spends credit on the mid-day request when
     ///      pending work sits below the threshold; the subscription LINK floor still applies.
+    ///      A donation is a paying action: the donor is registered (existing ID or a new one)
+    ///      and the ID is returned so Admin credits the donation's FLIP reward by ID.
     /// @param to Donor to credit.
     /// @param linkAmount LINK donated, in juels.
-    function creditMiddayRng(address to, uint256 linkAmount) external;
+    /// @return id The donor's wallet ID (never 0).
+    /// @custom:reverts OnlyAdmin If caller is not ADMIN.
+    /// @custom:reverts E If the donor is new past paid admission (PAID_ADMISSION_WALLETS
+    ///                 registered wallets; a donation quotes no Game spend).
+    function creditMiddayRng(address to, uint256 linkAmount) external returns (uint32 id);
 
 
     /// @notice Check whether lootbox presale mode is currently active.
@@ -332,24 +357,26 @@ interface IDegenerusGame {
         returns (uint256 packed);
 
     /// @notice Sample up to 4 trait burn tickets from a specific level.
-    /// @dev View function for BAF scatter selection targeting a specific level.
+    /// @dev View function for BAF scatter selection targeting a specific level. Returns the
+    ///      wallet IDs the trait bucket already stores (no wallet-table decode).
     /// @param nextLevel Select the next level instead of the current level.
     /// @param entropy Random entropy for sampling (typically from VRF).
     /// @return trait The sampled trait ID.
-    /// @return entries Array of player addresses holding sampled entries.
-    function sampleTraitEntries(bool nextLevel, uint256 entropy) external view returns (uint8 trait, address[] memory entries);
+    /// @return entries Wallet IDs holding the sampled entries (IDs may repeat).
+    function sampleTraitEntries(bool nextLevel, uint256 entropy) external view returns (uint8 trait, uint32[] memory entries);
 
     /// @notice Sample two BAF rounds' worth of unminted future-level candidates.
     /// @dev Four packs (independent level in [fromLevel, toLevel] + one random eight-lane queue
     ///      word), two distinct lanes each: slots 0..3 feed one round and 4..7 the next, so
     ///      each round's candidates come from four different packs. Unfilled slots are
-    ///      address(0). Call during BAF with unminted levels only (above current+1).
+    ///      0. Call during BAF with unminted levels only (above current+1). Returns the
+    ///      wallet IDs the queue lanes already store (no wallet-table decode).
     /// @param entropy Random entropy for sampling (typically from VRF).
     /// @param fromLevel Lowest candidate level (inclusive).
     /// @param toLevel Highest candidate level (inclusive).
-    /// @return tickets Eight candidate slots (addresses may repeat or be zero).
+    /// @return tickets Eight candidate slots as wallet IDs (may repeat; 0 = unfilled).
     function sampleFarFutureTickets(uint256 entropy, uint24 fromLevel, uint24 toLevel)
-        external view returns (address[] memory tickets);
+        external view returns (uint32[] memory tickets);
 
 
     /// @notice Purchase a deity pass for a specific symbol (0-31).
@@ -489,16 +516,19 @@ interface IDegenerusGame {
     function drainAffiliateBase(address sub) external returns (uint256 base);
 
     /// @notice QUESTS-only: bump an afking sub's streak base for a secondary/level completion.
-    /// @param player The afking subscriber whose secondary completion is recorded.
+    /// @dev Keyed by wallet ID (Quests holds only IDs). A no-op unless `id` has a live afking
+    ///      sub; `id == 0` is a no-op. Never reverts for the authorized caller.
+    /// @param id Wallet ID of the afking subscriber whose secondary completion is recorded.
     /// @param amount The streak-base increment (1 for a daily secondary, more for a level quest).
-    function recordAfkingSecondary(address player, uint16 amount) external;
+    function recordAfkingSecondary(uint32 id, uint16 amount) external;
 
     /// @notice QUESTS-only: floor an afking sub's streak base to `floor`, so a foil-pack
     ///         purchase's quest-streak guarantee reaches a mid-run afker (whose reward streak
     ///         is the sub base plus funded delivered days, not the manual quest streak).
-    /// @param player The afking subscriber whose streak base is floored.
+    /// @dev Keyed by wallet ID. A no-op unless `id` has a live afking sub; `id == 0` is a no-op.
+    /// @param id Wallet ID of the afking subscriber whose streak base is floored.
     /// @param floor The minimum streak base to set (no-op if the base is already at/above it).
-    function floorAfkingStreakBase(address player, uint16 floor) external;
+    function floorAfkingStreakBase(uint32 id, uint16 floor) external;
 
     /// @notice Permissionless paid cure: clear `target`'s cashout/smite curse for 100 FLIP.
     /// @param target The cursed player to cure.

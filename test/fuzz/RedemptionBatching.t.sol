@@ -33,7 +33,7 @@ contract RedemptionBatchGameSeeder is DegenerusGame {
 contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
     address private keeper = address(0xC4A123);
     bytes32 private constant MINER_WORK = keccak256("MinerWork(address,uint8,uint256,uint256)");
-    bytes32 private constant STAKE_UPDATED = keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
+    bytes32 private constant STAKE_UPDATED = keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)");
 
     /// @dev The miner's one reward clock: the later of the latest VRF request (slot-0
     ///      rngRequestTime) and the day reset.
@@ -95,7 +95,7 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
                 ++works;
             }
             if (logs[i].emitter == address(coinflip) && logs[i].topics.length > 1
-                && logs[i].topics[0] == STAKE_UPDATED && logs[i].topics[1] == bytes32(uint256(uint160(keeper)))) {
+                && logs[i].topics[0] == STAKE_UPDATED && logs[i].topics[1] == bytes32(uint256(game.walletIdOf(keeper)))) {
                 ++credits;
             }
         }

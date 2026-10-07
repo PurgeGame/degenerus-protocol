@@ -27,8 +27,8 @@ contract BoostHarness is CrapsViews {
         uint256 cap,
         address player,
         uint256 boost
-    ) external pure returns (Craps.SlipResult memory) {
-        return _settleSlip(b, seed, bankroll, goal, cap, _SLIP_ROLL_BUDGET, uint256(uint160(player)), boost);
+    ) external view returns (Craps.SlipResult memory) {
+        return _settleSlip(b, seed, bankroll, goal, cap, _SLIP_ROLL_BUDGET, _saltOf(player), boost);
     }
 
     /// @dev The shipped engine on the shipped bounds — what a settlement has to be compared
@@ -40,8 +40,8 @@ contract BoostHarness is CrapsViews {
         uint256 goal,
         address player,
         uint256 boost
-    ) external pure returns (Craps.SlipResult memory) {
-        Craps.SlipResult memory r = _settleSlip(b, seed, bankroll * FLIP, goal * FLIP, _MAX_SLIP_HANDS, _SLIP_ROLL_BUDGET, uint256(uint160(player)), boost);
+    ) external view returns (Craps.SlipResult memory) {
+        Craps.SlipResult memory r = _settleSlip(b, seed, bankroll * FLIP, goal * FLIP, _MAX_SLIP_HANDS, _SLIP_ROLL_BUDGET, _saltOf(player), boost);
         r.bankrollIn /= FLIP;
         r.bankrollOut /= FLIP;
         r.peakBankroll /= FLIP;
@@ -566,7 +566,7 @@ contract CrapsShooterBoostTest is CrapsPins {
 
     /// @dev `CrapsBetSettled(betId, player, won, paid)` for one bet, out of a settle walk's logs.
     function _settledOf(Vm.Log[] memory logs, uint256 betId) internal pure returns (uint256 won, uint256 paid) {
-        bytes32 sig = keccak256("CrapsBetSettled(uint256,address,uint256,uint256)");
+        bytes32 sig = keccak256("CrapsBetSettled(uint256,uint32,uint256,uint256)");
         for (uint256 i = 0; i < logs.length; ++i) {
             if (logs[i].topics.length == 0 || logs[i].topics[0] != sig) continue;
             if (uint256(logs[i].topics[1]) != betId) continue;
@@ -900,7 +900,7 @@ contract CrapsShooterBoostTest is CrapsPins {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool paid;
         for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics[0] == keccak256("CrapsHottestShooterPaid(uint256,bytes32,address,uint16,uint256)")) {
+            if (logs[i].topics[0] == keccak256("CrapsHottestShooterPaid(uint256,bytes32,uint32,uint16,uint256)")) {
                 assertEq(uint256(logs[i].topics[1]), hotId);
                 (uint16 rolls, uint256 amount) = abi.decode(logs[i].data, (uint16, uint256));
                 assertEq(rolls, best >> 9);

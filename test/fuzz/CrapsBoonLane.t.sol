@@ -11,19 +11,19 @@ contract CrapsBoonModuleHarness is DegenerusGameBoonModule {
         return _boonFromRoll(roll);
     }
 
-    function writeSlot1(address player, uint256 value) external {
+    function writeSlot1(uint32 player, uint256 value) external {
         boonPacked[player].slot1 = value;
     }
 
-    function writeSlot0(address player, uint256 value) external {
+    function writeSlot0(uint32 player, uint256 value) external {
         boonPacked[player].slot0 = value;
     }
 
-    function slot1Of(address player) external view returns (uint256) {
+    function slot1Of(uint32 player) external view returns (uint256) {
         return boonPacked[player].slot1;
     }
 
-    function slot0Of(address player) external view returns (uint256) {
+    function slot0Of(uint32 player) external view returns (uint256) {
         return boonPacked[player].slot0;
     }
 
@@ -73,7 +73,7 @@ contract CrapsBoonLane is Test {
     uint256 private constant LANE_DEITY_BIT = 0x4;
     uint24 private constant EXPIRY_DAYS = 2;
 
-    address private constant PLAYER = address(0xC7A95);
+    uint32 private constant PLAYER = 0xC7A95;
 
     function setUp() public {
         module_ = new CrapsBoonModuleHarness();

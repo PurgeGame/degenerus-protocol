@@ -21,7 +21,7 @@ contract GenesisDailyQuestSeed is DeployProtocol {
     uint8 private constant QUEST_TYPE_DEGENERETTE_ETH = 7;
     uint8 private constant CURRENCY_ETH = 0;
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
-    uint256 private constant QUEST_BITMAP_SLOT = 4;
+    uint256 private constant QUEST_BITMAP_SLOT = 3;
 
     address private player;
 
@@ -88,7 +88,7 @@ contract GenesisDailyQuestSeed is DeployProtocol {
             MintPaymentKind.DirectEth,
             false
         );
-        (bool slot0, ) = quests.questCompletionToday(player);
+        (bool slot0, ) = quests.questCompletionToday(game.walletIdOf(player));
         assertTrue(
             slot0,
             "a deploy-day ticket buy completes the seeded MINT_ETH primary"
@@ -98,7 +98,7 @@ contract GenesisDailyQuestSeed is DeployProtocol {
         // spin clears it at any price.
         vm.prank(player);
         game.placeDegeneretteBet{value: 0.5 ether}(player, CURRENCY_ETH, 0.5 ether, 1, 3);
-        (, bool slot1) = quests.questCompletionToday(player);
+        (, bool slot1) = quests.questCompletionToday(game.walletIdOf(player));
         assertTrue(
             slot1,
             "a deploy-day ETH degenerette bet then completes the seeded slot-1 quest"

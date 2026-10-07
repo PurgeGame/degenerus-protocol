@@ -29,7 +29,7 @@
     "label": "_bonusSeated",
     "offset": 0,
     "slot": 3,
-    "typeLabel": "mapping(bytes32 => mapping(address => bool))"
+    "typeLabel": "mapping(bytes32 => mapping(uint32 => bool))"
   },
   {
     "bytes": "32",
@@ -61,7 +61,7 @@
     "label": "_daySeated",
     "offset": 0,
     "slot": 7,
-    "typeLabel": "mapping(uint256 => mapping(address => uint256))"
+    "typeLabel": "mapping(uint256 => mapping(uint32 => uint256))"
   },
   {
     "bytes": "32",

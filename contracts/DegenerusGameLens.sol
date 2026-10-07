@@ -277,7 +277,8 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         assembly {
             base := _subOf.slot
         }
-        uint256 w = _sload(game, _mapSlot(uint256(_walletId(game, player)), base));
+        uint32 id = _walletId(game, player);
+        uint256 w = _sload(game, _mapSlot(uint256(id), base));
         s.dailyQuantity = uint8(w);
         s.active = s.dailyQuantity != 0;
         s.flags = uint8(w >> 8);
@@ -290,7 +291,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         s.affiliateBase = uint32(w >> 152);
         s.pendingFlip = uint24(w >> 184);
         s.subStreakLatch = uint16(w >> 208);
-        s.effectiveStreak = _effectiveQuestStreakMirror(game, player, w);
+        s.effectiveStreak = _effectiveQuestStreakMirror(game, id, w);
     }
 
     /// @dev Mirror of DegenerusGameStorage._effectiveQuestStreak, sourcing the Sub
@@ -298,10 +299,10 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
     ///      reads the Sub-side compute-on-read, everyone else the manual streak.
     function _effectiveQuestStreakMirror(
         address game,
-        address player,
+        uint32 id,
         uint256 subWord
     ) private view returns (uint32) {
-        (uint32 manualStreak, bool afking) = quests.effectiveBaseStreakAndAfking(player);
+        (uint32 manualStreak, bool afking) = quests.effectiveBaseStreakAndAfking(id);
         if (!afking) return manualStreak;
         if (uint24(subWord >> 128) != 0) {
             uint32 a = _afkingStreakMirror(game, subWord);
@@ -439,7 +440,8 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
             subBase := _subOf.slot
         }
         uint256 packed = _sload(game, _mapSlot(player, packedBase));
-        uint256 subWord = _sload(game, _mapSlot(uint256(uint32(packed >> BitPackingLib.WALLET_ID_SHIFT)), subBase));
+        uint32 id = uint32(packed >> BitPackingLib.WALLET_ID_SHIFT);
+        uint256 subWord = _sload(game, _mapSlot(uint256(id), subBase));
         uint256 w = _levelWord(game);
         uint24 currLevel;
         {
@@ -450,7 +452,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
             currLevel = uint24(w >> (o << 3));
         }
 
-        b.questStreak = _effectiveQuestStreakMirror(game, player, subWord);
+        b.questStreak = _effectiveQuestStreakMirror(game, id, subWord);
         b.questStreakPoints = uint256(b.questStreak) / 2;
 
         b.deityPass = packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0;
@@ -493,7 +495,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
                     (packed >> BitPackingLib.AFFILIATE_BONUS_POINTS_SHIFT) &
                     BitPackingLib.MASK_6;
             } else {
-                b.affiliatePoints = affiliate.affiliateBonusPointsBest(currLevel, player);
+                b.affiliatePoints = affiliate.affiliateBonusPointsBest(currLevel, id);
             }
         }
 

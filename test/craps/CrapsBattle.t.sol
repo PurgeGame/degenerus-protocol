@@ -206,6 +206,8 @@ contract CrapsBattleTest is CrapsPins {
 
     function setUp() public {
         _installPins();
+        game.registerWallet(alice, true);
+        game.registerWallet(bob, true);
         craps = new BattleHarness();
         // Genesis is a Craps warm-up day; every fixture plays from genesis + 1.
         vm.warp(block.timestamp + 1 days);
@@ -1107,7 +1109,7 @@ contract CrapsBattleTest is CrapsPins {
     ///      with no follow-up call and no dependence on arrival order. Graded against `betOf`,
     ///      which reads the stored word.
     function test_oneEventStreamCarriesTheWholeField() public {
-        bytes32 sig = keccak256("CrapsSlipPlaced(address,uint256)");
+        bytes32 sig = keccak256("CrapsSlipPlaced(uint32,uint256)");
 
         vm.recordLogs();
         _openDay();
@@ -1132,7 +1134,7 @@ contract CrapsBattleTest is CrapsPins {
             if (!isDay && betId >> 64 != slot) continue;
 
             CrapsViews.Bet memory stored = craps.betOf(betId);
-            assertEq(address(uint160(uint256(logs[i].topics[1]))), stored.player, "wrong owner");
+            assertEq(uint256(logs[i].topics[1]), stored.playerId, "wrong owner");
             assertEq(bet & 0x7FFFFFF, stored.chips, "wrong chips");
             assertEq((bet >> 190) & 0xFFFF, uint256(0), "wrong frozen standing");
             assertEq(uint64(betId), stored.seat, "wrong seat");
@@ -2697,7 +2699,7 @@ contract CrapsBattleTest is CrapsPins {
         address house = ContractAddresses.SDGNRS;
         craps.setPassCredits(house, 0, 0); // the deployment seed aside: two passes, three days
         vm.prank(ContractAddresses.GAME);
-        craps.deliverPasses(house, 2, 0);
+        craps.deliverPasses(_idFor(house), 2, 0);
 
         uint24 tomorrow = craps.currentDayIndex() + 1;
         assertEq(craps.dayStateOf(tomorrow, house), craps.DAY_SEATED(), "the house took no seat on tomorrow");
@@ -2736,7 +2738,7 @@ contract CrapsBattleTest is CrapsPins {
         address house = ContractAddresses.SDGNRS;
         craps.setPassCredits(house, 0, 0);
         vm.prank(ContractAddresses.GAME);
-        craps.deliverPasses(house, 0, 1);
+        craps.deliverPasses(_idFor(house), 0, 1);
         uint24 target = craps.currentDayIndex() + 1;
         assertEq(craps.dayStateOf(target, house), craps.DAY_SEATED(), "the house took no seat on tomorrow");
         assertTrue(craps.daySeatIsHigh(target, house), "the high pass did not seat in the high lane");
@@ -2778,7 +2780,7 @@ contract CrapsBattleTest is CrapsPins {
             PaidOut[] memory pots = _potsIn(logs);
             if (pots.length == 1 && pots[0].player == alice) {
                 uint256 banked;
-                bytes32 splitSig = keccak256("CrapsProtocolAwardSplit(bytes32,address,uint8,uint256,uint256)");
+                bytes32 splitSig = keccak256("CrapsProtocolAwardSplit(bytes32,uint32,uint8,uint256,uint256)");
                 for (uint256 j; j < logs.length; ++j) {
                     if (logs[j].topics[0] != splitSig || uint256(logs[j].topics[3]) != 1) continue;
                     (uint256 gross, uint256 liquid) = abi.decode(logs[j].data, (uint256, uint256));
@@ -2945,7 +2947,7 @@ contract CrapsBattleTest is CrapsPins {
         vm.prank(v);
         craps.setPreferredBoard(board);
         vm.prank(ContractAddresses.GAME);
-        uint24 reservedDay = craps.deliverPasses(v, 2, 0);
+        uint24 reservedDay = craps.deliverPasses(_idFor(v), 2, 0);
         uint256 prepaid = (craps._daySlotOfPub(reservedDay) << 64) | craps.daySeatNumberOf(reservedDay, v);
         assertEq(craps.betOf(prepaid).chips, board);
 
@@ -3034,7 +3036,7 @@ contract CrapsBattleTest is CrapsPins {
         craps.setPassCredits(house, 0, 0);
         craps.setPassCredits(ContractAddresses.VAULT, 0, 0);
         vm.prank(ContractAddresses.GAME);
-        craps.deliverPasses(house, 2, 0);
+        craps.deliverPasses(_idFor(house), 2, 0);
         flip.setBurnRefused(house, true);
         flip.setBurnRefused(ContractAddresses.VAULT, true);
 

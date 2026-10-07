@@ -443,7 +443,7 @@ contract AnyInputSafety is DeployProtocol {
     }
 
     function _selectors() internal pure returns (bytes4[] memory s) {
-        s = new bytes4[](119);
+        s = new bytes4[](117);
         uint256 i;
         s[i++] = AnyInputHandler.cf_deposit.selector;
         s[i++] = AnyInputHandler.cf_claim.selector;
@@ -496,8 +496,6 @@ contract AnyInputSafety is DeployProtocol {
         s[i++] = AnyInputHandler.gn_burn.selector;
         s[i++] = AnyInputHandler.gn_vote.selector;
         s[i++] = AnyInputHandler.pm_placeBet.selector;
-        s[i++] = AnyInputHandler.pm_claim.selector;
-        s[i++] = AnyInputHandler.pm_claimRound.selector;
         s[i++] = AnyInputHandler.af_createCode.selector;
         s[i++] = AnyInputHandler.af_referPlayer.selector;
         s[i++] = AnyInputHandler.af_claim.selector;
@@ -551,7 +549,7 @@ contract AnyInputSafety is DeployProtocol {
         s[i++] = AnyInputHandler.prog_deadman.selector;
         s[i++] = AnyInputHandler.gd_buyPresaleBox.selector;
         s[i++] = AnyInputHandler.gd_buyLootboxAndPresaleBox.selector;
-        require(i == 119, "selector table size");
+        require(i == 117, "selector table size");
     }
 
     // =====================================================================================

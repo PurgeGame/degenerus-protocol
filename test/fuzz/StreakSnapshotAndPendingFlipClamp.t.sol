@@ -103,13 +103,14 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
         // Ground a live run so afkingStartDay != 0 and recordAfkingSecondary is not a no-op.
         _deliverDay(_singleton(p), 0xC1A11);
         assertGt(_afkingStartOf(p), 0, "non-vacuity: a live afking run grounds the +1 bump path");
+        uint32 pId = game.walletIdOf(p);
 
         // Pin the latch AT the ceiling, then bump +1 through the live secondary path: the kept clamp
         // saturates the write at 65535 (newOwed = 65536 > type(uint16).max -> 65535), never wrapping to 0.
         _setStreakLatchSlot(p, STREAK_LATCH_CEILING);
         assertEq(_streakLatch16Of(p), STREAK_LATCH_CEILING, "latch pinned at the uint16 ceiling");
         vm.prank(QUESTS_CALLER);
-        game.recordAfkingSecondary(p, 1); // +1 at the ceiling -> clamp saturates
+        game.recordAfkingSecondary(pId, 1); // +1 at the ceiling -> clamp saturates
         assertEq(_streakLatch16Of(p), STREAK_LATCH_CEILING, "clamp: +1 at the ceiling stays 65535 (saturates, never wraps to 0)");
         assertTrue(_streakLatch16Of(p) != 0, "clamp: the +1 bump did NOT wrap the latch to 0");
 
@@ -117,27 +118,27 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
         // the top), so the saturation is a true clamp, not a stuck value.
         _setStreakLatchSlot(p, STREAK_LATCH_CEILING - 1);
         vm.prank(QUESTS_CALLER);
-        game.recordAfkingSecondary(p, 1);
+        game.recordAfkingSecondary(pId, 1);
         assertEq(_streakLatch16Of(p), STREAK_LATCH_CEILING, "clamp: a +1 from one-below reaches exactly the ceiling");
 
         // A value below 255 (the old uint8 ceiling) bumps cleanly into the >255 range — the widened latch
         // carries it past the old truncation point, so the +1 path is not the only thing wider; the base is too.
         _setStreakLatchSlot(p, 255);
         vm.prank(QUESTS_CALLER);
-        game.recordAfkingSecondary(p, 1);
+        game.recordAfkingSecondary(pId, 1);
         assertEq(_streakLatch16Of(p), 256, "clamp/widen: a +1 from 255 reads 256 (the latch carries past the old uint8 ceiling)");
 
         // amount > 1 (the level-quest path, LEVEL_QUEST_STREAK_BONUS = 5): the full amount is added,
         // then the same clamp binds at the ceiling. A +5 from a non-ceiling value advances by 5.
         _setStreakLatchSlot(p, 250);
         vm.prank(QUESTS_CALLER);
-        game.recordAfkingSecondary(p, 5);
+        game.recordAfkingSecondary(pId, 5);
         assertEq(_streakLatch16Of(p), 255, "amount: a +5 from 250 reaches 255 (full amount applied)");
 
         // A +5 that would overshoot the ceiling saturates to 65535, never wrapping past it.
         _setStreakLatchSlot(p, STREAK_LATCH_CEILING - 3);
         vm.prank(QUESTS_CALLER);
-        game.recordAfkingSecondary(p, 5);
+        game.recordAfkingSecondary(pId, 5);
         assertEq(_streakLatch16Of(p), STREAK_LATCH_CEILING, "amount: a +5 overshooting the ceiling saturates at 65535");
         assertTrue(_streakLatch16Of(p) != 0, "amount: the +5 overshoot did NOT wrap the latch to 0");
     }
@@ -312,14 +313,16 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
     /// @dev The manual quest streak handed back to `who` after finalize — the protocol's own quest-streak
     ///      source (the dormant value the score reads for a non-afker).
     function _manualStreakOf(address who) internal view returns (uint256 streak) {
-        (streak, ) = quests.effectiveBaseStreakAndAfking(who);
+        (streak, ) = quests.effectiveBaseStreakAndAfking(game.walletIdOf(who));
     }
 
     /// @dev Drive `player`'s dormant manual quest streak to `q` by writing `questPlayerState[player]` directly:
     ///      `state.streak = q` with `lastSyncDay` non-zero and the day anchors 0, so `_questSyncState` skips its
     ///      decay branch and `beginAfking` snapshots `q` verbatim.
     function _setManualQuestStreak(address player, uint16 q) internal {
-        bytes32 slot = keccak256(abi.encode(player, QUESTSTATE_SLOT));
+        uint32 id = game.walletIdOf(player);
+        if (id == 0) id = _giveWalletId(player);
+        bytes32 slot = keccak256(abi.encode(uint256(id), QUESTSTATE_SLOT));
         uint256 word = (uint256(q) << (OFF_QS_STREAK * 8)) | (uint256(1) << (OFF_QS_SYNCDAY * 8));
         vm.store(address(quests), slot, bytes32(word));
     }

@@ -243,11 +243,11 @@ contract CoverageGap222 is DeployProtocol {
     function test_gap_boon_consumers() public {
         vm.prank(buyer);
         (bool ok1, ) = address(game).call(
-            abi.encodeWithSignature("consumeCoinflipBoon(address)", buyer)
+            abi.encodeWithSignature("consumeCoinflipBoon(uint32)", uint32(1))
         );
         vm.prank(buyer);
         (bool ok2, ) = address(game).call(
-            abi.encodeWithSignature("consumeDecimatorBoon(address)", buyer)
+            abi.encodeWithSignature("consumeDecimatorBoon(uint32)", uint32(1))
         );
         assertFalse(ok1, "consumeCoinflipBoon rejected non-authorized caller");
         assertFalse(ok2, "consumeDecimatorBoon rejected non-authorized caller");
@@ -506,19 +506,19 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o1, ) = address(coinflip).call(
             abi.encodeWithSignature(
-                "creditFlip(address,uint256)",
-                buyer,
+                "creditFlip(uint32,uint256)",
+                uint32(1),
                 uint256(1)
             )
         );
-        address[] memory players = new address[](1);
+        uint32[] memory players = new uint32[](1);
         uint256[] memory amounts = new uint256[](1);
-        players[0] = buyer;
+        players[0] = 1;
         amounts[0] = 1;
         vm.prank(buyer);
         (bool o2, ) = address(coinflip).call(
             abi.encodeWithSignature(
-                "creditFlipBatch(address[],uint256[])",
+                "creditFlipBatch(uint32[],uint256[])",
                 players,
                 amounts
             )
@@ -1320,42 +1320,44 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o1, ) = address(quests).call(
             abi.encodeWithSignature(
-                "handlePurchase(address,uint256,uint32,uint256,uint256,uint256)",
-                buyer,
+                "handlePurchase(uint32,uint256,uint32,uint256,uint256,uint256)",
                 uint32(1),
-                true,
+                uint256(1),
+                uint32(1),
+                uint256(1),
+                uint256(1 ether),
                 uint256(1 ether)
             )
         );
         vm.prank(buyer);
         (bool o2, ) = address(quests).call(
             abi.encodeWithSignature(
-                "handleFlip(address,uint256)",
-                buyer,
+                "handleFlip(uint32,uint256)",
+                uint32(1),
                 uint256(1)
             )
         );
         vm.prank(buyer);
         (bool o3, ) = address(quests).call(
             abi.encodeWithSignature(
-                "handleDecimator(address,uint256)",
-                buyer,
+                "handleDecimator(uint32,uint256)",
+                uint32(1),
                 uint256(1)
             )
         );
         vm.prank(buyer);
         (bool o4, ) = address(quests).call(
             abi.encodeWithSignature(
-                "handleAffiliate(address,uint256)",
-                buyer,
+                "handleAffiliate(uint32,uint256)",
+                uint32(1),
                 uint256(1)
             )
         );
         vm.prank(buyer);
         (bool o6, ) = address(quests).call(
             abi.encodeWithSignature(
-                "handlePurchase(address,uint256,uint32,uint256,uint256,uint256)",
-                buyer,
+                "handlePurchase(uint32,uint256,uint32,uint256,uint256,uint256)",
+                uint32(1),
                 uint256(1),
                 uint32(0),
                 uint256(1),
@@ -1366,8 +1368,8 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o7, ) = address(quests).call(
             abi.encodeWithSignature(
-                "handleDegenerette(address,uint256,bool,uint256)",
-                buyer,
+                "handleDegenerette(uint32,uint256,bool,uint256)",
+                uint32(1),
                 uint256(1),
                 true,
                 uint256(1 ether)
@@ -1397,10 +1399,10 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool ok, ) = address(quests).call(
             abi.encodeWithSignature(
-                "awardQuestStreakBonus(address,uint16,uint32)",
-                buyer,
+                "awardQuestStreakBonus(uint32,uint16,uint24)",
+                uint32(1),
                 uint16(1),
-                uint32(1)
+                uint24(1)
             )
         );
         assertFalse(ok, "awardQuestStreakBonus rejected non-coin caller");
@@ -1481,8 +1483,8 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool ok, ) = address(game).call(
             abi.encodeWithSignature(
-                "payRecordSdgnrs(address,uint256)",
-                buyer,
+                "payRecordSdgnrs(uint32,uint256)",
+                uint32(1),
                 uint256(1)
             )
         );
@@ -1583,8 +1585,8 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool ok, ) = address(jackpots).call(
             abi.encodeWithSignature(
-                "recordBafFlip(address,uint24,uint256)",
-                buyer,
+                "recordBafFlip(uint32,uint24,uint256)",
+                uint32(1),
                 uint24(0),
                 uint256(1)
             )

@@ -13,30 +13,22 @@
     "label": "questPlayerState",
     "offset": 0,
     "slot": 1,
-    "typeLabel": "mapping(address => struct DegenerusQuests.PlayerQuestState)"
-  },
-  {
-    "bytes": "2",
-    "encoding": "inplace",
-    "label": "_reservedLevelQuest",
-    "offset": 0,
-    "slot": 2,
-    "typeLabel": "uint16"
+    "typeLabel": "mapping(uint32 => struct DegenerusQuests.PlayerQuestState)"
   },
   {
     "bytes": "32",
     "encoding": "mapping",
     "label": "levelQuestPlayerState",
     "offset": 0,
-    "slot": 3,
-    "typeLabel": "mapping(address => uint256)"
+    "slot": 2,
+    "typeLabel": "mapping(uint32 => uint256)"
   },
   {
     "bytes": "32",
     "encoding": "mapping",
     "label": "questRolledDayBitmap",
     "offset": 0,
-    "slot": 4,
+    "slot": 3,
     "typeLabel": "mapping(uint16 => uint256)"
   }
 ]

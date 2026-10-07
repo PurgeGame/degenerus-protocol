@@ -91,8 +91,8 @@ contract JackpotTableHarness is CrapsViews {
     function clearDayBodies(uint24 day) external {
         uint256 d = uint256(day) * 8;
         _dayTickets[d] = 0;
-        _storeDaySeat(d, ContractAddresses.SDGNRS, 0);
-        _storeDaySeat(d, ContractAddresses.VAULT, 0);
+        _storeDaySeat(d, 2, 0);
+        _storeDaySeat(d, 1, 0);
     }
     function jackpotTerms(uint64 slot) external view returns (Window memory) { return _slotWindow(slot); }
     /// @dev Unopen a day, so the next lock detaches its battle to remainder seven of that day.

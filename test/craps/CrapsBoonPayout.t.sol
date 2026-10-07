@@ -48,6 +48,8 @@ contract CrapsBoonPayoutTest is CrapsPins {
 
     function setUp() public {
         _installPins();
+        game.registerWallet(alice, true);
+        game.registerWallet(bob, true);
         craps = new BoonPayoutHarness();
         vm.warp(block.timestamp + 1 days);
         _setIndex(0);
@@ -120,7 +122,7 @@ contract CrapsBoonPayoutTest is CrapsPins {
 
         // A DELIVERED pass is not a purchase.
         vm.prank(ContractAddresses.GAME);
-        craps.deliverPasses(bob, 1, 0);
+        craps.deliverPasses(_idFor(bob), 1, 0);
         uint256 seat = craps.daySeatNumberOf(today + 1, bob);
         assertGt(seat, 0, "the delivery did not seat tomorrow");
         uint256 betId = ((uint256(today + 1) * slotsPerDay) << 64) | seat;
@@ -128,7 +130,7 @@ contract CrapsBoonPayoutTest is CrapsPins {
 
         // Nor is SPENDING a banked credit, even with a boon armed.
         vm.prank(ContractAddresses.GAME);
-        craps.deliverPasses(alice, 2, 0);
+        craps.deliverPasses(_idFor(alice), 2, 0);
         flip.setNextBoonMask(uint8(MASK_15));
         vm.prank(alice);
         craps.applyCrapsPasses(today + 5, 1, false);
@@ -296,7 +298,7 @@ contract CrapsBoonPayoutTest is CrapsPins {
     }
 
     function _settledPaidOf(Vm.Log[] memory logs, uint256 betId) internal pure returns (uint256) {
-        bytes32 sig = keccak256("CrapsBetSettled(uint256,address,uint256,uint256)");
+        bytes32 sig = keccak256("CrapsBetSettled(uint256,uint32,uint256,uint256)");
         for (uint256 i = 0; i < logs.length; ++i) {
             if (logs[i].topics.length == 3 && logs[i].topics[0] == sig && uint256(logs[i].topics[1]) == betId) {
                 (, uint256 paid) = abi.decode(logs[i].data, (uint256, uint256));
@@ -358,7 +360,7 @@ contract CrapsBoonPayoutTest is CrapsPins {
         vm.recordLogs();
         craps.settleSlot(slot, WHOLE_FIELD);
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        bytes32 sig = keccak256("CrapsBetSettled(uint256,address,uint256,uint256)");
+        bytes32 sig = keccak256("CrapsBetSettled(uint256,uint32,uint256,uint256)");
         for (uint256 i = 0; i < logs.length; ++i) {
             if (logs[i].topics.length == 3 && logs[i].topics[0] == sig && uint256(logs[i].topics[1]) == betId) {
                 (, uint256 paid) = abi.decode(logs[i].data, (uint256, uint256));

@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 // Permanently skipped historical cases were retired in the test review.
 // See docs/TEST_REVIEW.md for replacement suites and remaining coverage limits.
 
+import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -32,11 +33,11 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     // (PRESERVED VERBATIM: 351-04/05/08 port this topic-decode).
     // -------------------------------------------------------------------------
 
-    /// @dev keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)") — emitted once per
+    /// @dev keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)") — emitted once per
     ///      creditFlip. topics[1] is the indexed player (recipient isolation); the non-indexed
     ///      `amount` is the first 32 bytes of `data`.
     bytes32 private constant COINFLIP_STAKE_UPDATED_SIG =
-        keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
+        keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)");
 
     // -------------------------------------------------------------------------
     // DegenerusGame pinned slot layout (RE-DERIVED via `forge inspect storage DegenerusGame`;
@@ -47,7 +48,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay (bytes 11..13 of the Sub slot)
     uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS; // _subscribers address[] (length here)
     uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED; // mintPacked_ mapping root (deity bit)
-    uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS_SHIFT in mintPacked_
+    uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT;
 
     uint256 private constant CLAIMABLE_POOL_SLOT = GameSlots.CLAIMABLE_POOL; // uint128 packed at offset 16 of slot 1
     uint256 private constant BALANCES_PACKED_SLOT = GameSlots.BALANCES_PACKED; // mapping(address => uint256) balancesPacked [afking:high128 | claimable:low128]
@@ -123,7 +124,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
             }
             if (logs[i].emitter == address(coinflip) && logs[i].topics.length > 1
                 && logs[i].topics[0] == COINFLIP_STAKE_UPDATED_SIG) {
-                assertNotEq(logs[i].topics[1], bytes32(uint256(uint160(caller))), "tiny work credited the miner");
+                assertNotEq(logs[i].topics[1], bytes32(uint256(game.walletIdOf(caller))), "tiny work credited the miner");
             }
         }
         assertEq(workEvents, 1, "the request must report measured progress");
@@ -189,7 +190,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
                     : (used - 1_000_000) * rate * 1000 ether * (3000 + step * 4500) * _passFactor * (lockedAtStart ? 2 : 1)
                         / (rewardPrice * 10_000);
                 // Whole-FLIP normalization at the payment site: positive sub-FLIP pays 1 FLIP.
-                if (expected != 0) expected = expected < 1 ether ? 1 ether : (expected / 1 ether) * 1 ether;
+                if (expected != 0) expected = expected < 1 ether ? 1 : expected / 1 ether;
                 assertEq(paid, expected, "reward prices qualifying measured gas at capped base fee");
                 assertGt(used, 0);
                 ++workEvents;
@@ -199,7 +200,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
                 logs[i].emitter == address(coinflip) &&
                 logs[i].topics.length > 1 &&
                 logs[i].topics[0] == COINFLIP_STAKE_UPDATED_SIG &&
-                logs[i].topics[1] == bytes32(uint256(uint160(keeper)))
+                logs[i].topics[1] == bytes32(uint256(game.walletIdOf(keeper)))
             ) {
                 count++;
                 amount += abi.decode(logs[i].data, (uint256));
@@ -346,6 +347,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         uint256[] memory seededFund = new uint256[](N);
         for (uint256 i; i < N; i++) {
             players[i] = makeAddr(string(abi.encodePacked("snap_player_", _u(i))));
+            _giveWalletId(players[i]);
             // Vary: alternate zero / non-zero, distinct magnitudes.
             seededClaim[i] = (i % 3 == 0) ? 0 : (uint256(i + 1) * 1.337 ether);
             if (seededClaim[i] > 0) _seedClaimable(players[i], seededClaim[i]);
@@ -455,7 +457,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
                 logs[i].emitter == address(coinflip) &&
                 logs[i].topics.length > 1 &&
                 logs[i].topics[0] == COINFLIP_STAKE_UPDATED_SIG &&
-                logs[i].topics[1] == bytes32(uint256(uint160(who)))
+                logs[i].topics[1] == bytes32(uint256(game.walletIdOf(who)))
             ) count++;
         }
     }
@@ -488,6 +490,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     ///      AfKing.depositFor). The deposit credits both the player bucket AND claimablePool in-contract,
     ///      so SOLVENCY-01 stays balanced.
     function _fundAfking(address who, uint256 amount) internal {
+        _giveWalletId(who);
         vm.deal(address(this), amount);
         game.depositAfkingFunding{value: amount}(who);
     }

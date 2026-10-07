@@ -4,6 +4,7 @@ import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js
 import {
   deployFullProtocol,
   restoreAddresses,
+  giveWalletId,
 } from "../helpers/deployFixture.js";
 import {
   eth,
@@ -81,6 +82,7 @@ describe("WhaleBundle", function () {
       for (let slot = 0; slot < 3; slot++) {
         const discountBps = whaleDiscountBps(slots[slot]);
         if (discountBps == 0n) continue;
+        await giveWalletId(game, recipient.address);
         await game
           .connect(deity)
           .issueDeityBoon(deity.address, recipient.address, slot);
@@ -675,6 +677,7 @@ describe("WhaleBundle", function () {
       for (let slot = 0; slot < 3; slot++) {
         const discountBps = lazyDiscountBps(slots[slot]);
         if (discountBps == 0n) continue;
+        await giveWalletId(game, recipient.address);
         await game
           .connect(deity)
           .issueDeityBoon(deity.address, recipient.address, slot);

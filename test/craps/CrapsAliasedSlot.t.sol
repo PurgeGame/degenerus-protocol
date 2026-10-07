@@ -72,7 +72,7 @@ contract CrapsAliasedSlotTest is CrapsPins {
     }
 
     function _paidLogs(Vm.Log[] memory logs) internal pure returns (uint256 n) {
-        bytes32 sig = keccak256("CrapsBattlePaid(uint256,bytes32,address,uint256)");
+        bytes32 sig = keccak256("CrapsBattlePaid(uint256,bytes32,uint32,uint256)");
         for (uint256 i = 0; i < logs.length; ++i) {
             if (logs[i].topics[0] == sig) ++n;
         }

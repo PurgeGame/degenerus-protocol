@@ -285,7 +285,7 @@ contract TurboBafTicketFloor is DeployProtocol {
 
     function _tryCoinflipDeposit() internal {
         vm.prank(buyer);
-        try coinflip.depositCoinflip(buyer, 500 ether) {} catch {}
+        try coinflip.depositCoinflip(buyer, 500) {} catch {}
     }
 
     // ---------------------------------------------------------------------
@@ -313,7 +313,8 @@ contract TurboBafTicketFloor is DeployProtocol {
         if (reqId == 0) return;
         (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
         if (fulfilled) return;
-        uint256 word = uint256(keccak256(abi.encode(simTime, reqId)));
+        // Bit 0 set: every daily flip wins, so the level-10 BAF resolves instead of skipping.
+        uint256 word = uint256(keccak256(abi.encode(simTime, reqId))) | 1;
         try mockVRF.fulfillRandomWords(reqId, word) {} catch {}
     }
 

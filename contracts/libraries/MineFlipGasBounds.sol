@@ -21,8 +21,8 @@ library MineFlipGasBounds {
     uint256 internal constant TRANSITION_CLOSE = 3_850_000;
     uint256 internal constant LEVEL_ONE_DRAW = 2_500_000;
     // Cold consolidation. Worst: x00 losing flip, skip mark plus the incinerator's 20-probe
-    // book search and fresh FLIP credit, Decimator seal, yield dump, keep roll: 0.48M measured.
-    // The x00 winning flip (BAF reservation) measures 0.42M.
+    // book search and fresh FLIP credit, Decimator seal, growth seal, yield dump, keep roll:
+    // 0.51M measured including intrinsic gas. The x00 winning flip (BAF reservation) measures 0.45M.
     uint256 internal constant POOL_CONSOLIDATION = 580_000;
     uint256 internal constant DAILY_PHASE_TAIL = 150_000;
     // Vault flip settlement at an x0 seal over the full 365-day claim window, auto-rebuy
@@ -146,6 +146,13 @@ library MineFlipGasBounds {
     uint256 internal constant CRAPS_MAINTENANCE_GAS_MAX = 240_000;
     uint256 internal constant CRAPS_REFUND_GAS_MAX = 65_000;
     uint256 internal constant CRAPS_SWEEP_TAIL_GAS = 130_000;
+
+    // GROWTH
+    // Winners paid per Parimutuel settlement call, credited through one creditFlipBatch.
+    uint256 internal constant GROWTH_SETTLE_WINNERS = 100;
+    // Cold chunk of GROWTH_SETTLE_WINNERS distinct winners on fresh Coinflip lanes (the call, packed
+    // ID reads, cursor write, events and batch credit): 2.65M measured inside mineFlip.
+    uint256 internal constant GROWTH_SETTLE_GAS = 3_200_000;
 
     // REDEEM
     // Cold beneficiary without a lootbox leg: 0.23M measured (pre-batch; re-measure).

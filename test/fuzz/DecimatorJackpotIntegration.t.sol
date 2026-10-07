@@ -120,7 +120,7 @@ contract DecimatorJackpotIntegrationTest is Test {
         vm.etch(ContractAddresses.CRAPS_ENGINE, type(DecimatorJackpotEngineProbe).runtimeCode);
         vm.etch(ContractAddresses.CRAPS, type(DecimatorJackpotPreferenceProbe).runtimeCode);
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
-        vm.mockCall(ContractAddresses.AFFILIATE, abi.encodeWithSignature("affiliateTop(uint24)"), abi.encode(address(0), uint256(0)));
+        vm.mockCall(ContractAddresses.AFFILIATE, abi.encodeWithSignature("affiliateTop(uint24)"), abi.encode(uint32(0), uint96(0)));
         h = DecimatorJackpotHarness(ContractAddresses.GAME);
         h.seedProtocolWallets();
         lens = new DegenerusGameLens();

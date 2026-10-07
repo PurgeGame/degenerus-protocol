@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
 import {WWXRP} from "../../contracts/WWXRP.sol";
-import {AffiliateIdentityLib} from "../../contracts/libraries/AffiliateIdentityLib.sol";
+import {WalletTableLib} from "../../contracts/libraries/WalletTableLib.sol";
 import {CrapsPreferenceLib} from "../../contracts/libraries/CrapsPreferenceLib.sol";
 import {GameSlots, CrapsSlots} from "../helpers/GameSlots.sol";
 
@@ -180,13 +180,13 @@ contract StorageSlotPinsTest is Test {
 
         (s,) = h.s_boonPacked(); assertEq((new WwxrpSlotHarness()).boonPackedSlot(), s, "WWXRP.GAME_BOON_PACKED_SLOT");
 
-        (s,) = h.s_mintPacked(); assertEq(AffiliateIdentityLib.ID_SLOT, s, "AffiliateIdentityLib.ID_SLOT");
-        (s,) = h.s_wallets(); assertEq(AffiliateIdentityLib.OWNERS_SLOT, s, "AffiliateIdentityLib.OWNERS_SLOT");
+        (s,) = h.s_wallets(); assertEq(WalletTableLib.OWNERS_SLOT, s, "WalletTableLib.OWNERS_SLOT");
     }
 
     function test_CrapsSlotConstants() public {
         CrapsSlotHarness c = new CrapsSlotHarness();
-        assertEq(CrapsPreferenceLib.PASS_SLOT, c.passCredits(), "CrapsPreferenceLib.PASS_SLOT");
+        // JackpotBattleFieldLib reads boards from the ID-keyed pass word in Craps storage.
+        assertEq(CrapsPreferenceLib.PASS_SLOT, c.passCreditsById(), "CrapsPreferenceLib.PASS_SLOT");
         assertEq(CrapsSlots.PASS_CREDITS, c.passCredits(), "CrapsSlots.PASS_CREDITS");
         assertEq(CrapsSlots.PASS_CREDITS_BY_ID, c.passCreditsById(), "CrapsSlots.PASS_CREDITS_BY_ID");
         assertEq(CrapsSlots.DAY_STAKED, c.dayStaked(), "CrapsSlots.DAY_STAKED");

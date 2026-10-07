@@ -21,7 +21,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///         fraction Bernoulli-rounded), capped at twelve high passes with the rest staying
 ///         coinflip credit; a sub-pass roll whose fraction loses pays the WWXRP dud.
 contract CrapsPassAwards is DeployProtocol {
-    event CrapsPassesCredited(address indexed player, bool highRoller, uint256 count);
+    event CrapsPassesCredited(uint32 indexed playerId, bool highRoller, uint256 count);
     event LootBoxBuy(address indexed buyer, uint48 indexed index, uint32 position, uint256 amount);
 
     uint256 private constant WHALE_EARLY_PRICE = 2.4 ether;
@@ -35,6 +35,7 @@ contract CrapsPassAwards is DeployProtocol {
         vm.warp(block.timestamp + 1 days);
         buyer = makeAddr("pass_award_buyer");
         vm.deal(buyer, 5_000 ether);
+        _giveWalletId(buyer);
     }
 
     /// @dev game.level = lvl: uint24 at slot 0, byte offset 12 (bit 96). Reaching `lvl` means every
@@ -66,7 +67,7 @@ contract CrapsPassAwards is DeployProtocol {
 
     function testWhaleAwardPerPassBelowLevel10() public {
         vm.expectEmit(address(crapsBattle));
-        emit CrapsPassesCredited(buyer, false, 3);
+        emit CrapsPassesCredited(game.walletIdOf(buyer), false, 3);
         _buyWhale(buyer, 3, WHALE_EARLY_PRICE);
 
         (uint256 normal, uint256 high) = crapsBattle.passCreditsOf(buyer);
@@ -98,7 +99,7 @@ contract CrapsPassAwards is DeployProtocol {
         vm.expectEmit(true, false, false, true, address(game));
         emit LootBoxBuy(buyer, 0, 0, DEITY_FIRST_PRICE / 20);
         vm.expectEmit(address(crapsBattle));
-        emit CrapsPassesCredited(buyer, true, 1);
+        emit CrapsPassesCredited(game.walletIdOf(buyer), true, 1);
         _buyDeity(buyer, 4);
 
         (uint256 normal, uint256 high) = crapsBattle.passCreditsOf(buyer);
@@ -120,7 +121,7 @@ contract CrapsPassAwards is DeployProtocol {
         vm.expectEmit(true, false, false, true, address(game));
         emit LootBoxBuy(buyer, 0, 0, DEITY_FIRST_PRICE / 10);
         vm.expectEmit(address(crapsBattle));
-        emit CrapsPassesCredited(buyer, false, 1);
+        emit CrapsPassesCredited(game.walletIdOf(buyer), false, 1);
         _buyDeity(buyer, 7);
 
         (uint256 normal, uint256 high) = crapsBattle.passCreditsOf(buyer);
@@ -131,8 +132,9 @@ contract CrapsPassAwards is DeployProtocol {
     // ── Saturation: a full lane drops the excess, the purchase still lands ───
 
     function testSaturatedLaneDropsExcessAndPurchaseSucceeds() public {
+        uint32 buyerId = game.walletIdOf(buyer);
         vm.prank(address(game));
-        crapsBattle.creditPasses(buyer, type(uint32).max, 0);
+        crapsBattle.creditPasses(buyerId, type(uint32).max, 0);
 
         _buyWhale(buyer, 2, WHALE_EARLY_PRICE);
 
@@ -322,7 +324,7 @@ contract CrapsPassAwards is DeployProtocol {
 
         _finalizeIndex(index);
         vm.expectEmit(address(crapsBattle));
-        emit CrapsPassesCredited(p, false, n);
+        emit CrapsPassesCredited(game.walletIdOf(p), false, n);
         vm.expectEmit(address(game));
         emit PresaleBoxOpened(p, (uint48(1) << 46) | index, amount, 0, 0, 0, false, n, 0);
         game.mineFlip();
@@ -347,7 +349,7 @@ contract CrapsPassAwards is DeployProtocol {
 
         _finalizeIndex(index);
         vm.expectEmit(address(crapsBattle));
-        emit CrapsPassesCredited(p, true, h);
+        emit CrapsPassesCredited(game.walletIdOf(p), true, h);
         vm.expectEmit(address(game));
         emit PresaleBoxOpened(p, (uint48(1) << 46) | index, amount, 0, 0, 0, false, 0, h);
         game.mineFlip();
@@ -372,7 +374,7 @@ contract CrapsPassAwards is DeployProtocol {
 
         _finalizeIndex(index);
         vm.expectEmit(address(crapsBattle));
-        emit CrapsPassesCredited(p, true, HIGH_CAP);
+        emit CrapsPassesCredited(game.walletIdOf(p), true, HIGH_CAP);
         vm.expectEmit(address(game));
         emit PresaleBoxOpened(p, (uint48(1) << 46) | index, amount, flipLeft, 0, 0, false, 0, uint32(HIGH_CAP));
         game.mineFlip();

@@ -297,7 +297,7 @@ named constants in the consumer; full string hashes are constant expressions.
 | WWXRP box/foil spin | `H(boxSpinSeed, WWXRP_DRAW_TAG)`, result `H(that, RESULT_TICKET_TAG)` | Internal box and foil reward spins only (no player-funded WWXRP bets); derived from that box's root, separate from the ETH/FLIP board; rig `H(spinSeed, WWXRP_RIG_SALT)` |
 | Degenerette survival / rounding / record | `H(word, walletId, betId, respectiveTag)` | Owner's wallet ID (bet word bits 0–31) + index-scoped bet id (queue position + 1, see DEGENERETTE-BET-QUEUE.md); tags `BET_SURVIVAL_TAG`, `FLIP_ROUND_TAG`, `RECORD_SPIN_TAG`; settlement batch excluded |
 | Craps dice | `H(_CRAPS_SEED_DOMAIN, word, bound)` | Shared table sequence; existing engine domains and rotating shooter retained |
-| Craps scatter / survival | `H(word, SCATTER_TAG, salt)`; survival `H(SURVIVAL_TAG, seed, round, salt)` | Salt = the bet word's owner field for paid entries, `uint160(H(word, JACKPOT_AWARDED_TAG, betId))` for awarded entries; per-owner board, distinct from lootbox boon |
+| Craps scatter / survival | `H(word, SCATTER_TAG, salt)`; survival `H(SURVIVAL_TAG, seed, round, salt)` | Salt = the paid entry's committed owner wallet ID (bet word bits 0–31, bits 32–159 zero; protocol seats sDGNRS 2 / Vault 1), `uint160(H(word, JACKPOT_AWARDED_TAG, betId))` for awarded entries; per-owner board, distinct from lootbox boon |
 | Craps bounty boost | `H(word, bound, BOOST_TAG)` | Window identity; battle financial key excluded |
 | Craps schedule | `H(word, SCHEDULE_TAG, period)` | Fixed scheduled period |
 | Craps ties / rounding | `H(word, TIE_TAG, bound<<64 | seat)` / `H(word, CRAPS_ROUND_TAG, betId)` | Fixed window and entry; separate domains |
@@ -316,6 +316,7 @@ named constants in the consumer; full string hashes are constant expressions.
 | Foil packs | `FOIL_SEED_TAG` on frozen normal cohort word; `FOIL_CCY_TAG` / `FOIL_SPIN_TAG` on immutable packed payout seed | Stored lines bind the buyer's wallet ID, level and line ordinal; payout binds draw day and ticket ordinal |
 | Deity boon menu | `H(dailyWord, deityWalletId, day, slot)` | Protocol issuers use their constant IDs (VAULT 1, SDGNRS 2); `DeityBoonViewer` reads the deity's ID from the Game |
 | Protocol boon winners | `H(PROTOCOL_BOON_WINNER_TAG, issuer, day, slot, winnerWord)` | Issuer-address domain; winner cohort closed before request |
+| WWXRP draw bucket | packed `H(bytes32("WWXRP_DRAW_BUCKET"), chainid, wwxrp, uint24(day), uint32(walletId)) % 10` | The entrant's admitted wallet ID (`enter` registers before hashing); no VRF word; `bucketOf(day, 0)` returns 10 (no bucket) |
 | Incinerator / WWXRP draws | existing contract/day/draw domains | Weighted stake intervals choose probability, not hash input entropy |
 
 ## Intended sharing and retained exceptions

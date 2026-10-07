@@ -80,7 +80,7 @@ contract JackpotVariablePricingTest is CrapsPins {
 
     function _start(uint256 word, uint32 chips) private {
         uint256[] memory field = new uint256[](5);
-        for (uint256 i; i < 5; ++i) field[i] = uint160(ALICE) | (uint256(chips) << 160) | (uint256(1) << 180);
+        for (uint256 i; i < 5; ++i) field[i] = uint256(game.registerWallet(ALICE, true)) | (uint256(chips) << 160) | (uint256(1) << 180);
         vm.startPrank(ContractAddresses.GAME);
         cold.prepareJackpotBattle(2, word);
         cold.appendJackpotBattle(field, 5, true);
@@ -236,7 +236,7 @@ contract JackpotVariablePricingTest is CrapsPins {
         _lock(1_000_000_000);
         assertEq(_round().awardTarget, 500);
         uint256[] memory field = new uint256[](50);
-        for (uint256 i; i < 50; ++i) field[i] = uint160(ALICE) | (uint256(1) << 180);
+        for (uint256 i; i < 50; ++i) field[i] = uint256(game.registerWallet(ALICE, true)) | (uint256(1) << 180);
         vm.startPrank(ContractAddresses.GAME);
         cold.prepareJackpotBattle(2, words[15]);
         for (uint256 i; i < 10; ++i) cold.appendJackpotBattle(field, (i + 1) * 50, i == 9);

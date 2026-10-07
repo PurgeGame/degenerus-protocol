@@ -31,6 +31,7 @@ contract SeatTenureDraw is DeployProtocol {
     // ──────────────────────────────────────────────────────────────────────
 
     function _fundPool(address who, uint256 amount) internal {
+        _giveWalletId(who);
         vm.deal(address(this), amount);
         game.depositAfkingFunding{value: amount}(who);
     }
@@ -103,7 +104,7 @@ contract SeatTenureDraw is DeployProtocol {
         require(startDay != 0, "poke: no live run");
         uint24 newCovered = startDay + spanDays;
         for (uint256 base = 0; base < 160; base++) {
-            bytes32 slot = keccak256(abi.encode(who, base));
+            bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), base));
             uint256 word = uint256(vm.load(address(game), slot));
             if (
                 uint8(word) == qty &&
@@ -172,7 +173,7 @@ contract SeatTenureDraw is DeployProtocol {
                 if (winner == p && playerStakeBefore == 0) {
                     assertEq(
                         coinflip.coinflipAmount(p),
-                        flipAmount * 1 ether,
+                        flipAmount,
                         "creditFlip landed the prize as next-day stake"
                     );
                     playerWinChecked = true;

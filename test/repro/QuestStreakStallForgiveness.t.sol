@@ -11,7 +11,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///         unadvanced calendar gap. Test-only storage reads use compiler-derived packed offsets.
 contract QuestStreakStallForgiveness is DeployProtocol {
     uint256 private constant QUEST_STATE_SLOT = 1;
-    uint256 private constant QUEST_BITMAP_SLOT = 4;
+    uint256 private constant QUEST_BITMAP_SLOT = 3;
     uint256 private constant OFF_LAST_ACTIVE = 3;
     uint256 private constant OFF_LAST_SYNC = 6;
     uint256 private constant OFF_STREAK = 9;
@@ -45,7 +45,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         for (uint24 day = 11; day < 18; ++day) {
             assertFalse(_questWasRolled(day), "jump leaves every intervening day unrolled");
         }
-        assertEq(quests.effectiveBaseStreak(player), 10, "unrolled days do not decay the streak view");
+        assertEq(quests.effectiveBaseStreak(_qid(player)), 10, "unrolled days do not decay the streak view");
         assertEq(_questField(player, OFF_SHIELD, 8), 2, "unrolled days consume no shields");
 
         (, , uint32 streak, bool completed) = _completePrimary(player);
@@ -82,7 +82,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         for (uint24 day = initialQuestDay + 1; day < recoveryDay; ++day) {
             assertFalse(_questWasRolled(day), "real recovery does not invent a quest for a gap day");
         }
-        assertEq(quests.effectiveBaseStreak(player), 1, "real stalled days preserve the manual streak");
+        assertEq(quests.effectiveBaseStreak(_qid(player)), 1, "real stalled days preserve the manual streak");
         (, , uint32 recoveredStreak, bool recoveredCompleted) = _completePrimary(player);
         assertTrue(recoveredCompleted, "recovery-day primary completes");
         assertEq(recoveredStreak, 2, "real recovery continues the streak");
@@ -121,8 +121,9 @@ contract QuestStreakStallForgiveness is DeployProtocol {
 
         // Game-side callers pass wall time here during a stalled advance. They must synchronize
         // against the newest rolled quest day (10), not move the completion epoch to wall day 13.
+        uint32 qid1 = _qid(completedPlayer);
         vm.prank(ContractAddresses.GAME);
-        quests.beginAfking(completedPlayer, 13);
+        quests.beginAfking(qid1, 13);
         assertEq(_questField(completedPlayer, OFF_LAST_SYNC, 24), 10, "sync clock stays on rolled day");
         assertEq(_questField(completedPlayer, OFF_COMPLETION_MASK, 8) & 1, 1, "completion mask stays closed");
         (, , , bool duplicate) = _completePrimary(completedPlayer);
@@ -133,11 +134,11 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         _award(debtPlayer, 4, 13);
         assertEq(_questField(debtPlayer, OFF_LAST_ACTIVE, 24), 10, "bonus anchor normalized to quest day");
         assertEq(_questField(debtPlayer, OFF_STREAK, 16), 9, "bonus reaches the raw streak");
-        assertEq(quests.effectiveBaseStreak(debtPlayer), 5, "same-day view remains the start-of-day snapshot");
+        assertEq(quests.effectiveBaseStreak(_qid(debtPlayer)), 5, "same-day view remains the start-of-day snapshot");
 
         _roll(16);
         assertFalse(_questWasRolled(15), "later gap day remains unrolled");
-        assertEq(quests.effectiveBaseStreak(debtPlayer), 9, "recovery cannot panic or erase the bonus");
+        assertEq(quests.effectiveBaseStreak(_qid(debtPlayer)), 9, "recovery cannot panic or erase the bonus");
     }
 
     function test_FinalizeIgnoresUnrolledGapButNotNextRolledMiss() public {
@@ -152,7 +153,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         assertEq(_questField(player, OFF_LAST_ACTIVE, 24), 10, "anchor remains the actual valid mint day");
 
         _roll(17);
-        assertEq(quests.effectiveBaseStreak(player), 0, "rolled day 16 was a real miss and is not forgiven twice");
+        assertEq(quests.effectiveBaseStreak(_qid(player)), 0, "rolled day 16 was a real miss and is not forgiven twice");
     }
 
     function test_FinalizePendingTailSurvivesRecoveryThenDecaysOnRealMiss() public {
@@ -166,9 +167,9 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         assertEq(_questField(player, OFF_LAST_ACTIVE, 24), 10, "future wall days are not stored as quest anchors");
 
         _roll(16); // days 11..15 remain unrolled
-        assertEq(quests.effectiveBaseStreak(player), 10, "streak remains live on recovery day");
+        assertEq(quests.effectiveBaseStreak(_qid(player)), 10, "streak remains live on recovery day");
         _roll(17);
-        assertEq(quests.effectiveBaseStreak(player), 0, "first genuinely missed rolled day still decays");
+        assertEq(quests.effectiveBaseStreak(_qid(player)), 0, "first genuinely missed rolled day still decays");
     }
 
     function test_FinalizeDeliveredAheadKeepsAnchorThroughRecovery() public {
@@ -411,37 +412,47 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         assertEq(duringGapScore, beforeScore, "unadvanced wall days do not temporarily zero the live AFKing streak");
     }
 
+    function _qid(address who) private returns (uint32 id) {
+        id = game.walletIdOf(who);
+        if (id == 0) id = _giveWalletId(who);
+    }
+
     function _roll(uint24 day) private {
         vm.prank(ContractAddresses.GAME);
         quests.rollDailyQuest(day, uint256(keccak256(abi.encode("stall-quest", day))) | 1, false, false, false);
     }
 
     function _award(address player, uint16 amount, uint24 wallDay) private {
+        uint32 qid2 = _qid(player);
         vm.prank(ContractAddresses.GAME);
-        quests.awardQuestStreakBonus(player, amount, wallDay);
+        quests.awardQuestStreakBonus(qid2, amount, wallDay);
     }
 
     function _grantShields(address player, uint16 amount) private {
+        uint32 qid3 = _qid(player);
         vm.prank(ContractAddresses.GAME);
-        quests.awardQuestStreakShield(player, amount);
+        quests.awardQuestStreakShield(qid3, amount);
     }
 
     function _beginAfking(address player, uint24 wallDay) private {
+        uint32 qid4 = _qid(player);
         vm.prank(ContractAddresses.GAME);
-        quests.beginAfking(player, wallDay);
+        quests.beginAfking(qid4, wallDay);
     }
 
     function _finalizeAfking(address player, uint24 earned, uint24 covered, uint24 wallDay) private {
+        uint32 qid5 = _qid(player);
         vm.prank(ContractAddresses.GAME);
-        quests.finalizeAfking(player, earned, covered, wallDay);
+        quests.finalizeAfking(qid5, earned, covered, wallDay);
     }
 
     function _completePrimary(address player)
         private
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
+        uint32 qid6 = _qid(player);
         vm.prank(ContractAddresses.COIN);
-        (reward, questType, streak, completed, ) = quests.handlePurchase(player, MINT_PRICE, 0, 0, MINT_PRICE, MINT_PRICE);
+        (reward, questType, streak, completed, ) = quests.handlePurchase(qid6, MINT_PRICE, 0, 0, MINT_PRICE, MINT_PRICE);
     }
 
     function _startAfkingPlayer(string memory label, uint16 streak) private returns (address player) {
@@ -487,7 +498,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
     }
 
     function _questWord(address player) private view returns (uint256) {
-        return uint256(vm.load(address(quests), keccak256(abi.encode(player, QUEST_STATE_SLOT))));
+        return uint256(vm.load(address(quests), keccak256(abi.encode(uint256(game.walletIdOf(player)), QUEST_STATE_SLOT))));
     }
 
     function _questField(address player, uint256 offset, uint256 width) private view returns (uint256) {

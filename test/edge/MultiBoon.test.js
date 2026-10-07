@@ -4,6 +4,7 @@ import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js
 import {
   deployFullProtocol,
   restoreAddresses,
+  giveWalletId,
 } from "../helpers/deployFixture.js";
 import {
   eth,
@@ -113,6 +114,7 @@ describe("Multi-category boon coexistence", function () {
       for (let slot = 0; slot < 3; slot++) {
         const cat = boonCategory(slots[slot]);
         if (cat !== targetCategory) continue;
+        await giveWalletId(game, recipient.address);
         const tx = await game
           .connect(deity)
           .issueDeityBoon(deity.address, recipient.address, slot);
@@ -289,6 +291,7 @@ describe("Multi-category boon coexistence", function () {
       for (let slot = 0; slot < 3; slot++) {
         const cat = boonCategory(slots[slot]);
         if (cat === "other" || cat === "whalepass") continue;
+        await giveWalletId(game, bob.address);
         await game
           .connect(alice)
           .issueDeityBoon(alice.address, bob.address, slot);
@@ -348,6 +351,7 @@ describe("Multi-category boon coexistence", function () {
         const cat = boonCategory(slots[slot]);
         if (cat === "other" || cat === "whalepass") continue;
         try {
+          await giveWalletId(game, bob.address);
           const tx = await game
             .connect(alice)
             .issueDeityBoon(alice.address, bob.address, slot);

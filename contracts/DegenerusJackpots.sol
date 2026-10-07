@@ -45,9 +45,10 @@ import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 /// @dev Used to draw the weighted final-day depositor slice.
 interface IDegenerusCoinJackpotView {
     /// @notice One amount-weighted random winner among the armed final-day direct
-    ///         coinflip deposits (address(0) when the day recorded none).
+    ///         coinflip deposits, as a wallet ID (0 when the day recorded none).
     /// @param rngWord The BAF transition VRF word (domain-separated inside Coinflip).
-    function bafDrawWinner(uint256 rngWord) external view returns (address winner);
+    /// @return winnerId The drawn depositor's wallet ID, or 0 (no winner).
+    function bafDrawWinner(uint256 rngWord) external view returns (uint32 winnerId);
 }
 
 // ===========================================================================
@@ -94,12 +95,12 @@ contract DegenerusJackpots is IDegenerusJackpots {
       +======================================================================+*/
 
     /// @notice Emitted when a player's winning-flip payout is credited to their BAF score.
-    /// @param player Address of the player.
+    /// @param id The player's wallet ID.
     /// @param lvl BAF bracket (level rounded up to the next multiple of 10).
     /// @param amount Amount added this flip.
     /// @param newTotal Player's new accumulated BAF credit for this bracket.
     event BafFlipRecorded(
-        address indexed player,
+        uint32 indexed id,
         uint24 indexed lvl,
         uint256 amount,
         uint256 newTotal
@@ -127,15 +128,6 @@ contract DegenerusJackpots is IDegenerusJackpots {
       +======================================================================+
       |  Data structures for BAF leaderboard tracking.                       |
       +======================================================================+*/
-
-    /// @notice Leaderboard entry for BAF credited-payout scores.
-    /// @dev Packed into single slot: address (160) + score (96) = 256 bits.
-    struct PlayerScore {
-        /// @notice Player address.
-        address player;
-        /// @notice Accumulated winning-flip payout credit (whole tokens, capped at uint96.max).
-        uint96 score;
-    }
 
     /// @notice Per-player BAF state for a bracket level.
     /// @dev Packed into single slot: total (192) + epoch (64) = 256 bits.
@@ -197,6 +189,12 @@ contract DegenerusJackpots is IDegenerusJackpots {
     ///      so the mint carries no protocol liability.
     uint256 private constant CONSOLATION_DIVISOR = 1000;
 
+    /// @dev The Game's constant wallet ID for the vault.
+    uint32 private constant VAULT_WALLET_ID = 1;
+
+    /// @dev One leaderboard entry's 128-bit lane: score in the low 96 bits, wallet ID above.
+    uint256 private constant TOP_ENTRY_MASK = type(uint128).max;
+
 
     /*+======================================================================+
       |                         BAF STATE STORAGE                            |
@@ -204,11 +202,13 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  Per-player BAF totals and top-4 leaderboard per level.              |
       +======================================================================+*/
 
-    /// @notice Accumulated winning-flip payout credit + owning epoch per player per BAF bracket.
-    mapping(uint24 => mapping(address => BafPlayer)) internal bafPlayer;
+    /// @notice Accumulated winning-flip payout credit + owning epoch per wallet ID per BAF bracket.
+    mapping(uint24 => mapping(uint32 => BafPlayer)) internal bafPlayer;
 
-    /// @notice Top-4 coinflip bettors for BAF per level (sorted by score descending).
-    mapping(uint24 => PlayerScore[4]) internal bafTop;
+    /// @notice Top-4 coinflip bettors for BAF per level, sorted by score descending. Two 128-bit
+    ///         entries per word: entry i lives in word i >> 1 at bit (i & 1) * 128, laid out as
+    ///         score (bits 0-95, whole tokens capped at uint96.max) | wallet ID (bits 96-127).
+    mapping(uint24 => uint256[2]) internal bafTop;
 
     /// @notice Epoch counter + bafTop board length per BAF bracket level.
     mapping(uint24 => BafLevel) internal bafLevel;
@@ -263,25 +263,26 @@ contract DegenerusJackpots is IDegenerusJackpots {
     ///      is kept OFF the top-4 leaderboard (no _updateBafTop), so it can never take the
     ///      top-bettor slices. sDGNRS gets no BAF score at all: it is skipped upstream at the
     ///      recordBafFlip call site (its free per-level flips would otherwise dominate the slices).
-    /// @param player Address of the player.
+    ///      Coinflip reports only a nonzero wallet ID (its claim walk runs only under one).
+    /// @param id The player's wallet ID.
     /// @param lvl BAF bracket (level rounded up to the next multiple of 10).
     /// @param amount Winning coinflip payout credited to the player's BAF score.
     /// @custom:access Restricted to COINFLIP via onlyCoin modifier.
-    function recordBafFlip(address player, uint24 lvl, uint256 amount) external override onlyCoin {
+    function recordBafFlip(uint32 id, uint24 lvl, uint256 amount) external override onlyCoin {
         uint64 currentEpoch = bafLevel[lvl].epoch;
-        BafPlayer memory ps = bafPlayer[lvl][player];
+        BafPlayer memory ps = bafPlayer[lvl][id];
         // A stale epoch means the bracket already resolved: restart the total from zero.
         uint256 total = ps.epoch == currentEpoch ? ps.total : 0;
         unchecked { total += amount; }
         if (total > type(uint192).max) total = type(uint192).max;
-        bafPlayer[lvl][player] = BafPlayer({total: uint192(total), epoch: currentEpoch});
+        bafPlayer[lvl][id] = BafPlayer({total: uint192(total), epoch: currentEpoch});
 
         // VAULT accrues a score (above) but stays off the leaderboard: it can never win the
         // top-bettor slices, while still ranking in the score-ranked ticket slices it holds.
-        if (player != ContractAddresses.VAULT) {
-            _updateBafTop(lvl, player, total);
+        if (id != VAULT_WALLET_ID) {
+            _updateBafTop(lvl, id, total);
         }
-        emit BafFlipRecorded(player, lvl, amount, total);
+        emit BafFlipRecorded(id, lvl, amount, total);
     }
 
     /*+========================================================================+
@@ -300,7 +301,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  R: 48 below a 500 ETH pool, doubled per fourfold step, max 1,536.     |
       |                                                                        |
       |  ELIGIBILITY:                                                          |
-      |  * Top-BAF/pick: any non-zero address (no streak req)                  |
+      |  * Top-BAF/pick: any wallet on the board (no streak req)               |
       |  * Weighted depositor slice: drawn in Coinflip over the armed final    |
       |    day's direct deposits, weight = raw FLIP principal                  |
       |  * Far-future & scatter: additionally require a positive BAF score;    |
@@ -325,10 +326,8 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @custom:access Restricted to game contract via onlyGame modifier.
     function finalizeBaf(uint24 lvl) external onlyGame {
         BafLevel memory current = bafLevel[lvl];
-        for (uint8 i; i < current.topLen; ) {
-            delete bafTop[lvl][i];
-            unchecked { ++i; }
-        }
+        if (current.topLen != 0) delete bafTop[lvl][0];
+        if (current.topLen > 2) delete bafTop[lvl][1];
         unchecked {
             bafLevel[lvl] = BafLevel({epoch: current.epoch + 1, topLen: 0, skipped: false});
         }
@@ -337,16 +336,16 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @notice One of the bracket's three head awards: slot 0 the top BAF bettor, slot 1 the
     ///         armed final purchase day's amount-weighted direct depositor (drawn inside
     ///         Coinflip from the same word), slot 2 a word-picked third or fourth place.
-    /// @dev Pure in the frozen board, the word and the slot; address(0) when the slot is empty.
-    function bafHeadWinner(uint24 lvl, uint256 rngWord, uint8 slot) external view returns (address winner) {
-        if (slot == 0) (winner, ) = _bafTop(lvl, 0);
-        else if (slot == 1) winner = coin.bafDrawWinner(rngWord);
-        else (winner, ) = _bafTop(lvl, 2 + uint8(EntropyLib.hash2(_bafEntropyBase(rngWord), BAF_HEAD_PICK_KEY) & 1));
+    /// @dev Pure in the frozen board, the word and the slot; 0 (no winner) when the slot is empty.
+    function bafHeadWinner(uint24 lvl, uint256 rngWord, uint8 slot) external view returns (uint32 winnerId) {
+        if (slot == 0) (winnerId, ) = _bafTop(lvl, 0);
+        else if (slot == 1) winnerId = coin.bafDrawWinner(rngWord);
+        else (winnerId, ) = _bafTop(lvl, 2 + uint8(EntropyLib.hash2(_bafEntropyBase(rngWord), BAF_HEAD_PICK_KEY) & 1));
     }
 
     /// @notice Scatter rounds 2 * pair and 2 * pair + 1 of the bracket: each round's best and
     ///         second-best BAF score among its four sampled candidates, as [best, second] of the
-    ///         even round then of the odd round (address(0) where none qualifies).
+    ///         even round then of the odd round, as wallet IDs (0 where none qualifies).
     /// @dev Pure in the bracket, the word, the pair, the round count and the bucket and queue
     ///      entries it samples. Four bands of `rounds / 4` rounds (`rounds` a multiple of 8, so a
     ///      pair never straddles two bands): trait buckets at lvl and lvl + 1 (each round four
@@ -354,12 +353,12 @@ contract DegenerusJackpots is IDegenerusJackpots {
     ///      lvl + 6..lvl + 99, where one sample of eight lanes serves the pair (the even round
     ///      ranks the first four).
     function bafPairWinners(uint24 lvl, uint256 rngWord, uint256 pair, uint256 rounds)
-        external view returns (address[4] memory winners)
+        external view returns (uint32[4] memory winners)
     {
         uint256 base = _bafEntropyBase(rngWord);
         uint256 band = (pair * 8) / rounds;
         uint64 currentEpoch = bafLevel[lvl].epoch;
-        address[] memory tickets;
+        uint32[] memory tickets;
         if (band < 2) {
             (, tickets) = degenerusGame.sampleTraitEntries(band == 1, EntropyLib.hash2(base, 2 * pair));
             (winners[0], winners[1]) = _bafRank(tickets, 0, lvl, currentEpoch);
@@ -375,19 +374,20 @@ contract DegenerusJackpots is IDegenerusJackpots {
         }
     }
 
-    /// @dev Best and second-best BAF score among the four candidates from `off` (fewer when the
-    ///      sample is shorter); address(0) where none qualifies.
-    function _bafRank(address[] memory tickets, uint256 off, uint24 lvl, uint64 currentEpoch)
+    /// @dev Best and second-best BAF score among the four candidate wallet IDs from `off` (fewer
+    ///      when the sample is shorter); 0 where none qualifies. An unfilled sample slot is ID 0,
+    ///      which never holds a score.
+    function _bafRank(uint32[] memory tickets, uint256 off, uint24 lvl, uint64 currentEpoch)
         private
         view
-        returns (address best, address second)
+        returns (uint32 best, uint32 second)
     {
         uint256 end = off + 4;
         if (end > tickets.length) end = tickets.length;
         uint256 bestScore;
         uint256 secondScore;
         for (uint256 i = off; i < end; ) {
-            address cand = tickets[i];
+            uint32 cand = tickets[i];
             uint256 score = _bafScore(cand, lvl, currentEpoch);
             if (score > bestScore) {
                 second = best;
@@ -440,7 +440,8 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @notice Claim the WWXRP consolation for a player's skipped BAF bracket.
     /// @dev Permissionless: anyone may execute, but the mint always goes to
     ///      the recorded score owner — no value can move from a non-consenting
-    ///      party. Pays only when the bracket is marked skipped and the score
+    ///      party. The score is keyed by the owner's Game wallet ID; a wallet without
+    ///      one holds no score. Pays only when the bracket is marked skipped and the score
     ///      belongs to the bracket's live epoch (a resolved bracket bumped its
     ///      epoch, so its scores read stale and pay nothing). Deleting the
     ///      score slot is the claim flag — no separate mapping. The delete can
@@ -455,11 +456,13 @@ contract DegenerusJackpots is IDegenerusJackpots {
     function claimBafConsolation(address player, uint24 lvl) external {
         BafLevel memory lv = bafLevel[lvl];
         if (!lv.skipped) revert NothingToClaim();
-        BafPlayer memory ps = bafPlayer[lvl][player];
+        // A wallet with no ID reads the never-written key 0: no score, nothing to claim.
+        uint32 id = degenerusGame.walletIdOf(player);
+        BafPlayer memory ps = bafPlayer[lvl][id];
         if (ps.epoch != lv.epoch) revert NothingToClaim();
         uint256 amount = _bafConsolationAmount(ps.total);
         if (amount == 0) revert NothingToClaim();
-        delete bafPlayer[lvl][player];
+        delete bafPlayer[lvl][id];
         emit BafConsolationClaimed(player, lvl, ps.total, amount);
         wwxrp.mintPrize(player, amount);
     }
@@ -471,7 +474,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     function bafConsolationOf(address player, uint24 lvl) external view returns (uint256) {
         BafLevel memory lv = bafLevel[lvl];
         if (!lv.skipped) return 0;
-        BafPlayer memory ps = bafPlayer[lvl][player];
+        BafPlayer memory ps = bafPlayer[lvl][degenerusGame.walletIdOf(player)];
         if (ps.epoch != lv.epoch) return 0;
         return _bafConsolationAmount(ps.total);
     }
@@ -489,13 +492,13 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  Maintain sorted top-4 leaderboard per level.                        |
       +======================================================================+*/
 
-    /// @dev Get player's BAF score for a level.
-    /// @param player Address to query.
+    /// @dev Get a wallet's BAF score for a level.
+    /// @param id Wallet ID to query.
     /// @param lvl Level number.
     /// @param currentEpoch The bracket's current epoch (read once per resolution by callers).
     /// @return Accumulated winning-flip payout credit (0 if the stored epoch is stale).
-    function _bafScore(address player, uint24 lvl, uint64 currentEpoch) private view returns (uint256) {
-        BafPlayer memory ps = bafPlayer[lvl][player];
+    function _bafScore(uint32 id, uint24 lvl, uint64 currentEpoch) private view returns (uint256) {
+        BafPlayer memory ps = bafPlayer[lvl][id];
         if (ps.epoch != currentEpoch) return 0;
         return ps.total;
     }
@@ -514,18 +517,20 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @dev Update top-4 BAF leaderboard with new stake.
     ///      Maintains sorted order (highest score first).
     ///      Handles existing player update, new player insertion, and capacity management.
+    ///      Entries shift down through the two packed words in place.
     /// @param lvl Level number.
-    /// @param player Address.
-    /// @param stake New total stake for player.
-    function _updateBafTop(uint24 lvl, address player, uint256 stake) private {
+    /// @param id Wallet ID.
+    /// @param stake New total stake for the wallet.
+    function _updateBafTop(uint24 lvl, uint32 id, uint256 stake) private {
         uint96 score = _score96(stake);
-        PlayerScore[4] storage board = bafTop[lvl];
+        uint256[2] storage board = bafTop[lvl];
         uint8 len = bafLevel[lvl].topLen;
+        uint256 entry = uint256(score) | (uint256(id) << 96);
 
-        // Check if player already on leaderboard
+        // Check if the wallet is already on the leaderboard
         uint8 existing = 4; // sentinel: not found
         for (uint8 i; i < len; ) {
-            if (board[i].player == player) {
+            if (uint32(_topEntry(board, i) >> 96) == id) {
                 existing = i;
                 break;
             }
@@ -534,57 +539,75 @@ contract DegenerusJackpots is IDegenerusJackpots {
             }
         }
 
-        // Case 1: Player already on board - shift down and re-place if improved
+        // Case 1: Already on board - shift down and re-place if improved
         // (same shift-then-place idiom as Cases 2/3; strict > keeps tie order).
         if (existing < 4) {
-            if (score <= board[existing].score) return; // No improvement
+            if (score <= uint96(_topEntry(board, existing))) return; // No improvement
             uint8 idx = existing;
-            while (idx > 0 && score > board[idx - 1].score) {
-                board[idx] = board[idx - 1];
+            while (idx > 0) {
+                uint256 above = _topEntry(board, idx - 1);
+                if (score <= uint96(above)) break;
+                _setTopEntry(board, idx, above);
                 unchecked {
                     --idx;
                 }
             }
-            board[idx] = PlayerScore({player: player, score: score});
+            _setTopEntry(board, idx, entry);
             return;
         }
 
         // Case 2: Board not full - insert in sorted position
         if (len < 4) {
             uint8 insert = len;
-            while (insert > 0 && score > board[insert - 1].score) {
-                board[insert] = board[insert - 1];
+            while (insert > 0) {
+                uint256 above = _topEntry(board, insert - 1);
+                if (score <= uint96(above)) break;
+                _setTopEntry(board, insert, above);
                 unchecked {
                     --insert;
                 }
             }
-            board[insert] = PlayerScore({player: player, score: score});
+            _setTopEntry(board, insert, entry);
             bafLevel[lvl].topLen = len + 1;
             return;
         }
 
         // Case 3: Board full - replace bottom if score is higher
-        if (score <= board[3].score) return; // Not good enough
+        if (score <= uint96(_topEntry(board, 3))) return; // Not good enough
         uint8 idx2 = 3;
-        while (idx2 > 0 && score > board[idx2 - 1].score) {
-            board[idx2] = board[idx2 - 1];
+        while (idx2 > 0) {
+            uint256 above = _topEntry(board, idx2 - 1);
+            if (score <= uint96(above)) break;
+            _setTopEntry(board, idx2, above);
             unchecked {
                 --idx2;
             }
         }
-        board[idx2] = PlayerScore({player: player, score: score});
+        _setTopEntry(board, idx2, entry);
     }
 
-    /// @dev Get player at leaderboard position.
+    /// @dev Leaderboard entry `i` (score | wallet ID << 96) from its packed word.
+    function _topEntry(uint256[2] storage board, uint256 i) private view returns (uint256) {
+        return (board[i >> 1] >> ((i & 1) << 7)) & TOP_ENTRY_MASK;
+    }
+
+    /// @dev Write leaderboard entry `i`, keeping the other entry of its word.
+    function _setTopEntry(uint256[2] storage board, uint256 i, uint256 entry) private {
+        uint256 shift = (i & 1) << 7;
+        uint256 w = board[i >> 1];
+        board[i >> 1] = (w & ~(TOP_ENTRY_MASK << shift)) | (entry << shift);
+    }
+
+    /// @dev Get the wallet at a leaderboard position.
     /// @param lvl Level number.
     /// @param idx Position (0 = top).
-    /// @return player Address at position (address(0) if empty).
-    /// @return score Player's score.
-    function _bafTop(uint24 lvl, uint8 idx) private view returns (address player, uint96 score) {
+    /// @return id Wallet ID at the position (0 if empty).
+    /// @return score The wallet's score.
+    function _bafTop(uint24 lvl, uint8 idx) private view returns (uint32 id, uint96 score) {
         uint8 len = bafLevel[lvl].topLen;
-        if (idx >= len) return (address(0), 0);
-        PlayerScore memory entry = bafTop[lvl][idx];
-        return (entry.player, entry.score);
+        if (idx >= len) return (0, 0);
+        uint256 entry = _topEntry(bafTop[lvl], idx);
+        return (uint32(entry >> 96), uint96(entry));
     }
 
     /*+======================================================================+

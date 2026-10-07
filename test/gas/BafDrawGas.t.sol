@@ -43,7 +43,7 @@ contract BafDrawGas is DeployProtocol {
     function _measuredDeposit(address who) internal returns (uint256 used) {
         vm.prank(who);
         uint256 g0 = gasleft();
-        coinflip.depositCoinflip{gas: 11_500_000 - (21_000 + 68 * 16)}(address(0), 100 ether);
+        coinflip.depositCoinflip{gas: 11_500_000 - (21_000 + 68 * 16)}(address(0), 100);
         used = g0 - gasleft();
     }
 
@@ -59,7 +59,8 @@ contract BafDrawGas is DeployProtocol {
 
     function testNormalDepositWarmSingleTransactionRegression() public {
         (uint256 first, uint256 sameDay, uint256 nextDay) = this.measureWarmDepositProfile();
-        assertLe(first, 92_000, "first-ever warm deposit ceiling");
+        // The first deposit of a registered wallet makes one Game lookup and caches the ID in slot A.
+        assertLe(first, 108_000, "first-ever warm deposit ceiling");
         assertLe(sameDay, 23_500, "same-day warm repeat ceiling");
         assertLe(nextDay, 46_500, "next-day warm repeat ceiling");
     }
@@ -72,13 +73,14 @@ contract BafDrawGas is DeployProtocol {
     }
 
     function _normalProfile(bool cold) private returns (uint256 first, uint256 sameDay, uint256 nextDay) {
-        _mint(alice, 1000 ether);
+        _mint(alice, 1000);
+        _giveWalletId(alice);
         if (cold) {
             _coolDeposit();
             vm.record();
         }
         first = _measuredDeposit(alice);
-        if (cold) assertLe(first, 92_000 + _depositColdAllowance(), "cold first-ever deposit ceiling");
+        if (cold) assertLe(first, 108_000 + _depositColdAllowance(), "cold first-ever deposit ceiling");
         if (cold) {
             _coolDeposit();
             vm.record();
@@ -92,12 +94,12 @@ contract BafDrawGas is DeployProtocol {
         }
         nextDay = _measuredDeposit(alice);
         if (cold) assertLe(nextDay, 46_500 + _depositColdAllowance(), "cold next-day repeat ceiling");
-        assertEq(coin.balanceOf(alice), 700 ether, "all three deposits burn their principal");
-        assertEq(coinflip.coinflipAmount(alice), 100 ether, "last deposit funds the next day's stake");
+        assertEq(coin.balanceOf(alice), 700, "all three deposits burn their principal");
+        assertEq(coinflip.coinflipAmount(alice), 100, "last deposit funds the next day's stake");
         emit log_named_uint("deposit_gas_first_ever", first);
         emit log_named_uint("deposit_gas_repeat_same_day", sameDay);
         emit log_named_uint("deposit_gas_repeat_next_day", nextDay);
-        // depositCoinflip(address(0),100 ether): 68 bytes; conservatively price
+        // depositCoinflip(address(0),100): 68 bytes; conservatively price
         // every calldata byte as nonzero when adding intrinsic transaction gas.
         uint256 intrinsic = 21_000 + 68 * 16;
         assertLt(first + intrinsic, 11_500_000, "first deposit transaction cap");
@@ -139,11 +141,21 @@ contract BafDrawGas is DeployProtocol {
         vm.cool(address(jackpots));
     }
 
+    /// @notice A new wallet's first deposit also registers it with Game (one allocation call and the
+    ///         cached ID write); the ordinary profile above starts from a registered wallet.
+    function testFirstDepositWithRegistrationGas() public {
+        _mint(alice, 1000);
+        uint256 used = _measuredDeposit(alice);
+        emit log_named_uint("deposit_gas_first_ever_with_registration", used);
+        assertGt(game.walletIdOf(alice), 0, "the first deposit registers the wallet");
+        assertLe(used, 200_000, "first-ever deposit with registration ceiling");
+    }
+
     /// @notice Armed-day entry costs: the first entry pays the header's zero->nonzero
     ///         write; every later entry pays a fresh entry slot + header rewrite.
     function testArmedDayEntryGasProfile() public {
-        _mint(alice, 1000 ether);
-        _mint(bob, 1000 ether);
+        _mint(alice, 1000);
+        _mint(bob, 1000);
 
         // Un-armed baseline for the same shapes (fresh players, same day).
         uint256 baseFirst = _measuredDeposit(alice);
@@ -177,10 +189,10 @@ contract BafDrawGas is DeployProtocol {
         uint256 cum;
         for (uint32 i; i < n; ++i) {
             cum += 100 + (uint256(keccak256(abi.encode(day, i))) % 1000);
-            address p = address(uint160(uint256(keccak256(abi.encode("p", i)))));
+            uint32 p = uint32(i + 1);
             uint256 key = (uint256(day) << 32) | i;
             vm.store(
-                address(coinflip), keccak256(abi.encode(key, ENTRY_SLOT)), bytes32((uint256(uint160(p)) << 96) | cum)
+                address(coinflip), keccak256(abi.encode(key, ENTRY_SLOT)), bytes32((uint256(p) << 96) | cum)
             );
         }
         vm.store(address(coinflip), keccak256(abi.encode(day, HEADER_SLOT)), bytes32((uint256(n) << 96) | cum));
@@ -194,7 +206,7 @@ contract BafDrawGas is DeployProtocol {
         assertEq(total, uint96(cum), "install: cumulative total");
     }
 
-    function _measuredWinner(uint256 word) internal view returns (address w, uint256 used) {
+    function _measuredWinner(uint256 word) internal view returns (uint32 w, uint256 used) {
         uint256 g0 = gasleft();
         w = coinflip.bafDrawWinner(word);
         used = g0 - gasleft();
@@ -205,16 +217,16 @@ contract BafDrawGas is DeployProtocol {
     ///         entries stay a rounding error against the BAF resolution budget.
     function testResolutionGasIsLogarithmic() public {
         _installEntries(3, 16);
-        (address w16, uint256 g16) = _measuredWinner(uint256(keccak256("w16")));
-        assertTrue(w16 != address(0), "16: a winner must be found");
+        (uint32 w16, uint256 g16) = _measuredWinner(uint256(keccak256("w16")));
+        assertTrue(w16 != 0, "16: a winner must be found");
 
         _installEntries(4, 512);
-        (address w512, uint256 g512) = _measuredWinner(uint256(keccak256("w512")));
-        assertTrue(w512 != address(0), "512: a winner must be found");
+        (uint32 w512, uint256 g512) = _measuredWinner(uint256(keccak256("w512")));
+        assertTrue(w512 != 0, "512: a winner must be found");
 
         _installEntries(5, 4096);
-        (address w4096, uint256 g4096) = _measuredWinner(uint256(keccak256("w4096")));
-        assertTrue(w4096 != address(0), "4096: a winner must be found");
+        (uint32 w4096, uint256 g4096) = _measuredWinner(uint256(keccak256("w4096")));
+        assertTrue(w4096 != 0, "4096: a winner must be found");
 
         emit log_named_uint("resolve_gas_16", g16);
         emit log_named_uint("resolve_gas_512", g512);

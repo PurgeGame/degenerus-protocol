@@ -85,7 +85,7 @@ describe("AccessControl", function () {
       const { coinflip, alice, bob } = await loadFixture(deployFullProtocol);
 
       await expect(
-        coinflip.connect(alice).creditFlip(bob.address, eth("100"))
+        coinflip.connect(alice).creditFlip(1, eth("100"))
       ).to.be.revertedWithCustomError(coinflip, "OnlyFlipCreditors");
     });
 
@@ -94,7 +94,7 @@ describe("AccessControl", function () {
 
       await expect(
         coinflip.connect(alice).creditFlipBatch(
-          [bob.address, carol.address, dan.address],
+          [1, 2, 3],
           [eth("100"), eth("100"), eth("100")]
         )
       ).to.be.revertedWithCustomError(coinflip, "OnlyFlipCreditors");
@@ -204,7 +204,7 @@ describe("AccessControl", function () {
       const { jackpots, alice } = await loadFixture(deployFullProtocol);
 
       await expect(
-        jackpots.connect(alice).recordBafFlip(alice.address, 0, eth("100"))
+        jackpots.connect(alice).recordBafFlip(1, 0, eth("100"))
       ).to.be.revertedWithCustomError(jackpots, "OnlyCoin");
     });
 
@@ -242,7 +242,7 @@ describe("AccessControl", function () {
       const { quests, alice } = await loadFixture(deployFullProtocol);
 
       await expect(
-        quests.connect(alice).handlePurchase(alice.address, 1, 0, 0, 0, 0)
+        quests.connect(alice).handlePurchase(1, 1, 0, 0, 0, 0)
       ).to.be.revertedWithCustomError(quests, "OnlyCoin");
     });
 
@@ -252,7 +252,7 @@ describe("AccessControl", function () {
       const { quests, alice } = await loadFixture(deployFullProtocol);
 
       await expect(
-        quests.connect(alice).awardQuestStreakBonus(alice.address, 1, 1n)
+        quests.connect(alice).awardQuestStreakBonus(1, 1, 1)
       ).to.be.revertedWithCustomError(quests, "OnlyGame");
     });
   });
@@ -407,7 +407,7 @@ describe("AccessControl", function () {
       // (it reads from game storage on behalf of a player; direct calls from
       // random signers should revert with E() since it checks msg.sender).
       await expect(
-        game.connect(alice).consumeCoinflipBoon(alice.address)
+        game.connect(alice).consumeCoinflipBoon(1)
       ).to.be.reverted;
     });
 

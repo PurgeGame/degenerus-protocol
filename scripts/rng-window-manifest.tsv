@@ -204,6 +204,7 @@ GATE	rngFlagsAndNudges	_rngConsumerStage	storage/DegenerusGameStorage.sol	READ
 GATE	_currentRngWord	_rngConsumersComplete	storage/DegenerusGameStorage.sol	READ	Completion requires a published non-waiting word plus every frozen consumer.
 GATE	lootboxRngPacked	_rngConsumersComplete	storage/DegenerusGameStorage.sol	READ	ready, all committed ticket processing, mid-day latch, box/bet frontier and exact Craps pending count
 ACCESSOR	rngFlagsAndNudges	_setNudgeCount	storage/DegenerusGameStorage.sol	WRITE	Nudge purchase before daily lock; masked setter preserves every lifecycle bit.
+ACCESSOR	rngFlagsAndNudges	_setGrowthSettlePending	storage/DegenerusGameStorage.sol	WRITE	Masked setter of the growth settlement-pending bit (bit 11): set by the level-transition seal, cleared by the mining settlement stage; preserves every nudge and lifecycle bit and never touches a VRF word.
 ACCESSOR	rngFlagsAndNudges	_setRngComplete	storage/DegenerusGameStorage.sol	WRITE	Masked completion setter preserves nudge bits.
 ACCESSOR	rngFlagsAndNudges	_setRngRequestActive	storage/DegenerusGameStorage.sol	WRITE	Masked callback-authority setter preserves nudge bits; retained IDs cannot grant authority.
 ACCESSOR	rngFlagsAndNudges	_setRngSessionPublished	storage/DegenerusGameStorage.sol	WRITE	Masked mandatory-publication setter preserves nudge bits.

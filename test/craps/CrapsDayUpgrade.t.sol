@@ -46,11 +46,13 @@ contract CrapsDayUpgradeTest is CrapsPins {
 
     /// @dev Local restatement for `expectEmit`; matched by topics, not by declaring contract.
     event CrapsDayWindowsUpgraded(
-        address indexed player, uint24 indexed day, uint8 upgradedMask, uint256 burned
+        uint32 indexed playerId, uint24 indexed day, uint8 upgradedMask, uint256 burned
     );
 
     function setUp() public {
         _installPins();
+        game.registerWallet(alice, true);
+        game.registerWallet(bob, true);
         craps = new UpgradeHarness();
         // The deployment day is a Craps warm-up day with no windows; every fixture plays
         // from genesis + 1, the first day the table opens.
@@ -148,7 +150,7 @@ contract CrapsDayUpgradeTest is CrapsPins {
 
     /// @dev The `paid` a `CrapsBetSettled` log reported for one bet.
     function _settledPaid(Vm.Log[] memory logs, uint256 betId) internal pure returns (uint256) {
-        bytes32 sig = keccak256("CrapsBetSettled(uint256,address,uint256,uint256)");
+        bytes32 sig = keccak256("CrapsBetSettled(uint256,uint32,uint256,uint256)");
         for (uint256 i = 0; i < logs.length; ++i) {
             if (logs[i].topics.length == 3 && logs[i].topics[0] == sig && uint256(logs[i].topics[1]) == betId) {
                 (, uint256 paid) = abi.decode(logs[i].data, (uint256, uint256));
@@ -212,7 +214,7 @@ contract CrapsDayUpgradeTest is CrapsPins {
         uint256 want = _deltaOf(day, 1, 10) + _deltaOf(day, 4, 10) + _deltaOf(day, 5, 10);
 
         vm.expectEmit(address(craps));
-        emit CrapsDayWindowsUpgraded(alice, day, uint8((1 << 1) | (1 << 4) | (1 << 5)), want);
+        emit CrapsDayWindowsUpgraded(_idFor(alice), day, uint8((1 << 1) | (1 << 4) | (1 << 5)), want);
         vm.prank(alice);
         uint256 burned = craps.upgradeDayWindows(day, uint8((1 << 1) | (1 << 4) | (1 << 5)));
         assertEq(burned, want, "three windows did not charge their three deltas");
@@ -331,7 +333,7 @@ contract CrapsDayUpgradeTest is CrapsPins {
     function test_aBankedPassCannotBeUpgraded() public {
         uint24 day = _openDay(10);
         vm.prank(ContractAddresses.GAME);
-        craps.creditPasses(alice, 3, 0);
+        craps.creditPasses(_idFor(alice), 3, 0);
 
         vm.prank(alice);
         vm.expectRevert(CrapsBattleStorage.NoSuchBet.selector);

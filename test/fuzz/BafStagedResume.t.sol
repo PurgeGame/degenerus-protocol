@@ -129,7 +129,7 @@ abstract contract BafStagedResumeFixture is BafBracketFixture {
         (uint64 epoch0, uint8 topLen0,, uint256 top0) = _bracketBoard(LVL);
         assertEq(topLen0, 4, "full board before the stage");
         assertTrue(top0 != 0);
-        assertTrue(jackpots.bafHeadWinner(LVL, word, 0) == _topBettor(3), "the top bettor holds head slot 0");
+        assertTrue(jackpots.bafHeadWinner(LVL, word, 0) == _idOf(_topBettor(3)), "the top bettor holds head slot 0");
         BafStageHost.PoolView memory p0 = host.poolView();
 
         MineFlipGas.Result memory r = _drainOnce(LARGE);
@@ -142,12 +142,12 @@ abstract contract BafStagedResumeFixture is BafBracketFixture {
         assertEq(topLen1, 0, "board length cleared");
         assertEq(top1, 0, "board slots cleared");
         assertFalse(skipped1);
-        assertEq(jackpots.bafHeadWinner(LVL, word, 0), address(0), "no top bettor after finalizeBaf");
-        assertEq(jackpots.bafHeadWinner(LVL, word, 2), address(0), "no third or fourth place after finalizeBaf");
+        assertEq(jackpots.bafHeadWinner(LVL, word, 0), 0, "no top bettor after finalizeBaf");
+        assertEq(jackpots.bafHeadWinner(LVL, word, 2), 0, "no third or fourth place after finalizeBaf");
         uint256 rounds = _bafRounds(pool);
         for (uint256 pair; pair < rounds / 2; pair += 3) {
-            address[4] memory drawn = jackpots.bafPairWinners(LVL, word, pair, rounds);
-            for (uint256 k; k < 4; ++k) assertEq(drawn[k], address(0), "closed epoch: no scatter winner");
+            uint32[4] memory drawn = jackpots.bafPairWinners(LVL, word, pair, rounds);
+            for (uint256 k; k < 4; ++k) assertEq(drawn[k], 0, "closed epoch: no scatter winner");
         }
 
         BafStageHost.PoolView memory p1 = host.poolView();
@@ -172,27 +172,25 @@ abstract contract BafStagedResumeFixture is BafBracketFixture {
     ///      pending balance the freeze already holds.
     function test_EmptyHeadSlotReturnsItsTermToThePendingFuturePool() public {
         _clearDepositDraw();
-        assertEq(jackpots.bafHeadWinner(LVL, word, 1), address(0), "head slot 1 is empty");
+        assertEq(jackpots.bafHeadWinner(LVL, word, 1), 0, "head slot 1 is empty");
         _checkResidue(_bafEthTerm(pool, _bafPositions(pool) - 2));
     }
 
-    /// @dev A head winner without a wallet ID forfeits its whole award: nothing is credited to it,
-    ///      no ID is allocated, and exactly what a registered winner would have been credited
-    ///      returns with the residue.
-    function test_HeadWinnerWithoutWalletIdForfeitsItsAward() public {
-        address stranger = address(0x5157A9);
+    /// @dev An empty head slot (wallet ID 0) forfeits its whole award: nothing is credited and exactly
+    ///      what a filled slot would have been credited returns with the residue.
+    function test_EmptyBafSlotForfeitsToResidue() public {
+        address top = _topBettor(3);
+        uint256 snap = vm.snapshotState();
+        (uint256 creditedPaid, uint256 residuePaid) = _drainAll();
+        assertGt(host.claimableOf(top), 0, "a filled head slot is paid");
+        vm.revertToState(snap);
         vm.mockCall(
             address(jackpots),
             abi.encodeWithSelector(jackpots.bafHeadWinner.selector, LVL, word, uint8(0)),
-            abi.encode(stranger)
+            abi.encode(uint32(0))
         );
-        uint256 snap = vm.snapshotState();
-        host.seedWallet(stranger);
-        (uint256 creditedPaid, uint256 residuePaid) = _drainAll();
-        assertGt(host.claimableOf(stranger), 0, "a registered head winner is paid");
-        vm.revertToState(snap);
         (uint256 creditedSkipped, uint256 residueSkipped) = _drainAll();
-        assertEq(host.walletIdOf(stranger), 0, "a BAF award never registers");
+        assertEq(host.claimableOf(top), 0, "the empty slot credits nobody");
         assertGt(creditedPaid, creditedSkipped, "the forfeited award is not credited");
         assertEq(residueSkipped - residuePaid, creditedPaid - creditedSkipped, "the forfeit joins the residue");
     }
@@ -217,7 +215,7 @@ abstract contract BafStagedResumeFixture is BafBracketFixture {
         _clearDepositDraw();
         // Every recorded score belongs to a closed epoch and the board is empty.
         vm.store(address(jackpots), keccak256(abi.encode(uint256(LVL), uint256(2))), bytes32(uint256(1)));
-        assertEq(jackpots.bafHeadWinner(LVL, word, 0), address(0));
+        assertEq(jackpots.bafHeadWinner(LVL, word, 0), 0);
         _checkResidue(reserve);
     }
 
@@ -418,11 +416,12 @@ abstract contract BafStagedResumeFixture is BafBracketFixture {
             uint256 cut = _afterFirstPair(logs, exact, cursor, floor);
             assertTrue(vm.revertToState(snap));
             for (uint256 j; j < cut; ++j) _replayQueued(logs[j]);
-            address[4] memory drawn = jackpots.bafPairWinners(LVL, word, second, rounds);
+            uint32[4] memory drawn = jackpots.bafPairWinners(LVL, word, second, rounds);
             bool moved;
             for (uint256 k; k < 4; ++k) {
-                if (drawn[k] != exact[4 + k]) moved = true;
-                exact[4 + k] = drawn[k];
+                address winner = host.walletKeyOf(drawn[k]);
+                if (winner != exact[4 + k]) moved = true;
+                exact[4 + k] = winner;
             }
             assertTrue(vm.revertToStateAndDelete(snap));
             // Counted after the revert, which also restores this contract's storage.
@@ -479,7 +478,7 @@ abstract contract BafStagedResumeFixture is BafBracketFixture {
     function _replayQueued(Vm.Log memory l) internal {
         if (l.emitter != address(game) || l.topics.length < 2 || l.topics[0] != QUEUED_SIG) return;
         (uint24 target, uint32 entries) = abi.decode(l.data, (uint24, uint32));
-        host.replayQueued(address(uint160(uint256(l.topics[1]))), target, entries);
+        host.replayQueued(host.walletKeyOf(uint32(uint256(l.topics[1]))), target, entries);
     }
 
     function _balances() internal view returns (uint256[] memory c, uint256[] memory h) {

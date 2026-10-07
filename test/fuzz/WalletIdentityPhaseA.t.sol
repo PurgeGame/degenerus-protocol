@@ -275,7 +275,7 @@ contract WalletIdentityPhaseATest is DeployProtocol {
         vm.prank(ContractAddresses.AFFILIATE);
         uint32 id = game.registerWallet(owner, true);
         assertGt(id, 0);
-        (bool mayBet, ) = quests.marketBetGates(owner, game.level() + 1);
+        (bool mayBet,,) = quests.marketBetGates(owner, game.level() + 1);
         assertFalse(mayBet, "registration alone does not open the markets");
     }
 

@@ -10,6 +10,7 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {IJackpotBattle} from "../../contracts/interfaces/IJackpotBattle.sol";
 import {ICoinflip} from "../../contracts/interfaces/ICoinflip.sol";
+import {IDegenerusGame} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {IDegenerusJackpots} from "../../contracts/interfaces/IDegenerusJackpots.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
@@ -38,12 +39,12 @@ library BafSchedule {
         keccak256("JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)");
     bytes32 internal constant WHALE_SIG = keccak256("JackpotWhalePassWin(uint32,uint256,uint8)");
 
-    /// @dev One award event: signature, recipient, the ETH amount (ETH credit) or half-pass count
+    /// @dev One award event: signature, recipient wallet ID, the ETH amount (ETH credit) or half-pass count
     ///      (whale pass), zero for a ticket roll; `level` and `entries` are a ticket roll's target
     ///      level and queued entries.
     struct Award {
         bytes32 sig;
-        address winner;
+        uint32 winner;
         uint256 value;
         uint256 level;
         uint256 entries;
@@ -88,7 +89,7 @@ library BafSchedule {
     }
 
     /// @dev Appends the award events position `i` emits for `winner` to `out` from index `n`.
-    function expect(Award[] memory out, uint256 n, uint256 pool, uint256 i, address winner)
+    function expect(Award[] memory out, uint256 n, uint256 pool, uint256 i, uint32 winner)
         internal
         pure
         returns (uint256 next, uint256 rolls, uint256 whales)
@@ -96,13 +97,13 @@ library BafSchedule {
         return expectR(out, n, pool, i, winner, ROUNDS);
     }
 
-    function expectR(Award[] memory out, uint256 n, uint256 pool, uint256 i, address winner, uint256 rounds)
+    function expectR(Award[] memory out, uint256 n, uint256 pool, uint256 i, uint32 winner, uint256 rounds)
         internal
         pure
         returns (uint256 next, uint256 rolls, uint256 whales)
     {
         next = n;
-        if (winner == address(0)) return (next, 0, 0);
+        if (winner == 0) return (next, 0, 0);
         uint256 a = amountR(pool, i, rounds);
         uint256 lootbox = a;
         if (a >= pool / 20) {
@@ -130,7 +131,7 @@ library BafSchedule {
             if (logs[i].topics.length == 0) continue;
             bytes32 t0 = logs[i].topics[0];
             if (t0 != ETH_SIG && t0 != TICKET_SIG && t0 != WHALE_SIG) continue;
-            address who = address(uint160(uint256(logs[i].topics[1])));
+            uint32 who = uint32(uint256(logs[i].topics[1]));
             uint256 value;
             uint256 entryLevel;
             uint256 entries;
@@ -161,8 +162,8 @@ library BafSchedule {
         uint256 pool,
         uint256 from,
         uint256 to,
-        address[] memory expected,
-        address[] memory paid
+        uint32[] memory expected,
+        uint32[] memory paid
     ) internal pure returns (uint256 credited) {
         return checkGroupR(got, pool, from, to, expected, paid, ROUNDS);
     }
@@ -172,16 +173,16 @@ library BafSchedule {
         uint256 pool,
         uint256 from,
         uint256 to,
-        address[] memory expected,
-        address[] memory paid,
+        uint32[] memory expected,
+        uint32[] memory paid,
         uint256 rounds
     ) internal pure returns (uint256 credited) {
         Award[] memory want = new Award[](3);
         uint256 ptr;
         for (uint256 i = from; i < to; ++i) {
             require(ptr < got.length, "every position of the group pays");
-            address winner = got[ptr].winner;
-            require(winner != address(0), "every position has a winner");
+            uint32 winner = got[ptr].winner;
+            require(winner != 0, "every position has a winner");
             require(winner == expected[i - from], "the group pays the views' draw at the pair start");
             (uint256 n,,) = expectR(want, 0, pool, i, winner, rounds);
             require(ptr + n <= got.length, "every award of the position pays");
@@ -216,7 +217,7 @@ library BafSchedule {
 /// @dev A game host's reference seam: the production queue sink with one logged ticket roll's
 ///      arguments.
 interface IBafReplayHost {
-    function replayQueued(address buyer, uint24 targetLevel, uint32 entries) external;
+    function replayQueuedId(uint32 id, uint24 targetLevel, uint32 entries) external;
 }
 
 /// @dev Reference draw of one award group of the level-100 bracket under the stage's rule: a round
@@ -240,12 +241,12 @@ library BafPairDraw {
         uint256 from,
         uint256 to,
         uint256 rounds
-    ) internal returns (address[] memory atStart, address[] memory atPair) {
+    ) internal returns (uint32[] memory atStart, uint32[] memory atPair) {
         require(from >= 2 * rounds || from & 3 == 0, "a group starts at a pair boundary");
         IDegenerusJackpots views = IDegenerusJackpots(jackpots);
-        atStart = new address[](to - from);
-        atPair = new address[](to - from);
-        address[4] memory w;
+        atStart = new uint32[](to - from);
+        atPair = new uint32[](to - from);
+        uint32[4] memory w;
         for (uint256 i = from; i < to; ++i) {
             if (i < 2 * rounds) {
                 if (i & 3 == 0) w = views.bafPairWinners(BafSchedule.LVL, word, i >> 2, rounds);
@@ -267,7 +268,7 @@ library BafPairDraw {
             for (uint256 k; k < n && ptr < got.length; ++k) {
                 BafSchedule.Award memory a = got[ptr++];
                 if (a.sig == BafSchedule.TICKET_SIG) {
-                    IBafReplayHost(host).replayQueued(a.winner, uint24(a.level), uint32(a.entries));
+                    IBafReplayHost(host).replayQueuedId(a.winner, uint24(a.level), uint32(a.entries));
                 }
             }
         }
@@ -295,37 +296,37 @@ library CenturyBafScores {
     /// @dev Scores the seeder's trait-bucket holders (round r: 0xC3700000 + r * 4096 + 1..2048)
     ///      and far-future holders (levels 102..105: 0xFA000000 + 0..8191; levels 106..199:
     ///      0xFB000000 + 0..12031) at the bracket's current epoch, for the 48-round schedule.
-    function seedCandidates(address jackpots) internal {
-        seedCandidatesR(jackpots, 24, 1);
+    function seedCandidates(address jackpots, address game) internal {
+        seedCandidatesR(jackpots, game, 24, 1);
     }
 
     /// @dev As `seedCandidates`, for a schedule whose minted-level rounds are 0..`traitRounds` - 1
     ///      and far-future queues `depth` times as deep (see `CenturyConsolidationSeeder.seedRounds`).
-    function seedCandidatesR(address jackpots, uint256 traitRounds, uint256 depth) internal {
+    function seedCandidatesR(address jackpots, address game, uint256 traitRounds, uint256 depth) internal {
         uint256 epochBits = uint256(uint64(levelWord(jackpots))) << 192;
         bytes32 bracket = keccak256(abi.encode(LVL, uint256(0)));
         for (uint256 r; r < traitRounds; ++r) {
             uint256 first = 0xC3700000 + r * 4096 + 1;
-            for (uint256 k; k < 2048; ++k) _score(jackpots, bracket, first + k, epochBits);
+            for (uint256 k; k < 2048; ++k) _score(jackpots, game, bracket, first + k, epochBits);
         }
-        for (uint256 k; k < 4 * 2048 * depth; ++k) _score(jackpots, bracket, 0xFA000000 + k, epochBits);
-        for (uint256 k; k < 94 * 128 * depth; ++k) _score(jackpots, bracket, 0xFB000000 + k, epochBits);
+        for (uint256 k; k < 4 * 2048 * depth; ++k) _score(jackpots, game, bracket, 0xFA000000 + k, epochBits);
+        for (uint256 k; k < 94 * 128 * depth; ++k) _score(jackpots, game, bracket, 0xFB000000 + k, epochBits);
     }
 
     /// @dev Head board 0xBAF000..0xBAF003 (1M..4M FLIP) and a 4096-interval draw book of one
     ///      depositor armed for `day`, so the depositor draw walks a cold 12-step binary search.
     function seedHead(address jackpots, address coinflip, address game, uint24 day) internal {
         for (uint256 i; i < 4; ++i) {
+            uint32 id = _register(game, address(uint160(0xBAF000 + i)));
             VM.prank(ContractAddresses.COINFLIP);
-            IDegenerusJackpots(jackpots).recordBafFlip(
-                address(uint160(0xBAF000 + i)), uint24(LVL), (i + 1) * 1_000_000 ether
-            );
+            IDegenerusJackpots(jackpots).recordBafFlip(id, uint24(LVL), (i + 1) * 1_000_000 ether);
         }
+        uint256 depositorId = _register(game, address(0xD3F0517));
         for (uint256 i; i < 4096; ++i) {
             VM.store(
                 coinflip,
                 keccak256(abi.encode((uint256(day) << 32) | i, uint256(8))),
-                bytes32((uint256(uint160(address(0xD3F0517))) << 96) | ((i + 1) * 100))
+                bytes32((depositorId << 96) | ((i + 1) * 100))
             );
         }
         VM.store(coinflip, keccak256(abi.encode(uint256(day), uint256(5))), bytes32((uint256(4096) << 96) | 409_600));
@@ -333,8 +334,14 @@ library CenturyBafScores {
         ICoinflip(coinflip).armBafDraw(day);
     }
 
-    function _score(address jackpots, bytes32 bracket, uint256 who, uint256 epochBits) private {
-        VM.store(jackpots, keccak256(abi.encode(who, bracket)), bytes32(epochBits | (100 ether + (who % 1009) * 1 ether)));
+    function _register(address game, address wallet) private returns (uint32 id) {
+        VM.prank(ContractAddresses.AFFILIATE);
+        id = IDegenerusGame(game).registerWallet(wallet, true);
+    }
+
+    function _score(address jackpots, address game, bytes32 bracket, uint256 who, uint256 epochBits) private {
+        uint256 id = IDegenerusGame(game).walletIdOf(address(uint160(who)));
+        VM.store(jackpots, keccak256(abi.encode(id, bracket)), bytes32(epochBits | (100 ether + (who % 1009) * 1 ether)));
     }
 }
 
@@ -466,8 +473,8 @@ contract CenturyNativeGasHost is DegenerusGame, WalletSeed {
         return (claimablePool, _getFuturePrizePool(), pending);
     }
     /// @dev Reference seam: the production queue sink with one logged ticket roll's arguments.
-    function replayQueued(address buyer, uint24 targetLevel, uint32 entries) external {
-        _queueEntries(_seedWallet(buyer), targetLevel, entries, true);
+    function replayQueuedId(uint32 id, uint24 targetLevel, uint32 entries) external {
+        _queueEntries(id, targetLevel, entries, true);
     }
     function _native(address target, bytes memory data) private returns (bytes memory result) {
         (bool ok, bytes memory reason) = target.delegatecall(data);
@@ -515,7 +522,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         uint256 distinctTicketPairs;
         uint256 farRolls;
         bytes32[] ticketPairs;
-        address[] recipients;
+        uint32[] recipients;
     }
 
     /// @dev Award-stage measurement: per-group cold gas, the composed run, and draw bookkeeping.
@@ -534,7 +541,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
     uint256 private expectedWhales;
     bool private expectHousePass;
     /// @dev Every position's winner drawn by the bracket views before the consolidation.
-    address[] private predicted;
+    uint32[] private predicted;
     /// @dev The pool's scatter round count (the draw module's `_bafRounds`) and award positions.
     uint256 internal rounds;
     uint256 internal positions;
@@ -574,7 +581,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         assertEq(game.rngWordForDay(400), 0, "the word-apply transaction must apply fresh RNG");
         assertFalse(game.decWindow(), "real century request closes the burn window");
 
-        CenturyBafScores.seedCandidatesR(address(jackpots), rounds / 2, rounds > 48 ? 4 : 1);
+        CenturyBafScores.seedCandidatesR(address(jackpots), address(game), rounds / 2, rounds > 48 ? 4 : 1);
         CenturyBafScores.seedHead(address(jackpots), address(coinflip), address(game), 400);
         assertEq(uint8(CenturyBafScores.levelWord(address(jackpots)) >> 64), 4, "bafLevel layout: four board entries");
         (, uint96 weight, uint32 count) = coinflip.bafDrawInfo();
@@ -600,7 +607,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
             vm.etch(address(coinflip), type(VaultHistorySeeder).runtimeCode);
             VaultHistorySeeder(address(coinflip)).seedVaultHistory(historyMode == 1);
             vm.etch(address(coinflip), original);
-            vm.store(address(crapsBattle), keccak256(abi.encode(ContractAddresses.VAULT, CrapsSlots.PASS_CREDITS)), bytes32(0));
+            vm.store(address(crapsBattle), keccak256(abi.encode(uint256(1), CrapsSlots.PASS_CREDITS_BY_ID)), bytes32(0));
             vm.store(address(coin), bytes32(0), bytes32(uint256(uint128(uint256(vm.load(address(coin), bytes32(0)))))));
         }
         _predictAwards(word, s);
@@ -610,7 +617,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
     ///      derives the expected award counts from the schedule's amounts and legs: every position
     ///      must hold a qualifying, distinct winner.
     function _predictAwards(uint256 word, Shape memory s) private {
-        address[] memory drawn = new address[](positions);
+        uint32[] memory drawn = new uint32[](positions);
         for (uint256 r; r < rounds; ++r) {
             (drawn[2 * r], drawn[2 * r + 1]) = BafViews.round(address(jackpots), 100, word, r, rounds);
         }
@@ -620,7 +627,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         uint256 rolls;
         uint256 whales;
         for (uint256 i; i < positions; ++i) {
-            require(drawn[i] != address(0), "every BAF position must have a qualifying winner");
+            require(drawn[i] != 0, "every BAF position must have a qualifying winner");
             for (uint256 j; j < i; ++j) {
                 require(drawn[i] != drawn[j], "BAF recipients must be distinct");
             }
@@ -914,7 +921,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         assertEq(kind, 7, "the award stage is pending");
         assertEq(at, cursor, "exactly one fixed group per admitted allowance");
         uint256 end = cursor + BAF_GROUP < positions ? cursor + BAF_GROUP : positions;
-        (address[] memory atStart, address[] memory expected, bytes32 refDigest) = _referenceDraw(cursor, end);
+        (uint32[] memory atStart, uint32[] memory expected, bytes32 refDigest) = _referenceDraw(cursor, end);
 
         _coolEngine();
         vm.recordLogs();
@@ -957,7 +964,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
     ///      digest of that run.
     function _referenceDraw(uint256 cursor, uint256 end)
         private
-        returns (address[] memory atStart, address[] memory expected, bytes32 refDigest)
+        returns (uint32[] memory atStart, uint32[] memory expected, bytes32 refDigest)
     {
         uint256 pre = vm.snapshotState();
         vm.recordLogs();
@@ -985,12 +992,12 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         Vm.Log[] memory logs,
         uint256 cursor,
         uint256 end,
-        address[] memory atStart,
-        address[] memory expected
+        uint32[] memory atStart,
+        uint32[] memory expected
     ) private returns (uint256 credited) {
         (BafSchedule.Award[] memory got, bool tagged) = BafSchedule.awardsOf(logs);
         assertTrue(tagged, "BAF award events carry level 100 and the BAF sentinel");
-        address[] memory paid = new address[](end - cursor);
+        uint32[] memory paid = new uint32[](end - cursor);
         credited = BafSchedule.checkGroupR(got, expectedPool, cursor, end, expected, paid, rounds);
         for (uint256 i = cursor; i < end; ++i) {
             if (expected[i - cursor] != atStart[i - cursor]) {
@@ -1045,7 +1052,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
 
     function _newTally() private view returns (Tally memory t) {
         t.ticketPairs = new bytes32[](2 * positions + 8);
-        t.recipients = new address[](positions + 8);
+        t.recipients = new uint32[](positions + 8);
     }
 
     function _lastStage(Vm.Log[] memory logs) private pure returns (uint8 stage) {
@@ -1076,7 +1083,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
             }
             if (topic == WHALE_SIG) ++t.whaleAwards;
             if (topic == ETH_SIG || topic == TICKET_SIG || topic == WHALE_SIG) {
-                address who = address(uint160(uint256(logs[i].topics[1])));
+                uint32 who = uint32(uint256(logs[i].topics[1]));
                 bool found;
                 for (uint256 j; j < t.distinct; ++j) {
                     if (t.recipients[j] == who) found = true;
@@ -1106,8 +1113,8 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
             if (topic == keccak256("GrowthRoundSealed(uint24,bool)")) ++t.growth;
             if (topic == keccak256("LevelQuestRolled(uint24,uint8,uint8,uint256)")) ++t.quest;
             if (
-                topic == keccak256("CrapsPassesCredited(address,bool,uint256)")
-                    && address(uint160(uint256(logs[i].topics[1]))) == ContractAddresses.SDGNRS
+                topic == keccak256("CrapsPassesCredited(uint32,bool,uint256)")
+                    && uint32(uint256(logs[i].topics[1])) == 2
             ) {
                 (bool high, uint256 n) = abi.decode(logs[i].data, (bool, uint256));
                 if (high) t.highPasses += n;

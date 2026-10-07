@@ -24,7 +24,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///         5. KEEPER: a plain mineFlip() resolves the queue and pays the box-open bounty.
 ///
 ///         Callees the sweep reaches, driven here: IDegenerusCoin.mintForGame (the owner FLIP
-///         flush), ICoinflip.creditFlip + IDegenerusAffiliate.getReferrer (the affiliate leg of
+///         flush), ICoinflip.creditFlip + IDegenerusAffiliate.getReferrerId (the affiliate leg of
 ///         a high-match ETH spin) and IsDGNRS.poolBalance / IsDGNRS.transferFromPool (the S>=7
 ///         award). The record-bounty chain's IDegenerusCoin.mintForGame is driven by
 ///         BigRecordArming.

@@ -82,6 +82,18 @@ contract BafTranscriptHost is DegenerusGame, WalletSeed {
         return (n, f, prizePoolFrozen);
     }
 
+    function btIdOf(address w) external view returns (uint32) {
+        return _walletIdOf(w);
+    }
+
+    function btKeyOf(uint32 id) external view returns (address) {
+        return id == 0 ? address(0) : _walletKey(id);
+    }
+
+    function btSeedWallet(address w) external returns (uint32) {
+        return _seedWallet(w);
+    }
+
     function btPlayer(address w) external view returns (uint256 claimable, uint256 halfPasses) {
         return (uint128(balancesPacked[_walletIdOf(w)]), _halfPassesOf(w));
     }
@@ -313,10 +325,10 @@ abstract contract BafTranscriptFixture is DeployProtocol {
     }
 
     /// @dev Bracket storage of DegenerusJackpots for `lvl`: the BafLevel word (epoch | topLen |
-    ///      skipped), the four board slots and the global resolution day.
+    ///      skipped), the two board words and the global resolution day.
     struct Bracket {
         uint256 levelWord;
-        bytes32[4] top;
+        bytes32[2] top;
         uint24 resolvedDay;
     }
 
@@ -661,16 +673,16 @@ abstract contract BafTranscriptFixture is DeployProtocol {
         for (uint256 q; q < rounds / 2; ++q) {
             atStageStart[q] = keccak256(abi.encode(jackpots.bafPairWinners(lvl, word, q, rounds)));
         }
-        address[3] memory heads;
+        uint32[3] memory heads;
         for (uint256 s; s < 3; ++s) heads[s] = jackpots.bafHeadWinner(lvl, word, uint8(s));
 
         Totals memory t;
         Draws memory d;
-        address[4] memory drawn;
+        uint32[4] memory drawn;
         uint256 lanesAtPairStart;
         uint256 p;
         for (uint256 i; i < _positions(); ++i) {
-            address w;
+            uint32 w;
             if (i < 2 * rounds) {
                 uint256 q = i >> 2;
                 uint256 band = (q * 8) / rounds;
@@ -688,23 +700,23 @@ abstract contract BafTranscriptFixture is DeployProtocol {
                     // The even round is paid and its queues replayed: the odd round still pays
                     // lanes 4..7 of the pair-start sample (`drawn`), whatever a re-sample says.
                     if (_bandLanes(band) != lanesAtPairStart) ++d.evenAddedLane;
-                    address[4] memory resampled = _drawPair(q, rounds, st.epoch);
+                    uint32[4] memory resampled = _drawPair(q, rounds, st.epoch);
                     if (resampled[2] != drawn[2] || resampled[3] != drawn[3]) ++d.oddHeld;
                 }
                 w = drawn[i & 3];
-                if (i & 1 == 1 && w != address(0)) assertTrue(w != drawn[(i & 3) - 1], "a round's places are distinct");
+                if (i & 1 == 1 && w != 0) assertTrue(w != drawn[(i & 3) - 1], "a round's places are distinct");
             } else {
                 w = jackpots.bafHeadWinner(lvl, word, uint8(i - 2 * rounds));
                 assertEq(w, heads[i - 2 * rounds], "head slot is fixed by the frozen board");
             }
             uint256 amount = _amountAt(pool, i);
             bool ethLeg = _ethLeg(i);
-            if (w == address(0) || amount == 0) {
+            if (w == 0 || amount == 0) {
                 ++d.empty;
                 d.emptyTerm += _ethTerm(amount, threshold, ethLeg);
                 continue;
             }
-            p = _expectAward(logs, p, w, amount, threshold, ethLeg,
+            p = _expectAward(logs, p, host.btKeyOf(w), amount, threshold, ethLeg,
                 EntropyLib.hash4(word, lvl, BAF_TICKET_TAG, i), st.floorLvl, t);
         }
         assertEq(_nextKey(logs, p), logs.length, "the award stage emits nothing beyond the award set");
@@ -738,17 +750,17 @@ abstract contract BafTranscriptFixture is DeployProtocol {
     /// @dev Pair q of `rounds` ranked here on the current state: a trait pair ranks two four-entry
     ///      bucket samples (one per round); a far-future pair ranks lanes 0..3 (even round) and
     ///      4..7 (odd round) of one eight-lane sample.
-    function _drawPair(uint256 q, uint256 rounds, uint64 epoch) internal view returns (address[4] memory d) {
+    function _drawPair(uint256 q, uint256 rounds, uint64 epoch) internal view returns (uint32[4] memory d) {
         uint256 base = EntropyLib.hash2(word, uint256(BAF_WINNERS_TAG));
         uint256 band = (q * 8) / rounds;
         if (band < 2) {
-            (, address[] memory a) = game.sampleTraitEntries(band == 1, EntropyLib.hash2(base, 2 * q));
+            (, uint32[] memory a) = game.sampleTraitEntries(band == 1, EntropyLib.hash2(base, 2 * q));
             (d[0], d[1]) = _rankRef(a, 0, epoch);
             (, a) = game.sampleTraitEntries(band == 1, EntropyLib.hash2(base, 2 * q + 1));
             (d[2], d[3]) = _rankRef(a, 0, epoch);
         } else {
             (uint24 from, uint24 to) = _bandLevels(band);
-            address[] memory lanes = game.sampleFarFutureTickets(EntropyLib.hash2(base, BAF_FAR_PAIR_KEY | q), from, to);
+            uint32[] memory lanes = game.sampleFarFutureTickets(EntropyLib.hash2(base, BAF_FAR_PAIR_KEY | q), from, to);
             (d[0], d[1]) = _rankRef(lanes, 0, epoch);
             (d[2], d[3]) = _rankRef(lanes, 4, epoch);
         }
@@ -766,10 +778,10 @@ abstract contract BafTranscriptFixture is DeployProtocol {
     /// @dev Best and second-best bracket score among the four candidates from `off`; a later
     ///      candidate takes a place only with a strictly higher score, and the second place never
     ///      repeats the best.
-    function _rankRef(address[] memory c, uint256 off, uint64 epoch)
+    function _rankRef(uint32[] memory c, uint256 off, uint64 epoch)
         internal
         view
-        returns (address best, address second)
+        returns (uint32 best, uint32 second)
     {
         uint256 end = off + 4 < c.length ? off + 4 : c.length;
         uint256 bestScore;
@@ -786,9 +798,9 @@ abstract contract BafTranscriptFixture is DeployProtocol {
     }
 
     /// @dev `bafPlayer[lvl][a]` total when it belongs to the bracket's live epoch, else zero.
-    function _scoreOf(address a, uint64 epoch) internal view returns (uint256) {
+    function _scoreOf(uint32 a, uint64 epoch) internal view returns (uint256) {
         bytes32 inner = keccak256(abi.encode(uint256(lvl), BAF_PLAYER_SLOT));
-        uint256 v = uint256(vm.load(address(jackpots), keccak256(abi.encode(a, inner))));
+        uint256 v = uint256(vm.load(address(jackpots), keccak256(abi.encode(uint256(a), inner))));
         return uint64(v >> 192) == epoch ? uint192(v) : 0;
     }
 
@@ -809,7 +821,6 @@ abstract contract BafTranscriptFixture is DeployProtocol {
         if (a >= threshold) {
             uint256 eth = a / 2;
             uint256 lootbox = a - eth;
-            p = _expectCredit(logs, p, w, eth, t);
             p = _expectEthWin(logs, p, w, eth, t);
             if (lootbox <= LOOTBOX_CLAIM_THRESHOLD) return _expectRolls(logs, p, w, lootbox, entropy, floorLvl);
             p = _expectCredit(logs, p, w, lootbox % HALF_WHALE_PASS_PRICE, t);
@@ -817,7 +828,6 @@ abstract contract BafTranscriptFixture is DeployProtocol {
             return _expectWhale(logs, p, w, lootbox / HALF_WHALE_PASS_PRICE, WHALE_PASS_SRC_BAF_DIRECT, t);
         }
         if (ethLeg) {
-            p = _expectCredit(logs, p, w, a, t);
             return _expectEthWin(logs, p, w, a, t);
         }
         if (a > LOOTBOX_CLAIM_THRESHOLD) {
@@ -845,7 +855,7 @@ abstract contract BafTranscriptFixture is DeployProtocol {
         p = _nextKey(logs, p);
         assertLt(p, logs.length, "credit log present");
         assertEq(logs[p].topics[0], CREDIT_SIG, "claimable credit");
-        assertEq(logs[p].topics[1], bytes32(uint256(uint160(w))), "credit winner");
+        assertEq(logs[p].topics[1], bytes32(uint256(host.btIdOf(w))), "credit winner");
         assertEq(keccak256(logs[p].data), keccak256(abi.encode(amount)), "credit amount");
         t.credits += amount;
         return p + 1;
@@ -859,11 +869,12 @@ abstract contract BafTranscriptFixture is DeployProtocol {
         p = _nextKey(logs, p);
         assertLt(p, logs.length, "ETH win log present");
         assertEq(logs[p].topics[0], ETH_SIG, "ETH win");
-        assertEq(logs[p].topics[1], bytes32(uint256(uint160(w))), "ETH winner");
+        assertEq(logs[p].topics[1], bytes32(uint256(host.btIdOf(w))), "ETH winner");
         assertEq(logs[p].topics[2], bytes32(uint256(lvl)), "ETH win level");
         assertEq(logs[p].topics[3], bytes32(uint256(BAF_TRAIT_SENTINEL)), "BAF sentinel");
         assertEq(keccak256(logs[p].data), keccak256(abi.encode(amount, uint256(0))), "ETH win amount");
         t.ethWins += amount;
+        t.credits += amount;
         return p + 1;
     }
 
@@ -875,7 +886,7 @@ abstract contract BafTranscriptFixture is DeployProtocol {
         p = _nextKey(logs, p);
         assertLt(p, logs.length, "whale-pass log present");
         assertEq(logs[p].topics[0], WHALE_SIG, "whale-pass deferral");
-        assertEq(logs[p].topics[1], bytes32(uint256(uint160(w))), "whale-pass winner");
+        assertEq(logs[p].topics[1], bytes32(uint256(host.btIdOf(w))), "whale-pass winner");
         assertEq(keccak256(logs[p].data), keccak256(abi.encode(halves, source)), "half passes and source");
         t.halfPasses += halves;
         return p + 1;
@@ -921,7 +932,7 @@ abstract contract BafTranscriptFixture is DeployProtocol {
             p = _nextKey(logs, p);
             assertLt(p, logs.length, "queue log present");
             assertEq(logs[p].topics[0], QUEUED_SIG, "entries queued");
-            assertEq(logs[p].topics[1], bytes32(uint256(uint160(w))), "queued winner");
+            assertEq(logs[p].topics[1], bytes32(uint256(host.btIdOf(w))), "queued winner");
             assertEq(keccak256(logs[p].data), keccak256(abi.encode(target, entries)), "queued level and entries");
             host.btReplayQueued(w, target, entries);
             ++p;
@@ -929,7 +940,7 @@ abstract contract BafTranscriptFixture is DeployProtocol {
         p = _nextKey(logs, p);
         assertLt(p, logs.length, "ticket win log present");
         assertEq(logs[p].topics[0], TICKET_SIG, "ticket win");
-        assertEq(logs[p].topics[1], bytes32(uint256(uint160(w))), "ticket winner");
+        assertEq(logs[p].topics[1], bytes32(uint256(host.btIdOf(w))), "ticket winner");
         assertEq(logs[p].topics[2], bytes32(uint256(target)), "ticket target level");
         assertEq(logs[p].topics[3], bytes32(uint256(BAF_TRAIT_SENTINEL)), "BAF sentinel");
         assertEq(keccak256(logs[p].data), keccak256(abi.encode(entries, floorLvl, uint256(0), up)),
@@ -944,7 +955,7 @@ abstract contract BafTranscriptFixture is DeployProtocol {
     function _bracket() internal view returns (Bracket memory b) {
         b.levelWord = uint256(vm.load(address(jackpots), keccak256(abi.encode(uint256(lvl), BAF_LEVEL_SLOT))));
         uint256 topBase = uint256(keccak256(abi.encode(uint256(lvl), BAF_TOP_SLOT)));
-        for (uint256 i; i < 4; ++i) b.top[i] = vm.load(address(jackpots), bytes32(topBase + i));
+        for (uint256 i; i < 2; ++i) b.top[i] = vm.load(address(jackpots), bytes32(topBase + i));
         b.resolvedDay = jackpots.getLastBafResolvedDay();
     }
 
@@ -960,7 +971,7 @@ abstract contract BafTranscriptFixture is DeployProtocol {
     function _assertBracketClosed(Bracket memory b0, uint24 consDay) internal view {
         Bracket memory b = _bracket();
         assertEq(b.levelWord, uint256(uint64(b0.levelWord)) + 1, "finalizeBaf bumps the epoch, empties the board");
-        for (uint256 i; i < 4; ++i) assertEq(b.top[i], bytes32(0), "finalizeBaf clears every board slot");
+        for (uint256 i; i < 2; ++i) assertEq(b.top[i], bytes32(0), "finalizeBaf clears every board word");
         assertEq(b.resolvedDay, consDay, "the resolution day stays at the consolidation day");
     }
 
@@ -1044,7 +1055,7 @@ abstract contract BafTranscriptFixture is DeployProtocol {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
             bytes32 topic = logs[i].topics[0];
             if (topic != ETH_SIG && topic != TICKET_SIG && topic != WHALE_SIG && topic != CREDIT_SIG) continue;
-            address a = address(uint160(uint256(logs[i].topics[1])));
+            address a = host.btKeyOf(uint32(uint256(logs[i].topics[1])));
             bool seen;
             for (uint256 j; j < n; ++j) {
                 if (buf[j] == a) {
@@ -1082,9 +1093,13 @@ abstract contract BafTranscriptFixture is DeployProtocol {
 
     function _credits(Vm.Log[] memory logs) internal view returns (uint256 sum) {
         for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].emitter == address(game) && logs[i].topics.length != 0 && logs[i].topics[0] == CREDIT_SIG) {
-                sum += abi.decode(logs[i].data, (uint256));
+            if (logs[i].emitter != address(game) || logs[i].topics.length == 0) continue;
+            if (logs[i].topics[0] == CREDIT_SIG) sum += abi.decode(logs[i].data, (uint256));
+            else if (logs[i].topics[0] == ETH_SIG) {
+                (uint256 eth,) = abi.decode(logs[i].data, (uint256, uint256));
+                sum += eth;
             }
+
         }
     }
 
@@ -1166,7 +1181,7 @@ abstract contract BafTranscriptFixture is DeployProtocol {
         uint256 count = depositors.length;
         for (uint256 i; i < count; ++i) {
             vm.store(address(coinflip), keccak256(abi.encode((uint256(DAY) << 32) | i, uint256(8))),
-                bytes32((uint256(uint160(depositors[i])) << 96) | ((i + 1) * 100)));
+                bytes32((uint256(_giveWalletId(depositors[i])) << 96) | ((i + 1) * 100)));
         }
         vm.store(address(coinflip), keccak256(abi.encode(uint256(DAY), uint256(5))),
             bytes32((count << 96) | (count * 100)));
@@ -1215,14 +1230,15 @@ abstract contract CenturyBafTranscript is BafTranscriptFixture {
     function _score() internal override {
         // A full board of four bettors above every scatter candidate.
         for (uint256 i; i < 4; ++i) {
+            uint32 id = host.btSeedWallet(address(uint160(0xBAF000 + i)));
             vm.prank(ContractAddresses.COINFLIP);
-            jackpots.recordBafFlip(address(uint160(0xBAF000 + i)), 100, (i + 1) * 1_000_000 ether);
+            jackpots.recordBafFlip(id, 100, (i + 1) * 1_000_000 ether);
         }
         // Trait rounds (the first half, a quarter per level) read frozen buckets: score the four
         // entries each round samples.
         uint256 entropyBase = EntropyLib.hash2(WORD, uint256(BAF_WINNERS_TAG));
         for (uint256 r; r < _rounds() / 2; ++r) {
-            (, address[] memory candidates) =
+            (, uint32[] memory candidates) =
                 game.sampleTraitEntries(r >= _rounds() / 4, EntropyLib.hash2(entropyBase, r));
             assertEq(candidates.length, 4, "each trait round samples four entries");
             for (uint256 i; i < candidates.length; ++i) {
@@ -1235,15 +1251,16 @@ abstract contract CenturyBafTranscript is BafTranscriptFixture {
         uint256 epoch = uint64(uint256(vm.load(address(jackpots), keccak256(abi.encode(uint256(100), BAF_LEVEL_SLOT)))));
         bytes32 inner = keccak256(abi.encode(uint256(100), BAF_PLAYER_SLOT));
         address probe = address(0xBAF5C0E);
+        uint32 probeId = host.btSeedWallet(probe);
         vm.prank(ContractAddresses.COINFLIP);
-        jackpots.recordBafFlip(probe, 100, 7 ether);
-        assertEq(uint256(vm.load(address(jackpots), keccak256(abi.encode(probe, inner)))), 7 ether | (epoch << 192),
+        jackpots.recordBafFlip(probeId, 100, 7 ether);
+        assertEq(uint256(vm.load(address(jackpots), keccak256(abi.encode(uint256(probeId), inner)))), 7 ether | (epoch << 192),
             "bafPlayer slot layout");
         for (uint24 l = 102; l <= 199; ++l) {
             address[] memory owners = host.btFarOwners(l);
             for (uint256 i; i < owners.length; ++i) {
                 uint256 score = (1 + uint256(uint160(owners[i])) % 997) * 1 ether;
-                vm.store(address(jackpots), keccak256(abi.encode(owners[i], inner)), bytes32(score | (epoch << 192)));
+                vm.store(address(jackpots), keccak256(abi.encode(uint256(host.btIdOf(owners[i])), inner)), bytes32(score | (epoch << 192)));
             }
         }
     }
@@ -1310,8 +1327,9 @@ abstract contract PlainBafTranscript is BafTranscriptFixture {
         _armWord(_word());
         assertEq(game.level(), target, "the request pre-increments the level");
         for (uint256 i; i < PLAYERS; ++i) {
+            uint32 id = game.walletIdOf(address(PLAYER_BASE + uint160(i)));
             vm.prank(ContractAddresses.COINFLIP);
-            jackpots.recordBafFlip(address(PLAYER_BASE + uint160(i)), target, (i + 1) * 100 ether);
+            jackpots.recordBafFlip(id, target, (i + 1) * 100 ether);
         }
         if (_armDraw()) {
             address[] memory depositors = new address[](16);
@@ -1360,7 +1378,7 @@ contract BafStagedTranscriptEmptySlot is PlainBafTranscript {
     }
 
     function _score() internal override {
-        assertEq(jackpots.bafHeadWinner(lvl, word, 1), address(0), "the empty depositor draw names nobody");
+        assertEq(jackpots.bafHeadWinner(lvl, word, 1), 0, "the empty depositor draw names nobody");
     }
 }
 

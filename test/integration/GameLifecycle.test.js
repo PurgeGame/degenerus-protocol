@@ -4,9 +4,11 @@ import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js
 import {
   deployFullProtocol,
   restoreAddresses,
+  giveWalletId,
 } from "../helpers/deployFixture.js";
 import {
   eth,
+  flip,
   advanceToNextDay,
   getEvents,
   ZERO_BYTES32,
@@ -400,6 +402,10 @@ describe("GameLifecycle", function () {
       await game.connect(alice).setOperatorApproval(bob.address, true);
       expect(await game.isOperatorApproved(alice.address, bob.address)).to.equal(true);
 
+      // The beneficiary and the paying operator of a payer-funded purchase both hold wallet IDs.
+      await giveWalletId(game, alice.address);
+      await giveWalletId(game, bob.address);
+
       // Bob purchases on behalf of alice.
       const tx = await game.connect(bob).purchase(
         alice.address,
@@ -516,7 +522,7 @@ describe("GameLifecycle", function () {
       ]);
       await hre.ethers.provider.send("hardhat_impersonateAccount", [minterAddr]);
       const minterSigner = await hre.ethers.getSigner(minterAddr);
-      await coin.connect(minterSigner).mintForGame(alice.address, eth(1000));
+      await coin.connect(minterSigner).mintForGame(alice.address, flip(1000));
       await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [
         minterAddr,
       ]);
@@ -530,7 +536,7 @@ describe("GameLifecycle", function () {
       await expect(
         coinflip
           .connect(alice)
-          .depositCoinflip("0x0000000000000000000000000000000000000000", eth(100))
+          .depositCoinflip("0x0000000000000000000000000000000000000000", flip(100))
       ).to.not.be.reverted;
     });
   });

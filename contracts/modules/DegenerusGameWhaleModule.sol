@@ -37,8 +37,9 @@ import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 ///      inside the Game, so the external call reaches the table with msg.sender == GAME. The
 ///      door makes no external calls and saturates at the lane cap instead of reverting.
 interface ICrapsPassCredit {
-    /// @notice Bank a rolled pass award as day-pass credits, revert-free (CrapsBattle, game-only).
-    function creditPasses(address player, uint32 normal, uint32 high) external;
+    /// @notice Bank a rolled pass award as day-pass credits for wallet `id`, revert-free
+    ///         (CrapsBattle, game-only; the Game passes the nonzero ID it holds).
+    function creditPasses(uint32 id, uint32 normal, uint32 high) external;
 }
 
 /**
@@ -288,7 +289,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         if (quantity == 0 || quantity > WHALE_MAX_QUANTITY) revert InvalidQuantity();
 
-        (bool hasValidBoon, uint256 s0) = _whaleBoonState(buyer);
+        // Boons are keyed by wallet ID: an unregistered buyer reads the empty ID-0 lanes.
+        (bool hasValidBoon, uint256 s0) = _whaleBoonState(_walletIdOf(buyer));
         // x00 (century) levels: minimum 2 passes (8 ETH) to deter fresh-account century bonus
         // farming. Standard-price path only; a boon purchase takes the discount branch.
         if (!hasValidBoon && passLevel % 100 == 0 && quantity < 2) revert MinQuantityRequired();
@@ -339,7 +341,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         if (_livenessTriggered()) return 0;
 
         uint24 passLevel = level + 1;
-        (bool hasValidBoon, uint256 s0) = _whaleBoonState(ContractAddresses.SDGNRS);
+        (bool hasValidBoon, uint256 s0) = _whaleBoonState(SDGNRS_WALLET_ID);
         (uint256 firstPrice, uint256 restPrice) = _whaleUnitPrices(passLevel, hasValidBoon, s0);
         uint256 budget = _claimableOf(SDGNRS_WALLET_ID) / SDGNRS_WHALE_BUDGET_DIVISOR;
         // quote(q) = firstPrice + restPrice * (q - 1) <= budget  <=>  q * restPrice <= budget + restPrice - firstPrice.
@@ -361,12 +363,12 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         );
     }
 
-    /// @dev Whale boon lane read: whether `buyer` holds a live whale discount boon and the packed
+    /// @dev Whale boon lane read: whether wallet `id` holds a live whale discount boon and the packed
     ///      slot-0 word the consumer clears from. Deity-granted boons are valid only on the grant
     ///      day; lootbox-rolled keep the 4-day window (mirrors the BoonModule/deity-pass siblings).
     ///      A read only — nothing is consumed here, so a quote can be sized before committing.
-    function _whaleBoonState(address buyer) private view returns (bool valid, uint256 s0) {
-        s0 = boonPacked[buyer].slot0;
+    function _whaleBoonState(uint32 id) private view returns (bool valid, uint256 s0) {
+        s0 = boonPacked[id].slot0;
         uint24 boonDay = uint24(s0 >> BP_WHALE_DAY_SHIFT);
         if (boonDay != 0) {
             uint24 currentDay = _simulatedDayIndex();
@@ -421,7 +423,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     ) private {
         if (hasValidBoon) {
             // Clear whale fields (consumed)
-            boonPacked[buyer].slot0 = s0 & BP_WHALE_CLEAR;
+            boonPacked[buyerId].slot0 = s0 & BP_WHALE_CLEAR;
         }
         _settleShortfall(buyerId, totalPrice - freshPaid, true);
         // Whale-pass ETH-in (any funding source): the full price routes to the pools; the
@@ -571,7 +573,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                     0
                 );
             }
-            if (kickback != 0) coinflip.creditFlip(buyer, kickback);
+            if (kickback != 0) coinflip.creditFlip(buyerId, kickback);
         }
 
         _rewardWhalePassDgnrs(buyer, quantity);
@@ -603,12 +605,12 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         // Lootbox: 10% of price, one box per pass bought
         uint256 lootboxAmount = (totalPrice * WHALE_LOOTBOX_BPS) / 10_000;
-        _recordLootboxEntry(buyer, lootboxAmount, uint8(quantity));
+        _recordLootboxEntry(buyer, buyerId, lootboxAmount, uint8(quantity));
         // Below level 10 (passLevel == level + 1, invariant across this call) every pass
         // bought banks one Craps day-pass credit on the table's credit-only door.
         if (passLevel <= 10) {
             ICrapsPassCredit(ContractAddresses.CRAPS).creditPasses(
-                buyer,
+                buyerId,
                 uint32(quantity),
                 0
             );
@@ -646,7 +648,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         if (_livenessTriggered()) revert GameOver();
         uint24 currentLevel = level;
         bool hasValidBoon = false;
-        BoonPacked storage bpLazy = boonPacked[buyer];
+        // Boons are keyed by wallet ID: an unregistered buyer reads the empty ID-0 lanes, which
+        // hold no boon day, so nothing below writes under ID 0.
+        BoonPacked storage bpLazy = boonPacked[_walletIdOf(buyer)];
         uint256 s1 = bpLazy.slot1;
         uint8 lazyTier = uint8(s1 >> BP_LAZY_PASS_TIER_SHIFT);
         uint16 boonDiscountBps = _lazyPassTierToBps(lazyTier);
@@ -775,7 +779,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                     0
                 );
             }
-            if (kickback != 0) coinflip.creditFlip(buyer, kickback);
+            if (kickback != 0) coinflip.creditFlip(buyerId, kickback);
         }
 
         _activate10LevelPass(buyer, startLevel, LAZY_PASS_ENTRIES_PER_LEVEL);
@@ -807,7 +811,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         // Award lootbox as 10% of the price paid
         uint256 lootboxAmount = (totalPrice * LAZY_PASS_LOOTBOX_BPS) / 10_000;
-        _recordLootboxEntry(buyer, lootboxAmount, 1);
+        _recordLootboxEntry(buyer, buyerId, lootboxAmount, 1);
         _grantSeatCoin(buyer);
     }
 
@@ -871,9 +875,10 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         uint256 basePrice = _deityPassBasePrice(deityPassSales);
 
-        // Apply discount boon if active (tier 1=10%, 2=20%, 3=35%)
+        // Apply discount boon if active (tier 1=10%, 2=20%, 3=35%). Boons are keyed by the wallet
+        // ID the mint word carries; an unregistered buyer reads the empty ID-0 lanes.
         uint256 totalPrice = basePrice;
-        BoonPacked storage bpDeity = boonPacked[buyer];
+        BoonPacked storage bpDeity = boonPacked[uint32(mp >> BitPackingLib.WALLET_ID_SHIFT)];
         uint256 s1Deity = bpDeity.slot1;
         uint8 boonTier = uint8(s1Deity >> BP_DEITY_PASS_TIER_SHIFT);
         if (boonTier != 0) {
@@ -924,26 +929,19 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         _queueEntryRange(buyerId, passLevel, jackpotPhaseFlag ? 99 : 100, DEITY_PERPETUAL_ENTRIES);
         ++deityPassSales;
 
-        // DGNRS rewards
-        address affiliateAddr = affiliate.getReferrer(buyer);
-        address upline;
-        address upline2;
-        if (affiliateAddr != address(0)) {
-            upline = affiliate.getReferrer(affiliateAddr);
-            if (upline != address(0)) {
-                upline2 = affiliate.getReferrer(upline);
-            }
-        }
-        _rewardDeityPassDgnrs(buyer, affiliateAddr, upline, upline2, passLevel - 1);
+        // DGNRS rewards: the three referrer hops by wallet ID (VAULT when unreferred). A referrer
+        // without an ID yet (a bootstrap code owner before its first earnings) reads 0 and zeroes
+        // every later hop.
+        (uint32 affiliateId, uint32 upline1Id, uint32 upline2Id) = affiliate.referrerIds(buyer);
+        // The conferred whale pass below needs the direct affiliate's wallet ID.
+        if (affiliateId == 0) revert E();
+        _rewardDeityPassDgnrs(buyer, affiliateId, upline1Id, upline2Id, passLevel - 1);
 
         // The buyer's perpetual ticket range was granted by _registerDeity above.
-        // The separate whale pass the
-        // purchase confers goes to the deity's affiliate (affiliateAddr is always non-zero —
-        // getReferrer defaults to VAULT when the buyer has no real referrer): queued immediately
-        // for 100 levels from passLevel (= level + 1), 5/lvl over the level-1-9 bonus window +
-        // one whole ticket every 2nd level standard, plus the whale-pass freeze/stat boost.
-        // Every referrer holds a wallet ID: a code's owner registers when the code is first used.
-        uint32 affiliateId = _requireWalletId(affiliateAddr);
+        // The separate whale pass the purchase confers goes to the deity's affiliate: queued
+        // immediately for 100 levels from passLevel (= level + 1), 5/lvl over the level-1-9
+        // bonus window + one whole ticket every 2nd level standard, plus the whale-pass
+        // freeze/stat boost.
         uint24 ticketStartLevel = passLevel;
         uint24 bonusCount = passLevel <= WHALE_BONUS_END_LEVEL
             ? (WHALE_BONUS_END_LEVEL - passLevel + 1)
@@ -962,7 +960,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             100 - bonusCount,
             WHALE_HALF_PASSES_PER_PASS
         );
-        _applyWhalePassStats(affiliateAddr, ticketStartLevel);
+        _applyWhalePassStats(_walletKey(affiliateId), ticketStartLevel);
 
         // Fund distribution: pre-game 70/30, post-game 95/5 (future/next).
         // passLevel == 1 <=> level == 0: level cannot move within the purchase.
@@ -992,9 +990,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         bool earlyDeity = passLevel <= 10;
         uint256 lootboxAmount = (totalPrice
             * (earlyDeity ? DEITY_EARLY_LOOTBOX_BPS : DEITY_LOOTBOX_BPS)) / 10_000;
-        _recordLootboxEntry(buyer, lootboxAmount, 1);
+        _recordLootboxEntry(buyer, buyerId, lootboxAmount, 1);
         ICrapsPassCredit(ContractAddresses.CRAPS).creditPasses(
-            buyer,
+            buyerId,
             earlyDeity ? 0 : 1,
             earlyDeity ? 1 : 0
         );
@@ -1090,17 +1088,18 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         }
     }
 
-    /// @dev Distribute DGNRS rewards for deity pass purchase to buyer and affiliates.
+    /// @dev Distribute DGNRS rewards for deity pass purchase to buyer and affiliates. Referrers
+    ///      are wallet IDs, paid at their payees; a zero hop is skipped.
     /// @param buyer The pass purchaser receiving 5% of whale pool.
-    /// @param affiliateAddr Direct referrer (receives 0.5% of the unreserved affiliate pool).
-    /// @param upline Second-level referrer (receives 0.1% of the unreserved affiliate pool).
-    /// @param upline2 Third-level referrer (receives 0.05% of the unreserved affiliate pool).
+    /// @param affiliateId Direct referrer (receives 0.5% of the unreserved affiliate pool).
+    /// @param upline1Id Second-level referrer (receives 0.1% of the unreserved affiliate pool).
+    /// @param upline2Id Third-level referrer (receives 0.05% of the unreserved affiliate pool).
     /// @param currentLevel Current game level, used to read the level's DGNRS allocation.
     function _rewardDeityPassDgnrs(
         address buyer,
-        address affiliateAddr,
-        address upline,
-        address upline2,
+        uint32 affiliateId,
+        uint32 upline1Id,
+        uint32 upline2Id,
         uint24 currentLevel
     ) private {
         uint256 whaleReserve = dgnrs.poolBalance(
@@ -1129,33 +1128,32 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         if (reserved >= affiliateReserve) return;
         affiliateReserve -= reserved;
 
-        if (affiliateAddr != address(0)) {
-            uint256 affiliateShare = (affiliateReserve *
-                DGNRS_AFFILIATE_DIRECT_DEITY_PPM) /
-                DGNRS_WHALE_REWARD_PPM_SCALE;
-            if (affiliateShare != 0) {
-                dgnrs.transferFromPool(
-                    IsDGNRS.Pool.Affiliate,
-                    affiliateAddr,
-                    affiliateShare
-                );
-            }
+        // The caller guarantees a nonzero direct affiliate.
+        uint256 affiliateShare = (affiliateReserve *
+            DGNRS_AFFILIATE_DIRECT_DEITY_PPM) /
+            DGNRS_WHALE_REWARD_PPM_SCALE;
+        if (affiliateShare != 0) {
+            dgnrs.transferFromPool(
+                IsDGNRS.Pool.Affiliate,
+                _payee(_walletElement(affiliateId)),
+                affiliateShare
+            );
         }
 
         uint256 uplineShare = (affiliateReserve *
             DGNRS_AFFILIATE_UPLINE_DEITY_PPM) / DGNRS_WHALE_REWARD_PPM_SCALE;
-        if (upline != address(0) && uplineShare != 0) {
+        if (upline1Id != 0 && uplineShare != 0) {
             dgnrs.transferFromPool(
                 IsDGNRS.Pool.Affiliate,
-                upline,
+                _payee(_walletElement(upline1Id)),
                 uplineShare
             );
         }
         uint256 upline2Share = uplineShare / 2;
-        if (upline2 != address(0) && upline2Share != 0) {
+        if (upline2Id != 0 && upline2Share != 0) {
             dgnrs.transferFromPool(
                 IsDGNRS.Pool.Affiliate,
-                upline2,
+                _payee(_walletElement(upline2Id)),
                 upline2Share
             );
         }
@@ -1173,6 +1171,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @dev Record a pass purchase's lootbox spend as `boxes` custom boxes of equal value.
     function _recordLootboxEntry(
         address buyer,
+        uint32 buyerId,
         uint256 lootboxAmount,
         uint8 boxes
     ) private {
@@ -1187,7 +1186,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                 IDegenerusGameLootboxModule.recordCoverBox.selector,
                 buyer,
                 lootboxAmount,
-                _clampScore(_playerActivityScore(buyer, _effectiveQuestStreak(buyer))),
+                _clampScore(_playerActivityScore(buyer, _effectiveQuestStreak(buyerId))),
                 level + 1,
                 true,
                 boxes

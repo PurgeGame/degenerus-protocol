@@ -33,7 +33,7 @@ contract MinerMiddayEligibilityTest is Test {
         game = MinerMiddayEligibilityHarness(ContractAddresses.GAME);
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
         vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending()"), abi.encode(false));
-        vm.mockCall(ContractAddresses.COINFLIP, abi.encodeWithSignature("creditFlip(address,uint256)"), bytes(""));
+        vm.mockCall(ContractAddresses.COINFLIP, abi.encodeWithSignature("creditFlip(uint32,uint256)"), bytes(""));
         vm.mockCall(ContractAddresses.VRF_COORDINATOR, abi.encodeWithSelector(IVRFCoordinator.getSubscription.selector),
             abi.encode(uint96(100 ether), uint96(0), uint64(0), address(0), new address[](0)));
         game.seed(DegenerusGameStorage.MinerAction.Idle);

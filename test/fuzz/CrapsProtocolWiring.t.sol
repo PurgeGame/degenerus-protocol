@@ -37,6 +37,7 @@ import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 ///         nothing if the gate admits everyone.
 contract CrapsProtocolWiringTest is DeployProtocol {
     address internal constant PLAYER = address(0xBEEF);
+    uint32 internal constant CREDIT_ID = 0xBEEF;
     address internal constant STRANGER = address(0xDEAD);
     address internal constant KEEPER = address(0xC0FFEE);
     /// @dev Extra seats in the walked window (see test_mineFlipShutsAWindowAndWalksItsField).
@@ -89,18 +90,18 @@ contract CrapsProtocolWiringTest is DeployProtocol {
     /// @dev Both payout lanes, with a stranger refused at each.
     function test_coinflipHonoursTheCrapsAddressForBothCreditLanes() public {
         vm.prank(ContractAddresses.CRAPS);
-        coinflip.creditFlip(PLAYER, 100);
+        coinflip.creditFlip(CREDIT_ID, 100);
 
-        address[] memory players = new address[](1);
+        uint32[] memory players = new uint32[](1);
         uint256[] memory amounts = new uint256[](1);
-        players[0] = PLAYER;
+        players[0] = CREDIT_ID;
         amounts[0] = 100;
         vm.prank(ContractAddresses.CRAPS);
         coinflip.creditFlipBatch(players, amounts);
 
         vm.prank(STRANGER);
         vm.expectRevert();
-        coinflip.creditFlip(PLAYER, 100);
+        coinflip.creditFlip(CREDIT_ID, 100);
 
         vm.prank(STRANGER);
         vm.expectRevert();
@@ -430,10 +431,10 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         uint256 fixedCost;
         for (uint256 s = 0; s < 6; ++s) {
             uint256 n = sizes[s];
-            address[] memory who = new address[](n);
+            uint32[] memory who = new uint32[](n);
             uint256[] memory amt = new uint256[](n);
             for (uint256 i = 0; i < n; ++i) {
-                who[i] = address(uint160(uint256(keccak256(abi.encode("cold", s, i)))));
+                who[i] = uint32(0x1000 * (s + 1) + i);
                 amt[i] = 1;
             }
             vm.prank(ContractAddresses.CRAPS);
@@ -452,8 +453,8 @@ contract CrapsProtocolWiringTest is DeployProtocol {
 
         // A REPEAT recipient, and a WARM day slot: both are cheaper, which is why the reserve is
         // taken from the cold distinct case and not from an average.
-        address repeat = address(uint160(uint256(keccak256("repeat"))));
-        address[] memory one = new address[](1);
+        uint32 repeat = 0x7777;
+        uint32[] memory one = new uint32[](1);
         uint256[] memory oneAmt = new uint256[](1);
         one[0] = repeat;
         oneAmt[0] = 1;

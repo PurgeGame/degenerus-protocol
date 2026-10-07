@@ -16,10 +16,10 @@ contract CustomerHotPathSeeder is DegenerusGameStorage, WalletSeed {
         assembly { hero := dailyHeroWagers.slot meta := lootboxRngPacked.slot }
     }
     function sealToday() external { dailyIdx = _simulatedDayIndex(); }
-    function seedBoon(address player, bool craps, bool expired) external {
+    function seedBoon(uint32 id, bool craps, bool expired) external {
         uint256 day = _simulatedDayIndex() - (expired ? 3 : 0);
-        if (craps) boonPacked[player].slot1 = 3 | (day << BP_LANE_DAY_SHIFT);
-        else boonPacked[player].slot0 = (uint256(3) << BP_COINFLIP_TIER_SHIFT) | day;
+        if (craps) boonPacked[id].slot1 = 3 | (day << BP_LANE_DAY_SHIFT);
+        else boonPacked[id].slot0 = (uint256(3) << BP_COINFLIP_TIER_SHIFT) | day;
     }
     function seed(address player) external {
         level = 24;
@@ -160,9 +160,10 @@ contract CustomerHotPathGasTest is DeployProtocol {
 
     function _deposit(uint256 amount) private { vm.prank(PLAYER); coinflip.depositCoinflip(address(0), amount); }
     function _boon(bool craps, bool expired) private {
+        uint32 id = game.walletIdOf(PLAYER);
         bytes memory code = address(game).code;
         vm.etch(address(game), type(CustomerHotPathSeeder).runtimeCode);
-        CustomerHotPathSeeder(address(game)).seedBoon(PLAYER, craps, expired);
+        CustomerHotPathSeeder(address(game)).seedBoon(id, craps, expired);
         vm.etch(address(game), code);
     }
     function test_Gas_CoinflipBoon() public { _boon(false, false); _begin(); _deposit(1000); _end("flip_boon"); }
@@ -184,7 +185,7 @@ contract CustomerHotPathGasTest is DeployProtocol {
         uint24 last = start + days_;
         bytes32 state = keccak256(abi.encode(PLAYER, uint256(2)));
         vm.store(address(coinflip), state, bytes32((uint256(start) << 128)
-            | (uint256(start) << 152) | (uint256(rebuy ? 1 : 0) << 176)));
+            | (uint256(start) << 152) | (uint256(rebuy ? 1 : 0) << 176) | (uint256(game.walletIdOf(PLAYER)) << 184)));
         vm.store(address(coinflip), bytes32(uint256(state) + 1), bytes32(uint256(5000)));
         uint256 global = uint256(vm.load(address(coinflip), bytes32(uint256(4))));
         vm.store(address(coinflip), bytes32(uint256(4)), bytes32((global & ~uint256(0xffffff)) | last));
@@ -192,7 +193,7 @@ contract CustomerHotPathGasTest is DeployProtocol {
             bytes32 slot = keccak256(abi.encode(d >> 5, uint256(1)));
             uint256 word = uint256(vm.load(address(coinflip), slot));
             vm.store(address(coinflip), slot, bytes32(word | ((d % 3 == 0 ? uint256(1) : 100) << ((d & 31) * 8))));
-            slot = keccak256(abi.encode(PLAYER, keccak256(abi.encode(d >> 3, uint256(0)))));
+            slot = keccak256(abi.encode(uint256(game.walletIdOf(PLAYER)), keccak256(abi.encode(d >> 3, uint256(0)))));
             word = uint256(vm.load(address(coinflip), slot));
             vm.store(address(coinflip), slot, bytes32(word | (uint256(1000) << ((d & 7) * 32))));
         }
@@ -273,7 +274,8 @@ contract CustomerHotPathGasTest is DeployProtocol {
         _bank(1_000_000); _future("craps_banked_flip", 1);
     }
     function test_Gas_CrapsPass() public {
-        vm.prank(address(game)); crapsBattle.creditPasses(PLAYER, 5, 0);
+        uint32 id = game.walletIdOf(PLAYER);
+        vm.prank(address(game)); crapsBattle.creditPasses(id, 5, 0);
         uint24 day = uint24(game.currentDayView()) + 1;
         _begin(); vm.prank(PLAYER); crapsBattle.applyCrapsPasses(day, 1, false, BOARD); _end("craps_pass");
     }
@@ -283,7 +285,7 @@ contract CustomerHotPathGasTest is DeployProtocol {
         bytes32 resultSlot = keccak256(abi.encode(uint256(1), uint256(1)));
         uint256 results = uint256(vm.load(address(coinflip), resultSlot));
         vm.store(address(coinflip), resultSlot, bytes32(results & ~(uint256(255) << 8))); // gap day 33
-        bytes32 stakeSlot = keccak256(abi.encode(PLAYER, keccak256(abi.encode(uint256(4), uint256(0)))));
+        bytes32 stakeSlot = keccak256(abi.encode(uint256(game.walletIdOf(PLAYER)), keccak256(abi.encode(uint256(4), uint256(0)))));
         uint256 stakes = uint256(vm.load(address(coinflip), stakeSlot));
         vm.store(address(coinflip), stakeSlot, bytes32(stakes | (uint256(777) << 96))); // future day 35
         vm.startStateDiffRecording();

@@ -38,7 +38,7 @@ contract WhaleBoonExpiry is DeployProtocol {
     // from `forge inspect DegenerusGame storage-layout` on the working tree,
     // post Stage B Game-storage packing).
     // ──────────────────────────────────────────────────────────────────────
-    uint256 constant SLOT_BOON_PACKED  = GameSlots.BOON_PACKED;   // mapping(address => BoonPacked)
+    uint256 constant SLOT_BOON_PACKED  = GameSlots.BOON_PACKED;   // mapping(uint32 => BoonPacked)
     uint256 constant SLOT_LOOTBOX_WORD = GameSlots.RNG_DAY_TAGS;   // mapping(uint48 => uint256) lootboxRngWordByIndex
     uint256 constant SLOT_BOX_QUEUE = GameSlots.BOX_QUEUE;         // mapping(uint48 => uint256[]) boxQueue (manually addressed)
 
@@ -70,8 +70,8 @@ contract WhaleBoonExpiry is DeployProtocol {
     // ──────────────────────────────────────────────────────────────────────
 
     /// @dev Compute the storage slot for boonPacked[player].slot0
-    function _boonSlot0(address player) internal pure returns (bytes32) {
-        return keccak256(abi.encode(player, SLOT_BOON_PACKED));
+    function _boonSlot0(address player) internal view returns (bytes32) {
+        return keccak256(abi.encode(uint256(game.walletIdOf(player)), SLOT_BOON_PACKED));
     }
 
     /// @dev Compute the storage slot for a nested mapping: base[index][player]
@@ -90,6 +90,7 @@ contract WhaleBoonExpiry is DeployProtocol {
     ///      200..255 first, so any other packed lane already present is left untouched --
     ///      mirrors the contract's own targeted bitmask discipline (BP_WHALE_CLEAR).
     function _injectWhaleBoon(address player, uint24 whaleDay, uint24 deityWhaleDay, uint8 tier) internal {
+        _giveWalletId(player);
         bytes32 slot = _boonSlot0(player);
         uint256 current = uint256(vm.load(address(game), slot));
         current &= BP_WHALE_CLEAR;

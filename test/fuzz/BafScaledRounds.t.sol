@@ -133,9 +133,9 @@ contract BafScaledRoundsTest is DeployProtocol {
         for (uint256 rounds = 48; rounds <= 1536; rounds *= 2) {
             uint256[4] memory perBand;
             for (uint256 round; round < rounds; ++round) {
-                address[4] memory pair = jackpots.bafPairWinners(lvl, WORD, round >> 1, rounds);
-                (address best, address next) = (pair[(round & 1) * 2], pair[(round & 1) * 2 + 1]);
-                uint256 band = (uint160(best) - 0xBAF000) / 16;
+                uint32[4] memory pair = jackpots.bafPairWinners(lvl, WORD, round >> 1, rounds);
+                (uint32 best, uint32 next) = (pair[(round & 1) * 2], pair[(round & 1) * 2 + 1]);
+                uint256 band = (uint256(best) - 0xBAF000) / 16;
                 assertEq(band, (round * 4) / rounds, "contiguous quarter bands in forward order");
                 assertEq(best, oracle.candidate(band, 1), "highest score gets first place");
                 assertEq(next, oracle.candidate(band, 2), "second score gets second place");

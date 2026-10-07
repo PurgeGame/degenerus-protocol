@@ -115,7 +115,7 @@ contract CrapsSlipHarness is CrapsViews {
     ///      own loop, so there is no external on the table; the suite reaches the SHIPPED function
     ///      through this harness rather than adding one.
     function survivedAt(uint48 index, uint256 handsPlayed, address player) external view returns (bool) {
-        return _survived(_seedFor(index), handsPlayed, uint256(uint160(player)));
+        return _survived(_seedFor(index), handsPlayed, _saltOf(player));
     }
 
     /// @dev Test tap into the slip engine with a caller-chosen roll budget — organically
@@ -126,7 +126,7 @@ contract CrapsSlipHarness is CrapsViews {
         view
         returns (Craps.SlipResult memory)
     {
-        return _settleSlip(b, _seedFor(index), bankroll, 0, MAX_SLIP_HANDS, budget, uint256(uint160(player)), 0);
+        return _settleSlip(b, _seedFor(index), bankroll, 0, MAX_SLIP_HANDS, budget, _saltOf(player), 0);
     }
 
     /// @dev The same engine under a SCHEDULE. `boost` is the packed pair `_settleSlip` reads —
@@ -140,8 +140,8 @@ contract CrapsSlipHarness is CrapsViews {
         uint256 cap,
         address player,
         uint256 boost
-    ) external pure returns (Craps.SlipResult memory) {
-        return _settleSlip(b, seed, bankroll, goal, cap, SLIP_ROLL_BUDGET, uint256(uint160(player)), boost);
+    ) external view returns (Craps.SlipResult memory) {
+        return _settleSlip(b, seed, bankroll, goal, cap, SLIP_ROLL_BUDGET, _saltOf(player), boost);
     }
 
     /// @dev The engine under caller-chosen bounds, so a fixture can drive the shooter cap and the
@@ -155,8 +155,8 @@ contract CrapsSlipHarness is CrapsViews {
         uint256 rollBudget,
         address player,
         uint256 boost
-    ) external pure returns (Craps.SlipResult memory) {
-        return _settleSlip(b, seed, bankroll, goal, cap, rollBudget, uint256(uint160(player)), boost);
+    ) external view returns (Craps.SlipResult memory) {
+        return _settleSlip(b, seed, bankroll, goal, cap, rollBudget, _saltOf(player), boost);
     }
 }
 
@@ -366,7 +366,7 @@ contract CrapsSlipTest is CrapsPins {
     ///      off by one boundary reads the double on the wrong leg and fails here rather than
     ///      silently mis-pricing every historical bet.
     function test_placementEventCarriesTheChips() public {
-        bytes32 sig = keccak256("CrapsSlipPlaced(address,uint256)");
+        bytes32 sig = keccak256("CrapsSlipPlaced(uint32,uint256)");
         uint64 slot = _openBattle(craps, PLAYED, 3, uint16(GOAL_FAR_MULT), 0);
 
         for (uint256 leg = 0; leg < 9; ++leg) {
@@ -767,7 +767,7 @@ contract CrapsSlipTest is CrapsPins {
 
         // The receipt carries the two figures a client would otherwise run the engine for, and
         // nothing else — the dice are replayable from the word, so they are not shipped.
-        bytes32 sig = keccak256("CrapsBetSettled(uint256,address,uint256,uint256)");
+        bytes32 sig = keccak256("CrapsBetSettled(uint256,uint32,uint256,uint256)");
         for (uint256 i = 0; i < logs.length; ++i) {
             if (logs[i].topics[0] != sig) continue;
             (uint256 eWon, uint256 ePaid) = abi.decode(logs[i].data, (uint256, uint256));

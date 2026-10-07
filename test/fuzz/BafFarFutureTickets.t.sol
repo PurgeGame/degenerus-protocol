@@ -153,8 +153,9 @@ contract BafFarFutureTicketsTest is DeployProtocol {
         for (uint256 i = 0; i < bafPlayers.length; i++) {
             // Stagger stakes so multiple players appear in different BAF slices
             uint256 stake = (100 + i * 50) * 1 ether;
+            uint32 id = _giveWalletId(bafPlayers[i]);
             vm.prank(address(coinflip));
-            jackpots.recordBafFlip(bafPlayers[i], lvl, stake);
+            jackpots.recordBafFlip(id, lvl, stake);
         }
     }
 

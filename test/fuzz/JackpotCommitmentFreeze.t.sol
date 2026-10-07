@@ -66,9 +66,9 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
     address private constant ATTACKER = address(0xA11CE);
     address private constant NEWCOMER = address(0xBADB0B);
     uint32 private constant BOARD = 1 | (1 << 9) | (1 << 12);
-    bytes32 private constant ENTRY = keccak256("JackpotBattleEntry(uint64,uint256,address,uint256,uint32)");
-    bytes32 private constant SETTLED = keccak256("CrapsBetSettled(uint256,address,uint256,uint256)");
-    bytes32 private constant RESERVE = keccak256("HighRollerReserveDrawn(uint64,uint32,address,uint256,uint256)");
+    bytes32 private constant ENTRY = keccak256("JackpotBattleEntry(uint64,uint256,uint32,uint256,uint32)");
+    bytes32 private constant SETTLED = keccak256("CrapsBetSettled(uint256,uint32,uint256,uint256)");
+    bytes32 private constant RESERVE = keccak256("HighRollerReserveDrawn(uint64,uint32,uint32,uint256,uint256)");
     bytes32 private constant FINALIZED = keccak256("CrapsBattleFinalized(bytes32,uint8,uint64,uint256,uint256,uint256,uint256)");
     bytes4 private constant RNG_LOCKED = bytes4(keccak256("RngLocked()"));
     IJackpotBattle private api;
@@ -113,8 +113,9 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
         uint16 highMultiple = uint16(crapsBattle.highMultForDay(paidDay));
         vm.prank(ATTACKER);
         paidBet = crapsBattle.enterBonusBattle(5, BOARD, highMultiple);
+        uint32 attackerId = game.walletIdOf(ATTACKER);
         vm.prank(address(game));
-        crapsBattle.creditPasses(ATTACKER, 21, 1);
+        crapsBattle.creditPasses(attackerId, 21, 1);
         // A day seat exercises the distinct paid-day-header path and its upgrade gate.
         vm.prank(address(game));
         coin.mintForGame(NEWCOMER, 10_000_000 ether);
@@ -205,7 +206,7 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
                 bytes32 topic = logs[j].topics[0];
                 if (topic == ENTRY) {
                     ++result.entries;
-                    if (address(uint160(uint256(logs[j].topics[3]))) == ATTACKER) {
+                    if (uint32(uint256(logs[j].topics[3])) == game.walletIdOf(ATTACKER)) {
                         (, uint32 chips) = abi.decode(logs[j].data, (uint256, uint32));
                         assertEq(chips, BOARD, "awarded seat lost its committed saved board");
                         ++result.attackerAwards;

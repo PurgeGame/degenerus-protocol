@@ -65,11 +65,15 @@ contract RecordBountyTrophyTest is DeployProtocol {
 
     address private player;
     address private rival;
+    uint32 private playerId;
+    uint32 private rivalId;
 
     function setUp() public {
         _deployProtocol();
         player = makeAddr("trophy_player");
         rival = makeAddr("trophy_rival");
+        playerId = _giveWalletId(player);
+        rivalId = _giveWalletId(rival);
         _warpToDay(2);
     }
 
@@ -140,7 +144,7 @@ contract RecordBountyTrophyTest is DeployProtocol {
     ///         the end-to-end wiring, not a direct recordSet.
     function testFirstMarkTakesTheTrophy() public {
         vm.prank(GAME);
-        coinflip.armRecord(RECORD_KIND_SPIN, player, 1 ether);
+        coinflip.armRecord(RECORD_KIND_SPIN, playerId, 1 ether);
 
         assertEq(recordBounty.ownerOf(RECORD_KIND_SPIN), player, "trophy moved to setter");
         assertEq(recordBounty.balanceOf(HOME), 4, "the vault down to four");
@@ -157,12 +161,12 @@ contract RecordBountyTrophyTest is DeployProtocol {
     ///         days-held clock.
     function testBareRatchetMovesTrophyAndSelfRatchetKeepsClock() public {
         vm.prank(GAME);
-        coinflip.armRecord(RECORD_KIND_SPIN, player, 1 ether);
+        coinflip.armRecord(RECORD_KIND_SPIN, playerId, 1 ether);
 
         _warpToDay(5);
         // +5% — over the mark, under the +20% claim bar: ratchet only.
         vm.prank(GAME);
-        coinflip.armRecord(RECORD_KIND_SPIN, player, 1.05 ether);
+        coinflip.armRecord(RECORD_KIND_SPIN, playerId, 1.05 ether);
         (, uint128 mark, uint24 sinceDay, uint256 daysHeld) =
             recordBounty.recordInfo(RECORD_KIND_SPIN);
         assertEq(mark, 1.05 ether, "self-ratchet stamps the new mark");
@@ -171,7 +175,7 @@ contract RecordBountyTrophyTest is DeployProtocol {
 
         // A rival's bare ratchet takes the trophy and restarts the clock.
         vm.prank(GAME);
-        coinflip.armRecord(RECORD_KIND_SPIN, rival, 1.15 ether);
+        coinflip.armRecord(RECORD_KIND_SPIN, rivalId, 1.15 ether);
         assertEq(recordBounty.ownerOf(RECORD_KIND_SPIN), rival, "rival takes the trophy");
         assertEq(recordBounty.balanceOf(player), 0, "player parted with it");
         (, , uint24 rivalSince, uint256 rivalHeld) =
@@ -183,9 +187,9 @@ contract RecordBountyTrophyTest is DeployProtocol {
     /// @notice A losing candidate (at or under the mark) moves nothing.
     function testLosingCandidateMovesNothing() public {
         vm.prank(GAME);
-        coinflip.armRecord(RECORD_KIND_BUY, player, 500);
+        coinflip.armRecord(RECORD_KIND_BUY, playerId, 500);
         vm.prank(GAME);
-        coinflip.armRecord(RECORD_KIND_BUY, rival, 500);
+        coinflip.armRecord(RECORD_KIND_BUY, rivalId, 500);
 
         assertEq(recordBounty.ownerOf(RECORD_KIND_BUY), player, "tie moves nothing");
         (, uint128 mark, , ) = recordBounty.recordInfo(RECORD_KIND_BUY);
@@ -195,9 +199,9 @@ contract RecordBountyTrophyTest is DeployProtocol {
     /// @notice Each kind's trophy moves independently.
     function testKindsMoveIndependently() public {
         vm.prank(GAME);
-        coinflip.armRecord(RECORD_KIND_SPIN, player, 1 ether);
+        coinflip.armRecord(RECORD_KIND_SPIN, playerId, 1 ether);
         vm.prank(GAME);
-        coinflip.armRecord(RECORD_KIND_BUY, rival, 250);
+        coinflip.armRecord(RECORD_KIND_BUY, rivalId, 250);
 
         assertEq(recordBounty.ownerOf(RECORD_KIND_SPIN), player, "spin trophy");
         assertEq(recordBounty.ownerOf(RECORD_KIND_BUY), rival, "buy trophy");

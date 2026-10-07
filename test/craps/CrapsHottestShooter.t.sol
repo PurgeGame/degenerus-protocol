@@ -32,7 +32,7 @@ contract CrapsHottestShooterTest is CrapsPins {
     address bob = makeAddr("hot-bob");
     uint64 constant SLOT = 82;
     uint256 constant WORD = 923;
-    bytes32 constant HOT_EVENT = keccak256("CrapsHottestShooterPaid(uint256,bytes32,address,uint16,uint256)");
+    bytes32 constant HOT_EVENT = keccak256("CrapsHottestShooterPaid(uint256,bytes32,uint32,uint16,uint256)");
 
     function setUp() public { _installPins(); table = new HottestHarness(); }
 
@@ -45,7 +45,7 @@ contract CrapsHottestShooterTest is CrapsPins {
 
     function _bet(uint256 slot, uint256 seat, address player, bool high) private returns (uint256 id) {
         id = (slot << 64) | seat;
-        table.setBetWord(id, uint160(player) | (high ? 1 << 217 : 0));
+        table.setBetWord(id, uint256(_idFor(player)) | (high ? 1 << 217 : 0));
     }
 
     // payBattlePot must creditFlip exactly the two conserved liquid shares.

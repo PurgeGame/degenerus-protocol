@@ -24,7 +24,8 @@ contract SdgnrsLevelHighPasses is DeployProtocol {
 
     bytes32 private constant POOLS_SETTLED_SIG =
         keccak256("PoolsSettled(uint24,uint24,uint24,uint256,uint256,uint256,uint256,uint256,uint256)");
-    bytes32 private constant PASSES_CREDITED_SIG = keccak256("CrapsPassesCredited(address,bool,uint256)");
+    uint32 private constant SDGNRS_ID = 2;
+    bytes32 private constant PASSES_CREDITED_SIG = keccak256("CrapsPassesCredited(uint32,bool,uint256)");
 
     address private buyer1;
     address private buyer2;
@@ -67,7 +68,7 @@ contract SdgnrsLevelHighPasses is DeployProtocol {
         for (uint256 i; i < logs.length; ++i) {
             Vm.Log memory l = logs[i];
             if (l.emitter == address(crapsBattle) && l.topics[0] == PASSES_CREDITED_SIG
-                && address(uint160(uint256(l.topics[1]))) == ContractAddresses.SDGNRS) {
+                && uint32(uint256(l.topics[1])) == SDGNRS_ID) {
                 (bool high, uint256 count) = abi.decode(l.data, (bool, uint256));
                 if (!high) allNormalCredits += count;
             }
@@ -93,7 +94,7 @@ contract SdgnrsLevelHighPasses is DeployProtocol {
                 Vm.Log memory c = logs[i - back];
                 if (
                     c.emitter != address(crapsBattle) || c.topics[0] != PASSES_CREDITED_SIG
-                        || address(uint160(uint256(c.topics[1]))) != ContractAddresses.SDGNRS
+                        || uint32(uint256(c.topics[1])) != SDGNRS_ID
                 ) break;
                 (bool high, uint256 count) = abi.decode(c.data, (bool, uint256));
                 if (high) creditedHigh += count;

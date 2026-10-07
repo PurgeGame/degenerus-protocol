@@ -493,8 +493,9 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Slot-0 bytes 30..31. Bits 0..7 hold the nudge count (0..255); bit8 marks RNG
     ///      complete, bit9 the FLIP redemption window, bit10 the request's spent retry; bit11
-    ///      is spare, bit12 selects write, bit13 marks terminal; bits14/15 identify an active
-    ///      request / published session. All setters preserve neighboring fields.
+    ///      marks unpaid parimutuel growth winners, bit12 selects write, bit13 marks terminal;
+    ///      bits14/15 identify an active request / published session. All setters preserve
+    ///      neighboring fields.
     ///      Complete and published start true; the redemption window and request closed.
     uint16 internal rngFlagsAndNudges = (uint16(1) << 8) | (uint16(1) << 15);
     uint16 internal constant RNG_NUDGE_CAP = 255;
@@ -509,6 +510,12 @@ abstract contract DegenerusGameStorage {
     function _rngRetrySpent() internal view returns (bool) { return rngFlagsAndNudges & (uint16(1) << 10) != 0; }
     function _spendRngRetry() internal { rngFlagsAndNudges |= uint16(1) << 10; }
     function _rearmRngRetry() internal { rngFlagsAndNudges &= ~(uint16(1) << 10); }
+    /// @dev Set when a growth-round seal reports unpaid winners; cleared when the mining
+    ///      settlement stage reports every sealed round paid.
+    function _growthSettlePending() internal view returns (bool) { return rngFlagsAndNudges & (uint16(1) << 11) != 0; }
+    function _setGrowthSettlePending(bool on) internal {
+        rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 11)) | (on ? uint16(1) << 11 : 0);
+    }
     function _rngComplete() internal view returns (bool) { return rngFlagsAndNudges & (uint16(1) << 8) != 0; }
     function _setRngComplete(bool on) internal {
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 8)) | (on ? uint16(1) << 8 : 0);
@@ -979,7 +986,7 @@ abstract contract DegenerusGameStorage {
     /// @notice Emitted when a boon is consumed by a player.
     /// @dev boonType: 1 coinflip, 2 purchase, 3 decimator, 4 degenerette,
     ///      5 activity award, 6 craps, 7 WWXRP ecosystem.
-    event BoonConsumed(address indexed player, uint8 boonType, uint16 boostBps);
+    event BoonConsumed(uint32 indexed walletId, uint8 boonType, uint16 boostBps);
 
     /// @notice Emitted when admin swaps game ETH for stETH.
     event AdminSwapEthForStEth(address indexed recipient, uint256 amount);
@@ -1038,7 +1045,7 @@ abstract contract DegenerusGameStorage {
     enum MinerAction {
         Idle, Terminal, Wait, Publish, Tickets, DailyGap, DailyApply, DailyPhase,
         Redemption, Afking, HumanBoxes, Degenerette, Decimator, Craps,
-        CertifyRead, PrepareSubscriptions, Maintenance, RequestDaily, RequestMidday
+        CertifyRead, PrepareSubscriptions, Maintenance, RequestDaily, RequestMidday, GrowthSettle
     }
 
     function _minerMaintenancePending() internal view returns (bool) {
@@ -1087,6 +1094,9 @@ abstract contract DegenerusGameStorage {
         if (dailyDue && (_afkingResetDay <= dailyIdx || !subsFullyProcessed)) return MinerAction.PrepareSubscriptions;
         if (_minerMaintenancePending()) return MinerAction.Maintenance;
         if (dailyDue) return MinerAction.RequestDaily;
+        // Behind the day's request, so a long settlement never delays the daily word; ahead of
+        // the optional mid-day request, which would otherwise starve it.
+        if (_growthSettlePending()) return MinerAction.GrowthSettle;
         return _minerMiddayEligible(caller) ? MinerAction.RequestMidday : MinerAction.Idle;
     }
 
@@ -3643,13 +3653,14 @@ abstract contract DegenerusGameStorage {
         uint256 slot1;
     }
 
-    /// @dev Per-player packed boon state. Public getter returns (uint256 slot0, uint256
-    ///      slot1); bit layout above. UI readers combine with currentDayView() to compute
-    ///      per-category expiry. WWXRP.enter reads slot1's WWXRP lane by raw slot (its
+    /// @dev Packed boon state by wallet ID; nothing is ever written under ID 0, so its lanes
+    ///      read empty. Public getter returns (uint256 slot0, uint256 slot1); bit layout above.
+    ///      UI readers combine with currentDayView() to compute per-category expiry. WWXRP.enter
+    ///      reads slot1's WWXRP lane by raw slot `keccak256(id, slot) + 1` (its
     ///      GAME_BOON_PACKED_SLOT / GAME_WWXRP_LANE_SHIFT / GAME_LANE_TIER_MASK mirror this
     ///      mapping's slot, BP_WWXRP_LANE_SHIFT and BP_LANE_TIER_MASK): moving any of them
     ///      must move those too (pinned by test/fuzz/WwxrpBoonLaneSkip.t.sol).
-    mapping(address => BoonPacked) public boonPacked;
+    mapping(uint32 => BoonPacked) public boonPacked;
 
     // ---- Slot 0 shifts ----
     uint256 internal constant BP_COINFLIP_DAY_SHIFT = 0;
@@ -4058,14 +4069,14 @@ abstract contract DegenerusGameStorage {
     ///      is one unified value everywhere it is read. A live afking sub reads the Sub-side
     ///      compute-on-read (carrying the run's funded days + in-run secondaries); everyone else
     ///      (and a lapsed run) reads the manual decay-aware streak.
-    function _effectiveQuestStreak(address player) internal view returns (uint32) {
+    function _effectiveQuestStreak(uint32 id) internal view returns (uint32) {
         // Most players are not afking subs, so learn the afking flag from the quest-streak read we
         // make anyway: a non-afker returns here with no Sub-slot lookup. Only an afking player pays
         // the extra Sub read for the compute-on-read (funded days + in-run secondaries); a lapsed
-        // run falls back to the manual streak just read.
-        (uint32 manualStreak, bool afking) = quests.effectiveBaseStreakAndAfking(player);
+        // run falls back to the manual streak just read. ID 0 has no quest state: (0, false).
+        (uint32 manualStreak, bool afking) = quests.effectiveBaseStreakAndAfking(id);
         if (!afking) return manualStreak;
-        (bool live, uint32 a) = _liveAfkingStreak(_walletIdOf(player));
+        (bool live, uint32 a) = _liveAfkingStreak(id);
         return live ? a : manualStreak;
     }
 

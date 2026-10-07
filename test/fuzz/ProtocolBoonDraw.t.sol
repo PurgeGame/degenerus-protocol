@@ -55,7 +55,7 @@ contract ProtocolBoonFixture is DegenerusGameStorage, WalletSeed {
     function openIndex() external { rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12); }
     function clearDeity(uint8 symbol) external { deityBySymbol[symbol] = 0; }
     function seedBoon(address player, uint24 day) external {
-        boonPacked[player].slot1 = (uint256(3) | (uint256(day) << BP_LANE_DAY_SHIFT)) << BP_DEGEN_LANE0_SHIFT;
+        boonPacked[_seedWallet(player)].slot1 = (uint256(3) | (uint256(day) << BP_LANE_DAY_SHIFT)) << BP_DEGEN_LANE0_SHIFT;
     }
     function claimable(address player, uint256 amount) external {
         _creditClaimable(_seedWallet(player), amount + 1);
@@ -70,20 +70,22 @@ contract ProtocolBoonFixture is DegenerusGameStorage, WalletSeed {
     function occupyEveryLane(address player, uint24 stamp) external {
         uint256 tier = 3;
         uint256 d = stamp;
-        boonPacked[player].slot0 = (d << BP_COINFLIP_DAY_SHIFT) | (tier << BP_COINFLIP_TIER_SHIFT)
+        uint32 id = _seedWallet(player);
+        boonPacked[id].slot0 = (d << BP_COINFLIP_DAY_SHIFT) | (tier << BP_COINFLIP_TIER_SHIFT)
             | (d << BP_LOOTBOX_DAY_SHIFT) | (tier << BP_LOOTBOX_TIER_SHIFT)
             | (d << BP_PURCHASE_DAY_SHIFT) | (tier << BP_PURCHASE_TIER_SHIFT)
             | (tier << BP_DECIMATOR_TIER_SHIFT)
             | (d << BP_WHALE_DAY_SHIFT) | (tier << BP_WHALE_TIER_SHIFT);
         uint256 lane = tier | (d << BP_LANE_DAY_SHIFT);
-        boonPacked[player].slot1 = lane | (d << BP_DEITY_PASS_DAY_SHIFT) | (tier << BP_DEITY_PASS_TIER_SHIFT)
+        boonPacked[id].slot1 = lane | (d << BP_DEITY_PASS_DAY_SHIFT) | (tier << BP_DEITY_PASS_TIER_SHIFT)
             | (d << BP_LAZY_PASS_DAY_SHIFT) | (tier << BP_LAZY_PASS_TIER_SHIFT)
             | (lane << BP_DEGEN_LANE0_SHIFT) | (lane << (BP_DEGEN_LANE0_SHIFT + 24))
             | (lane << (BP_DEGEN_LANE0_SHIFT + 48));
         _seedHalfPasses(player, 1_000); // occupied; the counter is a plain uint256 increment
     }
     function boonWords(address player) external view returns (uint256, uint256) {
-        return (boonPacked[player].slot0, boonPacked[player].slot1);
+        uint32 id = _walletIdOf(player);
+        return (boonPacked[id].slot0, boonPacked[id].slot1);
     }
     function multiplier(uint256 score) external pure returns (uint256) {
         return ActivityCurveLib.boonDrawMultUnits(score);
@@ -122,7 +124,8 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         _fixtureCall(abi.encodeCall(ProtocolBoonFixture.resolve, (address(boonModule), day + 1)));
     }
     function _score(address who, uint256 score) private {
-        vm.mockCall(address(quests), abi.encodeWithSelector(quests.effectiveBaseStreakAndAfking.selector, who), abi.encode(uint32(score * 2), false));
+        uint32 id = _giveWalletId(who);
+        vm.mockCall(address(quests), abi.encodeWithSelector(quests.effectiveBaseStreakAndAfking.selector, id), abi.encode(uint32(score * 2), false));
     }
     function _ready() private {
         _fixtureCall(abi.encodeCall(ProtocolBoonFixture.word, (day, uint256(12345))));
@@ -431,7 +434,8 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         _ready();
         _fixtureCall(abi.encodeCall(ProtocolBoonFixture.word, (day, menuWord | 1)));
         _fixtureCall(abi.encodeCall(ProtocolBoonFixture.occupyEveryLane, (bettor, day + 1)));
-        vm.prank(address(game)); quests.awardQuestStreakShield(bettor, type(uint16).max);
+        uint32 bettorShieldId = game.walletIdOf(bettor);
+        vm.prank(address(game)); quests.awardQuestStreakShield(bettorShieldId, type(uint16).max);
         bytes memory original = address(game).code;
         vm.etch(address(game), address(fixture).code);
         (uint256 s0, uint256 s1) = ProtocolBoonFixture(address(game)).boonWords(bettor);

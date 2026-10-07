@@ -8,7 +8,7 @@ import {QuestInfo} from "../../contracts/interfaces/IDegenerusQuests.sol";
 
 contract QuestActivePackingTest is Test {
     DegenerusQuests internal quests;
-    address internal constant PLAYER = address(0xB071);
+    uint32 internal constant PLAYER = 0xB071;
 
     function setUp() public {
         vm.mockCall(ContractAddresses.GAME, abi.encodeWithSignature("level()"), abi.encode(uint24(24)));
@@ -21,7 +21,7 @@ contract QuestActivePackingTest is Test {
         uint256 active = uint256(vm.load(address(quests), bytes32(0)));
         assertEq(uint8(active >> 128), 1, "genesis MINT_ETH");
         assertEq(uint8(active >> 136), 1, "genesis epoch");
-        assertEq(vm.load(address(quests), bytes32(uint256(2))), bytes32(0), "old word unused");
+        assertEq(vm.load(address(quests), bytes32(uint256(2))), bytes32(0), "mapping base slot holds no data");
         QuestInfo[2] memory daily = quests.getActiveQuests();
         assertEq(daily[0].questType, 1);
         assertEq(daily[1].questType, 7);
@@ -52,7 +52,7 @@ contract QuestActivePackingTest is Test {
     function test_DailyRollDoesNotResetLevelProgress() public {
         vm.prank(ContractAddresses.GAME);
         quests.handlePurchase(PLAYER, 0.01 ether, 0, 0, 0.04 ether, 0.04 ether);
-        bytes32 progressSlot = keccak256(abi.encode(PLAYER, uint256(3)));
+        bytes32 progressSlot = keccak256(abi.encode(uint256(PLAYER), uint256(2)));
         uint256 progress = uint256(vm.load(address(quests), progressSlot));
         assertEq(uint128(progress >> 8), 0.01 ether);
         uint24 day = uint24(uint256(vm.load(address(quests), bytes32(0)))) + 1;

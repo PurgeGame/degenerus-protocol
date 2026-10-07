@@ -8,9 +8,13 @@ import {CrapsPriceLib} from "../libraries/CrapsPriceLib.sol";
 import {LootboxCraps} from "../LootboxCraps.sol";
 import {CrapsCustomTerms} from "../CrapsCustomTerms.sol";
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
+import {CrapsPreferenceLib} from "../libraries/CrapsPreferenceLib.sol";
 
 interface IGameCrapsWorkStage {
     function rngConsumerStage() external view returns (uint8);
+    /// @notice `owner`'s Game wallet ID; with `allocate`, a new wallet is registered, otherwise
+    ///         an unregistered one returns zero.
+    function registerWallet(address owner, bool allocate) external returns (uint32);
 }
 
 /// @dev Shared layout for the table and its pinned jackpot lifecycle delegate. Append-only.
@@ -89,8 +93,16 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///         it named no period at all.
     error NothingToUpgrade();
 
-    /// @notice A board save that pays nothing needs the caller's existing Game wallet ID.
+    /// @notice An action that pays nothing needs its wallet's existing Game wallet ID.
     error NoWalletId();
+
+    /// @dev The protocol bodies' Game wallet IDs, reserved at Game construction.
+    uint32 internal constant _VAULT_ID = 1;
+    uint32 internal constant _SDGNRS_ID = 2;
+
+    /// @dev A paying account packed into one word: its address in bits 0..159 (the FLIP burn and
+    ///      newcomer pricing are by address) and its wallet ID above, at this shift.
+    uint256 internal constant _ACCOUNT_ID_SHIFT = 160;
 
     /// @notice Six windows per day: five ordinary battles, then the daily jackpot battle (period 5).
     uint256 internal constant _BONUS_PERIODS_PER_DAY = 6;
@@ -255,7 +267,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     //   bits  33.. 42  goalMult   the target, _MIN_BATTLE_GOAL_MULT.._MAX_GOAL_MULT x the bankroll
     //   bits  43.. 60  stakeUnits the bounty, in _BATTLE_STAKE_UNIT granules
     //   bits  61..100  closeTime  when entry shuts and the table may be taken
-    //   bit   101      multi      one address may take as many seats as it pays for
+    //   bit   101      multi      one wallet may take as many seats as it pays for
     //   bits 102..109  highMult   the high-roller multiple, 0 (no high lane) or 2.._MAX_HIGH_MULT
     // The chips left to the dice are not a term: every ticket places zero through seven and
     // scatters the complement, but all play the slot's same ten-chip round.
@@ -285,7 +297,8 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     uint256 internal constant HIGH_TAG = 0x48696768526f6c6c6572; // "HighRoller"
 
     // One stored bet word:
-    //   bits   0..159  player
+    //   bits   0.. 31  the owner's Game wallet ID (never zero)
+    //   bits  32..159  zero
     //   bits 160..189  ten three-bit chip counts; all ten zero means draw all ten
     //   bits 190..205  scheduled day tag, low 16 bits (unused for custom bets)
     //   bits 206..208  the craps boon riding this slip, one-hot (see _BET_BOON_SHIFT)
@@ -455,7 +468,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     }
 
     struct SeatResult {
-        address player;
+        uint32 id;
         uint256 paid;
         uint256 staked;
         uint256 high;
@@ -538,14 +551,14 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         _bets[_betStorageKey(id)] = word;
     }
 
-    function _loadDaySeat(uint256 daySlot, address player) internal view returns (uint256 word) {
-        word = _daySeated[daySlot & 511][player];
+    function _loadDaySeat(uint256 daySlot, uint32 id) internal view returns (uint256 word) {
+        word = _daySeated[daySlot & 511][id];
         if (word >> 40 != daySlot >> 3) return 0;
         return word & _DAY_SEAT_VALUE_MASK;
     }
 
-    function _storeDaySeat(uint256 daySlot, address player, uint256 word) internal {
-        _daySeated[daySlot & 511][player] = (word & _DAY_SEAT_VALUE_MASK) | ((daySlot >> 3) << 40);
+    function _storeDaySeat(uint256 daySlot, uint32 id, uint256 word) internal {
+        _daySeated[daySlot & 511][id] = (word & _DAY_SEAT_VALUE_MASK) | ((daySlot >> 3) << 40);
     }
 
     /// @notice Custom battles opened so far. The next takes slot `_CUSTOM_SLOT_BASE + this + 1`.
@@ -554,9 +567,9 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     /// @dev Battle scoreboards, by match key (see `_battleKey`).
     mapping(bytes32 => uint256) internal _battles;
 
-    /// @dev Who has already taken their one seat in a seeded custom field. Unseeded custom
-    ///      battles permit separately funded repeat entries.
-    mapping(bytes32 => mapping(address => bool)) internal _bonusSeated;
+    /// @dev Which wallet IDs have already taken their one seat in a single-entry custom field.
+    ///      Multi-entry custom battles permit separately funded repeat entries.
+    mapping(bytes32 => mapping(uint32 => bool)) internal _bonusSeated;
 
     /// @dev Opened bonus day plus one; zero means no day has been opened yet.
     uint256 internal _bonus;
@@ -585,12 +598,12 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     /// @dev Scheduled window slots have remainders 1..6 within their eight-slot day.
     ///      Bits 33..38 in the day-seat word track them; low 32 bits remain the day seat.
     ///      Custom battles keep their independent membership mapping and multi-entry rules.
-    function _claimScheduledSeat(uint256 slot, address player) internal {
+    function _claimScheduledSeat(uint256 slot, uint32 id) internal {
         uint256 daySlot = slot & ~uint256(7);
         uint256 bit = uint256(1) << (32 + (slot & 7));
-        uint256 word = _loadDaySeat(daySlot, player);
+        uint256 word = _loadDaySeat(daySlot, id);
         if (word & (bit | _MASK32) != 0) revert AlreadyInBonus();
-        _storeDaySeat(daySlot, player, word | bit);
+        _storeDaySeat(daySlot, id, word | bit);
     }
 
     /// @dev How many DAY TICKETS a protocol day sold, with the per-period high counts above the
@@ -605,12 +618,12 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     /// @dev The holder's day-ticket seat in bits 0..31, scheduled window membership in
     ///      bits 33..38, and the exact day at bits 40..63. Keys use daySlot modulo 512;
     ///      _loadDaySeat authenticates and strips the day before checking membership.
-    ///      Day-ticket gates ask NONZERO — one ticket per address per day, and a bar on any single window of that
+    ///      Keyed by wallet ID. Day-ticket gates ask NONZERO — one ticket per wallet per day, and a bar on any single window of that
     ///      day, since the ticket already sits in all of them — but storing the seat is what lets
     ///      an upgrade name the caller's own ticket as `(daySlot << 64) | seat` without a walk.
     ///      Nothing here records how the seat was PAID for: a bought, pass-funded and prepaid
     ///      seat are indistinguishable, which is the point.
-    mapping(uint256 => mapping(address => uint256)) internal _daySeated;
+    mapping(uint256 => mapping(uint32 => uint256)) internal _daySeated;
 
     /// @notice Who may OPEN a custom battle. Joining one an authorized creator opened is free to
     ///         anyone who clears its terms, and the bonus windows are the protocol's own door.
@@ -642,29 +655,29 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      is what lets a custom battle behave exactly like a bonus window.
     mapping(uint256 => uint256) internal _customBattle;
 
-    /// @dev A player's UNCOMMITTED day-pass credits, both denominations in one word: the normal
-    ///      count in the low 32 bits, the high-roller count above `_PASS_HIGH_SHIFT`. Awarded by
-    ///      the lootbox and by the pass half of a protocol payout, spent by committing one to a
-    ///      future day, and movable one way — normals into highs — at the credits' value ratio.
+    /// @dev A wallet's forward word, keyed by address: the preferred board in bits 64..83 (two
+    ///      bits per leg), bit 84 set on its first save and never cleared, and the holder's Game
+    ///      wallet ID in bits 85..116, filled from the Game by the first board save and never
+    ///      changed. Bits 0..63 are zero. Every board door reads it first, so a bet learns its
+    ///      owner's ID and the unchanged-board fast path from one read.
+    mapping(address => uint256) internal _passCredits;
+
+    /// @dev A wallet's UNCOMMITTED day-pass credits and its board, keyed by Game wallet ID: the
+    ///      normal count in bits 0..31, the high-roller count above `_PASS_HIGH_SHIFT`, and the
+    ///      same board and initialized lanes as the address word, written together with it when a
+    ///      save changes the board. Board writes preserve the pass lanes and pass writes preserve
+    ///      the board. Awarded by the lootbox and by the pass half of a protocol payout, spent by
+    ///      committing one to a future day, and movable one way — normals into highs — at the
+    ///      credits' value ratio.
     ///
     ///      HELD HERE RATHER THAN IN THE GAME, and that placement is forced. A credit is spent by
     ///      `applyCrapsPasses`, which writes the reserved days — Craps state — so holding the
-    ///      balance in the Game would mean a cross-contract write on every application, and the
-    ///      Game has no room for the entry point that would take it. Here the debit and the
-    ///      reservation are one contract's storage and atomic by construction.
+    ///      balance in the Game would mean a cross-contract write on every application. Here the
+    ///      debit and the reservation are one contract's storage and atomic by construction.
     ///
     ///      Credits never expire and are not transferable. They are AWARDED only by the pinned
-    ///      game and spent only by their owner. Bits 64..83 hold the preferred board (two bits
-    ///      per leg); bit 84 is set on its first save and never cleared. Bits 85..116 cache the
-    ///      holder's Game wallet ID, filled once from the Game by the first save and never
-    ///      changed. Balance updates preserve these fields. CrapsPreferenceLib pins this
-    ///      mapping's slot for the Game's jackpot battle batch read.
-    mapping(address => uint256) internal _passCredits;
-
-    /// @dev The same word keyed by Game wallet ID, with the same lanes: normal passes in bits
-    ///      0..31, high passes in bits 32..63, the board in bits 64..83 and its initialized bit
-    ///      84. Only the board lanes are written, and only when a save changes the board; the
-    ///      pass lanes stay zero for the ID-keyed balances, and board writes preserve them.
+    ///      game and spent only by their owner. CrapsPreferenceLib pins this mapping's slot for
+    ///      the Game's jackpot battle batch read.
     mapping(uint32 => uint256) internal _passCreditsById;
 
     /// @dev THE PROGRESSIVE. One balance, shared by every scheduled window of every day.
@@ -774,7 +787,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     uint256 internal constant _SPLIT_SRC_HOTTEST = uint256(5) << 248;
     uint256 internal constant _SPLIT_GROSS_MASK = (uint256(1) << 248) - 1;
 
-    /// @notice A bet slip took a seat at a slot.
+    /// @notice A bet slip took a seat at a slot, owned by wallet `playerId`.
     /// @param bet The whole slip in one word:
     ///
     ///            - bits 0..29   the TEN leg counts, three bits each, low bits first: passLine,
@@ -798,7 +811,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      is a window's whole field. Carrying the id rather than deriving it from arrival order
     ///      costs nothing — the chips need 30 bits of a word that has 256 — and it means a dropped
     ///      or reordered log cannot renumber every seat behind it.
-    event CrapsSlipPlaced(address indexed player, uint256 bet);
+    event CrapsSlipPlaced(uint32 indexed playerId, uint256 bet);
 
     /// @notice An open slip's chips were re-spread by its owner. `chips` is the same thirty-bit
     ///         word `CrapsSlipPlaced` carries in its low bits — ten counts, the dark side at
@@ -807,18 +820,18 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     event CrapsSlipAmended(uint256 indexed betId, uint256 chips);
 
     /// @notice A wallet's automatic-entry default, in the canonical three-bit-per-leg encoding.
-    event CrapsPreferredBoardSet(address indexed player, uint32 chips);
+    event CrapsPreferredBoardSet(uint32 indexed playerId, uint32 chips);
 
     /// @notice A wager settled.
     /// @dev Deliberately thin. The whole run — every roll, every leg, the stop — is a pure
-    ///      function of the table's word, the slot, the chips and the owner, all of which an
+    ///      function of the table's word, the slot, the chips and the owner's wallet ID, all of which an
     ///      indexer already has from `CrapsSlipPlaced` and `CrapsBonusArmed`. Only the two
     ///      figures a client would otherwise have to run the engine for are carried, and the
     ///      dice are not: shipping a roll log cost the allocation, a byte write per roll and the
     ///      log data, for information anyone can replay for nothing.
     /// @param won  What the table returned to this bet, before the award rounding.
     /// @param paid Coinflip stake actually credited, after the rounding.
-    event CrapsBetSettled(uint256 indexed betId, address indexed player, uint256 won, uint256 paid);
+    event CrapsBetSettled(uint256 indexed betId, uint32 indexed playerId, uint256 won, uint256 paid);
 
     /// @notice Every entrant of the battle resolved: the scoreboard is the verdict.
     ///         Emitted by whichever settlement happened to be the last one.
@@ -880,7 +893,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///        rode that seat's own run instead of being contested — in which case `amount` is what
     ///        the run returned on it, and zero is a real and expected outcome.
     event CrapsHighRollerPaid(
-        uint256 indexed betId, bytes32 indexed battleKey, address indexed player, uint256 amount, bool bankrollRider
+        uint256 indexed betId, bytes32 indexed battleKey, uint32 indexed playerId, uint256 amount, bool bankrollRider
     );
 
     /// @notice A bonus window opened for entry at `slot`, carrying `seed` FLIP of house money on
@@ -902,10 +915,10 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         uint256 battleStake
     );
 
-    /// @notice A day-pass was committed to a future day for `player`. The day's terms and its
+    /// @notice A day-pass was committed to a future day for wallet `playerId`. The day's terms and its
     ///         high-roller multiple are both unknown at this point — that is the whole point of
     ///         the commitment — so the log carries only which kind was placed and where.
-    event CrapsDayReserved(address indexed player, uint24 indexed day, bool highRoller);
+    event CrapsDayReserved(uint32 indexed playerId, uint24 indexed day, bool highRoller);
 
     /// @notice Chosen windows of a whole-day ticket were upgraded to the day's high-roller lane.
     /// @param upgradedMask Only the bits NEWLY set by this call, bit `p` for period `p` — a bit
@@ -913,10 +926,10 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     /// @param burned The exact delta charged for them: `(bankroll + bounty) * (H - 1)`, summed
     ///        over the newly upgraded windows. ZERO with the full mask is `upgradeReservedDay`:
     ///        a future reservation swapped to the high lane for a banked high credit.
-    event CrapsDayWindowsUpgraded(address indexed player, uint24 indexed day, uint8 upgradedMask, uint256 burned);
+    event CrapsDayWindowsUpgraded(uint32 indexed playerId, uint24 indexed day, uint8 upgradedMask, uint256 burned);
 
-    /// @notice Uncommitted day-pass credits were banked for `player`.
-    event CrapsPassesCredited(address indexed player, bool highRoller, uint256 count);
+    /// @notice Uncommitted day-pass credits were banked for wallet `playerId`.
+    event CrapsPassesCredited(uint32 indexed playerId, bool highRoller, uint256 count);
 
     /// @notice Half of a protocol-funded award was targeted at day-pass credits; everything that
     ///         did not convert to whole passes stayed liquid. `grossProtocol` is the award the
@@ -927,7 +940,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     /// @param source 1 main ladder, 2 contested high lane, 3 sole high rider, 4 progressive.
     event CrapsProtocolAwardSplit(
         bytes32 indexed battleKey,
-        address indexed player,
+        uint32 indexed playerId,
         uint8 indexed source,
         uint256 grossProtocol,
         uint256 liquidFlip
@@ -937,18 +950,18 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///         credits, at the credits' own 21:1 value ratio. The ONLY log a conversion emits —
     ///         both lane deltas live here, and no `CrapsPassesCredited` rides along to
     ///         double-count the high addition.
-    event CrapsNormalPassesConverted(address indexed player, uint256 normalSpent, uint256 highReceived);
+    event CrapsNormalPassesConverted(uint32 indexed playerId, uint256 normalSpent, uint256 highReceived);
 
     /// @notice A battle's pot went to its winner, as coinflip credit. A progressive award riding
     ///         the same finalization is a SEPARATE credit and a separate log — this figure is the
     ///         pot and only the pot: the LIQUID figure, after any slice of a scheduled boost
     ///         banked as pass credit under `CrapsProtocolAwardSplit`.
-    event CrapsBattlePaid(uint256 indexed betId, bytes32 indexed battleKey, address indexed player, uint256 amount);
+    event CrapsBattlePaid(uint256 indexed betId, bytes32 indexed battleKey, uint32 indexed playerId, uint256 amount);
 
     /// @notice The longest shared hand won 10% of the scheduled main pot. High-lane funds
     ///         are excluded. `amount` is liquid FLIP; protocol pass credit is logged separately.
     event CrapsHottestShooterPaid(
-        uint256 indexed betId, bytes32 indexed battleKey, address indexed player, uint16 rolls, uint256 amount
+        uint256 indexed betId, bytes32 indexed battleKey, uint32 indexed playerId, uint16 rolls, uint256 amount
     );
 
     /// @notice A protocol day banked its half of the main allocation in the progressive.
@@ -977,7 +990,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     event CrapsProgressivePaid(
         uint256 indexed betId,
         bytes32 indexed battleKey,
-        address indexed player,
+        uint32 indexed playerId,
         bool rare,
         uint16 poolBps,
         uint256 peak,
@@ -1026,7 +1039,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     /// @dev One packed word per event. The nominee is sampled over the immutable paid high
     ///      field as settlement advances; cursor counts paid seats examined, including normals.
     struct HighRollerDraw {
-        address nominee;
+        uint32 nominee;
         uint32 eligible;
         uint32 cursor;
         bool resolved;
@@ -1051,10 +1064,10 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     event JackpotSubsidyRolled(uint64 indexed slot, uint32 multiplierBps, uint256 mainSubsidy);
     event HighRollerReserveFunded(uint64 indexed slot, uint256 contribution, uint256 balance);
     /// @notice A finalized event's single reserve draw. No eligible entries means no attempt.
-    /// @param winner Zero on a miss or an empty eligible field.
+    /// @param winnerId The nominee's wallet ID; zero on a miss or an empty eligible field.
     /// @param amount Existing reserve value released as Coinflip credit, never fresh funding.
     event HighRollerReserveDrawn(
-        uint64 indexed slot, uint32 eligible, address indexed winner, uint256 amount, uint256 balance
+        uint64 indexed slot, uint32 eligible, uint32 indexed winnerId, uint256 amount, uint256 balance
     );
     /// @notice Fee-only high exposure and its expected-loss comp allocation, before the fair pool roll.
     /// @dev 80% of the conservative loss budget funds comps; the rest remains unissued. This is
@@ -1066,6 +1079,84 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     mapping(uint48 => uint64[]) internal _rngSlots;
     uint64[2] internal _rngSlotCursor;
     uint64[2] internal _rngPending;
+
+    /// @dev `who`'s address word with its wallet ID filled in. A missing ID is fetched once from
+    ///      the Game: `allocate` registers a new wallet (a paying action); otherwise an
+    ///      unregistered wallet reverts. The fill is written back only by a board save.
+    function _walletWord(address who, bool allocate) internal returns (uint256 word) {
+        word = _passCredits[who];
+        if (word >> CrapsPreferenceLib.ID_SHIFT == 0) {
+            uint256 id = IGameCrapsWorkStage(_GAME).registerWallet(who, allocate);
+            if (id == 0) revert NoWalletId();
+            word |= id << CrapsPreferenceLib.ID_SHIFT;
+        }
+    }
+
+    /// @dev Bank credits, SATURATING at the lane's ceiling. A lootbox sweep is permissionless and
+    ///      must never revert on a full lane, so the excess is dropped and announced rather than
+    ///      thrown — and the ceiling is four billion passes, which no box can approach.
+    /// @param id   The wallet credited.
+    /// @param high Which lane: true for the high lane, false for normal.
+    /// @param add  Passes to add to that lane.
+    /// @return got What actually banked, which is `add` everywhere short of the ceiling. The
+    ///         award split prices its pass slice off this figure, so a saturated lane leaves the
+    ///         refused units' value liquid rather than deleting it.
+    function _credit(uint32 id, bool high, uint256 add) internal returns (uint256 got) {
+        unchecked {
+            uint256 word = _passCreditsById[id];
+            uint256 shift = high ? _PASS_HIGH_SHIFT : 0;
+            uint256 held = (word >> shift) & _PASS_MAX;
+            uint256 sum = held + add;
+            // SATURATES silently. The clamp exists only so an impossible overflow could not spill
+            // into the lane packed above this one. `CrapsPassesCredited` reports what banked.
+            if (sum > _PASS_MAX) sum = _PASS_MAX;
+            _passCreditsById[id] = (word & ~(_PASS_MAX << shift)) | (sum << shift);
+            got = sum - held;
+            emit CrapsPassesCredited(id, high, got);
+        }
+    }
+
+    /// @dev Spend `count` credits from one lane. CHECKED: an insufficient balance underflows and
+    ///      takes the call down, so the check and the debit are one write rather than two.
+    function _takeCredits(uint32 id, bool high, uint256 count) internal {
+        if (count == 0) revert BadPassCount();
+        uint256 word = _passCreditsById[id];
+        uint256 shift = high ? _PASS_HIGH_SHIFT : 0;
+        uint256 held = (word >> shift) & _PASS_MAX;
+        // Deliberately CHECKED — this is the one subtraction here that can be driven negative by a
+        // caller, and it is the whole balance validation.
+        held -= count;
+        _passCreditsById[id] = (word & ~(_PASS_MAX << shift)) | (held << shift);
+    }
+
+    /// @dev Split one protocol-funded award between pass credit and liquid FLIP: HALF of it is
+    ///      the pass target, floored to whole passes, and every wei the flooring, the high cap or
+    ///      a saturated lane refuses simply stays liquid — the caller subtracts only `banked`, so
+    ///      `liquid + banked == gross` exactly, by construction, and nothing here can delete
+    ///      value. The denomination is the lootbox's own switch: a budget strictly above twenty
+    ///      normal units pays HIGH, at most thirty of them, and one award never mixes lanes.
+    ///      DETERMINISTIC on purpose — the winner is receiving FLIP in this same transaction, so
+    ///      fractional dust rides home as change and no coin is tossed.
+    /// @param key The window/battle the award belongs to.
+    /// @param id  The award recipient's wallet ID.
+    /// @param taggedGross The award in whole FLIP, with its `_SPLIT_SRC_*` tag in the top byte.
+    /// @return banked The exact FLIP value of the passes actually credited — what the caller
+    ///         removes from the liquid payment. Zero banks nothing and emits nothing.
+    function _splitAward(bytes32 key, uint32 id, uint256 taggedGross) internal returns (uint256 banked) {
+        unchecked {
+            uint256 gross = taggedGross & _SPLIT_GROSS_MASK;
+            uint256 budget = gross / 2;
+            bool high = budget > _PASS_HIGH_SWITCH;
+            uint256 unit = high ? _HIGH_PASS_VALUE : _NORMAL_PASS_VALUE;
+            uint256 wanted = budget / unit;
+            if (wanted == 0) return 0;
+            if (high && wanted > _MAX_HIGH_PASSES_PER_AWARD) wanted = _MAX_HIGH_PASSES_PER_AWARD;
+            banked = _credit(id, high, wanted) * unit;
+            if (banked != 0) {
+                emit CrapsProtocolAwardSplit(key, id, uint8(taggedGross >> 248), gross, gross - banked);
+            }
+        }
+    }
 
     function _highMultOf(uint256 word) internal pure returns (uint256) {
         if (word == 0) return 0;

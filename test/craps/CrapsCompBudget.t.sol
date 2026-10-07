@@ -405,7 +405,7 @@ contract CrapsCompBudgetTest is CrapsPins {
         uint256 compId = (uint256(_slotAt(day, 1)) << 64) | 2;
         uint256 paid = craps.betWordOf(paidId);
         uint256 comp = craps.betWordOf(compId);
-        assertEq(address(uint160(comp)), dave, "the comped seat belongs to somebody else");
+        assertEq(uint32(comp), game.walletIdOf(dave), "the comped seat belongs to somebody else");
         assertEq(comp >> 160, paid >> 160, "the comped seat differs from the paid one above the owner");
     }
 
@@ -485,6 +485,7 @@ contract CrapsCompBudgetTest is CrapsPins {
         (, h) = craps.passCreditsOf(dave);
         assertEq(h, 1, "the high pass did not bank");
         // A nearly full lane banks what fits and bills only that.
+        game.registerWallet(erin, true);
         craps.setPassCredits(erin, type(uint32).max - 1, 0);
         charged = _comp(KIND_PASSES, erin, false, 0, 5);
         assertEq(charged, craps.NORMAL_PASS_VALUE(), "a saturated lane was billed for passes it dropped");
@@ -507,8 +508,8 @@ contract CrapsCompBudgetTest is CrapsPins {
         (uint256 n, uint256 h) = craps.windowReservedOf(_slotAt(day, 5));
         assertEq(n, 2, "the tail has other than two reserved seats");
         assertEq(h, 1, "the tail has other than one high reservation");
-        assertEq(address(uint160(craps.betWordOf((uint256(_slotAt(day, 5)) << 64) | 1))), dave, "seat one is not dave's");
-        assertEq(address(uint160(craps.betWordOf((uint256(_slotAt(day, 5)) << 64) | 2))), erin, "seat two is not erin's");
+        assertEq(uint32(craps.betWordOf((uint256(_slotAt(day, 5)) << 64) | 1)), game.walletIdOf(dave), "seat one is not dave's");
+        assertEq(uint32(craps.betWordOf((uint256(_slotAt(day, 5)) << 64) | 2)), game.walletIdOf(erin), "seat two is not erin's");
         assertEq(craps.daySeatNumberOf(day, dave), 0, "a window reservation reads as a day ticket");
     }
 

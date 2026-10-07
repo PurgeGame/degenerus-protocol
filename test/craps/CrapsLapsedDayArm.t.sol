@@ -45,6 +45,7 @@ contract CrapsLapsedDayArmTest is CrapsPins {
 
     function setUp() public {
         _installPins();
+        game.registerWallet(alice, true);
         craps = new LapseArmHarness();
         vm.warp(block.timestamp + 1 days);
         _setIndex(0);
@@ -79,11 +80,11 @@ contract CrapsLapsedDayArmTest is CrapsPins {
         }
     }
 
-    function _passesCreditedTo(Vm.Log[] memory logs, address who) internal pure returns (uint256 n) {
-        bytes32 sig = keccak256("CrapsPassesCredited(address,bool,uint256)");
+    function _passesCreditedTo(Vm.Log[] memory logs, address who) internal view returns (uint256 n) {
+        bytes32 sig = keccak256("CrapsPassesCredited(uint32,bool,uint256)");
         for (uint256 i = 0; i < logs.length; ++i) {
             if (logs[i].topics.length != 2 || logs[i].topics[0] != sig) continue;
-            if (address(uint160(uint256(logs[i].topics[1]))) != who) continue;
+            if (uint256(logs[i].topics[1]) != uint256(game.walletIdOf(who))) continue;
             (, uint256 count) = abi.decode(logs[i].data, (bool, uint256));
             n += count;
         }
@@ -103,7 +104,7 @@ contract CrapsLapsedDayArmTest is CrapsPins {
 
         // Alice's day-lane reservation on G, paid with a pass credit.
         vm.prank(ContractAddresses.GAME);
-        craps.creditPasses(alice, 1, 0);
+        craps.creditPasses(_idFor(alice), 1, 0);
         vm.prank(alice);
         craps.applyCrapsPasses(dayG, 1, false);
         (uint256 aN,) = craps.passCreditsOf(alice);
@@ -175,7 +176,7 @@ contract CrapsLapsedDayArmTest is CrapsPins {
         uint64 daySlotG = uint64(uint256(dayG) * craps.BONUS_SLOTS_PER_DAY());
 
         vm.prank(ContractAddresses.GAME);
-        craps.creditPasses(alice, 1, 0);
+        craps.creditPasses(_idFor(alice), 1, 0);
         vm.prank(alice);
         craps.applyCrapsPasses(dayG, 1, false);
         vm.prank(ContractAddresses.VAULT);
@@ -212,7 +213,7 @@ contract CrapsLapsedDayArmTest is CrapsPins {
 
         // Alice's day-lane reservation on G, paid with a pass credit.
         vm.prank(ContractAddresses.GAME);
-        craps.creditPasses(alice, 1, 0);
+        craps.creditPasses(_idFor(alice), 1, 0);
         vm.prank(alice);
         craps.applyCrapsPasses(dayG, 1, false);
 

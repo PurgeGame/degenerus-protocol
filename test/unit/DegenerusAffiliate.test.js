@@ -493,7 +493,7 @@ describe("DegenerusAffiliate", function () {
       );
       const evs = await getEvents(tx, affiliate, "AffiliateEarningsRecorded");
       expect(evs.length).to.be.gte(1);
-      expect(evs[0].args.affiliate).to.equal(alice.address);
+      expect(evs[0].args.affiliateId).to.equal(await game.walletIdOf(alice.address));
     });
 
     it("returns player kickback equal to kickbackPct% of scaled reward", async function () {
@@ -674,7 +674,7 @@ describe("DegenerusAffiliate", function () {
       const evs = await getEvents(tx, affiliate, "AffiliateEarningsRecorded");
       // Should record earnings for bob (direct affiliate)
       expect(evs.length).to.be.gte(1);
-      expect(evs[0].args.affiliate).to.equal(bob.address);
+      expect(evs[0].args.affiliateId).to.equal(await game.walletIdOf(bob.address));
     });
   });
 
@@ -682,16 +682,16 @@ describe("DegenerusAffiliate", function () {
   // 8. View Functions
   // =========================================================================
   describe("affiliateTop / affiliateScore / affiliateBonusPointsBest", function () {
-    it("affiliateTop returns zero address for level with no activity", async function () {
+    it("affiliateTop returns wallet ID 0 for level with no activity", async function () {
       const { affiliate } = await loadFixture(deployFullProtocol);
       const [player, score] = await affiliate.affiliateTop(1);
-      expect(player).to.equal(ZERO_ADDRESS);
+      expect(player).to.equal(0n);
       expect(score).to.equal(0n);
     });
 
     it("affiliateScore returns 0 for player with no earnings", async function () {
-      const { affiliate, alice } = await loadFixture(deployFullProtocol);
-      expect(await affiliate.affiliateScore(1, alice.address)).to.equal(0n);
+      const { affiliate, game, alice } = await loadFixture(deployFullProtocol);
+      expect(await affiliate.affiliateScore(1, await game.walletIdOf(alice.address))).to.equal(0n);
     });
 
     it("affiliateScore reflects earnings after payAffiliate", async function () {
@@ -714,7 +714,7 @@ describe("DegenerusAffiliate", function () {
         true
       );
 
-      const score = await affiliate.affiliateScore(1, alice.address);
+      const score = await affiliate.affiliateScore(1, await game.walletIdOf(alice.address));
       expect(score).to.equal(flip(250000)); // 25% of 1
     });
 
@@ -738,7 +738,7 @@ describe("DegenerusAffiliate", function () {
       );
 
       const [topPlayer] = await affiliate.affiliateTop(1);
-      expect(topPlayer).to.equal(alice.address);
+      expect(topPlayer).to.equal(await game.walletIdOf(alice.address));
     });
 
     it("emits AffiliateTopUpdated when new top is set", async function () {
@@ -761,25 +761,25 @@ describe("DegenerusAffiliate", function () {
       );
       const evs = await getEvents(tx, affiliate, "AffiliateTopUpdated");
       expect(evs.length).to.be.gte(1);
-      expect(evs[0].args.player).to.equal(alice.address);
+      expect(evs[0].args.affiliateId).to.equal(await game.walletIdOf(alice.address));
     });
 
     it("affiliateBonusPointsBest returns 0 for new player", async function () {
-      const { affiliate, alice } = await loadFixture(deployFullProtocol);
+      const { affiliate, game, alice } = await loadFixture(deployFullProtocol);
       expect(
-        await affiliate.affiliateBonusPointsBest(5, alice.address)
+        await affiliate.affiliateBonusPointsBest(5, await game.walletIdOf(alice.address))
       ).to.equal(0n);
     });
 
-    it("affiliateBonusPointsBest returns 0 for zero address or zero level", async function () {
-      const { affiliate } = await loadFixture(deployFullProtocol);
+    it("affiliateBonusPointsBest returns 0 for wallet ID 0 or zero level", async function () {
+      const { affiliate, game, alice } = await loadFixture(deployFullProtocol);
       expect(
-        await affiliate.affiliateBonusPointsBest(0, ZERO_ADDRESS)
+        await affiliate.affiliateBonusPointsBest(0, 0)
       ).to.equal(0n);
-      // Also test zero level with valid address
-      const { alice } = await loadFixture(deployFullProtocol);
+      // Also test zero level with a valid ID
+
       expect(
-        await affiliate.affiliateBonusPointsBest(0, alice.address)
+        await affiliate.affiliateBonusPointsBest(0, await game.walletIdOf(alice.address))
       ).to.equal(0n);
     });
 
@@ -817,7 +817,7 @@ describe("DegenerusAffiliate", function () {
         }
       }
 
-      const points = await affiliate.affiliateBonusPointsBest(6, alice.address);
+      const points = await affiliate.affiliateBonusPointsBest(6, await game.walletIdOf(alice.address));
       expect(points).to.equal(29n);
     });
 
@@ -843,7 +843,7 @@ describe("DegenerusAffiliate", function () {
         1,
         true
       );
-      expect(await affiliate.affiliateBonusPointsBest(2, alice.address)).to.equal(0n);
+      expect(await affiliate.affiliateBonusPointsBest(2, await game.walletIdOf(alice.address))).to.equal(0n);
 
       // 25 ETH fresh referred spend at a 0.04-price level (20% rate) is the exact
       // 50-point cap. Level 10 sits outside the level-2 window used above.
@@ -858,7 +858,7 @@ describe("DegenerusAffiliate", function () {
         10,
         true
       );
-      expect(await affiliate.affiliateBonusPointsBest(11, alice.address)).to.equal(50n);
+      expect(await affiliate.affiliateBonusPointsBest(11, await game.walletIdOf(alice.address))).to.equal(50n);
     });
   });
 
@@ -957,7 +957,7 @@ describe("DegenerusAffiliate", function () {
       await payAffiliateAsGame(
         hre.ethers, game, affiliate, flip(1000000), code, bob.address, 1, true
       );
-      expect(await affiliate.affiliateScore(1, alice.address)).to.equal(flip(250000));
+      expect(await affiliate.affiliateScore(1, await game.walletIdOf(alice.address))).to.equal(flip(250000));
 
       // Second call: 2 ETH fresh L1 => 0.5 ETH scaled, recorded in full (no cap)
       const tx = await payAffiliateAsGame(
@@ -969,7 +969,7 @@ describe("DegenerusAffiliate", function () {
       expect((evs[0].args.packed >> 24n) - flip(250000)).to.equal(flip(500000));
 
       // Total should be 0.25 + 0.5 = 0.75
-      expect(await affiliate.affiliateScore(1, alice.address)).to.equal(flip(750000));
+      expect(await affiliate.affiliateScore(1, await game.walletIdOf(alice.address))).to.equal(flip(750000));
     });
 
     it("different senders accrue independently", async function () {
@@ -985,7 +985,7 @@ describe("DegenerusAffiliate", function () {
       await payAffiliateAsGame(
         hre.ethers, game, affiliate, flip(100000000), code, bob.address, 1, true
       );
-      expect(await affiliate.affiliateScore(1, alice.address)).to.equal(flip(25000000));
+      expect(await affiliate.affiliateScore(1, await game.walletIdOf(alice.address))).to.equal(flip(25000000));
 
       // Carol contributes independently: 1 ETH => 0.25
       const tx = await payAffiliateAsGame(
@@ -996,7 +996,7 @@ describe("DegenerusAffiliate", function () {
       expect((evs[0].args.packed >> 24n) - flip(25000000)).to.equal(flip(250000));
 
       // Total now 25.25
-      expect(await affiliate.affiliateScore(1, alice.address)).to.equal(flip(25250000));
+      expect(await affiliate.affiliateScore(1, await game.walletIdOf(alice.address))).to.equal(flip(25250000));
     });
 
     it("earnings tracked per level", async function () {
@@ -1011,7 +1011,7 @@ describe("DegenerusAffiliate", function () {
       await payAffiliateAsGame(
         hre.ethers, game, affiliate, flip(100000000), code, bob.address, 1, true
       );
-      expect(await affiliate.affiliateScore(1, alice.address)).to.equal(flip(25000000));
+      expect(await affiliate.affiliateScore(1, await game.walletIdOf(alice.address))).to.equal(flip(25000000));
 
       // Same sender earns again at level 2 (independent per-level tracking)
       const tx = await payAffiliateAsGame(
@@ -1019,7 +1019,7 @@ describe("DegenerusAffiliate", function () {
       );
       const evs = await getEvents(tx, affiliate, "AffiliateEarningsRecorded");
       expect((evs[0].args.packed >> 24n)).to.equal(flip(250000));
-      expect(await affiliate.affiliateScore(2, alice.address)).to.equal(flip(250000));
+      expect(await affiliate.affiliateScore(2, await game.walletIdOf(alice.address))).to.equal(flip(250000));
     });
   });
 
@@ -1122,7 +1122,7 @@ describe("DegenerusAffiliate", function () {
       );
 
       // score=25500: 0.25 ETH scaled * 25% floor = 0.0625 ETH recorded
-      expect(await affiliate.affiliateScore(1, alice.address)).to.equal(flip(62500));
+      expect(await affiliate.affiliateScore(1, await game.walletIdOf(alice.address))).to.equal(flip(62500));
     });
 
     it("taper reduces kickback proportionally", async function () {
@@ -1206,7 +1206,7 @@ describe("DegenerusAffiliate", function () {
       await payAffiliateAsGame(
         hre.ethers, game, affiliate, flip(100000000), code, bob.address, 1, true, 25500
       );
-      expect(await affiliate.affiliateScore(1, alice.address)).to.equal(flip(6250000));
+      expect(await affiliate.affiliateScore(1, await game.walletIdOf(alice.address))).to.equal(flip(6250000));
     });
   });
 
@@ -1233,7 +1233,7 @@ describe("DegenerusAffiliate", function () {
       const { level, newTotal } = unpackEarnings(ev);
       expect(level).to.equal(1);
       expect(newTotal).to.equal(flip(250000)); // 1 ETH fresh at L1 => 25%
-      expect(newTotal).to.equal(await affiliate.affiliateScore(1, ev.args.affiliate));
+      expect(newTotal).to.equal(await affiliate.affiliateScore(1, ev.args.affiliateId));
     });
 
     it("fresh and recycled legs are indistinguishable in the event, by design", async function () {
@@ -1262,7 +1262,7 @@ describe("DegenerusAffiliate", function () {
       expect(evs.length).to.equal(1, "combined pools into a single emit");
       const { level, newTotal } = unpackEarnings(evs[0]);
       expect(level).to.equal(1);
-      expect(newTotal).to.equal(await affiliate.affiliateScore(1, evs[0].args.affiliate));
+      expect(newTotal).to.equal(await affiliate.affiliateScore(1, evs[0].args.affiliateId));
     });
   });
 

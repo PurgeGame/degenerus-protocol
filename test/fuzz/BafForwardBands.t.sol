@@ -10,25 +10,25 @@ contract BafBandOracle {
     uint24 private immutable baseLevel;
     constructor(uint24 lvl) { baseLevel = lvl; }
 
-    function candidate(uint256 band, uint256 rank) public pure returns (address) {
-        return address(uint160(0xBAF000 + band * 16 + rank));
+    function candidate(uint256 band, uint256 rank) public pure returns (uint32) {
+        return uint32(0xBAF000 + band * 16 + rank);
     }
 
-    function sampleTraitEntries(bool next, uint256) external pure returns (uint8, address[] memory entries) {
-        entries = new address[](4);
+    function sampleTraitEntries(bool next, uint256) external pure returns (uint8, uint32[] memory entries) {
+        entries = new uint32[](4);
         entries[0] = candidate(next ? 1 : 0, 1);
         entries[1] = candidate(next ? 1 : 0, 2);
         return (0, entries);
     }
 
-    function sampleFarFutureTickets(uint256, uint24 from, uint24 to) external view returns (address[] memory entries) {
+    function sampleFarFutureTickets(uint256, uint24 from, uint24 to) external view returns (uint32[] memory entries) {
         uint256 band;
         if (from == baseLevel + 2 && to == baseLevel + 5) band = 2;
         else {
             require(from == baseLevel + 6 && to == baseLevel + 99, "unexpected/history band");
             band = 3;
         }
-        entries = new address[](8);
+        entries = new uint32[](8);
         entries[0] = entries[4] = candidate(band, 1);
         entries[1] = entries[5] = candidate(band, 2);
     }
@@ -58,8 +58,8 @@ contract BafForwardBandsTest is DeployProtocol {
         uint256[4] memory first;
         uint256[4] memory second;
         for (uint256 round; round < 48; ++round) {
-            (address best, address next) = BafViews.round(address(jackpots), lvl, 123, round, 48);
-            uint256 band = (uint160(best) - 0xBAF000) / 16;
+            (uint32 best, uint32 next) = BafViews.round(address(jackpots), lvl, 123, round, 48);
+            uint256 band = (uint256(best) - 0xBAF000) / 16;
             assertLt(band, 4, "scatter never pays historical candidates");
             assertEq(band, round / 12, "twelve-round bands in forward order");
             assertEq(best, oracle.candidate(band, 1), "highest score gets first place");
@@ -73,7 +73,7 @@ contract BafForwardBandsTest is DeployProtocol {
         }
         // Head slots: the top bettor and the word-picked third or fourth place of the board.
         assertEq(jackpots.bafHeadWinner(lvl, 123, 0), oracle.candidate(3, 1), "slot 0 is the top bettor");
-        address pick = jackpots.bafHeadWinner(lvl, 123, 2);
+        uint32 pick = jackpots.bafHeadWinner(lvl, 123, 2);
         assertTrue(pick == oracle.candidate(1, 1) || pick == oracle.candidate(0, 1), "slot 2 is third or fourth place");
     }
 }

@@ -408,6 +408,9 @@ contract DegenerusGameMintModule is
                     jackpotPhaseFlag
                 );
 
+            // The buyer registered when the FLIP leg priced the purchase.
+            uint32 buyerId = _walletIdOf(buyer);
+
             // MINT_FLIP quest leg only (no ETH spend, no lootbox): skips activity
             // score, affiliate, and non-mint quests. The returned reward is a FLIP
             // flip stake, awarded via creditFlip — the full coin cost was already
@@ -418,7 +421,7 @@ contract DegenerusGameMintModule is
                 );
                 (uint256 questReward, , , bool questCompleted, ) = quests
                     .handlePurchase(
-                        buyer,
+                        buyerId,
                         0,
                         flipMintUnits,
                         0,
@@ -426,14 +429,13 @@ contract DegenerusGameMintModule is
                         nextLevelPrice
                     );
                 if (questCompleted && questReward != 0) {
-                    coinflip.creditFlip(buyer, questReward);
+                    coinflip.creditFlip(buyerId, questReward);
                 }
             }
 
-            // Queue tickets on the captured adjusted quantity (the buyer registered when the
-            // FLIP leg priced the purchase).
+            // Queue tickets on the captured adjusted quantity.
             if (adjustedQty32 != 0) {
-                _queuePurchaseEntries(_walletIdOf(buyer), targetLevel, adjustedQty32);
+                _queuePurchaseEntries(buyerId, targetLevel, adjustedQty32);
             }
         }
     }
@@ -601,7 +603,7 @@ contract DegenerusGameMintModule is
         // so the burn always covers.
         if (flipTokens != 0) {
             coin.burnCoinForSalvage(buyer, flipTokens);
-            coinflip.creditFlip(player, flipTokens);
+            coinflip.creditFlip(sellerId, flipTokens);
         }
 
         // Ticket leg = NORMAL recycled mint of `ticketWei` of current-level tickets from the player's
@@ -815,7 +817,7 @@ contract DegenerusGameMintModule is
         if (entryQuantityScaled >= BIGGEST_BUY_MIN_TICKETS * 4 * QTY_SCALE) {
             lootboxFlipCredit = coinflip.armRecord(
                 RECORD_KIND_BUY,
-                buyer,
+                buyerId,
                 entryQuantityScaled / (4 * QTY_SCALE)
             );
         }
@@ -965,7 +967,7 @@ contract DegenerusGameMintModule is
                 bool questCompleted,
                 bool afking
             ) = quests.handlePurchase(
-                    buyer,
+                    buyerId,
                     totalCost,
                     flipMintUnits,
                     lootBoxAmount,
@@ -1053,7 +1055,7 @@ contract DegenerusGameMintModule is
         // joins the buyer's flip credit; the rolled winner credit is returned and paired below.
         // Runs unconditionally — every purchase carries ETH spend (totalCost != 0 enforced at
         // entry); affiliate scores freeze at level + 1.
-        address affWinner;
+        uint32 affWinnerId;
         uint256 affWinnerCredit;
         {
             uint256 lbFreshFlip = lootboxFreshEth != 0
@@ -1063,7 +1065,7 @@ contract DegenerusGameMintModule is
                 ? _ethToFlipValue(lootboxClaimableUsed, priceWei)
                 : 0;
             uint256 affKickback;
-            (affWinner, affWinnerCredit, affKickback) = affiliate.payAffiliateCombined(
+            (affWinnerId, affWinnerCredit, affKickback) = affiliate.payAffiliateCombined(
                 affiliateCode,
                 buyer,
                 buyerId,
@@ -1100,9 +1102,9 @@ contract DegenerusGameMintModule is
         // (winner == sender credits nothing), so no slot collision; the pair call skips zero legs.
         if (lootboxFlipCredit != 0 || affWinnerCredit != 0) {
             coinflip.creditFlipPair(
-                buyer,
+                buyerId,
                 lootboxFlipCredit,
-                affWinner,
+                affWinnerId,
                 affWinnerCredit
             );
         }
@@ -1331,7 +1333,7 @@ contract DegenerusGameMintModule is
                 .delegatecall(
                     abi.encodeWithSelector(
                         IDegenerusGameBoonModule.consumePurchaseBoost.selector,
-                        buyer
+                        buyerId
                     )
                 );
             if (!boostOk) _revertDelegate(boostData);

@@ -19,20 +19,20 @@ contract TicketQueueSamplingTest is DeployProtocol {
     }
 
     function testFuzz_SamplingAfterReuseMatchesUniformLaneReference(uint256 entropy) public view {
-        address[] memory tickets = game.sampleFarFutureTickets(entropy, TARGET, TARGET);
+        uint32[] memory tickets = game.sampleFarFutureTickets(entropy, TARGET, TARGET);
         assertEq(tickets.length, 8);
         for (uint256 p; p < 4; ++p) {
             entropy = EntropyLib.hash2(entropy, p);
             uint256 a = (entropy >> 64) % COUNT;
             uint256 b = (a + 1 + (entropy >> 128) % 7) % COUNT;
-            assertEq(tickets[p], address(uint160(1000 + a)));
-            assertEq(tickets[p + 4], address(uint160(1000 + b)));
+            assertEq(tickets[p], game.walletIdOf(address(uint160(1000 + a))));
+            assertEq(tickets[p + 4], game.walletIdOf(address(uint160(1000 + b))));
             assertTrue(tickets[p] != tickets[p + 4], "the second lane is distinct");
         }
     }
 
     function test_StaleLevelCannotSampleTheNextCenturyQueue() public view {
-        address[] memory tickets = game.sampleFarFutureTickets(12345, 101, 101);
-        for (uint256 i; i < tickets.length; ++i) assertEq(tickets[i], address(0));
+        uint32[] memory tickets = game.sampleFarFutureTickets(12345, 101, 101);
+        for (uint256 i; i < tickets.length; ++i) assertEq(tickets[i], 0);
     }
 }

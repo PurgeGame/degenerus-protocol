@@ -5,6 +5,7 @@ import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js
 import {
   deployFullProtocol,
   restoreAddresses,
+  giveWalletId,
 } from "../helpers/deployFixture.js";
 import {
   eth,
@@ -54,12 +55,13 @@ describe("WhaleBoonDeityLapse", function () {
   const BP_DEITY_WHALE_DAY_SHIFT = 224n;
   const BP_WHALE_TIER_SHIFT = 248n;
 
-  async function boonSlot0(player) {
+  async function boonSlot0(game, player) {
+    const id = await giveWalletId(game, player);
     const SLOT_BOON_PACKED = await compiledStorageSlot("boonPacked");
     return hre.ethers.keccak256(
       hre.ethers.AbiCoder.defaultAbiCoder().encode(
-        ["address", "uint256"],
-        [player, SLOT_BOON_PACKED]
+        ["uint256", "uint256"],
+        [id, SLOT_BOON_PACKED]
       )
     );
   }
@@ -82,7 +84,7 @@ describe("WhaleBoonDeityLapse", function () {
   ///      read-clear-merge, as the Foundry counterpart does to protect sibling lanes)
   ///      is exact.
   async function injectWhaleBoon(game, player, whaleDay, deityWhaleDay, tier) {
-    const slot = await boonSlot0(player);
+    const slot = await boonSlot0(game, player);
     const packed = packWhaleLane(whaleDay, deityWhaleDay, tier);
     await hre.network.provider.send("hardhat_setStorageAt", [
       await game.getAddress(),
@@ -92,7 +94,7 @@ describe("WhaleBoonDeityLapse", function () {
   }
 
   async function readWhaleLane(game, player) {
-    const [slot0] = await game.boonPacked(player);
+    const [slot0] = await game.boonPacked(await game.walletIdOf(player));
     const whaleDay = (slot0 >> BP_WHALE_DAY_SHIFT) & 0xffffffn;
     const deityWhaleDay = (slot0 >> BP_DEITY_WHALE_DAY_SHIFT) & 0xffffffn;
     const tier = (slot0 >> BP_WHALE_TIER_SHIFT) & 0xffn;

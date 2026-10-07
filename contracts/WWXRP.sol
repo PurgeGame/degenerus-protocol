@@ -52,9 +52,11 @@ pragma solidity 0.8.34;
  * @dev DAILY DRAW (per participation day d):
  *      - A player burns at least 25 WWXRP via enter(); the burn and the
  *        recorded entry always belong to msg.sender.
- *      - Every address maps to exactly one of 10 buckets for day d:
- *        bucket = keccak(domain, chainid, this, d, player) % 10. All of an
- *        address's burns on a day share that bucket; the player cannot pick it.
+ *      - Every entrant maps to exactly one of 10 buckets for day d:
+ *        bucket = keccak(domain, chainid, this, d, walletId) % 10, keyed by the
+ *        entrant's permanent Game wallet ID (an entrant without one registers on
+ *        entry). All of a wallet's burns on a day share that bucket; the player
+ *        cannot pick it.
  *      - Each burn snapshots the player's activity score, consumes any live
  *        WWXRP boon (+4/8/12%), and records
  *        effectiveScore = amount * multBps * (10_000 + boonBps) / 1e8 — whole-WWXRP
@@ -110,18 +112,23 @@ interface IDrawGame {
     /// @notice DegenerusGame's recorded VRF word for `day` (0 if none recorded yet).
     function rngWordForDay(uint24 day) external view returns (uint256);
 
-    /// @notice DegenerusGame's aggregate activity-score read for `player`.
-    function playerActivityScore(
-        address player
-    ) external view returns (uint256);
+    /// @notice DegenerusGame's activity score for `player` plus its wallet ID, read from the
+    ///         same mint word (ID 0 = unregistered; never allocates).
+    function playerActivityScoreCached(address player) external returns (uint256 score, uint32 id);
 
-    function playerActivityScoreCached(address player) external returns (uint256);
+    /// @notice Game's wallet-ID hook: the existing ID, or with `allocate` a new one (paid
+    ///         admission applies; reverts for a new wallet past it). `enter` pays, so it allocates.
+    function registerWallet(address owner, bool allocate) external returns (uint32 id);
+
+    /// @notice `player`'s permanent Game wallet ID (0 = none; never allocates).
+    function walletIdOf(address player) external view returns (uint32);
 
     /// @notice DegenerusGame's current level.
     function level() external view returns (uint24);
 
-    /// @notice Consume the player's WWXRP boon through the caller-specific Game dispatch.
-    function consumeCoinflipBoon(address player) external returns (uint16);
+    /// @notice Consume wallet `id`'s WWXRP boon through the caller-specific Game dispatch
+    ///         (0 returns 0).
+    function consumeCoinflipBoon(uint32 id) external returns (uint16);
 
     /// @notice DegenerusGame's raw storage read (read-only).
     function extsload(bytes32 slot) external view returns (bytes32);
@@ -136,8 +143,8 @@ interface IDrawVaultOwner {
 /// @dev Coinflip stake-credit channel for draw prizes (WWXRP is an authorized
 ///      flip creditor alongside game/quests/affiliate/admin/sDGNRS).
 interface IDrawCoinflip {
-    /// @notice Coinflip's credit of `amount` FLIP stake to `player`.
-    function creditFlip(address player, uint256 amount) external;
+    /// @notice Coinflip's credit of `amount` FLIP stake to wallet `id` (0 is a no-op).
+    function creditFlip(uint32 id, uint256 amount) external;
     /// @notice The armed BAF draw day and its book: the whole-FLIP sum of every direct
     ///         self-funded deposit that staked the armed day, and the entry count.
     function bafDrawInfo() external view returns (uint24 day, uint96 totalWeight, uint32 entryCount);
@@ -171,7 +178,7 @@ contract WWXRP {
     /// @notice Emitted for every recorded daily-draw entry
     /// @param day Participation day (settles on rngWordForDay(day + 1))
     /// @param player Entrant (always msg.sender of the burn)
-    /// @param bucket Deterministic bucket for (day, player)
+    /// @param bucket Deterministic bucket for (day, entrant wallet ID)
     /// @param entryIndex Index of this entry within the bucket
     /// @param burnAmount WWXRP burned (0 decimals)
     /// @param effectiveScore Activity- and boon-weighted score recorded for this burn
@@ -190,14 +197,14 @@ contract WWXRP {
 
     /// @notice Emitted when a day's draw prize is claimed
     /// @param day Participation day that won
-    /// @param winner Player recorded in the winning entry (prize recipient)
+    /// @param winnerId Wallet ID recorded in the winning entry (prize recipient)
     /// @param big True for the BIG prize, false for SMALL
     /// @param prize FLIP amount credited as coinflip stake (0 decimals)
     /// @param bucket Winning bucket
     /// @param entryIndex Winning entry index within the bucket
     event DrawClaimed(
         uint24 indexed day,
-        address indexed winner,
+        uint32 indexed winnerId,
         bool big,
         uint256 prize,
         uint8 bucket,
@@ -233,13 +240,13 @@ contract WWXRP {
 
     /// @notice Emitted when a skipped century BAF resolves its incinerator draw
     /// @param bracket Century bracket whose BAF skipped (level x00)
-    /// @param winner Player recorded in the winning entry (paid game-side)
+    /// @param winnerId Wallet ID recorded in the winning entry (paid as flip credit)
     /// @param flipAward FLIP credited to the winner by the game as flip credit
     /// @param roll Winner roll in [0, totalScore)
     /// @param totalScore Bracket total effective score (whole tokens units)
     event IncineratorResolved(
         uint24 indexed bracket,
-        address indexed winner,
+        uint32 indexed winnerId,
         uint256 flipAward,
         uint256 roll,
         uint256 totalScore
@@ -367,10 +374,10 @@ contract WWXRP {
     uint256 private constant TARGET_SPAN_BPS = 20_000;
     uint256 private constant BPS = 10_000;
 
-    /// @dev Where DegenerusGame keeps a player's WWXRP boon: `boonPacked` is the mapping at Game
-    ///      slot 47, the lane is 24 bits at bit 232 of the player's second word, and its low two
-    ///      bits are the tier (0 = no boon). Read-only, used to skip the consume dispatch for a
-    ///      player holding no WWXRP boon; pinned against the Game layout by WwxrpBoonLaneSkip.
+    /// @dev Where DegenerusGame keeps a wallet's WWXRP boon: `boonPacked` is the wallet-ID-keyed
+    ///      mapping at Game slot 47, the lane is 24 bits at bit 232 of the wallet's second word, and
+    ///      its low two bits are the tier (0 = no boon). Read-only, used to skip the consume
+    ///      dispatch for a wallet holding no WWXRP boon; pinned against the Game layout.
     uint256 internal constant GAME_BOON_PACKED_SLOT = 47;
     uint256 private constant GAME_WWXRP_LANE_SHIFT = 232;
     uint256 private constant GAME_LANE_TIER_MASK = 0x3;
@@ -415,7 +422,7 @@ contract WWXRP {
     /// @dev Entry per (day, bucket, index):
     ///      bits [0..95]    cumulative effective score endpoint (exclusive,
     ///                      whole-WWXRP units)
-    ///      bits [96..255]  player address
+    ///      bits [96..127]  entrant wallet ID
     ///      Key: ((day % 3) << 40) | (bucket << 32) | index. Only entries below
     ///      the exact-day tagged header's count are live. Never zero for a
     ///      recorded entry (endpoint >= 25 units via MIN_BURN at 1.0x).
@@ -436,7 +443,7 @@ contract WWXRP {
     ///      whole tokens: the supply is uncapped-inflationary, so no
     ///      whole-token uint96 bound can be guaranteed. uint192 for the
     ///      bracket total (~6.3e57 whole tokens at a 3x activity ceiling) is safe for
-    ///      any reachable supply; entry endpoints get a full uint256 slot.
+    ///      any reachable supply, and entry endpoints share it.
 
     /// @dev Header per bracket (level x00):
     ///      bits [0..191]   total effective score (last cumulative endpoint,
@@ -444,18 +451,17 @@ contract WWXRP {
     ///      bits [192..223] entry count
     mapping(uint24 => uint256) private _incinHeader;
 
-    /// @notice One incinerator interval entry (two slots: full-precision
-    ///         endpoint + player).
+    /// @notice One incinerator interval entry in one slot: the endpoint (the bracket total
+    ///         saturates at uint192.max, so every endpoint fits) and the entrant's wallet ID.
     struct IncinEntry {
         /// @notice Cumulative effective score endpoint (exclusive, whole tokens units).
-        uint256 cum;
-        /// @notice Entrant credited if the winner roll lands in this interval.
-        address player;
+        uint192 cum;
+        /// @notice Wallet ID credited if the winner roll lands in this interval.
+        uint32 id;
     }
 
     /// @dev Entry per (bracket, index). Key: (bracket << 32) | index. The
-    ///      resolve binary search touches only the cum slot per probe; the
-    ///      player slot is read once for the winner.
+    ///      resolve binary search reads one slot per probe.
     mapping(uint256 => IncinEntry) private _incinEntry;
 
     /// @notice Addresses the vault owner has registered as minters/burners alongside the
@@ -635,10 +641,12 @@ contract WWXRP {
     ///      tokens and does not call the app; mintPrize and burnForGame never consume boons.
     ///      Trusted-minter status is the whole permission: no per-player approval, since
     ///      a trusted minter can already burn any balance through burnForGame.
+    ///      The boon is keyed by the player's Game wallet ID; a wallet without one has no boon
+    ///      (the Game returns 0 for ID 0).
     /// @custom:reverts OnlyMinter When the caller is not currently a trusted minter.
     function consumeBoon(address player) external returns (uint16 boonBps) {
         if (!trustedMinter[msg.sender]) revert OnlyMinter();
-        return game.consumeCoinflipBoon(player);
+        return game.consumeCoinflipBoon(game.walletIdOf(player));
     }
 
     /// @notice Mint any amount of WWXRP for free (a zero recipient mints nothing).
@@ -670,7 +678,9 @@ contract WWXRP {
     ///         BAF-incinerator draw for the upcoming x00 bracket.
     /// @dev The burned balance and the entry belong to msg.sender only — no
     ///      beneficiary parameter, so nobody can burn another player's balance
-    ///      or attach another player's activity score. Multiple burns per day
+    ///      or attach another player's activity score. The entry pays, so a
+    ///      first-time entrant registers its Game wallet ID; the entry, the
+    ///      bucket and the boon are keyed by that ID. Multiple burns per day
     ///      are allowed; each records its own activity snapshot and interval. One live
     ///      WWXRP boon boosts both draw weights from that burn; the token burn is unchanged.
     ///      Entry stays open during the daily RNG lock (like flip deposits):
@@ -686,6 +696,7 @@ contract WWXRP {
     /// @custom:reverts BelowMinBurn When amount is under 25 WWXRP.
     /// @custom:reverts ScoreOverflow When the bucket entry count would overflow.
     /// @custom:reverts InsufficientBalance When the caller's balance is short.
+    /// @custom:reverts E (Game) When a new entrant must register past paid admission.
     function enter(uint256 amount) external {
         if (amount < MIN_BURN) revert BelowMinBurn();
 
@@ -693,14 +704,18 @@ contract WWXRP {
         // call needed. Words for day+1 cannot exist yet: the game only ever
         // records words for days <= the current wall day.
         uint24 day = GameTimeLib.currentDayIndex();
-        uint8 bucket = bucketOf(day, msg.sender);
+        // The activity read carries the entrant's wallet ID from the same mint word; a
+        // first-time entrant registers (the burn pays) before anything keys on the ID.
+        (uint256 score, uint32 id) = game.playerActivityScoreCached(msg.sender);
+        if (id == 0) id = game.registerWallet(msg.sender, true);
         // Consume once for the whole burn. Both draws share the same activity/boon snapshot;
         // both daily and century weights floor to whole WWXRP at the same BPS boundaries.
         // The Game's consume returns 0 with no write and no event when the WWXRP lane's tier is
         // 0, so reading the lane first and skipping the dispatch for an empty lane is exact.
         uint16 boonBps;
-        if (_holdsWwxrpBoon(msg.sender)) boonBps = game.consumeCoinflipBoon(msg.sender);
-        uint256 multBps = drawMultBps(game.playerActivityScoreCached(msg.sender));
+        if (_holdsWwxrpBoon(id)) boonBps = game.consumeCoinflipBoon(id);
+        uint8 bucket = _bucketOf(day, id);
+        uint256 multBps = drawMultBps(score);
         uint256 fullWeight = _entryWeight(amount, multBps, boonBps);
         uint256 effective = fullWeight;
 
@@ -720,16 +735,14 @@ contract WWXRP {
         if (newTotal > type(uint96).max) newTotal = type(uint96).max;
 
         _drawHeader[hKey] = newRaw | (newTotal << 96) | ((count + 1) << 192) | ((uint256(day) + 1) << 224);
-        _drawEntry[_drawEntryKey(day, bucket, uint32(count))] =
-            newTotal |
-            (uint256(uint160(msg.sender)) << 96);
+        _drawEntry[_drawEntryKey(day, bucket, uint32(count))] = newTotal | (uint256(id) << 96);
 
         // Level-x99 burns double as century BAF-incinerator entries: the same
         // burn and activity/boon multipliers also arm the next x00 bracket's skip
         // draw (at whole-token precision there — no whole-token truncation).
         uint24 lvl = game.level();
         if (lvl % 100 == 99) {
-            _recordIncineratorEntry(lvl + 1, amount, fullWeight);
+            _recordIncineratorEntry(lvl + 1, id, amount, fullWeight);
         }
 
         _burn(msg.sender, amount);
@@ -745,13 +758,13 @@ contract WWXRP {
         );
     }
 
-    /// @dev True when `player`'s WWXRP boon lane in the Game has a nonzero tier (live or
-    ///      expired; the consume clears an expired lane and pays 0, as before).
-    function _holdsWwxrpBoon(address player) private view returns (bool) {
+    /// @dev True when wallet `id`'s WWXRP boon lane in the Game has a nonzero tier (live or
+    ///      expired; the consume clears an expired lane and pays 0).
+    function _holdsWwxrpBoon(uint32 id) private view returns (bool) {
         bytes32 slot;
         unchecked {
             // Struct member addressing wraps, as Solidity's own does.
-            slot = bytes32(uint256(keccak256(abi.encode(player, GAME_BOON_PACKED_SLOT))) + 1);
+            slot = bytes32(uint256(keccak256(abi.encode(id, GAME_BOON_PACKED_SLOT))) + 1);
         }
         return (uint256(game.extsload(slot)) >> GAME_WWXRP_LANE_SHIFT) & GAME_LANE_TIER_MASK != 0;
     }
@@ -804,7 +817,7 @@ contract WWXRP {
         if (roll < cumStart || roll >= cumEnd) revert NotWinningEntry();
 
         dayClaimed[day] = true;
-        address winner = address(uint160(entry >> 96));
+        uint32 winner = uint32(entry >> 96);
         uint256 prize = big ? BIG_PRIZE : SMALL_PRIZE;
         coinflip.creditFlip(winner, prize);
 
@@ -815,10 +828,17 @@ contract WWXRP {
       |                        DAILY DRAW: VIEWS                             |
       +======================================================================+*/
 
-    /// @notice Deterministic draw bucket for (day, player). Domain-separated
+    /// @notice Deterministic draw bucket for (day, wallet ID). Domain-separated
     ///         by chain and deployment address; identical for all of a
-    ///         player's burns on a day.
-    function bucketOf(uint24 day, address player) public view returns (uint8) {
+    ///         wallet's burns on a day. ID 0 never enters and has no bucket:
+    ///         it returns BUCKET_COUNT.
+    function bucketOf(uint24 day, uint32 id) external view returns (uint8) {
+        if (id == 0) return uint8(BUCKET_COUNT);
+        return _bucketOf(day, id);
+    }
+
+    /// @dev The bucket hash over the entrant's admitted wallet ID.
+    function _bucketOf(uint24 day, uint32 id) private view returns (uint8) {
         return
             uint8(
                 uint256(
@@ -828,7 +848,7 @@ contract WWXRP {
                             block.chainid,
                             address(this),
                             day,
-                            player
+                            id
                         )
                     )
                 ) % BUCKET_COUNT
@@ -867,17 +887,17 @@ contract WWXRP {
         entryCount = uint32(header >> 192);
     }
 
-    /// @notice A recorded draw entry's player and cumulative score endpoint
+    /// @notice A recorded draw entry's wallet ID and cumulative score endpoint
     ///         (whole-WWXRP units). Returns zero for an overwritten day or an index
     ///         outside that day's live count, including tails from a previous draw.
     function entryAt(
         uint24 day,
         uint8 bucket,
         uint32 index
-    ) external view returns (address player, uint256 cumulativeScore) {
-        if (index >= uint32(_readDrawHeader(day, bucket) >> 192)) return (address(0), 0);
+    ) external view returns (uint32 id, uint256 cumulativeScore) {
+        if (index >= uint32(_readDrawHeader(day, bucket) >> 192)) return (0, 0);
         uint256 entry = _drawEntry[_drawEntryKey(day, bucket, index)];
-        player = address(uint160(entry >> 96));
+        id = uint32(entry >> 96);
         cumulativeScore = entry & type(uint96).max;
     }
 
@@ -932,23 +952,23 @@ contract WWXRP {
     ///         for claim callers/indexers; never used in state-changing paths.
     /// @return found True when the day has a prize and a winning entry.
     /// @return entryIndex Index to pass to claim().
-    /// @return player Recorded winner.
+    /// @return id Recorded winner's wallet ID.
     function findWinningEntry(
         uint24 day
-    ) external view returns (bool found, uint32 entryIndex, address player) {
-        if (!_drawClaimOpen(day)) return (false, 0, address(0));
+    ) external view returns (bool found, uint32 entryIndex, uint32 id) {
+        if (!_drawClaimOpen(day)) return (false, 0, 0);
         uint256 word = game.rngWordForDay(day + 1);
-        if (word == 0) return (false, 0, address(0));
+        if (word == 0) return (false, 0, 0);
         bool big = _drawHash(DOM_BIG, day, word) % BIG_GATE == 0;
         if (!big && _drawHash(DOM_SMALL, day, word) % SMALL_GATE != 0) {
-            return (false, 0, address(0));
+            return (false, 0, 0);
         }
         uint8 bucket = uint8(
             _drawHash(DOM_WIN_BUCKET, day, word) % BUCKET_COUNT
         );
         uint256 header = _readDrawHeader(day, bucket);
         uint256 total = (header >> 96) & type(uint96).max;
-        if (total == 0) return (false, 0, address(0));
+        if (total == 0) return (false, 0, 0);
         uint256 roll = _drawHash(DOM_WINNER, day, word) % total;
 
         // Smallest index whose cumulative endpoint exceeds the roll.
@@ -966,7 +986,7 @@ contract WWXRP {
             }
         }
         uint256 entry = _drawEntry[_drawEntryKey(day, bucket, lo)];
-        return (true, lo, address(uint160(entry >> 96)));
+        return (true, lo, uint32(entry >> 96));
     }
 
     /*+======================================================================+
@@ -993,11 +1013,13 @@ contract WWXRP {
     ///      of the hedge (the daily-draw entry it rode on still settles
     ///      normally).
     /// @param bracket Century bracket being armed (level x00).
+    /// @param id The entrant's wallet ID.
     /// @param amount WWXRP burned by the carrying enter() (0 decimals).
     /// @param effective Whole-token activity/boon weight computed by the carrying entry.
     /// @custom:reverts ScoreOverflow When the bracket entry count would overflow.
     function _recordIncineratorEntry(
         uint24 bracket,
+        uint32 id,
         uint256 amount,
         uint256 effective
     ) private {
@@ -1013,11 +1035,7 @@ contract WWXRP {
         if (newTotal > type(uint192).max) newTotal = type(uint192).max;
 
         _incinHeader[bracket] = newTotal | ((count + 1) << 192);
-        IncinEntry storage e = _incinEntry[
-            _incinEntryKey(bracket, uint32(count))
-        ];
-        e.cum = newTotal;
-        e.player = msg.sender;
+        _incinEntry[_incinEntryKey(bracket, uint32(count))] = IncinEntry({cum: uint192(newTotal), id: id});
 
         emit IncineratorEntered(
             bracket,
@@ -1036,24 +1054,24 @@ contract WWXRP {
     ///      bracket, in the same call that processes the skip. The lost total is
     ///      the coinflip's draw book for the armed day (whole FLIP); the book closed
     ///      at the day boundary, before the transition word was requested. Returns
-    ///      address(0) when the bracket has no entries. A winner with an empty book —
+    ///      0 when the bracket has no entries. A winner with an empty book —
     ///      or one whose armed day won, or never resolved — is still drawn and logged,
     ///      with a zero award. Winner selection is a
     ///      domain-separated roll over the burn-weighted cumulative intervals,
     ///      located by binary search.
     /// @param bracket Skipped century bracket (level x00).
     /// @param rngWord VRF word of the transition that skipped the BAF.
-    /// @return winner Recorded winner, or address(0) for an empty bracket.
+    /// @return winnerId Recorded winner's wallet ID, or 0 for an empty bracket.
     /// @custom:reverts OnlyMinter When caller is not the game contract.
     function resolveIncinerator(
         uint24 bracket,
         uint256 rngWord
-    ) external returns (address winner) {
+    ) external returns (uint32 winnerId) {
         if (msg.sender != MINTER_GAME) revert OnlyMinter();
 
         uint256 header = _incinHeader[bracket];
         uint256 total = header & type(uint192).max;
-        if (total == 0) return address(0);
+        if (total == 0) return 0;
 
         uint256 roll = uint256(
             keccak256(
@@ -1077,7 +1095,7 @@ contract WWXRP {
                 lo = mid + 1;
             }
         }
-        winner = _incinEntry[_incinEntryKey(bracket, lo)].player;
+        winnerId = _incinEntry[_incinEntryKey(bracket, lo)].id;
 
         // Pay only against a book that actually lost. The skip gate reads the low bit of the
         // transition's own word, which is the armed day's word on every ordinary path — but a
@@ -1090,9 +1108,9 @@ contract WWXRP {
         uint256 flipAward = (!armedWin && rewardPercent != 0)
             ? (uint256(lostFlip) * INCINERATOR_FLIP_BPS) / 10_000
             : 0;
-        if (flipAward != 0) coinflip.creditFlip(winner, flipAward);
+        if (flipAward != 0) coinflip.creditFlip(winnerId, flipAward);
 
-        emit IncineratorResolved(bracket, winner, flipAward, roll, total);
+        emit IncineratorResolved(bracket, winnerId, flipAward, roll, total);
     }
 
     /// @notice Incinerator bracket totals.
@@ -1107,14 +1125,14 @@ contract WWXRP {
         entryCount = uint32(header >> 192);
     }
 
-    /// @notice A recorded incinerator entry's player and cumulative score
+    /// @notice A recorded incinerator entry's wallet ID and cumulative score
     ///         endpoint (whole tokens units).
     function incineratorEntryAt(
         uint24 bracket,
         uint32 index
-    ) external view returns (address player, uint256 cumulativeScore) {
-        IncinEntry storage e = _incinEntry[_incinEntryKey(bracket, index)];
-        player = e.player;
+    ) external view returns (uint32 id, uint256 cumulativeScore) {
+        IncinEntry memory e = _incinEntry[_incinEntryKey(bracket, index)];
+        id = e.id;
         cumulativeScore = e.cum;
     }
 

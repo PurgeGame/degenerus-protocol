@@ -10,7 +10,7 @@ contract JackpotBattleDrawHarness is DegenerusGameJackpotDrawModule, WalletSeed 
     function seed(uint24 target, address[] memory owners, bool gaps) external {
         for (uint256 i; i < owners.length; ++i) {
             // Queue positions need not equal registry positions (e.g. after a salvage swap).
-            if (gaps) (uint80(_seedWallet(address(uint160(0xDEAD0000 + i)))) << OWNER_IDX_SHIFT);
+            if (gaps) _seedWallet(address(uint160(0xDEAD0000 + i)));
             uint32 pos = _seedWallet(owners[i]);
             _tqAppend(_tqFarFutureKey(target), pos);
         }
@@ -19,7 +19,9 @@ contract JackpotBattleDrawHarness is DegenerusGameJackpotDrawModule, WalletSeed 
     function collect(uint24 ceiling, uint256 word, uint256 cursor, uint256 remaining)
         external view returns (address[] memory, uint256, bool)
     {
-        return _collectJackpotChunkWithLevels(ceiling, word, cursor, remaining, _jackpotDrawLevels(ceiling, cursor));
+        (uint32[] memory ids, uint256 next, bool exhausted) =
+            _collectJackpotChunkWithLevels(ceiling, word, cursor, remaining, _jackpotDrawLevels(ceiling, cursor));
+        return (_keys(ids), next, exhausted);
     }
 
     function collectCached(uint24 ceiling, uint256 word, uint256 count)
@@ -29,17 +31,23 @@ contract JackpotBattleDrawHarness is DegenerusGameJackpotDrawModule, WalletSeed 
         all = new address[](count);
         uint256 used;
         while (used < count) {
-            (address[] memory seats, uint256 next, bool exhausted) =
+            (uint32[] memory ids, uint256 next, bool exhausted) =
                 _collectJackpotChunkWithLevels(ceiling, word, cursor, count - used, snapshot);
+            address[] memory seats = _keys(ids);
             require(!exhausted && seats.length != 0, "fixture must have eligible levels");
             cursor = next;
             for (uint256 i; i < seats.length; ++i) all[used++] = seats[i];
         }
     }
 
+    function _keys(uint32[] memory ids) private view returns (address[] memory keys) {
+        keys = new address[](ids.length);
+        for (uint256 i; i < ids.length; ++i) keys[i] = _walletKey(ids[i]);
+    }
+
     function queued(uint24 target) external view returns (address[] memory owners) {
         uint256[] storage queue = ticketQueue[_ticketQueueStorageKey(_tqFarFutureKey(target))];
-        owners = new address[](queue.length);
+        owners = new address[](_ticketQueueLength(_tqFarFutureKey(target)));
         for (uint256 i; i < owners.length; ++i) owners[i] = _walletKey(_tqPositionAt(queue, i));
     }
 }

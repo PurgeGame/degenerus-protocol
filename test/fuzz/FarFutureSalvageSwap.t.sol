@@ -745,11 +745,11 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
             (uint256(priorState) & ~(uint256(type(uint24).max) << 96)) | (uint256(cl) << 96)
         ));
         for (uint256 s = 0; s < 32; ++s) {
-            address[] memory sampled =
+            uint32[] memory sampled =
                 game.sampleFarFutureTickets(uint256(keccak256(abi.encode("samp", s))), uint24(cl + 6), uint24(cl + 99));
             assertEq(sampled.length, 8, "BAF sampler must fill all candidate slots");
             for (uint256 i = 0; i < sampled.length; ++i) {
-                assertTrue(sampled[i] != address(0), "sampler leaked a zero/stale address after swap-pop");
+                assertTrue(sampled[i] != 0, "sampler leaked a zero/stale address after swap-pop");
             }
         }
 

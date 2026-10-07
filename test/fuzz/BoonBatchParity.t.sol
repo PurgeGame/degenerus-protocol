@@ -9,31 +9,35 @@ import {DegenerusGameBoonModule} from "../../contracts/modules/DegenerusGameBoon
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 contract BoonBatchParityHarness is DegenerusGameBoonModule, WalletSeed {
+    function seed(address player) external returns (uint32) {
+        return _seedWallet(player);
+    }
+
     function playerState(address player)
         external
         view
         returns (uint256 slot0, uint256 slot1, uint256 mintData, uint256 whaleClaims)
     {
-        BoonPacked storage bp = boonPacked[player];
+        BoonPacked storage bp = boonPacked[_walletIdOf(player)];
         return (bp.slot0, bp.slot1, mintPacked_[player], _halfPassesOf(player));
     }
 }
 
 contract BoonBatchQuestRecorder {
-    mapping(address => uint256) public streakBonus;
-    mapping(address => uint256) public shields;
+    mapping(uint32 => uint256) public streakBonus;
+    mapping(uint32 => uint256) public shields;
 
-    event StreakBonus(address indexed player, uint16 amount, uint24 day);
-    event Shields(address indexed player, uint16 amount);
+    event StreakBonus(uint32 indexed id, uint16 amount, uint24 day);
+    event Shields(uint32 indexed id, uint16 amount);
 
-    function awardQuestStreakBonus(address player, uint16 amount, uint24 day) external {
-        streakBonus[player] += amount;
-        emit StreakBonus(player, amount, day);
+    function awardQuestStreakBonus(uint32 id, uint16 amount, uint24 day) external {
+        streakBonus[id] += amount;
+        emit StreakBonus(id, amount, day);
     }
 
-    function awardQuestStreakShield(address player, uint16 amount) external {
-        shields[player] += amount;
-        emit Shields(player, amount);
+    function awardQuestStreakShield(uint32 id, uint16 amount) external {
+        shields[id] += amount;
+        emit Shields(id, amount);
     }
 }
 
@@ -45,6 +49,7 @@ contract BoonBatchParity is Test {
     BoonBatchParityHarness private harness;
     IDegenerusGameBoonModule private gameBoon;
     BoonBatchQuestRecorder private questRecorder;
+    uint32 private playerId;
 
     function setUp() public {
         vm.warp(1_900_000_000);
@@ -53,6 +58,7 @@ contract BoonBatchParity is Test {
         vm.etch(ContractAddresses.GAME, address(implementation).code);
         harness = BoonBatchParityHarness(ContractAddresses.GAME);
         gameBoon = IDegenerusGameBoonModule(ContractAddresses.GAME);
+        playerId = harness.seed(PLAYER);
 
         BoonBatchQuestRecorder quests = new BoonBatchQuestRecorder();
         vm.etch(ContractAddresses.QUESTS, address(quests).code);
@@ -67,7 +73,7 @@ contract BoonBatchParity is Test {
         vm.recordLogs();
         uint256 nonceBase;
         for (uint256 lane; lane < 5; ++lane) {
-            gameBoon.rollBoxBoons(PLAYER, _budget(amounts[lane]), 1, amounts[lane], CURRENT_LEVEL, seed, nonceBase++);
+            gameBoon.rollBoxBoons(PLAYER, playerId, _budget(amounts[lane]), 1, amounts[lane], CURRENT_LEVEL, seed, nonceBase++);
         }
         Vm.Log[] memory expectedLogs = vm.getRecordedLogs();
         bytes32 expectedState = _stateHash();
@@ -75,7 +81,7 @@ contract BoonBatchParity is Test {
         assertTrue(vm.revertToState(snapshot), "snapshot restore failed");
 
         vm.recordLogs();
-        gameBoon.rollBoxBoonTiers(PLAYER, amounts, countsPacked, CURRENT_LEVEL, seed);
+        gameBoon.rollBoxBoonTiers(PLAYER, playerId, amounts, countsPacked, CURRENT_LEVEL, seed);
         Vm.Log[] memory actualLogs = vm.getRecordedLogs();
 
         assertEq(_stateHash(), expectedState, "batched boon state drift");
@@ -90,7 +96,7 @@ contract BoonBatchParity is Test {
     function _stateHash() private view returns (bytes32) {
         (uint256 s0, uint256 s1, uint256 mintData, uint256 whaleClaims) = harness.playerState(PLAYER);
         return keccak256(
-            abi.encode(s0, s1, mintData, whaleClaims, questRecorder.streakBonus(PLAYER), questRecorder.shields(PLAYER))
+            abi.encode(s0, s1, mintData, whaleClaims, questRecorder.streakBonus(playerId), questRecorder.shields(playerId))
         );
     }
 

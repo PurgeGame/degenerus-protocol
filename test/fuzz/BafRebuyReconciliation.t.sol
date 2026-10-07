@@ -184,9 +184,9 @@ contract BafRebuyReconciliationTest is DeployProtocol {
         emit log_named_uint("BAF reservation", reserve);
 
         uint256 word = host.brWord();
-        assertEq(jackpots.bafHeadWinner(10, word, 0), buyer, "the injected bettor tops the board");
-        assertEq(jackpots.bafHeadWinner(10, word, 1), address(0), "nobody deposited on the armed day");
-        assertEq(jackpots.bafHeadWinner(10, word, 2), address(0), "the board has no third or fourth place");
+        assertEq(jackpots.bafHeadWinner(10, word, 0), game.walletIdOf(buyer), "the injected bettor tops the board");
+        assertEq(jackpots.bafHeadWinner(10, word, 1), 0, "nobody deposited on the armed day");
+        assertEq(jackpots.bafHeadWinner(10, word, 2), 0, "the board has no third or fourth place");
 
         // Award stage: one call pays every group.
         (uint256 next0, uint256 future0, uint256 current0, uint256 claimable0, uint256 pending0, bool frozen0) =
@@ -199,7 +199,7 @@ contract BafRebuyReconciliationTest is DeployProtocol {
         (,,,,, kind) = host.brWork();
         assertEq(kind, 0, "the stage completed and cleared its record");
 
-        uint256 credited = _sum(logs, CREDIT_SIG);
+        uint256 credited = _sum(logs, CREDIT_SIG) + _sum(logs, ETH_SIG);
         uint256 residue = reserve - credited;
         (uint256 next1, uint256 future1, uint256 current1, uint256 claimable1, uint256 pending1, bool frozen1) =
             host.brPools();
@@ -217,14 +217,14 @@ contract BafRebuyReconciliationTest is DeployProtocol {
         bool topPaid;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length == 4 && logs[i].topics[0] == ETH_SIG
-                && logs[i].topics[1] == bytes32(uint256(uint160(buyer)))
+                && logs[i].topics[1] == bytes32(uint256(game.walletIdOf(buyer)))
                 && logs[i].topics[3] == bytes32(uint256(BAF_TRAIT_SENTINEL))
                 && keccak256(logs[i].data) == keccak256(abi.encode((uint256(pool) / 10) / 2, uint256(0)))) {
                 topPaid = true;
             }
         }
         assertTrue(topPaid, "the top bettor takes half of head slot 0 as claimable ETH");
-        assertEq(jackpots.bafHeadWinner(10, word, 0), address(0), "finalizeBaf cleared the board");
+        assertEq(jackpots.bafHeadWinner(10, word, 0), 0, "finalizeBaf cleared the board");
     }
 
     /// @dev The schedule's ETH term: 48 rounds of (best (P/2)/48, second ((P*30)/100)/48) with
@@ -301,8 +301,9 @@ contract BafRebuyReconciliationTest is DeployProtocol {
     function _injectBafTop(address who, uint24 lvl) internal {
         // Record a large BAF flip to put the buyer at the top of the leaderboard.
         // 1000 ether stake = score 1000, the #1 position (head slot 0, 10% of the BAF pool).
+        uint32 id = _giveWalletId(who);
         vm.prank(address(coinflip));
-        jackpots.recordBafFlip(who, lvl, 1000 ether);
+        jackpots.recordBafFlip(id, lvl, 1000 ether);
     }
 
     /// @notice Buy tickets for the buyer at the current price.

@@ -104,9 +104,10 @@ contract BigRecordPoolTest is DeployProtocol {
     // ---------------------------------------------------------------------
 
     function testArmRecordIsGameOnly() public {
+        uint32 id = _giveWalletId(player);
         vm.prank(player);
         vm.expectRevert();
-        coinflip.armRecord(RECORD_KIND_SPIN, player, 1 ether);
+        coinflip.armRecord(RECORD_KIND_SPIN, id, 1 ether);
     }
 
     // ---------------------------------------------------------------------
@@ -347,7 +348,7 @@ contract BigRecordPoolTest is DeployProtocol {
     function testPayRecordSdgnrsIsCoinflipOnly() public {
         vm.prank(player);
         vm.expectRevert();
-        game.payRecordSdgnrs(player, SHARE_CEIL_BPS);
+        game.payRecordSdgnrs(1, SHARE_CEIL_BPS);
     }
 
     /// @notice The leg pays the accrued share at 1/500 scale of the live reward pool
@@ -360,8 +361,9 @@ contract BigRecordPoolTest is DeployProtocol {
         );
         uint256 expected = (rewardPool * SHARE_CEIL_BPS) / (10_000 * 500);
 
+        uint32 id = _giveWalletId(player);
         vm.prank(ContractAddresses.COINFLIP);
-        uint256 paid = game.payRecordSdgnrs(player, SHARE_CEIL_BPS);
+        (uint256 paid,) = game.payRecordSdgnrs(id, SHARE_CEIL_BPS);
         assertEq(paid, expected, "the leg pays shareBps of rewardPool/500");
     }
 
@@ -400,8 +402,9 @@ contract BigRecordPoolTest is DeployProtocol {
         address who,
         uint256 candidate
     ) internal returns (uint256) {
+        uint32 id = _giveWalletId(who);
         vm.prank(GAME);
-        return coinflip.armRecord(kind, who, candidate);
+        return coinflip.armRecord(kind, id, candidate);
     }
 
     /// @dev Mint wallet FLIP and self-deposit it (direct — arms the flip record).

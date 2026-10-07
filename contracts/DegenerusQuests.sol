@@ -29,6 +29,7 @@ import "./interfaces/IDegenerusGame.sol";
 import {ICoinflip} from "./interfaces/ICoinflip.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 import {BitPackingLib} from "./libraries/BitPackingLib.sol";
+import {WalletTableLib} from "./libraries/WalletTableLib.sol";
 import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 import {PriceLookupLib} from "./libraries/PriceLookupLib.sol";
 import {EntropyLib} from "./libraries/EntropyLib.sol";
@@ -43,7 +44,8 @@ import {EntropyLib} from "./libraries/EntropyLib.sol";
  * This contract operates as an external standalone contract (NOT delegatecall)
  * called by the COIN, COINFLIP, GAME, and AFFILIATE contracts. It manages:
  *   1. Daily quest rolling using VRF entropy
- *   2. Per-player progress tracking with day-gated resets
+ *   2. Per-player progress tracking with day-gated resets, keyed by the uint32 Game wallet
+ *      ID (callers pass the nonzero ID they hold; Quests has no player entry points)
  *   3. Streak accounting with fixed rewards/targets
  *
  * Security Model
@@ -51,7 +53,8 @@ import {EntropyLib} from "./libraries/EntropyLib.sol";
  * • Player-action handlers are `onlyCoin`-gated (COIN/COINFLIP/GAME/AFFILIATE)
  * • Rolling, afking, streak awards, and the foil handler are `onlyGame`-gated
  * • Game address fixed at deploy time
- * • External calls only to the trusted questGame (reads + recordAfkingSecondary/floorAfkingStreakBase) and coinflip.creditFlip
+ * • External calls only to the trusted questGame (reads, including the wallet table at a level-quest
+ *   completion, + recordAfkingSecondary/floorAfkingStreakBase) and coinflip.creditFlip
  * • No ETH handling or callbacks — reentrancy is not a concern
  *
  * Quest Lifecycle
@@ -109,7 +112,7 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /// @notice Emitted when player quest progress is updated.
     event QuestProgressUpdated(
-        address indexed player,
+        uint32 indexed playerId,
         uint24 indexed day,
         uint8 indexed slot,
         uint8 questType,
@@ -119,7 +122,7 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /// @notice Emitted when a quest slot is completed.
     event QuestCompleted(
-        address indexed player,
+        uint32 indexed playerId,
         uint24 indexed day,
         uint8 indexed slot,
         uint8 questType,
@@ -129,7 +132,7 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /// @notice Emitted when quest streak shields are consumed on missed days.
     event QuestStreakShieldUsed(
-        address indexed player,
+        uint32 indexed playerId,
         uint16 used,
         uint16 remaining,
         uint24 currentDay
@@ -137,14 +140,14 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /// @notice Emitted when days with no rolled quest are excluded from streak decay.
     event QuestStreakStallForgiven(
-        address indexed player,
+        uint32 indexed playerId,
         uint32 forgivenDays,
         uint24 currentDay
     );
 
     /// @notice Emitted when quest streak shields are granted (e.g. by a lootbox boon).
     event QuestStreakShieldGranted(
-        address indexed player,
+        uint32 indexed playerId,
         uint16 amount,
         uint8 newTotal
     );
@@ -166,7 +169,7 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /// @notice Emitted when quest streak is manually increased.
     event QuestStreakBonusAwarded(
-        address indexed player,
+        uint32 indexed playerId,
         uint16 amount,
         uint24 newStreak,
         uint24 currentDay
@@ -174,14 +177,14 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /// @notice Emitted when quest streak resets due to missed days.
     event QuestStreakReset(
-        address indexed player,
+        uint32 indexed playerId,
         uint24 previousStreak,
         uint24 currentDay
     );
 
     /// @notice Emitted when a player completes the level quest.
     event LevelQuestCompleted(
-        address indexed player,
+        uint32 indexed playerId,
         uint24 indexed level,
         uint8 questType,
         uint256 reward
@@ -189,7 +192,7 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /// @notice Emitted when a player completes the growth-bet participation quest.
     event GrowthBetQuestCompleted(
-        address indexed player,
+        uint32 indexed playerId,
         uint24 indexed level,
         uint256 reward
     );
@@ -328,6 +331,10 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @dev Reference to the coinflip contract for crediting flip stakes.
     ICoinflip internal constant coinflip = ICoinflip(ContractAddresses.COINFLIP);
 
+    /// @dev Protocol wallet IDs (reserved by the Game at construction).
+    uint32 private constant VAULT_WALLET_ID = 1;
+    uint32 private constant SDGNRS_WALLET_ID = 2;
+
     // =========================================================================
     //                                 STRUCTS
     // =========================================================================
@@ -400,20 +407,17 @@ contract DegenerusQuests is IDegenerusQuests {
     ///         Read/written via `_loadActiveQuests` / `_storeActiveQuests` (one SLOAD/SSTORE per pair).
     uint256 private activeQuestsPacked;
 
-    /// @notice Per-player quest state including progress, streak, and streak shields.
-    mapping(address => PlayerQuestState) private questPlayerState;
-
-    /// @dev Former level quest word. Keep the mapping roots that follow fixed; the active
-    ///      type/version now live in activeQuestsPacked and this reserved slot is never used.
-    uint16 private _reservedLevelQuest;
+    /// @notice Per-wallet quest state including progress, streak, and streak shields, keyed by
+    ///         wallet ID.
+    mapping(uint32 => PlayerQuestState) private questPlayerState;
 
     uint256 private constant LEVEL_QUEST_TYPE_SHIFT = 128;
     uint256 private constant LEVEL_QUEST_VERSION_SHIFT = 136;
     uint256 private constant LEVEL_QUEST_MASK = uint256(type(uint16).max) << LEVEL_QUEST_TYPE_SHIFT;
 
-    /// @notice Per-player level quest state.
+    /// @notice Per-wallet level quest state, keyed by wallet ID.
     ///         Packed: version (8b) | progress (128b) | completed (1b at bit 136).
-    mapping(address => uint256) private levelQuestPlayerState;
+    mapping(uint32 => uint256) private levelQuestPlayerState;
 
     /// @notice Bitmap of calendar days on which a daily quest was actually published.
     /// @dev Keyed by day / 256; bit day % 256. Decay scans only the words spanning the
@@ -610,31 +614,31 @@ contract DegenerusQuests is IDegenerusQuests {
      * @notice Award quest streak bonus to a player.
      * @dev Access: GAME contract only.
      *      Does not alter per-day completion snapshots.
-     *      Silently returns if player is zero address, amount is zero, or currentDay is zero.
+     *      Silently returns if amount is zero or currentDay is zero.
      *      Clamps at uint16 max on overflow.
-     * @param player The player to receive the streak bonus.
+     * @param id Wallet ID of the player to receive the streak bonus.
      * @param amount Number of streak days to add.
      * @param currentDay The caller's current calendar day; synchronization is pinned to the
      *        newest rolled quest day when one exists.
      * @custom:reverts OnlyGame When caller is not the GAME contract.
      */
-    function awardQuestStreakBonus(address player, uint16 amount, uint24 currentDay) external {
+    function awardQuestStreakBonus(uint32 id, uint16 amount, uint24 currentDay) external {
         // The whole-day craps ticket's streak credit does NOT come through this door: it rides
         // the burn's flag byte into recordCrapsAction, which reaches the same private body.
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
-        _awardStreakBonus(player, amount, currentDay);
+        _awardStreakBonus(id, amount, currentDay);
     }
 
     /// @dev The streak-bonus body, callable from inside this contract. `recordCrapsAction` reaches
     ///      it for the whole-day craps ticket so the period-0 purchase keeps its +1/+5 without a
     ///      second Craps->Quests call on top of the burn it already routes through FLIP.
-    function _awardStreakBonus(address player, uint16 amount, uint24 currentDay) private {
-        if (player == address(0) || amount == 0 || currentDay == 0) return;
+    function _awardStreakBonus(uint32 id, uint16 amount, uint24 currentDay) private {
+        if (amount == 0 || currentDay == 0) return;
 
-        PlayerQuestState storage state = questPlayerState[player];
+        PlayerQuestState storage state = questPlayerState[id];
         uint24 questDay = _currentQuestDayFast();
         uint24 syncDay = questDay == 0 ? currentDay : questDay;
-        _questSyncState(state, player, syncDay);
+        _questSyncState(state, id, syncDay);
 
         // While afking the manual streak is dormant and finalizeAfking overwrites it; writing it
         // here would discard the bonus at finalize and orphan a century shield granted off the
@@ -643,7 +647,7 @@ contract DegenerusQuests is IDegenerusQuests {
         // secondary completions already do, so it is reconciled into the earned streak and the
         // century shield is granted once off the reconciled value at finalize.
         if (state.afkingActive) {
-            questGame.recordAfkingSecondary(player, amount);
+            questGame.recordAfkingSecondary(id, amount);
             return;
         }
 
@@ -651,12 +655,12 @@ contract DegenerusQuests is IDegenerusQuests {
         uint32 updated = uint32(prevStreak) + uint32(amount);
         uint16 newStreak = updated > type(uint16).max ? type(uint16).max : uint16(updated);
         state.streak = newStreak;
-        _grantCenturyShield(player, state);
+        _grantCenturyShield(id, state);
 
         if (state.lastActiveDay < syncDay) {
             state.lastActiveDay = syncDay;
         }
-        emit QuestStreakBonusAwarded(player, amount, newStreak, syncDay);
+        emit QuestStreakBonusAwarded(id, amount, newStreak, syncDay);
     }
 
     /// @dev A foil purchase guarantees a quest streak of at least this floor.
@@ -673,14 +677,14 @@ contract DegenerusQuests is IDegenerusQuests {
      *      days (independent of state.streak), the same floor is applied to that base via the
      *      afking module — before the manual-streak early-return below, so it reaches the afker
      *      even when their manual streak is already at the floor.
-     * @param player The player who bought the foil pack.
+     * @param id Wallet ID of the player who bought the foil pack.
      */
-    function _foilStreakFloor(address player, PlayerQuestState storage state, uint24 currentDay) private {
-        if (player == address(0) || currentDay == 0) return;
+    function _foilStreakFloor(uint32 id, PlayerQuestState storage state, uint24 currentDay) private {
+        if (currentDay == 0) return;
         // The primary/foil leg already synced this day. Neither its credit nor the
         // afking callbacks can roll quests or reset lastSyncDay.
         if (state.afkingActive) {
-            questGame.floorAfkingStreakBase(player, FOIL_STREAK_FLOOR);
+            questGame.floorAfkingStreakBase(id, FOIL_STREAK_FLOOR);
         }
         uint16 prev = state.streak;
         if (prev >= FOIL_STREAK_FLOOR) return;
@@ -688,26 +692,26 @@ contract DegenerusQuests is IDegenerusQuests {
         if (state.lastActiveDay < currentDay) {
             state.lastActiveDay = currentDay;
         }
-        emit QuestStreakBonusAwarded(player, FOIL_STREAK_FLOOR - prev, FOIL_STREAK_FLOOR, currentDay);
+        emit QuestStreakBonusAwarded(id, FOIL_STREAK_FLOOR - prev, FOIL_STREAK_FLOOR, currentDay);
     }
 
     /**
      * @notice Grant quest streak shields to a player. Each shield absorbs one missed day,
      *         preserving the streak instead of resetting it (consumed in `_questSyncState`).
      * @dev Access: GAME contract only (the lootbox quest-shield boon routes through GAME).
-     *      Silently returns on zero address / zero amount. The shield count is a uint8 and
+     *      Silently returns on zero amount. The shield count is a uint8 and
      *      saturates at 255 — far above any reachable balance.
-     * @param player The player to receive shields.
+     * @param id Wallet ID of the player to receive shields.
      * @param amount Number of shields to add.
      * @custom:reverts OnlyGame When caller is not GAME contract.
      */
-    function awardQuestStreakShield(address player, uint16 amount) external onlyGame {
-        if (player == address(0) || amount == 0) return;
-        PlayerQuestState storage state = questPlayerState[player];
+    function awardQuestStreakShield(uint32 id, uint16 amount) external onlyGame {
+        if (amount == 0) return;
+        PlayerQuestState storage state = questPlayerState[id];
         uint256 updated = uint256(state.streakShield) + amount;
         uint8 newShield = updated > type(uint8).max ? type(uint8).max : uint8(updated);
         state.streakShield = newShield;
-        emit QuestStreakShieldGranted(player, amount, newShield);
+        emit QuestStreakShieldGranted(id, amount, newShield);
     }
 
     /// @dev Milestone streak-shield grant. Called after every write to `state.streak`: each
@@ -719,7 +723,7 @@ contract DegenerusQuests is IDegenerusQuests {
     ///      is a uint8 and saturates at century 255 (streak 25,500); past that bound every write
     ///      recomputes an owed grant and can refill shields already consumed. Reuses streakShield
     ///      consumed in `_questSyncState`.
-    function _grantCenturyShield(address player, PlayerQuestState storage state) private {
+    function _grantCenturyShield(uint32 id, PlayerQuestState storage state) private {
         uint256 century = uint256(state.streak) / CENTURY_SHIELD_INTERVAL;
         uint256 highWater = state.shieldCenturyHighWater;
         if (century < highWater) {
@@ -736,7 +740,7 @@ contract DegenerusQuests is IDegenerusQuests {
             : owed;
         uint8 newShield = uint8(held + granted);
         state.streakShield = newShield;
-        emit QuestStreakShieldGranted(player, uint16(granted), newShield);
+        emit QuestStreakShieldGranted(id, uint16(granted), newShield);
     }
 
     /**
@@ -749,22 +753,21 @@ contract DegenerusQuests is IDegenerusQuests {
      *
      *      Syncs day-reset state first (applying any pending gap-decay) so the snapshot is
      *      honest, then sets `afkingActive`. Does not touch the slot-1 quest.
-     * @param player The subscriber starting an afking run.
+     * @param id Wallet ID of the subscriber starting an afking run.
      * @param currentDay The caller's current calendar day; synchronization is pinned to the
      *        newest rolled quest day when one exists.
      * @return streak The player's gap-synced streak at the start of the run.
      * @custom:reverts OnlyGame When caller is not GAME contract.
      */
-    function beginAfking(address player, uint24 currentDay)
+    function beginAfking(uint32 id, uint24 currentDay)
         external
         onlyGame
         returns (uint24 streak)
     {
-        if (player == address(0)) return 0;
-        PlayerQuestState storage state = questPlayerState[player];
+        PlayerQuestState storage state = questPlayerState[id];
         uint24 questDay = _currentQuestDayFast();
         uint24 syncDay = questDay == 0 ? currentDay : questDay;
-        if (syncDay != 0) _questSyncState(state, player, syncDay);
+        if (syncDay != 0) _questSyncState(state, id, syncDay);
         streak = state.streak;
         state.afkingActive = true;
     }
@@ -785,7 +788,7 @@ contract DegenerusQuests is IDegenerusQuests {
      *      `afkingActive`. A
      *      double-call (cancel then in-stage reclaim) is safe: the second finds `afkingActive`
      *      already false and returns.
-     * @param player The subscriber whose run is ending.
+     * @param id Wallet ID of the subscriber whose run is ending.
      * @param earnedStreak The run's earned streak (snapshot + funded delivered days), Game-computed.
      * @param afkingCoveredDay The Game-side handback anchor (the day before the sub ended,
      *        floored at the afking funded high-water day).
@@ -793,13 +796,12 @@ contract DegenerusQuests is IDegenerusQuests {
      * @custom:reverts OnlyGame When caller is not GAME contract.
      */
     function finalizeAfking(
-        address player,
+        uint32 id,
         uint24 earnedStreak,
         uint24 afkingCoveredDay,
         uint24 currentDay
     ) external onlyGame {
-        if (player == address(0)) return;
-        PlayerQuestState storage state = questPlayerState[player];
+        PlayerQuestState storage state = questPlayerState[id];
         if (!state.afkingActive) return; // idempotent: already finalized / never afking
         uint24 lastValid = afkingCoveredDay;
         if (state.lastActiveDay > lastValid) lastValid = state.lastActiveDay;
@@ -810,22 +812,22 @@ contract DegenerusQuests is IDegenerusQuests {
         );
         uint24 finalStreak = missedDays == 0 ? earnedStreak : 0;
         state.streak = finalStreak > type(uint16).max ? type(uint16).max : uint16(finalStreak);
-        _grantCenturyShield(player, state);
+        _grantCenturyShield(id, state);
 
         state.lastActiveDay = lastValid;
         state.lastCompletedDay = lastValid;
         state.afkingActive = false;
         if (forgivenDays != 0) {
-            emit QuestStreakStallForgiven(player, forgivenDays, currentDay);
+            emit QuestStreakStallForgiven(id, forgivenDays, currentDay);
         }
-        emit QuestStreakBonusAwarded(player, 0, finalStreak, lastValid);
+        emit QuestStreakBonusAwarded(id, 0, finalStreak, lastValid);
     }
 
     // =========================================================================
     //                      PROGRESS HANDLERS (COIN-ONLY)
     // =========================================================================
     // All handle* functions follow a common pattern:
-    // 1. Early-exit if player/amount invalid or no active quest day
+    // 1. Early-exit if amount invalid or no active quest day
     // 2. Sync player state (reset streak if day missed, snapshot baseStreak)
     // 3. Find matching quest slot for the action type
     // 4. Sync slot progress (reset if day changed)
@@ -842,7 +844,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @notice Handle flip-stake progress credited in FLIP base units (18 decimals).
      * @dev Access: COIN, COINFLIP, GAME, or AFFILIATE contract only (`onlyCoin`).
      *      Progress tracks cumulative flip volume for the day.
-     * @param player The player who staked FLIP.
+     * @param id Wallet ID of the deposit's funder (the player who staked FLIP or paid for the gift).
      * @param flipCredit Amount of FLIP staked (in base units).
      * @return reward FLIP tokens earned (in base units, 18 decimals).
      * @return questType The type of quest that was processed.
@@ -851,7 +853,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @custom:reverts OnlyCoin When caller is not COIN, COINFLIP, GAME, or AFFILIATE.
      */
     function handleFlip(
-        address player,
+        uint32 id,
         uint256 flipCredit
     )
         external
@@ -860,12 +862,12 @@ contract DegenerusQuests is IDegenerusQuests {
     {
         DailyQuest[QUEST_SLOT_COUNT] memory quests = _loadActiveQuests();
         uint24 currentDay = _currentQuestDay(quests);
-        PlayerQuestState storage state = questPlayerState[player];
-        if (player == address(0) || flipCredit == 0 || currentDay == 0) {
+        PlayerQuestState storage state = questPlayerState[id];
+        if (flipCredit == 0 || currentDay == 0) {
             return (0, quests[0].questType, state.streak, false);
         }
-        _questSyncState(state, player, currentDay);
-        _handleLevelQuestProgress(player, QUEST_TYPE_FLIP, flipCredit, 0);
+        _questSyncState(state, id, currentDay);
+        _handleLevelQuestProgress(id, QUEST_TYPE_FLIP, flipCredit, 0);
 
         (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(quests, currentDay, QUEST_TYPE_FLIP);
         if (slotIndex == type(uint8).max) {
@@ -879,7 +881,7 @@ contract DegenerusQuests is IDegenerusQuests {
         _setProgressOf(state, slotIndex, progressAfter);
         uint256 target = _questTargetValue(quest, slotIndex, 0);
         emit QuestProgressUpdated(
-            player,
+            id,
             currentDay,
             slotIndex,
             quest.questType,
@@ -893,14 +895,14 @@ contract DegenerusQuests is IDegenerusQuests {
             return (0, quest.questType, state.streak, false);
         }
 
-        return _questCompleteWithPair(player, state, quests, slotIndex, quest, currentDay, 0);
+        return _questCompleteWithPair(id, state, quests, slotIndex, quest, currentDay, 0);
     }
 
     /**
      * @notice Handle decimator burns counted in FLIP base units (18 decimals).
      * @dev Access: COIN, COINFLIP, GAME, or AFFILIATE contract only (`onlyCoin`).
      *      Decimator quests share the same FLIP target as flip quests (2000 FLIP).
-     * @param player The player who performed the decimator burn.
+     * @param id Wallet ID of the player who performed the decimator burn.
      * @param burnAmount Amount of FLIP burned (in base units).
      * @return reward FLIP tokens earned (in base units, 18 decimals).
      * @return questType The type of quest that was processed.
@@ -909,7 +911,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @custom:reverts OnlyCoin When caller is not COIN, COINFLIP, GAME, or AFFILIATE.
      */
     function handleDecimator(
-        address player,
+        uint32 id,
         uint256 burnAmount
     )
         external
@@ -918,12 +920,12 @@ contract DegenerusQuests is IDegenerusQuests {
     {
         DailyQuest[QUEST_SLOT_COUNT] memory quests = _loadActiveQuests();
         uint24 currentDay = _currentQuestDay(quests);
-        PlayerQuestState storage state = questPlayerState[player];
-        if (player == address(0) || burnAmount == 0 || currentDay == 0) {
+        PlayerQuestState storage state = questPlayerState[id];
+        if (burnAmount == 0 || currentDay == 0) {
             return (0, quests[0].questType, state.streak, false);
         }
-        _questSyncState(state, player, currentDay);
-        _handleLevelQuestProgress(player, QUEST_TYPE_DECIMATOR, burnAmount, 0);
+        _questSyncState(state, id, currentDay);
+        _handleLevelQuestProgress(id, QUEST_TYPE_DECIMATOR, burnAmount, 0);
 
         (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(quests, currentDay, QUEST_TYPE_DECIMATOR);
         if (slotIndex == type(uint8).max) {
@@ -936,7 +938,7 @@ contract DegenerusQuests is IDegenerusQuests {
         _setProgressOf(state, slotIndex, progressAfter);
         uint256 target = _questTargetValue(quest, slotIndex, 0);
         emit QuestProgressUpdated(
-            player,
+            id,
             currentDay,
             slotIndex,
             quest.questType,
@@ -949,9 +951,9 @@ contract DegenerusQuests is IDegenerusQuests {
         if (_secondaryLocked(state, slotIndex)) {
             return (0, quest.questType, state.streak, false);
         }
-        (reward, questType, streak, completed) = _questCompleteWithPair(player, state, quests, slotIndex, quest, currentDay, 0);
+        (reward, questType, streak, completed) = _questCompleteWithPair(id, state, quests, slotIndex, quest, currentDay, 0);
         if (completed && reward != 0) {
-            coinflip.creditFlip(player, reward);
+            coinflip.creditFlip(id, reward);
         }
     }
 
@@ -981,13 +983,13 @@ contract DegenerusQuests is IDegenerusQuests {
      *
      *      Both craps quests are PASS/FAIL: one qualifying action completes them, counted the way
      *      FOIL is rather than accumulated.
-     * @param player The player who paid for the action.
+     * @param id Wallet ID of the player who paid for the action.
      * @param actionFlags CRAPS_FLAG_* bits describing what the burn bought.
      * @custom:reverts OnlyCoin When caller is not the COIN contract.
      */
-    function recordCrapsAction(address player, uint8 actionFlags) external {
+    function recordCrapsAction(uint32 id, uint8 actionFlags) external {
         if (msg.sender != ContractAddresses.COIN) revert OnlyCoin();
-        if (player == address(0) || actionFlags == 0) return;
+        if (actionFlags == 0) return;
 
         // Sync the day-lapse state ONCE, before either quest leg. `_handleLevelQuestProgress`
         // credits the streak on completion and, exactly like every other handler's call into it,
@@ -995,13 +997,13 @@ contract DegenerusQuests is IDegenerusQuests {
         // same sync idempotently. Without this the pass-only path — a `buyFutureCrapsDays` burn —
         // would bump a streak that a missed day should have reset.
         uint24 questDay = _currentQuestDayFast();
-        if (questDay != 0) _questSyncState(questPlayerState[player], player, questDay);
+        if (questDay != 0) _questSyncState(questPlayerState[id], id, questDay);
 
         // The whole-day ticket's streak credit. Reached through the private body so the period-0
         // purchase keeps its +1/+5 off the burn it already routes here.
         if (actionFlags & (CRAPS_FLAG_STREAK_NORMAL | CRAPS_FLAG_STREAK_HIGH) != 0) {
             _awardStreakBonus(
-                player,
+                id,
                 actionFlags & CRAPS_FLAG_STREAK_HIGH != 0
                     ? CRAPS_DAY_STREAK_HIGH
                     : CRAPS_DAY_STREAK,
@@ -1010,12 +1012,12 @@ contract DegenerusQuests is IDegenerusQuests {
         }
 
         if (actionFlags & CRAPS_FLAG_PASS != 0) {
-            _handleLevelQuestProgress(player, QUEST_TYPE_CRAPS_DAY_PASS, QUEST_CRAPS_TARGET, 0);
+            _handleLevelQuestProgress(id, QUEST_TYPE_CRAPS_DAY_PASS, QUEST_CRAPS_TARGET, 0);
         }
 
         if (actionFlags & CRAPS_FLAG_JOIN != 0) {
-            uint256 reward = _crapsJoinQuest(player);
-            if (reward != 0) coinflip.creditFlip(player, reward);
+            uint256 reward = _crapsJoinQuest(id);
+            if (reward != 0) coinflip.creditFlip(id, reward);
         }
     }
 
@@ -1023,12 +1025,12 @@ contract DegenerusQuests is IDegenerusQuests {
     ///      one action, no accumulation. Private: it returns the reward for `recordCrapsAction`
     ///      to credit.
     /// @return reward FLIP earned, for the caller to credit (0 when nothing completed).
-    function _crapsJoinQuest(address player) private returns (uint256 reward) {
+    function _crapsJoinQuest(uint32 id) private returns (uint256 reward) {
         DailyQuest[QUEST_SLOT_COUNT] memory quests = _loadActiveQuests();
         uint24 currentDay = _currentQuestDay(quests);
         if (currentDay == 0) return 0;
-        PlayerQuestState storage state = questPlayerState[player];
-        _questSyncState(state, player, currentDay);
+        PlayerQuestState storage state = questPlayerState[id];
+        _questSyncState(state, id, currentDay);
 
         (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(
             quests,
@@ -1044,7 +1046,7 @@ contract DegenerusQuests is IDegenerusQuests {
         _setProgressOf(state, slotIndex, progressAfter);
         uint256 target = _questTargetValue(quest, slotIndex, 0);
         emit QuestProgressUpdated(
-            player,
+            id,
             currentDay,
             slotIndex,
             quest.questType,
@@ -1056,7 +1058,7 @@ contract DegenerusQuests is IDegenerusQuests {
 
         bool completed;
         (reward, , , completed) = _questCompleteWithPair(
-            player,
+            id,
             state,
             quests,
             slotIndex,
@@ -1070,7 +1072,7 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @dev Foil secondary-quest progression (see handleFoilPurchase). Private so the streak
     ///      floor runs unconditionally after it, across all of its early-return paths.
     function _handleFoilPackQuest(
-        address player,
+        uint32 id,
         PlayerQuestState storage state,
         DailyQuest[QUEST_SLOT_COUNT] memory quests,
         uint24 currentDay,
@@ -1079,10 +1081,10 @@ contract DegenerusQuests is IDegenerusQuests {
         private
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
-        if (player == address(0) || currentDay == 0) {
+        if (currentDay == 0) {
             return (0, quests[0].questType, state.streak, false);
         }
-        if (needsSync) _questSyncState(state, player, currentDay);
+        if (needsSync) _questSyncState(state, id, currentDay);
 
         (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(
             quests,
@@ -1099,7 +1101,7 @@ contract DegenerusQuests is IDegenerusQuests {
         _setProgressOf(state, slotIndex, progressAfter);
         uint256 target = _questTargetValue(quest, slotIndex, 0);
         emit QuestProgressUpdated(
-            player,
+            id,
             currentDay,
             slotIndex,
             quest.questType,
@@ -1113,7 +1115,7 @@ contract DegenerusQuests is IDegenerusQuests {
             return (0, quest.questType, state.streak, false);
         }
         (reward, questType, streak, completed) = _questCompleteWithPair(
-            player,
+            id,
             state,
             quests,
             slotIndex,
@@ -1122,14 +1124,14 @@ contract DegenerusQuests is IDegenerusQuests {
             0
         );
         if (completed && reward != 0) {
-            coinflip.creditFlip(player, reward);
+            coinflip.creditFlip(id, reward);
         }
     }
 
     /**
      * @notice Handle affiliate earnings credited in FLIP base units (18 decimals).
      * @dev Access: COIN, COINFLIP, GAME, or AFFILIATE contract only (`onlyCoin`).
-     * @param player The affiliate who earned commission.
+     * @param id Wallet ID of the affiliate (code owner or upline) who earned commission.
      * @param amount FLIP earned from affiliate referrals (in base units).
      * @return reward FLIP tokens earned (in base units, 18 decimals).
      * @return questType The type of quest that was processed.
@@ -1138,7 +1140,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @custom:reverts OnlyCoin When caller is not COIN, COINFLIP, GAME, or AFFILIATE.
      */
     function handleAffiliate(
-        address player,
+        uint32 id,
         uint256 amount
     )
         external
@@ -1147,12 +1149,12 @@ contract DegenerusQuests is IDegenerusQuests {
     {
         DailyQuest[QUEST_SLOT_COUNT] memory quests = _loadActiveQuests();
         uint24 currentDay = _currentQuestDay(quests);
-        PlayerQuestState storage state = questPlayerState[player];
-        if (player == address(0) || amount == 0 || currentDay == 0) {
+        PlayerQuestState storage state = questPlayerState[id];
+        if (amount == 0 || currentDay == 0) {
             return (0, quests[0].questType, state.streak, false);
         }
-        _questSyncState(state, player, currentDay);
-        _handleLevelQuestProgress(player, QUEST_TYPE_AFFILIATE, amount, 0);
+        _questSyncState(state, id, currentDay);
+        _handleLevelQuestProgress(id, QUEST_TYPE_AFFILIATE, amount, 0);
 
         (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(quests, currentDay, QUEST_TYPE_AFFILIATE);
         if (slotIndex == type(uint8).max) {
@@ -1165,7 +1167,7 @@ contract DegenerusQuests is IDegenerusQuests {
         _setProgressOf(state, slotIndex, progressAfter);
         uint256 target = _questTargetValue(quest, slotIndex, 0);
         emit QuestProgressUpdated(
-            player,
+            id,
             currentDay,
             slotIndex,
             quest.questType,
@@ -1178,7 +1180,7 @@ contract DegenerusQuests is IDegenerusQuests {
         if (_secondaryLocked(state, slotIndex)) {
             return (0, quest.questType, state.streak, false);
         }
-        return _questCompleteWithPair(player, state, quests, slotIndex, quest, currentDay, 0);
+        return _questCompleteWithPair(id, state, quests, slotIndex, quest, currentDay, 0);
     }
 
     /**
@@ -1188,7 +1190,7 @@ contract DegenerusQuests is IDegenerusQuests {
      *      No reward is credited here; the ETH-mint, FLIP-mint, and lootbox rewards are summed
      *      and returned for the caller to credit exactly once. Returns streak for compute-once
      *      score forwarding.
-     * @param player The player who purchased.
+     * @param id Wallet ID of the player who purchased.
      * @param ethMintSpendWei Gross ETH-denominated spend on tickets + lootbox in wei
      *        (fresh + recycled), credited to the MINT_ETH quest (daily progress in milli-ETH after
      *        per-action truncation; level progress in wei).
@@ -1204,7 +1206,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @custom:reverts OnlyCoin When caller is not COIN, COINFLIP, GAME, or AFFILIATE.
      */
     function handlePurchase(
-        address player,
+        uint32 id,
         uint256 ethMintSpendWei,
         uint32 flipMintQty,
         uint256 lootBoxAmount,
@@ -1216,12 +1218,12 @@ contract DegenerusQuests is IDegenerusQuests {
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed, bool afking)
     {
         (reward, questType, streak, completed) = _handlePurchase(
-            player, ethMintSpendWei, flipMintQty, lootBoxAmount, mintPrice, levelQuestPrice,
+            id, ethMintSpendWei, flipMintQty, lootBoxAmount, mintPrice, levelQuestPrice,
             _loadActiveQuests()
         );
         // This player word was already loaded by the handler. Forward its run flag so
         // score consumers need the Game-side Sub word only for an afking player.
-        afking = questPlayerState[player].afkingActive;
+        afking = questPlayerState[id].afkingActive;
     }
 
     /**
@@ -1234,7 +1236,7 @@ contract DegenerusQuests is IDegenerusQuests {
      *      foil-EV boost freezes against.
      *      The secondary self-credits its FLIP reward; only the primary leg's reward/type/
      *      completion are returned (the caller batches the primary reward).
-     * @param player The player who bought the foil pack.
+     * @param id Wallet ID of the player who bought the foil pack.
      * @param ethMintSpendWei Gross ETH-denominated foil spend in wei, credited 1:1 to MINT_ETH.
      * @param flipMintQty FLIP-paid ticket-equivalent mint units.
      * @param lootBoxAmount ETH spent on lootbox in wei.
@@ -1248,7 +1250,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @custom:reverts OnlyGame When caller is not GAME contract.
      */
     function handleFoilPurchase(
-        address player,
+        uint32 id,
         uint256 ethMintSpendWei,
         uint32 flipMintQty,
         uint256 lootBoxAmount,
@@ -1264,27 +1266,27 @@ contract DegenerusQuests is IDegenerusQuests {
         // update their Sub words, and Coinflip credits cannot roll quests.
         DailyQuest[QUEST_SLOT_COUNT] memory quests = _loadActiveQuests();
         (reward, questType, , completed) = _handlePurchase(
-            player, ethMintSpendWei, flipMintQty, lootBoxAmount, mintPrice, levelQuestPrice,
+            id, ethMintSpendWei, flipMintQty, lootBoxAmount, mintPrice, levelQuestPrice,
             quests
         );
         // Snapshot the reward streak post-primary, pre-floor: the foil-EV boost freezes
         // against this streak, captured before the secondary quest and streak floor below
         // mutate it.
-        PlayerQuestState storage state = questPlayerState[player];
+        PlayerQuestState storage state = questPlayerState[id];
         uint24 currentDay = _currentQuestDay(quests);
         streakSnapshot = _effectiveBaseStreak(state, currentDay);
         _handleFoilPackQuest(
-            player, state, quests, currentDay,
+            id, state, quests, currentDay,
             ethMintSpendWei == 0 && flipMintQty == 0 && lootBoxAmount == 0
         );
-        _foilStreakFloor(player, state, currentDay);
+        _foilStreakFloor(id, state, currentDay);
         afking = state.afkingActive;
     }
 
     /// @dev Shared purchase-path quest legs (mint ETH/FLIP + lootbox). Modifier-less core
     ///      behind handlePurchase (COIN-gated) and handleFoilPurchase (GAME-gated).
     function _handlePurchase(
-        address player,
+        uint32 id,
         uint256 ethMintSpendWei,
         uint32 flipMintQty,
         uint256 lootBoxAmount,
@@ -1296,15 +1298,15 @@ contract DegenerusQuests is IDegenerusQuests {
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
         uint24 currentDay = _currentQuestDay(quests);
-        PlayerQuestState storage state = questPlayerState[player];
-        if (player == address(0) || currentDay == 0) {
+        PlayerQuestState storage state = questPlayerState[id];
+        if (currentDay == 0) {
             return (0, quests[0].questType, state.streak, false);
         }
         if (ethMintSpendWei == 0 && flipMintQty == 0 && lootBoxAmount == 0) {
             return (0, quests[0].questType, state.streak, false);
         }
 
-        _questSyncState(state, player, currentDay);
+        _questSyncState(state, id, currentDay);
 
         uint256 ethMintReward;
         uint256 flipMintReward;
@@ -1323,7 +1325,7 @@ contract DegenerusQuests is IDegenerusQuests {
                 outQuestType = QUEST_TYPE_MINT_ETH;
                 uint256 target = _questTargetValue(quest, 0, mintPrice);
                 (uint256 r, uint8 qt, uint32 s, bool c) = _questHandleProgressSlot(
-                    player, state, quests, quest, 0,
+                    id, state, quests, quest, 0,
                     ethMintSpendWei, target, currentDay, mintPrice,
                     QUEST_TYPE_MINT_ETH, ethMintSpendWei,
                     levelQuestPrice
@@ -1335,7 +1337,7 @@ contract DegenerusQuests is IDegenerusQuests {
                     anyCompleted = true;
                 }
             } else {
-                _handleLevelQuestProgress(player, QUEST_TYPE_MINT_ETH, ethMintSpendWei, levelQuestPrice);
+                _handleLevelQuestProgress(id, QUEST_TYPE_MINT_ETH, ethMintSpendWei, levelQuestPrice);
             }
         }
 
@@ -1348,7 +1350,7 @@ contract DegenerusQuests is IDegenerusQuests {
                 outQuestType = QUEST_TYPE_MINT_FLIP;
                 uint256 target = _questTargetValue(quest, 1, 0);
                 (uint256 r, uint8 qt, uint32 s, bool c) = _questHandleProgressSlot(
-                    player, state, quests, quest, 1,
+                    id, state, quests, quest, 1,
                     flipMintQty, target, currentDay, 0,
                     QUEST_TYPE_MINT_FLIP, flipMintQty,
                     levelQuestPrice
@@ -1360,13 +1362,13 @@ contract DegenerusQuests is IDegenerusQuests {
                     anyCompleted = true;
                 }
             } else {
-                _handleLevelQuestProgress(player, QUEST_TYPE_MINT_FLIP, flipMintQty, levelQuestPrice);
+                _handleLevelQuestProgress(id, QUEST_TYPE_MINT_FLIP, flipMintQty, levelQuestPrice);
             }
         }
 
         // --- Lootbox quest progress ---
         if (lootBoxAmount != 0) {
-            _handleLevelQuestProgress(player, QUEST_TYPE_LOOTBOX, lootBoxAmount, levelQuestPrice);
+            _handleLevelQuestProgress(id, QUEST_TYPE_LOOTBOX, lootBoxAmount, levelQuestPrice);
 
             (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(quests, currentDay, QUEST_TYPE_LOOTBOX);
             if (slotIndex != type(uint8).max) {
@@ -1377,7 +1379,7 @@ contract DegenerusQuests is IDegenerusQuests {
                 _setProgressOf(state, slotIndex, progressAfter);
                 uint256 target = _questTargetValue(quest, slotIndex, mintPrice);
                 emit QuestProgressUpdated(
-                    player, currentDay, slotIndex, quest.questType,
+                    id, currentDay, slotIndex, quest.questType,
                     uint128(_toNativeProgress(quest.questType, progressAfter)),
                     _toNativeProgress(quest.questType, target)
                 );
@@ -1386,7 +1388,7 @@ contract DegenerusQuests is IDegenerusQuests {
                     bool canComplete = !_secondaryLocked(state, slotIndex);
                     if (canComplete) {
                         (uint256 r, uint8 qt, uint32 s, bool c) = _questCompleteWithPair(
-                            player, state, quests, slotIndex, quest, currentDay, mintPrice
+                            id, state, quests, slotIndex, quest, currentDay, mintPrice
                         );
                         if (c) {
                             lootboxReward += r;
@@ -1413,7 +1415,7 @@ contract DegenerusQuests is IDegenerusQuests {
     /**
      * @notice Handle Degenerette bet progress for a player.
      * @dev Access: COIN, COINFLIP, GAME, or AFFILIATE contract only (`onlyCoin`).
-     * @param player The player who placed the Degenerette bet.
+     * @param id Wallet ID of the bet's funder.
      * @param amount The bet amount (wei for ETH, base units for FLIP).
      * @param paidWithEth True if bet was paid with ETH, false for FLIP.
      * @param mintPrice Current ticket price in wei (0 for FLIP bets).
@@ -1424,7 +1426,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @custom:reverts OnlyCoin When caller is not COIN, COINFLIP, GAME, or AFFILIATE.
      */
     function handleDegenerette(
-        address player,
+        uint32 id,
         uint256 amount,
         bool paidWithEth,
         uint256 mintPrice
@@ -1435,22 +1437,22 @@ contract DegenerusQuests is IDegenerusQuests {
     {
         DailyQuest[QUEST_SLOT_COUNT] memory quests = _loadActiveQuests();
         uint24 currentDay = _currentQuestDay(quests);
-        PlayerQuestState storage state = questPlayerState[player];
-        if (player == address(0) || amount == 0 || currentDay == 0) {
+        PlayerQuestState storage state = questPlayerState[id];
+        if (amount == 0 || currentDay == 0) {
             return (0, quests[0].questType, state.streak, false);
         }
-        _questSyncState(state, player, currentDay);
+        _questSyncState(state, id, currentDay);
 
         uint8 targetType = paidWithEth ? QUEST_TYPE_DEGENERETTE_ETH : QUEST_TYPE_DEGENERETTE_FLIP;
         (DailyQuest memory quest, uint8 slotIndex) = _currentDayQuestOfType(quests, currentDay, targetType);
         if (slotIndex == type(uint8).max) {
-            _handleLevelQuestProgress(player, targetType, amount, mintPrice);
+            _handleLevelQuestProgress(id, targetType, amount, mintPrice);
             return (0, targetType, state.streak, false);
         }
 
         uint256 target = _questTargetValue(quest, slotIndex, mintPrice);
         (reward, questType, streak, completed) = _questHandleProgressSlot(
-            player,
+            id,
             state,
             quests,
             quest,
@@ -1464,7 +1466,7 @@ contract DegenerusQuests is IDegenerusQuests {
             mintPrice
         );
         if (completed && reward != 0) {
-            coinflip.creditFlip(player, reward);
+            coinflip.creditFlip(id, reward);
         }
     }
 
@@ -1500,14 +1502,14 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /**
      * @notice Returns raw player quest state for debugging/analytics.
-     * @param player The player address to query.
+     * @param id Wallet ID of the player to query.
      * @return streak Current streak count.
      * @return lastCompletedDay Last day where a streak was credited (first slot completion).
      * @return progress Per-slot progress values (only valid if the day matches).
      * @return completed Per-slot completion flags for current day.
      */
     function playerQuestStates(
-        address player
+        uint32 id
     )
         external
         view
@@ -1515,7 +1517,7 @@ contract DegenerusQuests is IDegenerusQuests {
         returns (uint32 streak, uint24 lastCompletedDay, uint128[2] memory progress, bool[2] memory completed)
     {
         DailyQuest[QUEST_SLOT_COUNT] memory local = _loadActiveQuests();
-        PlayerQuestState memory state = questPlayerState[player];
+        PlayerQuestState memory state = questPlayerState[id];
         uint24 currentDay = _currentQuestDay(local);
         streak = state.streak;
         lastCompletedDay = state.lastCompletedDay;
@@ -1537,13 +1539,13 @@ contract DegenerusQuests is IDegenerusQuests {
      *         `playerQuestStates` for callers that need only the flags. Costs one
      *         packed quest-pair SLOAD plus one player-state SLOAD; no streak,
      *         progress-validity, or native-unit conversion work.
-     * @param player The player address to query.
+     * @param id Wallet ID of the player to query.
      * @return slot0 True if the player has completed quest slot 0 for its active day.
      * @return slot1 True if the player has completed quest slot 1 for its active day.
      */
-    function questCompletionToday(address player) external view returns (bool slot0, bool slot1) {
+    function questCompletionToday(uint32 id) external view returns (bool slot0, bool slot1) {
         DailyQuest[QUEST_SLOT_COUNT] memory local = _loadActiveQuests();
-        PlayerQuestState memory state = questPlayerState[player];
+        PlayerQuestState memory state = questPlayerState[id];
         slot0 = _questCompleted(state, local[0], 0);
         slot1 = _questCompleted(state, local[1], 1);
     }
@@ -1554,13 +1556,13 @@ contract DegenerusQuests is IDegenerusQuests {
      *      the player's anchor and exceed their streak shields, the effective streak shown is 0,
      *      matching what the next action's sync would do (unrolled stall days do not count).
      *      This is the recommended view function for frontends displaying quest UI.
-     * @param player The player address to query.
+     * @param id Wallet ID of the player to query.
      * @return viewData Comprehensive view including quests, progress, completion, and streak.
      */
-    function getPlayerQuestView(address player) external view returns (PlayerQuestView memory viewData) {
+    function getPlayerQuestView(uint32 id) external view returns (PlayerQuestView memory viewData) {
         DailyQuest[QUEST_SLOT_COUNT] memory local = _materializeActiveQuestsForView();
         uint24 currentDay = _currentQuestDay(local);
-        PlayerQuestState memory state = questPlayerState[player];
+        PlayerQuestState memory state = questPlayerState[id];
 
         viewData.lastCompletedDay = state.lastCompletedDay;
         viewData.baseStreak = _effectiveBaseStreak(state, currentDay);
@@ -1583,11 +1585,11 @@ contract DegenerusQuests is IDegenerusQuests {
     ///         (a cheap read for reward scaling). A streak lapsed past its shields reads 0, so a
     ///         stale-high raw streak (built then abandoned with no quest sync) can't inflate
     ///         downstream reward scaling — lootbox EV or sDGNRS claims.
-    /// @param player The player address to query.
+    /// @param id Wallet ID of the player to query.
     /// @return The effective (decay-applied) reward streak.
-    function effectiveBaseStreak(address player) external view returns (uint32) {
+    function effectiveBaseStreak(uint32 id) external view returns (uint32) {
         return _effectiveBaseStreak(
-            questPlayerState[player],
+            questPlayerState[id],
             _currentQuestDay(_materializeActiveQuestsForView())
         );
     }
@@ -1595,11 +1597,11 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @notice effectiveBaseStreak plus the player's afking-run flag, from the single quest-state
     ///         read, so a Game-side caller can skip its Sub-slot lookup for the common (non-afking)
     ///         player and only an afking player pays the extra Sub read.
-    /// @param player The player address to query.
+    /// @param id Wallet ID of the player to query.
     /// @return streak The effective (decay-applied) reward streak.
     /// @return afking True while the player is mid afking-run.
-    function effectiveBaseStreakAndAfking(address player) external view returns (uint32 streak, bool afking) {
-        PlayerQuestState memory state = questPlayerState[player];
+    function effectiveBaseStreakAndAfking(uint32 id) external view returns (uint32 streak, bool afking) {
+        PlayerQuestState memory state = questPlayerState[id];
         streak = _effectiveBaseStreak(state, _currentQuestDayFast());
         afking = state.afkingActive;
     }
@@ -1608,11 +1610,11 @@ contract DegenerusQuests is IDegenerusQuests {
     ///         already credited a milestone shield this run. Each shield absorbs one
     ///         missed quest day before the streak drops; the century high-water
     ///         re-arms down on a streak reset.
-    /// @param player The player address to query.
+    /// @param id Wallet ID of the player to query.
     /// @return shields Stackable quest-streak shields currently held.
     /// @return centuryHighWater Highest streak-century credited a milestone shield this run.
-    function shieldsOf(address player) external view returns (uint8 shields, uint8 centuryHighWater) {
-        PlayerQuestState storage state = questPlayerState[player];
+    function shieldsOf(uint32 id) external view returns (uint8 shields, uint8 centuryHighWater) {
+        PlayerQuestState storage state = questPlayerState[id];
         shields = state.streakShield;
         centuryHighWater = state.shieldCenturyHighWater;
     }
@@ -1937,7 +1939,7 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /**
      * @dev Processes progress against a given quest slot, updating progress and returning rewards.
-     * @param player Player address for event emission.
+     * @param id Wallet ID for event emission.
      * @param state Storage reference to player's quest state.
      * @param quests Memory copy of active quests (for pair completion check).
      * @param quest The specific quest being processed.
@@ -1955,7 +1957,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @return completed True if completion was successful.
      */
     function _questHandleProgressSlot(
-        address player,
+        uint32 id,
         PlayerQuestState storage state,
         DailyQuest[QUEST_SLOT_COUNT] memory quests,
         DailyQuest memory quest,
@@ -1974,19 +1976,19 @@ contract DegenerusQuests is IDegenerusQuests {
         );
         _setProgressOf(state, slot, progressAfter);
         emit QuestProgressUpdated(
-            player,
+            id,
             quest.day,
             slot,
             quest.questType,
             uint128(_toNativeProgress(quest.questType, progressAfter)),
             _toNativeProgress(quest.questType, target)
         );
-        _handleLevelQuestProgress(player, handlerQuestType, levelDelta, levelQuestPrice);
+        _handleLevelQuestProgress(id, handlerQuestType, levelDelta, levelQuestPrice);
         if (progressAfter >= target) {
             if (_secondaryLocked(state, slot)) {
                 return (0, quest.questType, state.streak, false);
             }
-            return _questCompleteWithPair(player, state, quests, slot, quest, currentDay, mintPrice);
+            return _questCompleteWithPair(id, state, quests, slot, quest, currentDay, mintPrice);
         }
         return (0, quest.questType, state.streak, false);
     }
@@ -2012,10 +2014,10 @@ contract DegenerusQuests is IDegenerusQuests {
      *      baseStreak Snapshot:
      *      - Captures streak at start of day for consistent view rendering
      * @param state Storage reference to player's quest state.
-     * @param player Player address for event emission and streak shield lookup.
+     * @param id Wallet ID for event emission.
      * @param currentDay The current quest day.
      */
-    function _questSyncState(PlayerQuestState storage state, address player, uint24 currentDay) private {
+    function _questSyncState(PlayerQuestState storage state, uint32 id, uint24 currentDay) private {
         if (state.lastSyncDay >= currentDay) return; // already synced this quest day
         uint16 prevStreak = state.streak;
         uint24 anchorDay = state.lastActiveDay != 0 ? state.lastActiveDay : state.lastCompletedDay;
@@ -2037,7 +2039,7 @@ contract DegenerusQuests is IDegenerusQuests {
                 uint32(shieldsBefore) + 1
             );
             if (forgivenDays != 0) {
-                emit QuestStreakStallForgiven(player, forgivenDays, currentDay);
+                emit QuestStreakStallForgiven(id, forgivenDays, currentDay);
             }
             if (missedDays != 0) {
                 uint16 shields = shieldsBefore;
@@ -2046,7 +2048,7 @@ contract DegenerusQuests is IDegenerusQuests {
                     state.streakShield = uint8(shields - uint16(used));
                     if (used != 0) {
                         emit QuestStreakShieldUsed(
-                            player,
+                            id,
                             uint16(used),
                             state.streakShield,
                             currentDay
@@ -2062,7 +2064,7 @@ contract DegenerusQuests is IDegenerusQuests {
         }
         if (prevStreak != 0 && state.streak == 0) {
             state.shieldCenturyHighWater = 0; // streak broke — re-arm so a genuine re-climb re-earns each century shield
-            emit QuestStreakReset(player, prevStreak, currentDay);
+            emit QuestStreakReset(id, prevStreak, currentDay);
         }
         state.lastSyncDay = currentDay;
         state.completionMask = 0;
@@ -2312,7 +2314,7 @@ contract DegenerusQuests is IDegenerusQuests {
      *      - Slot 0 (deposit ETH) pays a fixed 100 FLIP off a run; while afking it pays 0 here
      *        (the run's per-delivered-day pendingFlip accrual is that reward)
      *      - Slot 1 (random quest) pays a fixed 100 FLIP
-     * @param player The completing player (event subject; streak and century-shield bookkeeping).
+     * @param id The completing wallet (event subject; streak and century-shield bookkeeping).
      * @param state Storage reference to player's quest state.
      * @param slot The slot index being completed.
      * @param quest The quest being completed.
@@ -2322,7 +2324,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @return completed True if completion was successful.
      */
     function _questComplete(
-        address player,
+        uint32 id,
         PlayerQuestState storage state,
         uint8 slot,
         DailyQuest memory quest
@@ -2374,19 +2376,19 @@ contract DegenerusQuests is IDegenerusQuests {
                 newStreak += 1;
             }
             state.streak = uint16(newStreak);
-            _grantCenturyShield(player, state);
+            _grantCenturyShield(id, state);
             if (slot == 0) {
                 state.lastCompletedDay = questDay24;
             }
         } else if (slot == 1) {
-            questGame.recordAfkingSecondary(player, 1);
+            questGame.recordAfkingSecondary(id, 1);
         }
 
         uint256 rewardShare = slot == 1
             ? QUEST_RANDOM_REWARD
             : (afking ? 0 : QUEST_SLOT0_REWARD);
         emit QuestCompleted(
-            player,
+            id,
             quest.day,
             slot,
             quest.questType,
@@ -2401,7 +2403,7 @@ contract DegenerusQuests is IDegenerusQuests {
      *      This function enables "combo completion" where completing one quest
      *      can automatically complete the other if its progress already meets target.
      *      This is a UX optimization to avoid requiring separate transactions.
-     * @param player The completing player, forwarded to `_questComplete` and the pair check.
+     * @param id The completing wallet, forwarded to `_questComplete` and the pair check.
      * @param state Storage reference to player's quest state.
      * @param quests Memory copy of active quests.
      * @param slot The slot being completed.
@@ -2414,7 +2416,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @return completed True if completion was successful.
      */
     function _questCompleteWithPair(
-        address player,
+        uint32 id,
         PlayerQuestState storage state,
         DailyQuest[QUEST_SLOT_COUNT] memory quests,
         uint8 slot,
@@ -2426,7 +2428,7 @@ contract DegenerusQuests is IDegenerusQuests {
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed)
     {
         (reward, questType, streak, completed) = _questComplete(
-            player,
+            id,
             state,
             slot,
             quest
@@ -2450,7 +2452,7 @@ contract DegenerusQuests is IDegenerusQuests {
             uint8 extraType,
             uint32 extraStreak,
             bool extraCompleted
-        ) = _maybeCompleteOther(player, state, quests, otherSlot, currentDay, mintPrice);
+        ) = _maybeCompleteOther(id, state, quests, otherSlot, currentDay, mintPrice);
 
         // Aggregate rewards from paired completion
         if (extraCompleted) {
@@ -2464,7 +2466,7 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /**
      * @dev Attempts to complete the other slot if its progress meets the target.
-     * @param player The completing player, forwarded to `_questComplete`.
+     * @param id The completing wallet, forwarded to `_questComplete`.
      * @param state Storage reference to player's quest state.
      * @param quests Memory copy of active quests.
      * @param slot The slot to check for completion.
@@ -2476,7 +2478,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @return completed True if completion was successful.
      */
     function _maybeCompleteOther(
-        address player,
+        uint32 id,
         PlayerQuestState storage state,
         DailyQuest[QUEST_SLOT_COUNT] memory quests,
         uint8 slot,
@@ -2501,7 +2503,7 @@ contract DegenerusQuests is IDegenerusQuests {
             return (0, quest.questType, state.streak, false);
         }
 
-        return _questComplete(player, state, slot, quest);
+        return _questComplete(id, state, slot, quest);
     }
 
     /**
@@ -2618,19 +2620,23 @@ contract DegenerusQuests is IDegenerusQuests {
         );
     }
 
-    /// @dev Checks if a player is eligible for the level quest.
-    ///      Requires (levelStreak >= 5 OR any pass ever held) AND a whole ticket's worth
-    ///      of units (400 = 4 entries x the 100x quantity scale) minted at the current
-    ///      or next ticket level.
-    /// @param player The player address to check.
+    /// @dev Checks if a wallet is eligible for the level quest: resolves the account key (the
+    ///      protocol wallets by constant, every other ID through the wallet table), then applies
+    ///      the gates to its mint word.
+    /// @param id The wallet ID to check.
     /// @param lvl The current game level (fetched once by the caller).
-    /// @return True if the player meets both gates.
-    function _isLevelQuestEligible(address player, uint24 lvl) internal view returns (bool) {
-        return _isLevelQuestEligible(player, lvl, questGame.mintPackedFor(player));
+    /// @return True if the wallet meets both gates.
+    function _isLevelQuestEligible(uint32 id, uint24 lvl) internal view returns (bool) {
+        address key = id == VAULT_WALLET_ID
+            ? ContractAddresses.VAULT
+            : (id == SDGNRS_WALLET_ID ? ContractAddresses.SDGNRS : WalletTableLib.ownerOf(id));
+        return _levelQuestEligible(lvl, questGame.mintPackedFor(key));
     }
 
-    /// @dev Same gates with a caller-owned mint snapshot; only the deity fallback reads Game.
-    function _isLevelQuestEligible(address player, uint24 lvl, uint256 packed) private view returns (bool) {
+    /// @dev The level-quest gates on a mint word: (levelStreak >= 5 OR any pass ever held) AND
+    ///      a whole ticket's worth of units (400 = 4 entries x the 100x quantity scale) minted
+    ///      at the current or next ticket level.
+    function _levelQuestEligible(uint24 lvl, uint256 packed) private pure returns (bool) {
         // Activity gate: one whole ticket minted for this level's window. Jackpot-phase
         // buys tag units with `lvl` (tickets target the current level), purchase-phase
         // buys tag `lvl + 1` — either satisfies the quest.
@@ -2650,8 +2656,8 @@ contract DegenerusQuests is IDegenerusQuests {
         uint8 passType = uint8((packed >> BitPackingLib.WHALE_PASS_TYPE_SHIFT) & 0x3);
         if (frozen > 0 && passType != 0) return true;
 
-        // Deity pass fallback (separate SLOAD)
-        return questGame.hasDeityPass(player);
+        // Deity pass bit of the same word
+        return (packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT) & 1 != 0;
     }
 
     /// @dev Returns the 10x target for a level quest type.
@@ -2686,12 +2692,12 @@ contract DegenerusQuests is IDegenerusQuests {
     ///      to get both the active type and the current version. Short-circuits on type mismatch before any
     ///      player state read. Eligibility is deferred to the completion boundary —
     ///      an ineligible player keeps accumulating progress and completes once they later qualify.
-    /// @param player The player earning progress.
+    /// @param id Wallet ID of the player earning progress.
     /// @param handlerQuestType The quest type this handler tracks.
     /// @param delta The progress delta (units match quest type).
     /// @param mintPrice Current mint price in wei (for ETH-based targets; 0 for FLIP types).
     function _handleLevelQuestProgress(
-        address player,
+        uint32 id,
         uint8 handlerQuestType,
         uint256 delta,
         uint256 mintPrice
@@ -2703,7 +2709,7 @@ contract DegenerusQuests is IDegenerusQuests {
         if (lqType != handlerQuestType) return;
 
         uint8 currentVersion = uint8(active >> LEVEL_QUEST_VERSION_SHIFT);
-        uint256 packed = levelQuestPlayerState[player];
+        uint256 packed = levelQuestPlayerState[id];
         uint8 playerVersion = uint8(packed);
 
         // Version mismatch: reset stale progress from previous level's quest
@@ -2726,15 +2732,15 @@ contract DegenerusQuests is IDegenerusQuests {
             // Gate eligibility only at completion; the level is fetched once and
             // shared with the completion event.
             uint24 lvl = questGame.level();
-            if (!_isLevelQuestEligible(player, lvl)) {
+            if (!_isLevelQuestEligible(id, lvl)) {
                 packed = uint256(currentVersion) | (uint256(progress) << 8);
-                levelQuestPlayerState[player] = packed;
+                levelQuestPlayerState[id] = packed;
                 return;
             }
             packed = uint256(currentVersion)
                    | (uint256(progress) << 8)
                    | (uint256(1) << 136);
-            levelQuestPlayerState[player] = packed;
+            levelQuestPlayerState[id] = packed;
 
             // Level-quest completion advances the quest streak by LEVEL_QUEST_STREAK_BONUS (a daily
             // quest is +1) without touching the primary reset anchor (lastActiveDay), so the
@@ -2742,20 +2748,20 @@ contract DegenerusQuests is IDegenerusQuests {
             // streak (saturating at uint16 max, mirroring awardQuestStreakBonus); while afking it
             // bumps the Sub streak base by the same amount so the unified score reflects it. The
             // calling handler synced the player state for the current day before this runs.
-            PlayerQuestState storage qs = questPlayerState[player];
+            PlayerQuestState storage qs = questPlayerState[id];
             if (qs.afkingActive) {
-                questGame.recordAfkingSecondary(player, LEVEL_QUEST_STREAK_BONUS);
+                questGame.recordAfkingSecondary(id, LEVEL_QUEST_STREAK_BONUS);
             } else {
                 uint32 bumped = uint32(qs.streak) + LEVEL_QUEST_STREAK_BONUS;
                 qs.streak = bumped > type(uint16).max ? type(uint16).max : uint16(bumped);
-                _grantCenturyShield(player, qs);
+                _grantCenturyShield(id, qs);
             }
 
-            coinflip.creditFlip(player, 800);
-            emit LevelQuestCompleted(player, lvl + 1, lqType, 800);
+            coinflip.creditFlip(id, 800);
+            emit LevelQuestCompleted(id, lvl + 1, lqType, 800);
         } else {
             packed = uint256(currentVersion) | (uint256(progress) << 8);
-            levelQuestPlayerState[player] = packed;
+            levelQuestPlayerState[id] = packed;
         }
     }
 
@@ -2779,20 +2785,24 @@ contract DegenerusQuests is IDegenerusQuests {
     ///      counter and wallet ID masked out. The curse is the one field a third party can
     ///      write into a stranger's word (deity smite), and an ID alone is registration, not
     ///      participation; neither opens the markets.
+    ///      The wallet ID rides the same mint word; every door that writes a nonzero mint field
+    ///      registers first, so mayBet implies a nonzero ID.
     /// @param player The player to test.
     /// @param lvl The level to test against.
     /// @return mayBet True if the player may place a bet at all.
     /// @return earnsReward True if the placement also earns the growth quest.
+    /// @return id The player's wallet ID (0 if unregistered; never allocates).
     function marketBetGates(address player, uint24 lvl)
         external
         view
         override
-        returns (bool mayBet, bool earnsReward)
+        returns (bool mayBet, bool earnsReward, uint32 id)
     {
         uint256 mintData = questGame.mintPackedFor(player);
+        id = uint32(mintData >> BitPackingLib.WALLET_ID_SHIFT);
         earnsReward =
-            _isLevelQuestEligible(player, lvl, mintData) ||
-            questPlayerState[player].afkingActive;
+            _levelQuestEligible(lvl, mintData) ||
+            questPlayerState[id].afkingActive;
         mayBet =
             earnsReward ||
             (mintData &
@@ -2810,23 +2820,25 @@ contract DegenerusQuests is IDegenerusQuests {
     ///      real idempotence guarantee here — bit 137 only short-circuits a repeat within
     ///      the same version epoch until the next level-quest progress event rewrites the
     ///      word and clears it.
-    /// @param player The player who placed the bet.
+    /// @param id The bettor's wallet ID, as `marketBetGates` returned it in the same call
+    ///        (keys the quest record and the credit).
+    /// @param player The bettor's address (its mint word is the eligibility source).
     /// @param lvl The level the bet was placed on. Taken from the caller rather than read
     ///        back off the game: PARIMUTUEL is the only permitted caller and it read this
     ///        from the game in the same call, so the value is the same one questGame.level()
     ///        would return, for one less external call.
     /// @param reward FLIP to credit on first completion this level.
     /// @return paid The FLIP actually credited (0 when ineligible or already completed).
-    function recordGrowthBet(address player, uint24 lvl, uint256 reward)
+    function recordGrowthBet(uint32 id, address player, uint24 lvl, uint256 reward)
         external
         override
         returns (uint256 paid)
     {
         if (msg.sender != ContractAddresses.PARIMUTUEL) revert OnlyGame();
-        if (player == address(0) || reward == 0) return 0;
+        if (reward == 0) return 0;
 
         uint8 currentVersion = uint8(activeQuestsPacked >> LEVEL_QUEST_VERSION_SHIFT);
-        uint256 packed = levelQuestPlayerState[player];
+        uint256 packed = levelQuestPlayerState[id];
 
         // Version mismatch: this is the first touch of the word this level, so drop the
         // previous level's progress and both completion flags.
@@ -2834,11 +2846,11 @@ contract DegenerusQuests is IDegenerusQuests {
         if ((packed >> LQ_GROWTH_BET_BIT) & 1 == 1) return 0;
 
         if (
-            !_isLevelQuestEligible(player, lvl) &&
-            !questPlayerState[player].afkingActive
+            !_levelQuestEligible(lvl, questGame.mintPackedFor(player)) &&
+            !questPlayerState[id].afkingActive
         ) return 0;
 
-        levelQuestPlayerState[player] = packed | (uint256(1) << LQ_GROWTH_BET_BIT);
+        levelQuestPlayerState[id] = packed | (uint256(1) << LQ_GROWTH_BET_BIT);
 
         // Advance the streak by the participation +1 WITHOUT touching lastActiveDay —
         // the level-quest completion's pattern, so the missed-day reset stays keyed to
@@ -2847,31 +2859,32 @@ contract DegenerusQuests is IDegenerusQuests {
         // missed; while afking it feeds the Sub streak base so finalize reconciles it.
         uint24 questDay = _currentQuestDay(_loadActiveQuests());
         if (questDay != 0) {
-            PlayerQuestState storage qs = questPlayerState[player];
-            _questSyncState(qs, player, questDay);
+            PlayerQuestState storage qs = questPlayerState[id];
+            _questSyncState(qs, id, questDay);
             if (qs.afkingActive) {
-                questGame.recordAfkingSecondary(player, GROWTH_QUEST_STREAK_BONUS);
+                questGame.recordAfkingSecondary(id, GROWTH_QUEST_STREAK_BONUS);
             } else {
                 uint32 bumped = uint32(qs.streak) + GROWTH_QUEST_STREAK_BONUS;
                 qs.streak = bumped > type(uint16).max ? type(uint16).max : uint16(bumped);
-                _grantCenturyShield(player, qs);
+                _grantCenturyShield(id, qs);
             }
         }
 
-        coinflip.creditFlip(player, reward);
-        emit GrowthBetQuestCompleted(player, lvl, reward);
+        coinflip.creditFlip(id, reward);
+        emit GrowthBetQuestCompleted(id, lvl, reward);
         return reward;
     }
 
     /// @notice Returns a player's level quest state for frontend display.
-    /// @dev Reads the packed active level quest and the player's level progress word.
-    /// @param player The player address to query.
+    /// @dev Reads the packed active level quest and the player's level progress word;
+    ///      `eligible` resolves the wallet's address through the wallet table.
+    /// @param id Wallet ID of the player to query.
     /// @return questType The active level quest type (1-8, or 11 for the craps day-pass quest).
     /// @return progress The player's accumulated progress.
     /// @return target The target value for completion.
     /// @return completed Whether the player has completed the quest this level.
     /// @return eligible Whether the player is eligible for level quests.
-    function getPlayerLevelQuestView(address player)
+    function getPlayerLevelQuestView(uint32 id)
         external
         view
         override
@@ -2880,7 +2893,7 @@ contract DegenerusQuests is IDegenerusQuests {
         uint256 active = activeQuestsPacked;
         questType = uint8(active >> LEVEL_QUEST_TYPE_SHIFT);
 
-        uint256 packed = levelQuestPlayerState[player];
+        uint256 packed = levelQuestPlayerState[id];
         uint8 playerVersion = uint8(packed);
 
         if (playerVersion == uint8(active >> LEVEL_QUEST_VERSION_SHIFT) && questType != 0) {
@@ -2893,6 +2906,6 @@ contract DegenerusQuests is IDegenerusQuests {
             questType,
             PriceLookupLib.priceForLevel(lvl + 1)
         );
-        eligible = _isLevelQuestEligible(player, lvl);
+        eligible = _isLevelQuestEligible(id, lvl);
     }
 }

@@ -45,7 +45,8 @@ import {IStETH} from "../interfaces/IStETH.sol";
 ///         (streak / lastCompletedDay / progress) and its per-slot validity and
 ///         native-unit conversion work.
 interface IQuestCompletionView {
-    function questCompletionToday(address player) external view returns (bool slot0, bool slot1);
+    /// @notice Quests' today-completion flags for wallet `id` ((false, false) for 0).
+    function questCompletionToday(uint32 id) external view returns (bool slot0, bool slot1);
 }
 
 /// @title ISeatToken
@@ -428,7 +429,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // just-cancelled holder can sell immediately. Manual cancel is the graceful
             // exit — an eviction never reaches this branch, leaving the bit set so the
             // seat is forfeit (reclaimable to the vault) instead.
-            _finalizeAfking(subscriber, c, _simulatedDayIndex());
+            _finalizeAfking(subId, c, _simulatedDayIndex());
             c.dailyQuantity = 0;
             mintPacked_[subscriber] &= ~(uint256(1) << BitPackingLib.SEAT_ENCUMBERED_SHIFT);
             // The sparse `_fundingSourceOf` map holds an entry iff FLAG_EXTERNAL_FUNDING
@@ -577,14 +578,14 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 // start reverts (MustPurchaseToBeginAfking); only VAULT / SDGNRS, which
                 // self-subscribe with no funds at construction, forfeit the snapshot (base 0)
                 // instead.
-                uint256 snap = quests.beginAfking(subscriber, today); // syncs + sets afkingActive
+                uint256 snap = quests.beginAfking(subId, today); // syncs + sets afkingActive
                 // Frame the run on today (the compute-on-read base; afkCovered == today keeps the
                 // day-0 delivery gap-free and guarantees
                 // afkCovered >= afkingStartDay so the streak span never underflows).
                 s.afkCoveredThroughDay = uint24(today);
                 s.afkingStartDay = uint24(today);
 
-                (bool done0, ) = IQuestCompletionView(address(quests)).questCompletionToday(subscriber);
+                (bool done0, ) = IQuestCompletionView(address(quests)).questCompletionToday(subId);
                 if (s.lastOpenedDay < s.lastAutoBoughtDay) {
                     // A pending unopened box (this or a prior day) already grounds the run on a real
                     // purchase. Keep the snapshot and leave the box markers untouched so the open leg
@@ -1166,11 +1167,11 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      idempotent (a no-op if the player is not currently afking). Clears the
     ///      Sub's afking framing. The cross-contract read+write is the heavier (EVICT_WEIGHT)
     ///      STAGE branch.
-    /// @param player The subscriber whose run is ending.
+    /// @param id The wallet ID of the subscriber whose run is ending.
     /// @param sub The subscriber's record (storage ref — afking framing cleared here).
     /// @param currentDay The current day (the decay reference passed to DegenerusQuests).
     function _finalizeAfking(
-        address player,
+        uint32 id,
         Sub storage sub,
         uint24 currentDay
     ) private {
@@ -1180,7 +1181,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         uint24 anchor = covered;
         if (currentDay != 0 && currentDay - 1 > anchor) anchor = currentDay - 1;
         quests.finalizeAfking(
-            player,
+            id,
             earned > type(uint24).max ? type(uint24).max : uint24(earned),
             anchor,
             currentDay
@@ -1214,7 +1215,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             presaleBoxCredit[id] += credit;
         }
         emit AfkingFlipClaimed(player, owed);
-        coinflip.creditFlip(player, owed); // whole → base units
+        coinflip.creditFlip(id, owed); // whole → base units
     }
 
     /*------------------------------------------------------------------
@@ -1459,7 +1460,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 // delete the slot + swap-pop. A got-kicked
                 // sub forfeits both accumulators: deleting _subOf wipes pendingFlip /
                 // affiliateBase so nothing survives claimable out-of-set.
-                _finalizeAfking(player, sub, processDay);
+                _finalizeAfking(id, sub, processDay);
                 delete _subOf[id];
                 _removeFromSet(cursor + 1);
                 unchecked {
@@ -1831,16 +1832,16 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @notice QUESTS-only: record a secondary/level quest completion against an afking sub's
     ///         streak base, so the run's compute-on-read activity score reflects the player's own
     ///         quest effort (the primary rides the funded delivered days).
-    /// @dev No-op unless `player` has a live afking run (`afkingStartDay != 0`); otherwise an
+    /// @dev No-op unless wallet `id` has a live afking run (`afkingStartDay != 0`); otherwise an
     ///      `amount` bump to the Sub streak base, saturating at 65535. `amount` is 1 for a daily
     ///      secondary completion and LEVEL_QUEST_STREAK_BONUS for a level-quest completion. Runs in
     ///      the Game's storage context under delegatecall; `msg.sender` is the original caller
-    ///      (DegenerusQuests).
-    /// @param player The afking subscriber whose secondary completion is being recorded.
+    ///      (DegenerusQuests). ID 0 has no Sub record, so it returns before any write.
+    /// @param id Wallet ID of the afking subscriber whose secondary completion is being recorded.
     /// @param amount The streak-base increment to apply.
-    function recordAfkingSecondary(address player, uint16 amount) external {
+    function recordAfkingSecondary(uint32 id, uint16 amount) external {
         if (msg.sender != ContractAddresses.QUESTS) revert NotApproved();
-        Sub storage s = _subOf[_walletIdOf(player)];
+        Sub storage s = _subOf[id];
         if (s.setPosition == 0) return;
         if (s.afkingStartDay == 0) return;
         _setStreakBase(s, uint256(_streakBaseOf(s)) + amount);
@@ -1851,14 +1852,15 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///         the sub base plus funded delivered days, not the manual quest streak that the
     ///         foil-pack streak floor raises). The funded days continue to add on top of the
     ///         floored base.
-    /// @dev No-op unless `player` has a live afking run (`afkingStartDay != 0`); otherwise raises
+    /// @dev No-op unless wallet `id` has a live afking run (`afkingStartDay != 0`); otherwise raises
     ///      the Sub streak base to `floor` if it is below. Runs in the Game's storage context
-    ///      under delegatecall; `msg.sender` is the original caller (DegenerusQuests).
-    /// @param player The afking subscriber whose streak base is floored.
+    ///      under delegatecall; `msg.sender` is the original caller (DegenerusQuests). ID 0 has no
+    ///      Sub record, so it returns before any write.
+    /// @param id Wallet ID of the afking subscriber whose streak base is floored.
     /// @param floor The minimum streak base to set.
-    function floorAfkingStreakBase(address player, uint16 floor) external {
+    function floorAfkingStreakBase(uint32 id, uint16 floor) external {
         if (msg.sender != ContractAddresses.QUESTS) revert NotApproved();
-        Sub storage s = _subOf[_walletIdOf(player)];
+        Sub storage s = _subOf[id];
         if (s.setPosition == 0) return;
         if (s.afkingStartDay == 0) return;
         if (_streakBaseOf(s) < floor) _setStreakBase(s, floor);

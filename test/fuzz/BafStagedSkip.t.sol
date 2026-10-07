@@ -40,8 +40,9 @@ contract BafStagedSkipTest is BafBracketFixture {
         _hostAt(lvl, LOSING_WORD, false);
         host.seedPools(40 ether, 200 ether, 0, lvl - 1, 35 ether);
         vm.deal(address(game), address(game).balance + 400 ether);
+        uint32 scorerId = host.seedWallet(SCORER);
         vm.prank(ContractAddresses.COINFLIP);
-        jackpots.recordBafFlip(SCORER, lvl, 5_000 ether);
+        jackpots.recordBafFlip(scorerId, lvl, 5_000 ether);
         (uint64 epoch0,,,) = _bracketBoard(lvl);
 
         if (lvl % 100 == 0) {

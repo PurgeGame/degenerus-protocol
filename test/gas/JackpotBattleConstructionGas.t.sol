@@ -55,8 +55,8 @@ contract BattleConstructionGameSeed is DegenerusGameStorage, WalletSeed {
         dailyTicketBudgetsPacked = _JACKPOT_BATTLE_PENDING;
     }
 
-    function seedQueue(uint24 target, address[] calldata players) external {
-        for (uint256 i; i < players.length; ++i) _queueEntries(_seedWallet(players[i]), target, 4, true);
+    function seedQueue(uint24 target, uint32[] calldata ids) external {
+        for (uint256 i; i < ids.length; ++i) _queueEntries(ids[i], target, 4, true);
     }
 
     function runDraw(uint24 ceiling, uint256 word, uint256 allowance)
@@ -69,18 +69,18 @@ contract BattleConstructionGameSeed is DegenerusGameStorage, WalletSeed {
         return abi.decode(data, (MineFlipGas.Result));
     }
 
-    function collectProbe(uint24 ceiling, uint256 word) external returns (address[] memory) {
+    function collectProbe(uint24 ceiling, uint256 word) external returns (uint32[] memory) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_JACKPOT_DRAW_MODULE.delegatecall(
             abi.encodeWithSignature("collectProbe(uint24,uint256)", ceiling, word)
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
-        return abi.decode(data, (address[]));
+        return abi.decode(data, (uint32[]));
     }
 }
 
 /// @dev Exposes only the existing production draw loop for component calibration.
 contract BattleConstructionDrawProbe is DegenerusGameJackpotDrawModule {
-    function collectProbe(uint24 ceiling, uint256 word) external view returns (address[] memory players) {
+    function collectProbe(uint24 ceiling, uint256 word) external view returns (uint32[] memory players) {
         (players,,) = _collectJackpotChunkWithLevels(ceiling, word, 0, 150, _jackpotDrawLevels(ceiling, 0));
     }
 }
@@ -100,17 +100,17 @@ contract BattleConstructionTableSeed is CrapsBattleStorage {
             | (_BG_TERMS_FROZEN << _BG_TERM_TIER_SHIFT);
         _highField[bytes32(uint256(slot))] = 25;
         for (uint256 i = 1; i <= 50; ++i) {
-            _storeBet((uint256(slot) << 64) | i, uint160(address(uint160(0x310000 + i))));
-            _storeBet((daySlot << 64) | i, uint160(address(uint160(0x320000 + i))));
+            _storeBet((uint256(slot) << 64) | i, uint160(0x310000 + i));
+            _storeBet((daySlot << 64) | i, uint160(0x320000 + i));
         }
     }
 
-    function seedBoards(address[] calldata players) external {
+    function seedBoards(uint32[] calldata ids) external {
         // Seven legal chips, including the last leg: decode executes all ten iterations.
         uint32 chips = uint32((3 << 9) | (3 << 12) | (1 << 27));
         uint256 preference = (CrapsPreferenceLib.compress(chips) << CrapsPreferenceLib.SHIFT)
             | CrapsPreferenceLib.INITIALIZED;
-        for (uint256 i; i < players.length; ++i) _passCredits[players[i]] = preference;
+        for (uint256 i; i < ids.length; ++i) _passCreditsById[ids[i]] = preference;
     }
 }
 
@@ -146,11 +146,11 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
             // Shape 0 combines all 99 cold eligibility reads with a complete unique-wallet
             // chunk. Shape 1 maximizes singleton visits; shape 2 exercises circular fragments.
             uint256 count = shape == 0 ? (offset == first ? 500 : 1) : shape;
-            address[] memory players = new address[](count);
+            uint32[] memory players = new uint32[](count);
             for (uint256 i; i < count; ++i) {
-                // Every address has low byte zero. A full unique chunk hits all 1,225
+                // Every wallet ID has low byte zero. A full unique chunk hits all 1,225
                 // pairwise exact comparisons in JackpotBattleFieldLib.prepare.
-                players[i] = address(uint160((0x100000 + uint256(offset) * 1000 + i) << 8));
+                players[i] = uint32((0x100000 + uint256(offset) * 1000 + i) << 8);
             }
             gs.seedQueue(CEILING + 1 + offset, players);
             ts.seedBoards(players);
@@ -201,13 +201,13 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
         vm.recordLogs();
         _worker();
         Vm.Log[] memory entries = vm.getRecordedLogs();
-        address[] memory players = new address[](50);
+        uint32[] memory players = new uint32[](50);
         uint256 n;
         for (uint256 i; i < entries.length; ++i) {
-            if (entries[i].topics[0] != keccak256("JackpotBattleEntry(uint64,uint256,address,uint256,uint32)")) continue;
-            address player = address(uint160(uint256(entries[i].topics[3])));
+            if (entries[i].topics[0] != keccak256("JackpotBattleEntry(uint64,uint256,uint32,uint256,uint32)")) continue;
+            uint32 player = uint32(uint256(entries[i].topics[3]));
             (uint256 units, uint32 chips) = abi.decode(entries[i].data, (uint256, uint32));
-            assertEq(uint160(player) & 255, 0);
+            assertEq(player & 255, 0);
             assertEq(units, 1);
             assertEq(chips, (3 << 9) | (3 << 12) | (1 << 27));
             for (uint256 j; j < n; ++j) assertTrue(players[j] != player, "full collision scan requires unique wallets");
@@ -285,7 +285,7 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
             _cool();
             uint256 word = uint256(keccak256(abi.encode(WORD, CEILING, keccak256("far-future-coin"))));
             uint256 start = gasleft();
-            address[] memory players = BattleConstructionGameSeed(address(game)).collectProbe(CEILING, word);
+            uint32[] memory players = BattleConstructionGameSeed(address(game)).collectProbe(CEILING, word);
             uint256 used = start - gasleft();
             emit log_named_uint("collection queue length (0 = concentrated500)", shapes[i]);
             emit log_named_uint("cold production collection component", used);

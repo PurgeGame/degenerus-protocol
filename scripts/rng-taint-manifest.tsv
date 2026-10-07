@@ -28,7 +28,7 @@ EXEMPT-ADVANCE	PARAM	rngWord	processCoinflipPayouts	Coinflip.sol	onlyDegenerusGa
 PURE-DERIVE	PARAM	seed	_playerDraw	Craps.sol	private pure four-word keccak used by _survived; no storage, no actor input
 PURE-DERIVE	PARAM	seed	_runSettlement	Craps.sol	private pure hand machine over the committed seed; the board is the frozen, scattered slip
 PURE-DERIVE	PARAM	seed	_runSideSettlement	Craps.sol	private pure place/hardway specialization of _runSettlement over the same committed seed
-PURE-DERIVE	PARAM	word	_scatterInto	Craps.sol	internal pure: throws the unplaced chips at legs keccak(word, i) % 10; word is hash2(settling word, owner), passed to CrapsEngine.settleRanked by the table
+PURE-DERIVE	PARAM	word	_scatterInto	Craps.sol	internal pure: throws the unplaced chips at legs keccak(word, i) % 10; word is hash2(settling word, owner), owner = the paid entry's committed wallet ID (bet word bits 0-31) or the awarded entry's synthetic salt, passed to CrapsEngine.settleRanked by the table
 PURE-DERIVE	PARAM	seed	_settleSlip	Craps.sol	internal pure engine; seed = hash3(_CRAPS_SEED_DOMAIN, word, slot) from the caller; board, owner and boost row fixed at entry close, before the slot's index word existed
 PURE-DERIVE	PARAM	seed	_survived	Craps.sol	internal pure second-chance coin keccak(tag, seed, round, salt); salt = the owner's wallet ID or a synthetic entry's 160-bit salt, fixed before the word; seed the table's
 PURE-DERIVE	PARAM	seed	handSeed	Craps.sol	internal pure keccak(seed, hand i); no actor input
@@ -84,7 +84,7 @@ PURE-DERIVE	PARAM	word	_tierPick	JackpotBattle.sol	Pure daily/window-term helper
 PURE-DERIVE	PARAM	word	_windowTermsOn	JackpotBattle.sol	Pure daily/window-term helper on the committed day word and fixed period/domain; no post-commit selecting input.
 CONSUMER-SEALED	PARAM	word	finalizeBattle	JackpotBattle.sol	Only the pinned table invokes finalization; the slot was sealed before the active read word, and canonical resolved seats determine standing.
 CONSUMER-SEALED	PARAM	word	prepareJackpotBattle	JackpotBattle.sol	GAME-only via table delegate after paid-entry lock; forwards the committed battle word to _prepare and returns its frozen word, collection cursor and remaining target
-PURE-DERIVE	PARAM	word	_drawHash	WWXRP.sol	private view keccak(domain, this, day, word); word = game.rngWordForDay(day+1) in claim(): entries bind to the wall day at enter(), day+1 cannot seal until the next day's advance
+PURE-DERIVE	PARAM	word	_drawHash	WWXRP.sol	private view keccak(domain, this, day, word); word = game.rngWordForDay(day+1) in claim(): entries bind to the wall day at enter(), day+1 cannot seal until the next day's advance; the entrant's bucket is keccak(DOM_BUCKET, chainid, this, day, walletId) % 10, fixed at enter() from the admitted wallet ID (no VRF input)
 EXEMPT-ADVANCE	PARAM	rngWord	resolveIncinerator	WWXRP.sol	msg.sender==GAME; called by _consolidatePoolsAndRewardJackpots on a skipped x00 BAF; entries recorded only while level%100==99, closed by the transition that requests the word
 NOT-RNG	PARAM	word	decode	libraries/CrapsPreferenceLib.sol	packed pass balances and saved board, not randomness; mask bits 64-83, ignore initialized sentinel
 PURE-DERIVE	PARAM	entropy	roundFlipToHundreds	libraries/FlipRoundLib.sol	internal pure Bernoulli round-up on uint32(entropy) % 100; callers pass a per-award tagged hash of a committed word
@@ -311,7 +311,7 @@ PURE-DERIVE	ARG	TicketEntropy.queueStart	_roundPhase	modules/DegenerusGameTicket
 PURE-DERIVE	PARAM	entropy	queueStart	libraries/TicketEntropy.sol	Committed cohort word; domain-separated rotation depends only on the sealed key, frozen length and word.
 PURE-DERIVE	PARAM	seed	replacement	libraries/GoldSixLib.sol	Immutable candidate LCG state, full round seed, foil-line seed or daily root; separate replacement domain and no mutable financial input.
 PURE-DERIVE	PARAM	word	daily	libraries/GoldSixLib.sol	Committed daily word supplies the independent 1/6 keep gate and seven-way replacement hash.
-NOT-RNG	PARAM	earningsWord	_ensureBootstrapIdentity	DegenerusAffiliate.sol	Packed affiliate earnings and immutable upline IDs; contains no RNG value.
+NOT-RNG	PARAM	word	_setReferral	DegenerusAffiliate.sol	The player's stored referral word (sentinel, default code with owner ID, or custom code); contains no RNG value.
 NOT-RNG	PARAM	word	_purchaseWinner	DegenerusAffiliate.sol	Packed affiliate earnings and immutable upline IDs; contains no RNG value.
 NOT-RNG	PARAM	word	_recordEarnings	DegenerusAffiliate.sol	Packed affiliate earnings and immutable upline IDs; contains no RNG value.
 NOT-RNG	PARAM	word	_routeCache	DegenerusAffiliate.sol	Packed affiliate earnings and immutable upline IDs; contains no RNG value.
@@ -353,3 +353,5 @@ NOT-RNG	PARAM	word	_appendBoxOrder	modules/DegenerusGameMintModule.sol	packed bo
 NOT-RNG	PARAM	word	applyBoxOrderScore	modules/DegenerusGameLootboxModule.sol	in-flight packed box entry gaining its score and EV fraction; not a VRF value
 NOT-RNG	PARAM	word	_boxEntryCount	storage/DegenerusGameStorage.sol	counts the boxes of a packed box entry; not a VRF value
 NOT-RNG	PARAM	word	_buyPresaleBoxFor	modules/DegenerusGameMintModule.sol	the same call's in-flight ordinary entry the presale fields join; not a VRF value
+NOT-RNG	PARAM	word	_account	CrapsBattle.sol	The caller's Craps address word (board, INITIALIZED, cached wallet ID); packs msg.sender with the ID; contains no RNG value.
+NOT-RNG	PARAM	word	_rememberBoard	CrapsBattle.sol	The caller's Craps address word (board, INITIALIZED, cached wallet ID) from the door prologue; contains no RNG value.

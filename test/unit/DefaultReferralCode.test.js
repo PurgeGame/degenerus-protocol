@@ -199,13 +199,13 @@ describe("Default Referral Codes", function () {
     });
 
     it("emits ReferralUpdated with correct referrer for default code", async function () {
-      const { affiliate, alice, bob } = await loadFixture(deployFullProtocol);
+      const { affiliate, game, alice, bob } = await loadFixture(deployFullProtocol);
       const code = defaultCodeFor(alice.address);
       const tx = await affiliate.connect(bob).referPlayer(code);
       const ev = await getEvent(tx, affiliate, "ReferralUpdated");
       expect(ev.args.player).to.equal(bob.address);
       expect(ev.args.code).to.equal(code);
-      expect(ev.args.referrer).to.equal(alice.address);
+      expect(ev.args.referrerId).to.equal(await game.walletIdOf(alice.address));
       expect(ev.args.locked).to.equal(false);
     });
   });
@@ -242,7 +242,7 @@ describe("Default Referral Codes", function () {
       );
 
       // Alice should have affiliate score from both purchases
-      const score = await affiliate.affiliateScore(1, alice.address);
+      const score = await affiliate.affiliateScore(1, await game.walletIdOf(alice.address));
       expect(score).to.be.gt(0n);
     });
 
@@ -265,7 +265,7 @@ describe("Default Referral Codes", function () {
       );
 
       // Fresh ETH L1 => 25% => 0.25 ETH scaled
-      expect(await affiliate.affiliateScore(1, alice.address)).to.equal(eth("0.25"));
+      expect(await affiliate.affiliateScore(1, await game.walletIdOf(alice.address))).to.equal(eth("0.25"));
     });
 
     it("self-referral via default code locks to VAULT", async function () {
@@ -310,7 +310,7 @@ describe("Default Referral Codes", function () {
       );
 
       // Carol should have affiliate score
-      expect(await affiliate.affiliateScore(1, carol.address)).to.be.gt(0n);
+      expect(await affiliate.affiliateScore(1, await game.walletIdOf(carol.address))).to.be.gt(0n);
     });
 
     it("default code affiliate with no referral has VAULT as upline", async function () {
@@ -380,12 +380,19 @@ describe("Default Referral Codes", function () {
   // 7. Edge cases
   // =========================================================================
   describe("Edge cases", function () {
-    it("address(1)'s code is stored as the locked sentinel and resolves to the vault", async function () {
-      const { affiliate, alice, vault } = await loadFixture(deployFullProtocol);
+    it("bytes32(1) is rejected by referPlayer and locks the buyer to the vault on the purchase path", async function () {
+      // PHASE-E-NOTES-aff decision 6: the supplied code 1 is invalid, address(1) is never registered.
+      const { affiliate, game, alice, bob, vault } = await loadFixture(deployFullProtocol);
       const code = "0x0000000000000000000000000000000000000000000000000000000000000001";
       await expect(affiliate.connect(alice).referPlayer(code))
-        .to.emit(affiliate, "Affiliate").withArgs(0, code, alice.address);
+        .to.be.revertedWithCustomError(affiliate, "Insufficient");
       expect(await affiliate.getReferrer(alice.address)).to.equal(await vault.getAddress());
+
+      await payAffiliateAsGame(
+        hre.ethers, game, affiliate, eth(1), code, bob.address, 1, true
+      );
+      expect(await affiliate.getReferrer(bob.address)).to.equal(await vault.getAddress());
+      expect(await game.walletIdOf("0x0000000000000000000000000000000000000001")).to.equal(0n);
     });
 
     it("invalid code in high-byte range still reverts in referPlayer", async function () {

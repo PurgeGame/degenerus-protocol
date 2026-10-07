@@ -669,12 +669,14 @@ contract FLIP {
     ///      THE FULL GROSS IS ALWAYS BURNED. The boon is not a discount and pays nothing here: it
     ///      is carried back to the table as a one-hot mask and boosts only that slip's BANKROLL
     ///      RETURN when it settles, so nothing is credited until a run actually comes home.
-    /// @param player The buyer.
+    /// @param player The buyer, whose FLIP is burned.
+    /// @param id The buyer's wallet ID, which the table holds before the burn: it keys the craps
+    ///        boon lane and the quest credit.
     /// @param grossAndFlags The encoded price: (whole FLIP << 8) | action flags.
     /// @return boonMask One-hot tier for the caller to store on the slip — 1, 2 or 4 for the
     ///         tiers the table pays at 5/10/15%, and 0 on every burn that did not consume a boon.
     /// @custom:reverts OnlyGame If the caller is not the craps table.
-    function burnCoinForCraps(address player, uint256 grossAndFlags)
+    function burnCoinForCraps(address player, uint32 id, uint256 grossAndFlags)
         external
         returns (uint8 boonMask)
     {
@@ -706,14 +708,14 @@ contract FLIP {
         // pick the lane, so arriving here as COIN spends the CRAPS boon and can never reach the
         // coinflip one. The bps come back off the coinflip table the family mirrors; the table
         // stores a one-hot tier, not a rate, so translate here.
-        uint16 boonBps = degenerusGame.consumeCoinflipBoon(player);
+        uint16 boonBps = degenerusGame.consumeCoinflipBoon(id);
         if (boonBps == 500) boonMask = 1;
         else if (boonBps == 1000) boonMask = 2;
         else if (boonBps == 2500) boonMask = 4;
 
         // Quest progress and the day-streak credit only. No value is computed or forwarded here —
         // the boon's whole effect is the mask returned above.
-        if (flags != 0) questModule.recordCrapsAction(player, flags);
+        if (flags != 0) questModule.recordCrapsAction(id, flags);
     }
 
     /// @notice The craps comp lane's live balance, in FLIP whole tokens.
@@ -829,18 +831,23 @@ contract FLIP {
     }
 
     /// @dev Shared quest, activity, boon and battle-chip accounting after the funding leg is burned.
+    ///      The burn pays, so the burner's wallet ID comes from the Game's registration hook first
+    ///      (an existing wallet gets its ID back with no write); the quest and the boon run by ID,
+    ///      and the Game's own entry write finds the ID already in place. The activity score is
+    ///      read after the quest, so a quest this burn completes counts toward its multiplier.
     function _recordDecimatorBurn(address caller, uint256 amount, uint24 lvl, uint32 chips) private {
+        uint32 id = degenerusGame.registerWallet(caller, true);
+
         // Quest processing (reward creditFlipped internally; bonus boosts decimator weight)
-        (uint256 questReward,,, bool completed) = questModule.handleDecimator(caller, amount);
+        (uint256 questReward,,, bool completed) = questModule.handleDecimator(id, amount);
         uint256 baseAmount = amount + (completed ? questReward : 0);
 
         // Activity score bonus (whole points); the curve self-saturates at its cap.
-        uint256 bonusPoints = degenerusGame.playerActivityScoreCached(caller);
-
+        (uint256 bonusPoints, ) = degenerusGame.playerActivityScoreCached(caller);
         uint256 decBurnMultBps = ActivityCurveLib.decBattleMultBps(bonusPoints);
 
         // Decimator boon: percent boost on base amount (capped to 50k FLIP).
-        uint16 boonBps = degenerusGame.consumeDecimatorBoon(caller);
+        uint16 boonBps = degenerusGame.consumeDecimatorBoon(id);
         if (boonBps > 0) {
             uint256 cappedBase = baseAmount > DECIMATOR_BOON_CAP ? DECIMATOR_BOON_CAP : baseAmount;
             uint256 boost = (cappedBase * boonBps) / BPS_DENOMINATOR;

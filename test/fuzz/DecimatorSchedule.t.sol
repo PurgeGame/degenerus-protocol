@@ -43,7 +43,7 @@ contract DecimatorScheduleTest is Test {
         vm.warp(uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621 + 5 days);
         vm.etch(ContractAddresses.GAME, type(DecimatorScheduleHost).runtimeCode);
         vm.etch(ContractAddresses.GAME_JACKPOT_MODULE, type(DegenerusGameJackpotModule).runtimeCode);
-        vm.mockCall(ContractAddresses.AFFILIATE, abi.encodeWithSignature("affiliateTop(uint24)"), abi.encode(address(0), uint256(0)));
+        vm.mockCall(ContractAddresses.AFFILIATE, abi.encodeWithSignature("affiliateTop(uint24)"), abi.encode(uint32(0), uint96(0)));
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("poolBalance(uint8)"), abi.encode(uint256(0)));
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
         vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("lockJackpotBattle(uint24,uint256,uint24)"), abi.encode(uint64(0)));

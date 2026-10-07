@@ -10,7 +10,7 @@ import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
 /// @dev The two things craps reads out of the live game: the raw lootbox-RNG slots and the
 ///      player's mint history. One double serves both because production reads both from the
@@ -58,6 +58,9 @@ contract MockGame {
     ///      strict mode applies the Game's rule (the first paying contact allocates, a non-paying
     ///      contact returns the existing ID or zero).
     mapping(address => uint32) public walletIdOf;
+    /// @dev The reverse direction, also mirrored into the wallet-table slots `extsload` serves, so
+    ///      `WalletTableLib.ownerOf` resolves a mock ID exactly as it resolves a Game ID.
+    mapping(uint32 => address) public ownerOfId;
     uint32 public walletCount;
     bool public strictWalletIds;
 
@@ -68,6 +71,8 @@ contract MockGame {
         if (id == 0 && (allocate || !strictWalletIds)) {
             id = ++walletCount;
             walletIdOf[owner] = id;
+            ownerOfId[id] = owner;
+            slots[GameSlotKeys.walletElement(id)] = bytes32(uint256(uint160(owner)));
         }
     }
 
@@ -161,7 +166,10 @@ contract MockFlip {
         compLane = uint128(amount);
     }
 
-    function burnCoinForCraps(address target, uint256 grossAndFlags) external returns (uint8 mask) {
+    /// @dev The wallet ID the table passed with the last paid burn.
+    uint32 public lastCrapsId;
+
+    function burnCoinForCraps(address target, uint32 id, uint256 grossAndFlags) external returns (uint8 mask) {
         if (burnRefused[target]) revert MockBurnRefused();
         uint256 gross = grossAndFlags >> 8;
         lastCrapsFlags = uint8(grossAndFlags);
@@ -176,29 +184,33 @@ contract MockFlip {
         burned[target] += gross;
         totalBurned += gross;
         ++crapsBurns;
+        lastCrapsId = id;
         mask = nextBoonMask;
         nextBoonMask = 0;
         // The table no longer writes to the quest ledger itself: the burn lane reports the action,
         // so the mock forwards it the same way real FLIP does.
-        if (lastCrapsFlags != 0) MockQuests(ContractAddresses.QUESTS).recordCrapsAction(target, lastCrapsFlags);
+        if (lastCrapsFlags != 0) MockQuests(ContractAddresses.QUESTS).recordCrapsAction(id, lastCrapsFlags);
     }
 }
 
-/// @dev Records rakeback comps arriving through the flip-creditors lane.
+/// @dev Records rakeback comps arriving through the flip-creditors lane. Credits arrive by wallet
+///      ID, as on the real Coinflip; `staked` reads them back by the ID's account key (the mock
+///      Game's wallet table), and `stakedById` by the ID itself.
 contract MockCoinflip {
     mapping(address => uint256) public staked;
+    mapping(uint32 => uint256) public stakedById;
     uint256 public credits;
     uint256 public totalCredited;
 
-    function creditFlip(address player, uint256 amount) external {
-        _credit(player, amount);
+    function creditFlip(uint32 id, uint256 amount) external {
+        if (id != 0 && amount != 0) _credit(id, amount);
     }
 
     /// @dev The batched lane a settle walk pays through: one call for a whole field. Mirrors the
-    ///      real Coinflip, address(0) and zero-amount legs skipped.
-    function creditFlipBatch(address[] calldata players, uint256[] calldata amounts) external {
-        for (uint256 i = 0; i < players.length; ++i) {
-            if (players[i] != address(0) && amounts[i] != 0) _credit(players[i], amounts[i]);
+    ///      real Coinflip, ID 0 and zero-amount legs skipped.
+    function creditFlipBatch(uint32[] calldata ids, uint256[] calldata amounts) external {
+        for (uint256 i = 0; i < ids.length; ++i) {
+            if (ids[i] != 0 && amounts[i] != 0) _credit(ids[i], amounts[i]);
         }
         ++batches;
     }
@@ -214,7 +226,7 @@ contract MockCoinflip {
     uint24 public recordDayDiceRun;
     uint256 public diceRunArms;
 
-    function armDiceRunRecord(address player, uint256 candidate) external returns (uint256 claimed) {
+    function armDiceRunRecord(uint32 id, uint256 candidate) external returns (uint256 claimed) {
         ++diceRunArms;
         if (candidate < 1_000_000) return 0;
         if (candidate <= biggestDiceRunEver) return 0;
@@ -225,13 +237,14 @@ contract MockCoinflip {
         claimed = (uint256(recordPool) * shareBps) / 10_000;
         if (claimed != 0) {
             recordPool -= uint128(claimed);
-            _credit(player, claimed);
+            _credit(id, claimed);
         }
         recordDayDiceRun = today;
     }
 
-    function _credit(address player, uint256 amount) private {
-        staked[player] += amount;
+    function _credit(uint32 id, uint256 amount) private {
+        staked[MockGame(ContractAddresses.GAME).ownerOfId(id)] += amount;
+        stakedById[id] += amount;
         totalCredited += amount;
         ++credits;
     }
@@ -271,7 +284,8 @@ contract MockQuests {
     mapping(address => uint256) public streakCalls;
     uint24 public lastDay;
 
-    function awardQuestStreakBonus(address player, uint16 amount, uint24 currentDay) external {
+    function awardQuestStreakBonus(uint32 id, uint16 amount, uint24 currentDay) external {
+        address player = MockGame(ContractAddresses.GAME).ownerOfId(id);
         streakAwarded[player] += amount;
         ++streakCalls[player];
         lastDay = currentDay;
@@ -283,7 +297,8 @@ contract MockQuests {
     uint256 public crapsActions;
     uint8 public lastCrapsFlags;
 
-    function recordCrapsAction(address player, uint8 actionFlags) external {
+    function recordCrapsAction(uint32 id, uint8 actionFlags) external {
+        address player = MockGame(ContractAddresses.GAME).ownerOfId(id);
         ++crapsActions;
         lastCrapsFlags = actionFlags;
         if (actionFlags & 0xC != 0) {
@@ -343,6 +358,15 @@ abstract contract CrapsPins is Test {
     MockVault internal vault;
     MockQuests internal quests;
     address internal vaultOwner = makeAddr("vaultOwner");
+
+    /// @dev The Game-mock wallet ID of `who`, read straight from storage (`walletIdOf` is the
+    ///      mapping at slot 6) so a pending `vm.prank` / `vm.expectRevert` still reaches the next
+    ///      real call. An unregistered wallet is registered first, which does consume them: register
+    ///      actors in `setUp` when the id is read between a prank and its call.
+    function _idFor(address who) internal returns (uint32 id) {
+        id = uint32(uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(6))))));
+        if (id == 0) id = game.registerWallet(who, true);
+    }
 
     uint256 internal constant PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
     uint256 internal constant WORD_SLOT = 3;
@@ -488,15 +512,15 @@ abstract contract CrapsPins is Test {
     }
 
     /// @dev Every pot payment in a log stream, in the order the fields finished.
-    function _potsIn(Vm.Log[] memory logs) internal pure returns (PaidOut[] memory out) {
-        bytes32 sig = keccak256("CrapsBattlePaid(uint256,bytes32,address,uint256)");
+    function _potsIn(Vm.Log[] memory logs) internal view returns (PaidOut[] memory out) {
+        bytes32 sig = keccak256("CrapsBattlePaid(uint256,bytes32,uint32,uint256)");
         out = new PaidOut[](logs.length);
         uint256 n;
         for (uint256 i = 0; i < logs.length; ++i) {
             if (logs[i].topics.length != 4 || logs[i].topics[0] != sig) continue;
             out[n++] = PaidOut(
                 uint256(logs[i].topics[1]),
-                address(uint160(uint256(logs[i].topics[3]))),
+                game.ownerOfId(uint32(uint256(logs[i].topics[3]))),
                 abi.decode(logs[i].data, (uint256))
             );
         }
@@ -508,21 +532,21 @@ abstract contract CrapsPins is Test {
     /// @dev Independent value census for the intended scheduled 90/10 split.
     ///      Price every deferred pass receipt as gross minus liquid and require
     ///      both named payouts. Run/side-lane/progressive logs cannot fill a shortfall.
-    function _assertScheduledPotConserved(Vm.Log[] memory logs, uint256 grossPot) internal pure {
+    function _assertScheduledPotConserved(Vm.Log[] memory logs, uint256 grossPot) internal view {
         PaidOut[] memory main = _potsIn(logs);
         assertEq(main.length, 1, "exactly one main payout");
         uint256 hotLiquid;
         uint256 hotCount;
         uint256 mainDeferred;
         uint256 hotDeferred;
-        bytes32 hotSig = keccak256("CrapsHottestShooterPaid(uint256,bytes32,address,uint16,uint256)");
-        bytes32 splitSig = keccak256("CrapsProtocolAwardSplit(bytes32,address,uint8,uint256,uint256)");
+        bytes32 hotSig = keccak256("CrapsHottestShooterPaid(uint256,bytes32,uint32,uint16,uint256)");
+        bytes32 splitSig = keccak256("CrapsProtocolAwardSplit(bytes32,uint32,uint8,uint256,uint256)");
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length != 4) continue;
             if (logs[i].topics[0] == hotSig) {
                 (uint16 rolls, uint256 liquid) = abi.decode(logs[i].data, (uint16, uint256));
                 assertGt(rolls, 0, "longest-hand recipient has an actual hand");
-                assertTrue(address(uint160(uint256(logs[i].topics[3]))) != address(0), "no unassigned shooter");
+                assertTrue(uint256(logs[i].topics[3]) != 0, "no unassigned shooter");
                 hotLiquid += liquid;
                 ++hotCount;
             } else if (logs[i].topics[0] == splitSig) {
@@ -542,15 +566,15 @@ abstract contract CrapsPins is Test {
     /// @dev Every LANE payment in a stream, of one kind. `rider` picks a sole high roller's
     ///      return, which rides home on that seat's own run; clearing it picks the one payment a
     ///      CONTESTED lane makes to the best of its seats.
-    function _lanePaymentsIn(Vm.Log[] memory logs, bool rider) internal pure returns (PaidOut[] memory out) {
-        bytes32 sig = keccak256("CrapsHighRollerPaid(uint256,bytes32,address,uint256,bool)");
+    function _lanePaymentsIn(Vm.Log[] memory logs, bool rider) internal view returns (PaidOut[] memory out) {
+        bytes32 sig = keccak256("CrapsHighRollerPaid(uint256,bytes32,uint32,uint256,bool)");
         out = new PaidOut[](logs.length);
         uint256 n;
         for (uint256 i = 0; i < logs.length; ++i) {
             if (logs[i].topics.length != 4 || logs[i].topics[0] != sig) continue;
             (uint256 amount, bool bankrollRider) = abi.decode(logs[i].data, (uint256, bool));
             if (bankrollRider != rider) continue;
-            out[n++] = PaidOut(uint256(logs[i].topics[1]), address(uint160(uint256(logs[i].topics[3]))), amount);
+            out[n++] = PaidOut(uint256(logs[i].topics[1]), game.ownerOfId(uint32(uint256(logs[i].topics[3]))), amount);
         }
         assembly {
             mstore(out, n)

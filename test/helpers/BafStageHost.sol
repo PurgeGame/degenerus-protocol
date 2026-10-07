@@ -194,6 +194,11 @@ contract BafStageHost is DegenerusGame, BucketSeed {
         return _seedWallet(owner);
     }
 
+    /// @dev Account key of a wallet ID (0 for the empty ID).
+    function walletKeyOf(uint32 id) external view returns (address) {
+        return id == 0 ? address(0) : _walletKey(id);
+    }
+
     function whalePassesOf(address player) external view returns (uint256) {
         return _halfPassesOf(player);
     }
@@ -274,15 +279,15 @@ abstract contract BafBracketFixture is DeployProtocol {
         host.seedBracketHolders(lvl, TRAIT_BASE, TRAIT_HOLDERS, FAR_BASE, FAR_PER_LEVEL);
         vm.startPrank(ContractAddresses.COINFLIP);
         for (uint256 i; i < TRAIT_HOLDERS; ++i) {
-            jackpots.recordBafFlip(_traitHolder(i), lvl, (i + 1) * 10 ether);
+            jackpots.recordBafFlip(host.seedWallet(_traitHolder(i)), lvl, (i + 1) * 10 ether);
         }
         for (uint24 target = lvl + 2; target <= lvl + 99; ++target) {
             for (uint256 k; k < FAR_PER_LEVEL; ++k) {
-                jackpots.recordBafFlip(_farHolder(target, k), lvl, (uint256(target) * 16 + k + 1));
+                jackpots.recordBafFlip(host.seedWallet(_farHolder(target, k)), lvl, (uint256(target) * 16 + k + 1));
             }
         }
         for (uint256 i; i < 4; ++i) {
-            jackpots.recordBafFlip(_topBettor(i), lvl, (i + 1) * 1_000_000 ether);
+            jackpots.recordBafFlip(host.seedWallet(_topBettor(i)), lvl, (i + 1) * 1_000_000 ether);
         }
         vm.stopPrank();
     }
@@ -291,7 +296,7 @@ abstract contract BafBracketFixture is DeployProtocol {
     function _armDepositDraw() internal {
         for (uint256 i; i < DEPOSITORS; ++i) {
             vm.store(address(coinflip), keccak256(abi.encode((uint256(DRAW_DAY) << 32) | i, uint256(8))),
-                bytes32((uint256(uint160(_depositor(i))) << 96) | ((i + 1) * 100)));
+                bytes32((uint256(host.seedWallet(_depositor(i))) << 96) | ((i + 1) * 100)));
         }
         vm.store(address(coinflip), keccak256(abi.encode(uint256(DRAW_DAY), uint256(5))),
             bytes32((DEPOSITORS << 96) | (DEPOSITORS * 100)));
@@ -300,6 +305,11 @@ abstract contract BafBracketFixture is DeployProtocol {
         (, uint96 weight, uint32 drawn) = coinflip.bafDrawInfo();
         assertEq(drawn, DEPOSITORS, "draw layout");
         assertEq(weight, DEPOSITORS * 100, "draw weight");
+    }
+
+    /// @dev The wallet ID of a fixture wallet (0 when unregistered).
+    function _idOf(address wallet) internal view returns (uint32) {
+        return host.walletIdOf(wallet);
     }
 
     function _traitHolder(uint256 i) internal pure returns (address) {
@@ -409,11 +419,11 @@ abstract contract BafBracketFixture is DeployProtocol {
         for (uint256 i = start; i < end; ++i) {
             if (i < 2 * rounds) {
                 if (i & 3 == 0) {
-                    address[4] memory pair = jackpots.bafPairWinners(lvl, word, i >> 2, rounds);
-                    for (uint256 k; k < 4; ++k) w[i + k - start] = pair[k];
+                    uint32[4] memory pair = jackpots.bafPairWinners(lvl, word, i >> 2, rounds);
+                    for (uint256 k; k < 4; ++k) w[i + k - start] = host.walletKeyOf(pair[k]);
                 }
             } else {
-                w[i - start] = jackpots.bafHeadWinner(lvl, word, uint8(i - 2 * rounds));
+                w[i - start] = host.walletKeyOf(jackpots.bafHeadWinner(lvl, word, uint8(i - 2 * rounds)));
             }
         }
     }
@@ -454,7 +464,7 @@ abstract contract BafBracketFixture is DeployProtocol {
         for (uint256 j; j < logs.length; ++j) {
             Vm.Log memory l = logs[j];
             if (l.emitter != address(game) || l.topics.length == 0) continue;
-            address who = l.topics.length > 1 ? address(uint160(uint256(l.topics[1]))) : address(0);
+            address who = l.topics.length > 1 ? host.walletKeyOf(uint32(uint256(l.topics[1]))) : address(0);
             if (l.topics[0] == ETH_SIG) {
                 assertEq(uint256(l.topics[2]), lvl, "ETH leg level");
                 assertEq(uint256(l.topics[3]), BAF_TRAIT_SENTINEL, "ETH leg sentinel");
@@ -512,13 +522,13 @@ abstract contract BafBracketFixture is DeployProtocol {
         }
     }
 
-    /// @dev `bafLevel[lvl]` and the four `bafTop[lvl]` slots in DegenerusJackpots.
+    /// @dev `bafLevel[lvl]` and the two `bafTop[lvl]` words (two 128-bit lanes each) in DegenerusJackpots.
     function _bracketBoard(uint24 lvl) internal view returns (uint64 epoch, uint8 topLen, bool skipped, uint256 topBits) {
         uint256 packed = uint256(vm.load(address(jackpots), keccak256(abi.encode(uint256(lvl), uint256(2)))));
         epoch = uint64(packed);
         topLen = uint8(packed >> 64);
         skipped = uint8(packed >> 72) != 0;
         uint256 base = uint256(keccak256(abi.encode(uint256(lvl), uint256(1))));
-        for (uint256 i; i < 4; ++i) topBits |= uint256(vm.load(address(jackpots), bytes32(base + i)));
+        for (uint256 i; i < 2; ++i) topBits |= uint256(vm.load(address(jackpots), bytes32(base + i)));
     }
 }

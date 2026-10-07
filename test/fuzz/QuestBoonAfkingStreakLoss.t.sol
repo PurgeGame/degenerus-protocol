@@ -105,8 +105,9 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
         // +10 takes the transient manual streak 95 -> 105, crossing the century-100 boundary.
         uint16 amount = 10;
         uint24 currentDay = uint24(game.currentDayView());
+        uint32 pId = game.walletIdOf(p);
         vm.prank(ContractAddresses.GAME);
-        quests.awardQuestStreakBonus(p, amount, currentDay);
+        quests.awardQuestStreakBonus(pId, amount, currentDay);
 
         // ===================================================================
         // (a) VALUE LOSS: the afking sub streak base (what actually pays the afker) is UNCHANGED.
@@ -194,7 +195,7 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
     // ---- questPlayerState (DegenerusQuests slot 1) reads ----
 
     function _questField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 pk = uint256(vm.load(address(quests), keccak256(abi.encode(who, QUESTSTATE_SLOT)))) >> (off * 8);
+        uint256 pk = uint256(vm.load(address(quests), keccak256(abi.encode(uint256(game.walletIdOf(who)), QUESTSTATE_SLOT)))) >> (off * 8);
         return pk & ((uint256(1) << widthBits) - 1);
     }
 
@@ -224,7 +225,9 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
     /// @dev Park `who`'s dormant manual quest streak at `q` (lastSyncDay non-zero, day anchors 0) so
     ///      _questSyncState skips its decay branch and leaves `q` verbatim, and beginAfking snapshots `q`.
     function _setManualQuestStreak(address who, uint16 q) internal {
-        bytes32 slot = keccak256(abi.encode(who, QUESTSTATE_SLOT));
+        uint32 id = game.walletIdOf(who);
+        if (id == 0) id = _giveWalletId(who);
+        bytes32 slot = keccak256(abi.encode(uint256(id), QUESTSTATE_SLOT));
         uint256 word = (uint256(q) << (OFF_QS_STREAK * 8)) | (uint256(1) << (OFF_QS_SYNCDAY * 8));
         vm.store(address(quests), slot, bytes32(word));
     }

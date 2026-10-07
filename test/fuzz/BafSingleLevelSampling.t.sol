@@ -17,6 +17,10 @@ contract BafSingleLevelHarness is DegenerusGame, WalletSeed {
         }
     }
 
+    function keyOf(uint32 id) external view returns (address) {
+        return _walletKey(id);
+    }
+
     function seedRange(uint24 fromLevel, uint24 toLevel, uint256 count) external {
         for (uint24 target = fromLevel; target <= toLevel; ++target) seed(target, count);
     }
@@ -67,10 +71,10 @@ contract BafSingleLevelSamplingTest is Test {
         uint24 selected = fromLevel + uint24(EntropyLib.hash2(entropy, 0) % (uint256(toLevel - fromLevel) + 1));
         h.seedRange(fromLevel, toLevel, fallbackLength);
         h.seed(selected, len);
-        address[] memory players = h.sampleFarFutureTickets(entropy, fromLevel, toLevel);
+        uint32[] memory players = h.sampleFarFutureTickets(entropy, fromLevel, toLevel);
         assertEq(players.length, 8, "two rounds of four candidate slots");
         address[8] memory expected = _model(entropy, fromLevel, toLevel, selected, len, fallbackLength);
-        for (uint256 i; i < 8; ++i) assertEq(players[i], expected[i], "slot matches the uniform-lane replica");
+        for (uint256 i; i < 8; ++i) assertEq(players[i], h.walletIdOf(expected[i]), "slot matches the uniform-lane replica");
     }
 
     function testFuzz_MatchesReplicaWideBand(uint256 entropy, uint16 length) public {
@@ -99,40 +103,42 @@ contract BafSingleLevelSamplingTest is Test {
 
     function test_SingleHolderLeavesOddSlotEmpty() public {
         h.seed(150, 1);
-        address[] memory players = h.sampleFarFutureTickets(11, 150, 150);
+        uint32[] memory players = h.sampleFarFutureTickets(11, 150, 150);
         for (uint256 p; p < 4; ++p) {
-            assertEq(players[p], _owner(150, 0), "the lone holder takes every even slot");
-            assertEq(players[p + 4], address(0), "no distinct partner, odd slot stays empty");
+            assertEq(players[p], h.walletIdOf(_owner(150, 0)), "the lone holder takes every even slot");
+            assertEq(players[p + 4], 0, "no distinct partner, odd slot stays empty");
         }
     }
 
     function test_EmptySelectedLevelIsSkipped() public {
         h.seedRange(106, 199, 2);
         h.seed(199, 0);
-        address[] memory players = h.sampleFarFutureTickets(93, 106, 199);
+        uint32[] memory players = h.sampleFarFutureTickets(93, 106, 199);
         for (uint256 i; i < 8; ++i) {
-            assertTrue(uint256(uint160(players[i])) >> 32 != 199, "no slot names the empty level");
-            assertTrue(players[i] != address(0), "every slot names a live owner");
+            assertTrue(uint256(uint160(h.keyOf(players[i]))) >> 32 != 199, "no slot names the empty level");
+            assertTrue(players[i] != 0, "every slot names a live owner");
         }
     }
 
     function test_AllLevelsEmptyReturnsEmptySlotsWithoutReverting() public {
         h.seed(106, 0); // sets level = 100 and leaves the candidate queue empty
-        address[] memory players = h.sampleFarFutureTickets(7, 106, 199);
+        uint32[] memory players = h.sampleFarFutureTickets(7, 106, 199);
         assertEq(players.length, 8);
-        for (uint256 i; i < 8; ++i) assertEq(players[i], address(0), "an unseeded range fills nothing");
+        for (uint256 i; i < 8; ++i) assertEq(players[i], 0, "an unseeded range fills nothing");
     }
 
     // Narrow band (level+2..level+5 = 102..105, span 4): every level has exactly the two
     // protocol holders, so each pack names both of them once.
     function test_ProtocolOwnersPairInEveryPack() public {
         h.seedProtocolRange(102, 105);
-        address[] memory players = h.sampleFarFutureTickets(1, 102, 105);
+        uint32[] memory players = h.sampleFarFutureTickets(1, 102, 105);
+        uint32 sdgnrs = h.walletIdOf(ContractAddresses.SDGNRS);
+        uint32 vault = h.walletIdOf(ContractAddresses.VAULT);
         for (uint256 p; p < 4; ++p) {
             assertTrue(players[p] != players[p + 4], "a pack's two lanes are distinct");
             assertTrue(
-                (players[p] == ContractAddresses.SDGNRS && players[p + 4] == ContractAddresses.VAULT)
-                    || (players[p] == ContractAddresses.VAULT && players[p + 4] == ContractAddresses.SDGNRS),
+                (players[p] == sdgnrs && players[p + 4] == vault)
+                    || (players[p] == vault && players[p + 4] == sdgnrs),
                 "only the two protocol owners were seeded"
             );
         }

@@ -91,7 +91,7 @@ contract HumanOrderGasSeed is DegenerusGame {
     }
 
     function outcome(address player) external view returns (bytes32 digest) {
-        digest = keccak256(abi.encode(_claimableOf(_walletIdOf(player)), boonPacked[player], mintPacked_[player],
+        digest = keccak256(abi.encode(_claimableOf(_walletIdOf(player)), boonPacked[_walletIdOf(player)], mintPacked_[player],
             _getCurrentPrizePool(), _getNextPrizePool(), _getFuturePrizePool(),
             humanReadComplete, boxCursor, boxReadCount));
         for (uint24 lvl = 100; lvl <= 150; ++lvl) {

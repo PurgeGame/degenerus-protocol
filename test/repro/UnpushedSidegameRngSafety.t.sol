@@ -11,11 +11,14 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 /// @dev Inject only two deterministic rare outcomes. The witness tests settlement
 /// ordering and pool accounting, not the probability of these engine outcomes.
 contract UnpushedSidegameOutcomeEngine {
+    uint32 internal constant ALICE_ID = 4;
+    uint32 internal constant BOB_ID = 5;
+
     function settleBattle(uint256, uint256 header, uint256, uint256 bankroll,
         uint256, uint48, uint256, uint256) external pure returns (Craps.SlipResult memory r)
     {
-        address player = address(uint160(header));
-        if (player == address(0xA11CE) || player == address(0xB0B)) {
+        uint32 player = uint32(header);
+        if (player == ALICE_ID || player == BOB_ID) {
             r.peakBankroll = bankroll * 120;
             r.unitsPlayed = (uint256(1) << 104) | ((r.peakBankroll / 1 ether) << 60);
             r.stop = Craps.SlipStop.Goal;
@@ -35,6 +38,10 @@ contract UnpushedSidegameRngSafety is CrapsPins {
 
     function setUp() public {
         _installPins();
+        // The outcome engine keys its rare outcomes on the paid entry's owner ID; the Game mock
+        // holds the three protocol IDs, so the next two are 4 and 5.
+        assertEq(_idFor(address(0xA11CE)), 4);
+        assertEq(_idFor(address(0xB0B)), 5);
         table = new CrapsViews();
         api = JackpotBattle(address(table));
         uint256 elapsed = (vm.getBlockTimestamp() - 82_620) % 1 days;

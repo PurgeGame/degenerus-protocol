@@ -5,12 +5,12 @@ import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js
 import {
   deployFullProtocol,
   restoreAddresses,
+  giveWalletId,
 } from "../helpers/deployFixture.js";
 import {
   eth,
   getEvents,
   getEvent,
-  ZERO_ADDRESS,
 } from "../helpers/testUtils.js";
 
 /*
@@ -28,7 +28,7 @@ import {
  *    - finalizeBaf clears the board and bumps the epoch (stored scores read zero)
  *  - bafHeadWinner / bafPairWinners (views the game's award stage pays from)
  *    - head slots read the frozen board and the armed-day depositor draw
- *    - scatter rounds name only scored candidates (address(0) otherwise)
+ *    - scatter rounds name only scored candidates (ID 0 otherwise)
  *    - the word picks third or fourth place for head slot 2
  */
 
@@ -36,10 +36,17 @@ import {
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** Wallet ID of `addr`, registering it through the Game's allow-listed hook when new. */
+async function idOf(coinflip, addr) {
+  const game = await hre.ethers.getContractAt("DegenerusGame", await coinflip.degenerusGame());
+  return giveWalletId(game, addr);
+}
+
 /**
- * Impersonate the coinflip contract to call recordBafFlip.
+ * Impersonate the coinflip contract to call recordBafFlip for `player`'s wallet ID.
  */
 async function recordBafFlipAsCoinflip(hreEthers, coinflip, jackpots, player, lvl, amount) {
+  const playerId = await idOf(coinflip, player);
   const coinflipAddr = await coinflip.getAddress();
   await hreEthers.provider.send("hardhat_impersonateAccount", [coinflipAddr]);
   await hreEthers.provider.send("hardhat_setBalance", [
@@ -49,7 +56,7 @@ async function recordBafFlipAsCoinflip(hreEthers, coinflip, jackpots, player, lv
   const coinflipSigner = await hreEthers.getSigner(coinflipAddr);
   const tx = await jackpots
     .connect(coinflipSigner)
-    .recordBafFlip(player, lvl, amount);
+    .recordBafFlip(playerId, lvl, amount);
   await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [coinflipAddr]);
   return tx;
 }
@@ -100,7 +107,7 @@ describe("DegenerusJackpots", function () {
     it("reverts OnlyCoin when called by a random EOA", async function () {
       const { jackpots, alice, bob } = await loadFixture(deployFullProtocol);
       await expect(
-        jackpots.connect(alice).recordBafFlip(bob.address, 10, eth(100))
+        jackpots.connect(alice).recordBafFlip(1, 10, eth(100))
       ).to.be.revertedWithCustomError(jackpots, "OnlyCoin");
     });
 
@@ -114,7 +121,7 @@ describe("DegenerusJackpots", function () {
       ]);
       const coinSigner = await hre.ethers.getSigner(coinAddr);
       await expect(
-        jackpots.connect(coinSigner).recordBafFlip(alice.address, 10, eth(100))
+        jackpots.connect(coinSigner).recordBafFlip(1, 10, eth(100))
       ).to.be.revertedWithCustomError(jackpots, "OnlyCoin");
       await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [coinAddr]);
     });
@@ -149,7 +156,7 @@ describe("DegenerusJackpots", function () {
         eth(500)
       );
       const ev = await getEvent(tx, jackpots, "BafFlipRecorded");
-      expect(ev.args.player).to.equal(alice.address);
+      expect(ev.args.id).to.equal(await idOf(coinflip, alice.address));
       expect(ev.args.lvl).to.equal(10n);
       expect(ev.args.amount).to.equal(eth(500));
       expect(ev.args.newTotal).to.equal(eth(500));
@@ -196,7 +203,7 @@ describe("DegenerusJackpots", function () {
       );
       const evs = await getEvents(tx, jackpots, "BafFlipRecorded");
       expect(evs.length).to.equal(1);
-      expect(evs[0].args.player).to.equal(vaultAddr);
+      expect(evs[0].args.id).to.equal(1n);
       expect(evs[0].args.newTotal).to.equal(eth(1000));
     });
 
@@ -241,8 +248,8 @@ describe("DegenerusJackpots", function () {
       await recordBafFlipAsCoinflip(hre.ethers, coinflip, jackpots, bob.address, lvl, eth(400));
 
       // Head slot 0 is the top bettor; head slot 2 is the word-picked third or fourth place.
-      expect(await jackpots.bafHeadWinner(lvl, 1n, 0)).to.equal(alice.address);
-      expect([carol.address, dan.address]).to.include(await jackpots.bafHeadWinner(lvl, 1n, 2));
+      expect(await jackpots.bafHeadWinner(lvl, 1n, 0)).to.equal(await idOf(coinflip, alice.address));
+      expect([await idOf(coinflip, carol.address), await idOf(coinflip, dan.address)]).to.include(await jackpots.bafHeadWinner(lvl, 1n, 2));
     });
 
     it("updates existing player score when they flip more", async function () {
@@ -317,7 +324,7 @@ describe("DegenerusJackpots", function () {
       );
       const ev = await getEvent(tx, jackpots, "BafFlipRecorded");
       // Eve should appear in the event since she was recorded
-      expect(ev.args.player).to.equal(eve.address);
+      expect(ev.args.id).to.equal(await idOf(coinflip, eve.address));
     });
 
     it("does not replace lowest score when new player is equal or lower", async function () {
@@ -370,7 +377,7 @@ describe("DegenerusJackpots", function () {
         eth(50)
       );
       const ev = await getEvent(tx, jackpots, "BafFlipRecorded");
-      expect(ev.args.player).to.equal(eve.address);
+      expect(ev.args.id).to.equal(await idOf(coinflip, eve.address));
       expect(ev.args.newTotal).to.equal(eth(50));
     });
   });
@@ -423,11 +430,11 @@ describe("DegenerusJackpots", function () {
       for (const word of [1n, 999n]) {
         const rounds = await roundWinners(jackpots, 10, word);
         for (const { best, second } of rounds) {
-          expect(best).to.equal(ZERO_ADDRESS);
-          expect(second).to.equal(ZERO_ADDRESS);
+          expect(best).to.equal(0n);
+          expect(second).to.equal(0n);
         }
         for (let slot = 0; slot < 3; slot++) {
-          expect(await jackpots.bafHeadWinner(10, word, slot)).to.equal(ZERO_ADDRESS);
+          expect(await jackpots.bafHeadWinner(10, word, slot)).to.equal(0n);
         }
       }
     });
@@ -437,13 +444,13 @@ describe("DegenerusJackpots", function () {
       await recordBafFlipAsCoinflip(hre.ethers, coinflip, jackpots, alice.address, 10, eth(500));
       await recordBafFlipAsCoinflip(hre.ethers, coinflip, jackpots, bob.address, 10, eth(300));
       const before = await jackpots.bafHeadWinner(10, 1n, 0);
-      expect(before).to.equal(alice.address);
+      expect(before).to.equal(await idOf(coinflip, alice.address));
 
       await asGame(hre.ethers, game, (gameSigner) => jackpots.connect(gameSigner).beginBaf());
 
       expect(await jackpots.getLastBafResolvedDay()).to.equal(await game.currentDayView());
       // The award stage draws across several transactions from the same board.
-      expect(await jackpots.bafHeadWinner(10, 1n, 0)).to.equal(alice.address);
+      expect(await jackpots.bafHeadWinner(10, 1n, 0)).to.equal(await idOf(coinflip, alice.address));
       expect(await jackpots.bafConsolationOf(alice.address, 10)).to.equal(0n);
     });
 
@@ -458,7 +465,7 @@ describe("DegenerusJackpots", function () {
       });
 
       for (let slot = 0; slot < 3; slot++) {
-        expect(await jackpots.bafHeadWinner(10, 1n, slot)).to.equal(ZERO_ADDRESS);
+        expect(await jackpots.bafHeadWinner(10, 1n, slot)).to.equal(0n);
       }
       // The epoch bump makes the stored totals stale: a new flip starts from zero.
       const tx = await recordBafFlipAsCoinflip(hre.ethers, coinflip, jackpots, alice.address, 10, eth(100));
@@ -491,7 +498,7 @@ describe("DegenerusJackpots", function () {
       const seen = new Set();
       for (let w = 1n; w <= 32n && seen.size < 2; w++) {
         const pick = await jackpots.bafHeadWinner(10, w, 2);
-        expect([carol.address, dan.address]).to.include(pick);
+        expect([await idOf(coinflip, carol.address), await idOf(coinflip, dan.address)]).to.include(pick);
         seen.add(pick);
       }
       expect(seen.size).to.equal(2);
@@ -511,7 +518,11 @@ describe("DegenerusJackpots", function () {
       await recordBafFlipAsCoinflip(hre.ethers, coinflip, jackpots, bob.address, 10, eth(300));
       await recordBafFlipAsCoinflip(hre.ethers, coinflip, jackpots, carol.address, 10, eth(100));
 
-      const names = { [alice.address]: "Alice", [bob.address]: "Bob", [carol.address]: "Carol" };
+      const names = {
+        [await idOf(coinflip, alice.address)]: "Alice",
+        [await idOf(coinflip, bob.address)]: "Bob",
+        [await idOf(coinflip, carol.address)]: "Carol",
+      };
       const labels = ["top bettor (P/10)", "armed-day depositor draw (P/20)", "3rd/4th place (P/20)"];
       const heads = [];
       console.log("\n    === BAF head slots: lvl 10, 3 bettors ===");
@@ -523,11 +534,11 @@ describe("DegenerusJackpots", function () {
       }
 
       // Alice is the top BAF bettor (500 > 300 > 100).
-      expect(heads[0]).to.equal(alice.address);
+      expect(heads[0]).to.equal(await idOf(coinflip, alice.address));
       // No direct deposit on an armed day: the draw slot is empty.
-      expect(heads[1]).to.equal(ZERO_ADDRESS);
+      expect(heads[1]).to.equal(0n);
       // Third place is Carol, fourth is empty.
-      expect([carol.address, ZERO_ADDRESS]).to.include(heads[2]);
+      expect([await idOf(coinflip, carol.address), 0n]).to.include(heads[2]);
     });
   });
 
@@ -567,7 +578,11 @@ describe("DegenerusJackpots", function () {
 
       // Generate 20 unique player addresses from signers
       const players = signers.slice(0, 20).map((s) => s.address);
-      const scored = new Set([alice.address, bob.address, carol.address]);
+      const scored = new Set([
+        await idOf(coinflip, alice.address),
+        await idOf(coinflip, bob.address),
+        await idOf(coinflip, carol.address),
+      ]);
 
       // Set game level to 10
       await setLevel(gameAddr, 10);
@@ -614,13 +629,13 @@ describe("DegenerusJackpots", function () {
         const rounds = await roundWinners(jackpots, 10, word);
         for (const { best, second } of rounds) {
           // Only scored candidates place, and a second place needs a distinct first.
-          if (best !== ZERO_ADDRESS) {
+          if (best !== 0n) {
             expect(scored.has(best)).to.equal(true);
             ++firstCount;
           }
-          if (second !== ZERO_ADDRESS) {
+          if (second !== 0n) {
             expect(scored.has(second)).to.equal(true);
-            expect(best).to.not.equal(ZERO_ADDRESS);
+            expect(best).to.not.equal(0n);
             expect(second).to.not.equal(best);
             ++secondCount;
           }
@@ -634,7 +649,7 @@ describe("DegenerusJackpots", function () {
       expect(secondCount).to.be.gt(0, "Should have scatter 2nd place winners");
 
       // Alice should be top BAF
-      expect(await jackpots.bafHeadWinner(10, 42n, 0)).to.equal(alice.address);
+      expect(await jackpots.bafHeadWinner(10, 42n, 0)).to.equal(await idOf(coinflip, alice.address));
     });
   });
 });

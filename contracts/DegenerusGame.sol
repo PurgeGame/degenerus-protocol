@@ -506,8 +506,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Record a secondary/level quest completion against an afking sub's streak base.
     /// @dev QUESTS-only. Thin delegatecall dispatch stub into GameAfkingModule; the module impl
     ///      enforces the QUESTS-only gate under delegatecall (msg.sender preserved).
-    ///      Signature: recordAfkingSecondary(address player, uint16 amount) — matches the module selector.
-    function recordAfkingSecondary(address, uint16) external {
+    ///      Signature: recordAfkingSecondary(uint32 id, uint16 amount) — matches the module selector.
+    function recordAfkingSecondary(uint32, uint16) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_AFKING_MODULE
             .delegatecall(msg.data);
@@ -516,33 +516,35 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice QUESTS-only (enforced in the afking module): floor an afking sub's streak base
     ///         so a foil-pack purchase's quest-streak guarantee reaches a mid-run afker.
-    function floorAfkingStreakBase(address, uint16) external {
+    function floorAfkingStreakBase(uint32, uint16) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_AFKING_MODULE
             .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Pay the sDGNRS leg of an all-time record claim.
+    /// @notice Pay the sDGNRS leg of an all-time record claim and name the record's payee.
     /// @dev Access: COINFLIP only, which owns the all-time records (flip, spin, luckbox,
     ///      buy, dice run) and computes the claim's accrued pool share. Pays that share
     ///      at 1/500 scale from the sDGNRS reward pool — 0.01% to 0.15% of the pool per
     ///      claim across the share curve. transferFromPool clamps to the available
-    ///      balance and returns the exact decrement, zero on an empty pool.
-    /// @param player Recipient of the sDGNRS.
-    /// @param shareBps The claim's accrued record-pool share in bps.
+    ///      balance and returns the exact decrement, zero on an empty pool. The payee is
+    ///      returned on every call, a zero share included: Coinflip mints the record
+    ///      trophy to it on every ratchet.
+    /// @param id Wallet ID of the record holder (nonzero; Coinflip's callers hold it).
+    /// @param shareBps The claim's accrued record-pool share in bps (0 for a bare ratchet).
     /// @return paid The sDGNRS actually transferred.
+    /// @return payee The address paid the sDGNRS and the trophy.
     function payRecordSdgnrs(
-        address player,
+        uint32 id,
         uint256 shareBps
-    ) external returns (uint256 paid) {
+    ) external returns (uint256 paid, address payee) {
         if (msg.sender != ContractAddresses.COINFLIP) revert Unauthorized();
-        uint256 poolBalance = dgnrs.poolBalance(IsDGNRS.Pool.Reward);
-        if (poolBalance == 0) return 0;
-        uint256 payout = (poolBalance * shareBps) /
+        payee = _payee(_walletElement(id));
+        if (shareBps == 0) return (0, payee);
+        uint256 payout = (dgnrs.poolBalance(IsDGNRS.Pool.Reward) * shareBps) /
             (10_000 * RECORD_SDGNRS_SCALE_DIV);
-        if (payout == 0) return 0;
-        paid = dgnrs.transferFromPool(IsDGNRS.Pool.Reward, player, payout);
+        if (payout != 0) paid = dgnrs.transferFromPool(IsDGNRS.Pool.Reward, payee, payout);
     }
 
     /*+======================================================================+
@@ -985,27 +987,26 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev COINFLIP spends the coinflip boon, COIN spends the craps boon, and WWXRP spends
     ///      the WWXRP boon. Delegatecall preserves the caller and the module keeps the lanes
     ///      separate. Future WWXRP applications go through WWXRP.consumeBoon (trusted minters only).
-    ///      Signature: consumeCoinflipBoon(address player) — the player whose boon to consume.
+    ///      Signature: consumeCoinflipBoon(uint32 id) — the wallet whose boon to consume.
     ///      The signature matches the module function exactly (identical selector), so the
     ///      calldata forwards as-is — re-encoding here would cost contract-size headroom for
-    ///      no behavior change.
+    ///      no behavior change. ID 0 holds no boon state, so it returns 0 here.
     /// @return boostBps The boost in basis points to apply.
     /// @custom:reverts Unauthorized If caller is not COIN, COINFLIP or WWXRP.
     function consumeCoinflipBoon(
-        address player
+        uint32 id
     ) external returns (uint16 boostBps) {
         if (
             msg.sender != ContractAddresses.COIN &&
             msg.sender != ContractAddresses.COINFLIP &&
             msg.sender != ContractAddresses.WWXRP
         ) revert Unauthorized();
-        if (player == address(0)) return 0;
         // Most deposits/entries have no boon. Check the caller's own tier here
         // and avoid dispatching the cold module just to return zero. A nonzero
         // tier still reaches the module for expiry, consumption and its event.
         uint256 tier = msg.sender == ContractAddresses.COINFLIP
-            ? uint8(boonPacked[player].slot0 >> BP_COINFLIP_TIER_SHIFT)
-            : (boonPacked[player].slot1 >> (msg.sender == ContractAddresses.WWXRP ? BP_WWXRP_LANE_SHIFT : 0))
+            ? uint8(boonPacked[id].slot0 >> BP_COINFLIP_TIER_SHIFT)
+            : (boonPacked[id].slot1 >> (msg.sender == ContractAddresses.WWXRP ? BP_WWXRP_LANE_SHIFT : 0))
                 & BP_LANE_TIER_MASK;
         if (tier == 0) return 0;
         (bool ok, bytes memory data) = ContractAddresses
@@ -1016,21 +1017,21 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Consume decimator boon for burn bonus.
-    /// @dev Access: COIN contract only.
-    /// @param player The player whose boon to consume.
+    /// @dev Access: COIN contract only. ID 0 holds no boon state, so it returns 0.
+    /// @param id Wallet ID of the player whose boon to consume.
     /// @return boostBps The boost in basis points to apply.
     /// @custom:reverts Unauthorized If caller is not COIN contract.
     function consumeDecimatorBoon(
-        address player
+        uint32 id
     ) external returns (uint16 boostBps) {
         if (msg.sender != ContractAddresses.COIN) revert Unauthorized();
-        if (uint8(boonPacked[player].slot0 >> BP_DECIMATOR_TIER_SHIFT) == 0) return 0;
+        if (uint8(boonPacked[id].slot0 >> BP_DECIMATOR_TIER_SHIFT) == 0) return 0;
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_BOON_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameBoonModule.consumeDecimatorBoost.selector,
-                    player
+                    id
                 )
             );
         if (!ok) _revertDelegate(data);
@@ -1717,9 +1718,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      already holds. A donation is a payment, so the donor registers a wallet ID; the
     ///      RNG module holds the body. Signature: creditMiddayRng(address to, uint256
     ///      linkAmount) — matches the module selector, so the calldata forwards as-is.
-    function creditMiddayRng(address, uint256) external {
+    /// @return The donor's wallet ID.
+    function creditMiddayRng(address, uint256) external returns (uint32) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_RNG_MODULE.delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
+        // The trusted RNG module returns the identical one-word ABI result.
+        assembly ("memory-safe") { return(add(data, 32), mload(data)) }
     }
 
     /// @notice Read a donor's unspent mid-day RNG credit, in juels of donated LINK.
@@ -2315,24 +2319,28 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         // (the run's funded days + in-run secondaries); everyone else reads the decay-aware manual
         // streak, which zeroes a lapsed stale-high streak so it can't inflate
         // lootbox EV or sDGNRS claims.
-        uint32 streak = _effectiveQuestStreak(player);
-        return (_playerActivityScore(player, streak), _walletIdOf(player));
+        walletId = _walletIdOf(player);
+        scorePoints = _playerActivityScore(player, _effectiveQuestStreak(walletId));
     }
 
     /// @notice Activity score for transactions; refreshes the current-level affiliate cache.
-    /// @dev The read-only playerActivityScore remains available for STATICCALL consumers.
-    function playerActivityScoreCached(address player) external returns (uint256) {
+    /// @dev The read-only playerActivityScore remains available for STATICCALL consumers. The
+    ///      wallet ID rides the mint word the score reads; it is 0 for an unregistered wallet
+    ///      (never allocated here).
+    function playerActivityScoreCached(address player) external returns (uint256 score, uint32 id) {
         uint256 packed = mintPacked_[player];
         // Hits and wallets without durable purchase history need no mutating module call.
         if (uint24(packed >> BitPackingLib.AFFILIATE_BONUS_LEVEL_SHIFT) == level
             || (packed & ((BitPackingLib.MASK_24 << BitPackingLib.LAST_LEVEL_SHIFT)
                 | (BitPackingLib.MASK_24 << BitPackingLib.LEVEL_COUNT_SHIFT)
                 | (BitPackingLib.MASK_24 << BitPackingLib.DAY_SHIFT))) == 0) {
-            return _playerActivityScore(player, _effectiveQuestStreak(player));
+            id = uint32(packed >> BitPackingLib.WALLET_ID_SHIFT);
+            return (_playerActivityScore(player, _effectiveQuestStreak(id)), id);
         }
         (bool ok, bytes memory data) = ContractAddresses.GAME_MINER_MODULE.delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
-        return abi.decode(data, (uint256));
+        // The trusted Miner module returns the identical two-word ABI result.
+        assembly ("memory-safe") { return(add(data, 32), mload(data)) }
     }
 
     /*+======================================================================+
@@ -2426,45 +2434,48 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Sample up to 4 trait burn entries from a specific level.
     /// @dev BAF scatter reads a random packed word and rotates its lanes. Tail padding
     ///      is redrawn over valid entries so the last word keeps equal entry weighting.
-    ///      Bucket and owner-registry data roots are cached once for all four draws.
+    ///      The bucket's data root is hashed once for all four draws. Entries are the wallet
+    ///      IDs the bucket lanes store.
     /// @param nextLevel False selects the current level; true selects the next.
     /// @param entropy Random seed (typically VRF word) for trait and offset selection.
     /// @return traitSel Selected trait ID.
-    /// @return entries Array of up to 4 entry holder addresses.
+    /// @return entries Up to 4 entry holders' wallet IDs (IDs may repeat).
     function sampleTraitEntries(
         bool nextLevel,
         uint256 entropy
-    ) external view returns (uint8 traitSel, address[] memory entries) {
-        uint24 targetLvl = level + (nextLevel ? 1 : 0);
+    ) external view returns (uint8 traitSel, uint32[] memory entries) {
         traitSel = uint8(entropy >> 24);
-        if (_ticketLevelRetired(targetLvl)) return (traitSel, new address[](0));
-        uint256 headerSlot = _traitBufferBase(targetLvl) + traitSel;
-        uint256 len = _bucketLengthUnchecked(targetLvl, traitSel);
-        if (len == 0) {
-            return (traitSel, new address[](0));
-        }
+        uint256 len;
         uint256 header;
-        assembly ("memory-safe") { header := sload(headerSlot) }
+        uint256 wordsBase;
+        {
+            uint24 targetLvl = level + (nextLevel ? 1 : 0);
+            if (_ticketLevelRetired(targetLvl)) return (traitSel, new uint32[](0));
+            uint256 headerSlot = _traitBufferBase(targetLvl) + traitSel;
+            len = _bucketLengthUnchecked(targetLvl, traitSel);
+            if (len == 0) {
+                return (traitSel, new uint32[](0));
+            }
+            // Every draw uses the same bucket. Hash its data root once, including for a
+            // padding redraw that selects a different packed word.
+            assembly ("memory-safe") {
+                header := sload(headerSlot)
+                mstore(0, headerSlot)
+                wordsBase := keccak256(0, 32)
+            }
+        }
 
         uint256 take = len > 4 ? 4 : len;
-        entries = new address[](take);
-        // Every draw uses the same bucket and wallet table. Hash their data roots
-        // once, including for a padding redraw that selects a different packed word.
-        uint256 wordsBase;
-        uint256 ownersBase;
-        assembly ("memory-safe") {
-            mstore(0, headerSlot)
-            wordsBase := keccak256(0, 32)
-            mstore(0, wallets.slot)
-            ownersBase := keccak256(0, 32)
-        }
+        entries = new uint32[](take);
         PackedTicketSampleLib.Cursor memory cursor;
-        uint256 base = PackedTicketSampleLib.begin(cursor, len, entropy >> 40);
         uint256 selectedWord;
-        assembly ("memory-safe") {
-            switch eq(shr(3, base), shr(3, len))
-            case 1 { selectedWord := shr(32, header) }
-            default { selectedWord := sload(add(wordsBase, shr(3, base))) }
+        {
+            uint256 base = PackedTicketSampleLib.begin(cursor, len, entropy >> 40);
+            assembly ("memory-safe") {
+                switch eq(shr(3, base), shr(3, len))
+                case 1 { selectedWord := shr(32, header) }
+                default { selectedWord := sload(add(wordsBase, shr(3, base))) }
+            }
         }
         for (uint256 i; i < take; ) {
             (uint256 index, bool redrawn) = PackedTicketSampleLib.next(cursor, len);
@@ -2475,9 +2486,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                     case 1 { word := shr(32, header) }
                     default { word := sload(add(wordsBase, shr(3, index))) }
                 }
-                let ownerIndex := and(shr(shl(5, and(index, 7)), word), 0xffffffff)
-                mstore(add(add(entries, 32), shl(5, i)),
-                    and(sload(add(ownersBase, ownerIndex)), 0xffffffffffffffffffffffffffffffffffffffff))
+                mstore(add(add(entries, 32), shl(5, i)), and(shr(shl(5, and(index, 7)), word), 0xffffffff))
             }
             unchecked {
                 ++i;
@@ -2493,19 +2502,20 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      first lane goes to slot p (the first round's four candidates, slots 0..3) and its
     ///      second to slot p + 4 (the second round's, slots 4..7), so both rounds draw their
     ///      four candidates from four different packs. At most 12 attempts
-    ///      bound the gas; an unfilled slot stays address(0), which scores zero. BAF runs
+    ///      bound the gas; an unfilled slot stays 0, which scores zero. BAF runs
     ///      after level+1 has minted, so every candidate level is still unminted.
     /// @param entropy Random entropy for the level, word and lane draws.
     /// @param fromLevel Lowest candidate level (inclusive; the BAF passes unminted levels only).
     /// @param toLevel Highest candidate level (inclusive, >= fromLevel).
-    /// @return tickets Eight candidate slots (address(0) where unfilled).
+    /// @return tickets Eight candidate slots as the wallet IDs the queue lanes store (0 where
+    ///         unfilled).
     function sampleFarFutureTickets(
         uint256 entropy,
         uint24 fromLevel,
         uint24 toLevel
-    ) external view returns (address[] memory tickets) {
+    ) external view returns (uint32[] memory tickets) {
         uint256 span = uint256(toLevel - fromLevel) + 1;
-        tickets = new address[](8);
+        tickets = new uint32[](8);
         uint256 packs;
         for (uint256 attempt; packs < 4 && attempt < 12; ) {
             entropy = EntropyLib.hash2(entropy, attempt);
@@ -2521,7 +2531,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                 // append order) carries no edge — a word-first pick would over-weight a
                 // partial tail word.
                 uint256 a = (entropy >> 64) % len;
-                address first = _walletKey(_tqPositionAt(queue, a));
+                uint32 first = _tqPositionAt(queue, a);
                 // packs < 4 and the result array has eight slots.
                 assembly ("memory-safe") { mstore(add(add(tickets, 32), shl(5, packs)), first) }
                 uint256 window = len < 8 ? len : 8;
@@ -2529,7 +2539,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
                     uint256 b;
                     // Registry-backed lengths fit uint32 and window is at most eight.
                     assembly ("memory-safe") { b := mod(add(add(a, 1), mod(shr(128, entropy), sub(window, 1))), len) }
-                    address second = _walletKey(_tqPositionAt(queue, b));
+                    uint32 second = _tqPositionAt(queue, b);
                     assembly ("memory-safe") { mstore(add(add(tickets, 160), shl(5, packs)), second) }
                 }
                 unchecked { ++packs; }

@@ -474,7 +474,8 @@ interface IDegenerusGameLootboxModule {
 /// @notice Interface for boon consumption
 interface IDegenerusGameBoonModule {
     /// @notice Draw boons for every box in one opened entry, in a single call
-    /// @param player Box owner
+    /// @param player Box owner (account key for the mint word and box events)
+    /// @param id Box owner's wallet ID (boon and quest state key)
     /// @param perBoxBudget Boon budget of a single box, in wei of ETH-equivalent value
     /// @param boxCount Boxes rolled in this entry
     /// @param originalAmount One box's resolution amount, for the reward events
@@ -483,6 +484,7 @@ interface IDegenerusGameBoonModule {
     /// @param nonceBase Global box position of this batch's first box within its entry
     function rollBoxBoons(
         address player,
+        uint32 id,
         uint256 perBoxBudget,
         uint256 boxCount,
         uint256 originalAmount,
@@ -492,13 +494,15 @@ interface IDegenerusGameBoonModule {
     ) external payable;
 
     /// @notice Draw boons for a mixed box order in one delegatecall
-    /// @param player Box owner
+    /// @param player Box owner (account key for the mint word and box events)
+    /// @param id Box owner's wallet ID (boon and quest state key)
     /// @param amounts Per-box resolution amount for small/medium/large/custom/cover lanes
     /// @param countsPacked Five uint8 lane counts packed from least significant to most
     /// @param currentLevel Open level (level + 1)
     /// @param seed Player-mixed entry seed; nonces run cumulatively across populated lanes
     function rollBoxBoonTiers(
         address player,
+        uint32 id,
         uint256[5] calldata amounts,
         uint40 countsPacked,
         uint24 currentLevel,
@@ -513,37 +517,41 @@ interface IDegenerusGameBoonModule {
     function resolveProtocolBoonDraws(uint24 awardDay) external;
 
     /// @notice Consumes a player's coinflip, craps or WWXRP boon and returns its value
-    /// @dev The Game façade authorizes COINFLIP, COIN and WWXRP. Each caller selects only
-    ///      its own lane; delegatecall preserves the caller for the module's dispatch.
-    /// @param player Address of the player
+    /// @dev The Game façade authorizes COINFLIP, COIN and WWXRP and forwards its calldata
+    ///      unchanged (identical selector to DegenerusGame.consumeCoinflipBoon(uint32)). Each
+    ///      caller selects only its own lane; delegatecall preserves the caller for the
+    ///      module's dispatch. Boon state is keyed by wallet ID; `id == 0` returns 0.
+    /// @param id Wallet ID of the player
     /// @return boonBps Boon value in basis points
-    function consumeCoinflipBoon(address player) external returns (uint16 boonBps);
+    function consumeCoinflipBoon(uint32 id) external returns (uint16 boonBps);
 
     /// @notice Consumes a player's purchase boost boon
-    /// @param player Address of the player
+    /// @param id Wallet ID of the player (boon state key)
     /// @return boostBps Boost value in basis points
-    function consumePurchaseBoost(address player) external payable returns (uint16 boostBps);
+    function consumePurchaseBoost(uint32 id) external payable returns (uint16 boostBps);
 
     /// @notice Consumes a player's decimator boost boon
-    /// @param player Address of the player
+    /// @dev Delegate target of DegenerusGame.consumeDecimatorBoon(uint32). Boon state is keyed
+    ///      by wallet ID; `id == 0` returns 0.
+    /// @param id Wallet ID of the player
     /// @return boostBps Boost value in basis points
-    function consumeDecimatorBoost(address player) external returns (uint16 boostBps);
+    function consumeDecimatorBoost(uint32 id) external returns (uint16 boostBps);
 
     /// @notice Consumes a player's degenerette stake boon for a bet in `currency`
     /// @dev Each currency has its own independent boon lane; only the bet currency's
     ///      lane is read and spent.
-    /// @param player Address of the player
+    /// @param id Wallet ID of the player (boon state key)
     /// @param currency Bet currency (0=ETH, 1=FLIP)
     /// @return boostBps Stake bonus in basis points (0 if the lane is empty or expired)
     function consumeDegeneretteBoon(
-        address player,
+        uint32 id,
         uint8 currency
     ) external payable returns (uint16 boostBps);
 
     /// @notice Clear all expired boons for a player
-    /// @param player Address of the player
+    /// @param id Wallet ID of the player (boon state key)
     /// @return hasAnyBoon True if any active boon remains
-    function checkAndClearExpiredBoon(address player) external payable returns (bool hasAnyBoon);
+    function checkAndClearExpiredBoon(uint32 id) external payable returns (bool hasAnyBoon);
 }
 
 /// @title IDegenerusGameDegeneretteModule

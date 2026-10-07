@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {activityScoreOf} from "../helpers/ActivityScoreOf.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
+import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
 /// @title ActivityScorePointFloorTest -- proves the whole-point activity score's sole sub-point leg
 ///        (the quest streak) floors at `floor(questStreak/2)`, that this point-domain leg is the exact
@@ -39,7 +40,7 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     ///      afkingStartDay u24 off16.
     uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;
     uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED;
-    uint256 private constant DEITY_SHIFT = 184;
+    uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT;
     uint256 private constant OFF_AFKCOVERED = 13;
     uint256 private constant OFF_AFKINGSTART = 16;
     uint256 private constant OFF_STREAKLATCH = 26;
@@ -143,7 +144,9 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     ///      player is a non-afker (afkingActive == 0), so `_effectiveQuestStreak` returns this manual streak
     ///      with no Sub-slot read — the score's sole contributor.
     function _setManualQuestStreak(address player, uint16 q) internal {
-        bytes32 slot = keccak256(abi.encode(player, QUESTSTATE_SLOT));
+        uint32 id = game.walletIdOf(player);
+        if (id == 0) id = _giveWalletId(player);
+        bytes32 slot = keccak256(abi.encode(uint256(id), QUESTSTATE_SLOT));
         // baseStreak carries q as well as streak: _effectiveBaseStreak returns baseStreak
         // when lastSyncDay equals the active quest day, and the constructor-seeded
         // deploy-day quest makes that collision reachable (the marker day below is 1).
@@ -157,7 +160,7 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     /// @dev The effective quest streak the activity score reads for `player` — the same value
     ///      `_effectiveQuestStreak` resolves (manual for a non-afker, live compute-on-read for an afker).
     function _effectiveStreakSeenByScore(address player) internal view returns (uint32 streak) {
-        (streak, ) = quests.effectiveBaseStreakAndAfking(player);
+        (streak, ) = quests.effectiveBaseStreakAndAfking(game.walletIdOf(player));
     }
 
     // =========================================================================
@@ -202,7 +205,7 @@ contract ActivityScorePointFloorTest is DeployProtocol {
         _skipDaysNoDelivery(p, 0x0DECA3);
         assertEq(_liveAfkingStreakOf(p), 0, "the run decayed (live afking streak read is 0 after a missed funded day)");
 
-        (uint32 manualAfter, bool afking) = quests.effectiveBaseStreakAndAfking(p);
+        (uint32 manualAfter, bool afking) = quests.effectiveBaseStreakAndAfking(game.walletIdOf(p));
         assertFalse(afking, "the underfunded run handed back to manual quests");
         uint256 postScore = activityScoreOf(address(game), p);
         assertEq(postScore - DEITY_BASELINE_POINTS, uint256(manualAfter) / 2,

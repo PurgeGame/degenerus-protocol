@@ -52,7 +52,11 @@ contract MinerProgressHarness is DegenerusGameMinerModule {
             subsFullyProcessed = action == MinerAction.RequestDaily;
         }
         if (action == MinerAction.RequestMidday) _lrWrite(LR_PENDING_FLIP_SHIFT, LR_PENDING_FLIP_MASK, 1);
+        if (action == MinerAction.GrowthSettle) _setGrowthSettlePending(true);
     }
+
+    function setGrowthPending(bool pending) external { _setGrowthSettlePending(pending); }
+    function growthPending() external view returns (bool) { return _growthSettlePending(); }
 
     function pendingMidday() external { _lrWrite(LR_PENDING_FLIP_SHIFT, LR_PENDING_FLIP_MASK, 1); }
     function wireCoordinator() external { vrfCoordinator = IVRFCoordinator(ContractAddresses.VRF_COORDINATOR); }
@@ -110,14 +114,14 @@ contract MinerMaintenanceTable is CrapsBattle {
         if (remainder == 0) {
             _dayTickets[_keeperSlot] = entrants;
             for (uint256 i = 1; i <= entrants; ++i) {
-                _storeBet((uint256(_keeperSlot) << 64) | i, uint160(address(uint160(0xA000 + i))));
+                _storeBet((uint256(_keeperSlot) << 64) | i, 0xA000 + i);
             }
         } else _battles[bytes32(uint256(_keeperSlot))] = entrants;
     }
     function head() external view returns (uint64) { return _keeperSlot; }
     function binding(uint64 slot) external view returns (uint48) { return _slotIndexOf(slot); }
     function cursor(uint64 slot) external view returns (uint64) { return _bonusCursorOf(slot); }
-    function credits(address player) external view returns (uint256) { return _passCredits[player]; }
+    function credits(uint32 id) external view returns (uint256) { return _passCreditsById[id]; }
 }
 
 contract MinerNoProgressTest is Test {
@@ -136,7 +140,7 @@ contract MinerNoProgressTest is Test {
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
         vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending()"), abi.encode(false));
         vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenanceDueAt()"), abi.encode(uint256(0)));
-        vm.mockCall(ContractAddresses.COINFLIP, abi.encodeWithSignature("creditFlip(address,uint256)"), bytes(""));
+        vm.mockCall(ContractAddresses.COINFLIP, abi.encodeWithSignature("creditFlip(uint32,uint256)"), bytes(""));
     }
 
     function _seed(DegenerusGameStorage.MinerAction action) private {
@@ -244,6 +248,42 @@ contract MinerNoProgressTest is Test {
         }
     }
 
+    function test_GrowthSettleSelectedAfterRequestDailyAndBeforeRequestMidday() public {
+        _seed(DegenerusGameStorage.MinerAction.GrowthSettle);
+        assertEq(uint8(DegenerusGameStorage.MinerAction.GrowthSettle), 19, "appended value");
+        assertEq(game.minerAction(), 19, "pending settlement is selected");
+        game.pendingMidday();
+        _fundCoordinator(100 ether);
+        assertEq(game.minerAction(), 19, "settlement runs ahead of the mid-day request");
+        game.seed(DegenerusGameStorage.MinerAction.RequestDaily);
+        game.setGrowthPending(true);
+        assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.RequestDaily), "the daily request runs first");
+        game.seed(DegenerusGameStorage.MinerAction.Maintenance);
+        game.setGrowthPending(true);
+        vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending()"), abi.encode(true));
+        assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.Maintenance), "maintenance runs first");
+    }
+
+    function test_GrowthSettleClearsItsBitOnlyWhenDone() public {
+        _seed(DegenerusGameStorage.MinerAction.GrowthSettle);
+        bytes memory selector = abi.encodeWithSignature("settleGrowth(uint256)", uint256(100));
+        vm.mockCall(ContractAddresses.PARIMUTUEL, selector, abi.encode(false));
+        vm.expectCall(ContractAddresses.PARIMUTUEL, selector);
+        game.mineFlip{gas: 16_700_000}();
+        assertTrue(game.growthPending(), "unfinished settlement stays armed");
+        assertEq(game.minerAction(), 19, "and is selected again");
+        vm.mockCall(ContractAddresses.PARIMUTUEL, selector, abi.encode(true));
+        game.mineFlip{gas: 16_700_000}();
+        assertFalse(game.growthPending(), "a finished settlement clears the bit");
+    }
+
+    function test_GrowthSettleRejectsGasBeforeCallingParimutuel() public {
+        _seed(DegenerusGameStorage.MinerAction.GrowthSettle);
+        vm.expectCall(ContractAddresses.PARIMUTUEL, abi.encodeWithSignature("settleGrowth(uint256)", uint256(100)), uint64(0));
+        _expectFailure(MineFlipGas.InsufficientExecutionGas.selector, 500_000);
+        assertTrue(game.growthPending(), "the bit survives a refused call");
+    }
+
     function test_OptionalRequestRefusalsBubbleWithoutWorkButKeepCertification() public {
         bytes4[5] memory reasons = [IDegenerusGameRngModule.GasTooHigh.selector,
             IDegenerusGameRngModule.PreResetWindow.selector, IDegenerusGameRngModule.InsufficientLink.selector,
@@ -339,7 +379,7 @@ contract MinerNoProgressTest is Test {
     function _realTable() private returns (MinerMaintenanceTable table) {
         vm.clearMockedCalls();
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
-        vm.mockCall(ContractAddresses.COINFLIP, abi.encodeWithSignature("creditFlip(address,uint256)"), bytes(""));
+        vm.mockCall(ContractAddresses.COINFLIP, abi.encodeWithSignature("creditFlip(uint32,uint256)"), bytes(""));
         vm.etch(ContractAddresses.CRAPS, address(new MinerMaintenanceTable()).code);
         vm.etch(ContractAddresses.JACKPOT_BATTLE, address(new JackpotBattle()).code);
         return MinerMaintenanceTable(ContractAddresses.CRAPS);
@@ -425,7 +465,7 @@ contract MinerNoProgressTest is Test {
             if (j == 0) assertGt(calls, 1, "small gas commits a useful partial prefix");
             assertEq(table.cursor(head), 80);
             assertEq(table.head(), head + 8);
-            for (uint256 i = 1; i <= 80; ++i) assertEq(table.credits(address(uint160(0xA000 + i))), 1);
+            for (uint256 i = 1; i <= 80; ++i) assertEq(table.credits(uint32(0xA000 + i)), 1);
             _expectFailure(DegenerusGameMinerModule.NoWork.selector, 16_700_000);
             vm.revertToState(snap);
         }
@@ -434,7 +474,7 @@ contract MinerNoProgressTest is Test {
     function _terminalWorkers() private {
         vm.etch(ContractAddresses.GAME_ADVANCE_MODULE, address(new DegenerusGameAdvanceModule()).code);
         vm.etch(ContractAddresses.GAME_GAMEOVER_MODULE, address(new DegenerusGameGameOverModule()).code);
-        vm.mockCall(ContractAddresses.AFFILIATE, abi.encodeWithSignature("affiliateTop(uint24)"), abi.encode(address(0), uint256(0)));
+        vm.mockCall(ContractAddresses.AFFILIATE, abi.encodeWithSignature("affiliateTop(uint24)"), abi.encode(uint32(0), uint96(0)));
     }
 
     function test_TerminalLowGasCannotMasqueradeAsWork() public {

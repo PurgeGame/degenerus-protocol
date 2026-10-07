@@ -59,9 +59,9 @@ contract AfKingSubscription is DeployProtocol {
     uint256 private constant OFF_DAILY = 0; // uint8  dailyQuantity      (byte 0)
     uint256 private constant OFF_LASTBOUGHT = 7; // uint24 lastAutoBoughtDay  (bytes 7..9; post-validThroughLevel-removal repack)
 
-    /// @dev keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)") — one per creditFlip.
+    /// @dev keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)") — one per creditFlip.
     bytes32 private constant COINFLIP_STAKE_UPDATED_SIG =
-        keccak256("CoinflipStakeUpdated(address,uint24,uint256,uint256)");
+        keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)");
 
     /// @dev Game-resident module event signature (emitter == address(game) via delegatecall).
     bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(address,uint8)");
@@ -297,6 +297,7 @@ contract AfKingSubscription is DeployProtocol {
 
     /// @dev Credit `who`'s afkingFunding bucket with `amount` ETH (Δ5: depositAfkingFunding).
     function _fundPool(address who, uint256 amount) internal {
+        _giveWalletId(who);
         vm.deal(address(this), amount);
         game.depositAfkingFunding{value: amount}(who);
     }
@@ -364,7 +365,7 @@ contract AfKingSubscription is DeployProtocol {
                 _logsCache[i].emitter == address(coinflip) &&
                 _logsCache[i].topics.length >= 2 &&
                 _logsCache[i].topics[0] == COINFLIP_STAKE_UPDATED_SIG &&
-                address(uint160(uint256(_logsCache[i].topics[1]))) == to
+                uint256(_logsCache[i].topics[1]) == game.walletIdOf(to)
             ) count++;
         }
     }

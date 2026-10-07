@@ -28,6 +28,7 @@ contract PostRequestProgressiveControls is CrapsProgressiveTest {
 
 contract PostRequestBoonControls is Test {
     BoonBatchParityHarness private boon;
+    uint32 private boonId;
     bytes32 private constant REWARD = keccak256("LootBoxReward(address,uint8,uint256,uint256)");
 
     function setUp() public {
@@ -35,13 +36,14 @@ contract PostRequestBoonControls is Test {
         BoonBatchParityHarness implementation = new BoonBatchParityHarness();
         vm.etch(ContractAddresses.GAME, address(implementation).code);
         boon = BoonBatchParityHarness(ContractAddresses.GAME);
+        boonId = boon.seed(address(0xB00B));
         BoonBatchQuestRecorder quests = new BoonBatchQuestRecorder();
         vm.etch(ContractAddresses.QUESTS, address(quests).code);
     }
 
     function _reward(uint256 seed, uint24 lvl) private returns (uint256 rewardType) {
         vm.recordLogs();
-        boon.rollBoxBoons(address(0xB00B), 0.025 ether, 1, 0.25 ether, lvl, seed, 0);
+        boon.rollBoxBoons(address(0xB00B), boonId, 0.025 ether, 1, 0.25 ether, lvl, seed, 0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] == REWARD) return uint256(logs[i].topics[2]);

@@ -4,6 +4,7 @@ import hre from "hardhat";
 import {
   deployFullProtocol,
   restoreAddresses,
+  giveWalletId,
 } from "../helpers/deployFixture.js";
 import {
   eth,
@@ -31,6 +32,8 @@ const BPS_DENOM = 10_000n;
 
 // Helper: give a player sDGNRS from the Reward pool via game impersonation
 async function giveSDGNRS(sdgnrs, game, recipient, amount) {
+  // Redemptions are keyed by wallet ID, so a burning holder must be registered.
+  await giveWalletId(game, recipient);
   const gameAddr = await game.getAddress();
   await hre.network.provider.request({ method: "hardhat_impersonateAccount", params: [gameAddr] });
   await hre.ethers.provider.send("hardhat_setBalance", [gameAddr, "0xDE0B6B3A7640000"]);
