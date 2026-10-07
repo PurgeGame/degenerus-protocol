@@ -463,6 +463,13 @@ contract BoonPackedWalletIds is DeployProtocol {
         return game.afkingFundingOf(buyer);
     }
 
+    function _whaleCost(address buyer, uint256 quantity) private returns (uint256) {
+        vm.deal(buyer, 30 ether);
+        vm.prank(buyer);
+        game.purchaseWhalePass{value: 20 ether}(buyer, quantity, bytes32(0));
+        return 20 ether - game.afkingFundingOf(buyer);
+    }
+
     function _lazyOverpay(address buyer) private returns (uint256) {
         vm.deal(buyer, 10 ether);
         vm.prank(buyer);
@@ -484,6 +491,28 @@ contract BoonPackedWalletIds is DeployProtocol {
         assertGt(price, 0, "DeityPassPurchased emitted");
     }
 
+    /// @notice A whale boon only ever lowers the quote: its tier comes off the level's price for
+    ///         the first pass and every further pass pays that same price, so at the intro levels a
+    ///         boon buyer never pays more than a boonless one.
+    function testFuzz_WhaleBoonNeverPricesAboveTheBoonlessQuote(uint8 tierSeed, uint8 qtySeed) public {
+        uint256 tier = 1 + uint256(tierSeed) % 3;
+        uint256 quantity = 1 + uint256(qtySeed) % 5;
+        uint256 bps = tier == 3 ? 3500 : tier == 2 ? 2000 : 1000;
+
+        (address plain,) = _wallet("whale_plain_q");
+        uint256 snap = vm.snapshotState();
+        uint256 plainCost = _whaleCost(plain, quantity);
+        vm.revertToState(snap);
+
+        (address boosted, uint32 id) = _wallet("whale_boosted_q");
+        ext.x_setBoon(id, (tier << WHALE_TIER) | (_today() << WHALE_DAY), 0);
+        uint256 boostedCost = _whaleCost(boosted, quantity);
+
+        assertEq(plainCost, quantity * 2.4 ether, "boonless intro quote");
+        assertEq(boostedCost, 2.4 ether * (10_000 - bps) / 10_000 + (quantity - 1) * 2.4 ether, "boon off the intro price");
+        assertLt(boostedCost, plainCost, "a boon never raises the quote");
+    }
+
     function test_WhaleDiscountReadsAndClearsById() public {
         (address plain,) = _wallet("whale_plain");
         uint256 snap = vm.snapshotState();
@@ -494,10 +523,10 @@ contract BoonPackedWalletIds is DeployProtocol {
         ext.x_setBoon(id, (uint256(1) << WHALE_TIER) | (_today() << WHALE_DAY), 0);
         uint256 boostedOverpay = _whaleOverpay(boosted);
 
-        // A live boon prices the first pass at the standard 4 ETH less its tier (10%); without
-        // one the level-1 pass costs the 2.4 ETH intro price.
+        // A live boon takes its tier (10%) off the level's price: the level-1 pass costs the
+        // 2.4 ETH intro price without one and 2.16 ETH with it.
         assertEq(5 ether - plainOverpay, 2.4 ether, "boonless intro price");
-        assertEq(5 ether - boostedOverpay, 3.6 ether, "the ID's whale boon priced the pass");
+        assertEq(5 ether - boostedOverpay, 2.16 ether, "the ID's whale boon priced the pass");
         (uint256 s0,) = _boon(id);
         assertEq(s0 >> WHALE_TIER, 0, "whale lane cleared");
         _assertIdZeroEmpty();

@@ -266,7 +266,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *        12.5% / 10% for bulk buys (5+ paid passes). Recycled funds earn 5% of the price
      *        in FLIP, exactly like a ticket mint (kickback share credited back to the buyer).
      *
-     *      Price: 2.4 ETH at levels 0-3, 4 ETH at levels 4+, 10/20/35% off standard with boon.
+     *      Price: 2.4 ETH at levels 0-3, 4 ETH at levels 4+; a boon takes 10/20/35% off the first
+     *      pass at that price.
      *
      *      Fund distribution:
      *      - Pre-game (level 0): 30% next pool, 70% future pool
@@ -378,22 +379,18 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     }
 
     /// @dev The canonical whale quote's two unit prices: `first` for the first pass, `rest` for
-    ///      every further one (total = first + rest * (quantity - 1)). With a live boon the first
-    ///      pass takes the tier discount off the STANDARD price and the rest pay standard — the
-    ///      boon branch never sees the intro price; otherwise 2.4 ETH through passLevel 4 (stored
-    ///      levels 0-3) and 4 ETH after. `first <= rest` on every path.
+    ///      every further one (total = first + rest * (quantity - 1)). The level's price is
+    ///      2.4 ETH through passLevel 4 (stored levels 0-3) and 4 ETH after; a live boon takes its
+    ///      tier discount off that price for the first pass. `first <= rest` on every path.
     function _whaleUnitPrices(
         uint24 passLevel,
         bool hasValidBoon,
         uint256 s0
     ) private pure returns (uint256 first, uint256 rest) {
+        rest = passLevel <= 4 ? WHALE_PASS_EARLY_PRICE : WHALE_PASS_STANDARD_PRICE;
+        first = rest;
         if (hasValidBoon) {
-            uint16 discountBps = _whaleTierToBps(uint8(s0 >> BP_WHALE_TIER_SHIFT));
-            first = (WHALE_PASS_STANDARD_PRICE * (10_000 - discountBps)) / 10_000;
-            rest = WHALE_PASS_STANDARD_PRICE;
-        } else {
-            first = passLevel <= 4 ? WHALE_PASS_EARLY_PRICE : WHALE_PASS_STANDARD_PRICE;
-            rest = first;
+            first = (rest * (10_000 - _whaleTierToBps(uint8(s0 >> BP_WHALE_TIER_SHIFT)))) / 10_000;
         }
     }
 
