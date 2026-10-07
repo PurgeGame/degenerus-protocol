@@ -163,7 +163,7 @@ contract SerializedMidnightProgressTest is MiddayFrozenPoolLatch {
             if (topic == keccak256("Advance(uint8,uint24)")) {
                 (uint8 stage,) = abi.decode(logs[i].data, (uint8, uint24));
                 assertTrue(stage != 18, "consumer cleanup cannot report a fresh daily word applied");
-            } else if (topic == keccak256("TraitsGenerated(address,uint256,uint32)")) {
+            } else if (topic == keccak256("TraitsGenerated(uint32,uint256,uint32)")) {
                 ticketWork = true;
             } else if (topic == keccak256("MinerBounty(uint8,address,uint256)")) {
                 (, uint256 amount) = abi.decode(logs[i].data, (uint8, uint256));
@@ -229,7 +229,7 @@ contract SerializedMidnightProgressTest is MiddayFrozenPoolLatch {
             if (topic == keccak256("Advance(uint8,uint24)")) {
                 (uint8 stage,) = abi.decode(logs[i].data, (uint8, uint24));
                 assertTrue(stage != 18, "consumer cleanup cannot report a fresh daily word applied");
-            } else if (topic == keccak256("TraitsGenerated(address,uint256,uint32)")) {
+            } else if (topic == keccak256("TraitsGenerated(uint32,uint256,uint32)")) {
                 ticketWork = true;
             } else if (topic == keccak256("MinerBounty(uint8,address,uint256)")) {
                 ++bounties;

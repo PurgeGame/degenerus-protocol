@@ -39,7 +39,7 @@ contract CrapsHarness is CrapsSeedViews, CrapsBattle {
 
     /// @notice `_survived` — the owner-keyed second-chance coin for round `n`.
     function xSurvived(bytes32 seed, uint256 n, address player) external pure returns (bool) {
-        return _survived(seed, n, player);
+        return _survived(seed, n, uint256(uint160(player)));
     }
 
     /// @notice The battle-side board derivation, byte for byte as `_settlementOf` does it:
@@ -73,7 +73,7 @@ contract CrapsHarness is CrapsSeedViews, CrapsBattle {
         address player,
         uint256 boost
     ) external pure returns (Craps.SlipResult memory) {
-        return _settleSlip(b, seed, bankroll, goal, cap, rollBudget, player, boost);
+        return _settleSlip(b, seed, bankroll, goal, cap, rollBudget, uint256(uint160(player)), boost);
     }
 
     /// @notice `_shooterBoostTerms` — the packed (roll threshold, uplift) schedule a scheduled window

@@ -483,6 +483,7 @@ contract DegenerusAffiliate {
      * @param amount Base reward amount (0 decimals).
      * @param code Affiliate code provided with the transaction (may be bytes32(0)).
      * @param sender The player making the purchase.
+     * @param senderId The player's wallet ID (seeds the winner roll).
      * @param lvl Current game level (for join tracking and leaderboard).
      * @param isFreshEth True if payment is with fresh ETH, false if recycled (claimable).
      * @param lootboxActivityScore Buyer's activity score (whole points) for lootbox taper (0 = no taper; 100+ triggers linear taper to 25% floor at 255).
@@ -492,6 +493,7 @@ contract DegenerusAffiliate {
         uint256 amount,
         bytes32 code,
         address sender,
+        uint32 senderId,
         uint24 lvl,
         bool isFreshEth,
         uint16 lootboxActivityScore
@@ -553,7 +555,7 @@ contract DegenerusAffiliate {
 
         address winner;
         if (affiliateShareBase != 0) {
-            (winner, earningsWord) = _purchaseWinner(storedCode, affiliateAddr, sender, noReferrer, earningsWord);
+            (winner, earningsWord) = _purchaseWinner(storedCode, affiliateAddr, senderId, noReferrer, earningsWord);
         }
         // Cache fills share the existing earnings write. Commit before quest/credit calls.
         _recordEarnings(lvl, affiliateAddr, scaledAmount, earningsWord);
@@ -577,11 +579,12 @@ contract DegenerusAffiliate {
      *      at its own rate (fresh/recycled bps, taper on the lootbox-fresh leg) so per-component
      *      rounding matches the separate calls, pools the scaled total into ONE leaderboard write
      *      (all legs credit the same affiliate at the same level), then rolls ONE winner on the
-     *      shared (day, sender, code) entropy and credits the winner via ONE quest hop. The winner
+     *      shared (day, senderId, code) entropy and credits the winner via ONE quest hop. The winner
      *      credit is RETURNED, not paid here, so the caller batches it with the buyer's credit into
      *      one Coinflip write. payAffiliate (foil path) is left unchanged.
      * @param code Referral code supplied with the buy (resolved + locked once).
      * @param sender The buyer.
+     * @param senderId The buyer's wallet ID (seeds the winner roll).
      * @param lvl Leaderboard level for all legs (ticket and lootbox both freeze at level + 1).
      * @param tktFreshFlip Ticket-leg fresh spend in FLIP base units (fresh bps).
      * @param tktRecycledFlip Ticket-leg recycled spend in FLIP base units (recycled bps).
@@ -596,6 +599,7 @@ contract DegenerusAffiliate {
     function payAffiliateCombined(
         bytes32 code,
         address sender,
+        uint32 senderId,
         uint24 lvl,
         uint256 tktFreshFlip,
         uint256 tktRecycledFlip,
@@ -607,12 +611,9 @@ contract DegenerusAffiliate {
         returns (address winner, uint256 winnerCredit, uint256 playerKickback)
     {
         if (msg.sender != ContractAddresses.GAME) revert OnlyAuthorized();
-        (
-            address affiliateAddr,
-            uint8 kickbackPct,
-            bytes32 storedCode,
-            bool noReferrer
-        ) = _resolveReferral(sender, code);
+        (uint256 referral, bytes32 storedCode) = _referralWord(sender, code);
+        address affiliateAddr = address(uint160(referral));
+        bool noReferrer = referral >> 168 != 0;
         uint256 earningsWord = affiliateCoinEarned[lvl][affiliateAddr];
         _ensureBootstrapIdentity(storedCode, affiliateAddr, earningsWord);
 
@@ -620,25 +621,14 @@ contract DegenerusAffiliate {
         // per-component rounding matches four separate calls; then pool. All four legs credit the
         // same affiliate at the same level, so the leaderboard takes ONE read-modify-write.
         uint256 sumScaled;
-        {
-            (uint256 sc, uint256 kb) = _scaleLeg(tktFreshFlip, true, lvl, 0, kickbackPct);
-            sumScaled += sc;
-            playerKickback += kb;
-            (sc, kb) = _scaleLeg(tktRecycledFlip, false, lvl, 0, kickbackPct);
-            sumScaled += sc;
-            playerKickback += kb;
-            (sc, kb) = _scaleLeg(lbFreshFlip, true, lvl, lbFreshScore, kickbackPct);
-            sumScaled += sc;
-            playerKickback += kb;
-            (sc, kb) = _scaleLeg(lbRecycledFlip, false, lvl, 0, kickbackPct);
-            sumScaled += sc;
-            playerKickback += kb;
-        }
+        (sumScaled, playerKickback) = _scaleLegs(
+            tktFreshFlip, tktRecycledFlip, lbFreshFlip, lbRecycledFlip, lvl, lbFreshScore, uint8(referral >> 160)
+        );
         if (sumScaled == 0) return (address(0), 0, playerKickback);
 
         uint256 sumShareBase = sumScaled - playerKickback;
         if (sumShareBase != 0) {
-            (winner, earningsWord) = _purchaseWinner(storedCode, affiliateAddr, sender, noReferrer, earningsWord);
+            (winner, earningsWord) = _purchaseWinner(storedCode, affiliateAddr, senderId, noReferrer, earningsWord);
         }
         _recordEarnings(lvl, affiliateAddr, sumScaled, earningsWord);
         if (sumShareBase != 0) {
@@ -648,6 +638,31 @@ contract DegenerusAffiliate {
                 winnerCredit = sumShareBase + quests.handleAffiliate(winner, sumShareBase);
             }
         }
+    }
+
+    /// @dev The four legs of a purchase (ticket fresh, ticket recycled, lootbox fresh, lootbox
+    ///      recycled, then the lootbox-fresh taper score), each scaled at its own rate, pooled.
+    function _scaleLegs(
+        uint256 tktFreshFlip,
+        uint256 tktRecycledFlip,
+        uint256 lbFreshFlip,
+        uint256 lbRecycledFlip,
+        uint24 lvl,
+        uint16 lbFreshScore,
+        uint8 kickbackPct
+    ) private pure returns (uint256 sumScaled, uint256 kickback) {
+        (uint256 sc, uint256 kb) = _scaleLeg(tktFreshFlip, true, lvl, 0, kickbackPct);
+        sumScaled = sc;
+        kickback = kb;
+        (sc, kb) = _scaleLeg(tktRecycledFlip, false, lvl, 0, kickbackPct);
+        sumScaled += sc;
+        kickback += kb;
+        (sc, kb) = _scaleLeg(lbFreshFlip, true, lvl, lbFreshScore, kickbackPct);
+        sumScaled += sc;
+        kickback += kb;
+        (sc, kb) = _scaleLeg(lbRecycledFlip, false, lvl, 0, kickbackPct);
+        sumScaled += sc;
+        kickback += kb;
     }
 
     /// @dev Pure per-leg affiliate scaling: scale at the leg's bps (fresh L1-3 25% / L4+ 20%,
@@ -677,6 +692,16 @@ contract DegenerusAffiliate {
     /// @dev Resolve + lock the buyer's referral once (exact extraction of payAffiliate's resolution
     ///      block). Returns the affiliate address, kickback %, normalized stored code, and whether
     ///      the buyer has no real referrer (VAULT default).
+    /// @dev `_resolveReferral` packed for the combined path: affiliate address in bits 0..159,
+    ///      kickback percent 160..167, the no-referrer flag at 168.
+    function _referralWord(address sender, bytes32 code) private returns (uint256 referral, bytes32 storedCode) {
+        address affiliateAddr;
+        uint8 kickbackPct;
+        bool noReferrer;
+        (affiliateAddr, kickbackPct, storedCode, noReferrer) = _resolveReferral(sender, code);
+        referral = uint256(uint160(affiliateAddr)) | (uint256(kickbackPct) << 160) | (noReferrer ? uint256(1) << 168 : 0);
+    }
+
     function _resolveReferral(address sender, bytes32 code)
         private
         returns (address affiliateAddr, uint8 kickbackPct, bytes32 storedCode, bool noReferrer)
@@ -937,11 +962,11 @@ contract DegenerusAffiliate {
         _recordScore(owner, total, amount, lvl);
     }
 
-    function _purchaseWinner(bytes32 code, address owner, address buyer, bool noReferrer, uint256 word)
+    function _purchaseWinner(bytes32 code, address owner, uint32 buyerId, bool noReferrer, uint256 word)
         private view returns (address winner, uint256 updatedWord)
     {
         uint256 entropy = uint256(keccak256(abi.encodePacked(
-            AFFILIATE_ROLL_TAG, GameTimeLib.currentDayIndex(), buyer, code
+            AFFILIATE_ROLL_TAG, GameTimeLib.currentDayIndex(), buyerId, code
         )));
         if (noReferrer) {
             return (entropy % 2 == 0 ? ContractAddresses.VAULT : ContractAddresses.SDGNRS, word);

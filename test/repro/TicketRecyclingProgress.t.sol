@@ -119,14 +119,14 @@ contract TicketRecyclingProgressTest is DeployProtocol {
     function _traitsOrder(Vm.Log[] memory logs, address first, address second)
         private view returns (uint256 firstAt, uint256 secondAt)
     {
-        bytes32 topic = keccak256("TraitsGenerated(address,uint256,uint32)");
+        bytes32 topic = keccak256("TraitsGenerated(uint32,uint256,uint32)");
         firstAt = type(uint256).max;
         secondAt = type(uint256).max;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2 || logs[i].topics[0] != topic) continue;
-            address player = address(uint160(uint256(logs[i].topics[1])));
-            if (player == first && firstAt == type(uint256).max) firstAt = i;
-            if (player == second && secondAt == type(uint256).max) secondAt = i;
+            uint32 playerId = uint32(uint256(logs[i].topics[1]));
+            if (playerId == game.walletIdOf(first) && firstAt == type(uint256).max) firstAt = i;
+            if (playerId == game.walletIdOf(second) && secondAt == type(uint256).max) secondAt = i;
         }
         assertTrue(firstAt != type(uint256).max, "first owner generated traits");
         assertTrue(secondAt != type(uint256).max, "second owner generated traits");

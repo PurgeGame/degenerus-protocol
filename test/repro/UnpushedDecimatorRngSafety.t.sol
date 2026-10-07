@@ -76,7 +76,7 @@ contract UnpushedDecimatorSessionSeeder is DegenerusGameStorage {
 /// depend on the session's independently derived tiebreak key.
 contract UnpushedDecimatorFlatEngine {
     function settleSlipBounded(uint256, uint256, uint256, uint256, bytes32,
-        uint256 bankroll, address, uint256, uint256) external pure returns (Craps.SlipResult memory r)
+        uint256 bankroll, uint256, uint256, uint256) external pure returns (Craps.SlipResult memory r)
     {
         r.peakBankroll = bankroll;
         r.totalRolls = 30;

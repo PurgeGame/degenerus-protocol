@@ -328,7 +328,8 @@ contract Craps {
     /// @param cap        Shooter cap on the run.
     /// @param rollBudget Roll cap on the run, judged between shooters; one under `_MAX_ROLLS` is
     ///                   exact, cutting the last hand where it runs out.
-    /// @param player     The slip's owner, who seasons the survival coin.
+    /// @param salt       The slip's owner identity, which seasons the survival coin: a real
+    ///                   owner's wallet ID, or a synthetic entry's 160-bit salt.
     /// @param boost Packed schedule: the hot roll threshold in bits 0..7, the percent
     ///              added to subsequent-roll profit in bits 8..15, and above them the
     ///              ONE-BASED hand ordinal of this seat's rotation turn, or zero for none. Zero
@@ -341,7 +342,7 @@ contract Craps {
         uint256 goal,
         uint256 cap,
         uint256 rollBudget,
-        address player,
+        uint256 salt,
         uint256 boost
     ) internal pure returns (SlipResult memory r) {
 
@@ -409,7 +410,7 @@ contract Craps {
                         // end — rides the whole bankroll. Surviving doubles it, enough to cover
                         // exactly this round, and play continues; losing ends the slip with nothing.
                         // It is a PRE-GOAL instrument only: past the latch the reserve decides.
-                        if (_survived(seed, cur & _CUR_HANDS_MASK, player)) {
+                        if (_survived(seed, cur & _CUR_HANDS_MASK, salt)) {
                             bankroll += bankroll;
                         } else {
                             bankroll = 0;
@@ -790,19 +791,19 @@ contract Craps {
     ///      before the word existed — the seed is the table's and the owner is who placed the slip
     ///      — so settlement order cannot change the result. It is the same salt the board scatter
     ///      already uses, so a player's whole run is decorrelated from the field by one key.
-    function _survived(bytes32 seed, uint256 n, address player) internal pure returns (bool) {
-        return _playerDraw(SURVIVAL_TAG, seed, n, player) & 1 == 1;
+    function _survived(bytes32 seed, uint256 n, uint256 salt) internal pure returns (bool) {
+        return _playerDraw(SURVIVAL_TAG, seed, n, salt) & 1 == 1;
     }
 
-    /// @dev Exact `abi.encode(tag, seed, n, player)` digest without allocating or advancing the
+    /// @dev Exact `abi.encode(tag, seed, n, salt)` digest without allocating or advancing the
     ///      free-memory pointer. The survival draw uses this four-word preimage layout.
-    function _playerDraw(uint256 tag, bytes32 seed, uint256 n, address player) private pure returns (uint256 draw) {
+    function _playerDraw(uint256 tag, bytes32 seed, uint256 n, uint256 salt) private pure returns (uint256 draw) {
         assembly ("memory-safe") {
             let ptr := mload(0x40)
             mstore(ptr, tag)
             mstore(add(ptr, 0x20), seed)
             mstore(add(ptr, 0x40), n)
-            mstore(add(ptr, 0x60), player)
+            mstore(add(ptr, 0x60), salt)
             draw := keccak256(ptr, 0x80)
         }
     }

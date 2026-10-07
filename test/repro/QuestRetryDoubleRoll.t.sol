@@ -92,7 +92,7 @@ contract QuestRetryDoubleRoll is DeployProtocol {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(game) || logs[i].topics.length == 0) continue;
-            assertTrue(logs[i].topics[0] != keccak256("TraitsGenerated(address,uint256,uint32)"), "request generated no entries");
+            assertTrue(logs[i].topics[0] != keccak256("TraitsGenerated(uint32,uint256,uint32)"), "request generated no entries");
             if (logs[i].topics.length == 4) assertTrue(uint256(logs[i].topics[0]) >> 160 != target, "request emitted no seated reveal");
         }
         vm.roll(block.number + 17);

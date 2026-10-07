@@ -211,6 +211,7 @@ contract BoonStaticDiscard is DeployProtocol {
         DeityBoonViewer viewer = new DeityBoonViewer();
         for (uint256 i = 0; i < 200; i++) {
             address cand = makeAddr(string(abi.encodePacked("menuDeity", i)));
+            _giveWalletId(cand);
             (uint8[3] memory slots, , ) = viewer.deityBoonSlots(address(game), cand);
             for (uint8 s = 0; s < 3; s++) {
                 assertFalse(

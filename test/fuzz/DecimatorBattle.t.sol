@@ -22,7 +22,7 @@ contract DecimatorEngineProbe {
         uint256 count,
         bytes32,
         uint256 bankroll,
-        address,
+        uint256,
         uint256 boost,
         uint256 bounds
     ) external pure returns (Craps.SlipResult memory r) {
@@ -39,7 +39,7 @@ contract DecimatorEngineProbe {
 /// @dev Every run peaks exactly at the starting bankroll, so equal stacks tie and ranking falls
 ///      through to the random tiebreak.
 contract DecimatorFlatProbe {
-    function settleSlipBounded(uint256 chips, uint256 chip, uint256, uint256 count, bytes32, uint256 bankroll, address, uint256, uint256)
+    function settleSlipBounded(uint256 chips, uint256 chip, uint256, uint256 count, bytes32, uint256 bankroll, uint256, uint256, uint256)
         external
         pure
         returns (Craps.SlipResult memory r)
@@ -397,7 +397,8 @@ contract DecimatorBattleTest is Test {
                     10,
                     seed,
                     3000e18,
-                    address(uint160(id)),
+                    // The production salt: the entry's committed wallet ID (low 32 bits).
+                    uint256(uint32(uint160(h.entryOf(LVL, id).owner))),
                     (30 << 8) | 12,
                     (511 << 16) | 48
                 );
@@ -594,7 +595,7 @@ contract DecimatorBattleTest is Test {
         uint256 word = uint256(keccak256(abi.encode("round200k", uint256(404))));
         bytes32 seed = keccak256(abi.encode(DICE, word, LVL));
         uint256 board = uint256(keccak256(abi.encode(BOARD, word, LVL, uint64(200))));
-        address owner = address(uint160(200) + 0x1000);
+        uint256 owner = 200 + 0x1000;
         uint256 boost = 0x050c070c0a0c0e0c120c140c190c1e0c & 0xFFFF;
         Craps.SlipResult memory free = engine.settleSlip(0, 60, board, 10, seed, 1e40, 0, owner, boost);
         assertGe(free.totalRolls, 600, "funded fixture must reach the roll budget");

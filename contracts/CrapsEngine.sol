@@ -28,7 +28,7 @@ contract CrapsEngine is Craps, CrapsCustomTerms {
     /// @param seed         The window's shooter seed.
     /// @param bankroll     Starting bankroll in internal sub-units (10^18 per whole FLIP).
     /// @param goal         Goal in the same internal sub-units.
-    /// @param player       The slip's owner, who seasons the survival coin.
+    /// @param salt         The slip's owner identity, which seasons the survival coin.
     /// @param boost        The shooter-boost terms, zero for a custom battle.
     /// @return r The run; money fields retain internal sub-units for exact replay and scoring.
     function settleSlip(
@@ -39,10 +39,10 @@ contract CrapsEngine is Craps, CrapsCustomTerms {
         bytes32 seed,
         uint256 bankroll,
         uint256 goal,
-        address player,
+        uint256 salt,
         uint256 boost
     ) external pure returns (SlipResult memory r) {
-        r = _play(packedChips, chipFlip, scatterHash, scatterCount, seed, bankroll, goal, player, boost);
+        r = _play(packedChips, chipFlip, scatterHash, scatterCount, seed, bankroll, goal, salt, boost);
     }
 
     /// @notice `settleSlip` with no goal, under the caller's shooter cap and roll budget. The
@@ -57,7 +57,7 @@ contract CrapsEngine is Craps, CrapsCustomTerms {
         uint256 scatterCount,
         bytes32 seed,
         uint256 bankroll,
-        address player,
+        uint256 salt,
         uint256 boost,
         uint256 bounds
     ) external pure returns (SlipResult memory r) {
@@ -67,7 +67,7 @@ contract CrapsEngine is Craps, CrapsCustomTerms {
         if (rollBudget > _SLIP_ROLL_BUDGET) rollBudget = _SLIP_ROLL_BUDGET;
         Bets memory board = _boardFrom(packedChips, chipFlip);
         _scatterInto(board, scatterHash, chipFlip, scatterCount);
-        r = _settleSlip(board, seed, bankroll, 0, cap, rollBudget, player, boost);
+        r = _settleSlip(board, seed, bankroll, 0, cap, rollBudget, salt, boost);
     }
 
     /// @notice `settleSlip` with the table's MERIT COMPOSITE (`_rankOf`) in the fifth word, in
@@ -82,10 +82,10 @@ contract CrapsEngine is Craps, CrapsCustomTerms {
         bytes32 seed,
         uint256 bankroll,
         uint256 goal,
-        address player,
+        uint256 salt,
         uint256 boost
     ) external pure returns (SlipResult memory r) {
-        r = _play(packedChips, chipFlip, scatterHash, scatterCount, seed, bankroll, goal, player, boost);
+        r = _play(packedChips, chipFlip, scatterHash, scatterCount, seed, bankroll, goal, salt, boost);
         r.unitsPlayed = _rankOf(r);
     }
 
@@ -93,9 +93,10 @@ contract CrapsEngine is Craps, CrapsCustomTerms {
     /// @dev Inputs and returned money fields are whole FLIP. The simulation retains 10^18
     ///      sub-units through every hand; bankrollIn becomes the rounded payment and unitsPlayed
     ///      becomes the unscaled merit rank. Ranking precedes conversion of the receipt.
-    ///      Every seat of a field throws the same dice. An awarded entry keys its board scatter,
-    ///      survival coin to its own bet id rather than its wallet, so repeat
-    ///      awards to one wallet stay separate runs. Every field uses the shared 600-roll
+    ///      Every seat of a field throws the same dice. A paid entry salts its board scatter and
+    ///      survival coin with the bet word's owner field. An awarded entry keys both to a 160-bit
+    ///      hash of its own bet id rather than its wallet, so repeat awards to one wallet stay
+    ///      separate runs. Every field uses the shared 600-roll
     ///      between-shooter budget and 1,111-roll absolute ceiling.
     function settleBattle(uint256 betId, uint256 header, uint256 chipFlip, uint256 bankroll,
         uint256 goal, uint48 bound, uint256 field, uint256 word) external pure returns (SlipResult memory r)
@@ -119,7 +120,7 @@ contract CrapsEngine is Craps, CrapsCustomTerms {
             }
         }
         r = _play(chips, chipFlip, _hash3(word, SCATTER_TAG, key),
-            10 - placed, seed, bankroll * FLIP, goal * FLIP, address(uint160(key)), boost);
+            10 - placed, seed, bankroll * FLIP, goal * FLIP, key, boost);
         r.unitsPlayed = _rankOf(r);
         // The existing final-award policy discards sub-FLIP dust before its hundreds roll.
         // Retaining fractions above preserves affordability, goals and escalated payouts.
@@ -139,11 +140,11 @@ contract CrapsEngine is Craps, CrapsCustomTerms {
         bytes32 seed,
         uint256 bankroll,
         uint256 goal,
-        address player,
+        uint256 salt,
         uint256 boost
     ) private pure returns (SlipResult memory r) {
         Bets memory board = _boardFrom(packedChips, chipFlip);
         _scatterInto(board, scatterHash, chipFlip, scatterCount);
-        r = _settleSlip(board, seed, bankroll, goal, _MAX_SLIP_HANDS, _SLIP_ROLL_BUDGET, player, boost);
+        r = _settleSlip(board, seed, bankroll, goal, _MAX_SLIP_HANDS, _SLIP_ROLL_BUDGET, salt, boost);
     }
 }

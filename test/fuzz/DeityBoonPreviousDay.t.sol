@@ -3,16 +3,17 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {WalletSeed} from "../helpers/WalletSeed.sol";
 import {DegenerusGameBoonModule} from "../../contracts/modules/DegenerusGameBoonModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {DeityBoonViewer} from "../../contracts/DeityBoonViewer.sol";
 import {DeityBoonViewerTreeHarness} from "./BoonRollTreeParity.t.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
-contract PreviousDayBoonSeeder is DegenerusGameStorage {
+contract PreviousDayBoonSeeder is WalletSeed {
     function seed(uint24 day, uint256 word, address deity, bool locked) external {
         _recordDailyRng(day, word);
+        _seedWallet(deity);
         mintPacked_[deity] |= uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT;
         rngLockedFlag = locked;
     }
@@ -30,6 +31,9 @@ contract DeityBoonPreviousDayTest is DeployProtocol {
     function setUp() public {
         _deployProtocol();
         viewer = new DeityBoonViewerTreeHarness();
+        _giveWalletId(RECIPIENT);
+        _giveWalletId(address(0xB002));
+        _giveWalletId(address(0xB003));
         _warp(TODAY);
         _seed(TODAY - 1, YESTERDAY_WORD, false);
         _seed(TODAY, TODAY_WORD, false);
@@ -47,7 +51,7 @@ contract DeityBoonPreviousDayTest is DeployProtocol {
     }
 
     function _expected(uint256 word, uint24 day, uint8 slot) private view returns (uint8) {
-        uint256 roll = uint256(keccak256(abi.encode(word, DEITY, day, slot))) % 2766;
+        uint256 roll = uint256(keccak256(abi.encode(word, uint256(game.walletIdOf(DEITY)), day, slot))) % 2766;
         if (roll >= 982) roll += 50;
         if (roll >= 1072) roll += 40;
         return viewer.tree(roll);

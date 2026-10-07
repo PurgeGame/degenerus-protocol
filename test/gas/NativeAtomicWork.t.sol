@@ -105,7 +105,7 @@ contract NativeAtomicDecimatorTest is Test {
             (uint32 chips, uint256 named) = _board(id);
             Craps.SlipResult memory run = CrapsEngine(ContractAddresses.CRAPS_ENGINE).settleSlipBounded(
                 chips, 60, uint256(keccak256(abi.encode(keccak256("decimator.battle.board.v1"), word, uint24(5), id))),
-                10 - named, seed, 3000 ether, address(uint160(id) + 0x1000),
+                10 - named, seed, 3000 ether, uint256(id) + 0x1000,
                 (0x050c070c0a0c0e0c120c140c190c1e0c >> (named << 4)) & 0xFFFF, (511 << 16) | 48
             );
             if (run.totalRolls > rolls) { rolls = run.totalRolls; longest = id; longestStratum = i; }

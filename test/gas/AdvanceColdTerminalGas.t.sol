@@ -67,7 +67,7 @@ abstract contract ColdTerminalFixture is DeployProtocol {
         vm.prank(address(0xAFF1));
         affiliate.createAffiliateCode(bytes32("TERMINAL"), 0);
         vm.prank(address(game));
-        affiliate.payAffiliate(1000 ether, bytes32("TERMINAL"), address(0xAFF2), 10, true, 0);
+        affiliate.payAffiliate(1000 ether, bytes32("TERMINAL"), address(0xAFF2), 0xAFF2, 10, true, 0);
         vm.deal(address(game), 5000 ether);
         _requestTerminalWord();
         if (!_fresh()) _applyTerminalWord();

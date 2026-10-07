@@ -553,6 +553,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                     freshFlip,
                     affiliateCode,
                     buyer,
+                    buyerId,
                     passLevel,
                     true,
                     0
@@ -564,6 +565,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                     (recycled * PRICE_COIN_UNIT) / passPriceWei,
                     affiliateCode,
                     buyer,
+                    buyerId,
                     passLevel,
                     false,
                     0
@@ -755,6 +757,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                     (freshPaid * PRICE_COIN_UNIT) / passPriceWei,
                     affiliateCode,
                     buyer,
+                    buyerId,
                     currentLevel + 1,
                     true,
                     0
@@ -766,6 +769,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                     (recycled * PRICE_COIN_UNIT) / passPriceWei,
                     affiliateCode,
                     buyer,
+                    buyerId,
                     currentLevel + 1,
                     false,
                     0
@@ -856,9 +860,10 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         // stored one otherwise. The zero amount takes its no-reward return, so the pass links
         // without paying — the conferred whale pass below stays the affiliate's compensation.
         // A blank code is skipped rather than forwarded: forwarding it would lock an unreferred
-        // buyer to the VAULT, which the pass does not do today.
+        // buyer to the VAULT, which the pass does not do today. A zero amount never rolls a
+        // winner, so the buyer's wallet ID (assigned below) is not needed here.
         if (affiliateCode != bytes32(0)) {
-            affiliate.payAffiliate(0, affiliateCode, buyer, level + 1, true, 0);
+            affiliate.payAffiliate(0, affiliateCode, buyer, 0, level + 1, true, 0);
         }
         // One deity per buyer; the shared registration helper sets the ownership bit.
         uint256 mp = mintPacked_[buyer];

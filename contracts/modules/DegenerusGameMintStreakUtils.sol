@@ -269,14 +269,12 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         ethCashWei = cashWei - flipEth;
     }
 
-    /// @dev Per-player daily salvage seed: the seller hashed with the SETTLED prior-day
-    ///      VRF word (freeze-safe). Single computation site shared by the swap quote and
-    ///      the FLIP split so preview and execution always derive the same offer.
-    function _farFutureSeed(address player) internal view returns (uint256) {
+    /// @dev Per-player daily salvage seed: the seller's wallet ID hashed with the SETTLED
+    ///      prior-day VRF word (freeze-safe). Single computation site shared by the swap quote
+    ///      and the FLIP split so preview and execution always derive the same offer.
+    function _farFutureSeed(uint32 playerId) internal view returns (uint256) {
         return uint256(
-            keccak256(
-                abi.encodePacked(player, _recordedDailyWord(_simulatedDayIndex() - 1))
-            )
+            keccak256(abi.encode(uint256(playerId), _recordedDailyWord(_simulatedDayIndex() - 1)))
         );
     }
 

@@ -40,10 +40,11 @@ contract FoilCohortHarness is DegenerusGameFoilPackModule, WalletSeed {
         _bucketAppendRun(_traitBufferBase(1), 253, owner, 1, 1);
     }
     function retire() external { _setTicketBufferLevel(3); }
-    function goldWord(address who) external pure returns (uint256 word) {
+    function goldWord(address who) external returns (uint256 word) {
+        uint256 buyerId = _seedWallet(who);
         uint256[7] memory cut = DegenerusTraitUtils.foilCuts(20_000);
         for (word = 2; ; ++word) {
-            uint256 seed = uint256(keccak256(abi.encode(word, who, uint24(1), FOIL_SEED_TAG, uint256(0))));
+            uint256 seed = uint256(keccak256(abi.encode(word, buyerId, uint24(1), FOIL_SEED_TAG, uint256(0))));
             if (DegenerusTraitUtils.foilTrait(uint64(seed >> 192), cut) == 61) return word;
         }
     }

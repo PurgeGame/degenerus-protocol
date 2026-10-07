@@ -27,11 +27,11 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///      count proves the best-effort drain fired; zero count with an empty
 ///      queue proves the drain no-op is safe.
 contract GameOverBestEffortDrainTest is DeployProtocol {
-    /// @dev Keccak topic-0 for the frozen TraitsGenerated(address indexed player, uint256 baseKey,
+    /// @dev Keccak topic-0 for the frozen TraitsGenerated(uint32 indexed walletId, uint256 baseKey,
     ///      uint32 take) — the slimmed 3-arg event at DegenerusGameStorage:501. This test only
     ///      COUNTS drain emissions (not the removed entropy field), so the count is faithful.
     bytes32 internal constant TOPIC_TRAITS_GENERATED =
-        keccak256("TraitsGenerated(address,uint256,uint32)");
+        keccak256("TraitsGenerated(uint32,uint256,uint32)");
 
     /// @dev Keccak topic-0 for Advance(uint8 stage, uint24 level).
     bytes32 internal constant TOPIC_ADVANCE =

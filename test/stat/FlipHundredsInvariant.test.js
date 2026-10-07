@@ -310,7 +310,7 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
       ).to.equal(true);
       // Ordering: the survival flip settles first, so the threshold reads against the
       // number the player actually receives and a lost flip never reaches it.
-      const survivalIdx = body.indexOf("EntropyLib.hash4(rngWord, uint160(player), betId, BET_SURVIVAL_TAG)");
+      const survivalIdx = body.indexOf("EntropyLib.hash4(rngWord, playerId, betId, BET_SURVIVAL_TAG)");
       const roundIdx = body.indexOf("FlipRoundLib.roundFlipToHundreds(");
       expect(survivalIdx).to.be.greaterThan(-1);
       expect(roundIdx).to.be.greaterThan(-1);
@@ -350,10 +350,10 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
     it("[04b] the collapse at site 6 keys on the immutable `betId`, not on anything the caller chose", function () {
       const body = bodyOf(DEGENERETTE, "function _resolveBet(");
       expect(
-        /EntropyLib\.hash4\(\s*rngWord\s*,\s*uint160\(player\)\s*,\s*betId\s*,\s*FLIP_ROUND_TAG\s*\)/.test(
+        /EntropyLib\.hash4\(\s*rngWord\s*,\s*playerId\s*,\s*betId\s*,\s*FLIP_ROUND_TAG\s*\)/.test(
           body
         ),
-        "the collapse seed must be `hash4(rngWord, player, betId, FLIP_ROUND_TAG)` — all inputs immutable at fulfillment"
+        "the collapse seed must be `hash4(rngWord, playerId, betId, FLIP_ROUND_TAG)` — all inputs immutable at fulfillment"
       ).to.equal(true);
     });
   });

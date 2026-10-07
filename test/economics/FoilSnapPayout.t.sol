@@ -30,11 +30,14 @@ contract FoilSnapPayout is DeployProtocol {
     uint256 private constant TICKET_BUYERS = 6;
 
     /// @dev Driving parameters cloned from FoilPackEV's test_foilEV_N30 — same buyer
-    ///      addresses, same cohort sizes and order, same whale cadence, same VRF word
-    ///      sequence, same day count. RNG here is a pure function of that trajectory, so
-    ///      reusing it inherits a fixture already known to surface real foil matches
-    ///      (13 at that seed). A bespoke seed produced zero and the guard below caught it.
+    ///      addresses, same cohort sizes and order, same whale cadence, same day count.
+    ///      RNG here is a pure function of that trajectory; the guard below fails the run if the
+    ///      word series surfaces no foil match.
     uint256 private constant PURCHASE_DAYS = 30;
+    /// @dev Series label of the VRF word sequence. Each foil line's seed is keyed by the buyer's
+    ///      wallet ID, so the draws that produce claimable matches depend on it; this series
+    ///      surfaces matches in both lanes (2 claims, 4,800 FLIP).
+    uint256 private constant WORD_SERIES = 31;
     uint256 private constant RUN_DAYS = PURCHASE_DAYS + 50;
 
     /// @dev snapShift is a uint8 at slot 14, byte 7 — packed with ticketCursor (bytes 0-3)
@@ -142,7 +145,7 @@ contract FoilSnapPayout is DeployProtocol {
                     whale, 50 * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
                 ) {} catch {}
             }
-            _completeDay(_seed(PURCHASE_DAYS, d));
+            _completeDay(_seed(WORD_SERIES, d));
             _endDay = game.currentDayView();
             uint256 snapshot = vm.snapshotState();
             (, uint256 paidFlip,, uint256 claims) = _claimAll();

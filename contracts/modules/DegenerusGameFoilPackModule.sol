@@ -388,6 +388,7 @@ contract DegenerusGameFoilPackModule is
                 (freshBasis * PRICE_COIN_UNIT) / priceWei,
                 affiliateCode,
                 buyer,
+                buyerId,
                 affLevel,
                 true,
                 0
@@ -398,6 +399,7 @@ contract DegenerusGameFoilPackModule is
                 (claimableUsed * PRICE_COIN_UNIT) / priceWei,
                 affiliateCode,
                 buyer,
+                buyerId,
                 affLevel,
                 false,
                 0
@@ -702,11 +704,12 @@ contract DegenerusGameFoilPackModule is
         return true;
     }
 
-    /// @dev Generate four lines from the committed normal pack cohort's entropy.
+    /// @dev Generate four lines from the committed normal pack cohort's entropy, keyed by the
+    ///      buyer's wallet ID and the pack level (one pack per wallet per level).
     ///      The drain stores these same sixteen traits in the pack record and buckets;
     ///      later claims read the stored lines. Each uint32 holds four quadrant bytes.
     function _deriveFoilLines(
-        address buyer,
+        uint32 buyerId,
         uint24 lvl,
         uint256 entropy,
         uint16 multBps,
@@ -715,7 +718,7 @@ contract DegenerusGameFoilPackModule is
         uint256[7] memory cut = DegenerusTraitUtils.foilCuts(multBps);
         for (uint256 i; i < 4; ++i) {
             uint256 seed = uint256(
-                keccak256(abi.encode(entropy, buyer, lvl, FOIL_SEED_TAG, i))
+                keccak256(abi.encode(entropy, uint256(buyerId), lvl, FOIL_SEED_TAG, i))
             );
             uint8 tA = DegenerusTraitUtils.foilTrait(uint64(seed), cut);
             uint8 tB = DegenerusTraitUtils.foilTrait(uint64(seed >> 64), cut) | 64;
@@ -910,7 +913,8 @@ contract DegenerusGameFoilPackModule is
     ///      data this function has in hand — a fraction of a percent of the sixteen
     ///      entry writes it is here to do. Only the grand acts on it: the ladder and its
     ///      kicker stay a pull, off this budgeted path.
-    /// @param packedLvlBuyer Packed queue entry: buyer address, cycle level, and registry position.
+    /// @param packedLvlBuyer Packed queue entry: buyer address (bits 0..159, read only by the
+    ///        grand's event), cycle level (160..183) and wallet ID (192..223).
     /// @param entropy Committed normal cohort word driving the four boosted lines.
     /// @param terminal Whether liveness has triggered; suppresses the grand push, so the
     ///        terminal drain never carves a pool the terminal jackpot is settling from.
@@ -939,7 +943,7 @@ contract DegenerusGameFoilPackModule is
         // Their delayed claim records redirect every gold six, preserving uniqueness.
         bool retired = _ticketLevelRetired(lvl);
         uint32[4] memory lines = _deriveFoilLines(
-            buyer,
+            buyerId,
             lvl,
             entropy,
             _foilMultFor(buyerId, lvl),
@@ -986,8 +990,8 @@ contract DegenerusGameFoilPackModule is
             }
 
             uint256 baseKey = (uint256(TicketEntropy.FOIL) << 248) | (uint256(lvl) << 224) |
-                (uint256(uint160(buyer)) << 32);
-            emit TraitsGenerated(buyer, baseKey, FOIL_PACK_ENTRIES);
+                (uint256(buyerId) << TicketEntropy.ID_SHIFT);
+            emit TraitsGenerated(buyerId, baseKey, FOIL_PACK_ENTRIES);
 
         }
 

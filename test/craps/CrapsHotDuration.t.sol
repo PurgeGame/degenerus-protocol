@@ -9,7 +9,7 @@ contract HotDurationHarness is Craps {
     function run(Bets memory b, bytes32 seed, uint256 bank, uint256 cap, uint256 budget, uint256 boost)
         external pure returns (SlipResult memory)
     {
-        return _settleSlip(b, seed, bank, 0, cap, budget, address(123), boost);
+        return _settleSlip(b, seed, bank, 0, cap, budget, 123, boost);
     }
 }
 

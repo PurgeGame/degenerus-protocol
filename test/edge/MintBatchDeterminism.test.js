@@ -9,7 +9,7 @@ import { eth, advanceToNextDay, getLastVRFRequestId, ZERO_BYTES32 } from "../hel
 import { decodeCheckpointKey, ticketCheckpointTraits } from "../helpers/raritySymbolBatchRef.mjs";
 
 const WORD = 0x2f023456789abcdef0123456789abcdef0123456789abcdef0123456789abcden;
-const ADDRESS_MASK = (1n << 160n) - 1n;
+const WALLET_ID_MASK = (1n << 32n) - 1n;
 
 function parseInventory(receipt, iface) {
   const streams = [], revealed = [];
@@ -19,9 +19,9 @@ function parseInventory(receipt, iface) {
     if (parsed?.name === "TraitsGenerated") {
       const key = BigInt(parsed.args.baseKey);
       const decoded = decodeCheckpointKey(key);
-      streams.push({ ...decoded, baseKey: key, count: Number(parsed.args.take), player: parsed.args.player });
+      streams.push({ ...decoded, baseKey: key, count: Number(parsed.args.take), walletId: Number(parsed.args.walletId) });
     } else if (log.topics.length === 4 && log.data.length === 66) {
-      // EntryTraitsRevealed is anonymous: four level/address topics and one
+      // EntryTraitsRevealed is anonymous: four level/walletId topics and one
       // packed trait/mask word. Reject ordinary event signature topics.
       const topics = log.topics.map(BigInt);
       if (topics.some((v) => v >> 184n !== 0n)) continue;
@@ -32,7 +32,7 @@ function parseInventory(receipt, iface) {
           if ((mask >> BigInt(p * 4 + q) & 1n) === 0n) continue;
           revealed.push({
             level: Number(topics[p] >> 160n),
-            player: `0x${(topics[p] & ADDRESS_MASK).toString(16).padStart(40, "0")}`,
+            walletId: Number(topics[p] & WALLET_ID_MASK),
             trait: Number(bits >> BigInt(p * 32 + q * 8) & 255n),
           });
         }
@@ -68,7 +68,8 @@ async function drainFixture() {
     revealed.push(...inventory.revealed);
     if (!(await game.rngLocked()) && i > 4) break;
   }
-  const samePlayer = (v) => v.player.toLowerCase() === alice.address.toLowerCase();
+  const aliceId = Number(await fixture.game.walletIdOf(alice.address));
+  const samePlayer = (v) => v.walletId === aliceId;
   return { ...fixture, streams: streams.filter(samePlayer), revealed: revealed.filter(samePlayer) };
 }
 

@@ -53,6 +53,7 @@ contract DegeneretteResolveRepeg is DeployProtocol {
     uint8 private constant CURRENCY_FLIP = 1;
 
     address private player;
+    uint32 private playerId;
 
     function setUp() public {
         _deployProtocol();
@@ -60,6 +61,7 @@ contract DegeneretteResolveRepeg is DeployProtocol {
 
         player = makeAddr("degen_resolve_player");
         vm.deal(player, 1000 ether);
+        playerId = _giveWalletId(player);
 
         // Fund the game with ETH to back any pool / winning credit.
         vm.deal(address(game), 500 ether);
@@ -91,7 +93,7 @@ contract DegeneretteResolveRepeg is DeployProtocol {
         _seedFuturePrizePool(1_000_000 ether);
 
         // Word chosen so the FLIP bet (betId 1) WINS its bet-keyed survival flip
-        // (keccak(word, player, betId, BET_SURVIVAL_TAG) & 1 == 1) -- keeps the FLIP
+        // (keccak(word, playerId, betId, BET_SURVIVAL_TAG) & 1 == 1) -- keeps the FLIP
         // non-vacuity assert live under every partitioning. The FLIP bet queues first: the
         // queue's declared per-bet admissions are then non-decreasing (FLIP below ETH), so a
         // minimal-allowance call that admits one bet can never also admit the next.
@@ -99,7 +101,7 @@ contract DegeneretteResolveRepeg is DeployProtocol {
         uint256 word = uint256(keccak256("repeg_partition_independence_v1"));
         while (
             !_spin0Pays(index, word)
-                || uint256(keccak256(abi.encode(word, player, uint256(1), BET_SURVIVAL_TAG))) & 1 == 0
+                || uint256(keccak256(abi.encode(word, uint256(playerId), uint256(1), BET_SURVIVAL_TAG))) & 1 == 0
         ) ++word;
         uint32 ticket = _winningTicketFor(index, word);
 

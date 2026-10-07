@@ -44,9 +44,9 @@ library MineFlipGasBounds {
     // Eight changed seat writes, a fresh seat word, cursor and release writes, return: 65k.
     uint256 internal constant TICKET_TAIL = 75_000;
     uint256 internal constant TICKET_SELECT_MAX = 110_000;
-    // Skip with an owed write, cold queue word and registry: 14.1k measured.
+    // Skip with an owed write and a cold queue word: 11.7k measured.
     uint256 internal constant TICKET_SEAT_MAX = 17_000;
-    // Eight persisted seats re-read on a resumed call: 67k measured (one shared queue word).
+    // Eight persisted seats re-read on a resumed call: 45k measured (one shared queue word).
     uint256 internal constant TICKET_RELOAD_MAX = 100_000;
     // Four rare quadrants, 32 split appends each completing a fresh word: 0.95M measured.
     uint256 internal constant TICKET_ROUND_MAX = 1_150_000;

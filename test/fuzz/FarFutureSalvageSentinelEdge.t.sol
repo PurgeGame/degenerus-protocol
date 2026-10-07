@@ -45,7 +45,6 @@ contract FarFutureSalvageSentinelEdgeTest is DeployProtocol {
 
     function _seedExactSwap(address who) internal {
         seller = who;
-        _setExactJitter(who);
 
         // Seed the seller with 10 whole far-future tickets (40 entries) at level 110 (d=20 from cl=90).
         uint24 L = 110;
@@ -59,6 +58,8 @@ contract FarFutureSalvageSentinelEdgeTest is DeployProtocol {
         qtys[0] = 40;
         idxs[0] = len;
 
+        // The jitter seed is keyed by the seller's wallet ID, assigned when its entries are seeded.
+        _setExactJitter(who);
         _seedClaimable(ContractAddresses.SDGNRS, 10 ether); // funds the buyer above the >=1 ETH floor
     }
 
@@ -105,9 +106,10 @@ contract FarFutureSalvageSentinelEdgeTest is DeployProtocol {
     // --- helpers ---
 
     function _setExactJitter(address who) internal {
+        uint32 whoId = game.walletIdOf(who);
         for (uint256 i = 1; i < 200_000; ++i) {
             uint256 word = uint256(keccak256(abi.encodePacked("sentinel", i)));
-            if (_jitterMult(who, word) == 10000) {
+            if (_jitterMult(whoId, word) == 10000) {
                 _setPriorDayRngWord(word);
                 return;
             }
@@ -152,8 +154,8 @@ contract FarFutureSalvageSentinelEdgeTest is DeployProtocol {
         RecyclingState.seedDailyWord(address(game), uint24(day - 1), word);
     }
 
-    function _jitterMult(address player, uint256 priorDayWord) internal pure returns (uint256) {
-        return 7000 + (uint256(keccak256(abi.encodePacked(player, priorDayWord))) % 4001);
+    function _jitterMult(uint32 playerId, uint256 priorDayWord) internal pure returns (uint256) {
+        return 7000 + (uint256(keccak256(abi.encode(uint256(playerId), priorDayWord))) % 4001);
     }
 
     function _queueBaseSlot(uint24 key) internal pure returns (bytes32) {

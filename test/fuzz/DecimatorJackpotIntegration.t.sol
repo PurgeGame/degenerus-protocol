@@ -19,7 +19,7 @@ import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 contract DecimatorJackpotEngineProbe {
     function settleSlipBounded(uint256 chips, uint256 chip, uint256 board, uint256 scatter, bytes32,
-        uint256 bankroll, address, uint256 boost, uint256 bounds) external pure returns (Craps.SlipResult memory r)
+        uint256 bankroll, uint256, uint256 boost, uint256 bounds) external pure returns (Craps.SlipResult memory r)
     {
         uint256 named;
         for (uint256 i; i < 30; i += 3) named += (chips >> i) & 7;
@@ -535,10 +535,10 @@ contract DecimatorJackpotIntegrationTest is Test {
         address player = address(uint160(uint256(keccak256(abi.encode(keccak256("decimator.battle.generated.player.v1"), word, LVL, id)))));
         assertTrue(player != owner);
         vm.expectCall(ContractAddresses.CRAPS_ENGINE, abi.encodeWithSignature(
-            "settleSlipBounded(uint256,uint256,uint256,uint256,bytes32,uint256,address,uint256,uint256)",
+            "settleSlipBounded(uint256,uint256,uint256,uint256,bytes32,uint256,uint256,uint256,uint256)",
             uint256(chips), uint256(60), uint256(keccak256(abi.encode(keccak256("decimator.battle.board.v1"),word,LVL,id))),
             uint256(3), keccak256(abi.encode(keccak256("decimator.battle.dice.v1"),word,LVL)),
-            uint256(3000e18), player, uint256(0x050c), uint256(511 << 16 | 48)
+            uint256(3000e18), uint256(uint160(player)), uint256(0x050c), uint256(511 << 16 | 48)
         ), 1);
         vm.recordLogs();
         _daily(word, 3_000_000);
@@ -593,7 +593,7 @@ contract DecimatorJackpotIntegrationTest is Test {
         Craps.SlipResult memory flat;
         flat.peakBankroll = 3000e18;
         vm.mockCall(ContractAddresses.CRAPS_ENGINE, abi.encodeWithSignature(
-            "settleSlipBounded(uint256,uint256,uint256,uint256,bytes32,uint256,address,uint256,uint256)"
+            "settleSlipBounded(uint256,uint256,uint256,uint256,bytes32,uint256,uint256,uint256,uint256)"
         ), abi.encode(flat));
         h.prepare(LVL, 401, 600 ether + 7, 2000 ether, WORD, true);
         vm.recordLogs();

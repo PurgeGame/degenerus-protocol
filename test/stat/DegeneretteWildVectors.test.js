@@ -53,7 +53,7 @@ describe('Degenerette wild-color shared vectors', function () {
 
   it('FLIP survival outcomes', function () {
     for (const s of v.flip_survival) {
-      const bit = hashN(BigInt(s.word), BigInt(s.owner), BigInt(s.bet_id), BET_SURVIVAL_TAG) & 1n;
+      const bit = hashN(BigInt(s.word), BigInt(s.player_id), BigInt(s.bet_id), BET_SURVIVAL_TAG) & 1n;
       expect(bit === 1n).to.equal(s.survives);
     }
   });

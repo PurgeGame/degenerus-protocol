@@ -20,7 +20,7 @@ contract GasHarness is CrapsViews {
         view
         returns (Craps.SlipResult memory)
     {
-        return _settleSlip(b, _seedFor(index), bankroll, 0, MAX_SLIP_HANDS, SLIP_ROLL_BUDGET, address(0), 0);
+        return _settleSlip(b, _seedFor(index), bankroll, 0, MAX_SLIP_HANDS, SLIP_ROLL_BUDGET, 0, 0);
     }
 
     /// @dev The same worst case with the blank ticket's 30% suffix-profit bonus after
@@ -31,7 +31,7 @@ contract GasHarness is CrapsViews {
         returns (Craps.SlipResult memory)
     {
         return _settleSlip(
-            b, _seedFor(index), bankroll, 0, MAX_SLIP_HANDS, SLIP_ROLL_BUDGET, address(0), _shooterBoostTerms(0)
+            b, _seedFor(index), bankroll, 0, MAX_SLIP_HANDS, SLIP_ROLL_BUDGET, 0, _shooterBoostTerms(0)
         );
     }
 
@@ -41,7 +41,7 @@ contract GasHarness is CrapsViews {
         view
         returns (Craps.SlipResult memory)
     {
-        return _settleSlip(b, _seedFor(index), bankroll, 0, MAX_SLIP_HANDS, budget, address(0), _shooterBoostTerms(0));
+        return _settleSlip(b, _seedFor(index), bankroll, 0, MAX_SLIP_HANDS, budget, 0, _shooterBoostTerms(0));
     }
 
     /// @dev The scheduled engine with the high-water lifecycle actually ON — a live goal, so the
@@ -52,7 +52,7 @@ contract GasHarness is CrapsViews {
         returns (Craps.SlipResult memory)
     {
         return _settleSlip(
-            b, _seedFor(index), bankroll, goal, MAX_SLIP_HANDS, SLIP_ROLL_BUDGET, player, _shooterBoostTerms(0)
+            b, _seedFor(index), bankroll, goal, MAX_SLIP_HANDS, SLIP_ROLL_BUDGET, uint256(uint160(player)), _shooterBoostTerms(0)
         );
     }
 }

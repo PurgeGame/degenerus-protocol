@@ -766,7 +766,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     }
 
     function survived(bytes32 seed, uint256 n, address player) external pure returns (bool) {
-        return _survived(seed, n, player);
+        return _survived(seed, n, uint256(uint160(player)));
     }
 
     function boostBudgetOf(uint24 day) external view returns (uint256) {

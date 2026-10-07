@@ -31,7 +31,7 @@ contract WaterHarness is CrapsViews {
         address player,
         uint256 boost
     ) external pure returns (Craps.SlipResult memory) {
-        return _settleSlip(b, seed, bankroll, goal, cap, rollBudget, player, boost);
+        return _settleSlip(b, seed, bankroll, goal, cap, rollBudget, uint256(uint160(player)), boost);
     }
 
     function settlementAt(uint256 betId) external view returns (Settlement memory) {

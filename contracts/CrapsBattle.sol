@@ -31,7 +31,7 @@ interface ICrapsEngine {
         bytes32 seed,
         uint256 bankroll,
         uint256 goal,
-        address player,
+        uint256 salt,
         uint256 boost
     ) external pure returns (Craps.SlipResult memory);
 }

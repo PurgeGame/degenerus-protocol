@@ -28,7 +28,7 @@ contract BoostHarness is CrapsViews {
         address player,
         uint256 boost
     ) external pure returns (Craps.SlipResult memory) {
-        return _settleSlip(b, seed, bankroll, goal, cap, _SLIP_ROLL_BUDGET, player, boost);
+        return _settleSlip(b, seed, bankroll, goal, cap, _SLIP_ROLL_BUDGET, uint256(uint160(player)), boost);
     }
 
     /// @dev The shipped engine on the shipped bounds — what a settlement has to be compared
@@ -41,7 +41,7 @@ contract BoostHarness is CrapsViews {
         address player,
         uint256 boost
     ) external pure returns (Craps.SlipResult memory) {
-        Craps.SlipResult memory r = _settleSlip(b, seed, bankroll * FLIP, goal * FLIP, _MAX_SLIP_HANDS, _SLIP_ROLL_BUDGET, player, boost);
+        Craps.SlipResult memory r = _settleSlip(b, seed, bankroll * FLIP, goal * FLIP, _MAX_SLIP_HANDS, _SLIP_ROLL_BUDGET, uint256(uint160(player)), boost);
         r.bankrollIn /= FLIP;
         r.bankrollOut /= FLIP;
         r.peakBankroll /= FLIP;

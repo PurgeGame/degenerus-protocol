@@ -809,18 +809,20 @@ abstract contract DegenerusGameStorage {
     // Ticket Queue Helpers
     // =========================================================================
 
-    /// @notice Emitted when traits are generated for a player's ticket batch.
+    /// @notice Emitted when traits are generated for a wallet's ticket batch.
     ///         Records the encoded key + count needed to replay trait generation off-chain.
-    ///         Solo baseKey bit 255 records whether gold six was already taken before
-    ///         this run. Strip that event-only bit before deriving the stream's entropy.
+    ///         The key carries the wallet ID in bits 32..63 and the run's start offset in
+    ///         bits 0..31. Solo baseKey bit 255 records whether gold six was already taken
+    ///         before this run. Strip that event-only bit and the offset before deriving
+    ///         the stream's entropy.
     event TraitsGenerated(
-        address indexed player,
+        uint32 indexed walletId,
         uint256 baseKey,
         uint32 take
     );
 
-    /// @notice Direct entry reveals for up to four players, without a signature topic.
-    ///         Each nonzero topic is (uint256(level) << 160) | uint160(player). Query all
+    /// @notice Direct entry reveals for up to four wallets, without a signature topic.
+    ///         Each nonzero topic is (uint256(level) << 160) | walletId. Query all
     ///         four topic positions separately and deduplicate by transaction/log index.
     ///         An unused player topic is zero. In `entries`, byte (4*j+q) is player j's
     ///         trait in quadrant q; bit (128+4*j+q) marks that byte as present. Trait zero

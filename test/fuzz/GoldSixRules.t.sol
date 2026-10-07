@@ -25,6 +25,7 @@ contract GoldSixHarness is DegenerusGameTicketModule, WalletSeed {
         return (_walletKey(_traitDeity(trait)), _deityVirtualCount(trait, 100, _seedWallet(who)));
     }
     function queue(address who, uint32 scaled) external { _queueEntriesScaled(_seedWallet(who), level, scaled); }
+    function walletIdOf(address who) external view returns (uint32) { return _walletIdOf(who); }
     function commit(uint256 word) external {
         ticketWriteSlot = !ticketWriteSlot;
         rngWordCurrent = word;
@@ -62,10 +63,10 @@ contract GoldSixRulesTest is Test {
         assertTrue(r.done, "the queued solo run drains in one call");
     }
     /// @dev One owner queued alone at `lvl` owing 16 whole entries drains as a single solo trait
-    ///      run on identity(read key, lvl, 0, owner). Returns that stream; the caller commits.
+    ///      run on identity(read key, lvl, 0, owner's wallet ID). Returns that stream; the caller commits.
     function queueSolo(uint24 lvl, address who) private returns (uint256 stream) {
         h.queue(who, 1600);
-        stream = TicketEntropy.identity(h.writeKey(lvl), lvl, 0, who);
+        stream = TicketEntropy.identity(h.writeKey(lvl), lvl, 0, h.walletIdOf(who));
     }
     function testSoloCapAcrossOwnersAndRecycledLevelPreservesEveryOtherTrait() public {
         h.prepare(1, A);

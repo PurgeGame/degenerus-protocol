@@ -59,7 +59,8 @@ An ordinary solo identity packs:
 | 248–255 | `0x20` ordinary half zero; `0x21` ordinary half one; `0x22` frozen future |
 | 224–247 | Absolute level |
 | 192–223 | Frozen queue position |
-| 32–191 | Player address |
+| 64–191 | Zero |
+| 32–63 | Owner's wallet ID |
 | 0–31 | Zero while hashing the identity |
 
 For absolute **solo** offset `i`, a sixteen-entry group uses
@@ -89,7 +90,7 @@ new start. This removes permanent front-of-queue priority without shuffling or
 promising equal per-ticket odds. Producer priority and the foil FIFO remain as
 specified below.
 
-`TraitsGenerated(address,uint256,uint32)` retains its ABI. The emitted key is
+`TraitsGenerated(uint32 indexed walletId, uint256 baseKey, uint32 take)`. The emitted key is
 `identity | absoluteStartOffset | goldSixTakenFlag`. Bit 255 is an event-only flag
 indicating that gold Dice 6 was already present before this solo run. A decoder
 clears both that bit and the low32 offset before group hashing; the base domain
@@ -97,9 +98,10 @@ is still `0x20`–`0x22`. It applies the cap while replaying this run, using the
 as its initial state. The event’s count includes any final fractional bonus; no prior event in
 the transaction is required to recover the offset. Widened local arithmetic
 allows the final group to end at `2^32` without wrapping. Foil events use domain
-`0x23` and offset zero; they retain their existing four-line, buy-time-boosted
-`FOIL_SEED_TAG` algorithm. Seated `EntryTraitsRevealed` events directly reveal the
-credited entries and their ordered owners.
+`0x23` and offset zero with the buyer's wallet ID at bits 32–63; their four buy-time-boosted
+lines use `keccak256(abi.encode(word, uint256(buyerWalletId), level, FOIL_SEED_TAG, line))`.
+Seated `EntryTraitsRevealed` events directly reveal the credited entries and their ordered
+owners; each nonzero topic is `(level << 160) | walletId`.
 
 Gold Dice 6 (trait 253) keeps only its first natural occurrence at each full
 level, shared by solo, round and foil producers. The existing live-bucket bit,
@@ -285,7 +287,7 @@ named constants in the consumer; full string hashes are constant expressions.
 | Presale box | `H(entryRoot, walletId, PRESALE_BOX_TAG, buffer)` | Presale leg of the same entry; amount excluded |
 | Redemption box | roll `H(redemptionWord, walletId, BOX_OPEN_TAG, nonce)`, boon `H(redemptionWord, walletId, BOX_BOON_TAG, REDEMPTION_INDEX_TAG \| batchId)` | `redemptionWord = H(batchWord, beneficiaryWalletId)` in sDGNRS; claim keyed by the beneficiary ID at the burn; no queue position |
 | AFKing box | `H(word, walletId, AFKING_BOX_TAG, stampedDay)` | Day recorded before fulfillment; amount excluded |
-| Decimator battle | `H(tag, fullWord, level[, entryId])` | Tags `decimator.battle.dice.v1`, `.board.v1`, `.tie.v1`; dice omit entry id, board/tie include it; engine survival uses frozen owner; hot activation follows shared dice duration |
+| Decimator battle | `H(tag, fullWord, level[, entryId])` | Tags `decimator.battle.dice.v1`, `.board.v1`, `.tie.v1`; dice omit entry id, board/tie include it; engine survival salt is the entry's committed wallet ID (generated entries: the 160-bit `uint160(H(generated.player.v1, fullWord, level, id))`); hot activation follows shared dice duration |
 | Decimator survivor sample | `H(SAMPLE_TAG, fullWord, uint24(level)[, uint256(stratum)])` | `decimator.battle.sample.v1`; no-stratum hash rotates by modulo T; stratum hash selects one offset in [floor(i*T/S),floor((i+1)*T/S)); S=min(1000,ceil(T/2)); exact distinct set shared by locked generated and unlocked original workers |
 | Decimator generated entries | `H(tag, fullWord, level, uint64(id)[, uint8(quadrant), uint8(trait)])` | `decimator.battle.generated.player.v1` and `.recipient.v1`; IDs N+1..N+M share the original `decimator.battle.board.v1` and `.tie.v1` domains; allocation is fixed cumulative rounding; recipients/preferences read only for sampled entries under the daily RNG lock |
 | Direct reward box | `H(callerDerivedWord, walletId)` | ETH bet caller binds the relevant bet; this is not an independent raw-word consumer |
@@ -293,9 +295,9 @@ named constants in the consumer; full string hashes are constant expressions.
 | Degenerette result board | packed `H(word, uint32(index), QUICK_PLAY_SALT)` for spin 0; add `uint8(spin)` for later spins | **Shared by all ETH/FLIP players and bets in an RNG period**, including different stakes, hero symbols and currencies. Only ETH/FLIP bets use it; WWXRP is not a bet currency |
 | Degenerette player ticket | `H(H(word, index, heroSymbol, spin), PLAYER_TICKET_TAG)` | Shared across owners, bet ids, stakes and spin counts for the same hero; different heroes regenerate the other cells; no settlement inputs |
 | WWXRP box/foil spin | `H(boxSpinSeed, WWXRP_DRAW_TAG)`, result `H(that, RESULT_TICKET_TAG)` | Internal box and foil reward spins only (no player-funded WWXRP bets); derived from that box's root, separate from the ETH/FLIP board; rig `H(spinSeed, WWXRP_RIG_SALT)` |
-| Degenerette survival / rounding / record | `H(word, player, betId, respectiveTag)` | Owner + index-scoped bet id (queue position + 1, see DEGENERETTE-BET-QUEUE.md); tags `BET_SURVIVAL_TAG`, `FLIP_ROUND_TAG`, `RECORD_SPIN_TAG`; settlement batch excluded |
+| Degenerette survival / rounding / record | `H(word, walletId, betId, respectiveTag)` | Owner's wallet ID (bet word bits 0–31) + index-scoped bet id (queue position + 1, see DEGENERETTE-BET-QUEUE.md); tags `BET_SURVIVAL_TAG`, `FLIP_ROUND_TAG`, `RECORD_SPIN_TAG`; settlement batch excluded |
 | Craps dice | `H(_CRAPS_SEED_DOMAIN, word, bound)` | Shared table sequence; existing engine domains and rotating shooter retained |
-| Craps scatter | `H(word, SCATTER_TAG, player)` | Per-owner board, distinct from lootbox boon |
+| Craps scatter / survival | `H(word, SCATTER_TAG, salt)`; survival `H(SURVIVAL_TAG, seed, round, salt)` | Salt = the bet word's owner field for paid entries, `uint160(H(word, JACKPOT_AWARDED_TAG, betId))` for awarded entries; per-owner board, distinct from lootbox boon |
 | Craps bounty boost | `H(word, bound, BOOST_TAG)` | Window identity; battle financial key excluded |
 | Craps schedule | `H(word, SCHEDULE_TAG, period)` | Fixed scheduled period |
 | Craps ties / rounding | `H(word, TIE_TAG, bound<<64 | seat)` / `H(word, CRAPS_ROUND_TAG, betId)` | Fixed window and entry; separate domains |
@@ -311,8 +313,9 @@ named constants in the consumer; full string hashes are constant expressions.
 | Skim bps / variance | `H(word, SKIM_BPS_TAG)` / `H(word, SKIM_VARIANCE_TAG)` | Second variance draw hashes the first variance word |
 | sDGNRS century refill | `H(word, CENTURY_REFILL_TAG XOR completedLevel) % 51 + 25` | Tag = `H("sdgnrs.century.refill")`; fixed level and transition word; no caller, amount, timestamp or pool balance in seed |
 | Coinflip reward percent | packed `H(REWARD_PERCENT_TAG, word, uint24(epoch))` | Normally resolved days only; gap rewards are fixed at 100% profit, with win/loss from raw recovery bits |
-| Foil packs | `FOIL_SEED_TAG` on frozen normal cohort word; `FOIL_CCY_TAG` / `FOIL_SPIN_TAG` on immutable packed payout seed | Stored lines bind buyer, level and ticket ordinal; payout binds draw day and ticket ordinal |
-| Protocol/deity boons | existing issuer/day/slot domains | Shared issuer menu intentional; winner cohort closed before request |
+| Foil packs | `FOIL_SEED_TAG` on frozen normal cohort word; `FOIL_CCY_TAG` / `FOIL_SPIN_TAG` on immutable packed payout seed | Stored lines bind the buyer's wallet ID, level and line ordinal; payout binds draw day and ticket ordinal |
+| Deity boon menu | `H(dailyWord, deityWalletId, day, slot)` | Protocol issuers use their constant IDs (VAULT 1, SDGNRS 2); `DeityBoonViewer` reads the deity's ID from the Game |
+| Protocol boon winners | `H(PROTOCOL_BOON_WINNER_TAG, issuer, day, slot, winnerWord)` | Issuer-address domain; winner cohort closed before request |
 | Incinerator / WWXRP draws | existing contract/day/draw domains | Weighted stake intervals choose probability, not hash input entropy |
 
 ## Intended sharing and retained exceptions
@@ -332,8 +335,9 @@ named constants in the consumer; full string hashes are constant expressions.
 - Weighted populations, effective symbol totals and probability denominators
   remain inputs to selection arithmetic. Removing financial values from hash
   preimages does not remove economic weighting or eligibility conditions.
-- Affiliate selection and salvage quotes are intentionally deterministic/public;
-  they are not fresh VRF draws.
+- Affiliate selection (`H(AFFILIATE_ROLL_TAG, day, buyerWalletId, code)`, packed) and
+  salvage quotes (`H(sellerWalletId, previousDailyWord)`) are intentionally
+  deterministic/public; they are not fresh VRF draws.
 - There is no entropy fallback. A VRF request unanswered for 14 days ends the
   game deterministically with no word at all: the terminal level's tickets share
   the pot (`claimDeadVrf`). A normal ending draws only on a terminal word it

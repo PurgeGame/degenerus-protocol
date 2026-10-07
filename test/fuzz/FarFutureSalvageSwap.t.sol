@@ -36,7 +36,7 @@ contract FFKeyHarness is DegenerusGameStorage {
 ///
 /// @dev Far-future entries for the seller are seeded via vm.store into entriesOwedPacked + ticketQueue at
 ///      the far-future key (the constructor already pre-queues sDGNRS + VAULT). The daily jitter seed is
-///      keccak256(player, _recordedDailyWord(currentDayView()-1)); the test sets _recordedDailyWord(day-1) via vm.store
+///      keccak256(walletId, _recordedDailyWord(currentDayView()-1)); the test sets _recordedDailyWord(day-1) via vm.store
 ///      and searches for the word that drives the jitter multiplier to its 110% ceiling. ZERO contracts/*.sol
 ///      (mainnet) edits -- subject FROZEN at the Phase-326 diff.
 contract FarFutureSalvageSwapTest is DeployProtocol {
@@ -126,10 +126,10 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
     }
 
     /// @dev The exact jitter multiplier the contract derives for (player, priorDayWord).
-    ///      jitterMult = 7000 + (seed % 4001), seed = keccak256(player, priorDayWord). Mirrors
+    ///      jitterMult = 7000 + (seed % 4001), seed = keccak256(playerId, priorDayWord). Mirrors
     ///      MintStreakUtils._quoteFarFutureSwap so the test can search for the ceiling word.
-    function _jitterMult(address player, uint256 priorDayWord) internal pure returns (uint256) {
-        uint256 seed = uint256(keccak256(abi.encodePacked(player, priorDayWord)));
+    function _jitterMult(uint32 playerId, uint256 priorDayWord) internal pure returns (uint256) {
+        uint256 seed = uint256(keccak256(abi.encode(uint256(playerId), priorDayWord)));
         return 7000 + (seed % 4001);
     }
 
@@ -166,10 +166,11 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
 
     /// @dev Find a prior-day word that drives the jitter multiplier to EXACTLY 11000 (the 110% ceiling)
     ///      for `player`. Searches a bounded band of candidate words.
-    function _findCeilingWord(address player) internal pure returns (uint256 word, bool found) {
+    function _findCeilingWord(address player) internal view returns (uint256 word, bool found) {
+        uint32 playerId = game.walletIdOf(player);
         for (uint256 i = 1; i < 200_000; ++i) {
             uint256 w = uint256(keccak256(abi.encodePacked("ceil", player, i)));
-            if (_jitterMult(player, w) == 11000) {
+            if (_jitterMult(playerId, w) == 11000) {
                 return (w, true);
             }
         }
@@ -188,7 +189,7 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
         (uint256 ceilWord, bool ok) = _findCeilingWord(seller);
         assertTrue(ok, "could not find a ceiling jitter word (search band too small)");
         _setPriorDayRngWord(ceilWord);
-        assertEq(_jitterMult(seller, ceilWord), 11000, "jitter not at 110% ceiling");
+        assertEq(_jitterMult(game.walletIdOf(seller), ceilWord), 11000, "jitter not at 110% ceiling");
 
         uint24 cl = game.level() + 1; // _activeTicketLevel() at deploy (jackpotPhaseFlag=false)
 
@@ -243,14 +244,14 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
     ///         This is the anti-false-confidence guard for (a)'s ceiling: prove the contract can never
     ///         exceed 110% and CAN hit ~110% for some seed (so the ceiling is not a number it never produces).
     function test_SWAP08_JitterCeilingIsActuallyReached() public pure {
+        uint32 probeId = 0xBEEF;
         uint256 maxSeen;
         uint256 minSeen = type(uint256).max;
         bool reachedCeiling;
-        address probe = address(0xBEEF);
         // Search a band of prior-day words; the jitter multiplier must stay in [7000, 11000] and reach 11000.
         for (uint256 i = 0; i < 50_000; ++i) {
             uint256 w = uint256(keccak256(abi.encodePacked("jit", i)));
-            uint256 m = _jitterMult(probe, w);
+            uint256 m = _jitterMult(probeId, w);
             assertLe(m, 11000, "jitter multiplier exceeded the 110% ceiling");
             assertGe(m, 7000, "jitter multiplier fell below the 70% floor");
             if (m > maxSeen) maxSeen = m;
@@ -273,11 +274,12 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
     function test_SWAP08_BaseFractionBelowFarTicketPresentEv() public {
         // Base jitter = 100% (multiplier 10000). Find a word producing it.
         address probe = seller;
+        uint32 probeId = game.walletIdOf(probe);
         uint256 baseWord;
         bool found;
         for (uint256 i = 1; i < 200_000; ++i) {
             uint256 w = uint256(keccak256(abi.encodePacked("base", probe, i)));
-            if (_jitterMult(probe, w) == 10000) {
+            if (_jitterMult(probeId, w) == 10000) {
                 baseWord = w;
                 found = true;
                 break;
@@ -433,6 +435,11 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
     function test_SWAP10_SalvageTicketLegArmsBuyRecordInRawTickets() public {
         (uint32[] memory levels, uint256[] memory qtys, uint256[] memory idxs) =
             _setupExecutableSwap(6, 600, uint256(keccak256("record_jitter")), 500 ether);
+        // The jitter is keyed by the seller's wallet ID, assigned while its tickets are seeded:
+        // take the 110% ceiling word so the quote clears the record floor.
+        (uint256 ceilWord, bool found) = _findCeilingWord(seller);
+        assertTrue(found, "ceiling word exists");
+        _setPriorDayRngWord(ceilWord);
 
         (, , uint256 ticketWei, , ) = game.previewSellFarFutureEntries(seller, levels, qtys);
         uint256 oneTicketWei = PriceLookupLib.priceForLevel(game.level() + 1);
@@ -560,7 +567,7 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
     function test_SWAP09_WholeTicketAlignedNoRegression() public {
         uint256 baseWord = uint256(keccak256("aligned_base"));
         _setPriorDayRngWord(baseWord);
-        uint256 jitterMult = _jitterMult(seller, baseWord); // in [7000, 11000]
+        uint256 jitterMult = _jitterMult(game.walletIdOf(seller), baseWord); // in [7000, 11000]
         uint24 cl = game.level() + 1;
 
         uint256[4] memory ds = [uint256(6), uint256(20), uint256(50), uint256(100)];

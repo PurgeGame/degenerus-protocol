@@ -115,7 +115,7 @@ contract CrapsSlipHarness is CrapsViews {
     ///      own loop, so there is no external on the table; the suite reaches the SHIPPED function
     ///      through this harness rather than adding one.
     function survivedAt(uint48 index, uint256 handsPlayed, address player) external view returns (bool) {
-        return _survived(_seedFor(index), handsPlayed, player);
+        return _survived(_seedFor(index), handsPlayed, uint256(uint160(player)));
     }
 
     /// @dev Test tap into the slip engine with a caller-chosen roll budget — organically
@@ -126,7 +126,7 @@ contract CrapsSlipHarness is CrapsViews {
         view
         returns (Craps.SlipResult memory)
     {
-        return _settleSlip(b, _seedFor(index), bankroll, 0, MAX_SLIP_HANDS, budget, player, 0);
+        return _settleSlip(b, _seedFor(index), bankroll, 0, MAX_SLIP_HANDS, budget, uint256(uint160(player)), 0);
     }
 
     /// @dev The same engine under a SCHEDULE. `boost` is the packed pair `_settleSlip` reads —
@@ -141,7 +141,7 @@ contract CrapsSlipHarness is CrapsViews {
         address player,
         uint256 boost
     ) external pure returns (Craps.SlipResult memory) {
-        return _settleSlip(b, seed, bankroll, goal, cap, SLIP_ROLL_BUDGET, player, boost);
+        return _settleSlip(b, seed, bankroll, goal, cap, SLIP_ROLL_BUDGET, uint256(uint160(player)), boost);
     }
 
     /// @dev The engine under caller-chosen bounds, so a fixture can drive the shooter cap and the
@@ -156,7 +156,7 @@ contract CrapsSlipHarness is CrapsViews {
         address player,
         uint256 boost
     ) external pure returns (Craps.SlipResult memory) {
-        return _settleSlip(b, seed, bankroll, goal, cap, rollBudget, player, boost);
+        return _settleSlip(b, seed, bankroll, goal, cap, rollBudget, uint256(uint160(player)), boost);
     }
 }
 

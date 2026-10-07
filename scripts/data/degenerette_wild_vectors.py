@@ -189,15 +189,15 @@ def main():
     for symbol, spin, want in cases:
         word = find_bet(1, symbol, spin, want)
         bets.append(bet_vector(word, 1, symbol, spin, 10**16, 1000, [0, 305, 500, 30000][len(bets) % 4]))
-    # A paid S8, then FLIP survival in both outcomes for one owner/bet.
+    # A paid S8, then FLIP survival in both outcomes for one wallet ID/bet.
     word = find_bet(1, 11, 0, lambda s, w: s == 8)
     bets.append(bet_vector(word, 1, 11, 0, 10**16, 1000, 30000))
-    owner = 0x00000000000000000000000000000000000000AA
+    player_id = 0xAA  # wallet ID: the bet word's low 32 bits
     survival = []
     for want in (1, 0):
         for word in range(1, 1000):
-            if hash4(word, owner, 1, BET_SURVIVAL_TAG) & 1 == want:
-                survival.append({"word": h(word, 64), "owner": h(owner, 40), "bet_id": 1, "survives": bool(want)})
+            if hash4(word, player_id, 1, BET_SURVIVAL_TAG) & 1 == want:
+                survival.append({"word": h(word, 64), "player_id": h(player_id), "bet_id": 1, "survives": bool(want)})
                 break
 
     boxes = []

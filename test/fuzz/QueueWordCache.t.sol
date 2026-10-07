@@ -22,6 +22,8 @@ contract QueueWordCacheHarness is DegenerusGameStorage, WalletSeed {
 
     /// @dev Far-future lanes hold whole entries only (no remainder field), so far-future seeds
     ///      carry no remainder.
+    function idOf(address who) external view returns (uint32) { return _walletIdOf(who); }
+
     function seed(uint24 key, uint24 lvl, uint256 n, uint32 ownerStart, uint256 entropy, uint8 shape) external {
         uint256[] storage owners = wallets;
         assembly ("memory-safe") { sstore(owners.slot, add(ownerStart, 1)) }
@@ -190,16 +192,16 @@ abstract contract QueueWordCacheBase is Test {
         for (uint256 q = idx; q < o.nextIdx; ++q) visited[k++] = h.ownerAtPhysical(key, TicketEntropy.queueIndex(q, start, n));
         for (uint256 i; i < o.logs.length; ++i) {
             Vm.Log memory l = o.logs[i];
-            // EntryTraitsRevealed is anonymous: four player topics and one data word.
+            // EntryTraitsRevealed is anonymous: four seat topics and one data word.
             if (l.emitter != address(h) || l.topics.length != 4 || l.data.length != 32) continue;
             ++reveals;
             for (uint256 t; t < 4; ++t) {
                 uint256 topic = uint256(l.topics[t]);
                 if (topic == 0) continue;
                 assertEq(topic >> 160, lvl, "reveal names the drained level");
-                address player = address(uint160(topic));
+                uint32 seatId = uint32(topic);
                 bool found;
-                for (uint256 v; v < visited.length && !found; ++v) found = visited[v] == player;
+                for (uint256 v; v < visited.length && !found; ++v) found = h.idOf(visited[v]) == seatId;
                 assertTrue(found, "revealed seat owner matches the uncached queue lane");
             }
         }

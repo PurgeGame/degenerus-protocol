@@ -474,13 +474,12 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
         MineFlipGas.Meter memory meter) private returns (bool moved, bool complete, uint256 emitted)
     {
         if (!MineFlipGas.canRun(meter, SOLO_BASE + ENTRY_MAX, TAIL)) return (false, false, 0);
-        address player = _walletKey(ownerPos);
         uint80 packed = _entryPacked(rk, ownerPos);
         uint80 snapDone = shift == 0 ? 0 : SNAP_DONE_BIT;
         uint32 owed;
         uint8 rem;
-        (packed, owed, rem) = _readOwed(packed, snapDone, shift, rk, lvl, qi, player, entropy);
-        uint256 stream = TicketEntropy.identity(rk, lvl, qi, player);
+        (packed, owed, rem) = _readOwed(packed, snapDone, shift, rk, lvl, qi, ownerPos, entropy);
+        uint256 stream = TicketEntropy.identity(rk, lvl, qi, ownerPos);
         uint256 available = MineFlipGas.remaining(meter);
         // A low-gas miner may commit a shorter aligned prefix. Never consume
         // any of the reserve needed to write its complete continuation state.
@@ -514,7 +513,7 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
             assembly ("memory-safe") { free := mload(0x40) }
             _generateTraitRun(stream, offset, uint32(emitted), entropy, ownerPos, goldSixTaken);
             assembly ("memory-safe") { mstore(0x40, free) }
-            emit TraitsGenerated(player, stream | uint256(offset) | replayFlag, uint32(emitted));
+            emit TraitsGenerated(ownerPos, stream | uint256(offset) | replayFlag, uint32(emitted));
         }
         complete = finalTail;
         if (complete) {
@@ -531,13 +530,13 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
     /// @dev The one read of an entry's owed balance for both drain paths: snap it once, then
     ///      resolve a far-future fraction to a whole entry so no far-future remainder survives.
     function _readOwed(uint80 packed, uint80 snapDone, uint8 shift, uint24 rk, uint24 lvl,
-        uint256 qi, address player, uint256 entropy) private pure returns (uint80, uint32 owed, uint8 rem)
+        uint256 qi, uint32 walletId, uint256 entropy) private pure returns (uint80, uint32 owed, uint8 rem)
     {
         if (snapDone != 0 && packed != 0 && packed & SNAP_DONE_BIT == 0) packed = _snapOwedPacked(packed, shift);
         owed = uint32(packed >> 8);
         rem = uint8(packed);
         if (rk & TICKET_FAR_FUTURE_BIT != 0 && rem != 0) {
-            if (TicketEntropy.remainder(TicketEntropy.identity(rk, lvl, qi, player), entropy, rem)) ++owed;
+            if (TicketEntropy.remainder(TicketEntropy.identity(rk, lvl, qi, walletId), entropy, rem)) ++owed;
             rem = 0;
         }
         return (packed, owed, rem);
@@ -551,7 +550,6 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
     ///      the next entry and the seated set is always the first unexhausted entries from
     ///      the cursor — the property a budget-split resume rebuilds from storage alone.
     struct RoundSeats {
-        address[8] player;
         uint32[8] queueIdx;
         uint32[8] owed;
         uint8[8] rem;
@@ -596,7 +594,7 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
         while (i < endIndex) {
             uint256 groupIdx = i >> 4;
 
-            // Hash all inputs so player address (stored in baseKey bits 191-32)
+            // Hash all inputs so the wallet ID (baseKey bits 32-63)
             // reaches the low 32 bits of s. LCG iteration preserves low-bit
             // independence, so the category bucket — derived from the low 32
             // bits of s — inherits whatever entropy the seed's low bits carry.
@@ -728,14 +726,13 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
             st.queueWordIndex = wordIndex;
         }
         uint32 ownerPos = uint32(st.queueWord >> ((physical & 7) << 5));
-        address p = _walletKey(ownerPos);
         uint80 packed = _entryPacked(st.rk, ownerPos);
         uint32 owed;
         uint8 rem;
-        (packed, owed, rem) = _readOwed(packed, snapDone, shift, st.rk, lvl, physical, p, entropy);
+        (packed, owed, rem) = _readOwed(packed, snapDone, shift, st.rk, lvl, physical, ownerPos, entropy);
         if (owed == 0) {
             bool win = rem != 0 && TicketEntropy.remainder(
-                TicketEntropy.identity(st.rk, lvl, physical, p), entropy, rem
+                TicketEntropy.identity(st.rk, lvl, physical, ownerPos), entropy, rem
             );
             if (!win) {
                 if (packed != 0) _setEntryOwed(st.rk, ownerPos, 0);
@@ -746,7 +743,6 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
             _setEntryOwed(st.rk, ownerPos, (packed & OWNER_IDX_MASK) | snapDone | (uint80(1) << 8));
         }
         uint256 j = st.seated;
-        st.player[j] = p;
         st.queueIdx[j] = uint32(qi);
         st.owed[j] = owed;
         st.rem[j] = rem;
@@ -835,7 +831,8 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
             }
             if (owed == 0) {
                 if (rem != 0) {
-                    uint256 stream = TicketEntropy.identity(st.rk, lvl, TicketEntropy.queueIndex(st.queueIdx[j], st.queueStart, st.queueTotal), st.player[j]);
+                    uint256 stream = TicketEntropy.identity(st.rk, lvl,
+                        TicketEntropy.queueIndex(st.queueIdx[j], st.queueStart, st.queueTotal), uint32(st.ownerIdx[j]));
                     if (TicketEntropy.remainder(stream, entropy, rem)) owed = 1;
                     rem = 0;
                 }
@@ -848,7 +845,6 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
                 }
             }
             if (k != j) {
-                st.player[k] = st.player[j];
                 st.queueIdx[k] = st.queueIdx[j];
                 st.ownerIdx[k] = st.ownerIdx[j];
             }
@@ -872,10 +868,10 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
         uint256 offset
     ) private {
         uint256 prefix = uint256(lvl) << 160;
-        uint256 p0 = prefix | uint160(st.player[offset]);
-        uint256 p1 = offset + 1 < st.seated ? prefix | uint160(st.player[offset + 1]) : 0;
-        uint256 p2 = offset + 2 < st.seated ? prefix | uint160(st.player[offset + 2]) : 0;
-        uint256 p3 = offset + 3 < st.seated ? prefix | uint160(st.player[offset + 3]) : 0;
+        uint256 p0 = prefix | st.ownerIdx[offset];
+        uint256 p1 = offset + 1 < st.seated ? prefix | st.ownerIdx[offset + 1] : 0;
+        uint256 p2 = offset + 2 < st.seated ? prefix | st.ownerIdx[offset + 2] : 0;
+        uint256 p3 = offset + 3 < st.seated ? prefix | st.ownerIdx[offset + 3] : 0;
         emit EntryTraitsRevealed(p0, p1, p2, p3, uint144(uint128(traits)) | (uint144(uint16(mask)) << 128));
     }
 

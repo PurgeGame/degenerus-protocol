@@ -13,7 +13,7 @@ contract InlineCrapsReference is Craps {
     {
         Bets memory board = _boardFrom(chips, chipFlip);
         _scatterInto(board, scatter, chipFlip, count);
-        return _settleSlip(board, seed, bankroll, goal, _MAX_SLIP_HANDS, budget, player, boost);
+        return _settleSlip(board, seed, bankroll, goal, _MAX_SLIP_HANDS, budget, uint256(uint160(player)), boost);
     }
 }
 
@@ -32,8 +32,8 @@ contract CrapsEngineParity is Test {
         uint256 goal = latched ? 5e39 : 5e40;
         // Enough capital to force a bound, with a full board and no survival or scatter ambiguity.
         uint256 chips = 3 | (3 << 9) | (3 << 12) | (1 << 15);
-        Craps.SlipResult memory direct = e.settleSlip(chips, 1, 0, 0, seed, 1e40, goal, address(1), 0);
-        Craps.SlipResult memory ranked = e.settleRanked(chips, 1, 0, 0, seed, 1e40, goal, address(1), 0);
+        Craps.SlipResult memory direct = e.settleSlip(chips, 1, 0, 0, seed, 1e40, goal, 1, 0);
+        Craps.SlipResult memory ranked = e.settleRanked(chips, 1, 0, 0, seed, 1e40, goal, 1, 0);
         assertGe(direct.totalRolls, 600, "stopped before the shared budget");
         assertLe(direct.totalRolls, 1_111, "passed the shared ceiling");
         assertEq(ranked.totalRolls, direct.totalRolls, "ranked entry used different bounds");
@@ -59,7 +59,7 @@ contract CrapsEngineParity is Test {
             address player = address(uint160(h >> 96));
             uint256 boost = ((h >> 200) % 3 == 0) ? 0 : (h >> 160) & 0xFFFFFFFFFFFF;
             Craps.SlipResult memory r = e.settleSlip(
-                packed, chipFlip, uint256(keccak256(abi.encode(h, "scatter"))), n, seed, bankroll, goal, player, boost
+                packed, chipFlip, uint256(keccak256(abi.encode(h, "scatter"))), n, seed, bankroll, goal, uint256(uint160(player)), boost
             );
             Craps.SlipResult memory current = ref.run(
                 packed, chipFlip, uint256(keccak256(abi.encode(h, "scatter"))), n, seed, bankroll, goal, player, boost, 600

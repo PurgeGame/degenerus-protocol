@@ -89,8 +89,8 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         if (totalWeight == 0 || pool.awardedMask != 0) return;
         // Seal once before applying any reward. No retry or reroll after a collision.
         pool.awardedMask = 7;
-        deityBoonPacked[issuer == ContractAddresses.VAULT ? VAULT_WALLET_ID : SDGNRS_WALLET_ID] =
-            uint32(awardDay) | (uint32(7) << 24);
+        uint32 issuerId = issuer == ContractAddresses.VAULT ? VAULT_WALLET_ID : SDGNRS_WALLET_ID;
+        deityBoonPacked[issuerId] = uint32(awardDay) | (uint32(7) << 24);
         if (count == 0) return;
         mapping(uint32 => ProtocolBoonEntry) storage entries = protocolBoonEntries[issuer][day & 1];
         for (uint8 slot; slot < DEITY_DAILY_BOON_COUNT; ++slot) {
@@ -108,7 +108,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
             uint32 winnerId = entries[lo].playerId;
             if (winnerId == 0) continue;
             address winner = _walletKey(winnerId);
-            uint8 boonType = _deityBoonForSlot(issuer, awardDay, slot, menuWord);
+            uint8 boonType = _deityBoonForSlot(issuerId, awardDay, slot, menuWord);
             checkAndClearExpiredBoon(winner);
             _applyBoon(winner, boonType, awardDay, awardDay, 0, true);
             emit ProtocolBoonDrawAwarded(issuer, winner, day, slot, lo, boonType);
@@ -1413,14 +1413,14 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         // Every menu type is always issuable — the deity roll excludes the two
         // conditionally-usable families (decimator, deity-pass) unconditionally — so
         // issuance never reverts on the rolled type.
-        uint8 boonType = _deityBoonForSlot(deity, day, slot, rngWord);
+        uint8 boonType = _deityBoonForSlot(deityId, day, slot, rngWord);
         _applyBoon(recipient, boonType, day, day, 0, true);
 
         emit DeityBoonIssued(deity, recipient, day, slot, boonType);
     }
 
     /// @dev Deterministically generate a boon type for a deity's slot on a given day.
-    /// @param deity The deity address
+    /// @param deityId The deity's wallet ID (protocol issuers: VAULT 1, SDGNRS 2)
     /// @param day The day index
     /// @param slot The slot index (0-2)
     /// @param rngWord The preceding day's finalized word, or the award-day word
@@ -1436,12 +1436,12 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     ///      The reduced roll skips both bands arithmetically — the composed mapping is
     ///      exactly the renormalized 2,766-weight table over the same walk.
     function _deityBoonForSlot(
-        address deity,
+        uint32 deityId,
         uint24 day,
         uint8 slot,
         uint256 rngWord
     ) private pure returns (uint8 boonType) {
-        uint256 seed = uint256(keccak256(abi.encode(rngWord, deity, day, slot)));
+        uint256 seed = uint256(keccak256(abi.encode(rngWord, uint256(deityId), day, slot)));
         uint256 roll = seed %
             (BOON_WEIGHT_TOTAL - BOON_WEIGHT_DECIMATOR_ALL - BOON_WEIGHT_DEITY_PASS_ALL);
         if (roll >= BOON_WEIGHT_PRE_DECIMATOR) roll += BOON_WEIGHT_DECIMATOR_ALL;

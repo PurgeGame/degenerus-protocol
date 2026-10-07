@@ -41,7 +41,7 @@ contract BattleRef is Craps {
         bytes32 seed = keccak256(abi.encode(word, DICE_TAG));
         uint256 start = uint256(keccak256(abi.encode(ROTATING_SHOOTER_TAG, seed))) % n;
         uint256 offset = ((j + 1) + n - 1 - start) % n;
-        r = _settleSlip(b, seed, bankroll, bankroll * 5, 22, 200, p, BOOST_ROW | ((offset + 1) << 16));
+        r = _settleSlip(b, seed, bankroll, bankroll * 5, 22, 200, uint256(uint160(p)), BOOST_ROW | ((offset + 1) << 16));
     }
 
     /// @dev Independent canonical decoder and boost lookup, with no production codec use.
@@ -57,7 +57,7 @@ contract BattleRef is Craps {
         uint256 start = uint256(keccak256(abi.encode(ROTATING_SHOOTER_TAG, seed))) % n;
         uint256 turn = (j + n - start) % n + 1;
         uint256 bankroll = chipFlip * 50;
-        return _settleSlip(b, seed, bankroll, bankroll * 5, 22, 200, p, rows[placed] | (turn << 16));
+        return _settleSlip(b, seed, bankroll, bankroll * 5, 22, 200, uint256(uint160(p)), rows[placed] | (turn << 16));
     }
 
     /// @dev A raw slip with a caller-chosen hand cap, returning its shape for the gas envelope.
@@ -67,7 +67,7 @@ contract BattleRef is Craps {
         returns (uint256 h, uint256 rolls)
     {
         Bets memory b = _boardFrom(packed, 1);
-        SlipResult memory r = _settleSlip(b, seed, 1e30, 0, hands, budget, address(0xBEEF), BOOST_ROW | (turn << 16));
+        SlipResult memory r = _settleSlip(b, seed, 1e30, 0, hands, budget, 0xBEEF, BOOST_ROW | (turn << 16));
         return (r.handsPlayed, r.totalRolls);
     }
 
@@ -78,7 +78,7 @@ contract BattleRef is Craps {
         returns (SlipResult memory r)
     {
         Bets memory b = _boardFrom(packed, chipFlip);
-        r = _settleSlip(b, seed, bankroll, goal, _MAX_SLIP_HANDS, budget, address(0xBEEF), 0);
+        r = _settleSlip(b, seed, bankroll, goal, _MAX_SLIP_HANDS, budget, 0xBEEF, 0);
     }
 
     /// @dev Sum of the board's stakes, for the cut-hand accounting check.

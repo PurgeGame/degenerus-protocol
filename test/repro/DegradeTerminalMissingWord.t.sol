@@ -119,7 +119,7 @@ contract DegradeTerminalMissingWordTest is DeployProtocol {
         _fixture(abi.encodeCall(MissingWordSeeder.seedEnding, (HOLDER)));
         vm.deal(address(game), 100 ether);
         vm.prank(address(game));
-        affiliate.payAffiliate(1000 ether, bytes32(uint256(uint160(TOP))), address(0xB001), 11, true, 0);
+        affiliate.payAffiliate(1000 ether, bytes32(uint256(uint160(TOP))), address(0xB001), 0xB001, 11, true, 0);
         assertTrue(game.livenessTriggered(), "caught up past the deadline");
         game.mineFlip(); // latch + terminal request
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), WORD);

@@ -205,7 +205,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         bytes32 traitsSig = keccak256(
-            "TraitsGenerated(address,uint256,uint32)"
+            "TraitsGenerated(uint32,uint256,uint32)"
         );
         bytes32 drawSig = keccak256(
             "DailyWinningTraits(uint24,uint32)"
@@ -220,7 +220,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
                 foilAt < 0 &&
                 l.topics[0] == traitsSig &&
                 l.topics.length > 1 &&
-                address(uint160(uint256(l.topics[1]))) == p
+                uint32(uint256(l.topics[1])) == game.walletIdOf(p)
             ) {
                 foilAt = int256(i);
             }
@@ -278,10 +278,10 @@ contract FoilDrainMiddaySwap is DeployProtocol {
     }
 
     /// The SAME derivation `_deriveFoilLines` performs: four keccak seeds off
-    /// (entropy, buyer, level, FOIL_SEED_TAG, i), each sliced into four 64-bit lanes
+    /// (entropy, buyerId, level, FOIL_SEED_TAG, i), each sliced into four 64-bit lanes
     /// through the boosted cut ladder, with the quadrant tag OR'd in.
     function _deriveFoilTraits(
-        address buyer,
+        uint32 buyerId,
         uint24 lvl,
         uint256 entropy,
         uint16 multBps
@@ -289,7 +289,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
         uint256[7] memory cut = DegenerusTraitUtils.foilCuts(multBps);
         for (uint256 i = 0; i < 4; i++) {
             uint256 seed = uint256(
-                keccak256(abi.encode(entropy, buyer, lvl, FOIL_SEED_TAG, i))
+                keccak256(abi.encode(entropy, uint256(buyerId), lvl, FOIL_SEED_TAG, i))
             );
             out[i * 4 + 0] = DegenerusTraitUtils.foilTrait(uint64(seed), cut);
             out[i * 4 + 1] =

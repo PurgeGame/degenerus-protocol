@@ -80,9 +80,10 @@ async function payAffiliateAsGame(
     "0x1000000000000000000",
   ]);
   const gameSigner = await hreEthers.getSigner(gameAddr);
+  const senderId = await game.walletIdOf(sender);
   const tx = await affiliate
     .connect(gameSigner)
-    .payAffiliate(amount, code, sender, lvl, isFreshEth, lootboxActivityScore);
+    .payAffiliate(amount, code, sender, senderId, lvl, isFreshEth, lootboxActivityScore);
   await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
   return tx;
 }
@@ -108,12 +109,14 @@ async function payAffiliateAsGameStatic(
     "0x1000000000000000000",
   ]);
   const gameSigner = await hreEthers.getSigner(gameAddr);
+  const senderId = await game.walletIdOf(sender);
   const result = await affiliate
     .connect(gameSigner)
     .payAffiliate.staticCall(
       amount,
       code,
       sender,
+      senderId,
       lvl,
       isFreshEth,
       lootboxActivityScore

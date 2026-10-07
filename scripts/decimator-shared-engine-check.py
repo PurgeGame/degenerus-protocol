@@ -25,7 +25,7 @@ contract SharedDiceEVCheck {
         assembly ("memory-safe") { mem := mload(0x40) }
         Craps.SlipResult memory r = engine.settleSlip(
             0, 60, uint256(keccak256(abi.encode("board", seed, id))), 10,
-            seed, 3000e18, 0, address(uint160(id)), (32 << 8) | 15);
+            seed, 3000e18, 0, uint256(uint160(id)), (32 << 8) | 15);
         require(r.stop == Craps.SlipStop.Bust && r.totalRolls <= 1511, "run bounds");
         p = r.peakBankroll;
         assembly ("memory-safe") { mstore(0x40, mem) }

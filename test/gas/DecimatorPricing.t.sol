@@ -18,7 +18,7 @@ contract DecimatorEngineMeter {
     {
         uint256 beforeGas = gasleft();
         Craps.SlipResult memory r = CrapsEngine(ContractAddresses.CRAPS_ENGINE).settleSlipBounded(
-            chips, 60, uint256(keccak256(abi.encode("board", seed))), 3, seed, bankroll, address(0xD1CE), boost,
+            chips, 60, uint256(keccak256(abi.encode("board", seed))), 3, seed, bankroll, 0xD1CE, boost,
             (511 << 16) | 48
         );
         used = beforeGas - gasleft();
@@ -29,7 +29,7 @@ contract DecimatorEngineMeter {
 /// @dev Every run peaks at its starting bankroll after thirty rolls, so ranking follows the
 ///      stacks alone and the heap shape is chosen by the test.
 contract DecimatorPricingFlatProbe {
-    function settleSlipBounded(uint256, uint256, uint256, uint256, bytes32, uint256 bankroll, address, uint256, uint256)
+    function settleSlipBounded(uint256, uint256, uint256, uint256, bytes32, uint256 bankroll, uint256, uint256, uint256)
         external
         pure
         returns (Craps.SlipResult memory r)

@@ -75,8 +75,9 @@ contract TicketCheckpointHarness is DegenerusGameTicketModule, WalletSeed {
             for (uint256 i; i < n; ++i) out = keccak256(abi.encode(out, _bucketOwnerAt(lvl, uint8(t), i)));
         }
     }
+    function idOf(address who) external view returns (uint32) { return _walletIdOf(who); }
     function stream(uint24 lvl, uint256 qi, address player) external view returns (uint256) {
-        return TicketEntropy.identity(_tqReadKey(lvl), lvl, qi, player);
+        return TicketEntropy.identity(_tqReadKey(lvl), lvl, qi, _walletIdOf(player));
     }
 }
 
@@ -143,7 +144,7 @@ contract TicketCheckpointDeterminismTest is Test {
         uint256 largestBound;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length == 0 || logs[i].topics[0]
-                != keccak256("TraitsGenerated(address,uint256,uint32)")) continue;
+                != keccak256("TraitsGenerated(uint32,uint256,uint32)")) continue;
             (, uint32 take) = abi.decode(logs[i].data, (uint256, uint32));
             uint256 bound = GasBounds.TICKET_SOLO_BASE + uint256(take) * GasBounds.TICKET_ENTRY_MAX
                 + GasBounds.TICKET_TAIL + MineFlipGas.CHECK_RESERVE;
@@ -178,10 +179,10 @@ contract TicketCheckpointDeterminismTest is Test {
         uint256 owners;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length != 2 || logs[i].topics[0]
-                != keccak256("TraitsGenerated(address,uint256,uint32)")) continue;
+                != keccak256("TraitsGenerated(uint32,uint256,uint32)")) continue;
             (, uint32 take) = abi.decode(logs[i].data, (uint256, uint32));
-            address owner = address(uint160(uint256(logs[i].topics[1])));
-            for (uint256 j; j < 3; ++j) if (owner == player(j)) owners |= 1 << j;
+            uint32 owner = uint32(uint256(logs[i].topics[1]));
+            for (uint256 j; j < 3; ++j) if (owner == h.idOf(player(j))) owners |= 1 << j;
             emitted += take;
             ++chunks;
         }

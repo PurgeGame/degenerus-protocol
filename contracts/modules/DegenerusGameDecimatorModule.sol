@@ -47,7 +47,7 @@ interface IDecimatorCrapsEngine {
         uint256 scatterCount,
         bytes32 seed,
         uint256 bankroll,
-        address player,
+        uint256 salt,
         uint256 boost,
         uint256 bounds
     ) external pure returns (Craps.SlipResult memory);
@@ -319,10 +319,11 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         uint32 owner = index < len ? _bucketIdAtUnchecked(lvl, trait, index) : deity;
         // Every lane and deity holds a nonzero wallet ID; Craps validates boards when saving them.
         uint32 chips = IDecimatorBoardPreference(ContractAddresses.CRAPS).preferredBoardOf(owner);
+        // A generated entry is not a wallet: its survival salt is a 160-bit hash of its own id.
         Craps.SlipResult memory run = _settleRun(
             chips, uint256(keccak256(abi.encode(BOARD_TAG, word, lvl, id))),
             keccak256(abi.encode(DICE_TAG, word, lvl)),
-            address(uint160(uint256(keccak256(abi.encode(GEN_PLAYER_TAG, word, lvl, id)))))
+            uint160(uint256(keccak256(abi.encode(GEN_PLAYER_TAG, word, lvl, id))))
         );
         uint256 score = uint256(round.totalCreditedStack) * run.peakBankroll / round.count;
         (uint256 winners, bool retained) = _insert(lvl, word, round.capacity, round.winners, (score << 64) | id);
@@ -451,11 +452,12 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
     {
         // Only sampled survivors reach the engine; original IDs are never scanned.
         uint256 entry = decBattleEntries[_entryKey(lvl, id)];
-        // Craps survival entropy still takes the owner's address (Phase D swaps in the ID).
-        address owner = _walletKey(uint32(entry));
-        // The board was checked at burn, so settlement only counts its named chips.
+        // The board was checked at burn, so settlement only counts its named chips. The owner's
+        // wallet ID, committed with the burn, salts the survival coin.
         uint256 chips = (entry >> CHIPS_SHIFT) & 0x3FFFFFFF;
-        Craps.SlipResult memory run = _settleRun(chips, uint256(keccak256(abi.encode(BOARD_TAG, word, lvl, id))), seed, owner);
+        Craps.SlipResult memory run = _settleRun(
+            chips, uint256(keccak256(abi.encode(BOARD_TAG, word, lvl, id))), seed, uint32(entry)
+        );
         emit DecimatorRun(lvl, id, run.peakBankroll);
         uint256 score = (entry >> STACK_SHIFT) * run.peakBankroll;
         (uint256 retained,) = _insert(lvl, word, capacity, winners, (score << 64) | id);
@@ -464,12 +466,12 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
 
     /// @dev Ten 60-FLIP chips, ordinary scatter/boost and shared dice. Normalize only engine
     ///      units; callers weight the peak by the original stack or the frozen original mean.
-    function _settleRun(uint256 chips, uint256 board, bytes32 seed, address player)
+    function _settleRun(uint256 chips, uint256 board, bytes32 seed, uint256 salt)
         private pure returns (Craps.SlipResult memory)
     {
         uint256 named = _named(chips);
         return IDecimatorCrapsEngine(ContractAddresses.CRAPS_ENGINE).settleSlipBounded(
-            chips, 60, board, 10 - named, seed, SCALE, player,
+            chips, 60, board, 10 - named, seed, SCALE, salt,
             (0x050c070c0a0c0e0c120c140c190c1e0c >> (named << 4)) & 0xFFFF, RUN_BOUNDS
         );
     }

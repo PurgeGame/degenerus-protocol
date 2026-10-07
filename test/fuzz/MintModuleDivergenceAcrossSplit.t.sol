@@ -59,7 +59,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
     ///      start offset in the low 32 bits of baseKey. Used only to read the checkpoint
     ///      trajectory; the equality oracle itself is storage-diff.
     bytes32 internal constant TOPIC_TRAITS_GENERATED =
-        keccak256("TraitsGenerated(address,uint256,uint32)");
+        keccak256("TraitsGenerated(uint32,uint256,uint32)");
 
     // -------------------------------------------------------------------------
     // Scenario constants

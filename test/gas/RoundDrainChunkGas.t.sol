@@ -12,6 +12,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {TicketEntropy} from "../../contracts/libraries/TicketEntropy.sol";
+import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
 
 /// @dev Extends the production mint module so the ticket worker runs in THIS contract's
 ///      storage through the metered `runTicketWork` entry the miner uses; adds queue seeders
@@ -149,6 +150,13 @@ contract ChunkHarness is MintBucketSeed {
         }
     }
 
+    /// @dev The next registered wallet takes ID `next` (the solo stream is keyed by wallet ID).
+    function setNextWalletId(uint256 next) external {
+        if (wallets.length == 0) wallets.push();
+        uint256[] storage w = wallets;
+        assembly ("memory-safe") { sstore(w.slot, next) }
+    }
+
     /// @dev Pin the global round counter so a fixture rolls a chosen round seed.
     function setRound(uint32 r) external {
         ticketRound = r;
@@ -185,6 +193,10 @@ contract ChunkHarness is MintBucketSeed {
 
     function cursor() external view returns (uint256) {
         return ticketCursor;
+    }
+
+    function readKey(uint24 lvl) external view returns (uint24) {
+        return _tqReadKey(lvl);
     }
 
     function round() external view returns (uint32) {
@@ -236,7 +248,7 @@ abstract contract TicketChunkProbe is Test {
     /// @dev Gas a probe call spends outside the worker's meter: the external call into the
     ///      harness, the delegatecall into the ticket module (both cold) and ABI coding.
     uint256 internal constant UNMETERED_OVERHEAD = 50_000;
-    bytes32 internal constant TRAITS_GENERATED = keccak256("TraitsGenerated(address,uint256,uint32)");
+    bytes32 internal constant TRAITS_GENERATED = keccak256("TraitsGenerated(uint32,uint256,uint32)");
 
     /// @dev The admitted step a shape's chunk probe isolates.
     enum Step {
@@ -468,14 +480,14 @@ contract RoundDrainChunkGas is TicketChunkProbe {
     }
 
     /// @dev Rounds with single-ticket buyers: every round seats eight fresh entries (max seat
-    ///      joins per round, the registry-heavy shape).
+    ///      joins per round).
     function test_Chunk_Rounds_SingleTicketBuyers_Warm() public {
         h.seed(LVL, 2000, 4, uint160(0x30000), true);
         _measure("chunk_rounds_single_ticket_buyers_warm_gas", Step.Round);
     }
 
     /// @dev Rounds of single-ticket buyers registered at purchase: the production shape for a
-    ///      crowd of small buyers, where the drain pays no registry slot per seat.
+    ///      crowd of small buyers.
     function test_Chunk_Rounds_SingleTicketBuyers_Registered_Warm() public {
         h.seedViaPurchase(3, 2000, 400, uint160(0x60000), true);
         _measureAt(3, "chunk_rounds_single_ticket_buyers_registered_warm_gas", Step.Round);
@@ -607,6 +619,10 @@ contract RoundDrainChunkGas is TicketChunkProbe {
     ///      entry is the per-entry cold worst. A fresh level's first run also initializes the
     ///      live bitmap, the heaviest fixed part of a run.
     function test_Solo_EntryAndBaseCoverColdWorst() public {
+        // The fixture owner's wallet ID is the first whose sixteen-entry stream at LVL lands on
+        // sixteen distinct traits.
+        uint256 id = _distinctSixteenId();
+        h.setNextWalletId(id);
         uint256 snap = vm.snapshotState();
         h.seed(LVL, 1, 1, uint160(0x51000), false);
         h.seedHeaderTails(LVL);
@@ -628,6 +644,31 @@ contract RoundDrainChunkGas is TicketChunkProbe {
         assertLe(perEntry, GasBounds.TICKET_ENTRY_MAX, "per-entry cold worst exceeds ENTRY_MAX");
         assertLe(GasBounds.TICKET_ENTRY_MAX, 2 * perEntry, "ENTRY_MAX is padded beyond 2x");
         assertLe(freshRun, GasBounds.TICKET_SOLO_BASE + GasBounds.TICKET_ENTRY_MAX, "one-entry run exceeds its bound");
+    }
+
+    /// @dev First wallet ID whose solo stream (queue position 0 at LVL, the fixture word) draws
+    ///      sixteen distinct traits for its first sixteen entries.
+    function _distinctSixteenId() internal view returns (uint256 id) {
+        uint256 entropy = uint256(keccak256("chunk-gas-entropy")) | 1;
+        uint24 rk = h.readKey(LVL);
+        for (id = 1; ; ++id) {
+            uint256 stream = TicketEntropy.identity(rk, LVL, 0, uint32(id));
+            uint64 s = uint64(uint256(keccak256(abi.encode(stream, entropy, uint256(0))))) | 1;
+            uint256 seen0;
+            uint256 seen1;
+            bool distinct = true;
+            unchecked {
+                s *= 6364136223846793005;
+                for (uint256 i; i < 16 && distinct; ++i) {
+                    s = s * 6364136223846793005 + 1;
+                    uint256 trait = DegenerusTraitUtils.traitFromWord(s) + ((i & 3) << 6);
+                    uint256 bit = uint256(1) << (trait & 127);
+                    if (trait < 128) { distinct = seen0 & bit == 0; seen0 |= bit; }
+                    else { distinct = seen1 & bit == 0; seen1 |= bit; }
+                }
+            }
+            if (distinct) return id;
+        }
     }
 
     /// @dev The round cold worst: eight seats, all four quadrants split across their colour's
@@ -663,9 +704,9 @@ contract RoundDrainChunkGas is TicketChunkProbe {
         _oneChunk(LVL + 1, "chunk_round_all_rare_header_tails", Step.Round);
     }
 
-    /// @dev Seats that skip with an owed write, the heaviest seat: queue lane, owner registry
-    ///      and pending word reads plus the write. The worst single seat also opens a cold
-    ///      queue word and the registry length.
+    /// @dev Seats that skip with an owed write, the heaviest seat: queue lane and pending word
+    ///      reads plus the write. The worst single seat also opens a cold queue word; one more
+    ///      cold read is reserved on top.
     function test_Seat_ColdWorstFitsSeatMax() public {
         uint256 snap = vm.snapshotState();
         h.seed(LVL, 8, 0, uint160(0xC0000), false);

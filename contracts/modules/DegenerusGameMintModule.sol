@@ -460,7 +460,8 @@ contract DegenerusGameMintModule is
     ///      the vault on the owner-enabled fallback) so the ETH/FLIP breakdown reflects the actual
     ///      counterparty's FLIP inventory. Reverts on an ineligible distance or a zero /
     ///      non-whole-ticket quantity (entry counts in multiples of 4); does
-    ///      NOT check ownership (a quote for the given bundle). When the resolved buyer holds no FLIP
+    ///      NOT check ownership (a quote for the given bundle). The jitter is keyed by the wallet
+    ///      ID; an address with no ID quotes on ID 0 and holds nothing to sell. When the resolved buyer holds no FLIP
     ///      (or the seed targets zero) the whole cash leg is paid in ETH; conserved as ethCashWei +
     ///      value(flipTokens).
     /// @return totalFaceWei Sum of priceForLevel(L) * n / 4 over all lines (per-entry face; bundle face).
@@ -485,7 +486,7 @@ contract DegenerusGameMintModule is
     {
         uint24 cl = _activeTicketLevel();
         uint256 oneTicketWei = PriceLookupLib.priceForLevel(cl);
-        uint256 seed = _farFutureSeed(player);
+        uint256 seed = _farFutureSeed(_walletIdOf(player));
         uint256 cashWei;
         (totalFaceWei, totalBudget, ticketWei, cashWei) = _quoteFarFutureSwap(
             levels,
@@ -541,7 +542,8 @@ contract DegenerusGameMintModule is
 
         uint24 cl = _activeTicketLevel();
         uint256 oneTicketWei = PriceLookupLib.priceForLevel(cl);
-        uint256 seed = _farFutureSeed(player);
+        uint32 sellerId = _walletIdOf(player);
+        uint256 seed = _farFutureSeed(sellerId);
         (
             ,
             uint256 totalBudget,
@@ -575,7 +577,6 @@ contract DegenerusGameMintModule is
         // full sell-out) and credit the buyer the same entries. Distances were validated by
         // _quoteFarFutureSwap; sequential processing handles duplicate levels (a later same-level line reads
         // the decremented balance and reverts if it over-sells; only the line that zeroes the packed slot pops).
-        uint32 sellerId = _walletIdOf(player);
         uint32 buyerId = buyer == ContractAddresses.VAULT ? VAULT_WALLET_ID : SDGNRS_WALLET_ID;
         for (uint256 i; i < len; ) {
             uint24 L = uint24(levels[i]);
@@ -1065,6 +1066,7 @@ contract DegenerusGameMintModule is
             (affWinner, affWinnerCredit, affKickback) = affiliate.payAffiliateCombined(
                 affiliateCode,
                 buyer,
+                buyerId,
                 cachedLevel + 1,
                 ticketFreshFlip,
                 ticketRecycledFlip,

@@ -43,6 +43,9 @@ interface IDeityBoonDataSource {
 
     /// @notice Get the finalized RNG word for a game day (zero until available).
     function rngWordForDay(uint24 day) external view returns (uint256);
+
+    /// @notice The wallet ID of `player` (0 when unregistered).
+    function walletIdOf(address player) external view returns (uint32);
 }
 
 /// @title DeityBoonViewer
@@ -100,7 +103,8 @@ contract DeityBoonViewer {
     uint16 private constant W_PRE_DEITY_PASS = 1072;
     uint16 private constant W_DEITY_PASS_ALL = 40;
 
-    /// @notice Compute deity boon slots for a given deity.
+    /// @notice Compute deity boon slots for a given deity. The menu is keyed by the deity's
+    ///         wallet ID; an address with no wallet ID has no menu (all zeros).
     /// @param game Address of the DegenerusGame contract.
     /// @param deity The deity address to query.
     /// @return slots Array of 3 boon type IDs for today's slots.
@@ -121,13 +125,14 @@ contract DeityBoonViewer {
         day = d;
         usedMask = mask;
 
-        slots = _slotsForDay(deity, day, dailySeed);
+        slots = _slotsForDay(IDeityBoonDataSource(game).walletIdOf(deity), day, dailySeed);
     }
 
     /// @notice Preview the three deity boon slots available on the next game day.
     /// @param game Address of the DegenerusGame contract.
     /// @param deity The deity address to query.
-    /// @return slots Tomorrow's boon type IDs, or all zeros until today's RNG is finalized.
+    /// @return slots Tomorrow's boon type IDs, or all zeros until today's RNG is finalized
+    ///         or when the deity has no wallet ID.
     /// @return day The game day when these slots can be issued.
     function deityBoonSlotsTomorrow(
         address game,
@@ -135,18 +140,20 @@ contract DeityBoonViewer {
     ) external view returns (uint8[3] memory slots, uint24 day) {
         (, uint24 today, , , ) = IDeityBoonDataSource(game).deityBoonData(deity);
         day = today + 1;
-        slots = _slotsForDay(deity, day, IDeityBoonDataSource(game).rngWordForDay(today));
+        slots = _slotsForDay(
+            IDeityBoonDataSource(game).walletIdOf(deity), day, IDeityBoonDataSource(game).rngWordForDay(today)
+        );
     }
 
     /// @dev Mirrors BoonModule._deityBoonForSlot using the issuance day and the
     ///      preceding day's finalized word. No live eligibility term can remap a slot.
-    function _slotsForDay(address deity, uint24 day, uint256 dailySeed)
+    function _slotsForDay(uint32 deityId, uint24 day, uint256 dailySeed)
         private pure returns (uint8[3] memory slots)
     {
-        if (dailySeed == 0) return slots;
+        if (dailySeed == 0 || deityId == 0) return slots;
         // Decimator and deity-pass families are excluded from deity gifts.
         for (uint8 i = 0; i < DEITY_DAILY_BOON_COUNT; ) {
-            uint256 seed = uint256(keccak256(abi.encode(dailySeed, deity, day, i)));
+            uint256 seed = uint256(keccak256(abi.encode(dailySeed, uint256(deityId), day, i)));
             uint256 roll = seed % (W_TOTAL - W_DECIMATOR_ALL - W_DEITY_PASS_ALL);
             if (roll >= W_PRE_DECIMATOR) roll += W_DECIMATOR_ALL;
             if (roll >= W_PRE_DEITY_PASS) roll += W_DEITY_PASS_ALL;

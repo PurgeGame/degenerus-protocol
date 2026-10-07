@@ -324,17 +324,17 @@ contract FoilClaimBatch is DeployProtocol {
     // ──────────────────────────────────────────────────────────────────────
 
     /// @dev The SAME derivation `_deriveFoilLines` performs for one ticket index: four
-    ///      boosted [QQ][CCC][SSS] quadrant bytes off (entropy, buyer, level,
+    ///      boosted [QQ][CCC][SSS] quadrant bytes off (entropy, buyerId, level,
     ///      FOIL_SEED_TAG, ticketIndex).
     function _deriveFoilLine(
-        address buyer,
+        uint32 buyerId,
         uint24 lvl,
         uint256 entropy,
         uint16 multBps,
         uint256 ticketIndex
     ) internal pure returns (uint32) {
         uint256[7] memory cut = DegenerusTraitUtils.foilCuts(multBps);
-        uint256 seed = uint256(keccak256(abi.encode(entropy, buyer, lvl, FOIL_SEED_TAG, ticketIndex)));
+        uint256 seed = uint256(keccak256(abi.encode(entropy, uint256(buyerId), lvl, FOIL_SEED_TAG, ticketIndex)));
         uint8 tA = DegenerusTraitUtils.foilTrait(uint64(seed), cut);
         uint8 tB = DegenerusTraitUtils.foilTrait(uint64(seed >> 64), cut) | 64;
         uint8 tC = DegenerusTraitUtils.foilTrait(uint64(seed >> 128), cut) | 128;

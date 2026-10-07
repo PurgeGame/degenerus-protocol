@@ -128,7 +128,7 @@ contract SnapValveTest is Test {
     SnapValveHarness h;
     uint24 constant LVL = 7;
     uint160 constant BASE = 0xA000;
-    bytes32 constant TRAITS_SIG = keccak256("TraitsGenerated(address,uint256,uint32)");
+    bytes32 constant TRAITS_SIG = keccak256("TraitsGenerated(uint32,uint256,uint32)");
     /// @dev `runTicketWork` admits checkpoints while its allowance covers the next declared
     ///      bound; drive it with a realistic allowance.
     uint256 constant CHUNK_GAS = 10_000_000;

@@ -36,6 +36,7 @@ interface IDegenerusAffiliate {
     /// @param amount Base reward amount (0 decimals).
     /// @param code Affiliate code provided with the transaction (may be bytes32(0)).
     /// @param sender The player making the purchase.
+    /// @param senderId The player's wallet ID (seeds the winner roll).
     /// @param lvl Current game level (for leaderboard tracking).
     /// @param isFreshEth True if payment is with fresh ETH, false if recycled (claimable).
     /// @param lootboxActivityScore Buyer's activity score in whole points for lootbox taper (0 = no taper).
@@ -44,6 +45,7 @@ interface IDegenerusAffiliate {
         uint256 amount,
         bytes32 code,
         address sender,
+        uint32 senderId,
         uint24 lvl,
         bool isFreshEth,
         uint16 lootboxActivityScore
@@ -51,11 +53,12 @@ interface IDegenerusAffiliate {
 
     /// @notice Settle all of a buy's affiliate legs (ticket + lootbox, fresh + recycled) in ONE call.
     /// @dev GAME-only. Resolves the referral once, accrues each leg at its own scale (fresh/recycled
-    ///      bps, taper on the lootbox-fresh leg), rolls ONE winner on the shared (day, sender, code)
+    ///      bps, taper on the lootbox-fresh leg), rolls ONE winner on the shared (day, senderId, code)
     ///      entropy, and RETURNS the winner credit instead of paying it so the caller batches the
     ///      winner + buyer credits into one Coinflip write.
     /// @param code Referral code supplied with the buy (resolved + locked once).
     /// @param sender The buyer.
+    /// @param senderId The buyer's wallet ID (seeds the winner roll).
     /// @param lvl Leaderboard level for all legs (ticket and lootbox both freeze at level + 1).
     /// @param tktFreshFlip Ticket-leg fresh spend in FLIP base units.
     /// @param tktRecycledFlip Ticket-leg recycled spend in FLIP base units.
@@ -68,6 +71,7 @@ interface IDegenerusAffiliate {
     function payAffiliateCombined(
         bytes32 code,
         address sender,
+        uint32 senderId,
         uint24 lvl,
         uint256 tktFreshFlip,
         uint256 tktRecycledFlip,

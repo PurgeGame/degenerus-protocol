@@ -275,9 +275,9 @@ export function decodeOwedFromBaseKey(baseKey) {
 // Checkpoint generator V2. The functions above remain historical replay oracles.
 export const CHECKPOINT_DOMAINS = Object.freeze({ half0: 0x20, half1: 0x21, future: 0x22, foil: 0x23 });
 
-export function checkpointIdentity({ level, queueIndex, player, domain = CHECKPOINT_DOMAINS.half0 }) {
-  const lvl = BigInt(level), index = BigInt(queueIndex), who = BigInt(player);
-  if (lvl < 0n || lvl > 0xffffffn || index < 0n || index > U32_MASK || who < 0n || who >= (1n << 160n)) {
+export function checkpointIdentity({ level, queueIndex, walletId, domain = CHECKPOINT_DOMAINS.half0 }) {
+  const lvl = BigInt(level), index = BigInt(queueIndex), who = BigInt(walletId);
+  if (lvl < 0n || lvl > 0xffffffn || index < 0n || index > U32_MASK || who < 0n || who > U32_MASK) {
     throw new RangeError("ticket identity exceeds its packed field");
   }
   if (!Object.values(CHECKPOINT_DOMAINS).includes(domain)) throw new RangeError("unknown ticket domain");
@@ -294,7 +294,7 @@ export function decodeCheckpointKey(baseKey) {
     goldSixTaken,
     level: Number((key >> 224n) & 0xffffffn),
     queueIndex: Number((key >> 192n) & U32_MASK),
-    player: `0x${((key >> 32n) & ((1n << 160n) - 1n)).toString(16).padStart(40, "0")}`,
+    walletId: Number((key >> 32n) & U32_MASK),
     startIndex: Number(key & U32_MASK),
     identity: key & ~U32_MASK,
   };
@@ -333,7 +333,7 @@ export function ticketCheckpointTraits({ baseKey, entropyWord, count }) {
   return out;
 }
 
-/// Decode the anonymous EntryTraitsRevealed event's four packed owner topics.
+/// Decode the anonymous EntryTraitsRevealed event's four packed seat topics, (level << 160) | walletId.
 export function seatedTicketReveals(log) {
   if (log.topics.length !== 4 || log.data.length !== 66) return [];
   const topics = log.topics.map(BigInt);
@@ -345,7 +345,7 @@ export function seatedTicketReveals(log) {
       if ((mask >> BigInt(seat * 4 + quadrant) & 1n) === 0n) continue;
       out.push({
         lvl: Number(topics[seat] >> 160n),
-        player: `0x${(topics[seat] & ((1n << 160n) - 1n)).toString(16).padStart(40, "0")}`,
+        walletId: Number(topics[seat] & U32_MASK),
         trait: Number(word >> BigInt(seat * 32 + quadrant * 8) & 255n),
       });
     }

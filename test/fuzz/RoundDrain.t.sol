@@ -115,7 +115,7 @@ contract RoundDrain is Test {
     ///      bound, so every call is driven with a realistic bounded allowance and must make
     ///      progress.
     uint256 internal constant CHUNK_GAS = 10_000_000;
-    bytes32 internal constant ENTRY_SIG = keccak256("TraitsGenerated(address,uint256,uint32)");
+    bytes32 internal constant ENTRY_SIG = keccak256("TraitsGenerated(uint32,uint256,uint32)");
 
     function _isReveal(Vm.Log memory entry) private pure returns (bool) {
         return entry.topics.length == 4 && uint256(entry.topics[0]) >> 160 == LVL && entry.data.length == 32;

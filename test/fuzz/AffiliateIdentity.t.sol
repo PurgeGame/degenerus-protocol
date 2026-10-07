@@ -42,17 +42,20 @@ contract AffiliateIdentityTest is DeployProtocol {
     }
     function _length(uint256 n) private { _seed(abi.encodeCall(AffiliateIdentitySeeder.length, (n))); }
     function _id(address owner) private view returns (uint32) { return lens.walletIdOf(address(game), owner); }
-    function _buyer(bytes32 code, uint256 branch, uint256 start) private view returns (address buyer) {
+    /// @dev A buyer whose winner roll lands in `branch`. The roll is keyed by the buyer's wallet
+    ///      ID, which the Game passes; the fixture pairs address 0x100000+i with ID 0x100000+i.
+    function _buyer(bytes32 code, uint256 branch, uint256 start) private view returns (address buyer, uint32 buyerId) {
         for (uint256 i = start; ; ++i) {
             buyer = address(uint160(0x100000 + i));
-            uint256 roll = uint256(keccak256(abi.encodePacked(keccak256("affiliate-payout-roll-v1"), GameTimeLib.currentDayIndex(), buyer, code))) % 20;
-            if ((branch == 0 && roll < 15) || (branch == 1 && roll >= 15 && roll < 19) || (branch == 2 && roll == 19)) return buyer;
+            buyerId = uint32(0x100000 + i);
+            uint256 roll = uint256(keccak256(abi.encodePacked(keccak256("affiliate-payout-roll-v1"), GameTimeLib.currentDayIndex(), buyerId, code))) % 20;
+            if ((branch == 0 && roll < 15) || (branch == 1 && roll >= 15 && roll < 19) || (branch == 2 && roll == 19)) return (buyer, buyerId);
         }
     }
     function _pay(bytes32 code, uint256 branch, uint256 nonce) private returns (address winner) {
-        address buyer = _buyer(code, branch, nonce);
+        (address buyer, uint32 buyerId) = _buyer(code, branch, nonce);
         vm.prank(address(game));
-        (winner,,) = affiliate.payAffiliateCombined(code, buyer, 5, 10000, 0, 0, 0, 0);
+        (winner,,) = affiliate.payAffiliateCombined(code, buyer, buyerId, 5, 10000, 0, 0, 0, 0);
     }
     function _earningsSlot(uint24 lvl, address owner) private pure returns (bytes32) {
         return keccak256(abi.encode(owner, keccak256(abi.encode(lvl, uint256(1)))));
@@ -162,21 +165,23 @@ contract AffiliateIdentityTest is DeployProtocol {
         assertEq((_earningsWord(5, a) >> 192) & 1, 1);
         vm.expectRevert(bytes4(keccak256("Insufficient()")));
         vm.prank(a); affiliate.referPlayer(B);
+        uint32 aId = _id(a);
         vm.prank(address(game));
-        affiliate.payAffiliateCombined(B, a, 5, 10000, 0, 0, 0, 0);
+        affiliate.payAffiliateCombined(B, a, aId, 5, 10000, 0, 0, 0, 0);
         assertEq(affiliate.getReferrer(a), ContractAddresses.VAULT);
-        vm.prank(address(game)); affiliate.payAffiliate(10000, C, a, 5, true, 0);
+        vm.prank(address(game)); affiliate.payAffiliate(10000, C, a, aId, 5, true, 0);
         assertEq(affiliate.getReferrer(a), ContractAddresses.VAULT);
         assertEq(_pay(A, 1, 100), ContractAddresses.VAULT);
     }
 
     function test_PresaleLockedDefaultCannotBeReplaced() public {
         _seed(abi.encodeCall(AffiliateIdentitySeeder.presale, (true)));
-        vm.prank(address(game)); affiliate.payAffiliate(10000, bytes32(0), a, 5, true, 0);
+        uint32 aId = _id(a);
+        vm.prank(address(game)); affiliate.payAffiliate(10000, bytes32(0), a, aId, 5, true, 0);
         vm.expectRevert(bytes4(keccak256("Insufficient()")));
         vm.prank(a); affiliate.referPlayer(B);
-        vm.prank(address(game)); affiliate.payAffiliate(10000, B, a, 5, true, 0);
-        vm.prank(address(game)); affiliate.payAffiliateCombined(C, a, 5, 10000, 0, 0, 0, 0);
+        vm.prank(address(game)); affiliate.payAffiliate(10000, B, a, aId, 5, true, 0);
+        vm.prank(address(game)); affiliate.payAffiliateCombined(C, a, aId, 5, 10000, 0, 0, 0, 0);
         assertEq(affiliate.getReferrer(a), ContractAddresses.VAULT);
     }
 
@@ -212,9 +217,9 @@ contract AffiliateIdentityTest is DeployProtocol {
         vm.store(address(affiliate), _earningsSlot(5, a), bytes32(uint256(4000)));
         assertEq(affiliate.affiliateBonusPointsBest(6, a), bonus);
         vm.store(address(affiliate), _earningsSlot(5, a), bytes32(_earningsWord(5, a) | (first & ~uint256(type(uint128).max))));
-        address buyer = _buyer(code, 2, 200);
+        (address buyer, uint32 buyerId) = _buyer(code, 2, 200);
         vm.prank(address(game));
-        (address winner,,) = affiliate.payAffiliateCombined(code, buyer, 6, 10000, 0, 0, 0, 0);
+        (address winner,,) = affiliate.payAffiliateCombined(code, buyer, buyerId, 6, 10000, 0, 0, 0, 0);
         assertEq(winner, c);
         assertEq(_earningsWord(6, a) >> 128, first >> 128);
         assertEq(affiliate.affiliateScore(6, a), 2000);
@@ -243,9 +248,9 @@ contract AffiliateIdentityTest is DeployProtocol {
         assertEq(_pay(A, 0, 100), a);
         assertEq(affiliate.affiliateScore(5, a), type(uint128).max);
         uint256 beforeWord = _earningsWord(5, a);
-        address buyer = _buyer(A, 1, 200);
+        (address buyer, uint32 buyerId) = _buyer(A, 1, 200);
         vm.expectRevert(bytes4(keccak256("EarningsOverflow()")));
-        vm.prank(address(game)); affiliate.payAffiliateCombined(A, buyer, 5, 10000, 0, 0, 0, 0);
+        vm.prank(address(game)); affiliate.payAffiliateCombined(A, buyer, buyerId, 5, 10000, 0, 0, 0, 0);
         assertEq(_earningsWord(5, a), beforeWord);
     }
 

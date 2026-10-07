@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Ticket checkpoint replay and queued-storage regression. The event ABI remains
-// TraitsGenerated(address,uint256,uint32); its versioned key now carries an
+// TraitsGenerated(uint32,uint256,uint32); its versioned key now carries an
 // immutable stream identity and absolute low32 offset. Historical owed-salt
 // replay must not be applied to these new domains.
 
@@ -33,7 +33,7 @@ const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
 const DAILY_ENTROPY =
   0x2f02_3456_789a_bcde_f012_3456_789a_bcde_f012_3456_789a_bcde_f012_3456_789a_bcden;
 const TRAITS_GENERATED_V42_TOPIC_HASH =
-  "0x279edf1ccbf5db78a99006a6861b4d49de10ed6016d8400ce6a1d5e415d2ebc3";
+  "0xa13481a10df7aec5a107e35b3082a573c68cba49e6a82fcbff07da79e55a1059";
 const TICKET_SLOT_BIT = 0x800000n;
 const TICKET_FAR_FUTURE_BIT = 0x400000n;
 
@@ -87,15 +87,14 @@ async function parseTraitsGeneratedEvents(receipt, storage, deployDayBoundary) {
       const lvl = Number((baseKey >> 224n) & 0xFFFFFFn);
       const queueIdx = Number((baseKey >> 192n) & 0xFFFFFFFFn);
       const decoded = decodeCheckpointKey(baseKey);
-      const playerFromBase = (baseKey >> 32n) & ((1n << 160n) - 1n);
-      const indexedPlayerBn = BigInt(parsed.args.player);
-      if ((indexedPlayerBn & ((1n << 160n) - 1n)) !== playerFromBase) {
+      const walletIdFromBase = (baseKey >> 32n) & 0xFFFFFFFFn;
+      if (BigInt(parsed.args.walletId) !== walletIdFromBase) {
         throw new Error(
-          `TraitsGenerated decode mismatch: indexed player ${parsed.args.player} != baseKey bits 191..32 0x${playerFromBase.toString(16).padStart(40, "0")}`
+          `TraitsGenerated decode mismatch: indexed walletId ${parsed.args.walletId} != baseKey bits 63..32 ${walletIdFromBase}`
         );
       }
       events.push({
-        player: parsed.args.player,
+        walletId: Number(parsed.args.walletId),
         baseKey,
         take: Number(parsed.args.take),
         lvl,
@@ -231,16 +230,15 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
       const { events, reveals } = await drainViaAdvanceGame(game, deployer, storage, fixture.deployDayBoundary, 300);
       const ticketWriteSlotAfter = await readTicketWriteSlot(gameAddr);
 
-      const aliceEvents = events.filter(
-        (e) => e.player.toLowerCase() === alice.address.toLowerCase()
-      );
+      const aliceId = Number(await game.walletIdOf(alice.address));
+      const aliceEvents = events.filter((e) => e.walletId === aliceId);
 
       return {
         fixture,
         storage,
         allEvents: events,
         aliceEvents,
-        aliceReveals: reveals.filter((e) => e.player.toLowerCase() === alice.address.toLowerCase()),
+        aliceReveals: reveals.filter((e) => e.walletId === aliceId),
         ticketWriteSlotPostDrain: ticketWriteSlotAfter,
         gameAddr,
       };
@@ -288,7 +286,7 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
       );
     });
 
-    it("TST-MINTCLN-02 — each emission decodes to (player, baseKey, take) 3-tuple with baseKey low-32 = absolute offset + upper bits = (version/domain, lvl, queueIdx, player); event topic-hash matches v42 literal", async function () {
+    it("TST-MINTCLN-02 — each emission decodes to (walletId, baseKey, take) 3-tuple with baseKey low-32 = absolute offset + upper bits = (version/domain, lvl, queueIdx, walletId); event topic-hash matches v42 literal", async function () {
       const { storage, aliceEvents } = await setupWhaleBundleAndDrain();
 
       const evtFragment = storage.interface.getEvent("TraitsGenerated");
@@ -298,17 +296,17 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
       );
       const fieldNames = evtFragment.inputs.map((i) => i.name).sort();
       expect(fieldNames).to.deep.equal(
-        ["baseKey", "player", "take"],
-        "v42 TraitsGenerated field names must be exactly {player, baseKey, take}"
+        ["baseKey", "take", "walletId"],
+        "v42 TraitsGenerated field names must be exactly {walletId, baseKey, take}"
       );
 
       let topicMatchCount = 0;
       for (const e of aliceEvents) {
         const expectedBaseKey =
-          checkpointIdentity({ level: e.lvl, queueIndex: e.queueIdx, player: e.player, domain: e.domain }) | BigInt(e.startIndex) | (e.baseKey & (1n << 255n));
+          checkpointIdentity({ level: e.lvl, queueIndex: e.queueIdx, walletId: e.walletId, domain: e.domain }) | BigInt(e.startIndex) | (e.baseKey & (1n << 255n));
         expect(e.baseKey).to.equal(
           expectedBaseKey,
-          `baseKey for emission lvl=${e.lvl} queueIdx=${e.queueIdx} owed=${e.startIndex} must match the (domain, lvl, queueIdx, player, offset) encoding`
+          `baseKey for emission lvl=${e.lvl} queueIdx=${e.queueIdx} owed=${e.startIndex} must match the (domain, lvl, queueIdx, walletId, offset) encoding`
         );
         expect(decodeCheckpointKey(e.baseKey).startIndex).to.equal(
           e.startIndex,

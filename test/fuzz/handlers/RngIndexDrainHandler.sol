@@ -20,9 +20,9 @@ abstract contract RngIndexDrainOracle is Test {
     uint256 private constant SLOT_BUCKETS = GameSlots.LVL_TRAIT_ENTRY;
     uint256 private constant SLOT_OWNERS = GameSlots.WALLETS;
     uint256 private constant SLOT_TICKET_CURSOR = GameSlots.TICKET_CURSOR;
-    bytes32 internal constant TOPIC_TRAITS_GENERATED = keccak256("TraitsGenerated(address,uint256,uint32)");
+    bytes32 internal constant TOPIC_TRAITS_GENERATED = keccak256("TraitsGenerated(uint32,uint256,uint32)");
     /// @dev Receipt key = stream | startOffset | goldSixTakenFlag (TicketModule._solo): the stream
-    ///      is domain(8) | level(24) | queueIndex(32) | player(160) | 0(32); the low 32 bits carry
+    ///      is domain(8) | level(24) | queueIndex(32) | 0(128) | walletId(32) | 0(32); the low 32 bits carry
     ///      the run's start offset and bit 255 marks a level whose natural gold six was already
     ///      taken when the run started (c729ecfc9 / 1a7074212 entry identity).
     uint256 private constant GOLD_SIX_TAKEN = uint256(1) << 255;
@@ -93,11 +93,15 @@ abstract contract RngIndexDrainOracle is Test {
         uint256 lanes = occurrence / 8 == len / 8
             ? uint256(vm.load(address(subject), slot)) >> 32
             : uint256(vm.load(address(subject), bytes32(uint256(keccak256(abi.encode(slot))) + occurrence / 8)));
-        uint32 ownerIndex = uint32(lanes >> (32 * (occurrence % 8)));
-        // Bucket lanes hold wallet IDs (wallet-table positions; element 0 is never assigned).
+        // Bucket lanes hold wallet IDs.
+        return _walletAddress(subject, uint32(lanes >> (32 * (occurrence % 8))));
+    }
+
+    /// @dev Address registered under a wallet ID (wallet-table position; element 0 is never assigned).
+    function _walletAddress(DegenerusGame subject, uint32 walletId) private view returns (address) {
         bytes32 owners = bytes32(SLOT_OWNERS);
-        if (ownerIndex >= uint256(vm.load(address(subject), owners))) return address(0);
-        return address(uint160(uint256(vm.load(address(subject), bytes32(uint256(keccak256(abi.encode(owners))) + ownerIndex)))));
+        if (walletId >= uint256(vm.load(address(subject), owners))) return address(0);
+        return address(uint160(uint256(vm.load(address(subject), bytes32(uint256(keccak256(abi.encode(owners))) + walletId)))));
     }
 
     /// @dev Reimplement the published 64-bit generator and color thresholds without
@@ -151,14 +155,15 @@ abstract contract RngIndexDrainOracle is Test {
             uint32 start = uint32(key);
             uint8 domain = uint8(stream >> 248);
             uint24 lvl = uint24(stream >> 224);
-            address player = address(uint160(uint256(entry.topics[1])));
+            uint32 playerId = uint32(uint256(entry.topics[1]));
+            address player = _walletAddress(subject, playerId);
             if (domain < DOMAIN_ORDINARY_ZERO || domain > DOMAIN_FUTURE
                 || lvl < snap.firstLevel || uint256(lvl - snap.firstLevel) >= 4 || take == 0) {
                 // A foil's sixteen-entry TraitsGenerated receipt (FOIL domain) is not an LCG run.
                 ++result.unsupported;
                 continue;
             }
-            if (address(uint160(stream >> 32)) != player) ++result.mismatches;
+            if (uint32(stream >> 32) != playerId) ++result.mismatches;
             // Consecutive runs of one entry in one call must resume exactly where the last ended.
             if (stream == previousStream && start != nextOffset) ++result.mismatches;
             previousStream = stream;

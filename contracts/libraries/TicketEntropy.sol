@@ -11,6 +11,8 @@ library TicketEntropy {
     uint8 internal constant FOIL = 0x23;
     // Event-only flag: strip before hashing the stream identity.
     uint256 internal constant GOLD_SIX_TAKEN = uint256(1) << 255;
+    /// @dev Bit position of the owner's wallet ID in a stream identity (ticket and foil).
+    uint256 internal constant ID_SHIFT = 32;
     uint256 private constant ROTATION_DOMAIN = uint256(keccak256("DEGENERUS_TICKET_ROTATION_V1"));
 
     /// @dev The committed queue length and word remain frozen across every checkpoint.
@@ -24,14 +26,17 @@ library TicketEntropy {
     }
     uint256 private constant REMAINDER_DOMAIN = uint256(keccak256("DEGENERUS_TICKET_REMAINDER_V2"));
 
-    function identity(uint24 queueKey, uint24 level, uint256 queueIndex, address player)
+    /// @dev Stream identity: domain in bits 248..255, level 224..247, physical queue index
+    ///      192..223, the owner's wallet ID 32..63. Bits 64..191 are zero and bits 0..31 are
+    ///      reserved for the run's start offset.
+    function identity(uint24 queueKey, uint24 level, uint256 queueIndex, uint32 walletId)
         internal pure returns (uint256)
     {
         require(queueIndex <= type(uint32).max);
         uint8 domain = queueKey & (1 << 22) != 0 ? FUTURE
             : queueKey & (1 << 23) != 0 ? ORDINARY_ONE : ORDINARY_ZERO;
         return (uint256(domain) << 248) | (uint256(level) << 224)
-            | (queueIndex << 192) | (uint256(uint160(player)) << 32);
+            | (queueIndex << 192) | (uint256(walletId) << ID_SHIFT);
     }
 
     function remainder(uint256 stream, uint256 entropy, uint8 fraction) internal pure returns (bool) {

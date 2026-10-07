@@ -761,7 +761,8 @@ contract DegenerusGameDegeneretteModule is
             acc.ownerId = playerId;
             acc.ownerElement = _walletElement(playerId);
         }
-        // The owner's address feeds token payouts and, until Phase D, the bet's seeds.
+        // The bet's seeds take the committed wallet ID; the address feeds token payouts,
+        // the referrer lookup and the resolution event.
         address player = address(uint160(acc.ownerElement));
         uint8 symbol = uint8((bet >> BET_SYMBOL_SHIFT) & MASK_5);
         uint8 spinCount = uint8((bet >> BET_COUNT_SHIFT) & MASK_5);
@@ -839,7 +840,7 @@ contract DegenerusGameDegeneretteModule is
         // spin), so doubling adds it again and zeroing subtracts it back out. The outcome
         // reads off DegeneretteResolved: totalPayout vs the payouts its packed spins imply.
         if (currency == CURRENCY_FLIP && totals.totalPayout != 0) {
-            if (EntropyLib.hash4(rngWord, uint160(player), betId, BET_SURVIVAL_TAG) & 1 == 1) {
+            if (EntropyLib.hash4(rngWord, playerId, betId, BET_SURVIVAL_TAG) & 1 == 1) {
                 acc.flipMint += totals.totalPayout;
                 totals.totalPayout *= 2;
             } else {
@@ -862,7 +863,7 @@ contract DegenerusGameDegeneretteModule is
             uint256 rounded = totals.totalPayout > FlipRoundLib.FLIP_ROUND_THRESHOLD
                 ? FlipRoundLib.roundFlipToHundreds(
                     totals.totalPayout,
-                    EntropyLib.hash4(rngWord, uint160(player), betId, FLIP_ROUND_TAG)
+                    EntropyLib.hash4(rngWord, playerId, betId, FLIP_ROUND_TAG)
                 )
                 : FlipRoundLib.floorWholeFlip(totals.totalPayout);
             if (rounded > totals.totalPayout) {
@@ -920,7 +921,7 @@ contract DegenerusGameDegeneretteModule is
                 player,
                 recordBounty * TOKEN_MATH_SCALE,
                 activityScore,
-                EntropyLib.hash4(rngWord, uint160(player), betId, RECORD_SPIN_TAG),
+                EntropyLib.hash4(rngWord, playerId, betId, RECORD_SPIN_TAG),
                 symbol,
                 BOX_SPIN_TYPE_RECORD
             );

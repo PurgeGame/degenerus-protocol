@@ -32,14 +32,14 @@ contract DecimatorGeneratedEngineMeter {
         uint256 start = gasleft();
         Craps.SlipResult memory r = CrapsEngine(ContractAddresses.CRAPS_ENGINE).settleSlipBounded(
             3 | 3 << 9 | 1 << 24, 60, uint256(keccak256(abi.encode("board", seed))), 3,
-            seed, 1e45, address(0xD1CE), 0x050c, (511 << 16) | 48);
+            seed, 1e45, 0xD1CE, 0x050c, (511 << 16) | 48);
         return (start - gasleft(), r.totalRolls);
     }
 }
 
 contract DecimatorGeneratedFlatEngine {
     function settleSlipBounded(uint256, uint256, uint256, uint256, bytes32,
-        uint256 bankroll, address, uint256, uint256) external pure returns (Craps.SlipResult memory r)
+        uint256 bankroll, uint256, uint256, uint256) external pure returns (Craps.SlipResult memory r)
     { r.peakBankroll = bankroll; }
 }
 

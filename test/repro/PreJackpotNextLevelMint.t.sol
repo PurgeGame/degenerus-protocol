@@ -89,7 +89,7 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
     uint48 private constant INDEX = 0;
     bytes32 private constant PAYOUT_FIXED = keccak256("DeadVrfPayoutFixed(uint24,uint256,uint256,uint256,uint256)");
     bytes32 private constant ADVANCE = keccak256("Advance(uint8,uint24)");
-    bytes32 private constant TRAITS_GENERATED = keccak256("TraitsGenerated(address,uint256,uint32)");
+    bytes32 private constant TRAITS_GENERATED = keccak256("TraitsGenerated(uint32,uint256,uint32)");
 
     address private alice = address(0xA11CE);
     address private bob = address(0xB0B);
@@ -706,17 +706,18 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
 
     /// @dev Entries for (player, lvl) materialized by one log: a solo TraitsGenerated run (level in
     ///      the stream identity, bits 224..247) or an anonymous EntryTraitsRevealed round (topic j is
-    ///      (level << 160) | player; presence bit 128 + 4j + q per quadrant).
-    function _materializedIn(Vm.Log memory l, address player, uint24 lvl) private pure returns (uint256 n) {
+    ///      (level << 160) | walletId; presence bit 128 + 4j + q per quadrant).
+    function _materializedIn(Vm.Log memory l, address player, uint24 lvl) private view returns (uint256 n) {
+        uint32 playerId = game.walletIdOf(player);
         if (l.topics.length == 2 && l.topics[0] == TRAITS_GENERATED) {
-            if (address(uint160(uint256(l.topics[1]))) != player) return 0;
+            if (uint32(uint256(l.topics[1])) != playerId) return 0;
             (uint256 baseKey, uint32 take) = abi.decode(l.data, (uint256, uint32));
             if (uint24(baseKey >> 224) == lvl) n = take;
             return n;
         }
         if (l.topics.length != 4 || l.data.length != 32) return 0;
         uint256 entries = abi.decode(l.data, (uint256));
-        uint256 tag = (uint256(lvl) << 160) | uint160(player);
+        uint256 tag = (uint256(lvl) << 160) | playerId;
         for (uint256 j; j < 4; ++j) {
             if (uint256(l.topics[j]) != tag) continue;
             for (uint256 q; q < 4; ++q) if ((entries >> (128 + 4 * j + q)) & 1 != 0) ++n;

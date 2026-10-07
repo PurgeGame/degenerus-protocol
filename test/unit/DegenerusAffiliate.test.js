@@ -63,9 +63,11 @@ async function payAffiliateAsGame(
     "0x1000000000000000000",
   ]);
   const gameSigner = await hreEthers.getSigner(gameAddr);
+  // The impersonated account need not be the Game: only the Game exposes the wallet table.
+  const senderId = typeof game.walletIdOf === "function" ? await game.walletIdOf(sender) : 0n;
   const tx = await affiliate
     .connect(gameSigner)
-    .payAffiliate(amount, code, sender, lvl, isFreshEth, lootboxActivityScore);
+    .payAffiliate(amount, code, sender, senderId, lvl, isFreshEth, lootboxActivityScore);
   await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
   return tx;
 }
@@ -89,9 +91,10 @@ async function payAffiliateCombinedAsGame(
     "0x1000000000000000000",
   ]);
   const gameSigner = await hreEthers.getSigner(gameAddr);
+  const senderId = await game.walletIdOf(sender);
   const tx = await affiliate
     .connect(gameSigner)
-    .payAffiliateCombined(code, sender, lvl, tktFresh, tktRecycled, lbFresh, lbRecycled, lbFreshScore);
+    .payAffiliateCombined(code, sender, senderId, lvl, tktFresh, tktRecycled, lbFresh, lbRecycled, lbFreshScore);
   await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
   return tx;
 }
@@ -123,9 +126,10 @@ async function payAffiliateAsGameStatic(
     "0x1000000000000000000",
   ]);
   const gameSigner = await hreEthers.getSigner(gameAddr);
+  const senderId = await game.walletIdOf(sender);
   const result = await affiliate
     .connect(gameSigner)
-    .payAffiliate.staticCall(amount, code, sender, lvl, isFreshEth, lootboxActivityScore);
+    .payAffiliate.staticCall(amount, code, sender, senderId, lvl, isFreshEth, lootboxActivityScore);
   await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
   return result;
 }
@@ -404,7 +408,7 @@ describe("DegenerusAffiliate", function () {
       await expect(
         affiliate
           .connect(alice)
-          .payAffiliate(flip(1000000), ZERO_BYTES32, bob.address, 1, true, 0)
+          .payAffiliate(flip(1000000), ZERO_BYTES32, bob.address, 0, 1, true, 0)
       ).to.be.revertedWithCustomError(affiliate, "OnlyAuthorized");
     });
 

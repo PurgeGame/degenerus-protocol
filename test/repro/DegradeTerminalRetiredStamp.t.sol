@@ -72,7 +72,7 @@ contract DegradeTerminalRetiredStampTest is DeployProtocol {
 
     function _rankTop() private {
         vm.prank(address(game));
-        affiliate.payAffiliate(1000 ether, bytes32(uint256(uint160(TOP))), address(0xB001), 11, true, 0);
+        affiliate.payAffiliate(1000 ether, bytes32(uint256(uint160(TOP))), address(0xB001), 0xB001, 11, true, 0);
     }
 
     /// @dev Latch, request, fulfil and apply the terminal word; the payout runs on a later call.

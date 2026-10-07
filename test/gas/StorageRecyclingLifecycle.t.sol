@@ -150,7 +150,7 @@ contract StorageRecyclingLifecycleTest is DeployProtocol {
         emit log_named_uint("final completed level", game.level());
         emit log_named_uint("observed parity retirements", retirements);
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        bytes32 legacyTraits = keccak256("TraitsGenerated(address,uint256,uint32)");
+        bytes32 legacyTraits = keccak256("TraitsGenerated(uint32,uint256,uint32)");
         bytes32 entries = keccak256("EntriesQueued(uint32,uint24,uint32)");
         bytes32 scaled = keccak256("EntriesQueuedScaled(uint32,uint24,uint32)");
         bytes32 range = keccak256("EntriesQueuedRange(uint32,uint24,uint24,uint24,uint32)");

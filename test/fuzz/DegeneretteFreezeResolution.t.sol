@@ -106,6 +106,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         keccak256("BoxSpin(address,uint64,uint256,uint256,uint256)");
 
     address private player;
+    uint32 private playerId;
 
     function setUp() public {
         _deployProtocol();
@@ -116,6 +117,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
         player = makeAddr("degen_freeze_player");
         vm.deal(player, 1000 ether);
+        playerId = _giveWalletId(player);
 
         // Fund the game contract with ETH to back the pool injections
         vm.deal(address(game), 500 ether);
@@ -267,11 +269,11 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
         // Both bets share the seeded lootbox index 1 (placement requires word==0).
         // Word chosen so the FLIP bet (betId 2) WINS its bet-keyed survival flip
-        // (keccak(word, player, betId, BET_SURVIVAL_TAG) & 1 == 1) — the doubled-mint path is exercised
+        // (keccak(word, playerId, betId, BET_SURVIVAL_TAG) & 1 == 1) — the doubled-mint path is exercised
         // non-vacuously below.
         uint48 index = 1;
         uint256 word = uint256(keccak256("tier1_mixed_batch_word_v3"));
-        while (!_spin0Pays(index, word) || EntropyLib.hash4(word, uint160(player), 2, BET_SURVIVAL_TAG) & 1 == 0) {
+        while (!_spin0Pays(index, word) || EntropyLib.hash4(word, uint256(playerId), 2, BET_SURVIVAL_TAG) & 1 == 0) {
             ++word;
         }
 
@@ -332,17 +334,17 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // the raw mint is 2x the per-spin sum on a winning flip, 0 on a losing one. The
         // chosen word wins the flip for this bet, so the doubled path is live.
         uint256 rawFlipMint = (uint256(
-            keccak256(abi.encode(word, player, flipBet, BET_SURVIVAL_TAG))
+            keccak256(abi.encode(word, uint256(playerId), flipBet, BET_SURVIVAL_TAG))
         ) & 1 == 1) ? expectedFlip * 2 : 0;
         assertGt(rawFlipMint, 0, "Tier-1: word must win the FLIP survival flip");
 
         // The award granule then collapses the SURVIVED total onto a whole 100-FLIP
         // multiple. Replicated here from the same inputs the module uses, so this stays a
         // byte-identical amount assertion rather than a tolerance: the collapse is keyed on
-        // hash4(rngWord, player, betId, FLIP_ROUND_TAG), all fixed at fulfillment.
+        // hash4(rngWord, playerId, betId, FLIP_ROUND_TAG), all fixed at fulfillment.
         uint256 expectedFlipMint = _gateFlipAward(
             rawFlipMint,
-            EntropyLib.hash4(word, uint160(player), flipBet, FLIP_ROUND_TAG)
+            EntropyLib.hash4(word, uint256(playerId), flipBet, FLIP_ROUND_TAG)
         );
         // Non-vacuity for the collapse itself: this batch must actually cross the
         // threshold, or the assertion below degrades to the pre-granule behaviour.
@@ -382,7 +384,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     }
 
     /// @notice FLIP survival-flip LOSS path: a bet whose bet-keyed flip
-    ///         (keccak(word, player, betId, BET_SURVIVAL_TAG) & 1 == 0) loses mints NOTHING, even though its
+    ///         (keccak(word, playerId, betId, BET_SURVIVAL_TAG) & 1 == 0) loses mints NOTHING, even though its
     ///         raw spins paid (recomputed per-spin payout sum > 0).
     function testFlipSurvivalFlipLossZeroesMint() public {
         _seedFuturePrizePool(1_000_000 ether);
@@ -391,7 +393,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // per-spin payouts are nonzero.
         uint48 index = 1;
         uint256 word = uint256(keccak256("survival_flip_loss_word_v3"));
-        while (!_spin0Pays(index, word) || EntropyLib.hash4(word, uint160(player), 1, BET_SURVIVAL_TAG) & 1 == 1) {
+        while (!_spin0Pays(index, word) || EntropyLib.hash4(word, uint256(playerId), 1, BET_SURVIVAL_TAG) & 1 == 1) {
             ++word;
         }
         uint32 ticket = _winningTicketFor(index, word);
@@ -399,7 +401,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         _fundFlip(player, 1_000);
         uint64 betId = _placeBet(CURRENCY_FLIP, 200, 3, ticket);
         assertEq(
-            uint256(keccak256(abi.encode(word, player, betId, BET_SURVIVAL_TAG))) & 1,
+            uint256(keccak256(abi.encode(word, uint256(playerId), betId, BET_SURVIVAL_TAG))) & 1,
             0,
             "precondition: the chosen word loses the survival flip for this bet"
         );
