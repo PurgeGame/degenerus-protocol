@@ -52,7 +52,7 @@ contract QueuePackingPurchaseGas is DeployProtocol {
     function test_FirstTimePurchase_ExistingQueueWord_Cold() public {
         vm.prank(BUYER);
         uint256 beforeGas = gasleft();
-        game.purchase{value: 0.01 ether}(BUYER, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: 0.01 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         emit log_named_uint("QUEUE_FIRST_PURCHASE_EXISTING_WORD", beforeGas - gasleft());
         vm.etch(address(game), type(QueuePackingGasSeeder).runtimeCode);
         uint80 owed = QueuePackingGasSeeder(payable(address(game))).queued(1, BUYER);
@@ -76,7 +76,7 @@ contract QueuePackingEmptyPurchaseGas is DeployProtocol {
     function test_FirstTimePurchase_FreshQueueWord_Cold() public {
         vm.prank(BUYER);
         uint256 beforeGas = gasleft();
-        game.purchase{value: 0.04 ether}(BUYER, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: 0.04 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         emit log_named_uint("QUEUE_FIRST_PURCHASE_FRESH_WORD", beforeGas - gasleft());
         vm.etch(address(game), type(QueuePackingGasSeeder).runtimeCode);
         uint80 owed = QueuePackingGasSeeder(payable(address(game))).queued(111, BUYER);
@@ -92,7 +92,7 @@ contract QueuePackingReturningPurchaseGas is DeployProtocol {
         _deployProtocol();
         vm.deal(BUYER, 100 ether);
         vm.prank(BUYER);
-        game.purchase{value: 0.01 ether}(BUYER, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: 0.01 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         bytes memory code = address(game).code;
         vm.etch(address(game), type(QueuePackingGasSeeder).runtimeCode);
         QueuePackingGasSeeder(payable(address(game))).emptyPurchaseLevel();
@@ -101,7 +101,7 @@ contract QueuePackingReturningPurchaseGas is DeployProtocol {
     function test_ReturningWallet_LaterLevel_Cold() public {
         vm.prank(BUYER);
         uint256 beforeGas = gasleft();
-        game.purchase{value: 0.04 ether}(BUYER, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: 0.04 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         emit log_named_uint("QUEUE_RETURNING_PURCHASE_LATER_LEVEL", beforeGas - gasleft());
         vm.etch(address(game), type(QueuePackingGasSeeder).runtimeCode);
         uint80 owed = QueuePackingGasSeeder(payable(address(game))).queued(111, BUYER);
@@ -122,8 +122,9 @@ contract QueuePackingWhaleClaimGas is DeployProtocol {
     }
 
     function test_WhaleClaim_All100Levels_Cold() public {
+        uint32 id = game.walletIdOf(BUYER);
         uint256 beforeGas = gasleft();
-        game.claimWhalePass(BUYER);
+        game.claimWhalePass(id);
         emit log_named_uint("QUEUE_WHALE_CLAIM_100_LEVELS", beforeGas - gasleft());
         vm.etch(address(game), type(QueuePackingGasSeeder).runtimeCode);
         for (uint24 lvl = 1; lvl <= 100; ++lvl) {

@@ -79,8 +79,8 @@ contract FlipRedeemWindowTest is DeployProtocol {
         vm.prank(buyer);
         (ok, ) = address(game).call(
             abi.encodeWithSignature(
-                "redeemFlip(address,uint256)",
-                buyer,
+                "redeemFlip(uint32,uint256)",
+                uint32(0),
                 REDEEM_QTY
             )
         );

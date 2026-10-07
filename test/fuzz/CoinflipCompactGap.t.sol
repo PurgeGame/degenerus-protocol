@@ -220,7 +220,7 @@ contract CoinflipCompactGapTest is CoinflipRngSpineBehavioral {
         assertEq(coinflip.previewClaimCoinflips(player), stake * 2);
         uint256 beforeBalance = coin.balanceOf(player);
         vm.prank(player);
-        uint256 claimed = coinflip.claimCoinflips(address(0), type(uint256).max);
+        uint256 claimed = coinflip.claimCoinflips(0, type(uint256).max);
         assertEq(claimed, stake * 2, "winning backfill returns stake plus100% profit");
         assertEq(coin.balanceOf(player), beforeBalance + stake * 2);
         assertTrue(vm.revertToState(snapshot));
@@ -228,7 +228,7 @@ contract CoinflipCompactGapTest is CoinflipRngSpineBehavioral {
         assertEq(coinflip.previewClaimCoinflips(player), 0);
         beforeBalance = coin.balanceOf(player);
         vm.prank(player);
-        claimed = coinflip.claimCoinflips(address(0), type(uint256).max);
+        claimed = coinflip.claimCoinflips(0, type(uint256).max);
         assertEq(claimed, 0, "losing backfill forfeits the stake");
         assertEq(coin.balanceOf(player), beforeBalance);
     }

@@ -134,7 +134,7 @@ contract DegeneretteSweep is DeployProtocol {
     function _place(address who, uint8 currency, uint128 perSpin, uint8 spins) private {
         vm.prank(who);
         game.placeDegeneretteBet{value: currency == ETH ? uint256(perSpin) * spins : 0}(
-            address(0), currency, perSpin, spins, SYMBOL
+            0, currency, perSpin, spins, SYMBOL
         );
     }
 
@@ -242,7 +242,7 @@ contract DegeneretteSweep is DeployProtocol {
     function testPlacementRejectsPartialUnits() public {
         vm.prank(alice);
         vm.expectRevert(bytes4(keccak256("InvalidBet()")));
-        game.placeDegeneretteBet{value: 0.01 ether + 1}(address(0), ETH, 0.01 ether + 1, 1, SYMBOL);
+        game.placeDegeneretteBet{value: 0.01 ether + 1}(0, ETH, 0.01 ether + 1, 1, SYMBOL);
 
         _place(alice, FLIP, 101, 1); // any whole FLIP is fine
         assertEq((game.degeneretteBetInfo(IDX, 1) >> 188) & type(uint64).max, 101, "whole FLIP accepted");

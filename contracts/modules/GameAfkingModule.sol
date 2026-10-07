@@ -50,10 +50,13 @@ interface IQuestCompletionView {
 }
 
 /// @title ISeatToken
-/// @notice Minimal AFKing Subscription Token surface for the subscribe coin gate: holding
-///         >= 1 coin is the sole afking credential (sub <=> coin).
+/// @notice Minimal AFKing Subscription Token surface for subscribe: a new run burns one seat.
 interface ISeatToken {
-    function balanceOf(address account) external view returns (uint256);
+    /// @notice GAME-only: burn seat `seatId`, which `holder` must hold. `holder` is the
+    ///         subscriber's payee (the owner for a smurf). Called before the run is written.
+    /// @custom:reverts OnlyGame If the caller is not GAME.
+    /// @custom:reverts InvalidToken If `seatId` does not exist or is not held by `holder`.
+    function consumeSeat(address holder, uint256 seatId) external;
 }
 
 /**
@@ -61,8 +64,8 @@ interface ISeatToken {
  * @author Burnie Degenerus
  * @notice Delegate-called module owning the AfKing subscription logic. The bulk of that
  *         logic sits in this module's OWN EIP-170 budget; only the thin dispatch stubs
- *         (subscribe / claimAfkingFlip / drainAffiliateBase / decurse /
- *         subscriberCount / the sub-record view) occupy space in the DegenerusGame image.
+ *         (subscribe / claimAfkingFlip / drainAffiliateBase / decurse / smite /
+ *         subscriberSetLength) occupy space in the DegenerusGame image.
  *
  * @dev DELEGATECALL CONTEXT: the module inherits `DegenerusGameStorage` (via
  *      `DegenerusGameMintStreakUtils`), so the subscriber set
@@ -70,9 +73,8 @@ interface ISeatToken {
  *      (`_subCursor`/`_subOpenCursor`), the `subsFullyProcessed` STAGE
  *      drain-completion flag, the `afkingFunding` ledger, `claimablePool`, `operatorApprovals`,
  *      and the activity-score helpers are all in-context plain SLOADs/SSTOREs.
- *      The operator-approval / pass-horizon / afking-snapshot / afking-funding
- *      reads are all in-context here (the established module pattern — cf.
- *      `DegenerusGameBingoModule` reading `operatorApprovals` directly). The Game
+ *      The account-resolution / pass-horizon / afking-snapshot / afking-funding
+ *      reads are all in-context here. The Game
  *      reaches these via its delegatecall dispatch stubs; a direct call to this
  *      module address would have the wrong `msg.sender` for any Game-context
  *      invariant.
@@ -116,29 +118,15 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @notice Thrown when smite() targets a player who already holds 10 or more curse
     ///         points (5-stack ceiling) and cannot take on more smite stacks.
     error SmiteCeilingReached();
-    /// @dev Third-party subscribe(player, ...) where the caller is neither the
-    ///      player nor a game operator the player approved; OR a non-zero,
-    ///      non-self fundingSource that has not operator-approved the subscriber.
-    error NotApproved();
+    // error NotApproved() — inherited from DegenerusGameStorage: a subscribe caller not
+    // authorized for the account, or an external funding source that does not authorize
+    // the subscriber.
     /// @dev subscribe(_, 0) cancel where the caller has no active subscription
     ///      (nothing to tombstone).
     error NotSubscribed();
-    /// @dev subscribe would grow the active subscriber set past SUBSCRIBER_CAP
-    ///      (2005). NEW-subscriber path only — re-subscribe never trips it.
-    error SubscriberCapReached();
     /// @dev mineFlip() found all router categories empty — the clean no-work signal
     ///      (the unbounded-scan-free early-return on no pending work).
     error NoWork();
-    /// @dev subscribe (upsert) where the subscriber holds no AFKing Subscription Token — holding
-    ///      >= 1 coin is the sole afking credential (sub <=> coin), so a coinless
-    ///      address cannot occupy a subscriber slot.
-    error NoCoin();
-
-    /// @notice subscribe() fresh-subscribe by a holder with an uncollected eviction
-    ///         forfeit (SEAT_ENCUMBERED set with no active sub) — the forfeited seat
-    ///         must be reclaimed to the vault (AFKING_SUB_TOKEN.reclaimSeat) before
-    ///         the address can subscribe again.
-    error SeatForfeited();
     /// @dev subscribe (upsert) starting a NEW afking run that is not grounded on a real
     ///      purchase — neither already bought today nor a funded in-tx cover-buy. An
     ///      unfunded start reverts rather than beginning an inert, free-riding run.
@@ -149,7 +137,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ------------------------------------------------------------------*/
     /// @dev Single canonical subscription-state stream — POST-WRITE full state.
     ///      Cancel (subscribe(_, 0)) emits with dailyQuantity == 0.
-    ///      `fundingSource` is the stored funding wallet (address(0) = self);
+    ///      `fundingSource` is the external funding account's key (address(0) = self);
     ///      indexed so a source can filter the log for every account it funds.
     event SubscriptionUpdated(
         address indexed player,
@@ -171,8 +159,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      cohort can complete; the stamps' ETH stays in the prize pools.
     event AfkingBoxCountForfeited(uint16 count);
 
-    /// @notice A consented funding wallet paid the residual subscription cost in stETH.
-    /// @dev Any share-rounding excess remains in the source's prepaid balance.
+    /// @notice A consented funding account paid the residual subscription cost in stETH.
+    /// @dev `source` is the funding account's key (the stETH leaves its payee). Any
+    ///      share-rounding excess remains in the source's prepaid balance.
     event AfkingStethFunded(
         address indexed subscriber,
         address indexed source,
@@ -253,26 +242,12 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      lootbox mode.
     uint8 internal constant FLAG_USE_TICKETS = 4;
 
-    /// @dev externalFunding bit within Sub.flags — set when a non-zero
-    ///      `fundingSource` is registered in the sparse `_fundingSourceOf` map
-    ///      (an explicit self-address included; only address(0) takes the flagless self path).
-    ///      Lets the common self-funded path resolve the source to the subscriber's own set
+    /// @dev externalFunding bit within Sub.flags — set when an external funding account (an ID
+    ///      other than 0 and the subscriber's own) is registered in the sparse `_fundingSourceOf`
+    ///      map. Lets the common self-funded path resolve the source to the subscriber's own set
     ///      element from the already-loaded flags byte and SKIP the per-sub
     ///      `_fundingSourceOf` SLOAD (the map is read only for the rare operator-funded sub).
     uint8 internal constant FLAG_EXTERNAL_FUNDING = 1;
-
-    /// @dev Ring-length cap = 2005: the 2,000-coin supply (the natural bound on distinct
-    ///      subscribers — membership requires holding an AFKing Subscription Token) plus 5 slack slots
-    ///      for transient cancel/seat-exit tombstones awaiting the in-pass reclaim, so
-    ///      honest churn at full utilization never trips the backstop and ring-stuffing
-    ///      must burn extra funded entries before inconveniencing any joiner. Bounds the
-    ///      iterable set the protocol pays to iterate every cycle — the advance chain
-    ///      walks `_subscribers` in the process/open passes (every pass is
-    ///      weight-/OPEN_BATCH-chunked, so the cap bounds total subs and chunk count,
-    ///      never per-tx gas) and sits well within the uint16 `_subCursor`/`_subOpenCursor`
-    ///      range (no cursor aliasing). `subscribe` reverts a NEW-subscriber insert at the
-    ///      cap; a re-subscribe of an existing member does not grow the set, so it is exempt.
-    uint256 internal constant SUBSCRIBER_CAP = 2005;
 
     /// @dev Slot-0 quest completion reward — mirrors `DegenerusQuests.QUEST_SLOT0_REWARD`
     ///      (a private constant not visible cross-contract). Each delivered afking buy accrues
@@ -291,7 +266,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                           Subscription entrypoint
     ------------------------------------------------------------------*/
     /// @notice The SINGLE subscription entrypoint — create, replace, or cancel a
-    ///         daily subscription for `player`. dailyQuantity >= 1 upserts
+    ///         daily subscription for account `id` (0 = caller). dailyQuantity >= 1 upserts
     ///         (create-or-replace in place); dailyQuantity == 0 cancels (writes the
     ///         tombstone sentinel, relocating no one). Every mutation flows
     ///         through this one consent-gated path.
@@ -299,49 +274,46 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      (`rngLockedFlag`), for ALL of create / replace / cancel — the subscriber
     ///      set must be frozen across [request -> unlock] so the stamped set the open
     ///      consumes cannot shift mid-cycle. Callers wait for the unlock.
-    /// @dev Authorization is checked ONCE here, third-party path only:
-    ///      `player == address(0)` or `player == msg.sender` is self-consent (no
-    ///      check); otherwise the caller must be a game operator the player
-    ///      approved (in-context `operatorApprovals[subscriber][msg.sender]` —
-    ///      the same predicate `isOperatorApproved` returns). Authorization is
-    ///      NEVER re-checked at process-time.
-    /// @dev Coin-gating: holding >= 1 AFKing Subscription Token is the sole afking credential
-    ///      (sub <=> coin), checked with a SINGLE balanceOf staticcall at
-    ///      subscribe ONLY — the process passes never re-check. The coin holds
-    ///      the other side: a transfer that would empty an encumbered holder's
-    ///      balance reverts token-side (SeatInUse, read from the Game's subInfo
-    ///      view and the SEAT_ENCUMBERED mintPacked bit). Manual cancel
-    ///      (dailyQuantity == 0) clears the bit, so a clean leaver's seat is
-    ///      free to sell; an eviction leaves it set, so the evicted seat is
-    ///      forfeit — locked until anyone reclaims it to the vault
-    ///      (AFKING_SUB_TOKEN.reclaimSeat) — and the address cannot re-subscribe
-    ///      until that forfeit is collected. No pass requirement and no
-    ///      per-level validity horizon.
+    /// @dev Authorization is checked ONCE here under the account rule (`_resolveAccount`:
+    ///      the caller is the account's payee — its key or a smurf's owner — or an operator
+    ///      approved for its ID). Authorization is NEVER re-checked at process-time.
+    /// @dev Seats: a NEW run (no live run — never subscribed, cancelled or evicted) burns seat
+    ///      `seatId` of the subscriber's payee through the token's Game-only `consumeSeat`,
+    ///      before the run is written. Changing a live run and a cancel burn nothing; the
+    ///      exempt VAULT / SDGNRS subscriptions (made in their own constructors, before the
+    ///      token exists) never call the token. Every non-exempt set entry burned a seat and
+    ///      the token caps live seats plus set entries, so the set needs no runtime cap. No
+    ///      pass requirement and no per-level validity horizon.
     /// @dev msg.value > 0 credits the Game's afkingFunding ledger in-context
     ///      (claimablePool moved in tandem — the solvency invariant), keyed on the
-    ///      resolved funding bucket (the funder for an operator-funded sub, else the
-    ///      subscriber).
+    ///      resolved funding bucket (the external source for an externally funded sub, else
+    ///      the subscriber).
     /// @dev Funding-source 4-protection:
-    ///        (1) prepaid consent at subscribe — auth + fundingSource gate checked here;
-    ///        (2) default-self — `fundingSource == 0` resolves to `subscriber`, no gate;
+    ///        (1) prepaid consent at subscribe — auth + funding-source gate checked here;
+    ///        (2) default-self — `fundingSourceId` 0 or the subscriber's own ID self-funds from
+    ///            the subscriber's ledger, no gate; its stETH top-up pulls from the subscriber's
+    ///            payee;
     ///        (3) no-escalation — the source is fixed at subscribe, not changeable per-draw to escalate;
-    ///        (4) later approval revoke does not stop prepaid draws; stETH wallet pulls
-    ///            require live operator approval for nonself sources on every attempt.
-    /// @param player Subscriber to act for (0 or msg.sender = self).
+    ///        (4) later consent revocation does not stop prepaid draws; stETH pulls from an
+    ///            external source's payee require the consent to remain live on every attempt
+    ///            (a source sharing the subscriber's main wallet consents implicitly).
+    /// @param id Subscriber account (0 = caller).
     /// @param drainGameCreditFirst When true, the buy spends claimable credit first.
     /// @param useTickets Mint mode — true = tickets, false = lootboxes.
     /// @param dailyQuantity Daily buy units, 1..255 (upsert); 0 cancels (tombstone).
-    /// @param fundingSource Wallet whose `afkingFunding` funds this sub; address(0) = self.
-    ///        A non-zero, non-self source is honored ONLY when it has
-    ///        operator-approved the subscriber and already holds a wallet ID. Prepaid
-    ///        consent is checked at subscribe; each stETH wallet pull also requires that
-    ///        approval to remain live.
+    /// @param fundingSourceId Account whose `afkingFunding` funds this sub; 0 (or the
+    ///        subscriber's own ID) = self. An external source must be allocated and must
+    ///        consent: it shares the subscriber's main wallet (equal payees: an owner and its
+    ///        smurfs, in any pairing) or it approved the subscriber's key
+    ///        as an operator.
+    /// @param seatId Seat serial burned when this call starts a new run (ignored otherwise).
     function subscribe(
-        address player,
+        uint32 id,
         bool drainGameCreditFirst,
         bool useTickets,
         uint8 dailyQuantity,
-        address fundingSource
+        uint32 fundingSourceId,
+        uint256 seatId
     ) external payable {
         // Block ALL subscribe (create / replace / cancel) during the
         // RNG freeze window: the subscriber set the stamp pass + open consume must
@@ -362,40 +334,39 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // claim path.
         if (_livenessTriggered()) revert GameOver();
 
-        // Self-consent (player == 0 or msg.sender) or operator-approval.
-        address subscriber = player == address(0) ? msg.sender : player;
-        if (subscriber != msg.sender) {
-            if (!operatorApprovals[subscriber][msg.sender]) {
-                revert NotApproved();
-            }
-        }
-
-        // A non-zero, non-self fundingSource must have operator-approved
-        // the subscriber on the game and already hold a wallet ID (a funding source is
-        // never registered on someone else's call). address(0) (self) short-circuits both
-        // reads; prepaid draws retain this consent; stETH wallet pulls re-check it live.
-        uint32 fundId;
-        if (fundingSource != address(0) && fundingSource != subscriber) {
-            if (!operatorApprovals[fundingSource][subscriber]) revert NotApproved();
-            fundId = _requireWalletId(fundingSource);
-        }
+        // The account rule: the caller for id 0, else an account the caller may act for.
+        (address subscriber, address payee) = _resolveAccount(id);
 
         // Subscribing is a paying action, so it registers the subscriber before anything
         // else loads its mint word. A cancel pays nothing and only reads the ID: an
-        // unregistered address holds no sub and reverts NotSubscribed below.
+        // unregistered caller holds no sub and reverts NotSubscribed below.
         uint32 subId;
         if (dailyQuantity != 0) (subId, ) = _registerWallet(subscriber, msg.value);
         else subId = _walletIdOf(subscriber);
-        if (fundId == 0) fundId = subId;
+
+        // An external funding source (an ID other than 0 and the subscriber's own) must be
+        // allocated and must consent: the same main wallet as the subscriber (equal payees)
+        // consents implicitly, any other source must have approved the subscriber's key as an
+        // operator. Prepaid draws retain this consent; stETH pulls from the source's payee
+        // re-check it live.
+        uint32 fundId = subId;
+        address source;
+        if (fundingSourceId != 0 && fundingSourceId != subId) {
+            address sourcePayee;
+            (source, sourcePayee) = _accountKeys(fundingSourceId);
+            if (sourcePayee != payee && !operatorApprovals[fundingSourceId][subscriber]) {
+                revert NotApproved();
+            }
+            fundId = fundingSourceId;
+        }
 
         // msg.value > 0 credits the Game's afkingFunding ledger in-context (the Game
         // holds the ETH; claimablePool increases by the same amount). It credits the
-        // SAME bucket the draws debit: the resolved funding source — the non-self
-        // `fundingSource` for an operator-funded sub (already approved just
-        // above, so the funder consented to fund this subscriber), else the subscriber
-        // itself. So a deposit attached to subscribe always funds the bucket that
-        // actually pays for this sub's auto-buys — never misdirected to an unused player
-        // bucket on an operator-funded sub. Routed through _creditAfkingValue so the credit
+        // SAME bucket the draws debit: the resolved funding source — the external
+        // source for an externally funded sub (its consent was checked just above),
+        // else the subscriber itself. So a deposit attached to subscribe always funds the
+        // bucket that actually pays for this sub's auto-buys — never misdirected to an
+        // unused bucket on an externally funded sub. Routed through _creditAfkingValue so the credit
         // emits AfkingFunded like every other money-in path; the ledger is otherwise
         // write-asymmetric here (debits log, credits do not) and off-chain consumers cannot
         // attribute a funded subscribe made through a contract wallet.
@@ -424,14 +395,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             IDegenerusAffiliate(ContractAddresses.AFFILIATE).claim(drainOne);
 
             // Hand the afking-computed streak back to the manual quest system, then tombstone.
-            // The tombstone plus the encumbrance clear below release the seat: the coin's
-            // transfer guard reads subInfo.active and the SEAT_ENCUMBERED bit, so the
-            // just-cancelled holder can sell immediately. Manual cancel is the graceful
-            // exit — an eviction never reaches this branch, leaving the bit set so the
-            // seat is forfeit (reclaimable to the vault) instead.
+            // The run's seat was burned when it started; a later new run burns another.
             _finalizeAfking(subId, c, _simulatedDayIndex());
             c.dailyQuantity = 0;
-            mintPacked_[subscriber] &= ~(uint256(1) << BitPackingLib.SEAT_ENCUMBERED_SHIFT);
             // The sparse `_fundingSourceOf` map holds an entry iff FLAG_EXTERNAL_FUNDING
             // is set (the upsert writes/clears both together), so the common self-funded
             // cancel emits address(0) straight from the already-loaded flags — no map read.
@@ -456,52 +422,41 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // sub is mid-afking-run (afkingActive set) — a re-subscribe CONTINUES that run; 0 means
         // new / cancelled / evicted (afkingActive cleared by a prior finalize) — a fresh run.
         bool wasActive = s.dailyQuantity != 0;
+        // The two protocol self-subscribers (VAULT / sDGNRS) self-subscribe at
+        // construction with no funds and BEFORE the AFKing Subscription Token exists in the
+        // deploy order (the token deploys last; its constructor mints both
+        // permanent construction seats — serial 1 to SDGNRS, serial 2 to the
+        // vault); they are exempt from the seat burn and the
+        // purchase-grounded gate below, keyed on the un-spoofable resolved
+        // subscriber identity. Every other sub must clear both.
+        bool exemptSub = subscriber == ContractAddresses.VAULT ||
+            subscriber == ContractAddresses.SDGNRS;
 
-        // Settle the prior run's pendingFlip under its CURRENT flag + dailyQuantity before the
-        // overwrite below, so the presale-box credit keys on the state in force during accrual.
-        if (wasActive) _settlePendingFlip(subscriber, subId, s);
+        if (wasActive) {
+            // Settle the prior run's pendingFlip under its CURRENT flag + dailyQuantity before
+            // the overwrite below, so the presale-box credit keys on the state in force during
+            // accrual.
+            _settlePendingFlip(subscriber, subId, s);
+        } else if (!exemptSub) {
+            // A new run burns one seat held by the subscriber's payee, before the run is
+            // written. The token makes no callback into the Game.
+            ISeatToken(ContractAddresses.AFKING_SUB_TOKEN).consumeSeat(payee, seatId);
+        }
 
         s.dailyQuantity = dailyQuantity;
         if (drainGameCreditFirst) s.flags |= FLAG_DRAIN_FIRST;
         else s.flags &= ~FLAG_DRAIN_FIRST;
         if (useTickets) s.flags |= FLAG_USE_TICKETS;
         else s.flags &= ~FLAG_USE_TICKETS;
-        // The two protocol self-subscribers (VAULT / sDGNRS) self-subscribe at
-        // construction with no funds and BEFORE the AFKing Subscription Token exists in the
-        // deploy order (the coin deploys last; its constructor mints both
-        // permanent construction seats — serial 1 to SDGNRS, serial 2 to the
-        // vault); they are exempt from the coin-required and
-        // purchase-grounded gates below, keyed on the un-spoofable resolved
-        // subscriber identity. Every other sub must clear both gates.
-        bool exemptSub = subscriber == ContractAddresses.VAULT ||
-            subscriber == ContractAddresses.SDGNRS;
-        // Coin-required: >= 1 AFKing Subscription Token is the sole afking credential.
-        // Checked when starting a run; an active update reuses the invariant from the
-        // other side (its transfer guard reverts a last-coin transfer while
-        // subInfo.active, reclaim requires inactive, and there is no burn). An
-        // active sub therefore needs no balance re-check here or in the process pass.
-        // Seat-encumbrance latch (fresh subscribe only — an active sub's bit is
-        // already set). A still-set bit here means the last run ended by eviction
-        // (manual cancel is the only player-side clear), so the seat is forfeit:
-        // block re-entry until reclaimSeat sends it to the vault and clears the
-        // bit token-side. Otherwise set the latch — it holds the coin's transfer
-        // guard on the last seat for the whole run and through an eviction.
-        if (!exemptSub && !wasActive) {
-            if (ISeatToken(ContractAddresses.AFKING_SUB_TOKEN).balanceOf(subscriber) == 0) revert NoCoin();
-            uint256 packedWord = mintPacked_[subscriber];
-            if (
-                (packedWord >> BitPackingLib.SEAT_ENCUMBERED_SHIFT) & 1 != 0
-            ) revert SeatForfeited();
-            mintPacked_[subscriber] =
-                packedWord |
-                (uint256(1) << BitPackingLib.SEAT_ENCUMBERED_SHIFT);
-        }
-        // Sparse funder map: store any non-zero source (its address beside its wallet ID);
-        // only address(0) (self) clears it, so re-pointing an operator-funded sub back to
-        // address(0) does not strand a stale funder. Re-pointing the source IS a
-        // re-subscribe, which re-runs the operator-approval and wallet-ID gates.
-        if (fundingSource != address(0)) {
-            _fundingSourceOf[subId] = uint256(uint160(fundingSource)) | (uint256(fundId) << 160);
+        // Sparse funder map: store an external source (its key beside its wallet ID); a
+        // self-funded subscribe clears it, so re-pointing an externally funded sub back to
+        // self does not strand a stale funder. Re-pointing the source IS a re-subscribe,
+        // which re-runs the consent gate.
+        uint256 subWord = uint256(uint160(subscriber)) | (uint256(subId) << 160);
+        uint256 srcWord = subWord;
+        if (fundId != subId) {
+            srcWord = uint256(uint160(source)) | (uint256(fundId) << 160);
+            _fundingSourceOf[subId] = srcWord;
             s.flags |= FLAG_EXTERNAL_FUNDING;
         } else {
             // A live self-funded run has already cleared this map at its start.
@@ -512,8 +467,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             }
             s.flags &= ~FLAG_EXTERNAL_FUNDING;
         }
-        // The cover-buys below draw on the source just recorded: `fundingSource` (the
-        // subscriber when zero) under `fundId`, so they need no map read.
+        // The cover-buys below draw on the source just recorded (`srcWord`, the subscriber's
+        // own word when self-funded), so they need no map read.
 
         // Afking-run start (new sub) OR a streak-refreshing cover-buy (active sub re-subscribe).
         {
@@ -546,12 +501,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                             _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0,
                             srcFunding
                         );
-                    srcFunding = _tryFundAfkingSteth(
-                        subscriber,
-                        fundingSource != address(0) ? fundingSource : subscriber,
-                        ethValue,
-                        srcFunding
-                    );
+                    srcFunding = _tryFundAfkingSteth(subWord, srcWord, ethValue, srcFunding);
                     if (srcFunding >= ethValue) {
                         _deliverAfkingBuy(
                             uint256(uint160(subscriber)) | (uint256(subId) << 160),
@@ -618,12 +568,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                             _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0,
                             srcFunding
                         );
-                    srcFunding = _tryFundAfkingSteth(
-                        subscriber,
-                        fundingSource != address(0) ? fundingSource : subscriber,
-                        ethValue,
-                        srcFunding
-                    );
+                    srcFunding = _tryFundAfkingSteth(subWord, srcWord, ethValue, srcFunding);
                     if (srcFunding >= ethValue) {
                         _setStreakBase(s, snap); // funded day-0 — keep the snapshot
                         _deliverAfkingBuy(
@@ -660,7 +605,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             dailyQuantity,
             drainGameCreditFirst,
             useTickets,
-            fundingSource
+            source
         );
     }
 
@@ -668,23 +613,20 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      without resolving the purchase again against the new prepaid balance.
     ///      A fully admitted pull may fail for any reason, including exhausting
     ///      its stipend. Ordinary insufficient-funding handling owns the outcome.
+    /// @param subscriber The sub's set element: its key (bits 0..159) and wallet ID (160..191).
+    /// @param funding The funding account in the same layout; equal to `subscriber` when
+    ///        self-funded.
     function _tryFundAfkingSteth(
-        address subscriber,
-        address source,
+        uint256 subscriber,
+        uint256 funding,
         uint256 ethValue,
         uint256 srcFunding
     ) private returns (uint256) {
-        // Protocol custody is not a wallet funding allowance: sDGNRS preapproves
-        // GAME for redemptions whose stETH backing must remain segregated. Keep
-        // both protocol sinks on their existing internal-ledger funding path.
-        if (
-            srcFunding >= ethValue || source == ContractAddresses.SDGNRS || source == ContractAddresses.VAULT ||
-            (source != subscriber && !operatorApprovals[source][subscriber])
-        ) {
-            return srcFunding;
-        }
+        if (srcFunding >= ethValue) return srcFunding;
+        (address source, bool allowed) = _stethSource(subscriber, funding);
+        if (!allowed) return srcFunding;
         try IDegenerusGame(address(this)).pullAfkingSteth{gas: GasBounds.AFKING_STETH_PULL_GAS}(
-            subscriber, source, ethValue - srcFunding
+            address(uint160(subscriber)), source, ethValue - srcFunding
         ) returns (uint256 received) {
             return srcFunding + received;
         } catch {
@@ -692,27 +634,52 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         }
     }
 
+    /// @dev The address a sub's stETH top-up is pulled from — the funding account's payee (the
+    ///      owner for a smurf account) — and whether the pull may run. Protocol custody is not a
+    ///      wallet funding allowance: sDGNRS preapproves GAME for redemptions whose stETH backing
+    ///      must remain segregated, so neither protocol sink is ever pulled. An external source
+    ///      must still consent live: the same main wallet as the subscriber (equal payees), or
+    ///      an operator approval of the subscriber's key. A self-funded sub reads only its own
+    ///      element; the subscriber's payee is read only for an external source that is not
+    ///      the subscriber's own key. Never reverts.
+    /// @param subscriber The sub's set element (key | ID << 160).
+    /// @param funding The funding account's element in the same layout.
+    function _stethSource(uint256 subscriber, uint256 funding)
+        private
+        view
+        returns (address source, bool allowed)
+    {
+        uint32 fundId = uint32(funding >> 160);
+        source = _payee(_walletElement(fundId));
+        address key = address(uint160(subscriber));
+        allowed = source != ContractAddresses.SDGNRS && source != ContractAddresses.VAULT
+            && (funding == subscriber || source == key
+                || source == _payee(_walletElement(uint32(subscriber >> 160)))
+                || operatorApprovals[fundId][key]);
+    }
+
     /// @notice Atomic, gas-capped stETH funding operation, callable only by GAME itself.
     /// @dev Each token operation is caught, and the caller catches this whole frame:
     ///      malformed return data or bad receipts therefore
     ///      roll back the token transfer and its allowance consumption as well.
+    /// @param subscriber The sub's account key.
+    /// @param source The funding account's payee, where the stETH comes from.
     function pullAfkingSteth(address subscriber, address source, uint256 shortfall)
         external returns (uint256 received)
     {
         if (address(this) != ContractAddresses.GAME || msg.sender != address(this)) revert E();
         uint32 subId = _walletIdOf(subscriber);
         Sub storage sub = _subOf[subId];
-        // The funding word carries the source's address and wallet ID; a self-funded sub
-        // is its own source.
+        // The funding word carries the source's key and wallet ID; a self-funded sub is its
+        // own source.
+        uint256 subWord = uint256(uint160(subscriber)) | (uint256(subId) << 160);
         uint256 srcWord = (sub.flags & FLAG_EXTERNAL_FUNDING) != 0
             ? _fundingSourceOf[subId]
-            : uint256(uint160(subscriber)) | (uint256(subId) << 160);
-        if (
-            shortfall == 0 || sub.dailyQuantity == 0 ||
-            source == ContractAddresses.SDGNRS || source == ContractAddresses.VAULT ||
-            (source != subscriber && !operatorApprovals[source][subscriber]) ||
-            source != address(uint160(srcWord))
-        ) revert AfkingStethPullFailed();
+            : subWord;
+        (address expected, bool allowed) = _stethSource(subWord, srcWord);
+        if (shortfall == 0 || sub.dailyQuantity == 0 || !allowed || source != expected) {
+            revert AfkingStethPullFailed();
+        }
         uint32 sourceId = uint32(srcWord >> 160);
 
         IStETH token = IStETH(ContractAddresses.STETH_TOKEN);
@@ -752,7 +719,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         ) revert AfkingStethPullFailed();
 
         _creditAfkingValue(sourceId, received);
-        emit AfkingStethFunded(subscriber, source, shortfall, received);
+        emit AfkingStethFunded(subscriber, address(uint160(srcWord)), shortfall, received);
     }
 
     /*------------------------------------------------------------------
@@ -760,21 +727,15 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ------------------------------------------------------------------*/
     /// @dev Iterable set insert. Idempotent on already-in-set. Pushes the element word
     ///      (address bits 0..159 | wallet ID bits 160..191) and records its 1-indexed position
-    ///      in the subscriber's `Sub.setPosition` (0 = not in set). Reverts a NEW insert at
-    ///      SUBSCRIBER_CAP (2005: coin supply + tombstone slack) — the protocol caps the set it
-    ///      pays to iterate each cycle. A re-subscribe of an existing member is
-    ///      already-in-set (no growth) so it never trips the cap.
+    ///      in the subscriber's `Sub.setPosition` (0 = not in set). The set is bounded without a
+    ///      runtime cap: every non-exempt entry burned a seat, and the seat token caps live
+    ///      seats plus set entries at 2,000.
     /// @param s The subscriber's record (`_subOf[id]`).
     /// @param player The subscriber's address.
     /// @param id The subscriber's wallet ID.
     function _addToSet(Sub storage s, address player, uint32 id) internal {
         if (s.setPosition == 0) {
-            // Cap the NEW-subscriber path only: bound the active set the advance
-            // chain walks (SUBSCRIBER_CAP = 2005) so the per-cycle work stays cheap.
             uint256 len = _subscribers.length;
-            if (len >= SUBSCRIBER_CAP) {
-                revert SubscriberCapReached();
-            }
             _subscribers.push(uint256(uint160(player)) | (uint256(id) << 160));
             s.setPosition = uint32(len + 1);
         }
@@ -1406,10 +1367,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 continue;
             }
 
-            // No pass/validity gate: the AFKing Subscription Token is the sole afking
-            // credential and it is enforced entirely at the edges (subscribe's
-            // coin gate in + the coin's SeatInUse transfer lock out), so the process
-            // pass never re-checks membership credentials.
+            // No pass/validity gate: the run's seat was burned when it started, so the
+            // process pass never re-checks membership credentials.
 
             // Resolve the once-per-iteration funding source. The common self-funded path
             // is detected from the already-loaded `sub.flags` (FLAG_EXTERNAL_FUNDING clear
@@ -1434,7 +1393,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 uint256 claimableUse
             ) = _resolveBuy(sub, id, mp, swept, srcFunding);
 
-            srcFunding = _tryFundAfkingSteth(player, address(uint160(srcWord)), ethValue, srcFunding);
+            srcFunding = _tryFundAfkingSteth(element, srcWord, ethValue, srcFunding);
 
             // Funding skip → two-tier skip-kill. A normal underfunded sub is cancelled via
             // swap-pop (auto-pause WITHOUT advancing the cursor — the mover into this slot is
@@ -1786,9 +1745,12 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///         the caller; callable anytime — the reward is already earned per delivered day,
     ///         so there is no settle-timing or claim-timing edge to exploit. Off the solvency
     ///         path: a FLIP flip-credit, never an ETH cut.
-    /// @param subs The subscribers to pay (each credited its own accrued `pendingFlip`).
-    function claimAfkingFlip(address[] calldata subs) external {
-        uint256 len = subs.length;
+    /// @param ids The subscriber accounts to pay (0 = caller; each credited its own accrued
+    ///        `pendingFlip`). An ID with nothing accrued, an unallocated one included, settles
+    ///        nothing.
+    function claimAfkingFlip(uint32[] calldata ids) external {
+        uint256 len = ids.length;
+        uint32 self = _walletIdOf(msg.sender);
         // Presale-box eligibility for afking buyers, materialized at claim (no advance-path cost).
         // The slot-0 FLIP owed approximates the afking mint spend (100 whole FLIP == one
         // 0.01-ETH early-level buy, the price at the levels presale spans), and 25% of that spend is
@@ -1796,9 +1758,11 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // FLIP exactly once (cover-buys included — they accrue slot-0 like any buy), so there is no
         // double-count. Only while presale is open; the credit is unspendable once presaleOver.
         for (uint256 i; i < len; ) {
-            address player = subs[i];
-            uint32 id = _walletIdOf(player);
-            _settlePendingFlip(player, id, _subOf[id]);
+            uint32 id = ids[i];
+            if (id == 0) id = self;
+            Sub storage s = _subOf[id];
+            // Only an allocated account accrues, so the key read is in bounds.
+            if (s.pendingFlip != 0) _settlePendingFlip(_walletKey(id), id, s);
             unchecked {
                 ++i;
             }
@@ -1866,21 +1830,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         if (_streakBaseOf(s) < floor) _setStreakBase(s, floor);
     }
 
-    /// @notice AFKING_SUB_TOKEN-only: clear `holder`'s SEAT_ENCUMBERED latch. Called by
-    ///         the coin's reclaimSeat AFTER it seizes one of the evicted holder's seats
-    ///         to the vault, settling the eviction forfeit: the holder's remaining seats
-    ///         (if any) transfer freely again and a fresh subscribe stops reverting
-    ///         SeatForfeited. Exactly one seat is seized per eviction — this clear is
-    ///         what stops a second reclaim.
-    /// @dev Runs in the Game's storage context under delegatecall; `msg.sender` is the
-    ///      original caller (the AFKing Subscription Token). The coin verifies the
-    ///      forfeit state (SEAT_ENCUMBERED set with no active sub) before calling.
-    /// @param holder The evicted holder whose encumbrance latch is cleared.
-    function clearSeatEncumbrance(address holder) external {
-        if (msg.sender != ContractAddresses.AFKING_SUB_TOKEN) revert NotApproved();
-        mintPacked_[holder] &= ~(uint256(1) << BitPackingLib.SEAT_ENCUMBERED_SHIFT);
-    }
-
     /// @notice Emitted when a curse is cleared via the permissionless paid cure.
     event Decursed(address indexed curer, address indexed target);
 
@@ -1918,10 +1867,14 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         _applyCurseStack(player);
     }
 
-    /// @notice Permissionless paid cure: clear `target`'s cashout/smite curse for 100 FLIP.
-    /// @dev No _resolvePlayer — clearing another player's curse is purely beneficial. Reverts
-    ///      when the target already has no curse so the caller never wastes the burn.
-    function decurse(address target) external {
+    /// @notice Permissionless paid cure: clear account `id`'s cashout/smite curse for 100 FLIP.
+    /// @dev No authorization — clearing another account's curse is purely beneficial, and the
+    ///      caller pays from its own wallet. Reverts when the target already has no curse so
+    ///      the caller never wastes the burn.
+    /// @param id The cursed account (0 = caller; otherwise allocated).
+    function decurse(uint32 id) external {
+        address target = msg.sender;
+        if (id != 0) (target, ) = _accountKeys(id);
         uint256 curse = (mintPacked_[target] >> BitPackingLib.CURSE_COUNT_SHIFT) &
             BitPackingLib.MASK_5;
         if (curse == 0) revert NothingToClaim();
@@ -1930,16 +1883,21 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         emit Decursed(msg.sender, target);
     }
 
-    /// @notice A deity (soulbound pass owner) adds a saturating +2 curse stack to `smitee` for
-    ///         200 FLIP. Validated before the burn: active afkers are immune (the sole
-    ///         immunity), the smite path caps at a 10-point (5-stack) ceiling below the 20-point
-    ///         counter cap, and the protocol addresses are skipped (the redemption-snapshot
-    ///         reason). Self-smite is allowed — harmless, since the counter only lowers the score.
-    function smite(uint256 deityId, address smitee) external {
+    /// @notice A deity (soulbound pass owner) adds a saturating +2 curse stack to account
+    ///         `smiteeId` for 200 FLIP from the caller. Validated before the burn: active afkers
+    ///         are immune (the sole immunity), the smite path caps at a 10-point (5-stack)
+    ///         ceiling below the 20-point counter cap, and the protocol accounts are skipped (the
+    ///         redemption-snapshot reason). Self-smite is allowed — harmless, since the counter
+    ///         only lowers the score. The pass NFT sits at the deity account's main wallet, so
+    ///         the main wallet smites.
+    /// @param smiteeId The account receiving the stack (0 = caller; otherwise allocated).
+    function smite(uint256 deityId, uint32 smiteeId) external {
         if (
             IDegenerusDeityPassOwner(ContractAddresses.DEITY_PASS).ownerOf(deityId) !=
             msg.sender
         ) revert Unauthorized();
+        address smitee = msg.sender;
+        if (smiteeId != 0) (smitee, ) = _accountKeys(smiteeId);
         uint256 packed = mintPacked_[smitee];
         if (_subOf[uint32(packed >> BitPackingLib.WALLET_ID_SHIFT)].dailyQuantity != 0) {
             revert SmiteeAfkingImmune(); // active-afker immunity

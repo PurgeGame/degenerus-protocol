@@ -102,7 +102,7 @@ contract GameOverBestEffortDrainTest is DeployProtocol {
         uint256 ticketCost = (priceWei * 400) / 400;
         vm.prank(buyer);
         game.purchase{value: ticketCost}(
-            buyer,
+            0,
             400,
             0,
             bytes32(0),

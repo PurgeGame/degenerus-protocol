@@ -50,13 +50,13 @@ contract RecycleBonusClaimablePurchase is DeployProtocol {
         // DirectEth buy — no claimable draw is possible, so no recycle bonus.
         vm.recordLogs();
         vm.prank(ethBuyer);
-        game.purchase{value: cost}(ethBuyer, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         uint256 ethCredit = _buyerStakeCredit(ethBuyer);
 
         // Claimable buy — the full ticket cost is recycled (balance >= cost + sentinel).
         vm.recordLogs();
         vm.prank(claimBuyer);
-        game.purchase(claimBuyer, qty, 0, bytes32(0), MintPaymentKind.Claimable, false);
+        game.purchase(0, qty, 0, bytes32(0), MintPaymentKind.Claimable, false);
         uint256 claimCredit = _buyerStakeCredit(claimBuyer);
 
         // Identical buys, identical bulk/quest components — the only difference is the

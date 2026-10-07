@@ -73,4 +73,17 @@ interface IDegenerusJackpots {
 
     /// @notice Day index of the most recent BAF resolution or skip.
     function getLastBafResolvedDay() external view returns (uint24);
+
+    /// @notice Claim the WWXRP consolation of account `id` for a skipped BAF bracket.
+    /// @dev Permissionless: anyone may execute; the score is keyed by the account's wallet ID and
+    ///      the WWXRP mints to the account's PAYEE. `id == 0` is the caller (ID from Game
+    ///      `walletIdOf(msg.sender)`, payee = caller). A nonzero `id` resolves its payee through
+    ///      Game `resolveAccount(id, msg.sender)`, ignoring `authorized`. VAULT's consolation
+    ///      escrows into its WWXRP mint allowance via the token's vault routing.
+    /// @param id Score owner (0 = caller).
+    /// @param lvl Skipped bracket level to claim.
+    /// @custom:reverts E (Game) If `id` is unallocated.
+    /// @custom:reverts NothingToClaim If the bracket is not skipped, or the score is stale, absent
+    ///                 or already claimed (a caller with no ID holds no score).
+    function claimBafConsolation(uint32 id, uint24 lvl) external;
 }

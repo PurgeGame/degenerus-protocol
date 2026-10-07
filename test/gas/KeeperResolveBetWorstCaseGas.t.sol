@@ -468,7 +468,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     {
         uint256 totalBet = uint256(AMOUNT_PER_TICKET) * spins;
         vm.prank(better);
-        game.placeDegeneretteBet{value: totalBet}(address(0), 0, AMOUNT_PER_TICKET, spins, uint8(ticket & 7));
+        game.placeDegeneretteBet{value: totalBet}(0, 0, AMOUNT_PER_TICKET, spins, uint8(ticket & 7));
         betId = DQ.lastBetId(vm, address(game), INDEX);
     }
 
@@ -487,7 +487,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         uint32 ticket
     ) internal returns (uint64 betId) {
         vm.prank(better);
-        game.placeDegeneretteBet(address(0), currency, perTicket, spins, uint8(ticket & 7));
+        game.placeDegeneretteBet(0, currency, perTicket, spins, uint8(ticket & 7));
         betId = DQ.lastBetId(vm, address(game), INDEX);
     }
 
@@ -500,7 +500,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     /// @dev Place a single 1-spin winning bet (the typical item the marginal calibrates against).
     function _placeOneSpinBet(address better) internal returns (uint64 betId) {
         vm.prank(better);
-        game.placeDegeneretteBet{value: AMOUNT_PER_TICKET}(address(0), 0, AMOUNT_PER_TICKET, 1, uint8(worstCaseTicket & 7));
+        game.placeDegeneretteBet{value: AMOUNT_PER_TICKET}(0, 0, AMOUNT_PER_TICKET, 1, uint8(worstCaseTicket & 7));
         betId = DQ.lastBetId(vm, address(game), INDEX);
     }
 

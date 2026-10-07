@@ -22,7 +22,7 @@ contract DeityPassPriceCurve is DeployProtocol {
             uint256 price = _expected(n);
             vm.deal(who, price);
             vm.prank(who);
-            game.purchaseDeityPass{value: price}(who, uint8(n < 5 ? n + 1 : n + 2), bytes32(0));
+            game.purchaseDeityPass{value: price}(0, uint8(n < 5 ? n + 1 : n + 2), bytes32(0));
             assertEq(game.afkingFundingOf(who), 0, string.concat("exact price at n=", vm.toString(n)));
             assertEq(who.balance, 0, "the whole payment was taken");
             total += price;

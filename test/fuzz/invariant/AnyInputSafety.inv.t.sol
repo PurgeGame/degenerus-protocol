@@ -64,7 +64,7 @@ contract AnyInputSafety is DeployProtocol {
             address a = actors[i];
             if (i < N_SEEDED) {
                 vm.prank(a);
-                game.purchaseWhalePass{value: 2.4 ether}(a, 1, bytes32(0)); // seat + sDGNRS + far-future entries
+                game.purchaseWhalePass{value: 2.4 ether}(0, 1, bytes32(0)); // seat + sDGNRS + far-future entries
             }
             vm.startPrank(ContractAddresses.CREATOR);
             dgnrs.transfer(a, 1_000_000 ether);
@@ -82,7 +82,7 @@ contract AnyInputSafety is DeployProtocol {
             vm.startPrank(actors[i]);
             for (uint256 j; j < N_ACTORS; ++j) {
                 if (i == j) continue;
-                game.setOperatorApproval(actors[j], true);
+                if (i < N_SEEDED) game.setOperatorApproval(0, actors[j], true); // fresh actors hold no wallet ID yet
                 coin.approve(actors[j], type(uint256).max);
                 dgnrs.approve(actors[j], type(uint256).max);
                 (bool ok1,) = dgve.call(abi.encodeWithSignature("approve(address,uint256)", actors[j], type(uint256).max));
@@ -93,11 +93,11 @@ contract AnyInputSafety is DeployProtocol {
         }
         // Deity holders (actors 0, 2, 4) so issueDeityBoon / smite / decurse are reachable.
         vm.prank(actors[0]);
-        game.purchaseDeityPass{value: 45 ether}(actors[0], 3, bytes32(0));
+        game.purchaseDeityPass{value: 45 ether}(0, 3, bytes32(0));
         vm.prank(actors[2]);
-        game.purchaseDeityPass{value: 45 ether}(actors[2], 4, bytes32(0));
+        game.purchaseDeityPass{value: 45 ether}(0, 4, bytes32(0));
         vm.prank(actors[4]);
-        game.purchaseDeityPass{value: 45 ether}(actors[4], 7, bytes32(0));
+        game.purchaseDeityPass{value: 45 ether}(0, 7, bytes32(0));
         // Vault-owner configuration: charity slots naming actors (GNRUS vote / burn reachable) and
         // three craps battle creators (createBattle reachable).
         vm.startPrank(ContractAddresses.CREATOR);
@@ -118,11 +118,11 @@ contract AnyInputSafety is DeployProtocol {
 
         // ---------------- bystander: normal flows only, then it never acts again ----------------
         vm.startPrank(BYSTANDER);
-        game.purchaseWhalePass{value: 2.4 ether}(BYSTANDER, 1, bytes32(0));
-        game.depositAfkingFunding{value: 5 ether}(BYSTANDER);
-        game.purchaseDeityPass{value: 45 ether}(BYSTANDER, 5, bytes32(0)); // overpay lands in its own afking
+        game.purchaseWhalePass{value: 2.4 ether}(0, 1, bytes32(0));
+        game.depositAfkingFunding{value: 5 ether}(game.walletIdOf(BYSTANDER));
+        game.purchaseDeityPass{value: 45 ether}(0, 5, bytes32(0)); // overpay lands in its own afking
         (,,,, uint256 priceWei) = game.purchaseInfo();
-        game.purchase{value: priceWei * 10}(BYSTANDER, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: priceWei * 10}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         vm.stopPrank();
         vm.startPrank(ContractAddresses.CREATOR);
         dgnrs.transfer(BYSTANDER, 1_000_000 ether);
@@ -139,15 +139,16 @@ contract AnyInputSafety is DeployProtocol {
         // The salvage desk: sDGNRS buys far-future entries only from its own claimable (empty this
         // early), so the vault owner enables the vault fallback and an actor funds the vault's
         // prepaid afking (permissionless depositAfkingFunding). Both are ordinary flows.
+        uint32 vaultId = game.walletIdOf(address(vault));
         vm.prank(actors[5]);
-        game.depositAfkingFunding{value: 20 ether}(address(vault));
+        game.depositAfkingFunding{value: 20 ether}(vaultId);
         vm.prank(ContractAddresses.CREATOR);
         vault.setSalvageBuyFallback(true, 0);
         _bystanderClaimable();
         // Two actors run coinflip auto-rebuy, so the carry / take-profit doors have a live subject.
         for (uint256 i = 1; i < 4; i += 2) {
             vm.prank(actors[i]);
-            try coinflip.setCoinflipAutoRebuy(actors[i], true, 0) {} catch {
+            try coinflip.setCoinflipAutoRebuy(0, true, 0) {} catch {
                 console.log("fixture: auto-rebuy refused for actor", i);
             }
         }
@@ -368,6 +369,18 @@ contract AnyInputSafety is DeployProtocol {
         require(ok, "fixture: share transfer");
     }
 
+    function test_dbgLive() public {
+        handler.prog_buy(3225, 0, type(uint256).max);
+        handler.prog_mineFlip(1139325335);
+        handler.prog_fulfillVrf(0);
+        vm.warp(block.timestamp + 1 days);
+        for (uint256 k; k < 4; ++k) {
+            _fulfillLast(k);
+            vm.prank(address(0x4B33E5));
+            try game.mineFlip() { console.log("ok", k); } catch (bytes memory r) { console.logBytes(r); }
+        }
+    }
+
     function _driveDay(uint256 salt) internal {
         vm.warp(block.timestamp + 1 days);
         for (uint256 i; i < 200; ++i) {
@@ -402,7 +415,7 @@ contract AnyInputSafety is DeployProtocol {
             }
             if (!found) continue;
             vm.prank(BYSTANDER);
-            try game.sellFarFutureEntries(BYSTANDER, levels, qtys, idxs) {
+            try game.sellFarFutureEntries(0, levels, qtys, idxs) {
                 console.log("fixture: bystander sold far-future entries at level", uint256(lvl));
                 return;
             } catch {}
@@ -443,7 +456,7 @@ contract AnyInputSafety is DeployProtocol {
     }
 
     function _selectors() internal pure returns (bytes4[] memory s) {
-        s = new bytes4[](117);
+        s = new bytes4[](116);
         uint256 i;
         s[i++] = AnyInputHandler.cf_deposit.selector;
         s[i++] = AnyInputHandler.cf_claim.selector;
@@ -518,7 +531,6 @@ contract AnyInputSafety is DeployProtocol {
         s[i++] = AnyInputHandler.st_safeTransferFrom.selector;
         s[i++] = AnyInputHandler.st_approve.selector;
         s[i++] = AnyInputHandler.st_setApprovalForAll.selector;
-        s[i++] = AnyInputHandler.st_reclaimSeat.selector;
         s[i++] = AnyInputHandler.st_setSeatTraits.selector;
         // progress actions, weighted so a run moves the game forward several days
         for (uint256 w; w < 3; ++w) s[i++] = AnyInputHandler.prog_buy.selector;
@@ -549,7 +561,7 @@ contract AnyInputSafety is DeployProtocol {
         s[i++] = AnyInputHandler.prog_deadman.selector;
         s[i++] = AnyInputHandler.gd_buyPresaleBox.selector;
         s[i++] = AnyInputHandler.gd_buyLootboxAndPresaleBox.selector;
-        require(i == 117, "selector table size");
+        require(i == 116, "selector table size");
     }
 
     // =====================================================================================
@@ -570,7 +582,8 @@ contract AnyInputSafety is DeployProtocol {
         assertGt(h[9], 0, "DGVF");
         assertGt(h[10], 0, "WWXRP");
         assertGt(h[11], 0, "deity pass");
-        assertFalse(game.isOperatorApproved(BYSTANDER, actors[0]), "bystander approves nobody");
+        (,, bool authorized) = game.resolveAccount(game.walletIdOf(BYSTANDER), actors[0]);
+        assertFalse(authorized, "bystander approves nobody");
     }
 
     /// @notice The conservation check sees a single missing wei.

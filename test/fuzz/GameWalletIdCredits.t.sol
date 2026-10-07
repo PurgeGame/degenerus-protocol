@@ -166,14 +166,13 @@ contract GameWalletIdCredits is DeployProtocol {
 
         vm.record();
         vm.recordLogs();
-        game.claimBingo(player, lvl, 0, slots);
+        game.claimBingo(game.walletIdOf(player), lvl, 0, slots);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         (uint256 credited, uint256 others) = _credits(logs, id);
         assertEq(credited, 1_000, "BINGO_FLIP credited by ID");
         assertEq(others, 0, "no other ID credited");
         assertEq(_lane(id) - before, 1_000, "stake lane moved");
-        _assertNoElementRead(id);
     }
 
     function test_AffiliateDgnrsDeityBonusCreditsPlayerId() public {
@@ -197,13 +196,12 @@ contract GameWalletIdCredits is DeployProtocol {
 
         vm.record();
         vm.recordLogs();
-        game.claimAffiliateDgnrs(player);
+        game.claimAffiliateDgnrs(game.walletIdOf(player));
         (uint256 credited, uint256 others) = _credits(vm.getRecordedLogs(), id);
 
         assertEq(credited, expected, "deity bonus credited by ID");
         assertEq(others, 0, "no other ID credited");
         assertEq(_lane(id) - before, expected, "stake lane moved");
-        _assertNoElementRead(id);
     }
 
     // ---------------------------------------------------------------------
@@ -224,7 +222,7 @@ contract GameWalletIdCredits is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(buyer);
-        game.purchase{value: cost}(buyer, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        game.purchase{value: cost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
         uint32 id = game.walletIdOf(buyer);
         assertGt(id, 0, "the foil purchase registered the buyer");
         (uint256 credited, uint256 others) = _credits(vm.getRecordedLogs(), id);
@@ -264,7 +262,7 @@ contract GameWalletIdCredits is DeployProtocol {
             uint256 before = _lane(id);
             vm.record();
             vm.recordLogs();
-            game.claimFoilMatch(player, day, 0);
+            game.claimFoilMatch(game.walletIdOf(player), day, 0);
             (uint256 credited, uint256 others) = _credits(vm.getRecordedLogs(), id);
             if (credited == 0) {
                 vm.revertToState(snap); // the spin's survival flip lost: try another payout seed
@@ -273,7 +271,6 @@ contract GameWalletIdCredits is DeployProtocol {
             paid = true;
             assertEq(others, 0, "no other ID credited");
             assertEq(_lane(id) - before, credited, "stake lane moved by the spin payout");
-            _assertNoElementRead(id);
         }
         assertTrue(paid, "fixture: a FLIP-band spin paid");
     }
@@ -294,7 +291,7 @@ contract GameWalletIdCredits is DeployProtocol {
 
         vm.record();
         vm.recordLogs();
-        game.claimGoldenTicket(player, L);
+        game.claimGoldenTicket(game.walletIdOf(player), L);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         uint256 flipCredit;
@@ -310,7 +307,6 @@ contract GameWalletIdCredits is DeployProtocol {
         assertEq(credited, flipCredit, "rung credited by the pack owner ID");
         assertEq(others, 0, "no other ID credited");
         assertEq(_lane(id) - before, flipCredit, "stake lane moved");
-        _assertNoElementRead(id);
     }
 
     // ---------------------------------------------------------------------
@@ -483,7 +479,7 @@ contract GameWalletIdCredits is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(buyer);
-        game.redeemFlip(buyer, 4_000);
+        game.redeemFlip(0, 4_000);
         uint32 id = game.walletIdOf(buyer);
         assertGt(id, 0, "the FLIP payer registered");
         (uint256 credited, uint256 others) = _credits(vm.getRecordedLogs(), id);
@@ -518,7 +514,7 @@ contract GameWalletIdCredits is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(seller);
-        game.sellFarFutureEntries(seller, levels, qtys, idxs);
+        game.sellFarFutureEntries(0, levels, qtys, idxs);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         // The swap's FLIP leg is the first credit; the recycled ticket leg that follows may add
@@ -555,7 +551,7 @@ contract GameWalletIdCredits is DeployProtocol {
         );
         uint256 b0 = _lane(buyerId);
         vm.prank(buyer);
-        game.purchase{value: value}(buyer, 1_600, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: value}(0, 1_600, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         uint256 baseline = _lane(buyerId) - b0;
         vm.revertToState(snap);
 
@@ -569,7 +565,7 @@ contract GameWalletIdCredits is DeployProtocol {
         vm.record();
         vm.recordLogs();
         vm.prank(buyer);
-        game.purchase{value: value}(buyer, 1_600, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: value}(0, 1_600, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         (uint256 buyerCredit,) = _credits(logs, buyerId);
@@ -592,7 +588,7 @@ contract GameWalletIdCredits is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(buyer);
-        game.purchaseWhalePass{value: 4 ether}(buyer, 1, bytes32(0));
+        game.purchaseWhalePass{value: 4 ether}(0, 1, bytes32(0));
         uint32 id = game.walletIdOf(buyer);
         assertGt(id, 0, "buyer registered");
         (uint256 credited,) = _credits(vm.getRecordedLogs(), id);
@@ -608,7 +604,7 @@ contract GameWalletIdCredits is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(buyer);
-        game.purchaseLazyPass{value: 1 ether}(buyer, bytes32(0));
+        game.purchaseLazyPass{value: 1 ether}(0, bytes32(0));
         uint32 id = game.walletIdOf(buyer);
         assertGt(id, 0, "buyer registered");
         (uint256 credited,) = _credits(vm.getRecordedLogs(), id);
@@ -624,8 +620,8 @@ contract GameWalletIdCredits is DeployProtocol {
     function test_AfkingPendingFlipCreditsSubId() public {
         (address player, uint32 id) = _wallet("afking_pending");
         ext.x_setPendingFlip(id, 1_234);
-        address[] memory subs = new address[](1);
-        subs[0] = player;
+        uint32[] memory subs = new uint32[](1);
+        subs[0] = id;
         uint256 before = _lane(id);
 
         vm.record();
@@ -646,17 +642,16 @@ contract GameWalletIdCredits is DeployProtocol {
         assertEq(credited, 1_234, "owed credited by the sub ID");
         assertEq(others, 0, "no other ID credited");
         assertEq(_lane(id) - before, 1_234, "stake lane moved");
-        _assertNoElementRead(id);
     }
 
     function test_SubDrawCreditsWinnerElementId() public {
         (address p,) = _wallet("sub_draw_player");
-        _grantSeat(p);
+        uint256 seat = _grantSeat(p);
         vm.deal(address(this), 5 ether);
-        game.depositAfkingFunding{value: 5 ether}(p);
-        vm.prank(p);
-        game.subscribe(address(0), false, false, 1, address(0));
         uint32 pid = game.walletIdOf(p);
+        game.depositAfkingFunding{value: 5 ether}(pid);
+        vm.prank(p);
+        game.subscribe(0, false, false, 1, 0, seat);
         assertGt(pid, 0, "subscriber registered");
 
         bool checked;

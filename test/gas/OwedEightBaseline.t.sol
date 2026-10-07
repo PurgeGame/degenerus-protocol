@@ -25,9 +25,10 @@ contract OwedEightPurchaseBaselineTest is DeployProtocol {
     }
 
     function test_ColdWhaleClaim100Levels() public {
+        uint32 id = game.walletIdOf(BUYER);
         vm.cool(address(game));
         uint256 beforeGas = gasleft();
-        game.claimWhalePass(BUYER);
+        game.claimWhalePass(id);
         emit log_named_uint("OWED8_WHALE_CLAIM_100", beforeGas - gasleft());
         for (uint24 lvl = 1; lvl <= 100; ++lvl) assertEq(game.entriesOwedView(lvl, BUYER), 4);
     }
@@ -36,7 +37,7 @@ contract OwedEightPurchaseBaselineTest is DeployProtocol {
         vm.cool(address(game));
         vm.prank(BUYER);
         uint256 beforeGas = gasleft();
-        game.purchaseDeityPass{value: 24 ether}(BUYER, 4, bytes32(0));
+        game.purchaseDeityPass{value: 24 ether}(0, 4, bytes32(0));
         emit log_named_uint("OWED8_DEITY_BUY_100", beforeGas - gasleft());
         for (uint24 lvl = 1; lvl <= 100; ++lvl) assertEq(game.entriesOwedView(lvl, BUYER), 4);
     }
@@ -45,7 +46,7 @@ contract OwedEightPurchaseBaselineTest is DeployProtocol {
         vm.cool(address(game));
         vm.prank(BUYER);
         uint256 beforeGas = gasleft();
-        game.purchaseLazyPass{value: 0.24 ether}(BUYER, bytes32(0));
+        game.purchaseLazyPass{value: 0.24 ether}(0, bytes32(0));
         emit log_named_uint("OWED8_LAZY_BUNDLE_10", beforeGas - gasleft());
         for (uint24 lvl = 2; lvl <= 10; ++lvl) assertEq(game.entriesOwedView(lvl, BUYER), 4);
     }

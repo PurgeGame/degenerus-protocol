@@ -6,14 +6,14 @@ import {DegenerusVault} from "../../contracts/DegenerusVault.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 contract CompGameDouble {
-    function subscribe(address, bool, bool, uint8, address) external payable {}
+    function subscribe(uint32, bool, bool, uint8, uint32, uint256) external payable {}
 }
 
 /// @dev Records what the vault asked of the table's comp door, in order, and can refuse.
 contract CompCrapsDouble {
     struct Ask {
         uint8 kind;
-        address to;
+        uint32 toId;
         bool high;
         uint24 arg;
         uint8 count;
@@ -32,7 +32,7 @@ contract CompCrapsDouble {
         if (refuse) revert Refused();
         uint8 kind = uint8(code >> 160);
         uint8 count = uint8(code >> 200);
-        asks.push(Ask(kind, address(uint160(code)), code & (1 << 168) != 0, uint24(code >> 176), count));
+        asks.push(Ask(kind, uint32(code), code & (1 << 168) != 0, uint24(code >> 176), count));
         charged = uint256(count) * 1 + kind;
     }
 
@@ -49,9 +49,9 @@ contract VaultCrapsCompsTest is Test {
 
     address internal owner = ContractAddresses.CREATOR;
     address internal stranger = makeAddr("stranger");
-    address internal streamer = makeAddr("streamer");
+    uint32 internal streamer = 7;
 
-    event CrapsCompGranted(address indexed operator, address indexed to, uint8 kind, uint256 charged);
+    event CrapsCompGranted(address indexed operator, uint32 indexed toId, uint8 kind, uint256 charged);
     event CrapsCompAllowanceSet(address indexed operator, address indexed who, uint256 amount);
 
     function setUp() public {
@@ -61,12 +61,12 @@ contract VaultCrapsCompsTest is Test {
         vault = new DegenerusVault();
     }
 
-    function _code(uint8 kind, address to, bool high, uint24 arg, uint8 count) internal pure returns (uint256) {
-        return uint256(uint160(to)) | (uint256(kind) << 160) | (high ? (1 << 168) : 0) | (uint256(arg) << 176)
+    function _code(uint8 kind, uint32 to, bool high, uint24 arg, uint8 count) internal pure returns (uint256) {
+        return uint256(to) | (uint256(kind) << 160) | (high ? (1 << 168) : 0) | (uint256(arg) << 176)
             | (uint256(count) << 200);
     }
 
-    function _one(uint8 kind, address to, bool high, uint24 arg, uint8 count) internal pure returns (uint256[] memory r) {
+    function _one(uint8 kind, uint32 to, bool high, uint24 arg, uint8 count) internal pure returns (uint256[] memory r) {
         r = new uint256[](1);
         r[0] = _code(kind, to, high, arg, count);
     }
@@ -77,7 +77,7 @@ contract VaultCrapsCompsTest is Test {
         emit CrapsCompGranted(owner, streamer, 3, 5 + 3);
         vault.crapsComp(_one(3, streamer, true, 123_456, 5));
         assertEq(craps.calls(), 1, "the table was not called once");
-        (uint8 kind, address to, bool high, uint24 arg, uint8 count) = craps.asks(0);
+        (uint8 kind, uint32 to, bool high, uint24 arg, uint8 count) = craps.asks(0);
         assertEq(kind, 3, "kind");
         assertEq(to, streamer, "to");
         assertTrue(high, "high");
@@ -88,15 +88,15 @@ contract VaultCrapsCompsTest is Test {
     function test_aBatchIsForwardedInOrder() public {
         uint256[] memory r = new uint256[](4);
         for (uint256 i; i < 4; ++i) {
-            r[i] = _code(uint8(i), address(uint160(0xC0FFEE + i)), false, uint24(i), uint8(i + 1));
+            r[i] = _code(uint8(i), uint32(0xC0FFEE + i), false, uint24(i), uint8(i + 1));
         }
         vm.prank(owner);
         vault.crapsComp(r);
         assertEq(craps.calls(), 4, "one call per item is the contract");
         for (uint256 i; i < 4; ++i) {
-            (uint8 kind, address to,,,) = craps.asks(i);
+            (uint8 kind, uint32 to,,,) = craps.asks(i);
             assertEq(kind, uint8(i), "an item was reordered");
-            assertEq(to, address(uint160(0xC0FFEE + i)), "a recipient was reordered or dropped");
+            assertEq(to, uint32(0xC0FFEE + i), "a recipient was reordered or dropped");
         }
     }
 
@@ -137,7 +137,7 @@ contract VaultCrapsCompsTest is Test {
         // The double charges count x 1 + kind: 3 + 0 and 2 + 0 = 5.
         uint256[] memory r = new uint256[](2);
         r[0] = _code(0, streamer, false, 1, 3);
-        r[1] = _code(0, stranger, false, 2, 2);
+        r[1] = _code(0, streamer + 1, false, 2, 2);
         vm.prank(host);
         vault.crapsComp(r);
         assertEq(craps.calls(), 2, "the delegate's batch did not reach the table");
@@ -178,7 +178,7 @@ contract VaultCrapsCompsTest is Test {
     function test_aRefusedItemTakesTheWholeBatchDown() public {
         uint256[] memory r = new uint256[](2);
         r[0] = _code(4, streamer, false, 0, 1);
-        r[1] = _code(4, stranger, false, 0, 1);
+        r[1] = _code(4, streamer + 1, false, 0, 1);
         craps.setRefuse(true);
         vm.prank(owner);
         vm.expectRevert(CompCrapsDouble.Refused.selector);
@@ -186,13 +186,13 @@ contract VaultCrapsCompsTest is Test {
         assertEq(craps.calls(), 0, "a failed batch left a grant behind");
     }
 
-    function test_aZeroRecipientTakesTheWholeBatchDown() public {
+    function test_aZeroRecipientIdTakesTheWholeBatchDown() public {
         uint256[] memory r = new uint256[](2);
         r[0] = _code(4, streamer, false, 0, 1);
-        r[1] = _code(4, address(0), false, 0, 1);
+        r[1] = _code(4, 0, false, 0, 1);
         vm.prank(owner);
         vm.expectRevert(DegenerusVault.ZeroAddress.selector);
         vault.crapsComp(r);
-        assertEq(craps.calls(), 0, "the recipient ahead of the zero address kept its grant");
+        assertEq(craps.calls(), 0, "the recipient ahead of the zero ID kept its grant");
     }
 }

@@ -102,7 +102,7 @@ contract CoinflipSeedWindowTest is DeployProtocol {
 
     function _vaultClaim(uint256 amount) internal returns (uint256) {
         vm.prank(VAULT);
-        return coinflip.claimCoinflips(address(0), amount);
+        return coinflip.claimCoinflips(0, amount);
     }
 
     function _rawStake(uint24 day, address p) internal view returns (uint256) {
@@ -236,7 +236,7 @@ contract CoinflipSeedWindowTest is DeployProtocol {
                 // Anyone may settle the vault; day 62 passes the first century window before
                 // the second arms.
                 vm.prank(stranger);
-                coinflip.depositCoinflip(VAULT, 0);
+                coinflip.depositCoinflip(1, 0);
             }
             if (d == 13 || d == 47 || d == 82) {
                 vm.prank(SDGNRS);
@@ -251,22 +251,22 @@ contract CoinflipSeedWindowTest is DeployProtocol {
             }
             if (d == 40) {
                 vm.prank(VAULT);
-                coinflip.setCoinflipAutoRebuy(address(0), true, 150_000 + ((r >> 200) % 300_000));
+                coinflip.setCoinflipAutoRebuy(0, true, 150_000 + ((r >> 200) % 300_000));
                 // The century arm rides the day's transition close; a credit already sits on day 41.
                 _arm(100, stored);
             }
             if (d == 44 || d == 49) {
                 vm.prank(VAULT);
-                coinflip.claimCoinflipCarry(address(0), (r >> 140) % 250_000);
+                coinflip.claimCoinflipCarry(0, (r >> 140) % 250_000);
             }
             if (d == 46) {
                 vm.prank(VAULT);
-                coinflip.setCoinflipAutoRebuyTakeProfit(address(0), 0);
+                coinflip.setCoinflipAutoRebuyTakeProfit(0, 0);
             }
             if (d == 56) {
                 // Leaves auto-rebuy mid-window: the deep walk crosses window days.
                 vm.prank(VAULT);
-                coinflip.setCoinflipAutoRebuy(address(0), false, 0);
+                coinflip.setCoinflipAutoRebuy(0, false, 0);
             }
             if (d == 70) _arm(200, stored);
             if (d == 93) _vaultClaim(type(uint256).max);

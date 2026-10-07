@@ -81,7 +81,7 @@ contract MultiLevelHandler is Test {
 
         vm.prank(currentActor);
         try game.purchase{value: cost}(
-            currentActor,
+            0,
             qty,
             0,
             bytes32(0),
@@ -124,7 +124,7 @@ contract MultiLevelHandler is Test {
 
         vm.prank(currentActor);
         try game.purchase{value: cost}(
-            currentActor,
+            0,
             qty,
             0,
             bytes32(0),

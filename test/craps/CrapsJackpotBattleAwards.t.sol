@@ -38,7 +38,7 @@ contract CrapsJackpotBattleAwardsTest is CrapsPins {
 
     function test_RiuPassAwardPreservesPreferredBoardAndSentinel() public {
         vm.prank(winner);
-        c.setPreferredBoard(3 | (3 << 12) | (1 << 15));
+        c.setPreferredBoard(0, 3 | (3 << 12) | (1 << 15));
         c.payProgressiveAt(KEY, winner, 7500, 250_000);
         assertEq(c.preferredBoardOf(game.walletIdOf(winner)), 3 | (3 << 12) | (1 << 15));
         uint256 word = uint256(c.extsload(keccak256(abi.encode(uint256(game.walletIdOf(winner)), CrapsPreferenceLib.PASS_SLOT))));

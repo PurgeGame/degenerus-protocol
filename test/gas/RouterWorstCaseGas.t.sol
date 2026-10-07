@@ -129,7 +129,7 @@ contract RouterWorstCaseGas is DeployProtocol {
         vm.deal(buyer, 1_000 ether);
         for (uint256 i; i < 8; ++i) {
             vm.prank(buyer);
-            game.purchase{value: 0.01 ether}(buyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+            game.purchase{value: 0.01 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         }
 
         vm.warp(block.timestamp + 1 days);
@@ -240,8 +240,9 @@ contract RouterWorstCaseGas is DeployProtocol {
             address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
             subs[i] = who;
             _grantDeityPass(who);
+            uint256 seat = _grantSeat(who);
             vm.prank(who);
-            game.subscribe(address(0), false, false, 1, address(0)); // self, lootbox mode, qty 1
+            game.subscribe(0, false, false, 1, 0, seat); // self, lootbox mode, qty 1
             _fundPool(who, poolEach);
         }
     }
@@ -253,7 +254,9 @@ contract RouterWorstCaseGas is DeployProtocol {
 
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
-        game.depositAfkingFunding{value: amount}(who);
+        uint32 id = game.walletIdOf(who);
+        if (id == 0) id = _giveWalletId(who);
+        game.depositAfkingFunding{value: amount}(id);
     }
 
     function _grantDeityPass(address who) internal {

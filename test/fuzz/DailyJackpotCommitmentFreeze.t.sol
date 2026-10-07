@@ -193,12 +193,12 @@ contract DailyJackpotCommitmentFreezeTest is DeployProtocol {
         vm.startPrank(ATTACKER);
         // These both SUCCEED: a late purchase adds a write-cohort owner and a late
         // ETH wager adds a rival hero to today's ledger. Neither can enter this draw.
-        game.purchase{value: 0.01 ether}(ATTACKER, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
-        game.placeDegeneretteBet{value: 0.01 ether}(ATTACKER, 0, 0.01 ether, 1, 15);
+        game.purchase{value: 0.01 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.placeDegeneretteBet{value: 0.01 ether}(0, 0, 0.01 ether, 1, 15);
         vm.expectRevert(RNG_LOCKED);
-        game.claimWhalePass(ATTACKER);
+        game.claimWhalePass(0);
         vm.expectRevert(RNG_LOCKED);
-        game.purchaseWhalePass{value: 20 ether}(ATTACKER, 1, bytes32(0));
+        game.purchaseWhalePass{value: 20 ether}(0, 1, bytes32(0));
         vm.stopPrank();
         assertGt(game.entriesOwedView(4, ATTACKER), oldOwed, "late purchase must really add owed entries");
         assertGt(_hero(day), liveHero, "late wager must really write the rival hero");

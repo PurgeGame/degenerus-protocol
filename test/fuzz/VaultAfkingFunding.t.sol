@@ -16,6 +16,19 @@ import {DegenerusVault} from "../../contracts/DegenerusVault.sol";
 ///           D  sweep     — the final sweep pays each protocol sink (vault, sDGNRS, GNRUS) its
 ///                          afking balance along with its claimable, and zeroes both.
 contract VaultAfkingFunding is DeployProtocol {
+
+    mapping(address => uint32) private _aidCache;
+
+    /// @dev Wallet ID of `a`, registering it when it holds none. Call before any `vm.prank`.
+    function _aid(address a) internal returns (uint32 id) {
+        id = _aidCache[a];
+        if (id == 0) {
+            id = game.walletIdOf(a);
+            if (id == 0) id = _giveWalletId(a);
+            _aidCache[a] = id;
+        }
+    }
+
     address internal keeper = address(0xBEEF);
     address internal stranger = address(0x5712A);
     address internal owner;
@@ -116,9 +129,9 @@ contract VaultAfkingFunding is DeployProtocol {
 
     function test_finalSweepPaysEachSinkItsAfkingAndClaimable() public {
         vm.startPrank(keeper);
-        game.depositAfkingFunding{value: 3 ether}(ContractAddresses.VAULT);
-        game.depositAfkingFunding{value: 5 ether}(ContractAddresses.SDGNRS);
-        game.depositAfkingFunding{value: 7 ether}(ContractAddresses.GNRUS);
+        game.depositAfkingFunding{value: 3 ether}(_aid(ContractAddresses.VAULT));
+        game.depositAfkingFunding{value: 5 ether}(_aid(ContractAddresses.SDGNRS));
+        game.depositAfkingFunding{value: 7 ether}(_aid(ContractAddresses.GNRUS));
         vm.stopPrank();
 
         _driveToGameOver();

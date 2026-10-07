@@ -74,7 +74,7 @@ contract VrfRotationMidDayReRoll is DeployProtocol {
         address buyer = makeAddr("lootboxBuyer");
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
-        game.purchase{value: 1.01 ether}(buyer, 400, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: 1.01 ether}(0, 400, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         mockVRF.fundSubscription(1, 100e18);
     }
 

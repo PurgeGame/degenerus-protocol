@@ -304,7 +304,7 @@ function customTicketWithSymbol(quadrant, symbol) {
 // `(quadrant, symbol)` slot. Defaults to MIN_BET_ETH per spin, 1 spin total.
 async function placeEthBet(game, signer, quadrant, symbol) {
   const customTicket = customTicketWithSymbol(quadrant, symbol);
-  return game.connect(signer).placeDegeneretteBet(hre.ethers.ZeroAddress, CURRENCY_ETH, MIN_BET_ETH_VALUE, 1, (Number((BigInt(customTicket) >> (BigInt(quadrant) * 8n)) & 7n) | (Number(quadrant) << 3)), { value: MIN_BET_ETH_VALUE });
+  return game.connect(signer).placeDegeneretteBet(0, CURRENCY_ETH, MIN_BET_ETH_VALUE, 1, (Number((BigInt(customTicket) >> (BigInt(quadrant) * 8n)) & 7n) | (Number(quadrant) << 3)), { value: MIN_BET_ETH_VALUE });
 }
 
 // Phase 282 / 291 pattern: drive mineFlip() to issue a VRF request,
@@ -1022,7 +1022,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
             // debug trace; matches the Phase 282 / 291 fixture-volume
             // baseline scaled down for gas-measurement determinism.
             await game.connect(alice).purchase(
-              hre.ethers.ZeroAddress,
+              0,
               200n,
               0n,
               ZERO_BYTES32,
@@ -1255,7 +1255,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
             // Purchase enough tickets to drive the drain chain into
             // _emitDailyWinningTraits.
             await game.connect(alice).purchase(
-              hre.ethers.ZeroAddress,
+              0,
               200n,
               0n,
               ZERO_BYTES32,

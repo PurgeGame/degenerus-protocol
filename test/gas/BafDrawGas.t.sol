@@ -43,7 +43,7 @@ contract BafDrawGas is DeployProtocol {
     function _measuredDeposit(address who) internal returns (uint256 used) {
         vm.prank(who);
         uint256 g0 = gasleft();
-        coinflip.depositCoinflip{gas: 11_500_000 - (21_000 + 68 * 16)}(address(0), 100);
+        coinflip.depositCoinflip{gas: 11_500_000 - (21_000 + 68 * 16)}(0, 100);
         used = g0 - gasleft();
     }
 
@@ -99,7 +99,7 @@ contract BafDrawGas is DeployProtocol {
         emit log_named_uint("deposit_gas_first_ever", first);
         emit log_named_uint("deposit_gas_repeat_same_day", sameDay);
         emit log_named_uint("deposit_gas_repeat_next_day", nextDay);
-        // depositCoinflip(address(0),100): 68 bytes; conservatively price
+        // depositCoinflip(0,100): 68 bytes; conservatively price
         // every calldata byte as nonzero when adding intrinsic transaction gas.
         uint256 intrinsic = 21_000 + 68 * 16;
         assertLt(first + intrinsic, 11_500_000, "first deposit transaction cap");

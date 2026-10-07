@@ -130,13 +130,13 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
         assertTrue(game.rngLocked(), "mutation probe must be inside the real request lock");
         vm.startPrank(ATTACKER);
         vm.expectRevert(CrapsBattleStorage.BetLocked.selector);
-        crapsBattle.setPreferredBoard(2);
+        crapsBattle.setPreferredBoard(0, 2);
         vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);
         crapsBattle.amendSlip(paidBet, 2);
         vm.expectRevert(RNG_LOCKED);
-        game.purchaseWhalePass{value: 20 ether}(ATTACKER, 1, bytes32(0));
+        game.purchaseWhalePass{value: 20 ether}(0, 1, bytes32(0));
         vm.expectRevert(RNG_LOCKED);
-        game.claimWhalePass(ATTACKER);
+        game.claimWhalePass(0);
         uint32[] memory levels = new uint32[](1);
         levels[0] = 9;
         uint256[] memory quantities = new uint256[](1);
@@ -144,13 +144,13 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
         uint256[] memory positions = new uint256[](1);
         positions[0] = salvagePosition;
         vm.expectRevert(RNG_LOCKED);
-        game.sellFarFutureEntries(ATTACKER, levels, quantities, positions);
+        game.sellFarFutureEntries(0, levels, quantities, positions);
         // A no-op preference write is allowed; it must not unset the commitment.
-        crapsBattle.setPreferredBoard(BOARD);
+        crapsBattle.setPreferredBoard(0, BOARD);
         vm.stopPrank();
         vm.prank(NEWCOMER);
         vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);
-        crapsBattle.upgradeDayWindows(paidDay, 1 << 5);
+        crapsBattle.upgradeDayWindows(0, paidDay, 1 << 5);
         vm.prank(address(0xF123));
         vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);
         crapsBattle.enterBonusBattle(5, 0, 1);

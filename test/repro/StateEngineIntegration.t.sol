@@ -106,11 +106,11 @@ contract StateEngineIntegrationTest is RedemptionCloseTools {
             address player = address(uint160(0xB0000 + i));
             vm.deal(player, price * 100);
             vm.prank(player);
-            game.purchase{value: price * 100}(player, 0, BoxOrderLib.boSmalls(100), bytes32(0), MintPaymentKind.DirectEth, false);
+            game.purchase{value: price * 100}(0, 0, BoxOrderLib.boSmalls(100), bytes32(0), MintPaymentKind.DirectEth, false);
         }
         vm.deal(ALICE, 1 ether);
         vm.prank(ALICE);
-        game.placeDegeneretteBet{value: 0.025 ether}(ALICE, 0, 0.005 ether, 5, 0);
+        game.placeDegeneretteBet{value: 0.025 ether}(0, 0, 0.005 ether, 5, 0);
         vm.warp(vm.getBlockTimestamp() + 1 days);
     }
 
@@ -257,7 +257,7 @@ contract StateEngineIntegrationTest is RedemptionCloseTools {
             address player = address(uint160(0xF1000 + i));
             vm.deal(player, price * 100);
             vm.prank(player);
-            game.purchase{value: price * 100}(player, 40_000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+            game.purchase{value: price * 100}(0, 40_000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         }
         vm.deal(address(game), address(game).balance + 2000 ether);
         bytes memory production = address(game).code;

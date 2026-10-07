@@ -167,11 +167,11 @@ contract CrapsWalletIdsProtocolTest is DeployProtocol {
     function test_aBoardSaveNeedsAGameWalletIdAndThenCachesIt() public {
         vm.prank(carol);
         vm.expectRevert(CrapsBattleStorage.NoWalletId.selector);
-        crapsBattle.setPreferredBoard(BOARD);
+        crapsBattle.setPreferredBoard(0, BOARD);
         assertEq(game.walletIdOf(carol), 0, "a non-paying door allocates nothing");
         uint32 id = _giveWalletId(carol);
         vm.prank(carol);
-        crapsBattle.setPreferredBoard(BOARD);
+        crapsBattle.setPreferredBoard(0, BOARD);
         assertEq(_cachedId(carol), id);
         assertEq(crapsBattle.preferredBoardOf(id), BOARD);
     }
@@ -287,16 +287,16 @@ contract CrapsWalletIdsGasTest is DeployProtocol {
         address k = _who("gas-convert-cached");
         uint32 kId = _giveWalletId(k);
         vm.prank(k);
-        crapsBattle.setPreferredBoard(BOARD);
+        crapsBattle.setPreferredBoard(0, BOARD);
         vm.startPrank(ContractAddresses.GAME);
         crapsBattle.creditPasses(uId, 21, 0);
         crapsBattle.creditPasses(kId, 21, 0);
         vm.stopPrank();
         vm.prank(u);
-        crapsBattle.convertNormalToHigh(1);
+        crapsBattle.convertNormalToHigh(0, 1);
         _gas("convertNormalToHigh uncached");
         vm.prank(k);
-        crapsBattle.convertNormalToHigh(1);
+        crapsBattle.convertNormalToHigh(0, 1);
         _gas("convertNormalToHigh cached");
     }
 
@@ -306,7 +306,7 @@ contract CrapsWalletIdsGasTest is DeployProtocol {
         address k = _who("gas-upgrade-cached");
         uint32 kId = _giveWalletId(k);
         vm.prank(k);
-        crapsBattle.setPreferredBoard(BOARD);
+        crapsBattle.setPreferredBoard(0, BOARD);
         vm.startPrank(ContractAddresses.GAME);
         crapsBattle.deliverPasses(uId, 1, 0);
         crapsBattle.deliverPasses(kId, 1, 0);
@@ -314,10 +314,10 @@ contract CrapsWalletIdsGasTest is DeployProtocol {
         crapsBattle.creditPasses(kId, 0, 1);
         vm.stopPrank();
         vm.prank(u);
-        crapsBattle.upgradeReservedDay(day + 1);
+        crapsBattle.upgradeReservedDay(0, day + 1);
         _gas("upgradeReservedDay uncached");
         vm.prank(k);
-        crapsBattle.upgradeReservedDay(day + 1);
+        crapsBattle.upgradeReservedDay(0, day + 1);
         _gas("upgradeReservedDay cached");
     }
 
@@ -327,12 +327,14 @@ contract CrapsWalletIdsGasTest is DeployProtocol {
         address k = _who("gas-comp-cached");
         _giveWalletId(k);
         vm.prank(k);
-        crapsBattle.setPreferredBoard(BOARD);
+        crapsBattle.setPreferredBoard(0, BOARD);
+        uint256 uCode = uint256(game.walletIdOf(u)) | (uint256(4) << 160) | (uint256(1) << 200);
+        uint256 kCode = uint256(game.walletIdOf(k)) | (uint256(4) << 160) | (uint256(1) << 200);
         vm.prank(ContractAddresses.VAULT);
-        crapsBattle.vaultComp(uint256(uint160(u)) | (uint256(4) << 160) | (uint256(1) << 200));
+        crapsBattle.vaultComp(uCode);
         _gas("vaultComp kind 4 uncached recipient");
         vm.prank(ContractAddresses.VAULT);
-        crapsBattle.vaultComp(uint256(uint160(k)) | (uint256(4) << 160) | (uint256(1) << 200));
+        crapsBattle.vaultComp(kCode);
         _gas("vaultComp kind 4 cached recipient");
     }
 

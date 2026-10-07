@@ -51,6 +51,7 @@ contract FoilSnapPayout is DeployProtocol {
     uint256 private constant SNAP_BYTE = 7;
 
     address[FOIL_BUYERS] private _fb;
+    uint32[FOIL_BUYERS] private _fid;
     uint24 private _buyDay;
     uint24 private _endDay;
 
@@ -111,10 +112,11 @@ contract FoilSnapPayout is DeployProtocol {
             vm.deal(_fb[i], 1_000 ether);
             vm.prank(_fb[i]);
             try game.purchase{value: foilCost}(
-                _fb[i], 0, 0, bytes32(0), MintPaymentKind.DirectEth, true
+                0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true
             ) {
                 bought++;
             } catch {}
+            _fid[i] = game.walletIdOf(_fb[i]);
         }
         emit log_named_uint("foil packs bought", bought);
         // The ticket cohort is part of the cloned trajectory: it moves the pools and the
@@ -124,7 +126,7 @@ contract FoilSnapPayout is DeployProtocol {
             vm.deal(t, 1_000 ether);
             vm.prank(t);
             try game.purchase{value: foilCost}(
-                t, ticketQty, 0, bytes32(0), MintPaymentKind.DirectEth, false
+                0, ticketQty, 0, bytes32(0), MintPaymentKind.DirectEth, false
             ) {} catch {}
         }
 
@@ -142,7 +144,7 @@ contract FoilSnapPayout is DeployProtocol {
                 uint256 pw = PriceLookupLib.priceForLevel(game.level() + 1);
                 vm.prank(whale);
                 try game.purchase{value: 50 * pw}(
-                    whale, 50 * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
+                    0, 50 * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
                 ) {} catch {}
             }
             _completeDay(_seed(WORD_SERIES, d));
@@ -195,7 +197,7 @@ contract FoilSnapPayout is DeployProtocol {
             for (uint24 day = _buyDay + 1; day <= _endDay; day++) {
                 if (game.rngWordForDay(day) == 0) continue;
                 for (uint256 ti = 0; ti < 4; ti++) {
-                    try game.claimFoilMatch(_fb[i], day, ti) {
+                    try game.claimFoilMatch(_fid[i], day, ti) {
                         claims++;
                     } catch {}
                 }
@@ -261,11 +263,11 @@ contract FoilSnapPayout is DeployProtocol {
         // tier, and this fresh actor has no prepaid afking for the waterfall's last tier to
         // draw. Selector-pinned so an unrelated revert cannot make this pass by accident.
         vm.expectRevert(bytes4(keccak256("Insolvent()")));
-        game.purchase{value: baseCost}(a, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        game.purchase{value: baseCost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
 
         address b = makeAddr("fsnapPriceB");
         vm.deal(b, 1_000 ether);
         vm.prank(b);
-        game.purchase{value: 2 * baseCost}(b, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        game.purchase{value: 2 * baseCost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
     }
 }

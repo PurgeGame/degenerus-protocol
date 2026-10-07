@@ -147,12 +147,6 @@ contract KeeperFaucetResistance is DeployProtocol {
             bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)),
             bytes32(lrPacked)
         );
-
-        // The crank's onlySelf sub-call delegatecalls resolveBets with msg.sender == address(game).
-        // resolveBets -> _resolvePlayer(player) -> _requireApproved(player) needs the game approved
-        // as the bet-owner's operator. This is the documented crank resolve relaxation.
-        vm.prank(player);
-        game.setOperatorApproval(address(game), true);
     }
 
     // =========================================================================
@@ -309,9 +303,9 @@ contract KeeperFaucetResistance is DeployProtocol {
         for (uint256 i; i < n; ++i) {
             vm.prank(player);
             uint256 g = gasleft();
-            if (flip) game.placeDegeneretteBet(address(0), 1, 100, spinsOf[shape], 9);
+            if (flip) game.placeDegeneretteBet(0, 1, 100, spinsOf[shape], 9);
             else game.placeDegeneretteBet{value: uint256(0.005 ether) * spinsOf[shape]}(
-                address(0), 0, 0.005 ether, spinsOf[shape], shape == 2 ? 0 : 9
+                0, 0, 0.005 ether, spinsOf[shape], shape == 2 ? 0 : 9
             );
             placeGas += g - gasleft();
         }
@@ -373,7 +367,7 @@ contract KeeperFaucetResistance is DeployProtocol {
     function testBetSweepCreditsWorkNotBudget() public {
         for (uint256 i; i < 8; ++i) {
             vm.prank(player);
-            game.placeDegeneretteBet{value: 0.005 ether}(address(0), 0, 0.005 ether, 1, 9);
+            game.placeDegeneretteBet{value: 0.005 ether}(0, 0, 0.005 ether, 1, 9);
         }
         uint256 word;
         for (uint256 k; ; ++k) {
@@ -421,7 +415,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         uint32 customTraits = _losingTicketFor(INDEX, FIXED_WORD);
         uint128 betAmount = 0.01 ether; // >= MIN_BET_ETH (0.005 ether)
         vm.prank(better);
-        game.placeDegeneretteBet{value: betAmount}(address(0), 0, betAmount, 1, uint8(customTraits & 7));
+        game.placeDegeneretteBet{value: betAmount}(0, 0, betAmount, 1, uint8(customTraits & 7));
         betId = DQ.lastBetId(vm, address(game), INDEX);
     }
 
@@ -550,8 +544,9 @@ contract KeeperFaucetResistance is DeployProtocol {
             address w = makeAddr(string(abi.encodePacked("afkbox_", vm.toString(salt), "_", vm.toString(i))));
             subs[i] = w;
             _grantDeityPass(w);
+            uint256 seat_w = _grantSeat(w);
             vm.prank(w);
-            game.subscribe(address(0), false, false, 1, address(0)); // self, lootbox mode, qty 1
+            game.subscribe(0, false, false, 1, 0, seat_w); // self, lootbox mode, qty 1
             _fundPool(w, 5 ether);
         }
         _runStageNewDay(uint256(keccak256(abi.encode("stampK", salt))) & 0xFFFFFF);
@@ -579,8 +574,9 @@ contract KeeperFaucetResistance is DeployProtocol {
             address who = makeAddr(string(abi.encodePacked(prefix, vm.toString(i))));
             subs[i] = who;
             _grantDeityPass(who);
+            uint256 seat_who = _grantSeat(who);
             vm.prank(who);
-            game.subscribe(address(0), false, false, 1, address(0)); // self, lootbox mode, qty 1
+            game.subscribe(0, false, false, 1, 0, seat_who); // self, lootbox mode, qty 1
             _fundPool(who, 5 ether);
         }
     }
@@ -588,7 +584,13 @@ contract KeeperFaucetResistance is DeployProtocol {
     /// @dev Credit `who`'s afkingFunding bucket (Δ5: depositAfkingFunding replaces AfKing.depositFor).
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
-        game.depositAfkingFunding{value: amount}(who);
+        game.depositAfkingFunding{value: amount}(_idOf(who));
+    }
+
+    /// @dev `who`'s wallet ID, registering one through the production hook when it has none.
+    function _idOf(address who) internal returns (uint32 id) {
+        id = game.walletIdOf(who);
+        if (id == 0) id = _giveWalletId(who);
     }
 
     /// @dev Grant `who` the permanent deity bit (mintPacked_ is slot 9).

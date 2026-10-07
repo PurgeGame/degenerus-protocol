@@ -173,7 +173,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
         if (withFoil) {
             (,,,, uint256 foilPrice) = game.purchaseInfo();
             vm.prank(buyer);
-            game.purchase{value: foilPrice * 10}(buyer, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+            game.purchase{value: foilPrice * 10}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
         }
         if (viaCraps) {
             // A shut craps window waiting on the write buffer; an ordinary caller requests.
@@ -191,7 +191,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
         assertEq(_midDayLatch(), 2, "reachability: the mid-day request must isolate the future pool");
         (,,,, uint256 price) = game.purchaseInfo();
         vm.prank(lateBuyer);
-        game.purchase{value: price * 10}(lateBuyer, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: price * 10}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         day = game.currentDayView();
     }
 
@@ -212,7 +212,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
         _finishReadConsumers();
         // A second eligible mid-day request the same day is then accepted.
         vm.prank(buyer);
-        game.purchase{value: 2 ether}(buyer, 0, BoxOrderLib.boCustom(2 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: 2 ether}(0, 0, BoxOrderLib.boCustom(2 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         // A stuck latch would hold the request back: it must be the engine's next action.
         vm.prank(crank);
         assertEq(game.minerAction(), 18, "a stuck latch refuses the next request");
@@ -287,12 +287,12 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
         (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo();
         if (rngLocked_) return;
         vm.prank(buyer);
-        game.purchase{value: (priceWei * 4000) / 400}(buyer, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: (priceWei * 4000) / 400}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
     }
 
     function _middayRequest() internal {
         vm.prank(buyer);
-        game.purchase{value: 2 ether}(buyer, 0, BoxOrderLib.boCustom(2 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: 2 ether}(0, 0, BoxOrderLib.boCustom(2 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         uint256 priorReq = mockVRF.lastRequestId();
         vm.prank(crank);
         (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));

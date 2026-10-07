@@ -76,21 +76,23 @@ contract FoilPackEV is DeployProtocol {
         uint256 ticketQty = (foilCost * 4 * 100) / priceWei; // one whole ticket = 4*TICKET_SCALE units
 
         address[FOIL_BUYERS] memory fb;
+        uint32[FOIL_BUYERS] memory fid;
         address[TICKET_BUYERS] memory tb;
 
         for (uint256 i = 0; i < FOIL_BUYERS; i++) {
             fb[i] = makeAddr(string(abi.encodePacked("foil", vm.toString(i))));
             vm.deal(fb[i], 1_000 ether);
             vm.prank(fb[i]);
-            try game.purchase{value: foilCost}(fb[i], 0, 0, bytes32(0), MintPaymentKind.DirectEth, true) {
+            try game.purchase{value: foilCost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true) {
                 r.foilSpend += foilCost;
             } catch {}
+            fid[i] = game.walletIdOf(fb[i]);
         }
         for (uint256 i = 0; i < TICKET_BUYERS; i++) {
             tb[i] = makeAddr(string(abi.encodePacked("tkt", vm.toString(i))));
             vm.deal(tb[i], 1_000 ether);
             vm.prank(tb[i]);
-            try game.purchase{value: foilCost}(tb[i], ticketQty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {
+            try game.purchase{value: foilCost}(0, ticketQty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {
                 r.ticketSpend += foilCost;
             } catch {}
         }
@@ -107,7 +109,7 @@ contract FoilPackEV is DeployProtocol {
             if (!game.jackpotPhase()) {
                 uint256 pw = PriceLookupLib.priceForLevel(game.level() + 1);
                 vm.prank(whale);
-                try game.purchase{value: 50 * pw}(whale, 50 * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+                try game.purchase{value: 50 * pw}(0, 50 * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
             } else {
                 r.jackpotReached = true;
             }
@@ -116,8 +118,7 @@ contract FoilPackEV is DeployProtocol {
             for (uint24 day = game.currentDayView() > 1 ? game.currentDayView() - 1 : 1; day <= game.currentDayView(); day++) {
                 if (game.rngWordForDay(day) == 0) continue;
                 for (uint256 ti = 0; ti < 4; ti++) {
-                    vm.prank(fb[i]);
-                    try game.claimFoilMatch(fb[i], day, ti) {
+                    try game.claimFoilMatch(fid[i], day, ti) {
                         r.claims++;
                     } catch {}
                 }

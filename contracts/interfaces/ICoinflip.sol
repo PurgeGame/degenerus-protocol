@@ -61,52 +61,64 @@ interface ICoinflip {
       |                          CORE ACTIONS                                |
       +======================================================================+*/
 
-    /// @notice Deposit FLIP into the daily coinflip system.
+    /// @notice Deposit FLIP into the daily coinflip system for account `id`.
     /// @dev Processes any pending claims, funds the stake, applies quest and recycling bonuses,
     ///      then adds stake for the next day's flip.
-    ///      Permissionless: the player (player=address(0) or player=msg.sender) or an approved
-    ///      operator funds the deposit from the player's settled coinflip winnings first and
-    ///      burns the player's wallet FLIP via FLIP.burnForCoinflip for the remainder; any other
-    ///      caller funds the whole stake by burning their own FLIP as a gift credited to
-    ///      `player`, leaving the player's winnings untouched. The recycling bonus pays on the
-    ///      winnings leg only.
+    ///      Gift door. `id == 0` is the caller: a self deposit, with no Game resolution call. For
+    ///      a nonzero `id` Coinflip calls Game `resolveAccount(id, msg.sender)` (reverts `E` for
+    ///      an unallocated ID). An authorized caller (the account's key, a smurf's owner, or an
+    ///      approved operator) acts as the account: the deposit is funded from the account's
+    ///      settled coinflip winnings first and the remainder burns from the account's PAYEE's
+    ///      wallet FLIP via FLIP.burnForCoinflip; the quest credit goes to the account. Any other
+    ///      caller makes a gift: it funds the whole stake by burning its own FLIP, earns the
+    ///      quest itself (registered as a paying funder), and the account's winnings stay
+    ///      untouched. The recycling bonus pays on the winnings leg only.
     ///      Stakes and principal use whole FLIP. Each percentage bonus floors at its
     ///      calculation boundary before it is added to the day's stake. CoinflipStakeUpdated reports the accepted stake.
-    ///      The stake ledger is keyed by wallet ID, read from the player's coinflip state on a
-    ///      cache hit. On a miss a self or operator deposit registers the player (a paying action:
-    ///      Game `registerWallet(player, true)`); a gift needs the recipient's existing ID
-    ///      (`registerWallet(player, false)`) and registers the paying funder for its quest.
-    /// @param player The player making the deposit (address(0) or msg.sender for direct deposit).
+    ///      The stake ledger is keyed by wallet ID. A nonzero `id` is the ID itself; a self
+    ///      deposit reads the caller's ID from its coinflip state and on a miss registers the
+    ///      caller (a paying action: Game `registerWallet(msg.sender, true)`). The account's
+    ///      address-keyed coinflip state is keyed by the resolved key (a smurf's hash key).
+    ///      Any minted payout of the claim walk (loss-streak WWXRP) goes to the payee.
+    /// @param id The account receiving the stake (0 = caller).
     /// @param amount Amount of FLIP to deposit (must be >= 100 FLIP minimum).
-    /// @custom:reverts NoWalletId If a gift's recipient has no wallet ID.
-    /// @custom:reverts E (Game) If a new wallet must register past paid admission
-    ///                 (PAID_ADMISSION_WALLETS registered wallets; the hook carries no spend).
+    /// @custom:reverts E (Game) If `id` is unallocated, or a new self depositor must register
+    ///                 past paid admission (PAID_ADMISSION_WALLETS registered wallets; the hook
+    ///                 carries no spend).
     /// @custom:reverts AmountLTMin If amount is non-zero but less than 100 FLIP.
     /// @custom:reverts StakeAboveDailyCap If the stake with its bonuses would exceed the player's
     ///                 per-day cap of type(uint32).max whole FLIP; every prior mutation rolls back.
-    function depositCoinflip(address player, uint256 amount) external;
+    function depositCoinflip(uint32 id, uint256 amount) external;
 
-    /// @notice Claim an exact amount of coinflip winnings as FLIP tokens.
+    /// @notice Claim an exact amount of account `id`'s coinflip winnings as FLIP tokens.
     /// @dev Processes pending daily claims, then mints up to the requested amount.
-    ///      Caller can claim for themselves or as an approved operator for another player.
-    /// @param player The player claiming (address(0) for msg.sender).
+    ///      Authorized: `id == 0` is the caller; a nonzero `id` needs Game
+    ///      `resolveAccount(id, msg.sender).authorized` (the key, a smurf's owner or an approved
+    ///      operator). The FLIP and any loss-streak WWXRP mint to the account's PAYEE (the
+    ///      caller for `id == 0`, a smurf's owner, or an ordinary account's own key).
+    ///      A self caller with no wallet ID has no stake and claims 0.
+    /// @param id The account claiming (0 = caller).
     /// @param amount Amount to claim (will be capped at available balance).
     /// @return claimed The actual amount claimed and minted.
-    /// @custom:reverts NotApproved If caller is not the player and not an approved operator.
-    function claimCoinflips(address player, uint256 amount) external returns (uint256 claimed);
+    /// @custom:reverts NotApproved If the caller may not act for `id`.
+    /// @custom:reverts E (Game) If `id` is unallocated.
+    function claimCoinflips(uint32 id, uint256 amount) external returns (uint256 claimed);
 
-    /// @notice Claim up to `amount` of the auto-rebuy carry as minted FLIP while staying on auto-rebuy.
+    /// @notice Claim up to `amount` of account `id`'s auto-rebuy carry as minted FLIP while
+    ///         staying on auto-rebuy.
     /// @dev Runs the bounded claim walk first (wins roll into the carry, a loss zeroes it),
     ///      then withdraws from the settled carry; the remainder keeps rolling. Blocked while
     ///      today's flip is unapplied (`flipResolvedToday()` false), whether or not the game's
     ///      RNG lock is up. Take-profit chunks surfaced by the settle bank into the claimable side.
-    /// @param player The player claiming (address(0) for msg.sender).
+    ///      Authorized as `claimCoinflips`; the FLIP mints to the account's payee.
+    /// @param id The account claiming (0 = caller).
     /// @param amount Maximum carry to claim.
     /// @return claimed The actual amount minted from the carry.
-    /// @custom:reverts NotApproved If caller is not the player and not an approved operator.
+    /// @custom:reverts NotApproved If the caller may not act for `id`.
+    /// @custom:reverts E (Game) If `id` is unallocated.
     /// @custom:reverts RngLocked If today's flip has not been applied yet.
-    /// @custom:reverts AutoRebuyNotEnabled If the player is not on auto-rebuy.
-    function claimCoinflipCarry(address player, uint256 amount) external returns (uint256 claimed);
+    /// @custom:reverts AutoRebuyNotEnabled If the account is not on auto-rebuy.
+    function claimCoinflipCarry(uint32 id, uint256 amount) external returns (uint256 claimed);
 
     /// @notice Claim coinflip winnings via FLIP contract to cover token transfers/burns.
     /// @dev Access restricted to FLIP contract only. Processes pending claims and mints tokens.
@@ -128,34 +140,39 @@ interface ICoinflip {
     /// @custom:reverts OnlyFLIP If caller is not the FLIP contract.
     function consumeCoinflipsForBurn(address player, uint256 amount) external returns (uint256 consumed);
 
-    /// @notice Configure auto-rebuy mode for coinflips.
+    /// @notice Configure auto-rebuy mode for account `id`'s coinflips.
     /// @dev Auto-rebuy automatically rolls over winnings as stake for future flips.
     ///      When enabled, winnings accumulate as carry until claimed. When disabled,
-    ///      processes a larger window of pending claims and mints all accumulated tokens.
-    /// @param player The player configuring auto-rebuy (address(0) for msg.sender).
+    ///      processes a larger window of pending claims and mints all accumulated tokens to the
+    ///      account's payee. Authorized as `claimCoinflips`.
+    /// @param id The account configuring auto-rebuy (0 = caller).
     /// @param enabled Whether auto-rebuy should be enabled.
     /// @param takeProfit Threshold up to uint128 max; whole multiples are banked. Zero rolls all; ignored when disabling.
     /// @custom:reverts RngLocked If the player is already on auto-rebuy and today's flip has not
     ///                 been applied yet; enabling from off is never blocked.
-    /// @custom:reverts AutoRebuyAlreadyEnabled If enabling when already enabled (in strict mode).
+    /// @custom:reverts AutoRebuyAlreadyEnabled If enabling when already enabled.
     /// @custom:reverts TakeProfitTooLarge If enabling with a threshold above uint128 max.
-    /// @custom:reverts NotApproved If caller is not the player and not an approved operator.
+    /// @custom:reverts NotApproved If the caller may not act for `id`.
+    /// @custom:reverts E (Game) If `id` is unallocated.
     function setCoinflipAutoRebuy(
-        address player,
+        uint32 id,
         bool enabled,
         uint256 takeProfit
     ) external;
 
-    /// @notice Update the take profit threshold for auto-rebuy mode.
-    /// @dev Only callable when auto-rebuy is already enabled. Processes pending claims before updating.
-    /// @param player The player configuring (address(0) for msg.sender).
+    /// @notice Update the take profit threshold for account `id`'s auto-rebuy mode.
+    /// @dev Only callable when auto-rebuy is already enabled. Processes pending claims before
+    ///      updating; any settled winnings it mints go to the account's payee. Authorized as
+    ///      `claimCoinflips`.
+    /// @param id The account configuring (0 = caller).
     /// @param takeProfit New threshold up to uint128 max for banking whole multiples (zero rolls all).
     /// @custom:reverts RngLocked If today's flip has not been applied yet.
-    /// @custom:reverts AutoRebuyNotEnabled If player does not have auto-rebuy enabled.
+    /// @custom:reverts AutoRebuyNotEnabled If the account does not have auto-rebuy enabled.
     /// @custom:reverts TakeProfitTooLarge If the threshold exceeds uint128 max.
-    /// @custom:reverts NotApproved If caller is not the player and not an approved operator.
+    /// @custom:reverts NotApproved If the caller may not act for `id`.
+    /// @custom:reverts E (Game) If `id` is unallocated.
     function setCoinflipAutoRebuyTakeProfit(
-        address player,
+        uint32 id,
         uint256 takeProfit
     ) external;
 

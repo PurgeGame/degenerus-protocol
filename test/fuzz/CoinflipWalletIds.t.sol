@@ -174,11 +174,11 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         address p = makeAddr("layout_player");
         _fund(p, 10_000);
         vm.prank(p);
-        coinflip.depositCoinflip(address(0), 1_000);
+        coinflip.depositCoinflip(0, 1_000);
         uint32 id = _gameId(p);
         assertTrue(id != 0, "deposit registered the player");
         vm.prank(p);
-        coinflip.setCoinflipAutoRebuy(address(0), true, 777);
+        coinflip.setCoinflipAutoRebuy(0, true, 777);
 
         bytes32 base = keccak256(abi.encode(p, PLAYER_STATE_ROOT));
         uint256 a = uint256(vm.load(address(coinflip), base));
@@ -217,7 +217,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleFlip, (expectedId, 1_000)), 1);
         vm.recordLogs();
         vm.prank(p);
-        coinflip.depositCoinflip(address(0), 1_000);
+        coinflip.depositCoinflip(0, 1_000);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         (uint256 n, uint32 rid, address owner) = _registrations(logs);
@@ -244,7 +244,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         address p = makeAddr("cached_depositor");
         _fund(p, 10_000);
         vm.prank(p);
-        coinflip.depositCoinflip(address(0), 1_000);
+        coinflip.depositCoinflip(0, 1_000);
         uint32 id = _cachedId(p);
         assertTrue(id != 0);
 
@@ -252,7 +252,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.walletIdOf.selector), 0);
         vm.record();
         vm.prank(p);
-        coinflip.depositCoinflip(address(0), 2_000);
+        coinflip.depositCoinflip(0, 2_000);
         (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(GAME);
         assertEq(writes.length, 0, "no Game storage write");
         bytes32 mintSlot = GameSlotKeys.mintPacked(p);
@@ -262,26 +262,25 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         assertEq(_lane(_today() + 1, id), 3_000);
     }
 
-    /// @notice An approved operator's deposit registers the PLAYER (who pays), never the operator.
-    function test_OperatorDeposit_RegistersPlayerNotOperator() public {
+    /// @notice An approved operator's deposit runs on the PLAYER's ID (who pays), never the
+    ///         operator's; the resolved ID fills the cache with no registration.
+    function test_OperatorDeposit_UsesPlayerIdNotOperator() public {
         address p = makeAddr("op_player");
         address o = makeAddr("op_operator");
         _fund(p, 10_000);
+        uint32 expectedId = _giveWalletId(p);
         vm.prank(p);
-        game.setOperatorApproval(o, true);
-        uint32 expectedId = uint32(_walletCount());
+        game.setOperatorApproval(0, o, true);
 
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.registerWallet, (p, true)), 1);
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.registerWallet.selector, o), 0);
+        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.registerWallet.selector), 0);
+        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount, (expectedId, o)), 1);
         vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleFlip, (expectedId, 1_000)), 1);
         vm.recordLogs();
         vm.prank(o);
-        coinflip.depositCoinflip(p, 1_000);
+        coinflip.depositCoinflip(expectedId, 1_000);
 
-        (uint256 n, uint32 rid, address owner) = _registrations(vm.getRecordedLogs());
-        assertEq(n, 1);
-        assertEq(rid, expectedId);
-        assertEq(owner, p);
+        (uint256 n,,) = _registrations(vm.getRecordedLogs());
+        assertEq(n, 0, "no registration on an ID-addressed deposit");
         assertEq(_gameId(o), 0, "operator not registered");
         assertEq(_cachedId(o), 0);
         assertEq(_cachedId(p), expectedId);
@@ -289,22 +288,23 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         assertEq(_lane(_today() + 1, expectedId), 1_000);
     }
 
-    /// @notice A gift to a wallet with no Game ID reverts NoWalletId (a recipient is never
+    /// @notice A gift to an unallocated ID reverts the Game's E (a recipient is never
     ///         registered by someone else's payment).
-    function test_GiftToIdlessRecipient_RevertsNoWalletId() public {
+    function test_GiftToUnallocatedId_Reverts() public {
         address f = makeAddr("gift_funder");
         address r = makeAddr("gift_idless_recipient");
         _fund(f, 10_000);
-        vm.expectRevert(Coinflip.NoWalletId.selector);
+        uint32 unallocated = uint32(_walletCount());
+        vm.expectRevert(abi.encodeWithSignature("E()"));
         vm.prank(f);
-        coinflip.depositCoinflip(r, 1_000);
+        coinflip.depositCoinflip(unallocated, 1_000);
         assertEq(_gameId(r), 0);
         assertEq(_gameId(f), 0);
         assertEq(coin.balanceOf(f), 10_000);
     }
 
     /// @notice A gift to a registered recipient with an empty Coinflip cache works: the recipient
-    ///         is looked up (not allocated) and cached; the paying funder registers and its quest
+    ///         is resolved by ID (not allocated) and cached; the paying funder registers and its quest
     ///         gets the funder's ID; the stake is the recipient's.
     function test_GiftToUncachedRecipient_RegistersFunderForQuest() public {
         address f = makeAddr("gift_funder_2");
@@ -314,19 +314,19 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         _fund(f, 10_000);
         uint32 fid = uint32(_walletCount());
 
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.registerWallet, (r, false)), 1);
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.registerWallet, (r, true)), 0);
+        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount, (rid, f)), 1);
+        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.registerWallet.selector, r), 0);
         vm.expectCall(GAME, abi.encodeCall(DegenerusGame.registerWallet, (f, true)), 1);
         vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleFlip, (fid, 1_000)), 1);
         vm.recordLogs();
         vm.prank(f);
-        coinflip.depositCoinflip(r, 1_000);
+        coinflip.depositCoinflip(rid, 1_000);
 
         (uint256 n, uint32 regId, address owner) = _registrations(vm.getRecordedLogs());
         assertEq(n, 1, "only the funder registers");
         assertEq(regId, fid);
         assertEq(owner, f);
-        assertEq(_cachedId(r), rid, "recipient cache filled from the lookup");
+        assertEq(_cachedId(r), rid, "recipient cache filled from the resolved ID");
         assertEq(_cachedId(f), fid, "funder cache filled from its registration");
         uint24 target = _today() + 1;
         assertEq(_lane(target, rid), 1_000, "stake is the recipient's");
@@ -344,7 +344,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         _fund(uncached, 10_000);
         _fund(fresh, 10_000);
         vm.prank(cached);
-        coinflip.depositCoinflip(address(0), 1_000);
+        coinflip.depositCoinflip(0, 1_000);
         uint32 cid = _cachedId(cached);
         uint32 uid = _giveWalletId(uncached);
 
@@ -352,15 +352,15 @@ contract CoinflipWalletIdsTest is DeployProtocol {
 
         vm.expectRevert(abi.encodeWithSignature("E()"));
         vm.prank(fresh);
-        coinflip.depositCoinflip(address(0), 1_000);
+        coinflip.depositCoinflip(0, 1_000);
         vm.expectRevert(abi.encodeWithSignature("E()"));
         vm.prank(fresh);
-        coinflip.depositCoinflip(cached, 1_000);
+        coinflip.depositCoinflip(cid, 1_000);
 
         vm.prank(cached);
-        coinflip.depositCoinflip(address(0), 1_000);
+        coinflip.depositCoinflip(0, 1_000);
         vm.prank(uncached);
-        coinflip.depositCoinflip(address(0), 1_000);
+        coinflip.depositCoinflip(0, 1_000);
 
         uint24 target = _today() + 1;
         assertEq(_lane(target, cid), 2_000);
@@ -399,13 +399,13 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         vm.expectCall(address(jackpots), abi.encodeWithSelector(DegenerusJackpots.recordBafFlip.selector, id), 1);
         uint256 before = coin.balanceOf(p);
         vm.prank(p);
-        uint256 got = coinflip.claimCoinflips(address(0), type(uint256).max);
+        uint256 got = coinflip.claimCoinflips(0, type(uint256).max);
         assertEq(got, payout);
         assertEq(coin.balanceOf(p) - before, payout, "minted to the claiming wallet");
         assertEq(_cachedId(p), id, "first claim fills the cache");
 
         vm.prank(p);
-        assertEq(coinflip.claimCoinflips(address(0), 1), 0, "nothing left; cached, no second lookup");
+        assertEq(coinflip.claimCoinflips(0, 1), 0, "nothing left; cached, no second lookup");
     }
 
     /// @notice An ID-less wallet: claims and every FLIP callback return 0 without reverting, the
@@ -424,7 +424,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         vm.recordLogs();
         vm.record();
         vm.prank(q);
-        assertEq(coinflip.claimCoinflips(address(0), 100), 0);
+        assertEq(coinflip.claimCoinflips(0, 100), 0);
         assertEq(_lastClaim(q), latest, "the empty walk moves only the cursor");
         vm.startPrank(COIN);
         assertEq(coinflip.claimCoinflipsFromFlip(q, 100), 0);
@@ -432,7 +432,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         assertEq(coinflip.consumeFlipForSalvage(q, 100), 0);
         vm.stopPrank();
         vm.prank(q);
-        coinflip.setCoinflipAutoRebuy(address(0), true, 0);
+        coinflip.setCoinflipAutoRebuy(0, true, 0);
         (, bytes32[] memory writes) = vm.accesses(address(coinflip));
         _assertNoKeyZeroWrite(writes, latest + 1);
 
@@ -461,11 +461,11 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         _resolve(d + 2, true);
 
         vm.prank(q);
-        coinflip.depositCoinflip(address(0), 0);
+        coinflip.depositCoinflip(0, 0);
         assertEq(_lastClaim(q), d + 2);
 
         vm.prank(r);
-        coinflip.setCoinflipAutoRebuy(address(0), true, 0);
+        coinflip.setCoinflipAutoRebuy(0, true, 0);
         (,,, uint24 start) = coinflip.coinflipAutoRebuyInfo(r);
         assertEq(start, d + 2);
         _warpToDay(d + 3);
@@ -473,7 +473,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         _warpToDay(d + 4);
         _resolve(d + 4, false);
         vm.prank(r);
-        coinflip.depositCoinflip(address(0), 0);
+        coinflip.depositCoinflip(0, 0);
         assertEq(_lastClaim(r), d + 4, "rebuy-armed ID-less cursor lands on the latest resolved day");
 
         assertEq(_gameId(q), 0);
@@ -599,7 +599,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         address p = makeAddr("cap_player");
         _fund(p, 10_000);
         vm.prank(p);
-        coinflip.depositCoinflip(address(0), 100);
+        coinflip.depositCoinflip(0, 100);
         uint32 id = _cachedId(p);
         uint24 target = _today() + 1;
 
@@ -609,7 +609,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
 
         vm.expectRevert(Coinflip.StakeAboveDailyCap.selector);
         vm.prank(p);
-        coinflip.depositCoinflip(address(0), 100);
+        coinflip.depositCoinflip(0, 100);
 
         vm.recordLogs();
         vm.prank(GAME);
@@ -635,7 +635,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
     //                           protocol paths
     // =====================================================================
 
-    /// @notice `depositCoinflip(VAULT, 0)` from GAME, the sDGNRS settlement walk and the sDGNRS
+    /// @notice `depositCoinflip(1, 0)` from GAME, the sDGNRS settlement walk and the sDGNRS
     ///         backing read make no Game identity call; the seed rides IDs 1 and 2 only.
     function test_ProtocolPaths_NoGameLookup_SeedKeyedOnProtocolIds() public {
         vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.registerWallet.selector), 0);
@@ -645,7 +645,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         _warpToDay(d + 1);
         _resolve(d + 1, true); // sDGNRS settles its seeded day through the walk
         vm.prank(GAME);
-        coinflip.depositCoinflip(VAULT, 0);
+        coinflip.depositCoinflip(1, 0);
         vm.prank(SDGNRS);
         uint256 backing = coinflip.redeemableFlipBacking();
 
@@ -680,9 +680,9 @@ contract CoinflipWalletIdsTest is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(p1);
-        coinflip.depositCoinflip(address(0), 1_000);
+        coinflip.depositCoinflip(0, 1_000);
         vm.prank(p2);
-        coinflip.depositCoinflip(address(0), 3_000);
+        coinflip.depositCoinflip(0, 3_000);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint32 id1 = _cachedId(p1);
         uint32 id2 = _cachedId(p2);
@@ -706,11 +706,11 @@ contract CoinflipWalletIdsTest is DeployProtocol {
 
         address o = makeAddr("draw_operator");
         vm.prank(p1);
-        game.setOperatorApproval(o, true);
+        game.setOperatorApproval(0, o, true);
         vm.prank(o);
-        coinflip.depositCoinflip(p1, 500);
+        coinflip.depositCoinflip(id1, 500);
         vm.prank(p2);
-        coinflip.depositCoinflip(p1, 500);
+        coinflip.depositCoinflip(id1, 500);
         (uint24 day, uint96 total, uint32 count) = coinflip.bafDrawInfo();
         assertEq(day, armed);
         assertEq(total, 4_000);
@@ -736,7 +736,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
             uint256 amount = 100 + uint256(keccak256(abi.encode(seed, i))) % 150_000;
             _fund(p, amount);
             vm.prank(p);
-            coinflip.depositCoinflip(address(0), amount);
+            coinflip.depositCoinflip(0, amount);
             (uint32 eid,) = coinflip.bafDrawEntryAt(armed, uint32(i));
             assertEq(eid, _cachedId(p));
             assertEq(eid, _gameId(p));
@@ -868,7 +868,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         _fund(p, 10_000);
         uint24 d = _today();
         vm.prank(p);
-        coinflip.depositCoinflip(address(0), 1_000);
+        coinflip.depositCoinflip(0, 1_000);
         uint32 id = _cachedId(p);
 
         vm.expectCall(address(jackpots), abi.encodeWithSelector(DegenerusJackpots.recordBafFlip.selector, uint32(2)), 0);
@@ -878,9 +878,9 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         _warpToDay(d + 1);
         _resolve(d + 1, true); // the sDGNRS walk wins its seed day: no BAF call for ID 2
         vm.prank(p);
-        coinflip.claimCoinflips(address(0), type(uint256).max);
+        coinflip.claimCoinflips(0, type(uint256).max);
         vm.prank(GAME);
-        coinflip.depositCoinflip(VAULT, 0);
+        coinflip.depositCoinflip(1, 0);
 
         uint24 bracket = 10;
         assertGt(_bafTotal(bracket, id), 0, "player scores by ID");

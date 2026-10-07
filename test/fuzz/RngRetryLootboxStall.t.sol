@@ -64,7 +64,7 @@ contract RngRetryLootboxStallTest is DeployProtocol {
         // --- Inject a stalled mid-day lootbox VRF request ---
         // 1) create lootbox pending (>= 1 ETH threshold) via a real purchase.
         vm.prank(attacker);
-        game.purchase{value: 3 ether}(attacker, 0, BoxOrderLib.boCustomFloor(3 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: 3 ether}(0, 0, BoxOrderLib.boCustomFloor(3 ether), bytes32(0), MintPaymentKind.DirectEth, false);
 
         // 2) fire the mid-day lootbox RNG request through mineFlip, its only door (leaves
         //    rngLockedFlag = false).
@@ -198,7 +198,7 @@ contract RngRetryLootboxStallTest is DeployProtocol {
         if (cost == 0) return;
         if (who.balance < cost) vm.deal(who, cost + 10 ether);
         vm.prank(who);
-        try game.purchase{value: cost}(who, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+        try game.purchase{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
     }
 
     function _fulfillVrfIfPending() internal {

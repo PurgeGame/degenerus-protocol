@@ -50,7 +50,7 @@ contract VRFLifecycle is DeployProtocol {
         for (uint256 i = 0; i < 5; i++) {
             vm.prank(buyer);
             game.purchase{value: 0.01 ether}(
-                buyer,
+                0,
                 400,
                 0,
                 bytes32(0),
@@ -106,7 +106,7 @@ contract VRFLifecycle is DeployProtocol {
             for (uint256 i = 0; i < constant_buysPerBuyer; i++) {
                 vm.prank(buyer);
                 game.purchase{value: 1.01 ether}(
-                    buyer,
+                    0,
                     400,       // 1 full ticket
                     BoxOrderLib.boCustomFloor(1 ether),   // lootbox amount
                     bytes32(0),

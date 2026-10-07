@@ -60,7 +60,7 @@ contract CoinflipSeedWindowGas is DeployProtocol {
     /// @dev The vault's first claim: the walk crosses the 19 resolved deploy-window days.
     function test_VaultClaimAcrossSeededWindowCold() public {
         uint256 used = this.measureSeedCall(VAULT,
-            abi.encodeCall(coinflip.claimCoinflips, (address(0), type(uint256).max)));
+            abi.encodeCall(coinflip.claimCoinflips, (0, type(uint256).max)));
         emit log_named_uint("vault_claim_19_seeded_days_cold_gas", used);
         assertLt(used, VAULT_WALK_GAS_CEIL, "seeded days add no lane clear to the vault walk");
     }

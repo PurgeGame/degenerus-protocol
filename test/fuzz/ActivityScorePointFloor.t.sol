@@ -278,10 +278,10 @@ contract ActivityScorePointFloorTest is DeployProtocol {
         // Removing prepaid ETH (and any jackpot credit) makes the daily buy actually skip.
         uint256 funded = game.afkingFundingOf(player);
         vm.prank(player);
-        game.withdrawAfkingFunding(funded);
+        game.withdrawAfkingFunding(0, funded);
         if (game.claimableWinningsOf(player) != 0) {
             vm.prank(player);
-            game.claimWinnings(player);
+            game.claimWinnings(0);
         }
         uint32 covered = _afkCoveredOf(player);
         uint256 w = uint256(keccak256(abi.encode("skip", vrfWord, _deliverNonce++))) | 1;
@@ -335,14 +335,16 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     }
 
     function _subscribeLootbox(address who, uint8 q) internal {
-        _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (NoCoin without it)
+        uint256 seat = _grantSeat(who); // a new run burns a seat the subscriber holds
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, address(0)); // self, lootbox mode, no reinvest
+        game.subscribe(0, false, false, q, 0, seat); // self, lootbox mode, no reinvest
     }
 
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
-        game.depositAfkingFunding{value: amount}(who);
+        uint32 id = game.walletIdOf(who);
+        if (id == 0) id = _giveWalletId(who);
+        game.depositAfkingFunding{value: amount}(id);
     }
 
     function _grantDeityPass(address who) internal {

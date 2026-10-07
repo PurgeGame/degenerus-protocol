@@ -15,10 +15,10 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 /// @notice The 357-00 gates as built (GameAfkingModule.subscribe, the UPSERT branch), post the
 ///         AFKing Subscription Token credential swap (sub <=> coin: `Sub.validThroughLevel` / `_passHorizonOf` /
 ///         `NoPass()` / `SubscriptionExtendedFree` all DELETED from the module):
-///   - D-11 (NoCoin, :419): `if (!exemptSub && ISeatToken(AFKING_SUB_TOKEN).balanceOf(subscriber) == 0) revert
-///     NoCoin();` — a single balanceOf staticcall, checked at subscribe ONLY. Deity confers nothing for
-///     afking gating anymore (a deity holder without a coin still reverts NoCoin); any seated (>= 1 coin)
-///     subscriber clears it regardless of level.
+///   - D-11 (seat burn): a new non-exempt run calls the token's `consumeSeat(payee, seatId)`, which reverts
+///     `InvalidToken` unless the payee holds `seatId`; checked at subscribe ONLY. Deity confers nothing for
+///     afking gating (a deity holder without a seat still reverts InvalidToken); any payee holding a seat
+///     clears it regardless of level.
 ///   - D-12 (MustPurchaseToBeginAfking, :561): in the NEW-run leg (`!wasActive`), when the subscriber is
 ///     not grounded on a real purchase — neither `done[0]` (manual slot-0 today) NOR a funded in-tx
 ///     cover-buy executes — the start reverts. VAULT/sDGNRS take the `else if (exemptSub)` base-0
@@ -29,9 +29,8 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///     predates the coin's deploy (the coin seeds them 999/1 on construction, after they have already
 ///     self-subscribed through this identity carve).
 ///   - Level-crossing membership eviction is GONE: a sub is never evicted by a level change. Membership
-///     ends only via cancel or funding-skip kill (SubscriptionExpired reason 1); the coin's seat lock
-///     blocks an active sub's last-coin transfer (SeatInUse) until manual unsub/eviction. The STAGE runs a
-///     seated sub through arbitrary level changes untouched.
+///     ends only via cancel or funding-skip kill (SubscriptionExpired reason 1). The STAGE runs a
+///     subscribed account through arbitrary level changes untouched.
 ///
 /// @notice F-356-01 (drainAffiliateBase Game dispatch stub, DegenerusGame.sol:428): the guard-less
 ///   delegatecall to GAME_AFKING_MODULE.drainAffiliateBase (mirrors claimAfkingFlip), `_revertDelegate`
@@ -47,6 +46,19 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///   3 bytes) and a `_grantSeat`-driven credential poke replacing the deity/finite-pass/validThroughLevel
 ///   pokes. Test-only: ZERO contracts/*.sol mutation.
 contract V56SubHardening is DeployProtocol {
+
+    mapping(address => uint32) private _aidCache;
+
+    /// @dev Wallet ID of `a`, registering it when it holds none. Call before any `vm.prank`.
+    function _aid(address a) internal returns (uint32 id) {
+        id = _aidCache[a];
+        if (id == 0) {
+            id = game.walletIdOf(a);
+            if (id == 0) id = _giveWalletId(a);
+            _aidCache[a] = id;
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Game-resident storage slots + the Sub-slot offset block (post-coin-gate layout;
     // validThroughLevel deleted, every later field shifted down 3 bytes)
@@ -91,19 +103,20 @@ contract V56SubHardening is DeployProtocol {
     }
 
     // =========================================================================
-    // D-11 — coin-required subscribe (NoCoin on the UPSERT branch)
+    // D-11 — seat-required subscribe (InvalidToken on the new-run branch)
     // =========================================================================
 
-    /// @notice D-11 NEGATIVE: an EOA holding NO AFKing Subscription Token reverts NoCoin() on an UPSERT subscribe
-    ///         (dailyQuantity >= 1) — the sole afking credential (sub <=> coin), checked with a single
-    ///         balanceOf staticcall at subscribe. NoCoin fires ahead of the D-12 grounding gate, so the
+    /// @notice D-11 NEGATIVE: an EOA holding NO AFKing Subscription Token reverts InvalidToken() on a new-run subscribe
+    ///         (dailyQuantity >= 1) — a seat the payee holds is the sole afking credential, burned by the
+    ///         token's consumeSeat at subscribe. That burn precedes the D-12 grounding gate, so the
     ///         EOA is funded to isolate the credential failure.
-    function testD11CoinlessEoaRevertsNoCoin() public {
+    function testD11SeatlessEoaRevertsInvalidToken() public {
         address p = makeAddr("d11_nocoin");
-        _fundPool(p, 50 ether);       // funded, so the revert can ONLY be NoCoin (not MustPurchase)
+        _fundPool(p, 50 ether);       // funded, so the revert can ONLY be InvalidToken (not MustPurchase)
+        uint256 seat = _grantSeat(makeAddr("d11_other_holder")); // a seat p does not hold
         vm.prank(p);
-        vm.expectRevert(abi.encodeWithSignature("NoCoin()"));
-        game.subscribe(address(0), false, false, 1, address(0));
+        vm.expectRevert(abi.encodeWithSignature("InvalidToken()"));
+        game.subscribe(0, false, false, 1, 0, seat);
         assertEq(_subscriberIndexOf(p), 0, "D-11: the coinless sub was never created");
     }
 
@@ -113,23 +126,24 @@ contract V56SubHardening is DeployProtocol {
     ///         coin gate has no level dependence at all.
     function testD11SeatedEoaSubscribes() public {
         address p = makeAddr("d11_seated");
-        _grantSeat(p);
+        uint256 seat = _grantSeat(p);
         _fundPool(p, 50 ether);
         vm.prank(p);
-        game.subscribe(address(0), false, false, 1, address(0)); // MUST NOT revert
+        game.subscribe(0, false, false, 1, 0, seat); // MUST NOT revert
         assertGt(_subscriberIndexOf(p), 0, "D-11: seated sub created");
     }
 
     /// @notice D-11 (deity confers nothing for afking gating): a deity holder WITHOUT an AFKing Subscription Token still
-    ///         reverts NoCoin(). Deity ownership has no bearing on the afking credential.
-    function testD11DeityHolderWithoutCoinRevertsNoCoin() public {
+    ///         reverts InvalidToken(). Deity ownership has no bearing on the afking credential.
+    function testD11DeityHolderWithoutSeatRevertsInvalidToken() public {
         address p = makeAddr("d11_deity_nocoin");
         _grantDeityPass(p);           // deity bit set — confers nothing for the coin gate
-        _fundPool(p, 50 ether);       // funded, so the revert can ONLY be NoCoin (not MustPurchase)
+        _fundPool(p, 50 ether);       // funded, so the revert can ONLY be InvalidToken (not MustPurchase)
+        uint256 seat = _grantSeat(makeAddr("d11_other_holder")); // a seat p does not hold
         vm.prank(p);
-        vm.expectRevert(abi.encodeWithSignature("NoCoin()"));
-        game.subscribe(address(0), false, false, 1, address(0));
-        assertEq(_subscriberIndexOf(p), 0, "D-11: a deity holder without a coin is still rejected (NoCoin)");
+        vm.expectRevert(abi.encodeWithSignature("InvalidToken()"));
+        game.subscribe(0, false, false, 1, 0, seat);
+        assertEq(_subscriberIndexOf(p), 0, "D-11: a deity holder without a coin is still rejected (InvalidToken)");
     }
 
     // =========================================================================
@@ -139,15 +153,16 @@ contract V56SubHardening is DeployProtocol {
     /// @notice D-12 NEGATIVE: a seated (coin-holding, so D-11 is cleared) but UNFUNDED EOA reverts
     ///         MustPurchaseToBeginAfking() on a NEW-run UPSERT subscribe — neither bought-today (`done[0]`)
     ///         nor a funded in-tx cover-buy, so the start would free-ride the advance gate. The revert is
-    ///         the D-12 leg (the unfunded NEW-run else branch), NOT NoCoin (the seat clears D-11),
+    ///         the D-12 leg (the unfunded NEW-run else branch), NOT InvalidToken (the seat clears D-11),
     ///         isolating the grounding failure.
     function testD12UnfundedEoaRevertsMustPurchase() public {
         address p = makeAddr("d12_unfunded");
-        _grantSeat(p);                // clears D-11; isolates the D-12 grounding failure
+        uint256 seat = _grantSeat(p);                // clears D-11; isolates the D-12 grounding failure
+        _aid(p);
         // NO _fundPool: afkingFunding[p] == 0 -> the cover-buy is unfunded -> the NEW-run start reverts.
         vm.prank(p);
         vm.expectRevert(abi.encodeWithSignature("MustPurchaseToBeginAfking()"));
-        game.subscribe(address(0), false, false, 1, address(0));
+        game.subscribe(0, false, false, 1, 0, seat);
         assertEq(_subscriberIndexOf(p), 0, "D-12: the unfunded sub was never created");
     }
 
@@ -156,10 +171,10 @@ contract V56SubHardening is DeployProtocol {
     ///         revert.
     function testD12FundedEoaSubscribes() public {
         address p = makeAddr("d12_funded");
-        _grantSeat(p);
+        uint256 seat = _grantSeat(p);
         _fundPool(p, 50 ether);       // funds the cover-buy -> grounded NEW run
         vm.prank(p);
-        game.subscribe(address(0), false, false, 1, address(0)); // MUST NOT revert
+        game.subscribe(0, false, false, 1, 0, seat); // MUST NOT revert
         assertGt(_subscriberIndexOf(p), 0, "D-12: funded sub created");
         assertEq(_lastBoughtDayOf(p), uint32(game.currentDayView()), "D-12: the funded cover-buy delivered today");
     }
@@ -177,7 +192,7 @@ contract V56SubHardening is DeployProtocol {
         assertGt(_subscriberIndexOf(p), 0, "non-vacuity: the sub is active");
         // Re-subscribe the active sub (wasActive == true) — the NEW-run D-12 gate is not on this path.
         vm.prank(p);
-        game.subscribe(address(0), false, false, 1, address(0)); // MUST NOT revert (grounded re-sub)
+        game.subscribe(0, false, false, 1, 0, 0); // MUST NOT revert (grounded re-sub; a live run burns no seat)
         assertGt(_subscriberIndexOf(p), 0, "D-12: grounded re-sub stays active (no MustPurchase revert)");
     }
 
@@ -190,20 +205,20 @@ contract V56SubHardening is DeployProtocol {
     ///         `else if (exemptSub)` base-0 bootstrap). Load-bearing: VAULT self-subscribes at
     ///         construction, BEFORE the coin exists in the deploy order. Self-subscribe shape
     ///         (`subscribe(address(this), ...)`) keyed on the resolved identity.
-    function testD13VaultExemptSubscribesNoCoinUnfunded() public {
+    function testD13VaultExemptSubscribesSeatlessUnfunded() public {
         vm.prank(ContractAddresses.VAULT);
-        game.subscribe(ContractAddresses.VAULT, true, false, 1, address(0)); // no coin, unfunded
-        assertGt(_subscriberIndexOf(ContractAddresses.VAULT), 0, "D-13: VAULT exempt subscribe succeeded (no NoCoin / no MustPurchase)");
+        game.subscribe(0, true, false, 1, 0, 0); // no seat, unfunded
+        assertGt(_subscriberIndexOf(ContractAddresses.VAULT), 0, "D-13: VAULT exempt subscribe succeeded (no InvalidToken / no MustPurchase)");
     }
 
     /// @notice D-13 (sDGNRS exempt): sDGNRS subscribes with NO AFKing Subscription Token and UNFUNDED and is NOT
     ///         reverted — the same pinned-identity exemption. Both protocol self-subscribers bootstrap at
     ///         construction with no coin + no funds (the coin deploys LAST and seeds them 999/1
     ///         afterward); the gates MUST carve them out or deploy breaks.
-    function testD13SdgnrsExemptSubscribesNoCoinUnfunded() public {
+    function testD13SdgnrsExemptSubscribesSeatlessUnfunded() public {
         vm.prank(ContractAddresses.SDGNRS);
-        game.subscribe(ContractAddresses.SDGNRS, true, false, 1, address(0)); // no coin, unfunded
-        assertGt(_subscriberIndexOf(ContractAddresses.SDGNRS), 0, "D-13: sDGNRS exempt subscribe succeeded (no NoCoin / no MustPurchase)");
+        game.subscribe(0, true, false, 1, 0, 0); // no seat, unfunded
+        assertGt(_subscriberIndexOf(ContractAddresses.SDGNRS), 0, "D-13: sDGNRS exempt subscribe succeeded (no InvalidToken / no MustPurchase)");
     }
 
     // =========================================================================
@@ -447,9 +462,10 @@ contract V56SubHardening is DeployProtocol {
         address miner = makeAddr("coinless_miner");
         _fundPool(miner, 50 ether);
         assertTrue(game.bountyEligible(miner));
+        uint256 seat = _grantSeat(makeAddr("miner_other_holder")); // a seat the miner does not hold
         vm.prank(miner);
-        vm.expectRevert(abi.encodeWithSignature("NoCoin()"));
-        game.subscribe(address(0), false, false, 1, address(0));
+        vm.expectRevert(abi.encodeWithSignature("InvalidToken()"));
+        game.subscribe(0, false, false, 1, 0, seat);
         assertEq(_subscriberIndexOf(miner), 0, "subscription credential still required");
         vm.recordLogs();
         vm.prank(miner);
@@ -603,13 +619,14 @@ contract V56SubHardening is DeployProtocol {
     }
 
     function _subscribeLootbox(address who, uint8 q) internal {
+        uint256 seat = _grantSeat(who);
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, address(0)); // self, lootbox mode, no reinvest
+        game.subscribe(0, false, false, q, 0, seat); // self, lootbox mode, no reinvest
     }
 
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
-        game.depositAfkingFunding{value: amount}(who);
+        game.depositAfkingFunding{value: amount}(_aid(who));
     }
 
     /// @dev Deity bit only; it confers nothing for the afking coin gate or mining participation.

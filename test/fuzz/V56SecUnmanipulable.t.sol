@@ -21,6 +21,25 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 /// @dev Uses real funded subscriptions and production buy/open/claim/cancel paths. Storage
 ///      probes read the current packed Sub layout. Only test fixtures grant membership seats.
 contract V56SecUnmanipulable is DeployProtocol {
+
+    mapping(address => uint32) private _aidCache;
+
+    /// @dev Wallet ID of `a`, registering it when it holds none. Call before any `vm.prank`.
+    function _aid(address a) internal returns (uint32 id) {
+        id = _aidCache[a];
+        if (id == 0) {
+            id = game.walletIdOf(a);
+            if (id == 0) id = _giveWalletId(a);
+            _aidCache[a] = id;
+        }
+    }
+
+    /// @dev Wallet IDs of `a`, registering any that hold none.
+    function _aids(address[] memory a) internal returns (uint32[] memory ids) {
+        ids = new uint32[](a.length);
+        for (uint256 i; i < a.length; ++i) ids[i] = _aid(a[i]);
+    }
+
     // -------------------------------------------------------------------------
     // Game-resident storage slots + the v56 Sub-slot offset block (V56AfkingGasMarginal:68-89)
     // -------------------------------------------------------------------------
@@ -153,12 +172,11 @@ contract V56SecUnmanipulable is DeployProtocol {
         // the day before the cancel (floored at the funded high-water), so the protocol-skip gap zeroes
         // nothing. Gap days earned nothing — the handback equals the pre-gap earned streak.
         if (_subscriberIndexOf(p) == 0) {
-            _settleForfeit(p); // the funding-kill left the forfeit gate set
             _subscribeLootbox(p, 1); // re-create the slot to drive the explicit-cancel finalize
         }
         vm.recordLogs();
         vm.prank(p);
-        game.subscribe(address(0), false, false, 0, address(0));
+        game.subscribe(0, false, false, 0, 0, 0);
         uint24 finalStreak = _lastFinalizeStreakFor(p);
         assertEq(
             finalStreak,
@@ -199,7 +217,6 @@ contract V56SecUnmanipulable is DeployProtocol {
         // (afkingStartDay := the resume day; base := the manual snapshot, decayed to 0 across the gap).
         _fundPool(p, 50 ether);
         if (_subscriberIndexOf(p) == 0) {
-            _settleForfeit(p); // the funding-kill left the forfeit gate set
             _subscribeLootbox(p, 1);
         }
         _deliverDay(_singleton(p), 0x6A9007);
@@ -310,11 +327,12 @@ contract V56SecUnmanipulable is DeployProtocol {
         if (action == 0 && _dailyQtyOf(ledger.player) == 0) playerOwed = 0;
         vm.recordLogs();
         if (action == 0 || action == 2) {
+            uint256 seat = _grantSeat(ledger.player);
             vm.prank(ledger.player);
-            game.subscribe(address(0), false, false, action == 0 ? 1 : 0, address(0));
+            game.subscribe(0, false, false, action == 0 ? 1 : 0, 0, seat);
         } else if (action == 1) {
             vm.prank(ledger.relayer);
-            game.claimAfkingFlip(_pair(ledger.player, ledger.player));
+            game.claimAfkingFlip(_aids(_pair(ledger.player, ledger.player)));
         } else {
             vm.prank(ledger.relayer);
             affiliate.claim(_pair(ledger.player, ledger.player));
@@ -413,25 +431,25 @@ contract V56SecUnmanipulable is DeployProtocol {
 
         // FIRST claim: credits owed whole FLIP to the recipient's flip stake and zeroes pendingFlip.
         uint256 stakeBefore = coinflip.coinflipAmount(p);
-        game.claimAfkingFlip(_singleton(p));
+        game.claimAfkingFlip(_aids(_singleton(p)));
         uint256 stakeAfter1 = coinflip.coinflipAmount(p);
         assertEq(_pendingFlipOf(p), 0, "CEI: pendingFlip zeroed before the credit (reads 0 after the first claim)");
         assertEq(stakeAfter1 - stakeBefore, expectedCredit, "first claim credited exactly the accrued FLIP");
 
         // SECOND claim in the same block: the CEI zero means owed == 0 -> creditFlip(_, 0) is a no-op.
-        game.claimAfkingFlip(_singleton(p));
+        game.claimAfkingFlip(_aids(_singleton(p)));
         assertEq(coinflip.coinflipAmount(p), stakeAfter1, "double-call: the SECOND claim credited 0 (pays exactly once)");
 
         // claim -> unsub -> claim variant: unsub does not re-arm pendingFlip; the post-unsub claim is a no-op.
         _deliverDay(_singleton(p), 0xDB1C02); // re-accrue
         assertEq(_pendingFlipOf(p), SLOT0_FLIP_PER_BUY, "re-accrued 100 for the claim->unsub->claim variant");
         uint256 stakeBefore2 = coinflip.coinflipAmount(p);
-        game.claimAfkingFlip(_singleton(p)); // claim
+        game.claimAfkingFlip(_aids(_singleton(p))); // claim
         uint256 stakeAfterClaim2 = coinflip.coinflipAmount(p);
         assertEq(stakeAfterClaim2 - stakeBefore2, SLOT0_FLIP_PER_BUY, "claim credited the re-accrued FLIP once");
         vm.prank(p);
-        game.subscribe(address(0), false, false, 0, address(0)); // unsub (pendingFlip persists at 0)
-        game.claimAfkingFlip(_singleton(p)); // re-claim after unsub
+        game.subscribe(0, false, false, 0, 0, 0); // unsub (pendingFlip persists at 0)
+        game.claimAfkingFlip(_aids(_singleton(p))); // re-claim after unsub
         assertEq(coinflip.coinflipAmount(p), stakeAfterClaim2, "claim->unsub->claim: the post-unsub re-claim credited 0 (idempotent)");
     }
 
@@ -452,7 +470,7 @@ contract V56SecUnmanipulable is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(p);
-        game.subscribe(address(0), false, false, 0, address(0)); // explicit cancel
+        game.subscribe(0, false, false, 0, 0, 0); // explicit cancel
         // The finalize ran (event present) and the slot is tombstoned in place.
         _lastFinalizeStreakFor(p); // reverts if no finalize event fired before the tombstone
         assertEq(_dailyQtyOf(p), 0, "hook A: the slot is tombstoned (dailyQuantity == 0) AFTER the finalize handed the streak back");
@@ -513,12 +531,11 @@ contract V56SecUnmanipulable is DeployProtocol {
         // re-sub re-bases to base 0 (a full funded day was missed), so the immediate cancel still finalizes 0.
         _fundPool(zeroed, 50 ether);
         if (_subscriberIndexOf(zeroed) == 0) {
-            _settleForfeit(zeroed); // the funding-kill left the forfeit gate set
             _subscribeLootbox(zeroed, 1);
         }
         vm.recordLogs();
         vm.prank(zeroed);
-        game.subscribe(address(0), false, false, 0, address(0)); // explicit cancel finalize on a post-gap day
+        game.subscribe(0, false, false, 0, 0, 0); // explicit cancel finalize on a post-gap day
         uint24 zeroedStreak = _lastFinalizeStreakFor(zeroed);
         assertEq(zeroedStreak, 0, "hook D ZEROED: lastValid <= currentDay - 2 -> finalize zeroed the streak (decay)");
     }
@@ -653,14 +670,15 @@ contract V56SecUnmanipulable is DeployProtocol {
     }
 
     function _subscribeLootbox(address who, uint8 q) internal {
+        uint256 seat = _grantSeat(who);
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, address(0)); // self, lootbox mode, no reinvest
+        game.subscribe(0, false, false, q, 0, seat); // self, lootbox mode, no reinvest
     }
 
     function _fundPool(address who, uint256 amount) internal {
         _giveWalletId(who);
         vm.deal(address(this), amount);
-        game.depositAfkingFunding{value: amount}(who);
+        game.depositAfkingFunding{value: amount}(_aid(who));
     }
 
     /// @dev Withdraw the sub's whole afking funding so the next STAGE buy is unfunded — the funding-kill
@@ -669,18 +687,7 @@ contract V56SecUnmanipulable is DeployProtocol {
         uint256 bal = game.afkingFundingOf(who);
         if (bal == 0) return;
         vm.prank(who);
-        game.withdrawAfkingFunding(bal);
-    }
-
-    /// @dev Settle a funding-kill's seat forfeit test-side: clear the SEAT_ENCUMBERED
-    ///      bit (155 of `mintPacked_`, storage slot 9) so a post-eviction re-subscribe
-    ///      under test isn't blocked by the forfeit gate (SeatForfeited). The forfeit
-    ///      flow itself (trapped seat -> reclaimSeat -> vault) is proven in
-    ///      AfKingSeatToken; these streak tests only need the re-entry.
-    function _settleForfeit(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, GameSlots.MINT_PACKED));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        vm.store(address(game), slot, bytes32(packed & ~(uint256(1) << BitPackingLib.SEAT_ENCUMBERED_SHIFT)));
+        game.withdrawAfkingFunding(0, bal);
     }
 
     /// @dev Count the SubscriptionExpired(player, reason) events recorded since the last vm.recordLogs()

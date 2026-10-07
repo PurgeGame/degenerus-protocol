@@ -691,7 +691,7 @@ contract TicketLifecycleTest is DeployProtocol {
         vm.deal(buyer3, cost + 50 ether);
         vm.prank(buyer3);
         try game.purchase{value: cost}(
-            buyer3, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false
+            0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false
         ) {
             // Purchase succeeded -- verify routing via entriesOwedPacked
             uint32 nxtOwed0 = _ticketsOwed(nxtKey0, buyer3);
@@ -997,7 +997,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Credit the claimant's pending half-passes directly (wallet-table element, bits 192..255).
         _creditHalfPasses(claimant, 2);
 
-        game.claimWhalePass(claimant);
+        game.claimWhalePass(game.walletIdOf(claimant));
 
         // h=2 -> one whole ticket (4 entries) every 2nd level from startLevel 1: odd
         // levels covered, even levels empty. Only level 1 is within the mint ceiling
@@ -1057,7 +1057,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Credit the claimant's pending half-passes directly (wallet-table element, bits 192..255).
         _creditHalfPasses(claimant, 400);
 
-        game.claimWhalePass(claimant);
+        game.claimWhalePass(game.walletIdOf(claimant));
 
         // h=400 -> dense base leg only: 400 entries on every level of the span.
         assertEq(_ticketsOwed(_writeKeyForLevel(1), claimant), 400,
@@ -1465,7 +1465,7 @@ contract TicketLifecycleTest is DeployProtocol {
         vm.prank(buyer3);
         // Near-future purchase should not revert
         game.purchase{value: cost}(
-            buyer3, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false
+            0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false
         );
 
         // purchaseWhalePass spans levels (level+1) to (level+100).
@@ -1476,7 +1476,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         vm.prank(buyer3);
         vm.expectRevert(DegenerusGameStorage.RngLocked.selector);
-        game.purchaseWhalePass{value: whaleCost}(buyer3, 1, bytes32(0));
+        game.purchaseWhalePass{value: whaleCost}(0, 1, bytes32(0));
     }
 
     // =========================================================================
@@ -1608,7 +1608,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         vm.prank(buyer3);
         game.purchase{value: cost}(
-            buyer3, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false
+            0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false
         );
 
         // Check ticketsOwed: buyer3 must have owed at one of the WRITE keys
@@ -1662,7 +1662,7 @@ contract TicketLifecycleTest is DeployProtocol {
             vm.deal(buyer3, cost + 50 ether);
             vm.prank(buyer3);
             game.purchase{value: cost}(
-                buyer3, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
+                0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
             );
         }
 
@@ -1700,7 +1700,7 @@ contract TicketLifecycleTest is DeployProtocol {
             vm.deal(buyer3, cost + 50 ether);
             vm.prank(buyer3);
             game.purchase{value: cost}(
-                buyer3, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
+                0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
             );
         }
 
@@ -2282,7 +2282,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         vm.prank(who);
         try game.purchase{value: totalCost}(
-            who, ticketQty, BoxOrderLib.boCustomFloor(lootboxEthAmount), bytes32(0), MintPaymentKind.DirectEth, false
+            0, ticketQty, BoxOrderLib.boCustomFloor(lootboxEthAmount), bytes32(0), MintPaymentKind.DirectEth, false
         ) {} catch {
             return 0;
         }
@@ -2499,7 +2499,7 @@ contract TicketLifecycleTest is DeployProtocol {
         if (who.balance < cost) vm.deal(who, cost + 50 ether);
 
         vm.prank(who);
-        try game.purchaseWhalePass{value: cost}(who, quantity, bytes32(0)) {} catch {}
+        try game.purchaseWhalePass{value: cost}(0, quantity, bytes32(0)) {} catch {}
     }
 
     // ==================== RNG State Helpers ====================
@@ -2592,7 +2592,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         vm.prank(who);
         try game.purchase{value: cost}(
-            who, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false
+            0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false
         ) {} catch {}
     }
 

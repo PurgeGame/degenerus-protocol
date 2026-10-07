@@ -119,17 +119,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       +======================================================================+*/
 
     // error E() — inherited from DegenerusGameStorage
-    /// @notice Thrown when a deity issues a boon to itself.
-    error SelfBoon();
     /// @notice Thrown when the amount is zero or msg.value does not match it.
     error ValueMismatch();
     /// @notice Thrown when a reversal's live cost no longer matches the caller's quote.
     error NudgeCostChanged();
 
-    // error RngLocked() — inherited from DegenerusGameStorage
-
-    /// @notice Caller is not approved to act for the requested player.
-    error NotApproved();
+    // error RngLocked(), NotApproved() — inherited from DegenerusGameStorage
 
     /// @notice mineFlip found nothing to do (raised by the miner engine).
     error NoWork();
@@ -151,12 +146,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @param previous Previous threshold in wei.
     /// @param current New threshold in wei.
     event LootboxRngThresholdUpdated(uint256 previous, uint256 current);
-    /// @notice Emitted when a player approves or revokes an operator.
-    /// @param owner The player granting approval.
+    /// @notice Emitted when an account's operator is approved or revoked.
+    /// @param id The account's wallet ID.
     /// @param operator The approved operator.
     /// @param approved True if approved, false if revoked.
     event OperatorApproval(
-        address indexed owner,
+        uint32 indexed id,
         address indexed operator,
         bool approved
     );
@@ -272,18 +267,17 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Claim color-completion bingo: all 8 colors of one symbol on a level.
     /// @dev Dispatches to GAME_BINGO_MODULE via delegatecall; void return. Permissionless:
-    ///      the bingo settles to `player` (the slot owner), never the caller, so any caller
-    ///      may settle any owner's claim (address(0) = msg.sender). Each player may claim
-    ///      one bingo reward per level, regardless of which qualifying symbol they use, until
-    ///      L+2 takes over that level's ticket buffer (then the unclaimed bingo expires).
-    ///      Signature: claimBingo(address player, uint24 level, uint8 symbol, uint32[8] slots) —
-    ///      the owner to claim for, the level (uint24 storage-key width), the symbol 0-31
-    ///      (quadrant = symbol >> 3, symInQ = symbol & 7), and the per-color positions in
-    ///      lvlTraitEntry[level][traitId] the owner occupies. The signature matches the module
-    ///      function exactly (identical selector), so the calldata forwards as-is — re-encoding
-    ///      here would cost contract-size headroom for no behavior change.
+    ///      the bingo settles to account `id` (the slot owner; 0 = caller), never the caller, so
+    ///      any caller may settle any owner's claim; the DGNRS leg goes to the account's payee.
+    ///      Each account may claim one bingo reward per level, regardless of which qualifying
+    ///      symbol it uses, until L+2 takes over that level's ticket buffer (then the unclaimed
+    ///      bingo expires). Signature: claimBingo(uint32 id, uint24 level, uint8 symbol,
+    ///      uint32[8] slots) — the owner to claim for, the level (uint24 storage-key width), the
+    ///      symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7), and the per-color positions
+    ///      in lvlTraitEntry[level][traitId] the owner occupies. The signature matches the module
+    ///      function exactly (identical selector), so the calldata forwards as-is.
     function claimBingo(
-        address,
+        uint32,
         uint24,
         uint8,
         uint32[8] calldata
@@ -296,13 +290,13 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Claim deterministic-ending shares: after a game over caused by a dead VRF, every
     ///         ticket of the terminal level claims its share of the pot here until the final
-    ///         sweep. Permissionless; each share credits the holding's owner (`player`), never
+    ///         sweep. Permissionless; each share credits the holding's owner account by ID, never
     ///         the caller.
     /// @dev Dispatches to GAME_GAMEOVER_MODULE via delegatecall. Signature:
-    ///      claimDeadVrf(address player, uint256[] refs) — each ref names one holding, its top
-    ///      byte the kind (see DegenerusGameGameOverModule.claimDeadVrf). The signature matches
-    ///      the module function exactly (identical selector), so the calldata forwards as-is.
-    function claimDeadVrf(address, uint256[] calldata) external {
+    ///      claimDeadVrf(uint32 id, uint256[] refs) — the owner account (0 = caller), each ref one
+    ///      holding with its top byte the kind (see DegenerusGameGameOverModule.claimDeadVrf). The
+    ///      signature matches the module function exactly, so the calldata forwards as-is.
+    function claimDeadVrf(uint32, uint256[] calldata) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_GAMEOVER_MODULE
             .delegatecall(msg.data);
@@ -323,23 +317,21 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  mineFlip stage.                                                         |
       +==========================================================================+*/
 
-    /// @notice Start or extend a daily afking subscription for `player`.
-    /// @dev The self-consent / funding-gate consent checks run in-context against the
-    ///      Game's operatorApprovals (delegatecall preserves msg.sender).
-    ///      msg.value > 0 credits the RESOLVED funding bucket's afkingFunding — the
-    ///      non-self (approved) fundingSource for an operator-funded sub, else the
-    ///      subscriber (claimablePool in tandem) — so the deposit funds the bucket the
-    ///      draws debit.
-    ///      Signature: subscribe(address player, bool drainGameCreditFirst, bool useTickets,
-    ///      uint8 dailyQuantity, address fundingSource). The signature matches
-    ///      the module function exactly (identical selector), so the calldata forwards as-is —
-    ///      re-encoding here would cost contract-size headroom for no behavior change.
+    /// @notice Start, change or cancel a daily afking subscription for account `id`.
+    /// @dev The account and funding-source consent checks run in-context (delegatecall
+    ///      preserves msg.sender). A new run burns seat `seatId` of the subscriber's payee.
+    ///      msg.value > 0 credits the funding bucket the draws debit (the external source's,
+    ///      else the subscriber's; claimablePool in tandem).
+    ///      Signature: subscribe(uint32 id, bool drainGameCreditFirst, bool useTickets,
+    ///      uint8 dailyQuantity, uint32 fundingSourceId, uint256 seatId). The signature matches
+    ///      the module function exactly (identical selector), so the calldata forwards as-is.
     function subscribe(
-        address,
+        uint32,
         bool,
         bool,
         uint8,
-        address
+        uint32,
+        uint256
     ) external payable {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_AFKING_MODULE
@@ -385,13 +377,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         }
     }
 
-    /// @notice Permissionless FLIP claim — pays each listed sub its accrued `pendingFlip`
+    /// @notice Permissionless FLIP claim — pays each listed account its accrued `pendingFlip`
     ///         (the per-delivered-day quest reward + ticket buyer-bonus) in one creditFlip,
-    ///         zeroed. Always credits the sub, never the caller.
-    /// @dev Signature: claimAfkingFlip(address[] subs). The signature matches the module
-    ///      function exactly (identical selector), so the calldata forwards as-is — re-encoding
-    ///      the array here would cost contract-size headroom for no behavior change.
-    function claimAfkingFlip(address[] calldata) external {
+    ///         zeroed. Always credits the account, never the caller.
+    /// @dev Signature: claimAfkingFlip(uint32[] ids) (0 = caller). The signature matches the
+    ///      module function exactly (identical selector), so the calldata forwards as-is.
+    function claimAfkingFlip(uint32[] calldata) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_AFKING_MODULE
             .delegatecall(msg.data);
@@ -412,50 +403,23 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return abi.decode(data, (uint256));
     }
 
-    /// @notice Permissionless paid cure of `target`'s cashout/smite curse (100 FLIP).
+    /// @notice Permissionless paid cure of account `id`'s cashout/smite curse (100 FLIP from
+    ///         the caller).
     /// @dev Thin delegatecall dispatch stub into GameAfkingModule's decurse body.
-    ///      Signature: decurse(address target). The signature matches the module function
-    ///      exactly (identical selector), so the calldata forwards as-is — re-encoding here
-    ///      would cost contract-size headroom for no behavior change.
-    function decurse(address) external {
+    ///      Signature: decurse(uint32 id) (0 = caller). The signature matches the module function
+    ///      exactly (identical selector), so the calldata forwards as-is.
+    function decurse(uint32) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_AFKING_MODULE
             .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Number of entries in the afking subscriber ring (active subs plus
-    ///         cancel tombstones awaiting the in-pass reclaim; hard-capped at 2005 —
-    ///         the 2,000-coin supply plus reclaim slack).
-    function subscriberCount() external view returns (uint256) {
+    /// @notice Length of the afking subscriber set: live subscriptions, the two exempt
+    ///         protocol subscriptions and cancel/eviction tombstones awaiting the in-pass
+    ///         reclaim. The seat token's capped vault mint reads it.
+    function subscriberSetLength() external view returns (uint256) {
         return _subscribers.length;
-    }
-
-    /// @notice A subscriber's afking record: active flag, daily quantity, the
-    ///         current run's activation day, and the funded-through high-water.
-    ///         Tenure (funded days) = afkCoveredThroughDay - afkingStartDay while
-    ///         active; both are day indexes. `active` is half the AFKing Subscription
-    ///         Token's transfer guard (the other half is the SEAT_ENCUMBERED bit in
-    ///         mintPackedFor): the coin staticcalls both and reverts a last-coin
-    ///         transfer while either holds — active sub, or eviction forfeit awaiting
-    ///         reclaimSeat. Manual cancel clears both, so a clean leaver sells freely.
-    function subInfo(
-        address player
-    )
-        external
-        view
-        returns (
-            bool active,
-            uint8 dailyQuantity,
-            uint24 afkingStartDay,
-            uint24 afkCoveredThroughDay
-        )
-    {
-        Sub storage s = _subOf[_walletIdOf(player)];
-        active = s.dailyQuantity != 0;
-        dailyQuantity = s.dailyQuantity;
-        afkingStartDay = s.afkingStartDay;
-        afkCoveredThroughDay = s.afkCoveredThroughDay;
     }
 
     /// @notice Read a raw storage slot. Periphery escape hatch for lens/viewer
@@ -478,25 +442,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         id = abi.decode(data, (uint32));
     }
 
-    /// @notice AFKING_SUB_TOKEN-only: clear `holder`'s SEAT_ENCUMBERED latch after the
-    ///         coin's reclaimSeat seizes an evicted holder's forfeited seat to the vault.
-    /// @dev Thin delegatecall dispatch stub into GameAfkingModule's clearSeatEncumbrance
-    ///      body (the module enforces the AFKING_SUB_TOKEN-only gate under delegatecall,
-    ///      msg.sender preserved). Signature: clearSeatEncumbrance(address holder) —
-    ///      matches the module selector, so the calldata forwards as-is.
-    function clearSeatEncumbrance(address) external {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_AFKING_MODULE
-            .delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
-    }
-
-    /// @notice Deity-gated smite: add a curse stack to `smitee` for 200 FLIP.
+    /// @notice Deity-gated smite: add a curse stack to account `smiteeId` for 200 FLIP.
     /// @dev Thin delegatecall dispatch stub into GameAfkingModule's smite body.
-    ///      Signature: smite(uint256 deityId, address smitee). The signature matches the module
-    ///      function exactly (identical selector), so the calldata forwards as-is — re-encoding
-    ///      here would cost contract-size headroom for no behavior change.
-    function smite(uint256, address) external {
+    ///      Signature: smite(uint256 deityId, uint32 smiteeId) (0 = caller). The signature
+    ///      matches the module function exactly, so the calldata forwards as-is.
+    function smite(uint256, uint32) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_AFKING_MODULE
             .delegatecall(msg.data);
@@ -551,39 +501,48 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |                      OPERATOR APPROVALS                              |
       +======================================================================+*/
 
-    /// @notice Approve or revoke an operator to act on your behalf.
+    /// @notice Approve or revoke `operator` for account `id` (0 = the caller's own account).
+    /// @dev The caller's own account must already hold an ID. A nonzero `id` must be allocated
+    ///      and the caller must be its payee: the key itself or a smurf's owner (operators
+    ///      cannot approve operators).
+    /// @param id Account to manage (0 = caller).
     /// @param operator Address to approve or revoke.
     /// @param approved True to approve, false to revoke.
     /// @custom:reverts ZeroAddress If operator is the zero address.
-    function setOperatorApproval(address operator, bool approved) external {
+    function setOperatorApproval(uint32 id, address operator, bool approved) external {
         if (operator == address(0)) revert ZeroAddress();
-        operatorApprovals[msg.sender][operator] = approved;
-        emit OperatorApproval(msg.sender, operator, approved);
-    }
-
-    /// @notice Check if an operator is approved to act for a player.
-    /// @param owner The player who granted approval.
-    /// @param operator The operator address.
-    /// @return approved True if operator is approved.
-    function isOperatorApproved(
-        address owner,
-        address operator
-    ) external view returns (bool approved) {
-        return operatorApprovals[owner][operator];
-    }
-
-    function _requireApproved(address player) private view {
-        if (msg.sender != player && !operatorApprovals[player][msg.sender]) {
-            revert NotApproved();
+        if (id == 0) {
+            id = _requireWalletId(msg.sender);
+        } else {
+            (, address payee) = _accountKeys(id);
+            if (payee != msg.sender) revert NotApproved();
         }
+        operatorApprovals[id][operator] = approved;
+        emit OperatorApproval(id, operator, approved);
     }
 
-    function _resolvePlayer(
-        address player
-    ) private view returns (address resolved) {
-        if (player == address(0)) return msg.sender;
-        if (player != msg.sender) _requireApproved(player);
-        return player;
+    /// @notice Resolve account `id` for `caller`: its key, its payee and whether `caller` may
+    ///         act for it (the key, a smurf's owner, or an operator approved for `id`). Never
+    ///         reverts on authorization.
+    /// @custom:reverts E If `id == 0` or `id` is unallocated.
+    function resolveAccount(uint32 id, address caller)
+        external
+        view
+        returns (address key, address payee, bool authorized)
+    {
+        return _account(id, caller);
+    }
+
+    /// @notice Create a smurf account owned by the caller, give it the caller's referrer and
+    ///         buy it one ticket, all in one call.
+    /// @dev Body in the mint module; the signature matches the module function exactly, so the
+    ///      calldata and msg.value forward as-is.
+    /// @return The new account's wallet ID.
+    function createSmurf(bytes32, MintPaymentKind) external payable returns (uint32) {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data);
+        if (!ok) _revertDelegate(data);
+        // The trusted Mint module returns the identical one-word ABI result.
+        assembly ("memory-safe") { return(add(data, 32), mload(data)) }
     }
 
     /*+======================================================================+
@@ -652,7 +611,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Main entry point for all ETH/claimable purchases. For FLIP purchases, use redeemFlip().
     ///      Recycling at least 3 tickets' worth of claimable winnings earns a 10% FLIP flip-credit bonus.
     ///      Adds affiliate support for loot box purchases.
-    /// @param buyer Player address to receive purchases (address(0) = msg.sender).
+    ///      Account `id` (0 = caller) receives the purchases; the caller must be authorized
+    ///      for it. Fresh ETH comes from the caller; claimable and AFKing legs spend the account's.
+    /// @param id Account receiving the purchases (0 = caller).
     /// @param entryQuantityScaled Purchase units (400 = 4*QTY_SCALE = one whole ticket = 4 entries; 0 to skip).
     /// @param boxOrder Packed box order (0 to skip):
     ///        [small:8][med:8][large:8][customCount:8][customSize:56 in gwei]; every bit at or
@@ -667,14 +628,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///        and lootbox legs, sharing the combined spend's affiliate, quest, and streak
     ///        recording so a foil pack counts exactly like a ticket purchase.
     function purchase(
-        address buyer,
+        uint32 id,
         uint256 entryQuantityScaled,
         uint256 boxOrder,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
         bool foil
     ) external payable {
-        buyer = _resolvePlayer(buyer);
+        (address buyer, ) = _resolveAccount(id);
         if (foil) {
             (bool ok, bytes memory data) = ContractAddresses
                 .GAME_FOILPACK_MODULE
@@ -727,58 +688,38 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      SECURITY: The redemption window latches open only with no RNG in flight;
     ///      once open it stays usable through the jackpot days' locks until the final
     ///      jackpot request clears it.
-    /// @param buyer Player address to receive purchases (address(0) = msg.sender).
-    /// @param entryQuantityScaled Purchase units (400 = 4*QTY_SCALE = one whole ticket = 4 entries; 0 to skip).
-    function redeemFlip(
-        address buyer,
-        uint256 entryQuantityScaled
-    ) external {
-        buyer = _resolvePlayer(buyer);
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_MINT_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameMintModule.redeemFlip.selector,
-                    buyer,
-                    entryQuantityScaled
-                )
-            );
+    ///      The FLIP is burned from the account's payee.
+    ///      Signature: redeemFlip(uint32 id, uint256 entryQuantityScaled) — the account receiving
+    ///      the tickets (0 = caller) and the purchase units (400 = one whole ticket = 4 entries).
+    ///      The mint module resolves the account, so the calldata forwards as-is.
+    function redeemFlip(uint32, uint256) external {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
     /// @notice Buy a credit-gated coin-presale box with ETH and/or claimable.
     /// @dev Box is gated by presaleBoxCredit (earned 25% on prior ETH buys), consumes
     ///      credit 1:1, caps cumulatively at 50 ETH, and queues for later resolution.
-    /// @param buyer Player to receive the box (address(0) = msg.sender).
-    /// @param boxAmount Requested box ETH (>= 0.01 ETH; excess refunded if clamped).
-    function buyPresaleBox(
-        address buyer,
-        uint256 boxAmount
-    ) external payable {
-        buyer = _resolvePlayer(buyer);
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_MINT_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameMintModule.buyPresaleBox.selector,
-                    buyer,
-                    boxAmount
-                )
-            );
+    ///      Signature: buyPresaleBox(uint32 id, uint256 boxAmount) — the account receiving the box
+    ///      (0 = caller) and the requested box ETH (>= 0.01 ETH; excess credited to AFKing if
+    ///      clamped). The mint module resolves the account, so the calldata and msg.value
+    ///      forward as-is.
+    function buyPresaleBox(uint32, uint256) external payable {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Permissionlessly resolve `player`'s foil match claim (value credits to player).
-    /// @dev Signature: claimFoilMatch(address player, uint256 day, uint256 ticketIndex). The
+    /// @notice Permissionlessly resolve account `id`'s foil match claim (value credits to the account).
+    /// @dev Signature: claimFoilMatch(uint32 id, uint256 day, uint256 ticketIndex) (0 = caller). The
     ///      eligible cycle level is read inside the module from the day's sealed draw. The win
-    ///      credits to `player`, never the caller, and a tuple pays at most once (CEI marker),
+    ///      credits to the account, never the caller, and a tuple pays at most once (CEI marker),
     ///      so anyone may trigger it. The day's one board x four tickets give 4 independent
     ///      claimables per day. Claims are valid on the draw day and the following day,
     ///      and close when terminal settlement triggers. The signature matches the module
     ///      function exactly (identical selector), so the calldata forwards as-is —
     ///      re-encoding would cost size headroom for no change.
     function claimFoilMatch(
-        address,
+        uint32,
         uint256,
         uint256
     ) external {
@@ -788,17 +729,16 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Permissionlessly resolve a batch of foil match claims (address[] players,
-    ///         uint24[] days, uint8[] ticketIndexes).
+    /// @notice Permissionlessly resolve a batch of foil match claims (uint32[] ids,
+    ///         uint24[] days, uint8[] ticketIndexes; an id of 0 is the caller).
     /// @dev Non-claimable tuples past index 0 are skipped, not reverted; each settled win
-    ///      credits its own player and the caller earns a per-settled-claim FLIP bounty
-    ///      during a live game. A non-claimable tuple AT index 0 reverts the whole call
+    ///      credits its own account. A non-claimable tuple AT index 0 reverts the whole call
     ///      (StaleBatch), so a second sender handed an already-swept list sees the failure
     ///      in simulation instead of paying to walk it. Claims are valid on the draw day
     ///      and the following day, and close when terminal settlement triggers. The
     ///      signature matches the module function exactly, so the calldata forwards as-is.
     function claimFoilMatchMany(
-        address[] calldata,
+        uint32[] calldata,
         uint24[] calldata,
         uint8[] calldata
     ) external {
@@ -810,13 +750,13 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
 
     /// @notice Claim a foil pack's gold: a FLIP ladder from three golds up, or the
     ///         golden-ticket grand when two whole tickets came out all gold.
-    /// @dev Signature: claimGoldenTicket(address player, uint24 lvl). The pack's four
+    /// @dev Signature: claimGoldenTicket(uint32 id, uint24 lvl) (0 = caller). The pack's four
     ///      lines are re-derived inside the module from the sealed word its buy froze
     ///      against, so nothing about the gold is stored and the drain stays untouched.
-    ///      The win credits to `player`, never the caller, and a pack pays at most once
+    ///      The win credits to the account, never the caller, and a pack pays at most once
     ///      (CEI marker), so anyone may trigger it. The signature matches the module
     ///      function exactly (identical selector), so the calldata forwards as-is.
-    function claimGoldenTicket(address, uint24) external {
+    function claimGoldenTicket(uint32, uint24) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_FOILPACK_MODULE
             .delegatecall(msg.data);
@@ -828,34 +768,20 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      split across both legs (mint cost first, remainder to the box), so the box is
     ///      funded by the same mix as any other purchase — fresh ETH, claimable, or afking
     ///      per payKind. Both queue at one index for co-resolution.
-    /// @param buyer Player to receive both legs (address(0) = msg.sender).
-    /// @param entryQuantityScaled Purchase units (400 = one whole ticket = 4 entries; 0 to skip).
-    /// @param boxOrder Packed box order (0 to skip; see purchase()).
-    /// @param affiliateCode Affiliate/referral code for the mint leg.
-    /// @param payKind Payment method for the mint leg.
-    /// @param boxAmount Requested presale-box ETH (claimable-funded).
+    ///      Signature: buyLootboxAndPresaleBox(uint32 id, uint256 entryQuantityScaled, uint256
+    ///      boxOrder, bytes32 affiliateCode, MintPaymentKind payKind, uint256 boxAmount) — the
+    ///      account receiving both legs (0 = caller), the ticket units, the packed box order,
+    ///      the mint leg's code and payment method, and the requested presale-box ETH. The mint
+    ///      module resolves the account, so the calldata and msg.value forward as-is.
     function buyLootboxAndPresaleBox(
-        address buyer,
-        uint256 entryQuantityScaled,
-        uint256 boxOrder,
-        bytes32 affiliateCode,
-        MintPaymentKind payKind,
-        uint256 boxAmount
+        uint32,
+        uint256,
+        uint256,
+        bytes32,
+        MintPaymentKind,
+        uint256
     ) external payable {
-        buyer = _resolvePlayer(buyer);
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_MINT_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameMintModule.buyLootboxAndPresaleBox.selector,
-                    buyer,
-                    entryQuantityScaled,
-                    boxOrder,
-                    affiliateCode,
-                    payKind,
-                    boxAmount
-                )
-            );
+        (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
@@ -877,15 +803,16 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      level over 10-101, frozen until 101.
     ///      Example at level 51 (passLevel 52): no bonus levels, one whole ticket every 2nd level
     ///      over 52-151, frozen until 151.
-    /// @param buyer Player address to receive pass rewards (address(0) = msg.sender).
+    /// @param id Account to receive the passes (0 = caller); the buyer DGNRS reward and the
+    ///        free-tranche seat go to its payee.
     /// @param quantity Number of passes to purchase.
     /// @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code).
     function purchaseWhalePass(
-        address buyer,
+        uint32 id,
         uint256 quantity,
         bytes32 affiliateCode
     ) external payable {
-        buyer = _resolvePlayer(buyer);
+        (address buyer, ) = _resolveAccount(id);
         _purchaseWhalePassFor(buyer, quantity, affiliateCode);
     }
 
@@ -910,10 +837,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Purchase a 10-level lazy pass (direct in-game activation).
     /// @dev Available at levels 0-2 or x9 (9, 19, 29...), or with a valid lazy pass boon.
     ///      Levels 0-2: flat 0.24 ETH. Levels 3+: sum of per-level ticket prices across 10-level window.
-    /// @param buyer Player address to receive pass (address(0) = msg.sender).
+    /// @param id Account to receive the pass (0 = caller).
     /// @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code).
-    function purchaseLazyPass(address buyer, bytes32 affiliateCode) external payable {
-        buyer = _resolvePlayer(buyer);
+    function purchaseLazyPass(uint32 id, bytes32 affiliateCode) external payable {
+        (address buyer, ) = _resolveAccount(id);
         _purchaseLazyPassFor(buyer, affiliateCode);
     }
 
@@ -931,15 +858,16 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Purchase a deity pass for a specific symbol (0-31).
-    /// @param buyer Player address to receive pass (address(0) = msg.sender).
+    /// @dev One deity per main wallet (the payee); the pass NFT mints to that main wallet.
+    /// @param id Account buying the pass (0 = caller).
     /// @param symbolId Symbol to claim (0-31: Q0 Crypto 0-7, Q1 Zodiac 8-15, Q2 Cards 16-23, Q3 Dice 24-31).
     /// @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code).
     function purchaseDeityPass(
-        address buyer,
+        uint32 id,
         uint8 symbolId,
         bytes32 affiliateCode
     ) external payable {
-        buyer = _resolvePlayer(buyer);
+        (address buyer, ) = _resolveAccount(id);
         _purchaseDeityPassFor(buyer, symbolId, affiliateCode);
     }
 
@@ -962,16 +890,15 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Place single-symbol Degenerette bets.
-    /// @dev The bet belongs to `player`; the player or an approved operator spends the player's
-    ///      funds, any other caller funds the bet itself (a permissionless gift).
-    ///      Player-funded bets accept ETH and FLIP only. Heroes are symbols 0..23 (no Dice).
-    ///      The module resolves the player/funder split, so `player` forwards raw. Signature:
-    ///      placeDegeneretteBet(address player, uint8 currency, uint128 amountPerSpin,
+    /// @dev The bet belongs to account `id` (0 = caller); an authorized caller spends the
+    ///      account's funds, any other caller funds the bet itself (a permissionless gift).
+    ///      Bets accept ETH and FLIP only. Heroes are symbols 0..23 (no Dice).
+    ///      The module resolves the account/funder split, so `id` forwards raw. Signature:
+    ///      placeDegeneretteBet(uint32 id, uint8 currency, uint128 amountPerSpin,
     ///      uint8 spinCount, uint8 symbol). The signature matches the
-    ///      module function exactly (identical selector), so the calldata forwards as-is —
-    ///      re-encoding here would cost contract-size headroom for no behavior change.
+    ///      module function exactly (identical selector), so the calldata forwards as-is.
     function placeDegeneretteBet(
-        address,
+        uint32,
         uint8,
         uint128,
         uint8,
@@ -1070,28 +997,13 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         dailySeed = _recordedDailyWord(day - 1);
     }
 
-    /// @notice Issue a deity boon to a recipient.
-    /// @param deity Deity issuing the boon (address(0) = msg.sender).
-    /// @param recipient Recipient of the boon.
-    /// @param slot Slot index (0-2).
-    /// @custom:reverts SelfBoon If deity attempts to issue boon to themselves.
-    function issueDeityBoon(
-        address deity,
-        address recipient,
-        uint8 slot
-    ) external {
-        deity = _resolvePlayer(deity);
-        if (recipient == deity) revert SelfBoon();
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_BOON_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameBoonModule.issueDeityBoon.selector,
-                    deity,
-                    recipient,
-                    slot
-                )
-            );
+    /// @notice Issue a deity boon from deity account `deityId` to account `recipientId`.
+    /// @dev Body in the boon module (account resolution, the existing-recipient rule and the
+    ///      self-boon check by ID). Signature: issueDeityBoon(uint32 deityId, uint32
+    ///      recipientId, uint8 slot) — matches the module selector, so the calldata forwards
+    ///      as-is.
+    function issueDeityBoon(uint32, uint32, uint8) external {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_BOON_MODULE.delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
@@ -1240,8 +1152,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         uint128 claimableAfter
     );
 
-    /// @notice Emitted when a funding source withdraws its prepaid afking ETH.
-    /// @param player The funding source (msg.sender) whose bucket was debited.
+    /// @notice Emitted when an account withdraws its prepaid afking ETH.
+    /// @param player The account key whose bucket was debited.
     /// @param amount ETH amount withdrawn (wei).
     event AfkingWithdrew(address indexed player, uint256 amount);
 
@@ -1253,9 +1165,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      non-zero → cheaper SSTORE (cold→warm vs cold→zero→warm).
     ///
     ///      SECURITY: Reverts if balance ≤ 1 wei (nothing to claim).
-    /// @param player Player address to claim for (address(0) = msg.sender).
-    function claimWinnings(address player) external {
-        _claimWinningsWithCurse(_resolvePlayer(player), type(uint256).max);
+    ///      Debits account `id` and pays its payee; the caller must be authorized for it.
+    /// @param id Account to claim for (0 = caller).
+    function claimWinnings(uint32 id) external {
+        _claimWinningsWithCurse(id, type(uint256).max);
     }
 
     /// @notice Claim a fixed amount of accrued ETH winnings (partial cashout).
@@ -1265,17 +1178,18 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      is what lets a claimant take the ETH that exists while a stETH leg cannot move. Runs
     ///      the cashout curse like the full claim — a partial cashout is still a cashout (the
     ///      curse is activity-gated).
-    /// @param player Player to claim for (address(0) = msg.sender; a non-self claim requires approval).
+    /// @param id Account to claim for (0 = caller; any other account requires authorization).
     /// @param amount Maximum wei of claimable winnings to take.
-    function claimWinnings(address player, uint256 amount) external {
-        _claimWinningsWithCurse(_resolvePlayer(player), amount);
+    function claimWinnings(uint32 id, uint256 amount) external {
+        _claimWinningsWithCurse(id, amount);
     }
 
-    /// @dev Shared claim body: pull winnings (capped pre-gameOver by `maxClaim`) then set the
-    ///      cashout curse. The curse SET runs in the Game's context via delegatecall (hosted in
-    ///      GameAfkingModule to keep the Game under the EIP-170 ceiling).
-    function _claimWinningsWithCurse(address player, uint256 maxClaim) private {
-        _claimWinningsInternal(player, false, maxClaim);
+    /// @dev Shared claim body: pull winnings (capped pre-gameOver by `maxClaim`) to the account's
+    ///      payee, then set the account's cashout curse. The curse SET runs in the Game's context
+    ///      via delegatecall (hosted in GameAfkingModule to keep the Game under the EIP-170 ceiling).
+    function _claimWinningsWithCurse(uint32 id, uint256 maxClaim) private {
+        (address player, address payee) = _resolveAccount(id);
+        _claimWinningsInternal(player, payee, false, maxClaim);
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_AFKING_MODULE
             .delegatecall(
@@ -1288,14 +1202,15 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @dev Restricted to self-claims by the vault contract.
     function claimWinningsStethFirst() external {
         if (msg.sender != ContractAddresses.VAULT) revert OnlyVault();
-        _claimWinningsInternal(msg.sender, true, type(uint256).max);
+        _claimWinningsInternal(msg.sender, msg.sender, true, type(uint256).max);
     }
 
-    /// @param player Account whose accrued winnings are claimed.
+    /// @param player Account key whose accrued winnings are claimed.
+    /// @param payee Address the payout goes to (the account's payee).
     /// @param stethFirst True to pay out in stETH before ETH.
     /// @param maxClaim Maximum claimable winnings (wei) to draw (partial cashout). Post-gameOver the
     ///        claim also settles the whole afking half.
-    function _claimWinningsInternal(address player, bool stethFirst, uint256 maxClaim) private {
+    function _claimWinningsInternal(address player, address payee, bool stethFirst, uint256 maxClaim) private {
         if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert AlreadySwept();
         // One packed load: claimable is the low half, afking the high half. The read reuse
         // below and the debit both ride this single SLOAD (no external call intervenes). An
@@ -1331,43 +1246,45 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         claimablePool -= uint128(payout); // CEI: update state before external call (checked math)
         emit WinningsClaimed(player, payout, uint128(amount - claimDebit));
         if (stethFirst) {
-            _payoutWithEthFallback(player, payout);
+            _payoutWithEthFallback(payee, payout);
         } else {
-            _payoutWithStethFallback(player, payout);
+            _payoutWithStethFallback(payee, payout);
         }
     }
 
-    /// @notice Fund a player's prepaid afking ETH bucket (consumed by the AfKing afking auto-buy).
-    /// @dev Permissionless (fund anyone) — the AfKing subscribe-forward and the
-    ///      operator-funding case both route here. The reservation
-    ///      rides inside claimablePool (no separate aggregate) — credited in tandem.
-    /// @param player The beneficiary whose afkingFunding bucket is credited.
-    function depositAfkingFunding(address player) external payable {
-        _creditAfkingValue(_requireWalletId(player), msg.value);
+    /// @notice Fund account `id`'s prepaid afking ETH bucket (consumed by the AfKing auto-buy).
+    /// @dev Permissionless (fund anyone). `id` is a third-party recipient: nonzero and allocated.
+    ///      The reservation rides inside claimablePool (no separate aggregate) — credited in tandem.
+    /// @param id The beneficiary account whose afkingFunding bucket is credited.
+    function depositAfkingFunding(uint32 id) external payable {
+        _requireAllocated(id);
+        _creditAfkingValue(id, msg.value);
     }
 
-    /// @notice Withdraw prepaid afking ETH — the funding source reclaims its own balance.
+    /// @notice Withdraw prepaid afking ETH from account `id` (0 = caller) to its payee.
     /// @dev Un-brickable strict CEI: the GO_SWEPT guard is LINE 1 (before any debit), so a
     ///      post-final-sweep withdraw reverts cleanly instead of underflowing claimablePool
     ///      (which the sweep zeroes). Both debits land BEFORE the .call, so a re-entrant second
     ///      call re-reads the already-debited balance and reverts. Available always pre-sweep
     ///      (mid-game, after cancel, post-gameOver). The claimablePool debit stays checked math.
-    /// @param amount ETH amount (wei) to withdraw from the caller's afkingFunding bucket.
-    function withdrawAfkingFunding(uint256 amount) external {
+    /// @param id Account whose bucket is debited (0 = caller; any other requires authorization).
+    /// @param amount ETH amount (wei) to withdraw from the account's afkingFunding bucket.
+    function withdrawAfkingFunding(uint32 id, uint256 amount) external {
         if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert AlreadySwept();
         if (amount == 0) return;
+        (address player, address payee) = _resolveAccount(id);
         // One packed load: the guard reads the afking high half and the debit writes it back.
-        uint32 id = _walletIdOf(msg.sender);
-        uint256 packed = balancesPacked[id];
+        uint32 wid = _walletIdOf(player);
+        uint256 packed = balancesPacked[wid];
         if (amount > (packed >> 128)) revert Insolvent();
         // Guard proved amount <= high half, so `amount << 128` subtracts only from the afking
         // half (no borrow into claimable) — byte-identical to _debitAfking's checked store.
-        balancesPacked[id] = packed - (amount << 128);
+        balancesPacked[wid] = packed - (amount << 128);
         claimablePool -= uint128(amount); // tandem release (checked math)
-        emit AfkingWithdrew(msg.sender, amount);
+        emit AfkingWithdrew(player, amount);
         // ETH first, stETH for any shortfall — the same backing claims draw on, so a game holding
         // most of its reserve as stETH can still pay a prepaid afking balance back.
-        _payoutWithStethFallback(msg.sender, amount);
+        _payoutWithStethFallback(payee, amount);
     }
 
     /// @notice The canonical per-player prepaid afking ETH balance.
@@ -1377,17 +1294,16 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         return _afkingOf(_walletIdOf(player));
     }
 
-    /// @notice Claim DGNRS affiliate rewards for the current level (single affiliate).
+    /// @notice Claim DGNRS affiliate rewards for the current level (single affiliate account).
     /// @dev Permissionless: the reward is deterministic and credits the affiliate, so any
-    ///      caller may settle any affiliate's claim (address(0) = msg.sender). Thin delegatecall
+    ///      caller may settle any affiliate's claim (0 = caller; DGNRS to the payee). Thin delegatecall
     ///      dispatch stub into DegenerusGameBingoModule's claimAffiliateDgnrs body. The
     ///      delegatecall MUST be preserved (not a direct module call): the body invokes
     ///      dgnrs.transferFromPool (onlyGame) and coinflip.creditFlip (onlyFlipCreditors), both
     ///      of which authorize on msg.sender == GAME — so the logic has to execute in the Game's
-    ///      context. Signature: claimAffiliateDgnrs(address player). The signature matches the
-    ///      module function exactly (identical selector), so the calldata forwards as-is —
-    ///      re-encoding here would cost contract-size headroom for no behavior change.
-    function claimAffiliateDgnrs(address) external {
+    ///      context. Signature: claimAffiliateDgnrs(uint32 id). The signature matches the
+    ///      module function exactly (identical selector), so the calldata forwards as-is.
+    function claimAffiliateDgnrs(uint32) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_BINGO_MODULE
             .delegatecall(msg.data);
@@ -1397,16 +1313,21 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     /// @notice Permissionless batch affiliate-DGNRS claim; a blank array claims the caller's own.
     /// @dev Per-item isolated: an ineligible / already-claimed affiliate skips instead of
     ///      reverting the batch (the single-affiliate entry above is the catchable boundary).
-    /// @param affiliates Affiliates to settle; empty = msg.sender only.
-    function claimAffiliateDgnrs(address[] calldata affiliates) external {
-        uint256 len = affiliates.length;
+    ///      The isolating self-call runs with msg.sender == this contract, so an ID of 0 maps to
+    ///      the caller's own ID first; for a caller with no ID that stays 0, which the body
+    ///      rejects (propagated for the blank array, skipped inside a batch).
+    /// @param ids Affiliate accounts to settle (0 = caller); empty = the caller only.
+    function claimAffiliateDgnrs(uint32[] calldata ids) external {
+        uint256 len = ids.length;
+        uint32 self = _walletIdOf(msg.sender);
         if (len == 0) {
             // Blank array: settle the caller's own claim (propagates if ineligible).
-            this.claimAffiliateDgnrs(msg.sender);
+            this.claimAffiliateDgnrs(self);
             return;
         }
         for (uint256 i; i < len; ) {
-            try this.claimAffiliateDgnrs(affiliates[i]) {} catch {}
+            uint32 id = ids[i];
+            try this.claimAffiliateDgnrs(id == 0 ? self : id) {} catch {}
             unchecked {
                 ++i;
             }
@@ -1458,12 +1379,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///         large lootbox wins (>5 ETH), the solo jackpot bucket, golden tickets, the lootbox
     ///         whale-pass boon and foil tier 8.
     /// @dev Thin, PERMISSIONLESS delegatecall dispatch stub into the whale module — forwards
-    ///      `msg.data` verbatim (msg.sender preserved). No approval gate and no address(0)
-    ///      self-resolution: the claim only awards the passed player their own deferred
-    ///      tickets (it never moves value to the caller), so cranking it for anyone is safe.
-    ///      Signature: claimWhalePass(address player) — matches the module selector. Callers
-    ///      claiming for themselves pass their own address (sDGNRS / Vault pass address(this)).
-    function claimWhalePass(address) external {
+    ///      `msg.data` verbatim (msg.sender preserved). No approval gate: the claim only awards
+    ///      the account its own deferred tickets (it never moves value to the caller), so
+    ///      cranking it for anyone is safe. Signature: claimWhalePass(uint32 id) (0 = caller) —
+    ///      matches the module selector.
+    function claimWhalePass(uint32) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_WHALE_MODULE
             .delegatecall(msg.data);
@@ -1513,31 +1433,21 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Sell far-future ticket entries to sDGNRS for current-level tickets + cash (-EV exit).
-    /// @dev Resolves the seller (operator-honor) then delegatecalls the mint module, which holds the
+    /// @dev Delegatecalls the mint module, which resolves the seller account and holds the
     ///      far-future salvage logic (kept off this contract for EIP-170 headroom). Quote without
-    ///      executing via previewSellFarFutureEntries.
-    /// @param player Owner of the far entries / recipient (resolved via _resolvePlayer).
-    /// @param levels Target levels to sell from (each 2 <= level - currentLevel <= 100).
-    /// @param quantities Entries to sell at each level, in whole-ticket multiples of 4 (4 entries = 1 whole ticket).
-    /// @param queueIndices Caller-supplied ticketQueue position of the resolved player at each level.
+    ///      executing via previewSellFarFutureEntries. Signature: sellFarFutureEntries(uint32 id,
+    ///      uint32[] levels, uint256[] quantities, uint256[] queueIndices) — the account owning
+    ///      the far entries (0 = caller; any other requires authorization), the target levels
+    ///      (each 2 <= level - currentLevel <= 100), the entries per level in whole-ticket
+    ///      multiples of 4, and the account's ticketQueue position at each level. The calldata
+    ///      forwards as-is.
     function sellFarFutureEntries(
-        address player,
-        uint32[] calldata levels,
-        uint256[] calldata quantities,
-        uint256[] calldata queueIndices
+        uint32,
+        uint32[] calldata,
+        uint256[] calldata,
+        uint256[] calldata
     ) external {
-        player = _resolvePlayer(player);
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_MINT_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameMintModule.sellFarFutureEntries.selector,
-                    player,
-                    levels,
-                    quantities,
-                    queueIndices
-                )
-            );
+        (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 

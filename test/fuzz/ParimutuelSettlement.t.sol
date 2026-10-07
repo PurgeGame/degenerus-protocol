@@ -26,6 +26,7 @@ contract PariSettleMockGame {
     uint24 public round;
     bool public open;
     mapping(address => uint32) public ids;
+    mapping(uint32 => address) internal idKey;
 
     function set(uint24 r, bool o) external {
         round = r;
@@ -34,14 +35,19 @@ contract PariSettleMockGame {
 
     function setId(address a, uint32 i) external {
         ids[a] = i;
+        idKey[i] = a;
     }
 
     function growthState(uint24) external view returns (uint256, uint256, uint256, uint24, bool, uint8) {
         return (0, 0, 0, round, open, 0);
     }
 
-    function isOperatorApproved(address, address) external pure returns (bool) {
-        return false;
+    function resolveAccount(uint32 id, address caller) external view returns (address key, address payee, bool authorized) {
+        require(id != 0, "E");
+        key = idKey[id];
+        require(key != address(0), "E");
+        payee = key;
+        authorized = caller == key;
     }
 
     function walletIdOf(address a) external view returns (uint32) {
@@ -180,7 +186,7 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
         address p = _who(id);
         mockGame.setId(p, id);
         vm.prank(p);
-        pari.placeBet(address(0), over);
+        pari.placeBet(0, over);
     }
 
     function _seal(uint24 round, bool over) private returns (bool) {
@@ -233,10 +239,10 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
 
         vm.prank(_who(40));
         vm.expectRevert(DegenerusParimutuel.AlreadyBet.selector);
-        pari.placeBet(address(0), true);
+        pari.placeBet(0, true);
         vm.prank(_who(40));
         vm.expectRevert(DegenerusParimutuel.AlreadyBet.selector);
-        pari.placeBet(address(0), false);
+        pari.placeBet(0, false);
 
         assertEq(_countsWord(5), 1, "only the first bet is counted");
         assertEq(_sideLane(5, OVER, 1), 0, "a refused repeat appends nothing");
@@ -247,7 +253,7 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
         assertEq(_countsWord(6), uint256(1) << 128, "the next round accepts the wallet");
         vm.prank(_who(40));
         vm.expectRevert(DegenerusParimutuel.AlreadyBet.selector);
-        pari.placeBet(address(0), true);
+        pari.placeBet(0, true);
     }
 
     /// Eight 32-bit lanes per side-array word: positions 7/8 and 15/16 straddle word boundaries
@@ -359,7 +365,7 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
             for (uint256 s; s < 2; ++s) {
                 vm.prank(_who(taken[i]));
                 vm.expectRevert(DegenerusParimutuel.AlreadyBet.selector);
-                pari.placeBet(address(0), s == 0);
+                pari.placeBet(0, s == 0);
             }
         }
 
@@ -1036,7 +1042,7 @@ abstract contract PariSettlementProtocolBase is DeployProtocol, PariSettlementSl
             vm.prank(address(game));
             coin.mintForGame(who, STAKE);
             vm.prank(who);
-            parimutuel.placeBet(address(0), i < nWin ? over : !over);
+            parimutuel.placeBet(0, i < nWin ? over : !over);
             if (i < nWin) winners[i] = id;
             else losers[i - nWin] = id;
         }
@@ -1383,7 +1389,7 @@ contract ParimutuelSettlementProtocolTest is PariSettlementProtocolBase {
         uint256 price = game.mintPrice();
         vm.deal(who, 10 ether);
         vm.prank(who);
-        game.purchase{value: price}(who, 400, 0, 0, MintPaymentKind.DirectEth, false);
+        game.purchase{value: price}(0, 400, 0, 0, MintPaymentKind.DirectEth, false);
         bool mayBet;
         (mayBet, , id) = quests.marketBetGates(who, round);
         assertTrue(mayBet, "a buyer may bet");
@@ -1394,7 +1400,7 @@ contract ParimutuelSettlementProtocolTest is PariSettlementProtocolBase {
 
     function _betAs(address who, bool over) private {
         vm.prank(who);
-        parimutuel.placeBet(address(0), over);
+        parimutuel.placeBet(0, over);
     }
 
     /// @dev Steps the engine until the pending bit clears and returns the logs of those steps.
@@ -1494,14 +1500,12 @@ contract ParimutuelBetGateDoorsTest is DeployProtocol {
         vm.deal(OPERATOR, 10_000 ether);
         vm.deal(DEITY, 10_000 ether);
         vm.prank(DEITY);
-        game.purchaseDeityPass{value: 200 ether}(DEITY, DEITY_SYMBOL, 0);
+        game.purchaseDeityPass{value: 200 ether}(0, DEITY_SYMBOL, 0);
         vm.prank(address(game));
         coin.mintForGame(DEITY, 1_000_000);
         for (uint256 i; i < ACTORS; ++i) {
             address a = _actor(i);
             vm.deal(a, 10_000 ether);
-            vm.prank(a);
-            game.setOperatorApproval(OPERATOR, true);
         }
     }
 
@@ -1528,6 +1532,11 @@ contract ParimutuelBetGateDoorsTest is DeployProtocol {
         assertEq(freshId, 0);
     }
 
+    function _idOrRegister(address who) private returns (uint32 id) {
+        id = game.walletIdOf(who);
+        if (id == 0) id = _giveWalletId(who);
+    }
+
     function _call(address from, uint256 value, bytes memory data) private returns (bool ok) {
         vm.prank(from);
         (ok, ) = address(game).call{value: value}(data);
@@ -1537,24 +1546,30 @@ contract ParimutuelBetGateDoorsTest is DeployProtocol {
     function _door(uint256 kind, address who, address other, uint256 r) private returns (bool ok) {
         uint256 price = game.mintPrice();
         if (kind == 0) {
-            ok = _call(who, price, abi.encodeCall(DegenerusGame.purchase, (who, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false)));
+            ok = _call(who, price, abi.encodeCall(DegenerusGame.purchase, (uint32(0), 400, 0, bytes32(0), MintPaymentKind.DirectEth, false)));
         } else if (kind == 1) {
-            ok = _call(who, price, abi.encodeCall(DegenerusGame.purchase, (who, 0, 1, bytes32(0), MintPaymentKind.DirectEth, false)));
+            ok = _call(who, price, abi.encodeCall(DegenerusGame.purchase, (uint32(0), 0, 1, bytes32(0), MintPaymentKind.DirectEth, false)));
         } else if (kind == 2) {
-            ok = _call(OPERATOR, price, abi.encodeCall(DegenerusGame.purchase, (who, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false)));
+            // An operator acts only for an allocated account; a wallet with no ID is bought for by its own caller.
+            uint32 whoId = game.walletIdOf(who);
+            if (whoId != 0) {
+                vm.prank(who);
+                game.setOperatorApproval(0, OPERATOR, true);
+            }
+            ok = _call(OPERATOR, price, abi.encodeCall(DegenerusGame.purchase, (whoId, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false)));
         } else if (kind == 3) {
-            ok = _call(who, 4 ether, abi.encodeCall(DegenerusGame.purchaseWhalePass, (who, 1, bytes32(0))));
+            ok = _call(who, 4 ether, abi.encodeCall(DegenerusGame.purchaseWhalePass, (uint32(0), 1, bytes32(0))));
         } else if (kind == 4) {
-            ok = _call(who, 1 ether, abi.encodeCall(DegenerusGame.purchaseLazyPass, (who, bytes32(0))));
+            ok = _call(who, 1 ether, abi.encodeCall(DegenerusGame.purchaseLazyPass, (uint32(0), bytes32(0))));
         } else if (kind == 5) {
             // Symbols 0 and 6 are the protocol's, 7 is DEITY's.
-            ok = _call(who, 200 ether, abi.encodeCall(DegenerusGame.purchaseDeityPass, (who, uint8(8 + (r >> 32) % 24), bytes32(0))));
+            ok = _call(who, 200 ether, abi.encodeCall(DegenerusGame.purchaseDeityPass, (uint32(0), uint8(8 + (r >> 32) % 24), bytes32(0))));
         } else if (kind == 6) {
-            ok = _call(who, 0.01 ether, abi.encodeCall(DegenerusGame.placeDegeneretteBet, (address(0), 0, uint128(0.01 ether), 1, 3)));
+            ok = _call(who, 0.01 ether, abi.encodeCall(DegenerusGame.placeDegeneretteBet, (uint32(0), 0, uint128(0.01 ether), 1, 3)));
         } else if (kind == 7) {
-            ok = _call(who, 0.01 ether, abi.encodeCall(DegenerusGame.placeDegeneretteBet, (other, 0, uint128(0.01 ether), 1, 3)));
+            ok = _call(who, 0.01 ether, abi.encodeCall(DegenerusGame.placeDegeneretteBet, (game.walletIdOf(other), 0, uint128(0.01 ether), 1, 3)));
         } else if (kind == 8) {
-            ok = _call(DEITY, 0, abi.encodeCall(DegenerusGame.smite, (uint256(DEITY_SYMBOL), who)));
+            ok = _call(DEITY, 0, abi.encodeCall(DegenerusGame.smite, (uint256(DEITY_SYMBOL), _idOrRegister(who))));
         } else if (kind == 9) {
             _giveWalletId(who);
             ok = true;
@@ -1566,13 +1581,13 @@ contract ParimutuelBetGateDoorsTest is DeployProtocol {
             vm.prank(address(game));
             coin.mintForGame(who, 1_000);
             vm.prank(who);
-            (ok, ) = address(coinflip).call(abi.encodeCall(Coinflip.depositCoinflip, (address(0), 1_000)));
+            (ok, ) = address(coinflip).call(abi.encodeCall(Coinflip.depositCoinflip, (uint32(0), 1_000)));
         } else if (kind == 12) {
-            ok = _call(DEITY, 0, abi.encodeCall(DegenerusGame.decurse, (who)));
+            ok = _call(DEITY, 0, abi.encodeCall(DegenerusGame.decurse, (_idOrRegister(who))));
         } else if (kind == 13) {
-            ok = _call(who, 1 ether, abi.encodeCall(DegenerusGame.depositAfkingFunding, (who)));
+            ok = _call(who, 1 ether, abi.encodeCall(DegenerusGame.depositAfkingFunding, (_idOrRegister(who))));
         } else {
-            ok = _call(who, 0.05 ether, abi.encodeCall(DegenerusGame.buyPresaleBox, (who, 0.05 ether)));
+            ok = _call(who, 0.05 ether, abi.encodeCall(DegenerusGame.buyPresaleBox, (uint32(0), 0.05 ether)));
         }
     }
 
@@ -1614,22 +1629,23 @@ contract ParimutuelBetGateDoorsTest is DeployProtocol {
         );
     }
 
-    /// A smite writes only the curse field of a stranger's word: no ID, no bet.
+    /// A smite writes only the curse field of a registered, never-bought word: no bet.
     function test_SmiteOnlyWordCannotBet() public {
         address target = _actor(0);
+        uint32 targetId = _giveWalletId(target);
         vm.prank(DEITY);
-        game.smite(DEITY_SYMBOL, target);
+        game.smite(DEITY_SYMBOL, targetId);
         assertGt(game.curseCountOf(target), 0, "fixture: smitten");
-        assertEq(game.walletIdOf(target), 0, "a smite registers nobody");
+        assertEq(game.walletIdOf(target), targetId, "a smite allocates no new ID");
         (bool mayBet, bool earns, uint32 id) = quests.marketBetGates(target, game.level());
         assertFalse(mayBet || earns);
-        assertEq(id, 0);
+        assertEq(id, targetId);
         _openRound();
         vm.prank(address(game));
         coin.mintForGame(target, STAKE_UNITS);
         vm.prank(target);
         vm.expectRevert(DegenerusParimutuel.NotEligible.selector);
-        parimutuel.placeBet(address(0), true);
+        parimutuel.placeBet(0, true);
     }
 
     uint256 private constant STAKE_UNITS = 1_000;
@@ -1647,7 +1663,7 @@ contract ParimutuelBetGateDoorsTest is DeployProtocol {
         vm.prank(address(game));
         coin.mintForGame(flipper, STAKE_UNITS * 2);
         vm.prank(flipper);
-        coinflip.depositCoinflip(address(0), STAKE_UNITS);
+        coinflip.depositCoinflip(0, STAKE_UNITS);
         assertGt(game.walletIdOf(flipper), 0, "a deposit registers");
         (mayBet, , ) = quests.marketBetGates(flipper, game.level());
         assertFalse(mayBet, "a Coinflip registration is not participation");
@@ -1655,10 +1671,10 @@ contract ParimutuelBetGateDoorsTest is DeployProtocol {
         _openRound();
         vm.prank(hooked);
         vm.expectRevert(DegenerusParimutuel.NotEligible.selector);
-        parimutuel.placeBet(address(0), true);
+        parimutuel.placeBet(0, true);
         vm.prank(flipper);
         vm.expectRevert(DegenerusParimutuel.NotEligible.selector);
-        parimutuel.placeBet(address(0), true);
+        parimutuel.placeBet(0, true);
     }
 
     /// A real buyer's bet is booked under its wallet ID.
@@ -1666,7 +1682,7 @@ contract ParimutuelBetGateDoorsTest is DeployProtocol {
         address buyer = _actor(3);
         uint256 price = game.mintPrice();
         vm.prank(buyer);
-        game.purchase{value: price}(buyer, 400, 0, 0, MintPaymentKind.DirectEth, false);
+        game.purchase{value: price}(0, 400, 0, 0, MintPaymentKind.DirectEth, false);
         uint32 id = game.walletIdOf(buyer);
         assertGt(id, 0);
         uint24 round = _openRound();
@@ -1674,7 +1690,7 @@ contract ParimutuelBetGateDoorsTest is DeployProtocol {
         coin.mintForGame(buyer, STAKE_UNITS);
         vm.recordLogs();
         vm.prank(buyer);
-        parimutuel.placeBet(address(0), true);
+        parimutuel.placeBet(0, true);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool seen;
         for (uint256 i; i < logs.length; ++i) {

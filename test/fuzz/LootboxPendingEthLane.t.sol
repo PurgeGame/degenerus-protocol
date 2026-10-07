@@ -52,7 +52,7 @@ contract LootboxPendingEthLane is DeployProtocol {
         uint256 cost1 = 2 * priceWei + 0.5 ether;
         vm.prank(actor);
         game.purchase{value: cost1 + 1 ether}(
-            actor, 400, BoxOrderLib.boOrder(2, 0, 0, 1, 0.5 ether), bytes32(0), MintPaymentKind.DirectEth, false
+            0, 400, BoxOrderLib.boOrder(2, 0, 0, 1, 0.5 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         (uint48 idx1, uint64 pend1, uint64 thr1, uint40 flip1) = _lanes();
         assertEq(idx1, idx0, "the index lane is untouched by a buy");
@@ -64,7 +64,7 @@ contract LootboxPendingEthLane is DeployProtocol {
         uint256 cost2 = 3 * 5 * priceWei;
         vm.prank(actor);
         game.purchase{value: cost2 + 1 ether}(
-            actor, 400, BoxOrderLib.boOrder(0, 3, 0, 0, 0), bytes32(0), MintPaymentKind.DirectEth, false
+            0, 400, BoxOrderLib.boOrder(0, 3, 0, 0, 0), bytes32(0), MintPaymentKind.DirectEth, false
         );
         (uint48 idx2, uint64 pend2, uint64 thr2,) = _lanes();
         assertEq(idx2, idx0, "still the same index");
@@ -79,7 +79,7 @@ contract LootboxPendingEthLane is DeployProtocol {
         (uint48 idx0, uint64 pend0, uint64 thr0, uint40 flip0) = _lanes();
 
         vm.prank(actor);
-        game.purchaseWhalePass{value: 2.4 ether}(actor, 1, bytes32(0));
+        game.purchaseWhalePass{value: 2.4 ether}(0, 1, bytes32(0));
         (uint48 idx1, uint64 pend1, uint64 thr1, uint40 flip1) = _lanes();
         assertEq(idx1, idx0, "the index lane is untouched by a pass buy");
         assertEq(thr1, thr0, "the threshold lane is untouched");
@@ -90,7 +90,7 @@ contract LootboxPendingEthLane is DeployProtocol {
         address lazy = makeAddr("lazyActor");
         vm.deal(lazy, 10 ether);
         vm.prank(lazy);
-        game.purchaseLazyPass{value: 0.24 ether}(lazy, bytes32(0));
+        game.purchaseLazyPass{value: 0.24 ether}(0, bytes32(0));
         (uint48 idx2, uint64 pend2, uint64 thr2,) = _lanes();
         assertEq(idx2, idx0, "still the same index");
         assertEq(thr2, thr0, "threshold still untouched");

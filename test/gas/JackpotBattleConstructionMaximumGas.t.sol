@@ -470,7 +470,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
         _giveWalletId(locked);
         vm.prank(locked);
         vm.expectRevert(bytes4(keccak256("BetLocked()")));
-        CrapsBattle(address(crapsBattle)).setPreferredBoard(0);
+        CrapsBattle(address(crapsBattle)).setPreferredBoard(0, 0);
         assertTrue(game.rngLocked());
         (ok,) = _mine(12_000_000);
         assertTrue(ok);

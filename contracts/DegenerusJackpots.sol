@@ -112,7 +112,8 @@ contract DegenerusJackpots is IDegenerusJackpots {
     event BafSkipped(uint24 indexed lvl, uint24 day);
 
     /// @notice Emitted when the WWXRP consolation for a skipped bracket is claimed.
-    /// @param player Score owner credited with the mint (claims are permissionless).
+    /// @param player Key of the score owner account; its payee receives the mint (claims are
+    ///        permissionless).
     /// @param lvl Skipped BAF bracket level.
     /// @param score Frozen bracket score consumed by the claim (FLIP-denominated).
     /// @param wwxrpAmount WWXRP requested (score / 1000, minimum 1 for a positive score), before gameMintScale.
@@ -437,11 +438,14 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  redeemed once at score / 1000, minimum 1 for a positive score.      |
       +======================================================================+*/
 
-    /// @notice Claim the WWXRP consolation for a player's skipped BAF bracket.
+    /// @notice Claim the WWXRP consolation of account `id` for a skipped BAF bracket.
     /// @dev Permissionless: anyone may execute, but the mint always goes to
-    ///      the recorded score owner — no value can move from a non-consenting
+    ///      the score owner's payee — no value can move from a non-consenting
     ///      party. The score is keyed by the owner's Game wallet ID; a wallet without
-    ///      one holds no score. Pays only when the bracket is marked skipped and the score
+    ///      one holds no score. `id == 0` is the caller (ID from Game `walletIdOf`, paid
+    ///      to the caller); any other ID resolves its payee through Game
+    ///      `resolveAccount` (authorization is not required). Pays only when the bracket
+    ///      is marked skipped and the score
     ///      belongs to the bracket's live epoch (a resolved bracket bumped its
     ///      epoch, so its scores read stale and pay nothing). Deleting the
     ///      score slot is the claim flag — no separate mapping. The delete can
@@ -449,22 +453,29 @@ contract DegenerusJackpots is IDegenerusJackpots {
     ///      claimable bracket can never resolve later. VAULT's consolation
     ///      (it accrues bracket score from its daily flips) escrows into its
     ///      WWXRP mint allowance via the token's vault routing.
-    /// @param player Score owner credited with the mint.
+    /// @param id Score owner account (0 = caller).
     /// @param lvl Skipped bracket level to claim.
+    /// @custom:reverts E (Game) When `id` is unallocated.
     /// @custom:reverts NothingToClaim When the bracket is not skipped, the
     ///         score is stale/absent/already claimed.
-    function claimBafConsolation(address player, uint24 lvl) external {
+    function claimBafConsolation(uint32 id, uint24 lvl) external {
         BafLevel memory lv = bafLevel[lvl];
         if (!lv.skipped) revert NothingToClaim();
-        // A wallet with no ID reads the never-written key 0: no score, nothing to claim.
-        uint32 id = degenerusGame.walletIdOf(player);
+        address key = msg.sender;
+        address payee = msg.sender;
+        if (id == 0) {
+            // A caller with no ID reads the never-written key 0: no score, nothing to claim.
+            id = degenerusGame.walletIdOf(msg.sender);
+        } else {
+            (key, payee, ) = degenerusGame.resolveAccount(id, msg.sender);
+        }
         BafPlayer memory ps = bafPlayer[lvl][id];
         if (ps.epoch != lv.epoch) revert NothingToClaim();
         uint256 amount = _bafConsolationAmount(ps.total);
         if (amount == 0) revert NothingToClaim();
         delete bafPlayer[lvl][id];
-        emit BafConsolationClaimed(player, lvl, ps.total, amount);
-        wwxrp.mintPrize(player, amount);
+        emit BafConsolationClaimed(key, lvl, ps.total, amount);
+        wwxrp.mintPrize(payee, amount);
     }
 
     /// @notice Claimable WWXRP consolation for a player at a bracket level, before WWXRP's

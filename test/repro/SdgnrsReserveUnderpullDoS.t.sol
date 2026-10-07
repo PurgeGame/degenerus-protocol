@@ -117,7 +117,7 @@ contract SdgnrsReserveUnderpullDoS is RedemptionCloseTools {
         // 6b. X's resolved claim must be payable (pre-fix: reverts TransferFailed inside _payEth).
         uint256 xBefore = playerX.balance;
         vm.prank(playerX);
-        sdgnrs.claimRedemption(playerX, dayD);
+        sdgnrs.claimRedemption(0, dayD);
         assertGt(playerX.balance, xBefore, "FIX B: the resolved claimant must receive their redemption");
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0, "reserve fully released after the only claimant is paid");
     }

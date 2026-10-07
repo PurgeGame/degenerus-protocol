@@ -164,7 +164,7 @@ contract MiddayRngCreditTest is DeployProtocol {
     function _purchaseBelowThreshold() internal {
         vm.prank(outsider);
         game.purchase{value: 0.5 ether}(
-            outsider, 0, BoxOrderLib.boCustomFloor(0.5 ether), bytes32(0), MintPaymentKind.DirectEth, false
+            0, 0, BoxOrderLib.boCustomFloor(0.5 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
     }
 
@@ -172,7 +172,7 @@ contract MiddayRngCreditTest is DeployProtocol {
     function _purchaseAboveThreshold() internal {
         vm.prank(outsider);
         game.purchase{value: 1.01 ether}(
-            outsider, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
+            0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
     }
 
@@ -454,7 +454,7 @@ contract MiddayRngCreditTest is DeployProtocol {
         vm.prank(address(game));
         coin.mintForGame(outsider, 1_000);
         vm.prank(outsider);
-        game.placeDegeneretteBet(address(0), 1, 200, 1, 0);
+        game.placeDegeneretteBet(0, 1, 200, 1, 0);
         // lootboxRngPacked: bits 48..87 pending ETH, bits 184..223 pending FLIP.
         uint256 packed = uint256(vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED)));
         assertEq((packed >> 48) & type(uint40).max, 0, "harness: no pending ETH");
@@ -485,7 +485,7 @@ contract MiddayRngCreditTest is DeployProtocol {
         vm.deal(topUp, 2 ether);
         vm.prank(topUp);
         game.purchase{value: 1 ether}(
-            topUp, 0, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
+            0, 0, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         assertEq(_actionFor(outsider), 18, "at the threshold every caller sees the request");
         assertEq(game.nextMinerAction(), 18, "and so does the creditless view");

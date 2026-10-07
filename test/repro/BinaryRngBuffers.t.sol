@@ -72,9 +72,9 @@ contract BinaryRngBuffersTest is DeployProtocol {
     }
     function _buy() private {
         vm.prank(buyer);
-        game.purchase{value: 1 ether}(buyer, 0, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: 1 ether}(0, 0, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         vm.prank(buyer);
-        game.placeDegeneretteBet{value: 0.005 ether}(buyer, 0, uint128(0.005 ether), 1, uint8(9));
+        game.placeDegeneretteBet{value: 0.005 ether}(0, 0, uint128(0.005 ether), 1, uint8(9));
     }
     /// @dev Drain the delivered read session through the keeper. A 2M allowance can never admit
     ///      a fresh request (RNG_REQUEST plus tail), so the keeper stops at completion and the

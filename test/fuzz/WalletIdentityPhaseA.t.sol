@@ -59,7 +59,7 @@ contract WalletIdentityPhaseATest is DeployProtocol {
         uint256 value = _price() * tickets;
         vm.deal(buyer, value + 1 ether);
         vm.prank(buyer);
-        game.purchase{value: value}(buyer, tickets * 400, 0, 0, MintPaymentKind.DirectEth, false);
+        game.purchase{value: value}(0, tickets * 400, 0, 0, MintPaymentKind.DirectEth, false);
     }
 
     function _registeredLogs(Vm.Log[] memory logs) private view returns (uint256 n) {
@@ -120,7 +120,7 @@ contract WalletIdentityPhaseATest is DeployProtocol {
             BitPackingLib.MASK_24 << BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT,
             uint256(3) << BitPackingLib.WHALE_PASS_TYPE_SHIFT,
             uint256(1) << BitPackingLib.SEAT_CLAIMED_SHIFT,
-            uint256(1) << BitPackingLib.SEAT_ENCUMBERED_SHIFT,
+            uint256(1) << BitPackingLib.SMURF_FLAG_SHIFT,
             BitPackingLib.MASK_24 << BitPackingLib.MINT_STREAK_LAST_COMPLETED_SHIFT,
             uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT,
             BitPackingLib.MASK_24 << BitPackingLib.AFFILIATE_BONUS_LEVEL_SHIFT,
@@ -146,25 +146,25 @@ contract WalletIdentityPhaseATest is DeployProtocol {
         uint256 price = _price();
         vm.deal(boxBuyer, 10 ether);
         vm.prank(boxBuyer);
-        game.purchase{value: price}(boxBuyer, 0, 1, 0, MintPaymentKind.DirectEth, false);
+        game.purchase{value: price}(0, 0, 1, 0, MintPaymentKind.DirectEth, false);
         assertGt(game.walletIdOf(boxBuyer), 0, "box-only buyer");
 
         address whale = address(0x3A1E);
         vm.deal(whale, 10 ether);
         vm.prank(whale);
-        game.purchaseWhalePass{value: 4 ether}(whale, 1, 0);
+        game.purchaseWhalePass{value: 4 ether}(0, 1, 0);
         assertGt(game.walletIdOf(whale), 0, "whale pass buyer");
 
         address lazy = address(0x1A2E);
         vm.deal(lazy, 10 ether);
         vm.prank(lazy);
-        game.purchaseLazyPass{value: 1 ether}(lazy, 0);
+        game.purchaseLazyPass{value: 1 ether}(0, 0);
         assertGt(game.walletIdOf(lazy), 0, "lazy pass buyer");
 
         address deity = address(0xDE17);
         vm.deal(deity, 200 ether);
         vm.prank(deity);
-        game.purchaseDeityPass{value: 200 ether}(deity, 3, 0);
+        game.purchaseDeityPass{value: 200 ether}(0, 3, 0);
         assertGt(game.walletIdOf(deity), 0, "deity buyer");
     }
 
@@ -174,7 +174,7 @@ contract WalletIdentityPhaseATest is DeployProtocol {
         address bettor = address(0xBE77);
         vm.deal(bettor, 1 ether);
         vm.prank(bettor);
-        game.placeDegeneretteBet{value: 0.01 ether}(address(0), 0, uint128(0.01 ether), 1, 3);
+        game.placeDegeneretteBet{value: 0.01 ether}(0, 0, uint128(0.01 ether), 1, 3);
         assertGt(game.walletIdOf(bettor), 0, "bet owner registered");
     }
 
@@ -190,7 +190,7 @@ contract WalletIdentityPhaseATest is DeployProtocol {
         vm.deal(small, 10 ether);
         vm.prank(small);
         vm.expectRevert(DegenerusGameStorage.E.selector);
-        game.purchase{value: price}(small, 400, 0, 0, MintPaymentKind.DirectEth, false);
+        game.purchase{value: price}(0, 400, 0, 0, MintPaymentKind.DirectEth, false);
 
         uint256 tickets = (0.04 ether + price - 1) / price;
         _buyTickets(small, tickets);
@@ -226,7 +226,7 @@ contract WalletIdentityPhaseATest is DeployProtocol {
         vm.deal(next, value);
         vm.prank(next);
         vm.expectRevert(DegenerusGameStorage.E.selector);
-        game.purchase{value: value}(next, tickets * 400, 0, 0, MintPaymentKind.DirectEth, false);
+        game.purchase{value: value}(0, tickets * 400, 0, 0, MintPaymentKind.DirectEth, false);
         _buyTickets(last, 1);
     }
 
@@ -246,10 +246,11 @@ contract WalletIdentityPhaseATest is DeployProtocol {
 
         vm.prank(fresh);
         vm.expectRevert(DegenerusGameStorage.E.selector);
-        game.depositAfkingFunding{value: 1 ether}(address(0xF4E6));
+        game.depositAfkingFunding{value: 1 ether}(0);
 
-        vm.expectRevert(DegenerusGameStorage.NothingToClaim.selector);
-        game.claimWhalePass(fresh);
+        vm.prank(fresh);
+        vm.expectRevert(DegenerusGameStorage.E.selector);
+        game.claimWhalePass(0);
 
         assertEq(game.claimableWinningsOf(fresh), 0, "no ID, no balance");
         assertEq(game.afkingFundingOf(fresh), 0, "no ID, no afking");
@@ -257,14 +258,15 @@ contract WalletIdentityPhaseATest is DeployProtocol {
         // Overpayment by a payer that is not the beneficiary needs the payer's ID; exact payment does not.
         address buyer = address(0xB1);
         _buyTickets(buyer, 1);
+        uint32 buyerId = game.walletIdOf(buyer);
         vm.prank(buyer);
-        game.setOperatorApproval(fresh, true);
+        game.setOperatorApproval(0, fresh, true);
         uint256 price = _price();
         vm.prank(fresh);
         vm.expectRevert(DegenerusGameStorage.E.selector);
-        game.purchase{value: price * 2}(buyer, 400, 0, 0, MintPaymentKind.DirectEth, false);
+        game.purchase{value: price * 2}(buyerId, 400, 0, 0, MintPaymentKind.DirectEth, false);
         vm.prank(fresh);
-        game.purchase{value: price}(buyer, 400, 0, 0, MintPaymentKind.DirectEth, false);
+        game.purchase{value: price}(buyerId, 400, 0, 0, MintPaymentKind.DirectEth, false);
         assertEq(game.walletIdOf(fresh), 0, "operator stays unregistered");
     }
 
@@ -291,7 +293,7 @@ contract WalletIdentityPhaseATest is DeployProtocol {
                 uint256 price = _price();
                 vm.deal(who, price + 1 ether);
                 vm.prank(who);
-                game.purchase{value: price}(who, 0, 1, 0, MintPaymentKind.DirectEth, false);
+                game.purchase{value: price}(0, 0, 1, 0, MintPaymentKind.DirectEth, false);
             }
         }
         uint256 end = _length();

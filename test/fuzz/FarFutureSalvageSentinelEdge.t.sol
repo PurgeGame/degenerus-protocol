@@ -76,7 +76,7 @@ contract FarFutureSalvageSentinelEdgeTest is DeployProtocol {
 
         vm.prank(seller);
         vm.expectRevert(DegenerusGameStorage.Insolvent.selector);
-        game.sellFarFutureEntries(seller, levels, qtys, idxs);
+        game.sellFarFutureEntries(0, levels, qtys, idxs);
 
         assertEq(_ownedEntries(seller, 110), 40, "far entries untouched by the reverted swap");
     }
@@ -87,7 +87,7 @@ contract FarFutureSalvageSentinelEdgeTest is DeployProtocol {
         _seedAfking(seller, 1);
 
         vm.prank(seller);
-        game.sellFarFutureEntries(seller, levels, qtys, idxs);
+        game.sellFarFutureEntries(0, levels, qtys, idxs);
 
         assertEq(_ownedEntries(seller, 110), 0, "far entries fully sold");
         uint256 queued = uint256(TicketQueueStorage.owed(address(game), 90, seller));
@@ -97,9 +97,10 @@ contract FarFutureSalvageSentinelEdgeTest is DeployProtocol {
     function test_NonSellingSinksCannotBeSoldByAnotherCaller() public {
         address[2] memory sinks = [ContractAddresses.SDGNRS, ContractAddresses.GNRUS];
         for (uint256 i; i < sinks.length; ++i) {
+            uint32 sinkId = game.walletIdOf(sinks[i]);
             vm.prank(seller);
-            vm.expectRevert(DegenerusGame.NotApproved.selector);
-            game.sellFarFutureEntries(sinks[i], levels, qtys, idxs);
+            vm.expectRevert(DegenerusGameStorage.NotApproved.selector);
+            game.sellFarFutureEntries(sinkId, levels, qtys, idxs);
         }
     }
 

@@ -46,6 +46,7 @@ contract BigRecordPoolTest is DeployProtocol {
     address private player;
     address private rival;
     address private operator;
+    uint32 private playerId;
 
     function setUp() public {
         _deployProtocol();
@@ -54,8 +55,9 @@ contract BigRecordPoolTest is DeployProtocol {
         operator = makeAddr("record_operator");
         // Wall clock at day 2 so deposits target day 3 (clear of the day-1/2 seeds).
         _warpToDay(2);
+        playerId = _giveWalletId(player);
         vm.prank(player);
-        game.setOperatorApproval(operator, true);
+        game.setOperatorApproval(0, operator, true);
     }
 
     // ---------------------------------------------------------------------
@@ -297,7 +299,7 @@ contract BigRecordPoolTest is DeployProtocol {
         vm.prank(GAME);
         coin.mintForGame(player, FLIP_MIN);
         vm.prank(operator);
-        coinflip.depositCoinflip(player, FLIP_MIN);
+        coinflip.depositCoinflip(playerId, FLIP_MIN);
         assertEq(coinflip.biggestFlipEver(), 0, "indirect deposits stay off the record");
     }
 
@@ -412,6 +414,6 @@ contract BigRecordPoolTest is DeployProtocol {
         vm.prank(GAME);
         coin.mintForGame(who, amount);
         vm.prank(who);
-        coinflip.depositCoinflip(address(0), amount);
+        coinflip.depositCoinflip(0, amount);
     }
 }

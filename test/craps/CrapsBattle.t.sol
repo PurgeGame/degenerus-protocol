@@ -2905,9 +2905,9 @@ contract CrapsBattleTest is CrapsPins {
     function test_theVaultPlaysItsPreferredBoard() public {
         uint32 board = uint32((uint256(3) << 3) | (uint256(1) << 18) | (uint256(3) << 24));
         vm.prank(vaultOwner);
-        craps.setPreferredBoard(1);
+        craps.setPreferredBoard(0, 1);
         vm.prank(ContractAddresses.VAULT);
-        craps.setPreferredBoard(board);
+        craps.setPreferredBoard(0, board);
 
         _openDay();
         uint256 daySlot = craps._daySlotOfPub(craps.currentDayIndex());
@@ -2922,13 +2922,13 @@ contract CrapsBattleTest is CrapsPins {
     function test_theVaultsPreferredBoardIsChangeableAndRestorable() public {
         uint32 board = uint32((uint256(3) << 3) | (uint256(1) << 18) | (uint256(3) << 24));
         vm.prank(ContractAddresses.VAULT);
-        craps.setPreferredBoard(board);
+        craps.setPreferredBoard(0, board);
         _openDay();
         uint256 seat = (craps._daySlotOfPub(craps.currentDayIndex()) << 64) | 2;
         assertEq(craps.betOf(seat).chips, board);
 
         vm.prank(ContractAddresses.VAULT);
-        craps.setPreferredBoard(0);
+        craps.setPreferredBoard(0, 0);
         assertEq(craps.betOf(seat).chips, board, "preference change rewrote an existing seat");
 
         _nextWordedDay();
@@ -2945,14 +2945,14 @@ contract CrapsBattleTest is CrapsPins {
         uint32 board = uint32(SEVEN_PACKED);
         craps.setPassCredits(v, 0, 0);
         vm.prank(v);
-        craps.setPreferredBoard(board);
+        craps.setPreferredBoard(0, board);
         vm.prank(ContractAddresses.GAME);
         uint24 reservedDay = craps.deliverPasses(_idFor(v), 2, 0);
         uint256 prepaid = (craps._daySlotOfPub(reservedDay) << 64) | craps.daySeatNumberOf(reservedDay, v);
         assertEq(craps.betOf(prepaid).chips, board);
 
         vm.prank(v);
-        craps.setPreferredBoard(0);
+        craps.setPreferredBoard(0, 0);
         _nextWordedDay();
         _openDay();
         assertEq(craps.betOf(prepaid).chips, board, "opening rewrote a prepaid seat");
@@ -2975,24 +2975,24 @@ contract CrapsBattleTest is CrapsPins {
             uint256 first = placed > 3 ? 3 : placed;
             uint256 rest = placed - first;
             uint256 second = rest > 3 ? 3 : rest;
-            craps.setPreferredBoard(uint32(first | (second << 9) | ((rest - second) << 12)));
+            craps.setPreferredBoard(0, uint32(first | (second << 9) | ((rest - second) << 12)));
         }
         vm.expectRevert(CrapsBattleStorage.BadRandomCount.selector);
-        craps.setPreferredBoard(uint32(3 | (uint256(3) << 9) | (uint256(2) << 12)));
+        craps.setPreferredBoard(0, uint32(3 | (uint256(3) << 9) | (uint256(2) << 12)));
         vm.expectRevert(CrapsBattleStorage.TooManyChipsOnALeg.selector);
-        craps.setPreferredBoard(uint32((uint256(4) << 9) | (uint256(3) << 12)));
+        craps.setPreferredBoard(0, uint32((uint256(4) << 9) | (uint256(3) << 12)));
         vm.expectRevert(CrapsBattleStorage.BoardPlaysBothSides.selector);
-        craps.setPreferredBoard(uint32(uint256(3) | (uint256(1) << 9) | (uint256(3) << 27)));
+        craps.setPreferredBoard(0, uint32(uint256(3) | (uint256(1) << 9) | (uint256(3) << 27)));
         vm.expectRevert(CrapsBattleStorage.BadRandomCount.selector);
-        craps.setPreferredBoard(type(uint32).max);
-        craps.setPreferredBoard(uint32(SEVEN_PACKED));
+        craps.setPreferredBoard(0, type(uint32).max);
+        craps.setPreferredBoard(0, uint32(SEVEN_PACKED));
         vm.stopPrank();
 
         game.setRngLocked(true);
         vm.startPrank(ContractAddresses.VAULT);
-        craps.setPreferredBoard(uint32(SEVEN_PACKED)); // identical board is a no-op
+        craps.setPreferredBoard(0, uint32(SEVEN_PACKED)); // identical board is a no-op
         vm.expectRevert(CrapsBattleStorage.BetLocked.selector);
-        craps.setPreferredBoard(0);
+        craps.setPreferredBoard(0, 0);
         vm.stopPrank();
         assertEq(craps.preferredBoardOf(game.walletIdOf(ContractAddresses.VAULT)), SEVEN_PACKED);
     }

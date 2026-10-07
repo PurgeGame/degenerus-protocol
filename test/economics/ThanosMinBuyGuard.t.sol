@@ -115,8 +115,8 @@ contract ThanosMinBuyGuard is DeployProtocol {
         vm.prank(_buyer);
         (ok, ) = address(game).call{value: cost}(
             abi.encodeWithSignature(
-                "purchase(address,uint256,uint256,bytes32,uint8,bool)",
-                _buyer,
+                "purchase(uint32,uint256,uint256,bytes32,uint8,bool)",
+                uint32(0),
                 qty,
                 boxOrder,
                 bytes32(0),

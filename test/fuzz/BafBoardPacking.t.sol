@@ -314,7 +314,7 @@ contract BafConsolationWalletIdsTest is DeployProtocol {
         uint256 before = wwxrp.balanceOf(p);
         vm.recordLogs();
         vm.prank(runner);
-        jackpots.claimBafConsolation(p, BRACKET);
+        jackpots.claimBafConsolation(id, BRACKET);
         assertEq(wwxrp.balanceOf(p) - before, 5 * wwxrp.gameMintScale(), "minted to the player's address");
         assertEq(wwxrp.balanceOf(runner), 0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -331,7 +331,7 @@ contract BafConsolationWalletIdsTest is DeployProtocol {
         assertTrue(seen);
         assertEq(jackpots.bafConsolationOf(p, BRACKET), 0);
         vm.expectRevert(DegenerusJackpots.NothingToClaim.selector);
-        jackpots.claimBafConsolation(p, BRACKET);
+        jackpots.claimBafConsolation(id, BRACKET);
     }
 
     /// @notice An address with no wallet ID (and a registered one with no score) gets view 0 and
@@ -344,16 +344,17 @@ contract BafConsolationWalletIdsTest is DeployProtocol {
         address x = makeAddr("consolation_idless");
         assertEq(jackpots.bafConsolationOf(x, BRACKET), 0);
         vm.expectRevert(DegenerusJackpots.NothingToClaim.selector);
-        jackpots.claimBafConsolation(x, BRACKET);
+        vm.prank(x);
+        jackpots.claimBafConsolation(0, BRACKET);
         assertEq(uint32(uint256(vm.load(address(game), GameSlotKeys.mintPacked(x))) >> 224), 0);
 
         address empty = makeAddr("consolation_no_score");
-        _giveWalletId(empty);
+        uint32 emptyId = _giveWalletId(empty);
         assertEq(jackpots.bafConsolationOf(empty, BRACKET), 0);
         vm.expectRevert(DegenerusJackpots.NothingToClaim.selector);
-        jackpots.claimBafConsolation(empty, BRACKET);
+        jackpots.claimBafConsolation(emptyId, BRACKET);
 
-        jackpots.claimBafConsolation(scorer, BRACKET);
+        jackpots.claimBafConsolation(id, BRACKET);
         assertEq(wwxrp.balanceOf(scorer), 2 * wwxrp.gameMintScale());
     }
 }

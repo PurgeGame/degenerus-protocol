@@ -117,7 +117,7 @@ describe("Multi-category boon coexistence", function () {
         await giveWalletId(game, recipient.address);
         const tx = await game
           .connect(deity)
-          .issueDeityBoon(deity.address, recipient.address, slot);
+          .issueDeityBoon(await game.walletIdOf(deity.address), await giveWalletId(game, recipient.address), slot);
         // DeityBoonIssued emitted via delegatecall -- decode with lootboxModule ABI
         const events = await getEvents(tx, lootboxModule, "DeityBoonIssued");
         expect(events.length).to.equal(1);
@@ -140,7 +140,7 @@ describe("Multi-category boon coexistence", function () {
     // Alice becomes a deity
     await game
       .connect(alice)
-      .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+      .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
     const Viewer = await hre.ethers.getContractFactory("DeityBoonViewer");
     const viewer = await Viewer.deploy();
@@ -186,7 +186,7 @@ describe("Multi-category boon coexistence", function () {
 
     await game
       .connect(alice)
-      .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+      .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
     const Viewer = await hre.ethers.getContractFactory("DeityBoonViewer");
     const viewer = await Viewer.deploy();
@@ -227,7 +227,7 @@ describe("Multi-category boon coexistence", function () {
 
     await game
       .connect(alice)
-      .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+      .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
     const Viewer = await hre.ethers.getContractFactory("DeityBoonViewer");
     const viewer = await Viewer.deploy();
@@ -272,7 +272,7 @@ describe("Multi-category boon coexistence", function () {
 
     await game
       .connect(alice)
-      .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+      .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
     const Viewer = await hre.ethers.getContractFactory("DeityBoonViewer");
     const viewer = await Viewer.deploy();
@@ -294,7 +294,7 @@ describe("Multi-category boon coexistence", function () {
         await giveWalletId(game, bob.address);
         await game
           .connect(alice)
-          .issueDeityBoon(alice.address, bob.address, slot);
+          .issueDeityBoon(await game.walletIdOf(alice.address), await giveWalletId(game, bob.address), slot);
         deityBoonType = Number(slots[slot]);
         break;
       }
@@ -312,7 +312,7 @@ describe("Multi-category boon coexistence", function () {
     for (let i = 0; i < 5; i++) {
       const tx = await game
         .connect(bob)
-        .purchaseWhalePass(bob.address, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
+        .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
       // Whale bundle succeeds -- _rollLootboxBoons runs without exclusivity gate
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
@@ -325,7 +325,7 @@ describe("Multi-category boon coexistence", function () {
 
     await game
       .connect(alice)
-      .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+      .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
     const Viewer = await hre.ethers.getContractFactory("DeityBoonViewer");
     const viewer = await Viewer.deploy();
@@ -354,7 +354,7 @@ describe("Multi-category boon coexistence", function () {
           await giveWalletId(game, bob.address);
           const tx = await game
             .connect(alice)
-            .issueDeityBoon(alice.address, bob.address, slot);
+            .issueDeityBoon(await game.walletIdOf(alice.address), await giveWalletId(game, bob.address), slot);
           const events = await getEvents(tx, lootboxModule, "DeityBoonIssued");
           if (events.length > 0) {
             const emittedType = Number(events[0].args.boonType);

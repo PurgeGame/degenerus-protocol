@@ -51,7 +51,7 @@ contract PresaleBoxDrain is DeployProtocol {
         uint48 index = RecyclingState.writeBuffer(address(game));
         uint256 before = RecyclingState.boxCount(address(game), index);
         vm.prank(buyer);
-        game.buyPresaleBox{value: amount}(buyer, amount);
+        game.buyPresaleBox{value: amount}(0, amount);
         assertEq(RecyclingState.boxCount(address(game), index), before + 1, "one entry per presale purchase");
         assertEq(_entry(index, before).boId(), id, "the entry carries the buyer's wallet ID");
     }

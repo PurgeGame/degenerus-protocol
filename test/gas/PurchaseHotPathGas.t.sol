@@ -111,7 +111,7 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         returns (uint256 used)
     {
         vm.prank(BUYER);
-        game.purchase{value: fresh}(BUYER, quantity, boxes, referral, kind, false);
+        game.purchase{value: fresh}(0, quantity, boxes, referral, kind, false);
         used = vm.snapshotGasLastCall("purchase-hot-path");
     }
 
@@ -236,7 +236,7 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         uint256 cost = _price() * 11;
         vm.recordLogs();
         vm.prank(BUYER);
-        game.purchase{value: cost}(BUYER, 400, 0, 0, MintPaymentKind.DirectEth, true);
+        game.purchase{value: cost}(0, 400, 0, 0, MintPaymentKind.DirectEth, true);
         uint256 used = vm.snapshotGasLastCall("purchase-foil");
         _report(afking ? "afking_foil" : "foil_ticket", used, vm.getRecordedLogs());
     }
@@ -302,7 +302,7 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         if (afkingUsed > afking) {
             vm.expectRevert(DegenerusGameStorage.Insolvent.selector);
             vm.prank(BUYER);
-            game.purchase{value: fresh}(BUYER, quantity, box ? 1 : 0, 0, payment, false);
+            game.purchase{value: fresh}(0, quantity, box ? 1 : 0, 0, payment, false);
             assertEq(vm.load(address(game), balanceSlot), beforeBalance, "failed buy preserves balances");
             assertEq(game.claimablePoolView(), pool, "failed buy preserves liabilities");
         } else {

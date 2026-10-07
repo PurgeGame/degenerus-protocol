@@ -129,6 +129,10 @@ contract GoldenTicketFoilHarness is DegenerusGameFoilPackModule, WalletSeed {
         return _walletIdOf(who);
     }
 
+    function registerWallet(address who) external returns (uint32) {
+        return _seedWallet(who);
+    }
+
     function goldenTicketClaimed(
         address buyer,
         uint24 lvl
@@ -244,6 +248,7 @@ contract GoldenTicketFoilPack is Test {
     address internal constant BUYER =
         address(0x00000000000000000000000000000000000000B0);
     uint24 internal constant LVL = 3;
+    uint32 internal buyerId;
     uint256 internal constant ALL_GOLD_WORD = 304535; // 4 golds, all in ticket 0
     uint256 internal constant NO_GOLD_WORD = 2; // 0 golds
     uint256 internal constant TWO_GOLD_WORD = 1; // 2 golds, under the floor
@@ -271,6 +276,7 @@ contract GoldenTicketFoilPack is Test {
         GoldenTicketFoilHarness impl = new GoldenTicketFoilHarness();
         vm.etch(ContractAddresses.GAME, address(impl).code);
         h = GoldenTicketFoilHarness(payable(ContractAddresses.GAME));
+        buyerId = h.registerWallet(BUYER);
 
         // The grand delegatecalls the real jackpot module in the Game's context.
         DegenerusGameJackpotModule jm = new DegenerusGameJackpotModule();
@@ -413,7 +419,7 @@ contract GoldenTicketFoilPack is Test {
         seedAndDrain(ALL_GOLD_WORD);
 
         vm.recordLogs();
-        h.claimGoldenTicket(BUYER, LVL);
+        h.claimGoldenTicket(buyerId, LVL);
 
         assertEq(flipRec.calls(), 1, "one flip credit");
         assertEq(flipRec.lastPlayer(), h.walletIdOf(BUYER), "credited to the buyer");
@@ -446,17 +452,17 @@ contract GoldenTicketFoilPack is Test {
     function testClaimIsPermissionless() public {
         seedAndDrain(ALL_GOLD_WORD);
         vm.prank(address(0xCAFE));
-        h.claimGoldenTicket(BUYER, LVL);
+        h.claimGoldenTicket(buyerId, LVL);
         assertEq(flipRec.lastPlayer(), h.walletIdOf(BUYER), "credit follows the pack, not the caller");
     }
 
     function testClaimPaysOnce() public {
         seedAndDrain(ALL_GOLD_WORD);
-        h.claimGoldenTicket(BUYER, LVL);
+        h.claimGoldenTicket(buyerId, LVL);
         assertEq(flipRec.calls(), 1, "credited once");
 
         vm.expectRevert(DegenerusGameFoilPackModule.NoGoldenTicket.selector);
-        h.claimGoldenTicket(BUYER, LVL);
+        h.claimGoldenTicket(buyerId, LVL);
         assertEq(flipRec.calls(), 1, "no second credit");
     }
 
@@ -465,7 +471,7 @@ contract GoldenTicketFoilPack is Test {
     function testThreeScatteredGoldsPayTheFloorRung() public {
         seedAndDrain(THREE_GOLD_WORD);
         vm.recordLogs();
-        h.claimGoldenTicket(BUYER, LVL);
+        h.claimGoldenTicket(buyerId, LVL);
 
         (uint8 golds, uint8 allGold, uint256 flipCredit) = foilEventPayload(
             vm.getRecordedLogs()
@@ -478,35 +484,35 @@ contract GoldenTicketFoilPack is Test {
 
     function testFiveScatteredGoldsPayTheFiveRung() public {
         seedAndDrain(FIVE_GOLD_WORD);
-        h.claimGoldenTicket(BUYER, LVL);
+        h.claimGoldenTicket(buyerId, LVL);
         assertEq(flipRec.lastAmount(), 250_000, "the 5-gold rung");
     }
 
     function testClaimRevertsAtTwoGolds() public {
         seedAndDrain(TWO_GOLD_WORD);
         vm.expectRevert(DegenerusGameFoilPackModule.NoGoldenTicket.selector);
-        h.claimGoldenTicket(BUYER, LVL);
+        h.claimGoldenTicket(buyerId, LVL);
         assertEq(flipRec.calls(), 0, "nothing credited under the floor");
     }
 
     function testClaimRevertsWithNoGold() public {
         seedAndDrain(NO_GOLD_WORD);
         vm.expectRevert(DegenerusGameFoilPackModule.NoGoldenTicket.selector);
-        h.claimGoldenTicket(BUYER, LVL);
+        h.claimGoldenTicket(buyerId, LVL);
         assertEq(flipRec.calls(), 0, "nothing credited");
     }
 
     function testClaimRevertsWithoutAPack() public {
         h.setRngWord(RESOLVE_DAY, ALL_GOLD_WORD);
         vm.expectRevert(DegenerusGameFoilPackModule.NoGoldenTicket.selector);
-        h.claimGoldenTicket(BUYER, LVL);
+        h.claimGoldenTicket(buyerId, LVL);
     }
 
     /// @dev A pack whose resolveDay word has not sealed has no lines yet.
     function testClaimRevertsBeforeTheWordSeals() public {
         h.setFoilRecord(LVL, BUYER, MAX_MULT, RESOLVE_DAY, 0);
         vm.expectRevert(DegenerusGameFoilPackModule.NoGoldenTicket.selector);
-        h.claimGoldenTicket(BUYER, LVL);
+        h.claimGoldenTicket(buyerId, LVL);
     }
 
     /// @dev The claim closes from the liveness trigger on, matching the match claim:
@@ -517,7 +523,7 @@ contract GoldenTicketFoilPack is Test {
         // 365-day deploy idle timeout the liveness trigger is live.
         vm.warp(400 days);
         vm.expectRevert(DegenerusGameStorage.GameOver.selector);
-        h.claimGoldenTicket(BUYER, LVL);
+        h.claimGoldenTicket(buyerId, LVL);
     }
 
     // -- the snap valve reaches the price and stops there ----------------------
@@ -541,7 +547,7 @@ contract GoldenTicketFoilPack is Test {
         h.setLiveSnapShift(8);
         assertEq(h.liveSnapShiftFor(LVL), 8, "the live read really did move");
 
-        h.claimGoldenTicket(BUYER, LVL);
+        h.claimGoldenTicket(buyerId, LVL);
         assertEq(
             flipRec.lastAmount(),
             EXPECTED_FLIP,
@@ -555,7 +561,7 @@ contract GoldenTicketFoilPack is Test {
     function testClaimIgnoresTheValveLifting() public {
         seedAndDrain(ALL_GOLD_WORD);
         h.setLiveSnapShift(0);
-        h.claimGoldenTicket(BUYER, LVL);
+        h.claimGoldenTicket(buyerId, LVL);
         assertEq(flipRec.lastAmount(), EXPECTED_FLIP, "credit moved when the valve lifted");
     }
 
@@ -647,7 +653,7 @@ contract GoldenTicketFoilPack is Test {
     function testFlipRungsClaimableWhileRngLocked() public {
         seedAndDrain(ALL_GOLD_WORD);
         h.setRngLocked(true);
-        h.claimGoldenTicket(BUYER, LVL);
+        h.claimGoldenTicket(buyerId, LVL);
         assertEq(flipRec.lastAmount(), EXPECTED_FLIP, "ladder settles under the lock");
     }
 
@@ -669,7 +675,7 @@ contract GoldenTicketFoilPack is Test {
 
         // The pull is now shut for this pack — no ladder rung on top of the grand.
         vm.expectRevert(DegenerusGameFoilPackModule.NoGoldenTicket.selector);
-        h.claimGoldenTicket(BUYER, LVL);
+        h.claimGoldenTicket(buyerId, LVL);
         assertEq(flipRec.calls(), flipCalls, "no FLIP credit after the grand");
     }
 

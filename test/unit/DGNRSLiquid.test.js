@@ -525,7 +525,7 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
       // (a non-owner) can settle sDGNRS's claim directly — no sDGNRS-side wrapper needed.
       // She reaches the claim logic and reverts with NothingToClaim (empty claim), not an
       // authorization error.
-      await expect(game.connect(alice).claimWhalePass(sdgnrs.target))
+      await expect(game.connect(alice).claimWhalePass(await game.walletIdOf(sdgnrs.target)))
         .to.be.revertedWithCustomError(game, "NothingToClaim");
     });
 

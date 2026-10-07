@@ -139,7 +139,7 @@ contract DegeneretteBoonStake is DeployProtocol {
             : 0;
         vm.recordLogs();
         vm.prank(player);
-        game.placeDegeneretteBet{value: ethValue}(address(0), currency, perSpin, spins, (uint8((uint32(0x01020304) >> (uint256(1) * 8)) & 7) | (uint8(1) << 3)));
+        game.placeDegeneretteBet{value: ethValue}(0, currency, perSpin, spins, (uint8((uint32(0x01020304) >> (uint256(1) * 8)) & 7) | (uint8(1) << 3)));
         return _lastPackedStake(perSpin);
     }
 
@@ -151,9 +151,10 @@ contract DegeneretteBoonStake is DeployProtocol {
         address forPlayer,
         uint128 perSpin
     ) internal returns (uint256 stakePerSpin) {
+        uint32 forId = game.walletIdOf(forPlayer);
         vm.recordLogs();
         vm.prank(caller);
-        game.placeDegeneretteBet{value: perSpin}(forPlayer, CURRENCY_ETH, perSpin, 1, (uint8((uint32(0x01020304) >> (uint256(1) * 8)) & 7) | (uint8(1) << 3)));
+        game.placeDegeneretteBet{value: perSpin}(forId, CURRENCY_ETH, perSpin, 1, (uint8((uint32(0x01020304) >> (uint256(1) * 8)) & 7) | (uint8(1) << 3)));
         return _lastPackedStake(perSpin);
     }
 
@@ -428,7 +429,7 @@ contract DegeneretteBoonStake is DeployProtocol {
 
         address operator = makeAddr("degenBoonOperator");
         vm.prank(player);
-        game.setOperatorApproval(operator, true);
+        game.setOperatorApproval(0, operator, true);
 
         vm.deal(operator, 2 ether);
         uint256 stake = _placeEthFromAndReadPackedStake(operator, player, 1 ether);

@@ -32,7 +32,7 @@ describe("Presale flag is independent of mint-lootbox volume", function () {
     return game
       .connect(signer)
       .purchase(
-        ZERO_ADDRESS,
+        0,
         0n,
         boCustom(amount),
         ZERO_BYTES32,

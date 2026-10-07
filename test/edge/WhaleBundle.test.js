@@ -85,7 +85,7 @@ describe("WhaleBundle", function () {
         await giveWalletId(game, recipient.address);
         await game
           .connect(deity)
-          .issueDeityBoon(deity.address, recipient.address, slot);
+          .issueDeityBoon(await game.walletIdOf(deity.address), await giveWalletId(game, recipient.address), slot);
         return discountBps;
       }
     }
@@ -102,7 +102,7 @@ describe("WhaleBundle", function () {
 
       const tx = await game
         .connect(alice)
-        .purchaseWhalePass(alice.address, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
+        .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
     });
@@ -113,7 +113,7 @@ describe("WhaleBundle", function () {
       await expect(
         game
           .connect(alice)
-          .purchaseWhalePass(alice.address, 1, hre.ethers.ZeroHash, { value: eth(2.3) })
+          .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.3) })
       ).to.be.reverted;
     });
 
@@ -122,7 +122,7 @@ describe("WhaleBundle", function () {
 
       const tx = await game
         .connect(alice)
-        .purchaseWhalePass(alice.address, 3, hre.ethers.ZeroHash, { value: eth(7.2) });
+        .purchaseWhalePass(0, 3, hre.ethers.ZeroHash, { value: eth(7.2) });
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
     });
@@ -133,7 +133,7 @@ describe("WhaleBundle", function () {
       await expect(
         game
           .connect(alice)
-          .purchaseWhalePass(alice.address, 0, hre.ethers.ZeroHash, { value: eth(0) })
+          .purchaseWhalePass(0, 0, hre.ethers.ZeroHash, { value: eth(0) })
       ).to.be.reverted;
     });
 
@@ -143,7 +143,7 @@ describe("WhaleBundle", function () {
       await expect(
         game
           .connect(alice)
-          .purchaseWhalePass(alice.address, 101, hre.ethers.ZeroHash, { value: eth(242.4) })
+          .purchaseWhalePass(0, 101, hre.ethers.ZeroHash, { value: eth(242.4) })
       ).to.be.reverted;
     });
 
@@ -152,7 +152,7 @@ describe("WhaleBundle", function () {
 
       const tx = await game
         .connect(alice)
-        .purchaseWhalePass(alice.address, 100, hre.ethers.ZeroHash, { value: eth(240) });
+        .purchaseWhalePass(0, 100, hre.ethers.ZeroHash, { value: eth(240) });
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
     });
@@ -167,7 +167,7 @@ describe("WhaleBundle", function () {
       await expect(
         game
           .connect(alice)
-          .purchaseWhalePass(alice.address, 1, hre.ethers.ZeroHash, { value: eth(3) })
+          .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(3) })
       ).to.not.be.reverted;
       const after_ = await game.afkingFundingOf(alice.address);
       expect(after_ - before).to.equal(eth(0.6));
@@ -180,7 +180,7 @@ describe("WhaleBundle", function () {
 
       const tx = await game
         .connect(alice)
-        .purchaseWhalePass(alice.address, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
+        .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
       const events = await getEvents(tx, whaleModule, "LootBoxBuy");
       expect(events.length).to.be.gte(1);
       expect(events[0].args.buyer).to.equal(alice.address);
@@ -197,7 +197,7 @@ describe("WhaleBundle", function () {
 
       const tx = await game
         .connect(alice)
-        .purchaseWhalePass(alice.address, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
+        .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
       expect((await tx.wait()).status).to.equal(1);
     });
 
@@ -208,10 +208,10 @@ describe("WhaleBundle", function () {
 
       await game
         .connect(alice)
-        .purchaseWhalePass(alice.address, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
+        .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
       await game
         .connect(bob)
-        .purchaseWhalePass(bob.address, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
+        .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
     });
 
     it("expired whale boon cannot use stale dailyIdx to get discounted pricing", async function () {
@@ -221,7 +221,7 @@ describe("WhaleBundle", function () {
       // Alice needs deity status to issue boons.
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
       // Settle RNG each day while scanning Alice's slots for a whale boon,
       // then issue it to Bob. Boon is valid for a 4-day window.
@@ -245,7 +245,7 @@ describe("WhaleBundle", function () {
       await expect(
         game
           .connect(bob)
-          .purchaseWhalePass(bob.address, 1, hre.ethers.ZeroHash, { value: discountedEarly })
+          .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: discountedEarly })
       ).to.be.reverted;
     });
   });
@@ -260,7 +260,7 @@ describe("WhaleBundle", function () {
 
       const tx = await game
         .connect(alice)
-        .purchaseLazyPass(alice.address, hre.ethers.ZeroHash, { value: eth(0.24) });
+        .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: eth(0.24) });
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
     });
@@ -271,7 +271,7 @@ describe("WhaleBundle", function () {
       await expect(
         game
           .connect(alice)
-          .purchaseLazyPass(alice.address, hre.ethers.ZeroHash, { value: eth(0.2) })
+          .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: eth(0.2) })
       ).to.be.reverted;
     });
 
@@ -281,13 +281,13 @@ describe("WhaleBundle", function () {
       // Buy deity pass first
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
       // Lazy pass should revert (deityPassCount != 0)
       await expect(
         game
           .connect(alice)
-          .purchaseLazyPass(alice.address, hre.ethers.ZeroHash, { value: eth(0.24) })
+          .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: eth(0.24) })
       ).to.be.reverted;
     });
 
@@ -297,13 +297,13 @@ describe("WhaleBundle", function () {
       // Buy whale bundle first (extends freeze by 100 levels)
       await game
         .connect(alice)
-        .purchaseWhalePass(alice.address, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
+        .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
 
       // Now lazy pass should revert (frozenUntilLevel > level + 7)
       await expect(
         game
           .connect(alice)
-          .purchaseLazyPass(alice.address, hre.ethers.ZeroHash, { value: eth(0.24) })
+          .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: eth(0.24) })
       ).to.be.reverted;
     });
 
@@ -314,7 +314,7 @@ describe("WhaleBundle", function () {
 
       const tx = await game
         .connect(alice)
-        .purchaseLazyPass(alice.address, hre.ethers.ZeroHash, { value: eth(0.24) });
+        .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: eth(0.24) });
       const events = await getEvents(tx, whaleModule, "LootBoxBuy");
       expect(events.length).to.be.gte(1);
     });
@@ -330,7 +330,7 @@ describe("WhaleBundle", function () {
 
       const tx = await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
     });
@@ -340,12 +340,12 @@ describe("WhaleBundle", function () {
 
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
       // k=1: 24 + (1 * 2) / 2 = 25 ETH
       const tx = await game
         .connect(bob)
-        .purchaseDeityPass(bob.address, 1, hre.ethers.ZeroHash, { value: eth(25) });
+        .purchaseDeityPass(0, 1, hre.ethers.ZeroHash, { value: eth(25) });
       expect((await tx.wait()).status).to.equal(1);
     });
 
@@ -356,15 +356,15 @@ describe("WhaleBundle", function () {
 
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
       await game
         .connect(bob)
-        .purchaseDeityPass(bob.address, 1, hre.ethers.ZeroHash, { value: eth(25) });
+        .purchaseDeityPass(0, 1, hre.ethers.ZeroHash, { value: eth(25) });
 
       // k=2: 24 + (2 * 3) / 2 = 27 ETH
       const tx = await game
         .connect(carol)
-        .purchaseDeityPass(carol.address, 2, hre.ethers.ZeroHash, { value: eth(27) });
+        .purchaseDeityPass(0, 2, hre.ethers.ZeroHash, { value: eth(27) });
       expect((await tx.wait()).status).to.equal(1);
     });
 
@@ -373,11 +373,11 @@ describe("WhaleBundle", function () {
 
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
       // Same symbol (0) should revert
       await expect(
-        game.connect(bob).purchaseDeityPass(bob.address, 4, hre.ethers.ZeroHash, { value: eth(25) })
+        game.connect(bob).purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(25) })
       ).to.be.reverted;
     });
 
@@ -386,12 +386,12 @@ describe("WhaleBundle", function () {
 
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
       await expect(
         game
           .connect(alice)
-          .purchaseDeityPass(alice.address, 1, hre.ethers.ZeroHash, { value: eth(25) })
+          .purchaseDeityPass(0, 1, hre.ethers.ZeroHash, { value: eth(25) })
       ).to.be.reverted;
     });
 
@@ -401,7 +401,7 @@ describe("WhaleBundle", function () {
       await expect(
         game
           .connect(alice)
-          .purchaseDeityPass(alice.address, 32, hre.ethers.ZeroHash, { value: eth(24) })
+          .purchaseDeityPass(0, 32, hre.ethers.ZeroHash, { value: eth(24) })
       ).to.be.reverted;
     });
 
@@ -411,7 +411,7 @@ describe("WhaleBundle", function () {
       await expect(
         game
           .connect(alice)
-          .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(23) })
+          .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(23) })
       ).to.be.reverted;
     });
 
@@ -422,7 +422,7 @@ describe("WhaleBundle", function () {
       // Price for first pass = 24 ETH
       const tx = await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 23, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseDeityPass(0, 23, hre.ethers.ZeroHash, { value: eth(24) });
       expect((await tx.wait()).status).to.equal(1);
     });
 
@@ -431,7 +431,7 @@ describe("WhaleBundle", function () {
 
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
       expect(await game.level()).to.equal(0n);
       // deityPassRefundable should be set since level == 0
@@ -458,7 +458,7 @@ describe("WhaleBundle", function () {
       // falls back to the VAULT until the deity purchase binds the code.
       await game
         .connect(bob)
-        .purchaseDeityPass(bob.address, 4, code, { value: eth(24) });
+        .purchaseDeityPass(0, 4, code, { value: eth(24) });
 
       expect(await affiliate.getReferrer(bob.address)).to.equal(alice.address);
     });
@@ -472,7 +472,7 @@ describe("WhaleBundle", function () {
 
       const tx = await game
         .connect(bob)
-        .purchaseDeityPass(bob.address, 4, code, { value: eth(24) });
+        .purchaseDeityPass(0, 4, code, { value: eth(24) });
 
       // The deity purchase confers a 100-level whale pass on the buyer's affiliate;
       // _applyWhalePassStats emits PassActivated for whoever receives it.
@@ -491,7 +491,7 @@ describe("WhaleBundle", function () {
 
       await game
         .connect(bob)
-        .purchaseDeityPass(bob.address, 4, code, { value: eth(24) });
+        .purchaseDeityPass(0, 4, code, { value: eth(24) });
 
       // The conferred whale pass is the affiliate's compensation on this path; the
       // pass must not also mint a FLIP commission, so nothing scores at level + 1.
@@ -505,7 +505,7 @@ describe("WhaleBundle", function () {
 
       await game
         .connect(bob)
-        .purchaseDeityPass(bob.address, 4, hre.ethers.ZeroHash, {
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, {
           value: eth(24),
         });
 
@@ -525,7 +525,7 @@ describe("WhaleBundle", function () {
       // REF_CODE_LOCKED sentinel and strand the buyer on the VAULT permanently.
       await game
         .connect(bob)
-        .purchaseDeityPass(bob.address, 4, hre.ethers.ZeroHash, {
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, {
           value: eth(24),
         });
 
@@ -545,14 +545,14 @@ describe("WhaleBundle", function () {
       // Before purchase, check mint data
       await game
         .connect(alice)
-        .purchaseWhalePass(alice.address, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
+        .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
 
       // The player's frozenUntilLevel should be set (100 levels from ticketStartLevel=1)
       // We can verify indirectly: lazy pass should be blocked (freeze > level + 7)
       await expect(
         game
           .connect(alice)
-          .purchaseLazyPass(alice.address, hre.ethers.ZeroHash, { value: eth(0.24) })
+          .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: eth(0.24) })
       ).to.be.reverted;
     });
 
@@ -561,13 +561,13 @@ describe("WhaleBundle", function () {
 
       await game
         .connect(alice)
-        .purchaseWhalePass(alice.address, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
+        .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
 
       // Second whale bundle at same level should still work
       // (frozenUntilLevel = max(existing, new target))
       const tx = await game
         .connect(alice)
-        .purchaseWhalePass(alice.address, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
+        .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
       expect((await tx.wait()).status).to.equal(1);
     });
 
@@ -578,13 +578,13 @@ describe("WhaleBundle", function () {
 
       await game
         .connect(alice)
-        .purchaseWhalePass(alice.address, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
+        .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
       await game
         .connect(bob)
-        .purchaseWhalePass(bob.address, 2, hre.ethers.ZeroHash, { value: eth(4.8) });
+        .purchaseWhalePass(0, 2, hre.ethers.ZeroHash, { value: eth(4.8) });
       await game
         .connect(carol)
-        .purchaseWhalePass(carol.address, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
+        .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
     });
   });
 
@@ -598,7 +598,7 @@ describe("WhaleBundle", function () {
 
       const tx = await game
         .connect(alice)
-        .purchaseLazyPass(alice.address, hre.ethers.ZeroHash, { value: eth(0.24) });
+        .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: eth(0.24) });
       expect((await tx.wait()).status).to.equal(1);
     });
 
@@ -607,12 +607,12 @@ describe("WhaleBundle", function () {
 
       await game
         .connect(alice)
-        .purchaseLazyPass(alice.address, hre.ethers.ZeroHash, { value: eth(0.24) });
+        .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: eth(0.24) });
 
       // Whale bundle should still work
       const tx = await game
         .connect(alice)
-        .purchaseWhalePass(alice.address, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
+        .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
       expect((await tx.wait()).status).to.equal(1);
     });
 
@@ -621,12 +621,12 @@ describe("WhaleBundle", function () {
 
       await game
         .connect(alice)
-        .purchaseWhalePass(alice.address, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
+        .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
 
       await expect(
         game
           .connect(alice)
-          .purchaseLazyPass(alice.address, hre.ethers.ZeroHash, { value: eth(0.24) })
+          .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: eth(0.24) })
       ).to.be.reverted;
     });
   });
@@ -680,7 +680,7 @@ describe("WhaleBundle", function () {
         await giveWalletId(game, recipient.address);
         await game
           .connect(deity)
-          .issueDeityBoon(deity.address, recipient.address, slot);
+          .issueDeityBoon(await game.walletIdOf(deity.address), await giveWalletId(game, recipient.address), slot);
         return discountBps;
       }
     }
@@ -697,7 +697,7 @@ describe("WhaleBundle", function () {
       // Alice needs deity status to issue boons
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
       const discountBps = await issueLazyBoonForRecipient(
         game,
@@ -713,7 +713,7 @@ describe("WhaleBundle", function () {
 
       const tx = await game
         .connect(bob)
-        .purchaseLazyPass(bob.address, hre.ethers.ZeroHash, { value: discountedPrice });
+        .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: discountedPrice });
       expect((await tx.wait()).status).to.equal(1);
     });
 
@@ -723,7 +723,7 @@ describe("WhaleBundle", function () {
 
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
       await issueLazyBoonForRecipient(
         game,
@@ -741,7 +741,7 @@ describe("WhaleBundle", function () {
       await expect(
         game
           .connect(bob)
-          .purchaseLazyPass(bob.address, hre.ethers.ZeroHash, { value: eth(0.24) })
+          .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: eth(0.24) })
       ).to.not.be.reverted;
       const after_ = await game.afkingFundingOf(bob.address);
       expect(after_).to.be.gt(before, "lazy-pass overpay excess must credit afking");
@@ -753,7 +753,7 @@ describe("WhaleBundle", function () {
 
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
       const discountBps = await issueLazyBoonForRecipient(
         game,
@@ -768,13 +768,13 @@ describe("WhaleBundle", function () {
         (eth(0.24) * (10_000n - discountBps)) / 10_000n;
       await game
         .connect(bob)
-        .purchaseLazyPass(bob.address, hre.ethers.ZeroHash, { value: discountedPrice });
+        .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: discountedPrice });
 
       // Second purchase at discounted price should revert (boon consumed)
       await expect(
         game
           .connect(bob)
-          .purchaseLazyPass(bob.address, hre.ethers.ZeroHash, { value: discountedPrice })
+          .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: discountedPrice })
       ).to.be.reverted;
     });
 
@@ -784,7 +784,7 @@ describe("WhaleBundle", function () {
 
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
       const discountBps = await issueLazyBoonForRecipient(
         game,
@@ -803,13 +803,13 @@ describe("WhaleBundle", function () {
       await expect(
         game
           .connect(bob)
-          .purchaseLazyPass(bob.address, hre.ethers.ZeroHash, { value: discountedPrice })
+          .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: discountedPrice })
       ).to.be.reverted;
 
       // Full price should work
       const tx = await game
         .connect(bob)
-        .purchaseLazyPass(bob.address, hre.ethers.ZeroHash, { value: eth(0.24) });
+        .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: eth(0.24) });
       expect((await tx.wait()).status).to.equal(1);
     });
   });
@@ -827,22 +827,22 @@ describe("WhaleBundle", function () {
       // n=0: 24 + 0 = 24
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
       // n=1: 24 + 1 = 25
       await game
         .connect(bob)
-        .purchaseDeityPass(bob.address, 1, hre.ethers.ZeroHash, { value: eth(25) });
+        .purchaseDeityPass(0, 1, hre.ethers.ZeroHash, { value: eth(25) });
 
       // n=2: 24 + 3 = 27
       await game
         .connect(carol)
-        .purchaseDeityPass(carol.address, 2, hre.ethers.ZeroHash, { value: eth(27) });
+        .purchaseDeityPass(0, 2, hre.ethers.ZeroHash, { value: eth(27) });
 
       // n=3: 24 + 6 = 30
       await game
         .connect(dan)
-        .purchaseDeityPass(dan.address, 3, hre.ethers.ZeroHash, { value: eth(30) });
+        .purchaseDeityPass(0, 3, hre.ethers.ZeroHash, { value: eth(30) });
     });
   });
 });

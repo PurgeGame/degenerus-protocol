@@ -70,7 +70,7 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
     // ==================== Tests ====================
 
     function test_PreferredBoardFrozenAcrossPendingBattleAndMidnight() public {
-        vm.prank(buyer); crapsBattle.setPreferredBoard(3);
+        vm.prank(buyer); crapsBattle.setPreferredBoard(0, 3);
         uint24 day = _driveToJackpotPendingSet();
         uint256 wordD = game.rngWordForDay(day);
         _assertPreferenceFrozen();
@@ -78,7 +78,7 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
         _assertPreferenceFrozen();
         _drainUntilUnlocked();
         assertFalse(game.rngLocked());
-        vm.prank(buyer); crapsBattle.setPreferredBoard(0);
+        vm.prank(buyer); crapsBattle.setPreferredBoard(0, 0);
         assertEq(crapsBattle.preferredBoardOf(game.walletIdOf(buyer)), 0);
         // The unprocessed wall day must not inherit the revealed pending-battle word. The drain
         // runs on to the wall day's own request (the engine composes actions, 60d31f775), so
@@ -90,10 +90,10 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
         assertTrue(game.rngLocked());
         uint32 saved = crapsBattle.preferredBoardOf(game.walletIdOf(buyer));
         vm.prank(buyer); vm.expectRevert(CrapsBattleStorage.BetLocked.selector);
-        crapsBattle.setPreferredBoard(saved == 0 ? 3 : 0);
+        crapsBattle.setPreferredBoard(0, saved == 0 ? 3 : 0);
         // A fresh wallet cannot initialize even the random board during the commitment.
         vm.prank(address(0xC0FFEE)); vm.expectRevert(CrapsBattleStorage.BetLocked.selector);
-        crapsBattle.setPreferredBoard(0);
+        crapsBattle.setPreferredBoard(0, 0);
     }
 
 
@@ -365,7 +365,7 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
         if (cost == 0) return;
         if (who.balance < cost) vm.deal(who, cost + 10 ether);
         vm.prank(who);
-        try game.purchase{value: cost}(who, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+        try game.purchase{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
     }
 
     function _seedNextPrizePool(uint256 targetNext) internal {

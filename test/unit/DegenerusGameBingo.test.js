@@ -5,6 +5,7 @@ import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js
 import { compiledStorageSlot as deriveStorageSlot } from "../helpers/storageLayout.js";
 import {
   deployFullProtocol,
+  giveWalletId,
   restoreAddresses,
 } from "../helpers/deployFixture.js";
 
@@ -147,7 +148,7 @@ describe("DegenerusGame simple bingo", function () {
     const receipt = await (
       await bingo
         .connect(alice)
-        .claimBingo(alice.address, level, symbol, ZERO_SLOTS)
+        .claimBingo(0, level, symbol, ZERO_SLOTS)
     ).wait();
 
     expect(await sdgnrs.balanceOf(alice.address)).to.equal(
@@ -189,15 +190,15 @@ describe("DegenerusGame simple bingo", function () {
     await seedBingo(gameAddress, level, 0, [alice.address]);
     await seedBingo(gameAddress, level, 1, [alice.address]);
     await seedBingo(gameAddress, level, 8, [alice.address]);
-    await bingo.connect(alice).claimBingo(alice.address, level, 0, ZERO_SLOTS);
+    await bingo.connect(alice).claimBingo(0, level, 0, ZERO_SLOTS);
     const dgnrsAfterFirst = await sdgnrs.balanceOf(alice.address);
     const flipAfterFirst = await coinflip.coinflipAmount(alice.address);
 
     await expect(
-      bingo.connect(alice).claimBingo(alice.address, level, 1, ZERO_SLOTS)
+      bingo.connect(alice).claimBingo(0, level, 1, ZERO_SLOTS)
     ).to.be.revertedWithCustomError(bingo, "AlreadyClaimed");
     await expect(
-      bingo.connect(alice).claimBingo(alice.address, level, 8, ZERO_SLOTS)
+      bingo.connect(alice).claimBingo(0, level, 8, ZERO_SLOTS)
     ).to.be.revertedWithCustomError(bingo, "AlreadyClaimed");
     expect(await sdgnrs.balanceOf(alice.address)).to.equal(dgnrsAfterFirst);
     expect(await coinflip.coinflipAmount(alice.address)).to.equal(
@@ -213,8 +214,8 @@ describe("DegenerusGame simple bingo", function () {
 
     await seedBingo(gameAddress, 20, 2, [alice.address]);
     await seedBingo(gameAddress, 21, 17, [alice.address]);
-    await bingo.connect(alice).claimBingo(alice.address, 20, 2, ZERO_SLOTS);
-    await bingo.connect(alice).claimBingo(alice.address, 21, 17, ZERO_SLOTS);
+    await bingo.connect(alice).claimBingo(0, 20, 2, ZERO_SLOTS);
+    await bingo.connect(alice).claimBingo(0, 21, 17, ZERO_SLOTS);
 
     expect(await coinflip.coinflipAmount(alice.address)).to.equal(
       flipBefore + BINGO_FLIP * 2n
@@ -236,13 +237,13 @@ describe("DegenerusGame simple bingo", function () {
     const aliceExpected = (pool0 * BINGO_DGNRS_BPS) / BPS_DENOMINATOR;
     await bingo
       .connect(alice)
-      .claimBingo(alice.address, level, symbol, Array(8).fill(0));
+      .claimBingo(0, level, symbol, Array(8).fill(0));
 
     const pool1 = await sdgnrs.poolBalance(REWARD_POOL);
     const bobExpected = (pool1 * BINGO_DGNRS_BPS) / BPS_DENOMINATOR;
     await bingo
       .connect(bob)
-      .claimBingo(bob.address, level, symbol, Array(8).fill(1));
+      .claimBingo(0, level, symbol, Array(8).fill(1));
 
     expect(await sdgnrs.balanceOf(alice.address)).to.equal(aliceExpected);
     expect(await sdgnrs.balanceOf(bob.address)).to.equal(bobExpected);
@@ -264,7 +265,7 @@ describe("DegenerusGame simple bingo", function () {
     const callerFlipBefore = await coinflip.coinflipAmount(carol.address);
     await bingo
       .connect(carol)
-      .claimBingo(alice.address, level, 3, ZERO_SLOTS);
+      .claimBingo(await giveWalletId(game, alice.address), level, 3, ZERO_SLOTS);
 
     expect(await sdgnrs.balanceOf(alice.address)).to.be.gt(ownerDgnrsBefore);
     expect(await sdgnrs.balanceOf(carol.address)).to.equal(callerDgnrsBefore);
@@ -283,7 +284,7 @@ describe("DegenerusGame simple bingo", function () {
 
     await bingo
       .connect(alice)
-      .claimBingo(hre.ethers.ZeroAddress, level, 4, ZERO_SLOTS);
+      .claimBingo(0, level, 4, ZERO_SLOTS);
 
     expect(await coinflip.coinflipAmount(alice.address)).to.equal(BINGO_FLIP);
   });
@@ -294,17 +295,17 @@ describe("DegenerusGame simple bingo", function () {
     const bingo = await bingoAtGame(game);
     for (const level of [0, 1]) await seedBingo(gameAddress, level, 4, [alice.address]);
     for (const level of [1, 0]) {
-      await bingo.connect(alice).claimBingo(alice.address, level, 4, ZERO_SLOTS);
+      await bingo.connect(alice).claimBingo(0, level, 4, ZERO_SLOTS);
     }
     for (const level of [0, 1]) {
-      await expect(bingo.connect(alice).claimBingo(alice.address, level, 4, ZERO_SLOTS))
+      await expect(bingo.connect(alice).claimBingo(0, level, 4, ZERO_SLOTS))
         .to.be.revertedWithCustomError(bingo, "AlreadyClaimed");
     }
     await seedBingo(gameAddress, 2, 4, [alice.address]);
-    await bingo.connect(alice).claimBingo(alice.address, 2, 4, ZERO_SLOTS);
-    await expect(bingo.connect(alice).claimBingo(alice.address, 0, 4, ZERO_SLOTS))
+    await bingo.connect(alice).claimBingo(0, 2, 4, ZERO_SLOTS);
+    await expect(bingo.connect(alice).claimBingo(0, 0, 4, ZERO_SLOTS))
       .to.be.revertedWithCustomError(bingo, "BingoExpired");
-    await expect(bingo.connect(alice).claimBingo(alice.address, 1, 4, ZERO_SLOTS))
+    await expect(bingo.connect(alice).claimBingo(0, 1, 4, ZERO_SLOTS))
       .to.be.revertedWithCustomError(bingo, "AlreadyClaimed");
     expect(await coinflip.coinflipAmount(alice.address)).to.equal(3n * BINGO_FLIP);
   });
@@ -319,17 +320,17 @@ describe("DegenerusGame simple bingo", function () {
     await seedBingo(gameAddress, level, 7, [alice.address]);
 
     await expect(
-      bingo.connect(alice).claimBingo(alice.address, level, 32, ZERO_SLOTS)
+      bingo.connect(alice).claimBingo(0, level, 32, ZERO_SLOTS)
     ).to.be.revertedWithCustomError(bingo, "InvalidSymbol");
     await expect(
       bingo
         .connect(bob)
-        .claimBingo(bob.address, level, 7, ZERO_SLOTS)
+        .claimBingo(0, level, 7, ZERO_SLOTS)
     ).to.be.revertedWithCustomError(bingo, "NotSlotOwner");
     await expect(
       bingo
         .connect(alice)
-        .claimBingo(alice.address, level, 7, [0, 0, 0, 0, 0, 0, 0, 1])
+        .claimBingo(0, level, 7, [0, 0, 0, 0, 0, 0, 0, 1])
     ).to.be.revertedWithCustomError(bingo, "NotSlotOwner");
 
     const missingColorTrait = 7 | (7 << 3);
@@ -339,13 +340,13 @@ describe("DegenerusGame simple bingo", function () {
       0
     );
     await expect(
-      bingo.connect(alice).claimBingo(alice.address, level, 7, ZERO_SLOTS)
+      bingo.connect(alice).claimBingo(0, level, 7, ZERO_SLOTS)
     ).to.be.revertedWithCustomError(bingo, "NotSlotOwner");
     await seedTraitBucket(gameAddress, level, missingColorTrait, [
       alice.address,
     ]);
 
-    await bingo.connect(alice).claimBingo(alice.address, level, 7, ZERO_SLOTS);
+    await bingo.connect(alice).claimBingo(0, level, 7, ZERO_SLOTS);
     expect(await coinflip.coinflipAmount(alice.address)).to.equal(BINGO_FLIP);
   });
 
@@ -363,11 +364,11 @@ describe("DegenerusGame simple bingo", function () {
     await setStorage(gameAddress, 0n, originalHeader | gameOverMask);
 
     await expect(
-      bingo.connect(alice).claimBingo(alice.address, level, 9, ZERO_SLOTS)
+      bingo.connect(alice).claimBingo(0, level, 9, ZERO_SLOTS)
     ).to.be.revertedWithCustomError(bingo, "GameOver");
 
     await setStorage(gameAddress, 0n, originalHeader);
-    await bingo.connect(alice).claimBingo(alice.address, level, 9, ZERO_SLOTS);
+    await bingo.connect(alice).claimBingo(0, level, 9, ZERO_SLOTS);
     expect(await coinflip.coinflipAmount(alice.address)).to.equal(BINGO_FLIP);
   });
 
@@ -398,7 +399,7 @@ describe("DegenerusGame simple bingo", function () {
     const receipt = await (
       await bingo
         .connect(alice)
-        .claimBingo(alice.address, level, symbol, ZERO_SLOTS)
+        .claimBingo(0, level, symbol, ZERO_SLOTS)
     ).wait();
 
     expect(await sdgnrs.balanceOf(alice.address)).to.equal(0n);
@@ -409,7 +410,7 @@ describe("DegenerusGame simple bingo", function () {
     await expect(
       bingo
         .connect(alice)
-        .claimBingo(alice.address, level, symbol, ZERO_SLOTS)
+        .claimBingo(0, level, symbol, ZERO_SLOTS)
     ).to.be.revertedWithCustomError(bingo, "AlreadyClaimed");
   });
 
@@ -424,7 +425,7 @@ describe("DegenerusGame simple bingo", function () {
 
     await bingo
       .connect(alice)
-      .claimBingo(alice.address, level, symbol, ZERO_SLOTS);
+      .claimBingo(0, level, symbol, ZERO_SLOTS);
 
     expect(await coinflip.coinflipAmount(alice.address)).to.equal(BINGO_FLIP);
   });
@@ -435,7 +436,7 @@ describe("DegenerusGame simple bingo", function () {
     const bingo = await bingoAtGame(game);
     await seedBingo(gameAddress, 90, 10, [alice.address]);
     await setLevel(gameAddress, 91);
-    await bingo.connect(alice).claimBingo(alice.address, 90, 10, ZERO_SLOTS);
+    await bingo.connect(alice).claimBingo(0, 90, 10, ZERO_SLOTS);
     expect(await coinflip.coinflipAmount(alice.address)).to.equal(BINGO_FLIP);
   });
 
@@ -454,7 +455,7 @@ describe("DegenerusGame simple bingo", function () {
     await expect(
       bingo
         .connect(alice)
-        .claimBingo(alice.address, expiredLevel, symbol, ZERO_SLOTS)
+        .claimBingo(0, expiredLevel, symbol, ZERO_SLOTS)
     ).to.be.revertedWithCustomError(bingo, "BingoExpired");
     expect(
       BigInt(
@@ -468,7 +469,7 @@ describe("DegenerusGame simple bingo", function () {
 
     await bingo
       .connect(alice)
-      .claimBingo(alice.address, currentLevel, symbol, ZERO_SLOTS);
+      .claimBingo(0, currentLevel, symbol, ZERO_SLOTS);
     expect(await coinflip.coinflipAmount(alice.address)).to.equal(BINGO_FLIP);
   });
 });

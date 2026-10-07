@@ -179,7 +179,7 @@ contract CrapsSystemEconTest is CrapsPins {
 
         if (f.vaultDark) {
             vm.prank(ContractAddresses.VAULT);
-            craps.setPreferredBoard(_packed(B_DONT));
+            craps.setPreferredBoard(0, _packed(B_DONT));
         }
         if (f.starveBodies) {
             flip.setBurnRefused(ContractAddresses.SDGNRS, true);

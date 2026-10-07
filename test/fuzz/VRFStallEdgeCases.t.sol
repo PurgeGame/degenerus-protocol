@@ -351,7 +351,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         // Purchase 5 tickets before any day completes
         for (uint256 i = 0; i < 5; i++) {
             vm.prank(buyer);
-            game.purchase{value: 0.01 ether}(buyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+            game.purchase{value: 0.01 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         }
 
         // Complete the first post-deploy day normally
@@ -505,7 +505,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         // Purchase enough to mint FLIP for nudges
         for (uint256 i = 0; i < 10; i++) {
             vm.prank(buyer);
-            game.purchase{value: 0.5 ether}(buyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+            game.purchase{value: 0.5 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         }
         _completeDay(0xDEAD0001);
 
@@ -554,7 +554,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         address buyer = makeAddr("midDayBuyer");
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
-        game.purchase{value: 1.01 ether}(buyer, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: 1.01 ether}(0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
 
         // Fund VRF subscription
         mockVRF.fundSubscription(1, 100e18);
@@ -629,7 +629,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         address buyer = makeAddr("midDayBuyer");
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
-        game.purchase{value: 1.01 ether}(buyer, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: 1.01 ether}(0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
 
         mockVRF.fundSubscription(1, 100e18);
 
@@ -810,7 +810,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         vm.deal(buyer, 100 ether);
         for (uint256 i = 0; i < 5; i++) {
             vm.prank(buyer);
-            game.purchase{value: 0.01 ether}(buyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+            game.purchase{value: 0.01 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         }
 
         // Complete the first post-deploy day (day 2) normally

@@ -44,7 +44,7 @@ contract PreferredBoardAdvanceStress is PurchaseDailyFixture, FreshWordLeg {
         for (uint256 offset; offset < 99; ++offset) {
             for (uint256 i; i < FIELD_HOLDERS; ++i) {
                 vm.prank(fieldWallet(offset, i));
-                crapsBattle.setPreferredBoard(BOARD);
+                crapsBattle.setPreferredBoard(0, BOARD);
             }
         }
         _armFreshWord(s.word, 400);

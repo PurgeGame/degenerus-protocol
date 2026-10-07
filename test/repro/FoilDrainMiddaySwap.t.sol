@@ -316,7 +316,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
         uint24 lvl = _activeTicketLevelProbe();
         vm.prank(p);
         game.purchase{value: priceWei * 10}(
-            p,
+            0,
             0,
             0,
             bytes32(0),
@@ -352,7 +352,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
         if (rngLocked_) return;
         vm.prank(ticketBuyer);
         game.purchase{value: (priceWei * 4000) / 400}(
-            ticketBuyer,
+            0,
             4000,
             0,
             bytes32(0),
@@ -365,7 +365,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
         _finishReadConsumers();
         vm.prank(ticketBuyer);
         game.purchase{value: 2 ether}(
-            ticketBuyer,
+            0,
             0,
             BoxOrderLib.boCustom(2 ether),
             bytes32(0),

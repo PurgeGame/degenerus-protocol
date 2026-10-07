@@ -840,9 +840,9 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         return weight;
     }
 
-    /// @notice Claim deterministic-ending shares for `player`'s terminal-level tickets.
+    /// @notice Claim deterministic-ending shares for account `id`'s terminal-level tickets.
     /// @dev Delegatecall target of DegenerusGame.claimDeadVrf. Permissionless: every share
-    ///      credits the holding's owner, never the caller. Open from the dead ending's payout
+    ///      credits the holding's owner account by ID, never the caller. Open from the dead ending's payout
     ///      until the final sweep. Each reference names one holding; the top byte is its kind:
     ///        DEAD_REF_CREATED (0) — a created ticket: trait at bits 64..71, occurrence index
     ///          at bits 0..63 of the reference, selecting a holding in the level's trait bucket.
@@ -857,11 +857,12 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     ///      has its owed balance zeroed, a foil pack has its bucket word zeroed. Uncreated
     ///      weight claimed is debited from the tallied total, so claims can never exceed it.
     ///      Rounding dust stays in the contract for the final sweep.
-    /// @param player Owner of every referenced holding.
+    /// @param id Owner account of every referenced holding (0 = caller, which must hold an ID;
+    ///        otherwise allocated).
     /// @param refs The holdings to claim.
-    /// @custom:reverts E When no deterministic payout is open, or a reference is invalid,
-    ///      not `player`'s, or already claimed.
-    function claimDeadVrf(address player, uint256[] calldata refs) external {
+    /// @custom:reverts E When no deterministic payout is open, the account is unknown, or a
+    ///      reference is invalid, not the account's, or already claimed.
+    function claimDeadVrf(uint32 id, uint256[] calldata refs) external {
         uint256 total = deadTotal;
         if (total == 0 || _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert E();
         uint256 pot = deadPot;
@@ -871,8 +872,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         uint8 shift = _snapShiftFor(lvl);
         uint256 amount;
         uint256 weight;
-        // Holdings are verified by wallet ID; an unregistered address holds nothing.
-        uint32 playerId = _requireWalletId(player);
+        // Holdings are verified by wallet ID; a caller with no ID holds nothing.
+        (uint32 playerId, address player, ) = _creditAccount(id);
         for (uint256 i; i < refs.length; ) {
             uint256 ref = refs[i];
             uint256 kind = ref >> 248;

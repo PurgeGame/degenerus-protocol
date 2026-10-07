@@ -287,7 +287,7 @@ abstract contract AffiliateIdFixture is DeployProtocol {
         uint256 p = _price();
         vm.deal(buyer, buyer.balance + p);
         vm.prank(buyer);
-        game.purchase{value: p}(buyer, 400, 0, code, MintPaymentKind.DirectEth, false);
+        game.purchase{value: p}(0, 400, 0, code, MintPaymentKind.DirectEth, false);
         id = _id(buyer);
     }
 
@@ -820,7 +820,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         _create(o, code, 0);
         vm.deal(o, 200 ether);
         vm.prank(o);
-        game.purchaseDeityPass{value: 100 ether}(o, 1, code);
+        game.purchaseDeityPass{value: 100 ether}(0, 1, code);
         assertEq(_refWord(o), 1, "locked");
         (uint32 a, uint32 u1, uint32 u2) = affiliate.referrerIds(o);
         assertEq(a, 1);
@@ -1805,7 +1805,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         vm.deal(buyer, 200 ether);
         vm.startStateDiffRecording();
         vm.prank(buyer);
-        game.purchaseDeityPass{value: 100 ether}(buyer, 3, bytes32("DY_A"));
+        game.purchaseDeityPass{value: 100 ether}(0, 3, bytes32("DY_A"));
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         assertEq(_calls(acc, address(game), address(affiliate), affiliate.referrerIds.selector).length, 1);
         assertEq(_calls(acc, address(game), address(affiliate), affiliate.getReferrer.selector).length, 0);
@@ -1824,7 +1824,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         vm.deal(buyer, 200 ether);
         vm.startStateDiffRecording();
         vm.prank(buyer);
-        game.purchaseDeityPass{value: 100 ether}(buyer, 4, _dflt(P_B));
+        game.purchaseDeityPass{value: 100 ether}(0, 4, _dflt(P_B));
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         _assertIds(buyer, pbid, 0, 0);
         address[] memory to = _deityRecipients(acc);
@@ -1837,14 +1837,14 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         vm.deal(P_A, 200 ether);
         vm.expectRevert(bytes4(keccak256("E()")));
         vm.prank(P_A);
-        game.purchaseDeityPass{value: 100 ether}(P_A, 5, bytes32(0));
+        game.purchaseDeityPass{value: 100 ether}(0, 5, bytes32(0));
     }
 
     function test_DeityLinkTouchMaterializesPendingAffiliate() public {
         vm.deal(P_A, 200 ether);
         vm.startStateDiffRecording();
         vm.prank(P_A);
-        game.purchaseDeityPass{value: 100 ether}(P_A, 5, CODE_A);
+        game.purchaseDeityPass{value: 100 ether}(0, 5, CODE_A);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         _assertMaterialized(CODE_A, OWN_A, KICK_A);
         _assertIds(P_A, _id(OWN_A), 1, 2);
@@ -1889,7 +1889,7 @@ contract AffiliateDegeneretteReferrerTest is AffiliateIdFixture {
     function _resolve(address player) private returns (uint32 id, uint256 amount, Vm.Log[] memory logs) {
         vm.deal(player, 1 ether);
         vm.prank(player);
-        game.placeDegeneretteBet{value: 0.01 ether}(address(0), 0, 0.01 ether, 1, SYMBOL);
+        game.placeDegeneretteBet{value: 0.01 ether}(0, 0, 0.01 ether, 1, SYMBOL);
         _landWord(_wordScoring(7));
         vm.recordLogs();
         vm.startStateDiffRecording();

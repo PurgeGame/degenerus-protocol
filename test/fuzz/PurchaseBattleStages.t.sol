@@ -127,7 +127,7 @@ contract PurchaseBattleStagesTest is PurchaseBattleStagesBase {
         vm.warp(block.timestamp + 2 days);
         vm.prank(address(0xBEEF));
         vm.expectRevert(CrapsBattleStorage.BetLocked.selector);
-        crapsBattle.setPreferredBoard(3);
+        crapsBattle.setPreferredBoard(0, 3);
         (bytes32 deferred,) = _battle();
         assertEq(deferred, sameDay, "a deferred battle changed its result");
         // Daily words are retained for today and yesterday only (tagged two-slot storage,
@@ -141,7 +141,7 @@ contract PurchaseBattleStagesTest is PurchaseBattleStagesBase {
         (, Tally memory tickets) = _measure();
         assertEq(tickets.stage, STAGE_PURCHASE_DAILY_TICKETS);
         assertFalse(game.rngLocked());
-        vm.prank(address(0xBEEF)); crapsBattle.setPreferredBoard(3);
+        vm.prank(address(0xBEEF)); crapsBattle.setPreferredBoard(0, 3);
         assertEq(crapsBattle.preferredBoardOf(game.walletIdOf(address(0xBEEF))), 3);
     }
 

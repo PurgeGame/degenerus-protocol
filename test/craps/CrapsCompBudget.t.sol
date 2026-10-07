@@ -65,6 +65,7 @@ contract CrapsCompBudgetTest is CrapsPins {
         game.setScore(carol, floor_);
         game.setScore(dave, floor_);
         game.setScore(erin, floor_);
+        _idFor(alice); _idFor(bob); _idFor(carol); _idFor(dave); _idFor(erin);
         // The pins open the lane on a wei; a comp needs something to spend.
         flip.setCompLane(100_000_000);
     }
@@ -108,8 +109,8 @@ contract CrapsCompBudgetTest is CrapsPins {
         betId = craps.enterBonusBattle(period, _blank(), mult);
     }
 
-    function _code(uint8 kind, address to, bool high, uint24 arg, uint8 count) internal pure returns (uint256) {
-        return uint256(uint160(to)) | (uint256(kind) << 160) | (high ? (1 << 168) : 0) | (uint256(arg) << 176)
+    function _code(uint8 kind, address to, bool high, uint24 arg, uint8 count) internal returns (uint256) {
+        return uint256(_idFor(to)) | (uint256(kind) << 160) | (high ? (1 << 168) : 0) | (uint256(arg) << 176)
             | (uint256(count) << 200);
     }
 
@@ -191,7 +192,7 @@ contract CrapsCompBudgetTest is CrapsPins {
         vm.prank(alice);
         craps.enterBonusDay(_blank(), 1);
         vm.prank(alice);
-        craps.upgradeDayWindows(day, 1 << 1);
+        craps.upgradeDayWindows(0, day, 1 << 1);
         _seat(bob, 1, 1);
         _seat(carol, 2, 1);
         (uint256 bank1,,) = craps.windowOf(_slotAt(day, 1));
@@ -463,7 +464,7 @@ contract CrapsCompBudgetTest is CrapsPins {
         vm.prank(bob);
         craps.enterBonusDay(_blank(), 1);
         vm.prank(bob);
-        uint256 paid = craps.upgradeDayWindows(day, (1 << 2) | (1 << 5));
+        uint256 paid = craps.upgradeDayWindows(0, day, (1 << 2) | (1 << 5));
         uint256 laneBefore = flip.compFor(dave);
         uint256 charged = _comp(KIND_UPGRADE, dave, false, day, (1 << 2) | (1 << 5));
         assertEq(charged, paid, "the comped upgrade was priced other than the paid one");
@@ -571,7 +572,7 @@ contract CrapsCompBudgetTest is CrapsPins {
         craps.enterBonusDay(_blank(), 1);
         vm.prank(dave);
         vm.expectRevert(CrapsBattleStorage.NoSuchBet.selector);
-        craps.upgradeDayWindows(day, 1 << 1);
+        craps.upgradeDayWindows(0, day, 1 << 1);
         bytes32 key = craps.battleKeyOf(aliceId);
         assertEq(craps.highSeatsOf(key), 1, "the reserved high seat is not in the lane");
         (uint256 bank,,) = craps.windowOf(_slotAt(day, 1));

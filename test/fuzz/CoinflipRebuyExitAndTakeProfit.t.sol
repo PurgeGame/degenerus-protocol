@@ -50,11 +50,13 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
 
     address internal player;
     address internal operator;
+    uint32 internal playerId;
 
     function setUp() public {
         _deployProtocol();
         player = makeAddr("rebuy_player");
         operator = makeAddr("rebuy_operator");
+        playerId = _giveWalletId(player);
         // Day 2 APPLIED, wall clock still on it: the carry gates open only once the day's
         // word has been processed, and deposits from here target day 3 (clear of the
         // day-1/2 seeds). The player holds nothing on day 2, so the resolve is inert for it.
@@ -89,11 +91,11 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
         vm.prank(GAME);
         coin.mintForGame(player, stake);
         vm.prank(player);
-        game.setOperatorApproval(operator, true);
+        game.setOperatorApproval(0, operator, true);
         vm.prank(player);
-        coinflip.setCoinflipAutoRebuy(address(0), true, takeProfit);
+        coinflip.setCoinflipAutoRebuy(0, true, takeProfit);
         vm.prank(operator);
-        coinflip.depositCoinflip(player, stake);
+        coinflip.depositCoinflip(playerId, stake);
     }
 
     function _payoutOf(uint256 stake, uint24 epoch) internal view returns (uint256) {
@@ -122,7 +124,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
 
         uint256 balBefore = coin.balanceOf(player);
         vm.prank(player);
-        coinflip.setCoinflipAutoRebuy(address(0), false, 0);
+        coinflip.setCoinflipAutoRebuy(0, false, 0);
 
         assertEq(
             coin.balanceOf(player),
@@ -149,7 +151,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
         uint256 expectedCarry = payout + (payout * 75) / 10_000;
 
         vm.prank(player);
-        coinflip.setCoinflipAutoRebuy(address(0), false, 0);
+        coinflip.setCoinflipAutoRebuy(0, false, 0);
 
         assertEq(
             coin.balanceOf(player),
@@ -170,7 +172,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
 
         vm.prank(player);
         vm.expectRevert(Coinflip.RngLocked.selector);
-        coinflip.setCoinflipAutoRebuy(address(0), false, 0);
+        coinflip.setCoinflipAutoRebuy(0, false, 0);
     }
 
     /// The other side: day 3's payouts are applied and the lock is STILL held (the drains
@@ -186,7 +188,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
 
         _lockRng();
         vm.prank(player);
-        coinflip.setCoinflipAutoRebuy(address(0), false, 0);
+        coinflip.setCoinflipAutoRebuy(0, false, 0);
         vm.clearMockedCalls();
 
         assertEq(
@@ -203,7 +205,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
 
         vm.prank(player);
         vm.expectRevert(Coinflip.RngLocked.selector);
-        coinflip.setCoinflipAutoRebuyTakeProfit(address(0), 1);
+        coinflip.setCoinflipAutoRebuyTakeProfit(0, 1);
     }
 
     function test_TakeProfitChangeOpensOnceTodaysFlipResolvedUnderHeldLock() public {
@@ -212,7 +214,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
 
         _lockRng();
         vm.prank(player);
-        coinflip.setCoinflipAutoRebuyTakeProfit(address(0), 1);
+        coinflip.setCoinflipAutoRebuyTakeProfit(0, 1);
         vm.clearMockedCalls();
 
         (, uint256 stop, , ) = coinflip.coinflipAutoRebuyInfo(player);
@@ -225,7 +227,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
         _warpToDay(3);
 
         vm.prank(player);
-        coinflip.setCoinflipAutoRebuy(address(0), true, 0);
+        coinflip.setCoinflipAutoRebuy(0, true, 0);
 
         (bool enabled, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(player);
         assertTrue(enabled, "B: arming is open - no carry exists to protect");
@@ -241,7 +243,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
 
         vm.prank(player);
         vm.expectRevert(Coinflip.RngLocked.selector);
-        coinflip.setCoinflipAutoRebuy(address(0), true, 1);
+        coinflip.setCoinflipAutoRebuy(0, true, 1);
     }
 
     /// A player not on auto-rebuy meets AutoRebuyNotEnabled, never the freeze — the freeze is
@@ -251,11 +253,11 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
 
         vm.prank(player);
         vm.expectRevert(Coinflip.AutoRebuyNotEnabled.selector);
-        coinflip.setCoinflipAutoRebuyTakeProfit(address(0), 1);
+        coinflip.setCoinflipAutoRebuyTakeProfit(0, 1);
 
         vm.prank(player);
         vm.expectRevert(Coinflip.AutoRebuyNotEnabled.selector);
-        coinflip.claimCoinflipCarry(address(0), 1);
+        coinflip.claimCoinflipCarry(0, 1);
     }
 
     // ---------------------------------------------------------------------
@@ -276,7 +278,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
         uint256 expectedCarry = payout + (payout * 75) / 10_000;
 
         vm.prank(player);
-        uint256 minted = coinflip.claimCoinflips(address(0), type(uint256).max);
+        uint256 minted = coinflip.claimCoinflips(0, type(uint256).max);
         assertEq(minted, 0, "0 take-profit: nothing banks, it is all staked on today");
 
         vm.prank(ContractAddresses.COIN);
@@ -306,7 +308,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
         assertGt(rides, 0, "precondition: and a slice rides");
 
         vm.prank(player);
-        uint256 minted = coinflip.claimCoinflips(address(0), type(uint256).max);
+        uint256 minted = coinflip.claimCoinflips(0, type(uint256).max);
         assertEq(minted, reserved, "exactly the pre-committed bank leaves, no more");
 
         (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(player);
@@ -314,7 +316,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
 
         vm.prank(player);
         vm.expectRevert(Coinflip.RngLocked.selector);
-        coinflip.setCoinflipAutoRebuyTakeProfit(address(0), 1);
+        coinflip.setCoinflipAutoRebuyTakeProfit(0, 1);
     }
 
     // ---------------------------------------------------------------------
@@ -338,7 +340,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
 
         // Re-split to "bank everything" AFTER day 3 already resolved.
         vm.prank(player);
-        coinflip.setCoinflipAutoRebuyTakeProfit(address(0), 1);
+        coinflip.setCoinflipAutoRebuyTakeProfit(0, 1);
 
         (, uint256 stop, uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(player);
         assertEq(stop, 1, "D: new take-profit stored");
@@ -378,7 +380,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
 
         // Settle without extracting: a 0-amount carry claim walks the days only.
         vm.prank(player);
-        coinflip.claimCoinflipCarry(address(0), 0);
+        coinflip.claimCoinflipCarry(0, 0);
 
         (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(player);
         assertEq(carry, expectedCarry, "E: remainder + its recycle bonus rolls");
@@ -414,7 +416,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
 
         // Settling changes nothing — which is the whole point.
         vm.prank(player);
-        coinflip.claimCoinflipCarry(address(0), 0);
+        coinflip.claimCoinflipCarry(0, 0);
         assertEq(coinflip.previewSalvageFlipBacking(player), 0, "G: settle agrees");
     }
 
@@ -438,7 +440,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
 
         // Walk the days for real without extracting anything.
         vm.prank(player);
-        coinflip.claimCoinflipCarry(address(0), 0);
+        coinflip.claimCoinflipCarry(0, 0);
 
         (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(player);
         uint256 settledClaim = coinflip.previewClaimCoinflips(player);
@@ -466,13 +468,17 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
     function testFuzz_OversizedTakeProfitCannotEnable(uint256 raw) public {
         uint256 invalid = bound(raw, uint256(type(uint128).max) + 1, type(uint256).max);
         vm.prank(player);
-        game.setOperatorApproval(operator, true);
+        game.setOperatorApproval(0, operator, true);
 
-        address[3] memory callers = [player, operator, GAME];
+        vm.prank(GAME);
+        vm.expectRevert(Coinflip.NotApproved.selector);
+        coinflip.setCoinflipAutoRebuy(playerId, true, invalid);
+
+        address[2] memory callers = [player, operator];
         for (uint256 i; i < callers.length; ++i) {
             vm.prank(callers[i]);
             vm.expectRevert(Coinflip.TakeProfitTooLarge.selector);
-            coinflip.setCoinflipAutoRebuy(player, true, invalid);
+            coinflip.setCoinflipAutoRebuy(playerId, true, invalid);
             (bool enabled, uint256 stop, uint256 carry, uint24 start) = coinflip.coinflipAutoRebuyInfo(player);
             assertFalse(enabled, "invalid threshold must not enable rebuy");
             assertEq(stop, 0);
@@ -490,16 +496,11 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
         uint256 backingBefore = coinflip.previewSalvageFlipBacking(player);
         assertGt(backingBefore, 0, "fixture must hold an actual unsettled winning balance");
 
-        address[3] memory callers = [player, operator, GAME];
+        address[2] memory callers = [player, operator];
         for (uint256 i; i < callers.length; ++i) {
             vm.prank(callers[i]);
             vm.expectRevert(Coinflip.TakeProfitTooLarge.selector);
-            if (callers[i] == GAME) {
-                // The Game's non-strict enable path also updates an existing threshold.
-                coinflip.setCoinflipAutoRebuy(player, true, invalid);
-            } else {
-                coinflip.setCoinflipAutoRebuyTakeProfit(player, invalid);
-            }
+            coinflip.setCoinflipAutoRebuyTakeProfit(playerId, invalid);
             assertEq(_rebuyConfigHash(), stateBefore);
             assertEq(coin.balanceOf(player), balanceBefore, "invalid input must not settle or mint");
             assertEq(coinflip.previewSalvageFlipBacking(player), backingBefore);
@@ -513,15 +514,15 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
 
     function testFuzz_RepresentableTakeProfitRoundTripsExactly(uint128 threshold) public {
         vm.prank(player);
-        coinflip.setCoinflipAutoRebuy(player, true, type(uint128).max);
+        coinflip.setCoinflipAutoRebuy(0, true, type(uint128).max);
         (, uint256 stop,,) = coinflip.coinflipAutoRebuyInfo(player);
         assertEq(stop, type(uint128).max, "maximum representable threshold must be accepted");
         vm.prank(player);
-        coinflip.setCoinflipAutoRebuyTakeProfit(player, threshold);
+        coinflip.setCoinflipAutoRebuyTakeProfit(0, threshold);
         (, stop,,) = coinflip.coinflipAutoRebuyInfo(player);
         assertEq(stop, uint256(threshold), "stored threshold must equal the requested value");
         vm.prank(player);
-        coinflip.setCoinflipAutoRebuyTakeProfit(player, 0);
+        coinflip.setCoinflipAutoRebuyTakeProfit(0, 0);
         (, stop,,) = coinflip.coinflipAutoRebuyInfo(player);
         assertEq(stop, 0, "zero remains the explicit roll-all option");
     }
@@ -533,7 +534,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
         // The unbanked remainder earns the same 75 bps rebuy credit as an ordinary exit.
         uint256 expected = payout + ((payout % 7) * 75) / 10_000;
         vm.prank(player);
-        coinflip.setCoinflipAutoRebuy(player, false, type(uint256).max);
+        coinflip.setCoinflipAutoRebuy(0, false, type(uint256).max);
         (bool enabled,, uint256 carry,) = coinflip.coinflipAutoRebuyInfo(player);
         assertFalse(enabled);
         assertEq(carry, 0);
@@ -550,7 +551,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
             // Wall clock is at day d and day d is now resolved. A fresh deposit must
             // land strictly after it.
             vm.prank(player);
-            coinflip.depositCoinflip(address(0), 100);
+            coinflip.depositCoinflip(0, 100);
 
             // coinflipAmount reads the stake at _targetFlipDay() == wallDay + 1.
             assertGt(

@@ -442,7 +442,7 @@ describe("D-IMPL-01 — current trait draw routes level 1 and rotates coin trait
         );
         await game
           .connect(deityBuyers[q])
-          .purchaseDeityPass(deityBuyers[q].address, symbolId, hre.ethers.ZeroHash, {
+          .purchaseDeityPass(0, symbolId, hre.ethers.ZeroHash, {
             value: basePrice,
           });
       }

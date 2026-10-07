@@ -51,7 +51,7 @@ import {PriceLookupLib} from "./libraries/PriceLookupLib.sol";
  *        word). VAULT and SDGNRS are the constant IDs 1 and 2.
  *
  * @dev SECURITY:
- *      - Access control: payAffiliate / payAffiliateCombined (game only); claim (permissionless settlement)
+ *      - Access control: payAffiliate / payAffiliateCombined / copyReferral (game only); claim (permissionless settlement)
  *      - Referral locking: invalid codes lock slot (REF_CODE_LOCKED sentinel)
  *      - Fixed contract addresses at deploy (no re-pointing)
  */
@@ -510,6 +510,24 @@ contract DegenerusAffiliate {
     // =====================================================================
     //                    GAMEPLAY ENTRYPOINTS
     // =====================================================================
+
+    /**
+     * @notice Give a new smurf its owner's resolved referral word.
+     * @dev GAME only, once per smurf at creation, after the owner's referral was resolved, so
+     *      the owner's word is nonzero (a referrer word or REF_CODE_LOCKED). The copy is
+     *      verbatim and every nonzero word is permanent, so the smurf is locked to the owner's
+     *      referrer chain: its direct affiliate and uplines are the owner's, never the owner
+     *      (the owner's word cannot name the owner), and an unreferred owner gives an
+     *      unreferred smurf. Registers nobody and moves no value.
+     * @param ownerKey The smurf owner's address.
+     * @param smurfKey The new smurf's account key.
+     */
+    function copyReferral(address ownerKey, address smurfKey) external {
+        if (msg.sender != ContractAddresses.GAME) revert OnlyAuthorized();
+        bytes32 word = playerReferralCode[ownerKey];
+        (uint32 referrerId, bytes32 code) = _referrerView(ownerKey);
+        _setReferral(smurfKey, word, word == REF_CODE_LOCKED ? REF_CODE_LOCKED : code, referrerId);
+    }
 
     /**
      * @notice Process affiliate rewards for a purchase or gameplay action.

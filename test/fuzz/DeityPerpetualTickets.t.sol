@@ -72,7 +72,7 @@ contract DeityPerpetualTicketsTest is DeployProtocol {
     function _buy(address who, uint8 symbol, uint256 price, bytes32 code) private {
         vm.deal(who, price);
         vm.prank(who);
-        game.purchaseDeityPass{value: price}(who, symbol, code);
+        game.purchaseDeityPass{value: price}(0, symbol, code);
     }
     function _fixtureCall(bytes memory data) private {
         bytes memory original = address(game).code;
@@ -181,7 +181,7 @@ contract DeityPerpetualTicketsTest is DeployProtocol {
         vm.deal(buyer, 24 ether);
         for (uint8 i; i < 2; ++i) {
             vm.expectRevert(); vm.prank(buyer);
-            game.purchaseDeityPass{value: 24 ether}(buyer, i == 0 ? 0 : 6, bytes32(0));
+            game.purchaseDeityPass{value: 24 ether}(0, i == 0 ? 0 : 6, bytes32(0));
         }
         vm.expectRevert(); vm.prank(address(vault)); game.initProtocolDeity();
         vm.expectRevert(); game.initProtocolDeity();
@@ -209,7 +209,7 @@ contract DeityPurchaseColdGasTest is DeployProtocol {
     function testColdPaidInitialRangeAndFreshAffiliateFitTransactionCap() public {
         vm.prank(buyer);
         uint256 beforeGas = gasleft();
-        game.purchaseDeityPass{value: 24 ether, gas: 16_777_216 - 22_500}(buyer, 1, bytes32("FRESH"));
+        game.purchaseDeityPass{value: 24 ether, gas: 16_777_216 - 22_500}(0, 1, bytes32("FRESH"));
         uint256 used = beforeGas - gasleft() + 22_500;
         emit log_named_uint("cold deity purchase with new affiliate", used);
         assertLt(used, 16_777_216);

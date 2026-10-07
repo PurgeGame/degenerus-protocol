@@ -51,7 +51,9 @@ contract LootboxBoostBlendPin is DeployProtocol {
     }
 
     function _giveLootboxBoon(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, SLOT_BOON_PACKED));
+        uint32 id = game.walletIdOf(who);
+        if (id == 0) id = _giveWalletId(who);
+        bytes32 slot = keccak256(abi.encode(uint256(id), SLOT_BOON_PACKED));
         uint256 s0 = uint256(vm.load(address(game), slot));
         vm.store(address(game), slot, bytes32(s0 | (uint256(1) << BP_LOOTBOX_TIER_SHIFT)));
     }
@@ -61,7 +63,7 @@ contract LootboxBoostBlendPin is DeployProtocol {
         position = RecyclingState.boxCount(address(game), idx);
         vm.prank(player);
         game.purchase{value: n * amount + 1 ether}(
-            player, 400, BoxOrderLib.boCustoms(n, amount), bytes32(0), MintPaymentKind.DirectEth, false
+            0, 400, BoxOrderLib.boCustoms(n, amount), bytes32(0), MintPaymentKind.DirectEth, false
         );
         assertEq(RecyclingState.boxCount(address(game), idx), position + 1, "one entry per purchase");
     }

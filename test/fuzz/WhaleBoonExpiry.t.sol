@@ -125,7 +125,7 @@ contract WhaleBoonExpiry is DeployProtocol {
         if (game.walletIdOf(player) == 0) {
             (, , , , uint256 priceWei) = game.purchaseInfo();
             vm.prank(player);
-            game.purchase{value: priceWei}(player, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+            game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         }
         uint256 entry = uint256(game.walletIdOf(player))
             | (uint256(game.level()) << LB_LEVEL_SHIFT)

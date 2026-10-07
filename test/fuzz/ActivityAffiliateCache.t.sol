@@ -141,22 +141,8 @@ contract ActivityAffiliateCacheTest is ActivityAffiliateCacheFixture {
         assertFalse(mayBet); assertFalse(rewarded);
     }
 
-    function test_SeatEncumbranceClearDoesNotLeaveCacheOnlyGrowthEligibility() public {
-        (DegenerusGame game, DegenerusQuests quests) = _productionGame(uint256(1) << 155);
-        vm.etch(ContractAddresses.GAME_AFKING_MODULE, type(GameAfkingModule).runtimeCode);
-        (bool mayBet,,) = quests.marketBetGates(PLAYER, 24);
-        assertTrue(mayBet, "encumbered seat is original eligibility");
-        game.playerActivityScoreCached(PLAYER);
-        // Same production bit-clear used after a seat reclaim; cache bits must
-        // never extend participation once this sole original field disappears.
-        vm.prank(ContractAddresses.AFKING_SUB_TOKEN);
-        game.clearSeatEncumbrance(PLAYER);
-        (mayBet,,) = quests.marketBetGates(PLAYER, 24);
-        assertFalse(mayBet, "cache must not outlive the actual participation gate");
-    }
-
-    function testFuzz_MutableOnlyWordsNeverPersistCache(uint8 curse, bool seat) public {
-        uint256 packed = (uint256(curse) << BitPackingLib.CURSE_COUNT_SHIFT) | (seat ? uint256(1) << BitPackingLib.SEAT_ENCUMBERED_SHIFT : 0);
+    function testFuzz_MutableOnlyWordsNeverPersistCache(uint8 curse) public {
+        uint256 packed = uint256(curse) << BitPackingLib.CURSE_COUNT_SHIFT;
         host.seed(PLAYER, _withId(packed, PLAYER_ID), 24);
         uint256 expected = host.score(PLAYER, 17, 25);
         vm.startStateDiffRecording();

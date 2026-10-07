@@ -138,7 +138,7 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         (,,,, uint256 price) = game.purchaseInfo();
         vm.deal(buyer, price * count);
         vm.prank(buyer);
-        game.purchase{value: price * count}(buyer, 0, BoxOrderLib.boSmalls(count), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: price * count}(0, 0, BoxOrderLib.boSmalls(count), bytes32(0), MintPaymentKind.DirectEth, false);
     }
 
     function test_MoreThanOneBeneficiarySettlesWithExactExistingBounty() public {
@@ -398,7 +398,7 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
     function test_OversizedFirstBetWaitsAndNextFreshCallSettlesIt() public {
         uint32 day = _openBatchId();
         _newBurners(45, 1 ether);
-        game.placeDegeneretteBet{value: 0.125 ether}(bob, 0, 0.005 ether, 25, 0);
+        game.placeDegeneretteBet{value: 0.125 ether}(game.walletIdOf(bob), 0, 0.005 ether, 25, 0);
         _resolve(day, 100, 99); _commitWord(99);
         uint48 index = RecyclingState.readBuffer(address(game));
         // The smallest allowance that completes the redemption cohort leaves less than the last

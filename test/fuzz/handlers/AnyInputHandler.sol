@@ -131,6 +131,35 @@ contract AnyInputHandler is Test {
         return pool[seed % pool.length];
     }
 
+    /// @dev A wallet ID for third-party doors: mostly the ID of a pool address (0 when it holds none, which
+    ///      resolves to the caller), sometimes an arbitrary small ID so unallocated IDs are probed too.
+    function _id(uint256 seed) internal view returns (uint32) {
+        if (seed % 8 == 7) return uint32((seed >> 8) % 64);
+        return game.walletIdOf(_p(seed));
+    }
+
+    /// @dev Like `_id` but never 0, for doors where 0 reverts (third-party recipients).
+    function _idNZ(uint256 seed) internal view returns (uint32 id) {
+        id = _id(seed);
+        if (id == 0) id = 1;
+    }
+
+    function _ids(uint256[] memory seeds) internal view returns (uint32[] memory out) {
+        out = new uint32[](seeds.length);
+        for (uint256 i; i < seeds.length; ++i) out[i] = _id(seeds[i]);
+    }
+
+    /// @dev A seat token `who` holds when it holds one, else a seed-picked token id.
+    function _seatFor(address who, uint256 seed) internal view returns (uint256) {
+        (bool ok, bytes memory r) = SEAT.staticcall(abi.encodeWithSignature("nextSerial()"));
+        uint256 n = ok && r.length >= 32 ? abi.decode(r, (uint256)) : 0;
+        for (uint256 i = 1; i <= n; ++i) {
+            (bool okO, bytes memory o) = SEAT.staticcall(abi.encodeWithSignature("ownerOf(uint256)", i));
+            if (okO && o.length >= 32 && abi.decode(o, (address)) == who) return i;
+        }
+        return n == 0 ? seed : 1 + seed % n;
+    }
+
     function _ps(uint256[] memory seeds) internal view returns (address[] memory out) {
         out = new address[](seeds.length);
         for (uint256 i; i < seeds.length; ++i) out[i] = _p(seeds[i]);
@@ -208,23 +237,23 @@ contract AnyInputHandler is Test {
     // =====================================================================================
 
     function cf_deposit(uint256 a, uint256 pSeed, uint256 amount) external act(a) {
-        _call(0, COINFLIP, 0, abi.encodeWithSignature("depositCoinflip(address,uint256)", _p(pSeed), amount));
+        _call(0, COINFLIP, 0, abi.encodeWithSignature("depositCoinflip(uint32,uint256)", _id(pSeed), amount));
     }
 
     function cf_claim(uint256 a, uint256 pSeed, uint256 amount) external act(a) {
-        _call(1, COINFLIP, 0, abi.encodeWithSignature("claimCoinflips(address,uint256)", _p(pSeed), amount));
+        _call(1, COINFLIP, 0, abi.encodeWithSignature("claimCoinflips(uint32,uint256)", _id(pSeed), amount));
     }
 
     function cf_claimCarry(uint256 a, uint256 pSeed, uint256 amount) external act(a) {
-        _call(2, COINFLIP, 0, abi.encodeWithSignature("claimCoinflipCarry(address,uint256)", _p(pSeed), amount));
+        _call(2, COINFLIP, 0, abi.encodeWithSignature("claimCoinflipCarry(uint32,uint256)", _id(pSeed), amount));
     }
 
     function cf_setAutoRebuy(uint256 a, uint256 pSeed, bool enabled, uint256 takeProfit) external act(a) {
-        _call(3, COINFLIP, 0, abi.encodeWithSignature("setCoinflipAutoRebuy(address,bool,uint256)", _p(pSeed), enabled, takeProfit));
+        _call(3, COINFLIP, 0, abi.encodeWithSignature("setCoinflipAutoRebuy(uint32,bool,uint256)", _id(pSeed), enabled, takeProfit));
     }
 
     function cf_setTakeProfit(uint256 a, uint256 pSeed, uint256 takeProfit) external act(a) {
-        _call(4, COINFLIP, 0, abi.encodeWithSignature("setCoinflipAutoRebuyTakeProfit(address,uint256)", _p(pSeed), takeProfit));
+        _call(4, COINFLIP, 0, abi.encodeWithSignature("setCoinflipAutoRebuyTakeProfit(uint32,uint256)", _id(pSeed), takeProfit));
     }
 
     // =====================================================================================
@@ -244,11 +273,11 @@ contract AnyInputHandler is Test {
         // payKind is folded onto 0..4 only so the 4-value enum is hit at all: 0..3 are the real kinds,
         // 4 reaches the contract out of range and must fail its ABI decode.
         _call(5, address(game), _val(value), abi.encodeWithSelector(
-            DegenerusGame.purchase.selector, _p(bSeed), qty, boxOrder, code, uint256(payKind % 5), foil));
+            DegenerusGame.purchase.selector, _id(bSeed), qty, boxOrder, code, uint256(payKind % 5), foil));
     }
 
     function g_redeemFlip(uint256 a, uint256 bSeed, uint256 qty) external act(a) {
-        _call(6, address(game), 0, abi.encodeWithSignature("redeemFlip(address,uint256)", _p(bSeed), qty));
+        _call(6, address(game), 0, abi.encodeWithSignature("redeemFlip(uint32,uint256)", _id(bSeed), qty));
     }
 
     function g_sellFarFuture(uint256 a, uint256 pSeed, uint32[] calldata levels, uint256[] calldata qtys, uint256[] calldata idxs)
@@ -256,7 +285,7 @@ contract AnyInputHandler is Test {
         act(a)
     {
         _call(7, address(game), 0, abi.encodeWithSignature(
-            "sellFarFutureEntries(address,uint32[],uint256[],uint256[])", _p(pSeed), levels, qtys, idxs));
+            "sellFarFutureEntries(uint32,uint32[],uint256[],uint256[])", _id(pSeed), levels, qtys, idxs));
     }
 
     function g_buyLootboxAndPresaleBox(
@@ -270,19 +299,19 @@ contract AnyInputHandler is Test {
         uint256 value
     ) external act(a) {
         _call(8, address(game), _val(value), abi.encodeWithSelector(
-            DegenerusGame.buyLootboxAndPresaleBox.selector, _p(bSeed), qty, boxOrder, code, uint256(payKind % 5), boxAmount));
+            DegenerusGame.buyLootboxAndPresaleBox.selector, _id(bSeed), qty, boxOrder, code, uint256(payKind % 5), boxAmount));
     }
 
     function g_claimBingo(uint256 a, uint256 pSeed, uint24 lvl, uint8 symbol, uint32[8] calldata slots) external act(a) {
-        _call(9, address(game), 0, abi.encodeWithSignature("claimBingo(address,uint24,uint8,uint32[8])", _p(pSeed), lvl, symbol, slots));
+        _call(9, address(game), 0, abi.encodeWithSignature("claimBingo(uint32,uint24,uint8,uint32[8])", _id(pSeed), lvl, symbol, slots));
     }
 
     function g_claimDeadVrf(uint256 a, uint256 pSeed, uint256[] calldata refs) external act(a) {
-        _call(10, address(game), 0, abi.encodeWithSignature("claimDeadVrf(address,uint256[])", _p(pSeed), refs));
+        _call(10, address(game), 0, abi.encodeWithSignature("claimDeadVrf(uint32,uint256[])", _id(pSeed), refs));
     }
 
     function g_claimFoilMatch(uint256 a, uint256 pSeed, uint256 day, uint256 idx) external act(a) {
-        _call(11, address(game), 0, abi.encodeWithSignature("claimFoilMatch(address,uint256,uint256)", _p(pSeed), day, idx));
+        _call(11, address(game), 0, abi.encodeWithSignature("claimFoilMatch(uint32,uint256,uint256)", _id(pSeed), day, idx));
     }
 
     function g_claimFoilMatchMany(uint256 a, uint256[] calldata pSeeds, uint24[] calldata dayList, uint8[] calldata idxs)
@@ -290,35 +319,35 @@ contract AnyInputHandler is Test {
         act(a)
     {
         _call(12, address(game), 0, abi.encodeWithSignature(
-            "claimFoilMatchMany(address[],uint24[],uint8[])", _ps(pSeeds), dayList, idxs));
+            "claimFoilMatchMany(uint32[],uint24[],uint8[])", _ids(pSeeds), dayList, idxs));
     }
 
     function g_claimGoldenTicket(uint256 a, uint256 pSeed, uint24 lvl) external act(a) {
-        _call(13, address(game), 0, abi.encodeWithSignature("claimGoldenTicket(address,uint24)", _p(pSeed), lvl));
+        _call(13, address(game), 0, abi.encodeWithSignature("claimGoldenTicket(uint32,uint24)", _id(pSeed), lvl));
     }
 
     function g_claimAffiliateDgnrs(uint256 a, uint256 pSeed) external act(a) {
-        _call(14, address(game), 0, abi.encodeWithSignature("claimAffiliateDgnrs(address)", _p(pSeed)));
+        _call(14, address(game), 0, abi.encodeWithSignature("claimAffiliateDgnrs(uint32)", _id(pSeed)));
     }
 
     function g_claimAffiliateDgnrsMany(uint256 a, uint256[] calldata pSeeds) external act(a) {
-        _call(15, address(game), 0, abi.encodeWithSignature("claimAffiliateDgnrs(address[])", _ps(pSeeds)));
+        _call(15, address(game), 0, abi.encodeWithSignature("claimAffiliateDgnrs(uint32[])", _ids(pSeeds)));
     }
 
     function g_claimWhalePass(uint256 a, uint256 pSeed) external act(a) {
-        _call(16, address(game), 0, abi.encodeWithSignature("claimWhalePass(address)", _p(pSeed)));
+        _call(16, address(game), 0, abi.encodeWithSignature("claimWhalePass(uint32)", _id(pSeed)));
     }
 
     function g_claimAfkingFlip(uint256 a, uint256[] calldata pSeeds) external act(a) {
-        _call(17, address(game), 0, abi.encodeWithSignature("claimAfkingFlip(address[])", _ps(pSeeds)));
+        _call(17, address(game), 0, abi.encodeWithSignature("claimAfkingFlip(uint32[])", _ids(pSeeds)));
     }
 
     function g_withdrawAfking(uint256 a, uint256 amount) external act(a) {
-        _call(18, address(game), 0, abi.encodeWithSignature("withdrawAfkingFunding(uint256)", amount));
+        _call(18, address(game), 0, abi.encodeWithSignature("withdrawAfkingFunding(uint32,uint256)", uint32(0), amount));
     }
 
     function g_depositAfking(uint256 a, uint256 pSeed, uint256 value) external act(a) {
-        _call(19, address(game), _val(value), abi.encodeWithSignature("depositAfkingFunding(address)", _p(pSeed)));
+        _call(19, address(game), _val(value), abi.encodeWithSignature("depositAfkingFunding(uint32)", _id(pSeed)));
     }
 
     function g_reverseFlip(uint256 a, uint256 expectedCost) external act(a) {
@@ -326,7 +355,7 @@ contract AnyInputHandler is Test {
     }
 
     function g_issueDeityBoon(uint256 a, uint256 dSeed, uint256 rSeed, uint8 slot) external act(a) {
-        _call(21, address(game), 0, abi.encodeWithSignature("issueDeityBoon(address,address,uint8)", _p(dSeed), _p(rSeed), slot));
+        _call(21, address(game), 0, abi.encodeWithSignature("issueDeityBoon(uint32,uint32,uint8)", _id(dSeed), _idNZ(rSeed), slot));
     }
 
     function g_subscribe(uint256 a, uint256 pSeed, bool drain, bool useTickets, uint8 qty, uint256 fSeed, uint256 value)
@@ -334,11 +363,11 @@ contract AnyInputHandler is Test {
         act(a)
     {
         _call(22, address(game), _val(value), abi.encodeWithSignature(
-            "subscribe(address,bool,bool,uint8,address)", _p(pSeed), drain, useTickets, qty, _p(fSeed)));
+            "subscribe(uint32,bool,bool,uint8,uint32,uint256)", _id(pSeed), drain, useTickets, qty, _id(fSeed), _seatFor(currentActor, fSeed)));
     }
 
     function g_setOperatorApproval(uint256 a, uint256 oSeed, bool approved) external act(a) {
-        _call(23, address(game), 0, abi.encodeWithSignature("setOperatorApproval(address,bool)", _p(oSeed), approved));
+        _call(23, address(game), 0, abi.encodeWithSignature("setOperatorApproval(uint32,address,bool)", uint32(0), _p(oSeed), approved));
     }
 
     function g_placeDegeneretteBet(
@@ -351,41 +380,41 @@ contract AnyInputHandler is Test {
         uint256 value
     ) external act(a) {
         _call(24, address(game), _val(value), abi.encodeWithSignature(
-            "placeDegeneretteBet(address,uint8,uint128,uint8,uint8)", _p(pSeed), currency, amountPerSpin, spinCount, symbol));
+            "placeDegeneretteBet(uint32,uint8,uint128,uint8,uint8)", _id(pSeed), currency, amountPerSpin, spinCount, symbol));
     }
 
     function g_claimWinnings(uint256 a, uint256 pSeed) external act(a) {
-        _call(25, address(game), 0, abi.encodeWithSignature("claimWinnings(address)", _p(pSeed)));
+        _call(25, address(game), 0, abi.encodeWithSignature("claimWinnings(uint32)", _id(pSeed)));
     }
 
     function g_claimWinningsAmount(uint256 a, uint256 pSeed, uint256 amount) external act(a) {
-        _call(26, address(game), 0, abi.encodeWithSignature("claimWinnings(address,uint256)", _p(pSeed), amount));
+        _call(26, address(game), 0, abi.encodeWithSignature("claimWinnings(uint32,uint256)", _id(pSeed), amount));
     }
 
     function g_decurse(uint256 a, uint256 tSeed) external act(a) {
-        _call(27, address(game), 0, abi.encodeWithSignature("decurse(address)", _p(tSeed)));
+        _call(27, address(game), 0, abi.encodeWithSignature("decurse(uint32)", _id(tSeed)));
     }
 
     function g_smite(uint256 a, uint256 deityId, uint256 sSeed) external act(a) {
-        _call(28, address(game), 0, abi.encodeWithSignature("smite(uint256,address)", deityId, _p(sSeed)));
+        _call(28, address(game), 0, abi.encodeWithSignature("smite(uint256,uint32)", deityId, _id(sSeed)));
     }
 
     function g_purchaseWhalePass(uint256 a, uint256 bSeed, uint256 qty, bytes32 code, uint256 value) external act(a) {
         _call(29, address(game), _val(value), abi.encodeWithSignature(
-            "purchaseWhalePass(address,uint256,bytes32)", _p(bSeed), qty, code));
+            "purchaseWhalePass(uint32,uint256,bytes32)", _id(bSeed), qty, code));
     }
 
     function g_purchaseLazyPass(uint256 a, uint256 bSeed, bytes32 code, uint256 value) external act(a) {
-        _call(30, address(game), _val(value), abi.encodeWithSignature("purchaseLazyPass(address,bytes32)", _p(bSeed), code));
+        _call(30, address(game), _val(value), abi.encodeWithSignature("purchaseLazyPass(uint32,bytes32)", _id(bSeed), code));
     }
 
     function g_purchaseDeityPass(uint256 a, uint256 bSeed, uint8 symbolId, bytes32 code, uint256 value) external act(a) {
         _call(31, address(game), _val(value), abi.encodeWithSignature(
-            "purchaseDeityPass(address,uint8,bytes32)", _p(bSeed), symbolId, code));
+            "purchaseDeityPass(uint32,uint8,bytes32)", _id(bSeed), symbolId, code));
     }
 
     function g_buyPresaleBox(uint256 a, uint256 bSeed, uint256 boxAmount, uint256 value) external act(a) {
-        _call(32, address(game), _val(value), abi.encodeWithSignature("buyPresaleBox(address,uint256)", _p(bSeed), boxAmount));
+        _call(32, address(game), _val(value), abi.encodeWithSignature("buyPresaleBox(uint32,uint256)", _id(bSeed), boxAmount));
     }
 
     function g_claimWinningsStethFirst(uint256 a) external act(a) {
@@ -409,7 +438,7 @@ contract AnyInputHandler is Test {
     }
 
     function f_decimatorBurn(uint256 a, uint256 pSeed, uint256 amount, uint32 chips) external act(a) {
-        _call(37, COIN, 0, abi.encodeWithSignature("decimatorBurn(address,uint256,uint32)", _p(pSeed), amount, chips));
+        _call(37, COIN, 0, abi.encodeWithSignature("decimatorBurn(uint32,uint256,uint32)", _id(pSeed), amount, chips));
     }
 
     // =====================================================================================
@@ -441,11 +470,11 @@ contract AnyInputHandler is Test {
     }
 
     function s_claimRedemption(uint256 a, uint256 pSeed, uint32 batchId) external act(a) {
-        _call(44, SDGNRS_, 0, abi.encodeWithSignature("claimRedemption(address,uint32)", _p(pSeed), batchId));
+        _call(44, SDGNRS_, 0, abi.encodeWithSignature("claimRedemption(uint32,uint32)", _id(pSeed), batchId));
     }
 
     function s_claimParkedRedemption(uint256 a, uint256 pSeed, uint32 batchId) external act(a) {
-        _call(45, SDGNRS_, 0, abi.encodeWithSignature("claimParkedRedemption(address,uint32)", _p(pSeed), batchId));
+        _call(45, SDGNRS_, 0, abi.encodeWithSignature("claimParkedRedemption(uint32,uint32)", _id(pSeed), batchId));
     }
 
     function v_burnEth(uint256 a, uint256 amount) external act(a) {
@@ -469,7 +498,7 @@ contract AnyInputHandler is Test {
     // =====================================================================================
 
     function pm_placeBet(uint256 a, uint256 pSeed, bool over) external act(a) {
-        _call(50, PARIMUTUEL, 0, abi.encodeWithSignature("placeBet(address,bool)", _p(pSeed), over));
+        _call(50, PARIMUTUEL, 0, abi.encodeWithSignature("placeBet(uint32,bool)", _id(pSeed), over));
     }
 
     function af_createCode(uint256 a, bytes32 code, uint8 kickback) external act(a) {
@@ -485,7 +514,7 @@ contract AnyInputHandler is Test {
     }
 
     function wx_enter(uint256 a, uint256 amount) external act(a) {
-        _call(56, WWXRP_, 0, abi.encodeWithSignature("enter(uint256)", amount));
+        _call(56, WWXRP_, 0, abi.encodeWithSignature("enter(uint32,uint256)", uint32(0), amount));
     }
 
     function wx_claim(uint256 a, uint24 day, uint32 entryIndex) external act(a) {
@@ -497,45 +526,45 @@ contract AnyInputHandler is Test {
     // =====================================================================================
 
     function cr_setPreferredBoard(uint256 a, uint32 chips) external act(a) {
-        _call(58, CRAPS, 0, abi.encodeWithSignature("setPreferredBoard(uint32)", chips));
+        _call(58, CRAPS, 0, abi.encodeWithSignature("setPreferredBoard(uint32,uint32)", uint32(0), chips));
     }
 
     function cr_enterBattle(uint256 a, uint64 slot, uint32 chips, uint16 multiple) external act(a) {
-        (bool okB, bytes memory retB) = _call(59, CRAPS, 0, abi.encodeWithSignature("enterBattle(uint64,uint32,uint16)", slot, chips, multiple));
+        (bool okB, bytes memory retB) = _call(59, CRAPS, 0, abi.encodeWithSignature("enterBattle(uint32,uint64,uint32,uint16)", uint32(0), slot, chips, multiple));
         _recordBet(okB, retB);
     }
 
     function cr_enterBonusBattle(uint256 a, uint256 period, uint32 chips, uint16 multiple) external act(a) {
-        (bool okB, bytes memory retB) = _call(60, CRAPS, 0, abi.encodeWithSignature("enterBonusBattle(uint256,uint32,uint16)", period, chips, multiple));
+        (bool okB, bytes memory retB) = _call(60, CRAPS, 0, abi.encodeWithSignature("enterBonusBattle(uint32,uint256,uint32,uint16)", uint32(0), period, chips, multiple));
         _recordBet(okB, retB);
     }
 
     function cr_enterBonusDay(uint256 a, uint32 chips, uint16 multiple) external act(a) {
-        _call(61, CRAPS, 0, abi.encodeWithSignature("enterBonusDay(uint32,uint16)", chips, multiple));
+        _call(61, CRAPS, 0, abi.encodeWithSignature("enterBonusDay(uint32,uint32,uint16)", uint32(0), chips, multiple));
     }
 
     function cr_amendSlip(uint256 a, uint256 betId, uint32 chips) external act(a) {
-        _call(62, CRAPS, 0, abi.encodeWithSignature("amendSlip(uint256,uint32)", betId, chips));
+        _call(62, CRAPS, 0, abi.encodeWithSignature("amendSlip(uint32,uint256,uint32)", uint32(0), betId, chips));
     }
 
     function cr_buyFutureCrapsDays(uint256 a, uint24 startDay, uint8 count, bool high, uint32 chips) external act(a) {
-        _call(63, CRAPS, 0, abi.encodeWithSignature("buyFutureCrapsDays(uint24,uint8,bool,uint32)", startDay, count, high, chips));
+        _call(63, CRAPS, 0, abi.encodeWithSignature("buyFutureCrapsDays(uint32,uint24,uint8,bool,uint32)", uint32(0), startDay, count, high, chips));
     }
 
     function cr_applyCrapsPasses(uint256 a, uint24 startDay, uint8 count, bool high, uint32 chips) external act(a) {
-        _call(64, CRAPS, 0, abi.encodeWithSignature("applyCrapsPasses(uint24,uint8,bool,uint32)", startDay, count, high, chips));
+        _call(64, CRAPS, 0, abi.encodeWithSignature("applyCrapsPasses(uint32,uint24,uint8,bool,uint32)", uint32(0), startDay, count, high, chips));
     }
 
     function cr_convertNormalToHigh(uint256 a, uint32 highCount) external act(a) {
-        _call(65, CRAPS, 0, abi.encodeWithSignature("convertNormalToHigh(uint32)", highCount));
+        _call(65, CRAPS, 0, abi.encodeWithSignature("convertNormalToHigh(uint32,uint32)", uint32(0), highCount));
     }
 
     function cr_upgradeReservedDay(uint256 a, uint24 day) external act(a) {
-        _call(66, CRAPS, 0, abi.encodeWithSignature("upgradeReservedDay(uint24)", day));
+        _call(66, CRAPS, 0, abi.encodeWithSignature("upgradeReservedDay(uint32,uint24)", uint32(0), day));
     }
 
     function cr_upgradeDayWindows(uint256 a, uint24 day, uint8 mask) external act(a) {
-        _call(67, CRAPS, 0, abi.encodeWithSignature("upgradeDayWindows(uint24,uint8)", day, mask));
+        _call(67, CRAPS, 0, abi.encodeWithSignature("upgradeDayWindows(uint32,uint24,uint8)", uint32(0), day, mask));
     }
 
     function cr_donate(uint256 a, bool custom, uint256 index, uint24 granules) external act(a) {
@@ -582,10 +611,6 @@ contract AnyInputHandler is Test {
         _call(74, SEAT, 0, abi.encodeWithSignature("setApprovalForAll(address,bool)", _p(opSeed), approved));
     }
 
-    function st_reclaimSeat(uint256 a, uint256 tokenId) external act(a) {
-        _call(75, SEAT, 0, abi.encodeWithSignature("reclaimSeat(uint256)", tokenId));
-    }
-
     function st_setSeatTraits(uint256 a, uint256 tokenId, uint8 symbolId, uint24 bg, uint24 trim) external act(a) {
         _call(76, SEAT, 0, abi.encodeWithSignature("setSeatTraits(uint256,uint8,uint24,uint24)", tokenId, symbolId, bg, trim));
     }
@@ -605,7 +630,7 @@ contract AnyInputHandler is Test {
         if (cost > currentActor.balance) return;
         vm.prank(currentActor);
         try game.purchase{value: cost}(
-            currentActor, qty, lootboxAmt == 0 ? 0 : BoxOrderLib.boCustomFloor(lootboxAmt), bytes32(0), MintPaymentKind.DirectEth, false
+            0, qty, lootboxAmt == 0 ? 0 : BoxOrderLib.boCustomFloor(lootboxAmt), bytes32(0), MintPaymentKind.DirectEth, false
         ) {
             ++oks[77];
         } catch {}
@@ -619,7 +644,7 @@ contract AnyInputHandler is Test {
         if (eth > currentActor.balance || priceWei == 0) return;
         uint256 qty = eth * 400 / priceWei;
         vm.prank(currentActor);
-        try game.purchase{value: eth}(currentActor, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {
+        try game.purchase{value: eth}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {
             ++oks[78];
         } catch {}
     }
@@ -745,7 +770,7 @@ contract AnyInputHandler is Test {
                 qtys[0] = 4 * (1 + qSeed % (owned / 4));
                 idxs[0] = j;
                 _call(84, address(game), 0, abi.encodeWithSignature(
-                    "sellFarFutureEntries(address,uint32[],uint256[],uint256[])", currentActor, levels, qtys, idxs));
+                    "sellFarFutureEntries(uint32,uint32[],uint256[],uint256[])", uint32(0), levels, qtys, idxs));
                 return;
             }
         }
@@ -755,7 +780,7 @@ contract AnyInputHandler is Test {
 
     function gd_issueDeityBoon(uint256 a, uint256 rSeed, uint8 slot) external act(a) {
         currentActor = actors[(a % 3) * 2 % actors.length]; // actors 0, 2, 4 hold deity passes
-        _call(85, address(game), 0, abi.encodeWithSignature("issueDeityBoon(address,address,uint8)", address(0), _p(rSeed), slot % 3));
+        _call(85, address(game), 0, abi.encodeWithSignature("issueDeityBoon(uint32,uint32,uint8)", uint32(0), _idNZ(rSeed), slot % 3));
     }
 
     function gd_placeDegenerette(uint256 a, uint256 pSeed, uint256 cSeed, uint256 aSeed, uint256 sSeed, uint256 symSeed)
@@ -776,18 +801,18 @@ contract AnyInputHandler is Test {
             spins = uint8(1 + sSeed % 15);
         }
         _call(86, address(game), value, abi.encodeWithSignature(
-            "placeDegeneretteBet(address,uint8,uint128,uint8,uint8)", _p(pSeed), currency, amt, spins, uint8(symSeed % 24)));
+            "placeDegeneretteBet(uint32,uint8,uint128,uint8,uint8)", _id(pSeed), currency, amt, spins, uint8(symSeed % 24)));
     }
 
     function gd_enterBonusBattle(uint256 a, uint256 period, uint256 chipSeed, uint256 multSeed) external act(a) {
         (bool okB, bytes memory retB) = _call(87, CRAPS, 0, abi.encodeWithSignature(
-            "enterBonusBattle(uint256,uint32,uint16)", period % 6, _validChips(chipSeed), _multiple(multSeed)));
+            "enterBonusBattle(uint32,uint256,uint32,uint16)", uint32(0), period % 6, _validChips(chipSeed), _multiple(multSeed)));
         _recordBet(okB, retB);
     }
 
     function gd_enterBonusDay(uint256 a, uint256 chipSeed, uint256 multSeed) external act(a) {
         _call(88, CRAPS, 0, abi.encodeWithSignature(
-            "enterBonusDay(uint32,uint16)", _validChips(chipSeed), _multiple(multSeed)));
+            "enterBonusDay(uint32,uint32,uint16)", uint32(0), _validChips(chipSeed), _multiple(multSeed)));
     }
 
     function gd_createBattle(uint256 a, uint256 s) external act(a) {
@@ -802,14 +827,14 @@ contract AnyInputHandler is Test {
         (bool ok, bytes memory r) = CRAPS.staticcall(abi.encodeWithSignature("customBattleCount()"));
         uint64 n = ok && r.length >= 32 ? abi.decode(r, (uint64)) : 0;
         uint64 slot = (uint64(1) << 40) + (n == 0 ? 1 : n);
-        (bool okB, bytes memory retB) = _call(90, CRAPS, 0, abi.encodeWithSignature("enterBattle(uint64,uint32,uint16)", slot, _validChips(chipSeed), uint16(1)));
+        (bool okB, bytes memory retB) = _call(90, CRAPS, 0, abi.encodeWithSignature("enterBattle(uint32,uint64,uint32,uint16)", uint32(0), slot, _validChips(chipSeed), uint16(1)));
         _recordBet(okB, retB);
     }
 
     function gd_amendSlip(uint256 a, uint256 pick, uint256 chipSeed) external act(a) {
         if (_betIds.length != 0) currentActor = _betOwners[pick % _betIds.length];
         uint256 betId = _betIds.length == 0 ? pick : _betIds[pick % _betIds.length];
-        _call(91, CRAPS, 0, abi.encodeWithSignature("amendSlip(uint256,uint32)", betId, _validChips(chipSeed)));
+        _call(91, CRAPS, 0, abi.encodeWithSignature("amendSlip(uint32,uint256,uint32)", uint32(0), betId, _validChips(chipSeed)));
     }
 
     function gd_reverseFlip(uint256 a) external act(a) {
@@ -833,7 +858,7 @@ contract AnyInputHandler is Test {
 
     function gd_claimFoilMatch(uint256 a, uint256 pSeed, uint256 dSeed, uint256 iSeed) external act(a) {
         uint256 day = uint256(game.currentDayView()) - (dSeed % 2);
-        _call(94, address(game), 0, abi.encodeWithSignature("claimFoilMatch(address,uint256,uint256)", _p(pSeed), day, iSeed % 4));
+        _call(94, address(game), 0, abi.encodeWithSignature("claimFoilMatch(uint32,uint256,uint256)", _id(pSeed), day, iSeed % 4));
     }
 
 
@@ -841,7 +866,7 @@ contract AnyInputHandler is Test {
         uint256 k = a % 3;
         currentActor = actors[k * 2]; // deity holders: actor0 symbol 3, actor2 symbol 4, actor4 symbol 7
         uint256 symbol = k == 0 ? 3 : (k == 1 ? 4 : 7);
-        _call(95, address(game), 0, abi.encodeWithSignature("smite(uint256,address)", symbol, _p(sSeed)));
+        _call(95, address(game), 0, abi.encodeWithSignature("smite(uint256,uint32)", symbol, _id(sSeed)));
     }
 
     function gd_sdgnrsBurn(uint256 a, uint256 amtSeed) external act(a) {
@@ -932,7 +957,7 @@ contract AnyInputHandler is Test {
         uint256 credit = game.presaleBoxCreditOf(currentActor);
         uint256 amount = credit > 0.01 ether ? 0.01 ether + amtSeed % (credit - 0.01 ether + 1) : 0.01 ether;
         uint256 value = amount <= currentActor.balance ? amount : 0;
-        _call(103, address(game), value, abi.encodeWithSignature("buyPresaleBox(address,uint256)", currentActor, amount));
+        _call(103, address(game), value, abi.encodeWithSignature("buyPresaleBox(uint32,uint256)", uint32(0), amount));
     }
 
     function gd_buyLootboxAndPresaleBox(uint256 a, uint256 amtSeed) external act(a) {
@@ -942,7 +967,7 @@ contract AnyInputHandler is Test {
         uint256 value = priceWei + boxAmount;
         if (value > currentActor.balance) value = 0;
         _call(104, address(game), value, abi.encodeWithSelector(
-            DegenerusGame.buyLootboxAndPresaleBox.selector, currentActor, uint256(400), uint256(0), bytes32(0),
+            DegenerusGame.buyLootboxAndPresaleBox.selector, uint32(0), uint256(400), uint256(0), bytes32(0),
             uint256(0), boxAmount));
     }
 
@@ -991,7 +1016,7 @@ contract AnyInputHandler is Test {
             "cr_enterBonusBattle", "cr_enterBonusDay", "cr_amendSlip", "cr_buyFutureCrapsDays",
             "cr_applyCrapsPasses", "cr_convertNormalToHigh", "cr_upgradeReservedDay", "cr_upgradeDayWindows",
             "cr_donate", "cr_createBattle", "cr_closeBattle", "st_transferFrom",
-            "st_safeTransferFrom", "st_approve", "st_setApprovalForAll", "st_reclaimSeat",
+            "st_safeTransferFrom", "st_approve", "st_setApprovalForAll", "unused_75",
             "st_setSeatTraits", "prog_buy", "prog_bigBuy", "prog_mineFlip",
             "prog_fulfillVrf", "prog_warp", "prog_driveDay", "prog_topUp",
             "gd_sellFarFutureEntries", "gd_issueDeityBoon", "gd_placeDegeneretteBet", "gd_enterBonusBattle",

@@ -142,7 +142,7 @@ abstract contract VaultBafRig is DeployProtocol {
         (, , , bool rngLocked_, uint256 priceWei) = game.purchaseInfo();
         if (rngLocked_) return;
         vm.prank(buyer);
-        game.purchase{value: (priceWei * 4000) / 400}(buyer, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: (priceWei * 4000) / 400}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
     }
 
     function _seedNextPrizePool(uint256 targetNext) internal {
@@ -297,7 +297,7 @@ abstract contract VaultBafRig is DeployProtocol {
 ///
 /// @notice The x0 last-purchase seal arms tomorrow's BAF draw after today's coinflip result
 ///         is applied, and in the same step settles the vault's resolved flips through the
-///         existing `depositCoinflip(VAULT, 0)` entry. Drives the real advance path (the
+///         existing `depositCoinflip(1, 0)` entry. Drives the real advance path (the
 ///         turbo-chained rig of BafDrawArming) and pins:
 ///         - Reference equality: a player holding the vault's exact position who claims at
 ///           the last moment that still scores the bracket (the close of the day before the
@@ -335,7 +335,7 @@ contract VaultBafSettlement is VaultBafRig {
 
         // The last moment a claim still scores bracket 10: the latch day's close.
         vm.prank(REF);
-        coinflip.claimCoinflips(address(0), 0);
+        coinflip.claimCoinflips(0, 0);
         uint256 vaultScore = _score(VAULT, 10);
         assertGt(vaultScore, 0, "harness: the vault must hold bracket-10 credit");
         assertEq(vaultScore, _score(REF, 10), "vault and last-moment claimer hold the same bracket-10 score");
@@ -360,7 +360,7 @@ contract VaultBafSettlement is VaultBafRig {
         uint256 payoutB = stakeB + (stakeB * reward) / 100;
         vm.recordLogs();
         vm.prank(REF);
-        coinflip.claimCoinflips(address(0), 0);
+        coinflip.claimCoinflips(0, 0);
         logs = vm.getRecordedLogs();
         assertEq(_recordedAmount(logs, REF, 20), payoutB, "the BAF day's win scores bracket 20");
         assertEq(_countRecorded(logs, REF, 10), 0, "and never bracket 10");
@@ -376,7 +376,7 @@ contract VaultBafSettlement is VaultBafRig {
         _assertLatched(19, latch2);
         assertEq(_lastClaim(VAULT), latch2, "the next x0 seal settles the vault through its latch day");
         vm.prank(REF);
-        coinflip.claimCoinflips(address(0), 0);
+        coinflip.claimCoinflips(0, 0);
         uint256 vault20 = _score(VAULT, 20);
         assertGe(vault20, payoutB, "the vault's bracket-20 score carries the BAF day's win");
         assertEq(vault20, _score(REF, 20), "vault and claimer agree on bracket 20");
@@ -388,7 +388,7 @@ contract VaultBafSettlement is VaultBafRig {
         vm.pauseGasMetering();
         _settleToday();
         vm.prank(VAULT);
-        coinflip.setCoinflipAutoRebuy(address(0), true, 7_000 ether);
+        coinflip.setCoinflipAutoRebuy(0, true, 7_000 ether);
         holdLevel = 9;
         holdDays = 3;
         _driveToEve(9);
@@ -406,7 +406,7 @@ contract VaultBafSettlement is VaultBafRig {
         assertEq(_lastClaim(VAULT), latchDay, "the x0 seal settles the vault through the latch day");
 
         vm.prank(REF);
-        coinflip.claimCoinflips(address(0), 0);
+        coinflip.claimCoinflips(0, 0);
         uint256 vaultScore = _score(VAULT, 10);
         assertGt(vaultScore, 0, "harness: the vault must hold bracket-10 credit");
         assertEq(vaultScore, _score(REF, 10), "vault and last-moment claimer hold the same bracket-10 score");
@@ -435,7 +435,7 @@ contract VaultBafSettlement is VaultBafRig {
         // Settle everything before the latch day, so the latch day's stake is the vault's only
         // unsettled flip; then stake it.
         vm.prank(POKER);
-        coinflip.depositCoinflip(VAULT, 0);
+        coinflip.depositCoinflip(1, 0);
         _stageDay();
         uint256 stake = _stake(VAULT, latchDay);
         assertGt(stake, 0, "harness: the vault stakes the latch day");
@@ -487,7 +487,7 @@ contract VaultBafSettlement is VaultBafRig {
         assertEq(jackpots.bafConsolationOf(VAULT, 10), frozen / 1000, "the vault's settled score is its consolation");
 
         uint256 wwxrpBefore = wwxrp.balanceOf(VAULT);
-        jackpots.claimBafConsolation(VAULT, 10);
+        jackpots.claimBafConsolation(1, 10);
         assertEq(wwxrp.balanceOf(VAULT) - wwxrpBefore, frozen / 1000, "the consolation pays the vault");
     }
 }

@@ -143,7 +143,7 @@ contract DegenerusGameDegeneretteModule is
     ///        bit 224 = FLIP survival flag (1 = the survival flip won; unused for WWXRP/ETH).
     ///        The hero lane is the player lane with its wild bit (0x40) set.
     /// @param payout Total reward: WWXRP requested (before WWXRP's gameMintScale), FLIP (returned to the box caller and credited
-    ///        through coinflip at flush; only the record-bounty chain mints here), or the ETH
+    ///        through coinflip at flush; a record-bounty chain joins its bettor's batched mint), or the ETH
     ///        gross (= ethShare + the recirc).
     /// @param ethShare ETH credited to the player's claimable winnings (0 for WWXRP/FLIP). The
     ///        recirculated remainder is derivable as `payout - ethShare` (ETH only); that recirc
@@ -334,17 +334,20 @@ contract DegenerusGameDegeneretteModule is
     /// @dev Single chosen-attribute pick.
     ///      spinCount is treated as "spin count": each spin resolves independently but shares
     ///      the same lootbox RNG index/word (derived per spin).
-    ///      The bet always belongs to `player` (zero address = caller). Funding source: the
-    ///      player or an approved operator spends the player's funds; any other caller funds the
-    ///      bet itself — a permissionless gift (the caller pays, the player receives the bet and
-    ///      its winnings).
-    /// @param player The player the bet belongs to (use zero address for msg.sender).
+    ///      The bet always belongs to account `id` (0 = caller). Funding source: a caller
+    ///      authorized for the account (its payee — the key or a smurf's owner — or an approved
+    ///      operator) spends the account's funds: fresh ETH from the caller, the claimable
+    ///      shortfall from the account's ledger, FLIP burned from the account's payee, quest to
+    ///      the account. Any other caller funds the bet itself — a permissionless gift (the
+    ///      caller pays and earns the quest, the existing account receives the bet and its
+    ///      winnings).
+    /// @param id The account the bet belongs to (0 = caller; otherwise allocated).
     /// @param currency Currency type (0=ETH, 1=FLIP; all other values unsupported).
     /// @param amountPerSpin Bet amount per ticket.
     /// @param spinCount Number of spins (per-currency cap: ETH 25 / FLIP 15).
     /// @param symbol Chosen hero symbol (0..23: Crypto, Zodiac, Cards); quadrant = symbol >> 3.
     function placeDegeneretteBet(
-        address player,
+        uint32 id,
         uint8 currency,
         uint128 amountPerSpin,
         uint8 spinCount,
@@ -356,18 +359,19 @@ contract DegenerusGameDegeneretteModule is
         // way: distributed by the terminal drain before game over, swept to the terminal
         // sinks after it, and simply trapped once the one-shot final sweep has run.
         if (_livenessTriggered()) revert GameOver();
-        if (player == address(0)) player = msg.sender;
-        address funder;
-        if (player == msg.sender || operatorApprovals[player][msg.sender]) {
-            // The player or an approved operator spends the player's own funds.
-            funder = player;
-        } else {
-            // Permissionless gift: the caller funds, the player receives the bet.
-            funder = msg.sender;
+        address player = msg.sender;
+        address payee = msg.sender;
+        bool gift;
+        if (id != 0) {
+            // An authorized caller spends the account's funds; any other caller makes a gift.
+            bool authorized;
+            (player, payee, authorized) = _account(id, msg.sender);
+            gift = !authorized;
         }
         _placeDegeneretteBet(
             player,
-            funder,
+            gift ? msg.sender : payee,
+            gift,
             currency,
             amountPerSpin,
             spinCount,
@@ -480,12 +484,14 @@ contract DegenerusGameDegeneretteModule is
     // -------------------------------------------------------------------------
 
     /// @dev Internal implementation for placing a Degenerette bet. The bet and its winnings
-    ///      belong to `player`; the funds are debited from `funder` (== player for a
-    ///      self/approved bet, == the caller for a permissionless gift), and the quest
-    ///      progress goes to `funder` — the spender earns the quest.
+    ///      belong to `player`. An authorized bet is funded by the account (claimable by its
+    ///      ID, FLIP from `burnFrom` = its payee) and earns the account's quest; a gift is
+    ///      funded entirely by the caller (`burnFrom` = the caller), which registers as a paying
+    ///      funder and earns the quest.
     function _placeDegeneretteBet(
         address player,
-        address funder,
+        address burnFrom,
+        bool gift,
         uint8 currency,
         uint128 amountPerSpin,
         uint8 spinCount,
@@ -502,9 +508,8 @@ contract DegenerusGameDegeneretteModule is
             if (currency != CURRENCY_ETH) spendWei = spendWei * PriceLookupLib.priceForLevel(lvl + 1) / PRICE_COIN_UNIT;
             (playerId, ) = _registerWallet(player, spendWei);
             funderId = playerId;
-            if (funder != player) (funderId, ) = _registerWallet(funder, spendWei);
+            if (gift) (funderId, ) = _registerWallet(msg.sender, spendWei);
         }
-        // Distinct wallets hold distinct IDs, so equal IDs mean a self-funded bet.
         uint256 totalBet = _placeDegeneretteBetCore(
             player,
             playerId,
@@ -513,12 +518,12 @@ contract DegenerusGameDegeneretteModule is
             spinCount,
             symbol,
             lvl,
-            funderId == playerId
+            !gift
         );
 
         // A gift funder's balance is touched only for a claimable shortfall or stray ETH on a
         // FLIP bet.
-        _collectBetFunds(funder, funderId, currency, totalBet, symbol);
+        _collectBetFunds(burnFrom, funderId, currency, totalBet, symbol);
 
         // Quest progress for Degenerette bets (slot 1 only) — credited to the funder (the
         // spender earns the quest, e.g. a gifter advancing their own streak).
@@ -699,9 +704,10 @@ contract DegenerusGameDegeneretteModule is
         emit ProtocolBoonDrawEntered(issuer, player, day, amount, score, uint64(weight), index);
     }
 
-    /// @dev Processes bet funds (burn tokens, handle ETH, check pool).
+    /// @dev Processes bet funds (burn tokens, handle ETH, check pool). `burnFrom` pays a FLIP
+    ///      bet; `playerId` is the funding ledger.
     function _collectBetFunds(
-        address player,
+        address burnFrom,
         uint32 playerId,
         uint8 currency,
         uint256 totalBet,
@@ -737,7 +743,7 @@ contract DegenerusGameDegeneretteModule is
             // No max payout check needed: ETH payouts are capped at 10% of pool at distribution
             // time, so solvency is guaranteed regardless of jackpot size
         } else if (currency == CURRENCY_FLIP) {
-            coin.burnCoin(player, totalBet);
+            coin.burnCoin(burnFrom, totalBet);
             // Pending FLIP and the bet's queue count commit in one write.
             uint256 lrWord = lootboxRngPacked;
             lootboxRngPacked = ((lrWord & ~(LR_PENDING_FLIP_MASK << LR_PENDING_FLIP_SHIFT))
@@ -829,7 +835,7 @@ contract DegenerusGameDegeneretteModule is
             // _awardDegeneretteDgnrs reads poolBalance fresh per call, so summing
             // off a stale balance would change the payout.
             if (currency == CURRENCY_ETH && s >= 7) {
-                _awardDegeneretteDgnrs(player, amountPerSpin, s);
+                _awardDegeneretteDgnrs(_payee(acc.ownerElement), amountPerSpin, s);
             }
 
             unchecked {
@@ -925,7 +931,8 @@ contract DegenerusGameDegeneretteModule is
             uint256 key = (uint256(index) << 64) | betId;
             uint256 recordBounty = degeneretteRecordBounty[key];
             delete degeneretteRecordBounty[key];
-            _flipSpinChain(
+            // The chain's FLIP joins the owner's batched mint, which pays the owner's payee.
+            acc.flipMint += _flipSpinChain(
                 player,
                 recordBounty * TOKEN_MATH_SCALE,
                 activityScore,
@@ -1341,9 +1348,10 @@ contract DegenerusGameDegeneretteModule is
     }
 
     /// @dev Award sDGNRS from Reward pool on the top-3 score tiers (S>=7) Degenerette ETH bets.
-    ///      Reward scales by bet size (capped at 1 ETH) and score tier.
+    ///      Reward scales by bet size (capped at 1 ETH) and score tier; it goes to `payee`, the
+    ///      bettor account's payee.
     function _awardDegeneretteDgnrs(
-        address player,
+        address payee,
         uint256 betWei,
         uint8 s
     ) private {
@@ -1363,7 +1371,7 @@ contract DegenerusGameDegeneretteModule is
 
         sdgnrs.transferFromPool(
             IsDGNRS.Pool.Reward,
-            player,
+            payee,
             reward
         );
     }
@@ -1467,9 +1475,8 @@ contract DegenerusGameDegeneretteModule is
     /// @dev Stake uses 10^18 sub-units per FLIP. The split drops at most two sub-units;
     ///      spin payouts retain this precision until their sum completes the double-or-
     ///      nothings on one fair flip (EV-neutral) and is returned for the box entry's FLIP
-    ///      lane (credited via coinflip.creditFlip at flush; only the record-bounty chain mints
-    ///      here). No pool / ETH / recirc touch, so this is solvency-safe on every box path
-    ///      including recirc.
+    ///      lane (credited via coinflip.creditFlip at flush). No pool / ETH / recirc touch, so
+    ///      this is solvency-safe on every box path including recirc.
     function resolveFlipSpinsFromBox(
         address player,
         uint256 totalStake,
@@ -1491,7 +1498,8 @@ contract DegenerusGameDegeneretteModule is
     }
 
     /// @dev Shared automatic/record FLIP chain. Record and foil awards retain
-    ///      a chosen symbol; random box awards pass 32. Every spin rerolls colors.
+    ///      a chosen symbol; random box awards pass 32. Every spin rerolls colors. Returns the
+    ///      whole-FLIP result; every caller credits or mints it.
     function _flipSpinChain(
         address player,
         uint256 totalStake,
@@ -1534,12 +1542,9 @@ contract DegenerusGameDegeneretteModule is
                 EntropyLib.hash2(seed, FLIP_ROUND_TAG)
             )
             : FlipRoundLib.floorWholeFlip(total);
-        // The BOX caller sums this into the entry's FLIP lane; the record-bounty caller has no
-        // accumulator and mints here.
-        if (total != 0) {
-            if (spinType == BOX_SPIN_TYPE_RECORD) coin.mintForGame(player, total);
-            else minted = total;
-        }
+        // The box caller sums this into the entry's FLIP lane; the record-bounty caller adds it
+        // to the owner's batched FLIP mint.
+        minted = total;
 
         // One self-contained record: all three reels + count + survival + the final FLIP mint.
         packedSpins |=
@@ -1589,7 +1594,7 @@ contract DegenerusGameDegeneretteModule is
             payout,
             acc
         );
-        if (s >= 7) _awardDegeneretteDgnrs(player, betAmount, s);
+        if (s >= 7) _awardDegeneretteDgnrs(_payee(_walletElement(playerId)), betAmount, s);
 
         // Flush THIS spin's pool/claimable BEFORE recirc so recirc reads fresh storage.
         if (acc.ethClaimable != 0) _addClaimableEth(playerId, acc.ethClaimable);

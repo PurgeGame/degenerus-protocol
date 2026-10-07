@@ -115,7 +115,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
     return game
       .connect(buyer)
       .purchase(
-        ZERO_ADDRESS,
+        0,
         BigInt(n) * 400n,
         0n,
         ZERO_BYTES32,
@@ -197,7 +197,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       try {
         await game
           .connect(buyer)
-          .purchaseWhalePass(buyer.address, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
+          .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
       } catch {
         // May fail for some buyers
       }
@@ -409,7 +409,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
         try {
           await game
             .connect(buyer)
-            .purchaseDeityPass(buyer.address, i < 5 ? i + 1 : i + 2, hre.ethers.ZeroHash, {
+            .purchaseDeityPass(0, i < 5 ? i + 1 : i + 2, hre.ethers.ZeroHash, {
               value: hre.ethers.parseEther(priceEth.toString()),
             });
           deityCount++;
@@ -505,7 +505,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       const buyers = [alice, bob, carol, dan, eve, ...others.slice(0, 10)];
       await heavyPurchases(game, buyers);
       for (const buyer of others.slice(10, 160)) {
-        await game.connect(buyer).purchaseWhalePass(buyer.address, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
+        await game.connect(buyer).purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
       }
       const lvl0 = await game.level();
       const preLens = [];
@@ -600,7 +600,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
           await game
             .connect(buyer)
             .purchase(
-              buyer.address,
+              0,
               400n,         // 1 full ticket = qty 400; cost = (price * 400) / 400 = price = 0.01 ETH
               0n,
               ZERO_BYTES32,
@@ -685,7 +685,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       // mid-day threshold for mineFlip to select the request without donor credit.
       await game
         .connect(alice)
-        .purchase(alice.address, 0n, boSmalls(100), ZERO_BYTES32, MintPaymentKind.DirectEth, false,
+        .purchase(0, 0n, boSmalls(100), ZERO_BYTES32, MintPaymentKind.DirectEth, false,
           { value: eth(1) });
 
       const lbRequestId = await requestMiddayRng(game, deployer, mockVRF);
@@ -736,7 +736,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       return game
         .connect(buyer)
         .purchase(
-          ZERO_ADDRESS,
+          0,
           400n,
           0n,
           ZERO_BYTES32,
@@ -786,7 +786,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
         try {
           await game
             .connect(buyer)
-            .purchaseWhalePass(buyer.address, bundlesPerBuyer, hre.ethers.ZeroHash, {
+            .purchaseWhalePass(0, bundlesPerBuyer, hre.ethers.ZeroHash, {
               value: BigInt(bundlesPerBuyer) * pricePerBundle,
             });
         } catch {
@@ -794,7 +794,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
           try {
             await game
               .connect(buyer)
-              .purchaseWhalePass(buyer.address, bundlesPerBuyer, hre.ethers.ZeroHash, {
+              .purchaseWhalePass(0, bundlesPerBuyer, hre.ethers.ZeroHash, {
                 value: BigInt(bundlesPerBuyer) * eth(4),
               });
           } catch {
@@ -903,7 +903,7 @@ describe("Phase 264 SURF-05 — mineFlip 1.99× margin preserved at v35.0 HEAD",
   // git-blame stability).
   async function buyOneTicket(game, buyer) {
     return game.connect(buyer).purchase(
-      ZERO_ADDRESS,
+      0,
       400n,
       0n,
       ZERO_BYTES32,
@@ -937,14 +937,14 @@ describe("Phase 264 SURF-05 — mineFlip 1.99× margin preserved at v35.0 HEAD",
       try {
         await game
           .connect(buyer)
-          .purchaseWhalePass(buyer.address, bundlesPerBuyer, hre.ethers.ZeroHash, {
+          .purchaseWhalePass(0, bundlesPerBuyer, hre.ethers.ZeroHash, {
             value: BigInt(bundlesPerBuyer) * pricePerBundle,
           });
       } catch {
         try {
           await game
             .connect(buyer)
-            .purchaseWhalePass(buyer.address, bundlesPerBuyer, hre.ethers.ZeroHash, {
+            .purchaseWhalePass(0, bundlesPerBuyer, hre.ethers.ZeroHash, {
               value: BigInt(bundlesPerBuyer) * eth(4),
             });
         } catch {

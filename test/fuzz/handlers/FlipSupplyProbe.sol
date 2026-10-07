@@ -13,7 +13,7 @@ import {WhaleHandler} from "./WhaleHandler.sol";
 import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 
 interface ICoinflipClaim {
-    function claimCoinflips(address player, uint256 amount) external returns (uint256 claimed);
+    function claimCoinflips(uint32 id, uint256 amount) external returns (uint256 claimed);
     function previewClaimCoinflips(address player) external view returns (uint256);
 }
 
@@ -185,7 +185,7 @@ contract FlipSupplyProbe is Test {
         (uint256 t0, uint256 v0) = _before();
         address actor = _gameActor(actorSeed);
         vm.prank(actor);
-        try cf.claimCoinflips(actor, type(uint256).max) {} catch {}
+        try cf.claimCoinflips(0, type(uint256).max) {} catch {}
         _reconcile(t0, v0);
     }
 

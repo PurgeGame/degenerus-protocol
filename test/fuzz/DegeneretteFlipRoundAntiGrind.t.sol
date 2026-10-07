@@ -246,7 +246,7 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
     ) internal returns (uint64 betId) {
         vm.recordLogs();
         vm.prank(player);
-        game.placeDegeneretteBet(address(0), currency, perTicket, spins, uint8(ticket & 7));
+        game.placeDegeneretteBet(0, currency, perTicket, spins, uint8(ticket & 7));
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] == keccak256("DegeneretteBetPlaced(address,uint32,uint64,uint256)")) {

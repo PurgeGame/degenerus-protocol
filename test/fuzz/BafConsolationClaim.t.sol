@@ -13,7 +13,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///         players' accumulated bracket scores are frozen in storage. Each score
 ///         is redeemable once for WWXRP at score / 1000, with a one-token minimum
 ///         for positive scores, via the permissionless
-///         DegenerusJackpots.claimBafConsolation(player, lvl) — the mint always
+///         DegenerusJackpots.claimBafConsolation(id, lvl) — the mint always
 ///         goes to the recorded score owner.
 ///
 /// @dev Two layers:
@@ -40,6 +40,7 @@ contract BafConsolationClaimTest is DeployProtocol {
     address private bob;
     address private keeper;
     address private buyer;
+    mapping(address => uint32) private ids;
 
     function setUp() public {
         _deployProtocol();
@@ -57,6 +58,7 @@ contract BafConsolationClaimTest is DeployProtocol {
 
     function _record(address player, uint24 lvl, uint256 amount) private {
         uint32 id = _giveWalletId(player);
+        ids[player] = id;
         vm.prank(address(coinflip));
         jackpots.recordBafFlip(id, lvl, amount);
     }
@@ -73,7 +75,7 @@ contract BafConsolationClaimTest is DeployProtocol {
         // Bracket not skipped yet: nothing claimable.
         assertEq(jackpots.bafConsolationOf(alice, 10), 0, "no claim before skip");
         vm.expectRevert(NothingToClaim.selector);
-        jackpots.claimBafConsolation(alice, 10);
+        jackpots.claimBafConsolation(ids[alice], 10);
 
         _skip(10);
 
@@ -83,25 +85,25 @@ contract BafConsolationClaimTest is DeployProtocol {
         vm.expectEmit(true, true, false, true, address(jackpots));
         emit BafConsolationClaimed(alice, 10, 5000, 5);
         vm.prank(keeper);
-        jackpots.claimBafConsolation(alice, 10);
+        jackpots.claimBafConsolation(ids[alice], 10);
         assertEq(wwxrp.balanceOf(alice), 5, "alice minted score/1000");
         assertEq(wwxrp.balanceOf(keeper), 0, "keeper gets nothing");
         assertEq(jackpots.bafConsolationOf(alice, 10), 0, "claim consumed score");
 
         // Double claim reverts.
         vm.expectRevert(NothingToClaim.selector);
-        jackpots.claimBafConsolation(alice, 10);
+        jackpots.claimBafConsolation(ids[alice], 10);
 
         // A positive score below 1000 receives one whole WWXRP and is consumed once.
         assertEq(jackpots.bafConsolationOf(bob, 10), 1);
         vm.expectEmit(true, true, false, true, address(jackpots));
         emit BafConsolationClaimed(bob, 10, 250, 1);
         vm.prank(bob);
-        jackpots.claimBafConsolation(bob, 10);
+        jackpots.claimBafConsolation(ids[bob], 10);
         assertEq(wwxrp.balanceOf(bob), 1);
         assertEq(jackpots.bafConsolationOf(bob, 10), 0);
         vm.expectRevert(NothingToClaim.selector);
-        jackpots.claimBafConsolation(bob, 10);
+        jackpots.claimBafConsolation(ids[bob], 10);
     }
 
     function testWholeTokenConsolationBoundaries() public {
@@ -114,10 +116,10 @@ contract BafConsolationClaimTest is DeployProtocol {
         assertEq(jackpots.bafConsolationOf(bob, 10), 1);
         assertEq(jackpots.bafConsolationOf(keeper, 10), 1);
         assertEq(jackpots.bafConsolationOf(buyer, 10), 2);
-        jackpots.claimBafConsolation(alice, 10);
-        jackpots.claimBafConsolation(bob, 10);
-        jackpots.claimBafConsolation(keeper, 10);
-        jackpots.claimBafConsolation(buyer, 10);
+        jackpots.claimBafConsolation(ids[alice], 10);
+        jackpots.claimBafConsolation(ids[bob], 10);
+        jackpots.claimBafConsolation(ids[keeper], 10);
+        jackpots.claimBafConsolation(ids[buyer], 10);
         assertEq(wwxrp.balanceOf(alice), 1);
         assertEq(wwxrp.balanceOf(bob), 1);
         assertEq(wwxrp.balanceOf(keeper), 1);
@@ -134,7 +136,7 @@ contract BafConsolationClaimTest is DeployProtocol {
         jackpots.beginBaf();
         assertEq(jackpots.bafConsolationOf(alice, 20), 0, "a resolving bracket is not claimable");
         vm.expectRevert(NothingToClaim.selector);
-        jackpots.claimBafConsolation(alice, 20);
+        jackpots.claimBafConsolation(ids[alice], 20);
         (uint32 best,) = BafViews.round(address(jackpots), 20, uint256(keccak256("resolved_word")), 0, 48);
         assertEq(best, 0, "no sampled entry holds a bracket score");
         assertEq(jackpots.bafHeadWinner(20, uint256(keccak256("resolved_word")), 0), game.walletIdOf(alice),
@@ -146,14 +148,14 @@ contract BafConsolationClaimTest is DeployProtocol {
 
         assertEq(jackpots.bafConsolationOf(alice, 20), 0, "resolved bracket not claimable");
         vm.expectRevert(NothingToClaim.selector);
-        jackpots.claimBafConsolation(alice, 20);
+        jackpots.claimBafConsolation(ids[alice], 20);
 
         // Defensive: even a (production-impossible) late skip mark cannot revive
         // the stale-epoch score.
         _skip(20);
         assertEq(jackpots.bafConsolationOf(alice, 20), 0, "stale epoch pays zero");
         vm.expectRevert(NothingToClaim.selector);
-        jackpots.claimBafConsolation(alice, 20);
+        jackpots.claimBafConsolation(ids[alice], 20);
     }
 
     function testVaultConsolationEscrowsToAllowance() public {
@@ -165,13 +167,13 @@ contract BafConsolationClaimTest is DeployProtocol {
         uint256 balanceBefore = wwxrp.balanceOf(ContractAddresses.VAULT);
         uint256 supplyBefore = wwxrp.totalSupply();
         vm.prank(keeper);
-        jackpots.claimBafConsolation(ContractAddresses.VAULT, 10);
+        jackpots.claimBafConsolation(ids[ContractAddresses.VAULT], 10);
 
         assertEq(wwxrp.balanceOf(ContractAddresses.VAULT), balanceBefore + 5, "vault prize balance");
         assertEq(wwxrp.totalSupply(), supplyBefore + 5, "vault rewards circulate");
 
         vm.expectRevert(NothingToClaim.selector);
-        jackpots.claimBafConsolation(ContractAddresses.VAULT, 10);
+        jackpots.claimBafConsolation(ids[ContractAddresses.VAULT], 10);
     }
 
     function testZeroScoreRevertsAndSmallestScorePaysOne() public {
@@ -179,16 +181,16 @@ contract BafConsolationClaimTest is DeployProtocol {
 
         // No score at all.
         vm.expectRevert(NothingToClaim.selector);
-        jackpots.claimBafConsolation(alice, 10);
+        jackpots.claimBafConsolation(ids[alice], 10);
 
         assertEq(jackpots.bafConsolationOf(alice, 10), 0);
 
         _record(bob, 10, 1);
         assertEq(jackpots.bafConsolationOf(bob, 10), 1, "smallest positive score pays one");
-        jackpots.claimBafConsolation(bob, 10);
+        jackpots.claimBafConsolation(ids[bob], 10);
         assertEq(wwxrp.balanceOf(bob), 1);
         vm.expectRevert(NothingToClaim.selector);
-        jackpots.claimBafConsolation(bob, 10);
+        jackpots.claimBafConsolation(ids[bob], 10);
         assertEq(jackpots.bafConsolationOf(bob, 10), 0, "small score consumed once");
     }
 
@@ -199,11 +201,11 @@ contract BafConsolationClaimTest is DeployProtocol {
         vm.prank(ContractAddresses.CREATOR);
         wwxrp.setGameMintScale(7);
         assertEq(jackpots.bafConsolationOf(alice, 10), 1, "view reports the unscaled award");
-        jackpots.claimBafConsolation(alice, 10);
+        jackpots.claimBafConsolation(ids[alice], 10);
         assertEq(wwxrp.balanceOf(alice), 7);
         vm.prank(ContractAddresses.CREATOR);
         wwxrp.setGameMintScale(0);
-        jackpots.claimBafConsolation(bob, 10);
+        jackpots.claimBafConsolation(ids[bob], 10);
         assertEq(wwxrp.balanceOf(bob), 0, "zero mint scale still disables emission");
         assertEq(jackpots.bafConsolationOf(bob, 10), 0, "disabled mint still consumes the claim");
     }
@@ -215,11 +217,11 @@ contract BafConsolationClaimTest is DeployProtocol {
         uint256 expected = score < 1000 ? 1 : uint256(score) / 1000;
         assertEq(jackpots.bafConsolationOf(alice, 10), expected);
         vm.prank(keeper);
-        jackpots.claimBafConsolation(alice, 10);
+        jackpots.claimBafConsolation(ids[alice], 10);
         assertEq(wwxrp.balanceOf(alice), expected);
         assertEq(jackpots.bafConsolationOf(alice, 10), 0);
         vm.expectRevert(NothingToClaim.selector);
-        jackpots.claimBafConsolation(alice, 10);
+        jackpots.claimBafConsolation(ids[alice], 10);
     }
 
     function testIndependentBracketsClaimSeparately() public {
@@ -228,9 +230,9 @@ contract BafConsolationClaimTest is DeployProtocol {
         _skip(10);
         _skip(20);
 
-        jackpots.claimBafConsolation(alice, 10);
+        jackpots.claimBafConsolation(ids[alice], 10);
         assertEq(wwxrp.balanceOf(alice), 3, "bracket 10 minted");
-        jackpots.claimBafConsolation(alice, 20);
+        jackpots.claimBafConsolation(ids[alice], 20);
         assertEq(wwxrp.balanceOf(alice), 10, "bracket 20 minted on top");
     }
 
@@ -260,7 +262,7 @@ contract BafConsolationClaimTest is DeployProtocol {
 
                 // Bracket still undecided: claim must revert.
                 vm.expectRevert(NothingToClaim.selector);
-                jackpots.claimBafConsolation(players[0], 10);
+                jackpots.claimBafConsolation(ids[players[0]], 10);
             }
 
             simTime += 1 days + 1;
@@ -293,11 +295,11 @@ contract BafConsolationClaimTest is DeployProtocol {
 
             // Permissionless keeper claim, mint to the score owner.
             vm.prank(keeper);
-            jackpots.claimBafConsolation(players[i], 10);
+            jackpots.claimBafConsolation(ids[players[i]], 10);
             assertEq(wwxrp.balanceOf(players[i]), score / 1000, "minted score/1000");
 
             vm.expectRevert(NothingToClaim.selector);
-            jackpots.claimBafConsolation(players[i], 10);
+            jackpots.claimBafConsolation(ids[players[i]], 10);
         }
     }
 
@@ -329,7 +331,7 @@ contract BafConsolationClaimTest is DeployProtocol {
         if (who.balance < cost) vm.deal(who, cost + 10 ether);
 
         vm.prank(who);
-        try game.purchase{value: cost}(who, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+        try game.purchase{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
     }
 
     /// @dev Fulfill any pending VRF request with an even word (bit 0 = 0), so

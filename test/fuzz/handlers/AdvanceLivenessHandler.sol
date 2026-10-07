@@ -434,7 +434,7 @@ contract AdvanceLivenessHandler is Test {
             vm.deal(probe, 1 ether);
             vm.prank(probe);
             try game.purchase{value: 0.01 ether}(
-                probe, 0, BoxOrderLib.boCustom(0.01 ether), bytes32(0), MintPaymentKind.DirectEth, false
+                0, 0, BoxOrderLib.boCustom(0.01 ether), bytes32(0), MintPaymentKind.DirectEth, false
             ) {} catch {}
             MockLinkEthFeed(ContractAddresses.LINK_ETH_FEED).setUpdatedAt(block.timestamp);
             vm.prank(ContractAddresses.ADMIN);
@@ -615,7 +615,7 @@ contract AdvanceLivenessHandler is Test {
         if (game.gameOver()) return;
         (,,,, uint256 priceWei) = game.purchaseInfo();
         vm.prank(a);
-        try game.purchase{value: priceWei * tickets}(a, tickets * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {
+        try game.purchase{value: priceWei * tickets}(0, tickets * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {
             ghost_ticketBuys++;
         } catch {}
     }
@@ -623,7 +623,7 @@ contract AdvanceLivenessHandler is Test {
     function _buyLootbox(address a, uint256 amount) internal {
         if (game.gameOver()) return;
         vm.prank(a);
-        try game.purchase{value: amount}(a, 0, BoxOrderLib.boCustom(amount), bytes32(0), MintPaymentKind.DirectEth, false) {
+        try game.purchase{value: amount}(0, 0, BoxOrderLib.boCustom(amount), bytes32(0), MintPaymentKind.DirectEth, false) {
             ghost_lootboxBuys++;
         } catch {}
     }
@@ -633,7 +633,7 @@ contract AdvanceLivenessHandler is Test {
         (,,,, uint256 priceWei) = game.purchaseInfo();
         vm.prank(a);
         // overpay is credited to the payer's afking balance, never reverts
-        try game.purchase{value: priceWei * 80}(a, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true) {
+        try game.purchase{value: priceWei * 80}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true) {
             ghost_foilBuys++;
         } catch {}
     }
@@ -641,7 +641,7 @@ contract AdvanceLivenessHandler is Test {
     function _buyWhalePass(address a) internal {
         if (game.gameOver()) return;
         vm.prank(a);
-        try game.purchaseWhalePass{value: 10 ether}(a, 1, bytes32(0)) {
+        try game.purchaseWhalePass{value: 10 ether}(0, 1, bytes32(0)) {
             ghost_whalePasses++;
         } catch {}
     }

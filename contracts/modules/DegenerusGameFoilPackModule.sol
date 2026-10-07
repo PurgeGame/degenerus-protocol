@@ -272,7 +272,7 @@ contract DegenerusGameFoilPackModule is
         if (mintCost != 0) {
             _moduleCall(ContractAddresses.GAME_MINT_MODULE, abi.encodeWithSelector(
                 IDegenerusGameMintModule.purchaseWith.selector,
-                buyer, entryQuantityScaled, boxOrder, affiliateCode, payKind, mintFresh));
+                buyer, entryQuantityScaled, boxOrder, affiliateCode, payKind, mintFresh, uint32(0)));
         }
         _buyFoilPack(buyer, buyerId, fresh - mintFresh, affiliateCode, payKind);
     }
@@ -484,18 +484,20 @@ contract DegenerusGameFoilPackModule is
     // =========================================================================
 
     /// @notice Claim a foil ticket's match against a day's draw (permissionless).
-    /// @dev Delegatecall-only (see buyFoilPack). Anyone may resolve any player's
-    ///      claim — all value credits to `player` (the pack owner), never the caller,
+    /// @dev Delegatecall-only (see buyFoilPack). Anyone may resolve any account's
+    ///      claim — all value credits to account `id` (the pack owner; token prizes to its
+    ///      payee), never the caller,
     ///      and the double-claim marker is set before any payout, so a tuple pays at
     ///      most once regardless of who triggers it. The eligible cycle level is read
     ///      from the day's sealed draw, not passed in. Reverts if the tuple is not a
     ///      claimable win (the batch variant skips instead). Matches expire after the
     ///      draw day and following day; terminal settlement also closes this entrance.
-    /// @param player Pack owner the win credits to.
+    /// @param id Pack owner the win credits to (0 = caller, which must hold an ID; otherwise
+    ///        allocated).
     /// @param day The draw day to claim against.
     /// @param ticketIndex Which of the pack's four tickets to claim (0-3).
     function claimFoilMatch(
-        address player,
+        uint32 id,
         uint256 day,
         uint256 ticketIndex
     ) external {
@@ -509,7 +511,8 @@ contract DegenerusGameFoilPackModule is
         // them into the terminal cohort. The batch variant self-calls this entrypoint
         // under try/catch, so it inherits the gate and skips instead of reverting.
         if (_livenessTriggered()) revert GameOver();
-        if (!_tryClaimFoilMatch(player, day, ticketIndex)) revert NoClaimableMatch();
+        (uint32 playerId, address player, ) = _creditAccount(id);
+        if (!_tryClaimFoilMatch(player, playerId, day, ticketIndex)) revert NoClaimableMatch();
     }
 
     /// @notice Claim a foil pack's gold: the ladder on its total gold count, plus a
@@ -525,7 +528,7 @@ contract DegenerusGameFoilPackModule is
     ///      (see _pushFoilGrand). Only the FLIP legs are left to pull, and neither of
     ///      them reads a pool — which is why this claim needs no RNG-lock guard either.
     ///
-    ///      Anyone may settle any player's pack — every rung credits `player`, never the
+    ///      Anyone may settle any account's pack — every rung credits the account, never the
     ///      caller, and the marker is set before the payout (CEI), so a pack pays at
     ///      most once regardless of who triggers it.
     ///
@@ -533,13 +536,14 @@ contract DegenerusGameFoilPackModule is
     ///      own grand push: past that point the terminal path is drawing down the pools,
     ///      and a claim held back to straddle it would settle against a pool the terminal
     ///      jackpot has already committed.
-    /// @param player Pack owner the win credits to.
+    /// @param accountId Pack owner the win credits to (0 = caller, which must hold an ID;
+    ///        otherwise allocated).
     /// @param lvl The pack's cycle level.
-    function claimGoldenTicket(address player, uint24 lvl) external {
+    function claimGoldenTicket(uint32 accountId, uint24 lvl) external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (_livenessTriggered()) revert GameOver();
 
-        uint32 id = _walletIdOf(player);
+        (uint32 id, address player, ) = _creditAccount(accountId);
         (bool present, , , ) = _foilRecordFor(
             id,
             lvl
@@ -584,18 +588,19 @@ contract DegenerusGameFoilPackModule is
     ///      with StaleBatch(), because an already-swept list fails there first and the
     ///      cheap revert is what a wallet's pre-flight simulation shows a second sender.
     ///      Put a tuple expected to settle first. Each settled win credits its own
-    ///      `player`; the caller is paid nothing. The arrays are parallel: claim i is
-    ///      (players[i], drawDays[i], ticketIndexes[i]).
-    /// @param players Pack owners the wins credit to.
+    ///      account; the caller is paid nothing. The arrays are parallel: claim i is
+    ///      (ids[i], drawDays[i], ticketIndexes[i]). The isolating self-call runs with
+    ///      msg.sender == GAME, so an ID of 0 maps to the caller's own ID first.
+    /// @param ids Pack owners the wins credit to (0 = caller).
     /// @param drawDays Draw days to claim against.
     /// @param ticketIndexes Which pack ticket (0-3) per claim.
     function claimFoilMatchMany(
-        address[] calldata players,
+        uint32[] calldata ids,
         uint24[] calldata drawDays,
         uint8[] calldata ticketIndexes
     ) external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        uint256 n = players.length;
+        uint256 n = ids.length;
         if (drawDays.length != n || ticketIndexes.length != n) revert LengthMismatch();
 
         for (uint256 i; i < n; ) {
@@ -604,9 +609,10 @@ contract DegenerusGameFoilPackModule is
             // storage context. try/catch isolates each claim — a revert (non-claimable
             // OR an unpayable payout spin, e.g. an ETH tier the frozen pool can't cover)
             // rolls back ONLY that tuple's effects and the sweep continues.
+            uint32 id = ids[i];
             try
                 this.claimFoilMatch(
-                    players[i],
+                    id == 0 ? _walletIdOf(msg.sender) : id,
                     drawDays[i],
                     ticketIndexes[i]
                 )
@@ -632,6 +638,7 @@ contract DegenerusGameFoilPackModule is
     ///      the payout (CEI) and pays the isolated 40/40/20 spin.
     function _tryClaimFoilMatch(
         address player,
+        uint32 id,
         uint256 day,
         uint256 ticketIndex
     ) private returns (bool) {
@@ -649,7 +656,6 @@ contract DegenerusGameFoilPackModule is
 
         // The pack's first eligible draw and buy-time activity score (spin RTP).
         // Pending packs have no generated lines and cannot claim.
-        uint32 id = _walletIdOf(player);
         uint256 record = _foilRecordWord(id, L);
         if (record & _FOIL_READY == 0) return false;
         uint24 resolveDay = uint24(record);
@@ -857,7 +863,7 @@ contract DegenerusGameFoilPackModule is
             selector == IDegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox.selector
         ) {
             uint256 wwxrpOut = abi.decode(data, (uint256));
-            if (wwxrpOut != 0) IFoilWwxrp(ContractAddresses.WWXRP).mintPrize(player, wwxrpOut);
+            if (wwxrpOut != 0) IFoilWwxrp(ContractAddresses.WWXRP).mintPrize(_payee(_walletElement(id)), wwxrpOut);
         }
     }
 

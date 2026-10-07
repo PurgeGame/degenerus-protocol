@@ -189,10 +189,10 @@ contract V62GasBrickCompose is DeployProtocol {
         for (uint256 i; i < evictCount; ++i) {
             address who = makeAddr(string(abi.encodePacked("v62_", _u(i))));
             killSubs[i] = who;
-            _grantSeat(who);
+            uint256 seat = _grantSeat(who);
             _fundPool(who, 5 ether);
             vm.prank(who);
-            game.subscribe(address(0), false, false, 1, address(0));
+            game.subscribe(0, false, false, 1, 0, seat);
         }
 
         // Open the grounded subscribe's pending boxes first — the no-orphan guard (AfkingModule:1164)
@@ -211,7 +211,7 @@ contract V62GasBrickCompose is DeployProtocol {
             uint256 bal = game.afkingFundingOf(killSubs[i]);
             if (bal > 0) {
                 vm.prank(killSubs[i]);
-                game.withdrawAfkingFunding(bal);
+                game.withdrawAfkingFunding(0, bal);
             }
         }
 
@@ -334,7 +334,9 @@ contract V62GasBrickCompose is DeployProtocol {
 
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
-        game.depositAfkingFunding{value: amount}(who);
+        uint32 id = game.walletIdOf(who);
+        if (id == 0) id = _giveWalletId(who);
+        game.depositAfkingFunding{value: amount}(id);
     }
 
     function _setHeaderField(uint256 offBytes, uint256 widthBytes, uint256 value) internal {

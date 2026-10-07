@@ -457,18 +457,18 @@ contract DecimatorJackpotIntegrationTest is Test {
         CrapsBattle c = CrapsBattle(ContractAddresses.CRAPS);
         for (uint160 q; q < 4; ++q) {
             vm.prank(address(0xa100 + q));
-            c.setPreferredBoard(3);
+            c.setPreferredBoard(0, 3);
         }
         h.prepare(LVL, 101, 60 ether, 1000 ether, WORD, true);
         h.daily(LVL, WORD, 1_000_000);
         vm.prank(address(0xa100));
         vm.expectRevert();
-        c.setPreferredBoard(2);
+        c.setPreferredBoard(0, 2);
         assertEq(c.preferredBoardOf(h.walletIdOf(address(0xa100))), 3);
         _daily(WORD, 3_000_000);
         _settle(1_000_000);
         vm.prank(address(0xa100));
-        c.setPreferredBoard(2);
+        c.setPreferredBoard(0, 2);
         assertEq(c.preferredBoardOf(h.walletIdOf(address(0xa100))), 2);
     }
 

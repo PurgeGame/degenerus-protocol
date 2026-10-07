@@ -119,10 +119,10 @@ contract RedemptionHandler is Test {
         vm.recordLogs();
         if (game.gameOver()) {
             vm.prank(actor);
-            try sdgnrs.claimRedemption(actor, id) {} catch {}
+            try sdgnrs.claimRedemption(0, id) {} catch {}
         } else {
             vm.prank(actor);
-            try sdgnrs.claimParkedRedemption(actor, id) {} catch {}
+            try sdgnrs.claimParkedRedemption(0, id) {} catch {}
             try game.mineFlip() {} catch {}
         }
         _recordClaims(vm.getRecordedLogs());
@@ -130,7 +130,7 @@ contract RedemptionHandler is Test {
         if (claimed[id][actor]) {
             vm.recordLogs();
             vm.prank(actor);
-            try sdgnrs.claimRedemption(actor, id) {} catch {}
+            try sdgnrs.claimRedemption(0, id) {} catch {}
             _recordClaims(vm.getRecordedLogs());
         }
         _trackSupply(supply); _observeRolls();

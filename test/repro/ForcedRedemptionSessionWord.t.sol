@@ -164,7 +164,7 @@ contract ForcedRedemptionSessionWordTest is RedemptionCloseTools {
                 address owner = _owner(i);
                 uint256 beforeSteth = mockStETH.balanceOf(owner);
                 vm.prank(owner);
-                sdgnrs.claimRedemption(owner, burnDay);
+                sdgnrs.claimRedemption(0, burnDay);
                 assertGt(mockStETH.balanceOf(owner), beforeSteth, "late terminal withdrawal paid");
                 (uint128 base,) = sdgnrs.pendingRedemptions(game.walletIdOf(owner), burnDay);
                 assertEq(base, 0, "late entitlement consumed once");

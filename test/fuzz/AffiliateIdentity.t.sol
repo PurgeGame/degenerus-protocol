@@ -97,12 +97,12 @@ contract AffiliateIdentityTest is DeployProtocol {
         uint32 original = _id(a);
         assertGt(original, 0, "custom creation did not register owner");
         vm.deal(a, 1 ether);
-        vm.prank(a); game.purchase{value: 0.01 ether}(a, 400, 0, B, MintPaymentKind.DirectEth, false);
+        vm.prank(a); game.purchase{value: 0.01 ether}(0, 400, 0, B, MintPaymentKind.DirectEth, false);
         assertEq(_id(a), original);
         address fresh = address(0xD11);
         bytes32 freshCode = bytes32("TICKET_FIRST");
         vm.deal(fresh, 1 ether);
-        vm.prank(fresh); game.purchase{value: 0.01 ether}(fresh, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        vm.prank(fresh); game.purchase{value: 0.01 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         uint32 ticketId = _id(fresh);
         vm.prank(fresh); affiliate.createAffiliateCode(freshCode, 7);
         assertEq(_id(fresh), ticketId);

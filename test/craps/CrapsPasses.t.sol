@@ -750,7 +750,7 @@ contract CrapsPassesTest is CrapsPins {
     function test_twentyOneNormalsConvertToOneHigh() public {
         craps.setPassCredits(alice, 21, 0);
         vm.prank(alice);
-        craps.convertNormalToHigh(1);
+        craps.convertNormalToHigh(0, 1);
         (uint256 n, uint256 h) = craps.passCreditsOf(alice);
         assertEq(n, 0, "the twenty-one normals were not all spent");
         assertEq(h, 1, "the high credit did not arrive");
@@ -760,7 +760,7 @@ contract CrapsPassesTest is CrapsPins {
     function test_fortyTwoNormalsConvertToTwoHighs() public {
         craps.setPassCredits(alice, 42, 4);
         vm.prank(alice);
-        craps.convertNormalToHigh(2);
+        craps.convertNormalToHigh(0, 2);
         (uint256 n, uint256 h) = craps.passCreditsOf(alice);
         assertEq(n, 0, "the two conversions did not spend all forty-two normals");
         assertEq(h, 6, "the high lane did not gain exactly two");
@@ -770,7 +770,7 @@ contract CrapsPassesTest is CrapsPins {
         craps.setPassCredits(alice, 21, 0);
         vm.prank(alice);
         vm.expectRevert(CrapsBattleStorage.BadPassCount.selector);
-        craps.convertNormalToHigh(0);
+        craps.convertNormalToHigh(0, 0);
     }
 
     /// @dev TWENTY CANNOT BUY ONE. The rate is twenty-one exactly, and a short balance reverts on
@@ -779,7 +779,7 @@ contract CrapsPassesTest is CrapsPins {
         craps.setPassCredits(alice, 20, 7);
         vm.prank(alice);
         vm.expectRevert(stdError.arithmeticError);
-        craps.convertNormalToHigh(1);
+        craps.convertNormalToHigh(0, 1);
         (uint256 n, uint256 h) = craps.passCreditsOf(alice);
         assertEq(n, 20, "a refused conversion still debited normals");
         assertEq(h, 7, "a refused conversion still credited a high");
@@ -791,7 +791,7 @@ contract CrapsPassesTest is CrapsPins {
         craps.setPassCredits(alice, 41, 0);
         vm.prank(alice);
         vm.expectRevert(stdError.arithmeticError);
-        craps.convertNormalToHigh(2);
+        craps.convertNormalToHigh(0, 2);
         (uint256 n, uint256 h) = craps.passCreditsOf(alice);
         assertEq(n, 41, "a refused conversion moved the normal lane");
         assertEq(h, 0, "a refused conversion moved the high lane");
@@ -803,7 +803,7 @@ contract CrapsPassesTest is CrapsPins {
         craps.setPassCredits(alice, 21, type(uint32).max);
         vm.prank(alice);
         vm.expectRevert(CrapsBattleStorage.PassLaneFull.selector);
-        craps.convertNormalToHigh(1);
+        craps.convertNormalToHigh(0, 1);
         (uint256 n, uint256 h) = craps.passCreditsOf(alice);
         assertEq(n, 21, "an overflowing conversion still debited normals");
         assertEq(h, type(uint32).max, "the full lane moved");
@@ -815,7 +815,7 @@ contract CrapsPassesTest is CrapsPins {
         craps.setPassCredits(alice, 63, 0);
         vm.recordLogs();
         vm.prank(alice);
-        craps.convertNormalToHigh(3);
+        craps.convertNormalToHigh(0, 3);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(logs.length, 1, "a conversion logged other than once");
         assertEq(logs[0].topics[0], _CONVERTED_SIG, "the one log is not the conversion event");
@@ -836,7 +836,7 @@ contract CrapsPassesTest is CrapsPins {
         assertEq(craps.dayStateOf(target, alice), craps.DAY_SEATED(), "the fixture's reservation did not land");
 
         vm.prank(alice);
-        craps.convertNormalToHigh(1);
+        craps.convertNormalToHigh(0, 1);
         (uint256 n, uint256 h) = craps.passCreditsOf(alice);
         assertEq(n, 0, "the conversion did not spend the remaining bank");
         assertEq(h, 1, "the conversion did not bank the high");
@@ -851,7 +851,7 @@ contract CrapsPassesTest is CrapsPins {
         uint256 burnedBefore = flip.burned(alice);
         uint256 creditsBefore = coinflip.credits();
         vm.prank(alice);
-        craps.convertNormalToHigh(1);
+        craps.convertNormalToHigh(0, 1);
         assertEq(flip.burned(alice), burnedBefore, "a conversion burned FLIP");
         assertEq(coinflip.credits(), creditsBefore, "a conversion moved coinflip credit");
     }
@@ -876,7 +876,7 @@ contract CrapsPassesTest is CrapsPins {
         vm.expectEmit(address(craps));
         emit CrapsDayWindowsUpgraded(_idFor(alice), day, 0x3F, 0);
         vm.prank(alice);
-        craps.upgradeReservedDay(day);
+        craps.upgradeReservedDay(0, day);
 
         (uint256 normal, uint256 high) = craps.passCreditsOf(alice);
         assertEq(normal, 1, "the normal credit did not come back");
@@ -898,7 +898,7 @@ contract CrapsPassesTest is CrapsPins {
         craps.applyCrapsPasses(day, 1, false, 0);
         vm.expectRevert(stdError.arithmeticError);
         vm.prank(alice);
-        craps.upgradeReservedDay(day);
+        craps.upgradeReservedDay(0, day);
         (uint256 normal,) = craps.passCreditsOf(alice);
         assertEq(normal, 0, "a failed upgrade moved a credit");
     }
@@ -912,7 +912,7 @@ contract CrapsPassesTest is CrapsPins {
         craps.applyCrapsPasses(day, 1, true, 0);
         vm.expectRevert(CrapsBattleStorage.NothingToUpgrade.selector);
         vm.prank(alice);
-        craps.upgradeReservedDay(day);
+        craps.upgradeReservedDay(0, day);
     }
 
     /// @dev No ticket on the day, no upgrade — the seat lookup is the caller's own.
@@ -922,7 +922,7 @@ contract CrapsPassesTest is CrapsPins {
         uint24 day = _today() + 2;
         vm.expectRevert(CrapsBattleStorage.NoSuchBet.selector);
         vm.prank(alice);
-        craps.upgradeReservedDay(day);
+        craps.upgradeReservedDay(0, day);
     }
 
     /// @dev Today is not a future day: an open day's ticket upgrades through `upgradeDayWindows`
@@ -933,7 +933,7 @@ contract CrapsPassesTest is CrapsPins {
         uint24 today = _today();
         vm.expectRevert(CrapsBattleStorage.DayNotReservable.selector);
         vm.prank(alice);
-        craps.upgradeReservedDay(today);
+        craps.upgradeReservedDay(0, today);
     }
 }
 

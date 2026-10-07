@@ -315,7 +315,7 @@ contract DecimatorJackpotGasTest is Test {
             assertGt(id - n, uint256(n) * 384 / 416, "last non-solo bucket exercises cumulative allocation");
             for (uint160 i; i < 1000; ++i) {
                 vm.prank(address(0xb000 + i));
-                CrapsBattle(ContractAddresses.CRAPS).setPreferredBoard(3 << 27 | 3 << 9 | 1 << 24);
+                CrapsBattle(ContractAddresses.CRAPS).setPreferredBoard(0, 3 << 27 | 3 << 9 | 1 << 24);
             }
             h.prepare(5, n, 140 ether, 1000 ether, word, false);
             h.seedRecipients(250);
@@ -390,7 +390,7 @@ contract DecimatorJackpotGasTest is Test {
         uint32[8] memory boards = [uint32(0),1,2,3,3 | 1 << 9,3 << 27 | 2 << 9,3 | 3 << 9,3 | 3 << 9 | 1 << 24];
         for (uint160 i; i < 1000; ++i) {
             vm.prank(address(0xb000 + i));
-            CrapsBattle(ContractAddresses.CRAPS).setPreferredBoard(boards[i % 8]);
+            CrapsBattle(ContractAddresses.CRAPS).setPreferredBoard(0, boards[i % 8]);
         }
         h.prepare(5, originals, 140 ether, 1000 ether, 777, false);
         h.seedSampledOriginals(777, originals);

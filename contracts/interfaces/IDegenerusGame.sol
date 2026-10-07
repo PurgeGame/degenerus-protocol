@@ -39,12 +39,94 @@ enum MintPaymentKind {
 /// @dev Per level: a purchase phase (jackpotPhase()==false) transitions to a multi-day jackpot
 ///      payout phase (jackpotPhase()==true) once the prize target is met, then the level advances.
 ///      Ticket purchases stay open in both phases. gameOver() is terminal.
+///
+///      ACCOUNTS. Every player entry point names the account it acts for by wallet ID, never by
+///      address. An account is an ordinary wallet or a smurf (an extra account a wallet created
+///      with `createSmurf`; its key is a hash address nobody controls). The account rule:
+///      - `id == 0` is the caller. No resolution read: the caller's own mint word gives its ID.
+///      - Any other `id` must be allocated (`0 < id < wallets.length`), else `E`.
+///      - Authorized entry points require the caller to be the account's key, the owner of a
+///        smurf account, or an operator approved for that ID (`setOperatorApproval`), else
+///        `NotApproved`. Permissionless doors (claims that only credit the account) skip the
+///        check. Gift doors (Degenerette bets) treat an unauthorized caller as a gift funder.
+///      - Game state (ledgers, quests, mint history, pricing, events) follows the account.
+///      - Value paid out (ETH, stETH, FLIP, WWXRP, DGNRS, sDGNRS, seat and deity NFTs) goes to the
+///        account's PAYEE: the caller for `id == 0`, the key of an ordinary wallet, or the owner's
+///        key for a smurf. Tokens pulled or burned from a player's wallet come from the payee.
+///        A smurf key never holds tokens or receives value.
+///      - Third-party recipients (deity-boon recipient, AFKing deposit beneficiary, AFKing
+///        funding source) are IDs that must already exist: 0 or an unallocated ID reverts `E`.
 interface IDegenerusGame {
     /// @notice Wallet-ID hook for trusted protocol contracts: existing ID, or with `allocate` a new
     ///         one subject to paid admission. Non-allocating calls return zero for unregistered wallets.
     function registerWallet(address owner, bool allocate) external returns (uint32 id);
     /// @notice A wallet's permanent ID, or zero if unregistered.
     function walletIdOf(address player) external view returns (uint32);
+
+    /// @notice Resolve account `id` for `caller`: its key, its payee and whether `caller` may act for it.
+    /// @dev The one cross-contract account resolver (Coinflip, FLIP, Parimutuel, sDGNRS, WWXRP,
+    ///      Jackpots, CRAPS). Callers resolve `id == 0` (self) from their own forward word and never
+    ///      pass it. Reads the wallet-table element once: `key` = bits 0..159, owner ID = bits
+    ///      160..191. `payee` is `key` for an ordinary wallet and the owner element's key for a smurf
+    ///      (a second read, smurfs only). `authorized` is
+    ///      `key == caller || (smurf && smurfKey(caller, id) == key) || operatorApprovals[id][caller]`,
+    ///      where `smurfKey(owner, id) = address(uint160(uint256(keccak256(abi.encode(SMURF_KEY_TAG,
+    ///      owner, id)))))`. Never reverts on authorization; the caller decides: an authorized door
+    ///      reverts on false, a gift door (Coinflip deposit) treats false as a gift, and a
+    ///      permissionless door ignores it and pays `payee`.
+    /// @param id Wallet ID of the account (nonzero, allocated).
+    /// @param caller The address asking to act (the calling contract's `msg.sender`).
+    /// @return key The account key: the address keying the account's address-keyed state.
+    /// @return payee The address every payout for this account goes to and every wallet-token
+    ///         burn or pull comes from (never a smurf key).
+    /// @return authorized True when `caller` is the key, the smurf's owner, or an approved operator.
+    /// @custom:reverts E If `id == 0` or `id >= wallets.length`.
+    function resolveAccount(uint32 id, address caller)
+        external view returns (address key, address payee, bool authorized);
+
+    /// @notice Approve or revoke `operator` for account `id` (game-wide delegated control).
+    /// @dev `id == 0` is the caller's own account, which must already hold an ID (approving pays
+    ///      nothing, so it never registers). A nonzero `id` must be allocated and the caller must be
+    ///      its key or, for a smurf, its owner: operators cannot approve operators. Approvals are
+    ///      keyed `operatorApprovals[id][operator]`; the operator stays an address because it is a
+    ///      real caller. Emits `OperatorApproval(uint32 indexed id, address indexed operator, bool)`.
+    /// @param id Account to manage (0 = caller).
+    /// @param operator Address to approve or revoke.
+    /// @param approved True to approve, false to revoke.
+    /// @custom:reverts ZeroAddress If `operator` is the zero address.
+    /// @custom:reverts E If `id == 0` and the caller has no ID, or `id` is unallocated.
+    /// @custom:reverts NotApproved If the caller is neither the key nor the smurf's owner.
+    function setOperatorApproval(uint32 id, address operator, bool approved) external;
+
+    /// @notice Create a smurf account owned by the caller, give it the caller's referrer and buy it
+    ///         one ticket, all in one call.
+    /// @dev Owner = `msg.sender`, which must already hold a wallet ID (a smurf key is never a
+    ///      caller, so smurfs never own smurfs). Steps, atomically:
+    ///      1. Resolve the owner's referral exactly as a purchase does: an unset referral is set
+    ///         from `affiliateCode`, or locked to no referrer for a blank or invalid code; a set
+    ///         referral ignores the code.
+    ///      2. `smurfId = wallets.length`, `key = smurfKey(msg.sender, smurfId)`; the key must be
+    ///         unregistered. Push `key | ownerId << 160`, write the ID and the smurf flag (mint-word
+    ///         bit 147) to the key's mint word, emit `WalletRegistered(smurfId, key)` and
+    ///         `SmurfCreated(uint32 indexed ownerId, uint32 indexed smurfId)`.
+    ///      3. Copy the owner's resolved referral word to the smurf, locked (Affiliate
+    ///         `copyReferral`). An owner with no referrer gives a smurf with none.
+    ///      4. Buy exactly one whole ticket (400 scaled units, no boxes) for the smurf at the
+    ///         current price. The owner pays: fresh `msg.value` first, then the owner's claimable
+    ///         and AFKing balances as `payKind` allows, exactly as `purchase` spends a buyer's.
+    ///         Fresh ETH above the price credits the owner's AFKing balance. The ticket, mint
+    ///         history and quest progress belong to the smurf.
+    ///      Past PAID_ADMISSION_WALLETS the allocation is admitted only when the ticket price is
+    ///      at least PAID_ADMISSION_MIN_SPEND (`quotedSpend` = the ticket price).
+    /// @param affiliateCode Referral code applied to the owner if its referral is unset.
+    /// @param payKind How the owner funds the ticket (DirectEth, Claimable or Combined).
+    /// @return smurfId The new account's wallet ID.
+    /// @custom:reverts E If the caller has no wallet ID, the derived key is already registered,
+    ///                 or paid admission refuses the allocation.
+    /// @custom:reverts (purchase) Every revert of a one-ticket `purchase` by the owner (RNG lock,
+    ///                 liveness/game over, insufficient payment).
+    function createSmurf(bytes32 affiliateCode, MintPaymentKind payKind)
+        external payable returns (uint32 smurfId);
     /// @notice Read a raw storage slot; used for permanent identity lookups with pinned roots.
     function extsload(bytes32 slot) external view returns (bytes32 value);
     /// @notice Allowed read consumer: 0 blocked, 1 redemption, 2 AFK, 3 boxes/bets, 4 Decimator, 5 Craps, 6 complete.
@@ -113,12 +195,6 @@ interface IDegenerusGame {
     /// @return id The player's wallet ID (0 if unregistered).
     function playerActivityScoreCached(address player) external returns (uint256 score, uint32 id);
 
-    /// @notice Check if an operator is approved to act on behalf of a player.
-    /// @param owner The player who granted approval.
-    /// @param operator The operator address to check.
-    /// @return approved True if operator can act for owner.
-    function isOperatorApproved(address owner, address operator) external view returns (bool);
-
     /// @notice Everything the growth-bet parimutuel reads out of the game.
     /// @param round The round to report pool terms for; 0 skips the pool reads.
     /// @return prevPool The ratchet entry for round - 1.
@@ -181,11 +257,19 @@ interface IDegenerusGame {
         bool deityPassAvailable
     );
 
-    /// @notice Issue a deity boon to a recipient.
-    /// @param deity Deity issuing the boon (address(0) = msg.sender).
-    /// @param recipient Recipient of the boon.
+    /// @notice Issue a deity boon from deity account `deityId` to account `recipientId`.
+    /// @dev Authorized (account rule): `deityId == 0` is the caller; otherwise the caller must be the
+    ///      deity account's key, its owner (smurf deity) or an approved operator. The deity account
+    ///      must hold HAS_DEITY_PASS. The recipient is a third party: an existing ID, never 0. Self
+    ///      boons are compared by ID; a deity may boon its owner or its owner's other smurfs (no
+    ///      smurf-specific limit). Boon state is written for the recipient ID; no value moves.
+    /// @param deityId Deity account issuing the boon (0 = caller).
+    /// @param recipientId Recipient account (nonzero, allocated).
     /// @param slot Slot index (0-2).
-    function issueDeityBoon(address deity, address recipient, uint8 slot) external;
+    /// @custom:reverts NotApproved If the caller may not act for `deityId`.
+    /// @custom:reverts E If `deityId` or `recipientId` is unallocated, or `recipientId == 0`.
+    /// @custom:reverts SelfBoon If the resolved deity ID equals `recipientId`.
+    function issueDeityBoon(uint32 deityId, uint32 recipientId, uint8 slot) external;
 
     /// @notice Initialize both protocol deities in one post-deployment batch (creator only, once).
     function initProtocolDeity() external;
@@ -255,8 +339,8 @@ interface IDegenerusGame {
 
     /// @notice Pay the sDGNRS leg of an all-time record claim and name the record's payee.
     /// @dev COINFLIP only. Pays the claim's accrued record-pool share at 1/500 scale
-    ///      from the sDGNRS reward pool to the payee Game resolves for `id` (today the wallet's
-    ///      own address; Phase F resolves a smurf to its owner here). `payee` is returned on
+    ///      from the sDGNRS reward pool to the payee Game resolves for `id` (the wallet's own
+    ///      address, or the owner's for a smurf). `payee` is returned on
     ///      every call, including `shareBps == 0`, an empty pool and a zero payout: Coinflip
     ///      calls this on every record ratchet and mints the record trophy to `payee`.
     ///      Coinflip passes only nonzero IDs (its callers hold them).
@@ -299,21 +383,30 @@ interface IDegenerusGame {
     /// @return active True if presale is active.
     function lootboxPresaleActiveFlag() external view returns (bool active);
 
-    /// @notice Buy a credit-gated coin-presale box (ETH + claimable shortfall).
-    /// @param buyer Player to receive the box (address(0) = msg.sender).
+    /// @notice Buy a credit-gated coin-presale box (ETH + claimable shortfall) for account `id`.
+    /// @dev Authorized (account rule). The box, its credit gate and the claimable/AFKing legs are
+    ///      the account's; fresh ETH comes from the caller. Overpay and clamp-to-50 excess credit
+    ///      the payer's AFKing balance: the account's own ID when the caller is the account, else
+    ///      the caller's existing ID. Box payouts go to the account's payee.
+    /// @param id Account receiving the box (0 = caller).
     /// @param boxAmount Requested box ETH (>= 0.01 ETH; overpay and clamp-to-50 excess credit to AFKing).
-    function buyPresaleBox(address buyer, uint256 boxAmount) external payable;
+    /// @custom:reverts NotApproved If the caller may not act for `id`.
+    /// @custom:reverts E If `id` is unallocated.
+    function buyPresaleBox(uint32 id, uint256 boxAmount) external payable;
 
-    /// @notice Buy tickets/lootbox AND a presale box in one tx, sharing one RNG index.
-    /// @param buyer Player to receive both legs (address(0) = msg.sender).
+    /// @notice Buy tickets/lootbox AND a presale box in one tx for account `id`, sharing one RNG index.
+    /// @dev Authorized (account rule); funding and refunds as `purchase`.
+    /// @param id Account receiving both legs (0 = caller).
     /// @param entryQuantityScaled Scaled entry quantity (400 units = 1 whole ticket; 0 to skip).
     /// @param boxOrder Packed box order (0 to skip; see purchase()).
     /// @param affiliateCode Affiliate/referral code for the mint leg.
     /// @param payKind Payment method for the mint leg.
     /// @param boxAmount Requested presale-box ETH (funded by the mint leg's leftover fresh ETH,
     ///        then claimable, then afking).
+    /// @custom:reverts NotApproved If the caller may not act for `id`.
+    /// @custom:reverts E If `id` is unallocated.
     function buyLootboxAndPresaleBox(
-        address buyer,
+        uint32 id,
         uint256 entryQuantityScaled,
         uint256 boxOrder,
         bytes32 affiliateCode,
@@ -330,14 +423,22 @@ interface IDegenerusGame {
     /// @return remaining ETH still buyable in boxes (0 once presaleOver / sold out).
     function presaleBoxEthRemaining() external view returns (uint256 remaining);
 
-    /// @notice Place single-symbol Degenerette bets.
-    /// @param player The betting player (address(0) = msg.sender).
+    /// @notice Place single-symbol Degenerette bets for account `id`.
+    /// @dev Gift door. `id == 0` is the caller. When the caller is authorized for `id` (key, smurf
+    ///      owner or approved operator) the account funds the bet: fresh ETH from the caller, the
+    ///      claimable shortfall from the account's ledger, FLIP burned from the account's payee,
+    ///      and the quest credit goes to the account. Any other caller makes a permissionless
+    ///      gift: the caller funds the whole bet itself (its own ETH, claimable or FLIP; the
+    ///      caller is registered as a paying funder) and earns the quest; the bet belongs to
+    ///      `id`, which must already exist. Winnings follow the account and pay its payee.
+    /// @param id The betting account (0 = caller).
     /// @param currency Currency type (0=ETH, 1=FLIP; all other values unsupported).
     /// @param amountPerSpin Bet amount per ticket.
     /// @param spinCount Number of spins (1..25 ETH, 1..15 FLIP). Each spin resolves independently.
     /// @param symbol Chosen hero symbol (0..23: Crypto, Zodiac, Cards); quadrant = symbol >> 3.
+    /// @custom:reverts E If `id` is unallocated (gift or not).
     function placeDegeneretteBet(
-        address player,
+        uint32 id,
         uint8 currency,
         uint128 amountPerSpin,
         uint8 spinCount,
@@ -379,33 +480,64 @@ interface IDegenerusGame {
         external view returns (uint32[] memory tickets);
 
 
-    /// @notice Purchase a deity pass for a specific symbol (0-31).
-    /// @param buyer Player address to receive pass (address(0) = msg.sender).
+    /// @notice Purchase a deity pass for a specific symbol (0-31) for account `id`.
+    /// @dev Authorized (account rule). One deity per main wallet: the main of an account is its
+    ///      payee (the owner for a smurf, itself otherwise), and the purchase reverts when any
+    ///      existing deity's main equals the buyer's main (a scan of at most 32 deity IDs). The
+    ///      buying account keeps HAS_DEITY_PASS and every deity behaviour (perpetual tickets, boons
+    ///      issued as that deity, refunds by its ID); the soulbound pass NFT, the buyer's DGNRS
+    ///      reward and the free-tranche seat go to the payee. Funding and refunds as `purchase`.
+    /// @param id Account buying the pass (0 = caller).
     /// @param symbolId Symbol to claim (0-31).
     /// @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code).
+    /// @custom:reverts NotApproved If the caller may not act for `id`.
+    /// @custom:reverts E If `id` is unallocated.
+    /// @custom:reverts AlreadyOwnsDeityPass If the account, or any account with the same main
+    ///                 wallet, already holds a deity pass.
     function purchaseDeityPass(
-        address buyer,
+        uint32 id,
         uint8 symbolId,
         bytes32 affiliateCode
     ) external payable;
 
-    /// @notice Purchase a 10-level lazy pass (direct in-game activation).
-    /// @param buyer Player address to receive pass (address(0) = msg.sender).
+    /// @notice Purchase a 10-level lazy pass (direct in-game activation) for account `id`.
+    /// @dev Authorized (account rule). The pass is the account's; the free-tranche seat (one per
+    ///      account for life) mints to the payee. Funding and refunds as `purchase`.
+    /// @param id Account receiving the pass (0 = caller).
     /// @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code).
-    function purchaseLazyPass(address buyer, bytes32 affiliateCode) external payable;
+    /// @custom:reverts NotApproved If the caller may not act for `id`.
+    /// @custom:reverts E If `id` is unallocated.
+    function purchaseLazyPass(uint32 id, bytes32 affiliateCode) external payable;
+
+    /// @notice Purchase whale passes for account `id`.
+    /// @dev Authorized (account rule). Passes, entries and lootboxes are the account's; the buyer
+    ///      DGNRS reward and the free-tranche seat go to the payee. Funding and refunds as `purchase`.
+    /// @param id Account receiving the passes (0 = caller).
+    /// @param quantity Number of passes to purchase (1-100).
+    /// @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code).
+    /// @custom:reverts NotApproved If the caller may not act for `id`.
+    /// @custom:reverts E If `id` is unallocated.
+    function purchaseWhalePass(uint32 id, uint256 quantity, bytes32 affiliateCode) external payable;
 
     /// @notice Whether a player holds a deity pass.
     function hasDeityPass(address player) external view returns (bool);
 
     /// @notice Get raw bit-packed mint data for a player.
+    /// @dev Keyed by account key (a smurf's hash key included). Bits 224..255 hold the wallet ID;
+    ///      bit 147 is the smurf flag (set once by `createSmurf`).
     /// @param player Player address to query.
     /// @return Raw packed uint256 containing mint counts, streak, pass status.
     function mintPackedFor(address player) external view returns (uint256);
 
-    /// @notice Purchase tickets and loot boxes with ETH or claimable.
+    /// @notice Purchase tickets and loot boxes with ETH or claimable for account `id`.
     /// @dev Main entry point for all ETH/claimable purchases.
     ///      Recycling at least 3 tickets' worth of claimable winnings earns a 10% FLIP flip-credit bonus.
-    /// @param buyer Player address to receive purchases (address(0) = msg.sender).
+    ///      Authorized (account rule). Tickets, boxes, mint history, quests and pricing are the
+    ///      account's. Fresh ETH comes from the caller; the claimable and AFKing legs spend the
+    ///      account's own balances. Fresh ETH above the cost credits the payer's AFKing balance:
+    ///      the account's ID when the caller is the account, else the caller's existing ID (a
+    ///      smurf's owner gets its own refund). Box and pass payouts go to the account's payee.
+    /// @param id Account receiving the purchases (0 = caller).
     /// @param entryQuantityScaled Scaled entry quantity (400 units = 1 whole ticket; 0 to skip).
     /// @param boxOrder Packed box order (0 to skip):
     ///        [small:8][med:8][large:8][customCount:8][customSize:56 in gwei]; at most 100 boxes,
@@ -414,8 +546,10 @@ interface IDegenerusGame {
     /// @param payKind Payment method (DirectEth, Claimable, or Combined).
     /// @param foil True to additively buy one foil pack (10x price) in the same tx; the
     ///        foil leg is one-per-cycle and adds to, never replaces, the ticket/lootbox legs.
+    /// @custom:reverts NotApproved If the caller may not act for `id`.
+    /// @custom:reverts E If `id` is unallocated.
     function purchase(
-        address buyer,
+        uint32 id,
         uint256 entryQuantityScaled,
         uint256 boxOrder,
         bytes32 affiliateCode,
@@ -423,33 +557,129 @@ interface IDegenerusGame {
         bool foil
     ) external payable;
 
-    /// @notice Purchase tickets with FLIP.
-    /// @dev Entry point for FLIP ticket purchases.
-    /// @param buyer Player address to receive purchases (address(0) = msg.sender).
+    /// @notice Purchase tickets with FLIP for account `id`.
+    /// @dev Entry point for FLIP ticket purchases. Authorized (account rule). The tickets are the
+    ///      account's; the FLIP is burned from the account's payee (wallet balance, then the
+    ///      payee's settled coinflip winnings for a shortfall).
+    /// @param id Account receiving the tickets (0 = caller).
     /// @param entryQuantityScaled Scaled entry quantity (400 units = 1 whole ticket; 0 to skip).
+    /// @custom:reverts NotApproved If the caller may not act for `id`.
+    /// @custom:reverts E If `id` is unallocated.
     function redeemFlip(
-        address buyer,
+        uint32 id,
         uint256 entryQuantityScaled
+    ) external;
+
+    /// @notice Sell far-future ticket entries of account `id` for current-level tickets + cash.
+    /// @dev Authorized (account rule). Every value leg credits the account by ID (claimable ETH,
+    ///      FLIP credit) and the current-level tickets are the account's.
+    /// @param id Account owning the far entries (0 = caller).
+    /// @param levels Target levels to sell from (each 2 <= level - currentLevel <= 100).
+    /// @param quantities Entries to sell per level, in whole-ticket multiples of 4.
+    /// @param queueIndices Caller-supplied ticketQueue position of the account at each level.
+    /// @custom:reverts NotApproved If the caller may not act for `id`.
+    /// @custom:reverts E If `id` is unallocated.
+    function sellFarFutureEntries(
+        uint32 id,
+        uint32[] calldata levels,
+        uint256[] calldata quantities,
+        uint256[] calldata queueIndices
     ) external;
 
     /// @notice Claim color-completion bingo: all 8 colors of one symbol on a level.
     /// @dev One reward per player per level, claimable until the next level starts; dispatches
-    ///      to the bingo module. Permissionless:
-    ///      settles to `player`, the slot owner, never the caller (address(0) = msg.sender).
-    /// @param player Bingo owner to claim for (address(0) = msg.sender).
+    ///      to the bingo module. Permissionless: any caller may settle any account's claim. The
+    ///      FLIP leg credits the account by ID; the DGNRS leg goes to the account's payee.
+    /// @param id Bingo owner to claim for (0 = caller; otherwise allocated).
     /// @param level The level to claim on (uint24 storage-key width).
     /// @param symbol Symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7).
     /// @param slots Per-color positions in lvlTraitEntry[level][traitId] the owner occupies.
-    function claimBingo(address player, uint24 level, uint8 symbol, uint32[8] calldata slots) external;
+    /// @custom:reverts E If `id` is unallocated (or 0 for a caller with no ID).
+    function claimBingo(uint32 id, uint24 level, uint8 symbol, uint32[8] calldata slots) external;
 
-    /// @notice Claim deterministic-ending shares for `player`'s terminal-level tickets after a
+    /// @notice Claim deterministic-ending shares for account `id`'s terminal-level tickets after a
     ///         game over caused by a dead VRF (open until the final sweep).
-    /// @param player Owner of every referenced holding (credited, never the caller).
+    /// @dev Permissionless; each share credits the account's claimable by ID, never the caller.
+    /// @param id Owner of every referenced holding (0 = caller; otherwise allocated).
     /// @param refs Holdings to claim; the top byte of each is its kind: 0 a created ticket
     ///        (trait at bits 64..71, occurrence index at bits 0..63), 1 queued entries (stable owner ID
     ///        at bits 0..31, uint24 queue-domain key at bits 32..55), any other an undrained foil pack (resolve day at
     ///        bits 64..87, index into that day's bucket at bits 0..63).
-    function claimDeadVrf(address player, uint256[] calldata refs) external;
+    /// @custom:reverts E If `id` is unallocated (or 0 for a caller with no ID).
+    function claimDeadVrf(uint32 id, uint256[] calldata refs) external;
+
+    /// @notice Claim account `id`'s deferred whale-pass half passes as tickets.
+    /// @dev Permissionless: it only awards the account its own deferred tickets and moves no value.
+    /// @param id Account to claim for (0 = caller; otherwise allocated).
+    /// @custom:reverts E If `id` is unallocated.
+    function claimWhalePass(uint32 id) external;
+
+    /// @notice Permissionlessly resolve account `id`'s foil match claim for (`day`, `ticketIndex`).
+    /// @dev Credits the account by ID; a WWXRP box-spin prize mints to the account's payee. A tuple
+    ///      pays at most once.
+    /// @param id Pack owner (0 = caller; otherwise allocated).
+    /// @param day Draw day of the claim.
+    /// @param ticketIndex Ticket index 0..3 of the day's board.
+    /// @custom:reverts E If `id` is unallocated.
+    function claimFoilMatch(uint32 id, uint256 day, uint256 ticketIndex) external;
+
+    /// @notice Permissionlessly resolve a batch of foil match claims (parallel arrays).
+    /// @dev Each settled win credits its own account as `claimFoilMatch` does; `ids[i] == 0` is the
+    ///      caller. Non-claimable tuples past index 0 are skipped; a non-claimable tuple at index 0
+    ///      reverts the whole call (StaleBatch).
+    /// @param ids Pack owners.
+    /// @param drawDays Draw days.
+    /// @param ticketIndexes Ticket indexes 0..3.
+    function claimFoilMatchMany(uint32[] calldata ids, uint24[] calldata drawDays, uint8[] calldata ticketIndexes) external;
+
+    /// @notice Claim a foil pack's gold for account `id`: a FLIP ladder from three golds up, or the
+    ///         golden-ticket grand when two whole tickets came out all gold.
+    /// @dev Permissionless; credits the account by ID, payouts to the account's payee. A pack pays
+    ///      at most once.
+    /// @param id Pack owner (0 = caller; otherwise allocated).
+    /// @param lvl The pack's level.
+    /// @custom:reverts E If `id` is unallocated.
+    function claimGoldenTicket(uint32 id, uint24 lvl) external;
+
+    /// @notice Claim account `id`'s accrued ETH winnings in full.
+    /// @dev Authorized (account rule). Debits the account's claimable (and after game over its
+    ///      whole AFKing balance) and pays the account's payee, ETH first with a stETH fallback,
+    ///      then applies the cashout curse to the account. Leaves the 1-wei sentinel.
+    /// @param id Account to claim for (0 = caller).
+    /// @custom:reverts NotApproved If the caller may not act for `id`.
+    /// @custom:reverts E If `id` is unallocated.
+    /// @custom:reverts NothingToClaim If nothing is claimable.
+    /// @custom:reverts AlreadySwept After the final sweep.
+    function claimWinnings(uint32 id) external;
+
+    /// @notice Claim up to `amount` of account `id`'s accrued ETH winnings (partial cashout).
+    /// @dev As `claimWinnings(uint32)`, capped at `amount` of claimable.
+    /// @param id Account to claim for (0 = caller).
+    /// @param amount Maximum wei of claimable winnings to take.
+    /// @custom:reverts NotApproved If the caller may not act for `id`.
+    /// @custom:reverts E If `id` is unallocated.
+    /// @custom:reverts NothingToClaim If nothing is claimable.
+    /// @custom:reverts AlreadySwept After the final sweep.
+    function claimWinnings(uint32 id, uint256 amount) external;
+
+    /// @notice Fund account `id`'s prepaid AFKing ETH bucket with `msg.value`.
+    /// @dev Permissionless (fund anyone). `id` is a third-party recipient: it must already exist
+    ///      and 0 is not the caller. Credits the ledger by ID (claimablePool in tandem).
+    /// @param id Beneficiary account (nonzero, allocated).
+    /// @custom:reverts E If `id == 0` or `id` is unallocated.
+    function depositAfkingFunding(uint32 id) external payable;
+
+    /// @notice Withdraw `amount` of account `id`'s prepaid AFKing ETH.
+    /// @dev Authorized (account rule). Debits the account's bucket and pays the account's payee
+    ///      (the caller for `id == 0` or a smurf's owner; an operator's withdrawal for an ordinary
+    ///      wallet pays that wallet), ETH first with a stETH fallback. `amount == 0` is a no-op.
+    /// @param id Account whose bucket is debited (0 = caller).
+    /// @param amount ETH amount (wei) to withdraw.
+    /// @custom:reverts NotApproved If the caller may not act for `id`.
+    /// @custom:reverts E If `id` is unallocated.
+    /// @custom:reverts Insolvent If `amount` exceeds the bucket.
+    /// @custom:reverts AlreadySwept After the final sweep.
+    function withdrawAfkingFunding(uint32 id, uint256 amount) external;
 
     // -------------------------------------------------------------------------
     // Degenerette Tracking Views
@@ -488,27 +718,63 @@ interface IDegenerusGame {
     function rawFulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) external;
 
     /// @notice The SINGLE AfKing subscription entrypoint: create / replace (dailyQuantity >= 1)
-    ///         or cancel (dailyQuantity == 0) for `player` (self when address(0)/msg.sender).
-    /// @param player Subscriber (address(0) = msg.sender).
+    ///         or cancel (dailyQuantity == 0) for account `id`.
+    /// @dev Authorized (account rule), checked once here and never at process time.
+    ///      Seats: a NEW run (no live run: never subscribed, cancelled or evicted) burns seat
+    ///      `seatId`, which must be held by the subscriber's payee (the owner for a smurf): Game
+    ///      calls `AFKING_SUB_TOKEN.consumeSeat(payee, seatId)` before it writes the run. Changing
+    ///      a live run, a cancel, and the exempt VAULT/SDGNRS subscriptions burn nothing and
+    ///      ignore `seatId`. There is no seat lock and no eviction forfeit.
+    ///      Funding: `fundingSourceId == 0` (or the subscriber's own ID) self-funds from the
+    ///      subscriber's own AFKing ledger; a stETH top-up pulls from the subscriber's payee.
+    ///      Any other `fundingSourceId` is an ID that must exist and must consent: it shares the
+    ///      subscriber's main wallet (equal payees: an owner and its smurfs) or approved the
+    ///      subscriber's key as an operator. Prepaid draws keep that consent, and each stETH
+    ///      pull from the source's payee re-checks it live.
+    ///      `msg.value` credits the funding bucket the draws debit (the source's when external,
+    ///      else the subscriber's).
+    /// @param id Subscriber account (0 = caller).
     /// @param drainGameCreditFirst Spend game credit before fresh ETH.
     /// @param useTickets Deliver tickets (true) or lootbox deposits (false).
     /// @param dailyQuantity Daily delivery quantity; 0 cancels the subscription.
-    /// @param fundingSource Account funding the subscription (operator-approval gated).
+    /// @param fundingSourceId Account funding the subscription (0 = self-funded).
+    /// @param seatId Seat serial to burn when this call starts a new run (ignored otherwise).
+    /// @custom:reverts RngLocked During the RNG freeze window.
+    /// @custom:reverts GameOver Once the liveness trigger fires.
+    /// @custom:reverts NotApproved If the caller may not act for `id`, or the funding source does
+    ///                 not authorize the subscriber.
+    /// @custom:reverts E If `id` or `fundingSourceId` is unallocated.
+    /// @custom:reverts NotSubscribed On a cancel with no subscription.
+    /// @custom:reverts InvalidToken (seat token) If a new run's `seatId` is not held by the payee.
     function subscribe(
-        address player,
+        uint32 id,
         bool drainGameCreditFirst,
         bool useTickets,
         uint8 dailyQuantity,
-        address fundingSource
+        uint32 fundingSourceId,
+        uint256 seatId
     ) external payable;
 
+    /// @notice Length of the AFKing subscriber set: live subscriptions, the two exempt protocol
+    ///         subscriptions (VAULT, SDGNRS) and cancel/eviction tombstones awaiting the in-pass
+    ///         reclaim.
+    /// @dev The seat token's capped vault mint reads it: `liveSeats + n + subscriberSetLength()`
+    ///      may not exceed 2,000. Every non-exempt entry burned a seat, so the set never exceeds
+    ///      2,000 and needs no runtime cap.
+    function subscriberSetLength() external view returns (uint256);
+
     /// @notice GAME-only atomic stETH pull; caller catches any failed funding attempt.
+    /// @dev Game self-call (caller and callee both live in the Game image). `subscriber` is the
+    ///      sub's account key and `source` the address the stETH comes from: the funding account's
+    ///      payee. The live consent re-check runs by ID inside.
     function pullAfkingSteth(address subscriber, address source, uint256 shortfall) external returns (uint256);
 
-    /// @notice Permissionless FLIP claim — pays each sub its accrued pendingFlip in one
-    ///         creditFlip and zeroes it; always credits the sub, never the caller.
-    /// @param subs Subscribers to pay out.
-    function claimAfkingFlip(address[] calldata subs) external;
+    /// @notice Permissionless FLIP claim — pays each listed account its accrued pendingFlip in one
+    ///         creditFlip and zeroes it; always credits the account, never the caller.
+    /// @dev `ids[i] == 0` is the caller. An ID with nothing accrued, including an unallocated ID,
+    ///      settles nothing and does not revert.
+    /// @param ids Subscriber accounts to pay out.
+    function claimAfkingFlip(uint32[] calldata ids) external;
 
     /// @notice Affiliate-only atomic read-and-zero of a sub's accrued affiliateBase.
     /// @param sub The subscriber whose affiliate base is drained.
@@ -530,22 +796,38 @@ interface IDegenerusGame {
     /// @param floor The minimum streak base to set (no-op if the base is already at/above it).
     function floorAfkingStreakBase(uint32 id, uint16 floor) external;
 
-    /// @notice Permissionless paid cure: clear `target`'s cashout/smite curse for 100 FLIP.
-    /// @param target The cursed player to cure.
-    function decurse(address target) external;
+    /// @notice Permissionless paid cure: clear account `id`'s cashout/smite curse for 100 FLIP.
+    /// @dev The caller pays: 100 FLIP is burned from `msg.sender`'s own wallet (a gift), never
+    ///      from the account. Clears the curse on the account's mint word.
+    /// @param id The cursed account to cure (0 = caller; otherwise allocated).
+    /// @custom:reverts E If `id` is unallocated.
+    /// @custom:reverts NothingToClaim If the account has no curse.
+    function decurse(uint32 id) external;
 
-    /// @notice Deity-gated smite: add a saturating curse stack to `smitee` for 200 FLIP.
+    /// @notice Deity-gated smite: add a saturating curse stack to account `smiteeId` for 200 FLIP.
+    /// @dev The caller must own deity pass `deityId` (the NFT sits at the deity account's main
+    ///      wallet, so the main wallet smites) and pays 200 FLIP from its own wallet. Self-smite
+    ///      is allowed. Active afkers and the protocol accounts (VAULT, SDGNRS, GNRUS) are immune.
     /// @param deityId The smiting deity's pass ID (caller must hold it).
-    /// @param smitee The player receiving the curse stack.
-    function smite(uint256 deityId, address smitee) external;
+    /// @param smiteeId The account receiving the curse stack (0 = caller; otherwise allocated).
+    /// @custom:reverts Unauthorized If the caller does not own the pass, or the smitee is a
+    ///                 protocol account.
+    /// @custom:reverts E If `smiteeId` is unallocated.
+    function smite(uint256 deityId, uint32 smiteeId) external;
 
-    /// @notice Claim DGNRS affiliate rewards for the current level (single affiliate).
-    /// @param player Affiliate address to claim for (address(0) = msg.sender).
-    function claimAffiliateDgnrs(address player) external;
+    /// @notice Claim DGNRS affiliate rewards for the current level for affiliate account `id`.
+    /// @dev Permissionless: the reward is deterministic. The DGNRS leg goes to the account's
+    ///      payee; the FLIP bonus credits the account by ID.
+    /// @param id Affiliate account to claim for (0 = caller; otherwise allocated).
+    /// @custom:reverts E If `id` is unallocated.
+    function claimAffiliateDgnrs(uint32 id) external;
 
     /// @notice Permissionless batch affiliate-DGNRS claim; a blank array claims the caller's own.
-    /// @param affiliates Affiliates to settle; empty = msg.sender only.
-    function claimAffiliateDgnrs(address[] calldata affiliates) external;
+    /// @dev Each element runs as `claimAffiliateDgnrs(uint32)` in isolation (an ineligible or
+    ///      already-claimed account is skipped). `ids[i] == 0` is the caller: the Game resolves it
+    ///      to the caller's ID before its isolating self-call, whose `msg.sender` is the Game.
+    /// @param ids Affiliate accounts to settle; empty = the caller only.
+    function claimAffiliateDgnrs(uint32[] calldata ids) external;
 
     /// @notice Quote a far-future salvage swap WITHOUT executing (read-only in effect;
     ///         declared non-view because the Game dispatches it via delegatecall).

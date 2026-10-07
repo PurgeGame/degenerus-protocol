@@ -115,7 +115,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
         vm.prank(address(game));
         wwxrp.mintPrize(player, amount);
         vm.prank(player);
-        wwxrp.enter(amount);
+        wwxrp.enter(0, amount);
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -126,11 +126,11 @@ contract WWXRPDailyDrawTest is DeployProtocol {
         _bootstrap();
         vm.startPrank(alice);
         vm.expectRevert(abi.encodeWithSignature("BelowMinBurn()"));
-        wwxrp.enter(0);
+        wwxrp.enter(0, 0);
         vm.expectRevert(abi.encodeWithSignature("BelowMinBurn()"));
-        wwxrp.enter(25 - 1);
+        wwxrp.enter(0, 25 - 1);
         // Exactly the minimum is accepted.
-        wwxrp.enter(25);
+        wwxrp.enter(0, 25);
         vm.stopPrank();
     }
 
@@ -140,7 +140,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
         vm.prank(address(game));
         wwxrp.mintPrize(alice, 200);
         vm.prank(alice);
-        wwxrp.enter(100);
+        wwxrp.enter(0, 100);
         uint24 day = game.currentDayView();
         (, , uint32 count) = wwxrp.bucketInfo(day, wwxrp.bucketOf(day, aliceId));
         assertEq(count, 1, "genesis entry recorded");
@@ -153,7 +153,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
         vm.prank(address(game));
         wwxrp.mintPrize(carol, 100);
         vm.prank(carol);
-        wwxrp.enter(100);
+        wwxrp.enter(0, 100);
         uint32 id = game.walletIdOf(carol);
         assertGt(id, 0, "enter registered the burner");
         uint24 day = game.currentDayView();
@@ -177,7 +177,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
         uint24 day = game.currentDayView();
         uint8 bucket = wwxrp.bucketOf(day, aliceId);
         vm.prank(alice);
-        wwxrp.enter(100);
+        wwxrp.enter(0, 100);
         (, , uint32 count) = wwxrp.bucketInfo(day, bucket);
         assertEq(count, 1, "entry recorded under the game's day index");
     }
@@ -190,7 +190,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
         uint256 supplyBefore = wwxrp.totalSupply();
 
         vm.prank(alice);
-        wwxrp.enter(500);
+        wwxrp.enter(0, 500);
 
         assertEq(wwxrp.balanceOf(alice), balBefore - 500, "burned");
         assertEq(wwxrp.totalSupply(), supplyBefore - 500, "supply");
@@ -217,10 +217,10 @@ contract WWXRPDailyDrawTest is DeployProtocol {
         address bob2 = _addrInBucket(day, bucket, "bobSameBucket");
 
         vm.prank(alice);
-        wwxrp.enter(200);
+        wwxrp.enter(0, 200);
         _enterAs(bob2, 300);
         vm.prank(alice);
-        wwxrp.enter(100);
+        wwxrp.enter(0, 100);
 
         (uint256 raw, uint256 total, uint32 count) = wwxrp.bucketInfo(
             day,
@@ -275,7 +275,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
         vm.prank(address(game));
         wwxrp.mintPrize(alice, huge);
         vm.prank(alice);
-        wwxrp.enter(huge);
+        wwxrp.enter(0, huge);
 
         uint8 bucketA = wwxrp.bucketOf(day, aliceId);
         (uint256 raw, uint256 total, ) = wwxrp.bucketInfo(day, bucketA);
@@ -296,7 +296,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
         uint8 bucket = wwxrp.bucketOf(day, aliceId);
         uint256 supplyBefore = wwxrp.totalSupply();
         vm.prank(alice);
-        wwxrp.enter(26);
+        wwxrp.enter(0, 26);
         assertEq(
             wwxrp.totalSupply(),
             supplyBefore - 26,
@@ -338,7 +338,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
 
         uint256 gasBefore = gasleft();
         vm.prank(alice);
-        wwxrp.enter(500);
+        wwxrp.enter(0, 500);
         emit log_named_uint("enter gas", gasBefore - gasleft());
 
         _warpNextDay();
@@ -378,7 +378,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
         uint24 day = game.currentDayView();
         uint8 bucket = wwxrp.bucketOf(day, aliceId);
         vm.prank(alice);
-        wwxrp.enter(500);
+        wwxrp.enter(0, 500);
 
         _warpNextDay();
         _completeDay(_grindWord(day, 2, bucket));
@@ -399,7 +399,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
         _bootstrap();
         uint24 day = game.currentDayView();
         vm.prank(alice);
-        wwxrp.enter(500);
+        wwxrp.enter(0, 500);
 
         _warpNextDay();
         _completeDay(_grindWord(day, 0, 0));
@@ -414,7 +414,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
         _bootstrap();
         uint24 day = game.currentDayView();
         vm.prank(alice);
-        wwxrp.enter(500);
+        wwxrp.enter(0, 500);
         _warpNextDay();
         _completeDay(_grindWord(day, 1, wwxrp.bucketOf(day, aliceId)));
         (bool available,,,,,,) = wwxrp.previewOutcome(day);
@@ -435,7 +435,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
         uint24 day = game.currentDayView();
         uint8 aliceBucket = wwxrp.bucketOf(day, aliceId);
         vm.prank(alice);
-        wwxrp.enter(500);
+        wwxrp.enter(0, 500);
 
         // Gate hits but the winning bucket is a DIFFERENT (empty) one.
         uint8 emptyBucket = aliceBucket == 9 ? 0 : aliceBucket + 1;
@@ -462,7 +462,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
 
         // Alice [0, 200), Bob [200, 500) — whole-WWXRP units.
         vm.prank(alice);
-        wwxrp.enter(200);
+        wwxrp.enter(0, 200);
         _enterAs(bob2, 300);
 
         _warpNextDay();
@@ -500,7 +500,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
         _bootstrap();
         uint24 day = game.currentDayView();
         vm.prank(alice);
-        wwxrp.enter(500);
+        wwxrp.enter(0, 500);
         // Tomorrow's word does not exist yet.
         vm.expectRevert(abi.encodeWithSignature("WordUnavailable()"));
         wwxrp.claim(day, 0);
@@ -511,7 +511,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
         uint24 day = game.currentDayView();
         uint8 bucket = wwxrp.bucketOf(day, aliceId);
         vm.prank(alice);
-        wwxrp.enter(500);
+        wwxrp.enter(0, 500);
 
         _warpNextDay();
         _completeDay(_grindWord(day, 1, bucket));
@@ -535,7 +535,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
 
         // 6 entries in one bucket with varied sizes.
         vm.prank(alice);
-        wwxrp.enter(50);
+        wwxrp.enter(0, 50);
         for (uint256 i = 0; i < 4; i++) {
             address m = _addrInBucket(
                 day,
@@ -546,7 +546,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
             _enterAs(m, (i + 1) * 75);
         }
         vm.prank(alice);
-        wwxrp.enter(30);
+        wwxrp.enter(0, 30);
 
         _warpNextDay();
         _completeDay(_grindWord(day, 2, bucket));
@@ -592,7 +592,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
         for (uint256 i = 0; i < 10; i++) {
             uint24 day = game.currentDayView();
             vm.prank(alice);
-            wwxrp.enter(100);
+            wwxrp.enter(0, 100);
             _warpNextDay();
             _completeDay(uint256(keccak256(abi.encode("mirror", i))));
             uint256 recorded = game.rngWordForDay(day + 1);
@@ -670,7 +670,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
         uint8 bucket = wwxrp.bucketOf(day, aliceId);
 
         vm.prank(alice);
-        wwxrp.enter(100);
+        wwxrp.enter(0, 100);
         for (uint256 i = 0; i < 3; i++) {
             _enterAs(
                 _addrInBucket(day, bucket, string(abi.encodePacked("w", i))),
@@ -723,7 +723,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
             abi.encode(uint256(30_000), aliceId)
         );
         vm.prank(alice);
-        wwxrp.enter(100);
+        wwxrp.enter(0, 100);
         (, uint256 cum0) = wwxrp.entryAt(day, bucket, 0);
         assertEq(cum0, 300, "capped activity = 3x weight");
 
@@ -733,7 +733,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
             abi.encode(uint256(235), aliceId)
         );
         vm.prank(alice);
-        wwxrp.enter(100);
+        wwxrp.enter(0, 100);
         (, uint256 cum1) = wwxrp.entryAt(day, bucket, 1);
         assertEq(
             cum1 - cum0,

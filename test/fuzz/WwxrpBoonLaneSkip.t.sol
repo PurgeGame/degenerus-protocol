@@ -68,7 +68,7 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
         vm.expectEmit(true, false, false, true, address(game));
         emit BoonConsumed(aliceId, 7, 1200);
         vm.prank(alice);
-        wwxrp.enter(25);
+        wwxrp.enter(0, 25);
         (, uint256 s1) = IGameBoonView(address(game)).boonPacked(aliceId);
         assertEq(s1, others, "WWXRP lane not cleared or another lane touched");
     }
@@ -81,7 +81,7 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
         _write(aliceId, 0, _lane(2, false, d - 10) << WWXRP_LANE_SHIFT);
         vm.expectCall(address(game), abi.encodeCall(IGameBoonView.consumeCoinflipBoon, (aliceId)), 1);
         vm.prank(alice);
-        wwxrp.enter(25);
+        wwxrp.enter(0, 25);
         (, uint256 s1) = IGameBoonView(address(game)).boonPacked(aliceId);
         assertEq(s1, 0, "expired WWXRP lane not cleared");
     }
@@ -94,7 +94,7 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
         vm.expectEmit(true, false, false, true, address(game));
         emit BoonConsumed(aliceId, 7, 1200);
         vm.prank(alice);
-        wwxrp.enter(25);
+        wwxrp.enter(0, 25);
         (, uint256 s1) = IGameBoonView(address(game)).boonPacked(aliceId);
         assertEq(s1, 0, "same-day deity lane not spent");
 
@@ -103,7 +103,7 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
         vm.expectCall(address(game), abi.encodeCall(IGameBoonView.consumeCoinflipBoon, (aliceId)), 1);
         vm.recordLogs();
         vm.prank(alice);
-        wwxrp.enter(25);
+        wwxrp.enter(0, 25);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             assertTrue(logs[i].topics[0] != BOON_CONSUMED_SIG, "stale deity lane paid");
@@ -145,7 +145,7 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
         );
         vm.recordLogs();
         vm.prank(alice);
-        wwxrp.enter(amount);
+        wwxrp.enter(0, amount);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         if (!nonzeroTier) {
             (uint256 g0, uint256 g1) = IGameBoonView(address(game)).boonPacked(aliceId);

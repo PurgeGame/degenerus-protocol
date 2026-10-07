@@ -216,7 +216,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
         (, , , , uint256 priceWei) = game.purchaseInfo();
         if (priceWei != 0 && priceWei <= actor.balance) {
             vm.prank(actor);
-            try game.purchase{value: priceWei}(actor, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+            try game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         }
         for (uint256 i; i < 12 && !game.rngLocked(); i++) {
             vm.warp(block.timestamp + 1 days);
@@ -272,7 +272,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
     function _buyLootbox(address who, uint256 lootboxWei) internal {
         vm.deal(who, lootboxWei + 2 ether);
         vm.prank(who);
-        game.purchase{value: lootboxWei + 1 ether}(who, 400, BoxOrderLib.boCustomFloor(lootboxWei), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: lootboxWei + 1 ether}(0, 400, BoxOrderLib.boCustomFloor(lootboxWei), bytes32(0), MintPaymentKind.DirectEth, false);
     }
 
     /// @dev Buy a REAL presale box into the current write cohort (credit-funded; enqueues for auto-open).
@@ -283,7 +283,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
             // Entry-point registration: a plain ticket buy gives the wallet its ID (no box entry).
             (, , , , uint256 priceWei) = game.purchaseInfo();
             vm.prank(who);
-            game.purchase{value: priceWei}(who, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+            game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         }
         // Seed spendable presale-box credit (presaleBoxCredit — a credit ALLOWANCE keyed by wallet ID).
         bytes32 cslot = keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.PRESALE_BOX_CREDIT));
@@ -291,7 +291,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
         vm.store(address(game), cslot, bytes32(existing + boxWei));
         vm.deal(who, boxWei + 1 ether);
         vm.prank(who);
-        try game.buyPresaleBox{value: boxWei}(who, boxWei) {
+        try game.buyPresaleBox{value: boxWei}(0, boxWei) {
             created = true;
         } catch {
             created = false;

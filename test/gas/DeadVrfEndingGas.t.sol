@@ -241,20 +241,21 @@ contract DeadVrfClaimGas is DeployProtocol {
         for (uint256 i; i < refs.length; ++i) {
             refs[i] = i << 64;
         }
-        bytes memory payload = abi.encodeCall(game.claimDeadVrf, (OWNER, refs));
+        uint32 ownerId = game.walletIdOf(OWNER);
+        bytes memory payload = abi.encodeCall(game.claimDeadVrf, (ownerId, refs));
         uint256 intrinsic = 21_000;
         for (uint256 i; i < payload.length; ++i) {
             intrinsic += payload[i] == 0 ? 4 : 16;
         }
 
         uint256 beforeGas = gasleft();
-        game.claimDeadVrf{gas: 11_500_000 - intrinsic}(OWNER, refs);
+        game.claimDeadVrf{gas: 11_500_000 - intrinsic}(ownerId, refs);
         uint256 used = beforeGas - gasleft() + intrinsic;
         emit log_named_uint("DEAD_VRF_COLD_256_TRAIT_CLAIM_INCLUDING_INTRINSIC", used);
         assertLt(used, 11_500_000);
         assertEq(game.claimableWinningsOf(OWNER), expectedClaim);
         assertGt(expectedClaim, 0, "the measured call must pay the owner");
         vm.expectRevert();
-        game.claimDeadVrf(OWNER, refs);
+        game.claimDeadVrf(ownerId, refs);
     }
 }

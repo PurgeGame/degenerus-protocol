@@ -49,7 +49,7 @@ contract NativeAtomicDegeneretteTest is DeployProtocol {
         uint32 index = uint32(RecyclingState.writeBuffer(address(game)));
         uint256 word = _winningWord(index, minimum, currency == 1);
         vm.prank(PLAYER);
-        game.placeDegeneretteBet{value: currency == 0 ? uint256(stake) * spins : 0}(PLAYER, currency, stake, spins, 9);
+        game.placeDegeneretteBet{value: currency == 0 ? uint256(stake) * spins : 0}(0, currency, stake, spins, 9);
         host.publishRead();
         host.setCommittedWord(word);
         uint256 packed = host.bet();

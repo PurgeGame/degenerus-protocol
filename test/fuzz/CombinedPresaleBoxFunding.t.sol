@@ -45,7 +45,7 @@ contract CombinedPresaleBoxFunding is DeployProtocol {
         vm.recordLogs();
         vm.prank(buyer);
         game.buyLootboxAndPresaleBox{value: total}(
-            buyer,
+            0,
             ticketQty,
             0, // no ordinary box leg: a presale-only entry
             bytes32(0),
@@ -89,7 +89,7 @@ contract CombinedPresaleBoxFunding is DeployProtocol {
         uint256 expectedPosition = RecyclingState.boxCount(address(game), writeBuffer);
         vm.recordLogs();
         vm.prank(buyer);
-        game.buyPresaleBox{value: amount}(buyer, amount);
+        game.buyPresaleBox{value: amount}(0, amount);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool found;
         for (uint256 i; i < logs.length; ++i) {
@@ -120,7 +120,7 @@ contract CombinedPresaleBoxFunding is DeployProtocol {
         // purchase remains valid on either physical write parity while that word exists.
         RecyclingState.seedWord(address(game), writeBuffer ^ 1, bytes32(uint256(0xBEEF)));
         vm.prank(buyer);
-        game.purchase{value: 0.48 ether}(buyer, 19_200, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: 0.48 ether}(0, 19_200, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(game.presaleBoxCreditOf(buyer), 0.12 ether, "real purchase funds two box attempts");
 
         uint256 first = _buyAndCheck(buyer, writeBuffer, 0.05 ether);
@@ -142,7 +142,7 @@ contract CombinedPresaleBoxFunding is DeployProtocol {
         uint256 buyerBalance = buyer.balance;
         vm.prank(buyer);
         vm.expectRevert(bytes4(keccak256("E()")));
-        game.buyPresaleBox{value: 0.05 ether}(buyer, 0.05 ether);
+        game.buyPresaleBox{value: 0.05 ether}(0, 0.05 ether);
         assertEq(game.presaleBoxCreditOf(buyer), 0.02 ether, "the failed buy rolls back the credit debit");
         assertEq(game.presaleBoxEthRemaining(), 49.9 ether, "the failed buy sells no box");
         assertEq(RecyclingState.boxCount(address(game), writeBuffer), count, "the failed buy appends nothing");

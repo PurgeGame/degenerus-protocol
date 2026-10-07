@@ -191,12 +191,12 @@ contract OpenBountyCarry is DeployProtocol {
         for (uint256 i; i < n; ++i) {
             address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
             subs[i] = who;
-            _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (NoCoin without it)
-            _giveWalletId(who);
+            uint256 seat = _grantSeat(who);
+            uint32 id = _giveWalletId(who);
             vm.deal(address(this), poolEach);
-            game.depositAfkingFunding{value: poolEach}(who);
+            game.depositAfkingFunding{value: poolEach}(id);
             vm.prank(who);
-            game.subscribe(address(0), false, false, 1, address(0));
+            game.subscribe(0, false, false, 1, 0, seat);
         }
     }
 

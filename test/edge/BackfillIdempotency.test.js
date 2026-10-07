@@ -76,7 +76,7 @@ describe("BackfillIdempotency", function () {
     expect(initial).to.deep.equal({ purchaseStartDay: 1n, dailyIdx: 1n });
 
     await game.connect(alice).purchase(
-      hre.ethers.ZeroAddress, 400n, 0n, ZERO_BYTES32, 0, false, { value: eth(0.01) }
+      0, 400n, 0n, ZERO_BYTES32, 0, false, { value: eth(0.01) }
     );
     await advanceToNextDay();
     const requestDayR = await game.currentDayView();

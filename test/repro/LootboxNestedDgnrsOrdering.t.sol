@@ -56,7 +56,7 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
             vm.deal(filler, 1 ether);
             vm.prank(filler);
             game.purchase{value: 1 ether}(
-                filler, 0, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
+                0, 0, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
             );
             vm.prank(filler);
             game.mineFlip();
@@ -102,7 +102,7 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
         _parentPos = RecyclingState.boxCount(address(game), PARENT_BUFFER);
         vm.deal(PLAYER, 31 ether);
         vm.prank(PLAYER);
-        game.purchase{value: 30 ether}(PLAYER, 0, BOX_ORDER, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: 30 ether}(0, 0, BOX_ORDER, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(RecyclingState.boxCount(address(game), PARENT_BUFFER), _parentPos + 1, "one parent entry");
         assertEq(game.walletIdOf(PLAYER), 5, "RNG_WORD was derived for wallet ID 5");
         assertEq(_parentPos, 0, "RNG_WORD was derived for position 0");

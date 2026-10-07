@@ -120,7 +120,8 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
     // Errors
     // =========================================================================
 
-    /// @notice The caller may not act on the player's behalf.
+    /// @notice The caller may not act for the account: it is neither the account's key, a
+    ///         smurf's owner, nor an approved operator.
     error NotApproved();
 
     /// @notice No round is open for betting: outside the jackpot phase — game over
@@ -198,19 +199,22 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
     // Betting
     // =========================================================================
 
-    /// @notice Place the growth bet for the open round.
-    /// @dev Gated, not permissionless: the bet spends the player's FLIP, so only the player
-    ///      or an approved operator may place it. One fixed-size bet per wallet per round —
+    /// @notice Place account `id`'s growth bet for the open round.
+    /// @dev Gated, not permissionless: the bet spends the account payee's FLIP, so only the
+    ///      account's key, a smurf's owner or an approved operator may place it (`id == 0` is the
+    ///      caller, with no Game resolution call). One fixed-size bet per wallet per round —
     ///      there is no amount to choose and no averaging in, which is what makes the choice
     ///      to commit early against a thin book a real decision rather than a mechanical one.
-    /// @param player The player the bet belongs to (zero address for msg.sender).
+    /// @param id The account the bet belongs to (0 = caller).
     /// @param over True to bet that growth accelerates, false to bet that it does not.
-    function placeBet(address player, bool over) external {
-        if (player == address(0)) player = msg.sender;
-        if (
-            player != msg.sender &&
-            !game.isOperatorApproved(player, msg.sender)
-        ) revert NotApproved();
+    function placeBet(uint32 id, bool over) external {
+        address key = msg.sender;
+        address payee = msg.sender;
+        if (id != 0) {
+            bool authorized;
+            (key, payee, authorized) = game.resolveAccount(id, msg.sender);
+            if (!authorized) revert NotApproved();
+        }
 
         (, , , uint24 round, bool open, uint8 phaseDay) = game.growthState(0);
         // Round 0 is the sole unscoreable round — growthState reports no ratchet terms
@@ -220,12 +224,14 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
         // A wallet that has never bought anything cannot take a position on how the game
         // grows. The gate reads the mint word that also carries the wallet ID; every Game
         // door that writes a field passing it registers the wallet first, so `mayBet`
-        // implies a nonzero ID.
-        (bool mayBet, bool earnsReward, uint32 id) = quests.marketBetGates(player, round);
+        // implies a nonzero ID (for a resolved account, `id` itself).
+        bool mayBet;
+        bool earnsReward;
+        (mayBet, earnsReward, id) = quests.marketBetGates(key, round);
         if (!mayBet) revert NotEligible();
         _recordBet(id, round, over);
 
-        coin.burnCoin(player, STAKE);
+        coin.burnCoin(payee, STAKE);
 
         // Only an eligible bettor reaches for the quest: recordGrowthBet applies the same
         // gate internally and pays such a call 0 with no side effects, so skipping it for
@@ -234,7 +240,7 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
         if (earnsReward) {
             reward = quests.recordGrowthBet(
                 id,
-                player,
+                key,
                 round,
                 _questReward(phaseDay)
             );

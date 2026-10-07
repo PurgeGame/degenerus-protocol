@@ -201,18 +201,18 @@ contract RngLockDeterminism is DeployProtocol {
             uint32 customTraits = 0;
             uint8 heroQuadrant = uint8((seed >> 16) % 4);
             vm.prank(actor);
-            try game.placeDegeneretteBet{value: uint256(amount) * ticketCount}(actor, currency, amount, ticketCount, (uint8((uint32(customTraits) >> (uint256(heroQuadrant) * 8)) & 7) | (uint8(heroQuadrant) << 3))) {} catch { return; }
+            try game.placeDegeneretteBet{value: uint256(amount) * ticketCount}(0, currency, amount, ticketCount, (uint8((uint32(customTraits) >> (uint256(heroQuadrant) * 8)) & 7) | (uint8(heroQuadrant) << 3))) {} catch { return; }
         } else if (cls == 1) {
             vm.deal(actor, 100 ether);
             uint256 numCoins = 400 + (seed >> 8) % 200;
             uint256 lootboxAmount = 0;
             vm.prank(actor);
             try game.purchase{value: 1 ether}(
-                actor, numCoins, BoxOrderLib.boCustomFloor(lootboxAmount), bytes32(0), MintPaymentKind.DirectEth, false
+                0, numCoins, BoxOrderLib.boCustomFloor(lootboxAmount), bytes32(0), MintPaymentKind.DirectEth, false
             ) {} catch { return; }
         } else if (cls == 2) {
             vm.prank(actor);
-            try game.claimWinnings(actor) {} catch { return; }
+            try game.claimWinnings(0) {} catch { return; }
         } else if (cls == 3) {
             address recipient = address(uint160(uint256(keccak256(abi.encode("recipient", seed)))));
             if (recipient == address(0)) recipient = address(0xBEEF);
@@ -271,7 +271,7 @@ contract RngLockDeterminism is DeployProtocol {
             // is permissionless-beneficiary-arg-correct (D-01: claimWhalePass is callable
             // with any address as the player arg).
             vm.prank(actor);
-            try game.claimWhalePass(actor) {} catch { return; }
+            try game.claimWhalePass(0) {} catch { return; }
         }
     }
 
@@ -413,8 +413,9 @@ contract RngLockDeterminism is DeployProtocol {
         if (action == 18) {
             // game.claimWhalePass is permissionless and settles to the address passed in,
             // so the vault's claim is driven directly (no vault-side wrapper).
+            uint32 vaultId = game.walletIdOf(address(vault));
             vm.prank(vaultOwner);
-            try game.claimWhalePass(address(vault)) {} catch { return; }
+            try game.claimWhalePass(vaultId) {} catch { return; }
             return;
         }
         if (action == 19) {
@@ -540,7 +541,7 @@ contract RngLockDeterminism is DeployProtocol {
 
         vm.prank(holder);
         try game.purchase{value: 1.01 ether}(
-            holder, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
+            0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
         ) {
         } catch {
             vm.assume(false);
@@ -689,7 +690,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint48 purchaseIndex = _readLootboxRngIndex();
         vm.prank(buyer);
         game.purchase{value: 1.01 ether}(
-            buyer, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
+            0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
 
         // Move totalFlipReversals nonzero PRE-lock (reverseFlip is RngLocked-gated). 1-3 nudges.
@@ -830,7 +831,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint48 purchaseIndex = _readLootboxRngIndex();
         vm.prank(buyer);
         game.purchase{value: 1.01 ether}(
-            buyer, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
+            0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
 
         // Pre-load whalePassClaims[claimant] > 0 so the perturbation reaches the rngLock-gated
@@ -891,7 +892,7 @@ contract RngLockDeterminism is DeployProtocol {
         // bearing property is byte-identity of the consumed per-index word with vs. without
         // the perturbation attempt — INCLUDING the revert case.
         vm.prank(claimant);
-        try game.claimWhalePass(claimant) {} catch { /* expected under rngLock far-future / liveness */ }
+        try game.claimWhalePass(0) {} catch { /* expected under rngLock far-future / liveness */ }
 
         // claimWhalePass-during-lock SAFE / advance-consume reads frozen state: the lock must NOT lift.
         assertTrue(
@@ -973,7 +974,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint48 boxIndex = _readLootboxRngIndex();
         vm.prank(buyer);
         game.purchase{value: 1.01 ether}(
-            buyer, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
+            0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         game.mineFlip();
         assertTrue(game.rngLocked(), "autoOpen-noop: rngLock must be engaged");
@@ -1055,7 +1056,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint48 boxIndex = _readLootboxRngIndex();
         vm.prank(boxOwner);
         game.purchase{value: 1.01 ether}(
-            boxOwner, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
+            0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         assertTrue(
             _boxQueued(boxIndex, boxOwner),
@@ -1104,7 +1105,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint48 queuedIndex = _readLootboxRngIndex();
         vm.prank(boxOwner2);
         game.purchase{value: 1.01 ether}(
-            boxOwner2, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
+            0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         assertTrue(_boxQueued(queuedIndex, boxOwner2), "no-maroon: 2nd box queued at the round's index");
         // Two physical buffers: the seeded session makes queuedIndex the read side (the write

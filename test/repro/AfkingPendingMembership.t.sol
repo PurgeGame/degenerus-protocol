@@ -34,6 +34,7 @@ contract AfkingMembershipHarness is GameAfkingModule, WalletSeed {
             _subOf[cleanId].setPosition = 2;
         }
     }
+    function idOf(address player) external view returns (uint32) { return _walletIdOf(player); }
     function deliver() external { ++dailyIdx; _setRngComplete(false); }
     function corruptEmptySet() external { delete _subscribers; }
     function complete() external view returns (bool) { return _rngComplete(); }
@@ -58,8 +59,9 @@ contract AfkingPendingMembershipTest is Test {
 
     function test_CancellationAndTombstoneReclaimRetainPendingStamp() public {
         uint24 day = h.seed(PLAYER, address(0xBB22), 1);
+        uint32 playerId = h.idOf(PLAYER);
         vm.prank(PLAYER);
-        h.subscribe(PLAYER, false, false, 0, address(0));
+        h.subscribe(playerId, false, false, 0, 0, 0);
         MineFlipGas.Result memory staged = h.runSubscriberWork(day, 9_000_000);
         assertTrue(staged.done);
         (uint256 pending, uint256 members, uint256 index, uint24 stamp, uint24 opened, uint8 qty) = h.state(PLAYER);

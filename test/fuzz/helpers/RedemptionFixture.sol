@@ -90,7 +90,7 @@ abstract contract RedemptionFixture is DeployProtocol {
         vm.deal(buyer, 10 ether);
         vm.prank(buyer);
         game.purchase{value: 1.01 ether}(
-            buyer, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
+            0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         assertTrue(_runUntilNewRequestOrIdle(), "mid-day request sent");
         assertFalse(game.rngLocked(), "a mid-day request takes no daily lock");

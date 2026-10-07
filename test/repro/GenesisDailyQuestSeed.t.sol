@@ -81,7 +81,7 @@ contract GenesisDailyQuestSeed is DeployProtocol {
         (, , , , uint256 priceWei) = game.purchaseInfo();
         vm.prank(player);
         game.purchase{value: priceWei * 4}(
-            player,
+            0,
             1600,
             0,
             bytes32(0),
@@ -97,7 +97,7 @@ contract GenesisDailyQuestSeed is DeployProtocol {
         // Daily DEGENERETTE_ETH target = min(mintPrice * 2, 0.5 ether); one 0.5 ETH
         // spin clears it at any price.
         vm.prank(player);
-        game.placeDegeneretteBet{value: 0.5 ether}(player, CURRENCY_ETH, 0.5 ether, 1, 3);
+        game.placeDegeneretteBet{value: 0.5 ether}(0, CURRENCY_ETH, 0.5 ether, 1, 3);
         (, bool slot1) = quests.questCompletionToday(game.walletIdOf(player));
         assertTrue(
             slot1,

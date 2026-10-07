@@ -91,7 +91,7 @@ contract FSMHandler is Test {
             if (totalCost != 0 && totalCost <= currentActor.balance) {
                 vm.prank(currentActor);
                 try game.purchase{value: totalCost}(
-                    currentActor,
+                    0,
                     qty,
                     BoxOrderLib.boCustomFloor(lootboxAmt),
                     bytes32(0),

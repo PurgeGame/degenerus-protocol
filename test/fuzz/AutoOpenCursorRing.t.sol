@@ -69,6 +69,19 @@ contract RingSingleStepFixture is DegenerusGame {
 /// @dev Cursor pokes are explicit for the two directed wrap cases. The growth
 /// case uses no cursor poke. No contracts/*.sol source is changed.
 contract AutoOpenCursorRing is DeployProtocol {
+
+    mapping(address => uint32) private _aidCache;
+
+    /// @dev Wallet ID of `a`, registering it when it holds none. Call before any `vm.prank`.
+    function _aid(address a) internal returns (uint32 id) {
+        id = _aidCache[a];
+        if (id == 0) {
+            id = game.walletIdOf(a);
+            if (id == 0) id = _giveWalletId(a);
+            _aidCache[a] = id;
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Game-resident storage slots + the post-PACK Sub-slot offset block
     // (forge inspect DegenerusGame storage: _subOf@52, _subscribers@54, _subscriberIndex@55, cursors@56)
@@ -377,13 +390,14 @@ contract AutoOpenCursorRing is DeployProtocol {
     }
 
     function _subscribeLootbox(address who, uint8 q) internal {
+        uint256 seat = _grantSeat(who);
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, address(0)); // self, lootbox mode, no reinvest
+        game.subscribe(0, false, false, q, 0, seat); // self, lootbox mode, no reinvest
     }
 
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
-        game.depositAfkingFunding{value: amount}(who);
+        game.depositAfkingFunding{value: amount}(_aid(who));
     }
 
     function _grantDeityPass(address who) internal {

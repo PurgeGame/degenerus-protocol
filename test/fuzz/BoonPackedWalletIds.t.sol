@@ -152,7 +152,7 @@ contract BoonPackedWalletIds is DeployProtocol {
     function _placeBet(address who, uint8 currency, uint128 perSpin, uint8 spins, uint8 symbol) private {
         vm.prank(who);
         game.placeDegeneretteBet{value: currency == 0 ? uint256(perSpin) * spins : 0}(
-            address(0), currency, perSpin, spins, symbol
+            0, currency, perSpin, spins, symbol
         );
     }
 
@@ -218,9 +218,10 @@ contract BoonPackedWalletIds is DeployProtocol {
         bool applied;
         for (uint8 slot; slot < 3; ++slot) {
             (address recipient, uint32 rid) = _wallet(string(abi.encodePacked("gift_recipient_", vm.toString(slot))));
+            uint32 deityId = game.walletIdOf(deity);
             vm.recordLogs();
             vm.prank(deity);
-            game.issueDeityBoon(deity, recipient, slot);
+            game.issueDeityBoon(deityId, rid, slot);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             (uint256 s0, uint256 s1) = _boon(rid);
             (uint256 n, uint32 topicId,,) = _consumed(logs);
@@ -283,7 +284,7 @@ contract BoonPackedWalletIds is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(player);
-        coinflip.depositCoinflip(player, 1_000);
+        coinflip.depositCoinflip(0, 1_000);
 
         _assertConsumedBy(vm.getRecordedLogs(), id, 1);
         (uint256 s0,) = _boon(id);
@@ -321,7 +322,7 @@ contract BoonPackedWalletIds is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(player);
-        wwxrp.enter(100);
+        wwxrp.enter(0, 100);
 
         _assertConsumedBy(vm.getRecordedLogs(), id, 7);
         (, s1) = _boon(id);
@@ -358,7 +359,7 @@ contract BoonPackedWalletIds is DeployProtocol {
         uint256 value = 4 * _price();
         vm.recordLogs();
         vm.prank(buyer);
-        game.purchase{value: value}(buyer, 1_600, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: value}(0, 1_600, 0, bytes32(0), MintPaymentKind.DirectEth, false);
 
         _assertConsumedBy(vm.getRecordedLogs(), id, 2);
         (uint256 s0,) = _boon(id);
@@ -375,7 +376,7 @@ contract BoonPackedWalletIds is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(player);
-        coin.decimatorBurn(address(0), 2_000, 0);
+        coin.decimatorBurn(0, 2_000, 0);
 
         _assertConsumedBy(vm.getRecordedLogs(), id, 3);
         (uint256 s0,) = _boon(id);
@@ -421,7 +422,7 @@ contract BoonPackedWalletIds is DeployProtocol {
         uint256 value = _price();
         vm.recordLogs();
         vm.prank(buyer);
-        game.purchase{value: value}(buyer, 0, 1, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: value}(0, 0, 1, bytes32(0), MintPaymentKind.DirectEth, false);
 
         _assertBoostUsed(vm.getRecordedLogs(), buyer);
         (uint256 s0,) = _boon(id);
@@ -436,7 +437,7 @@ contract BoonPackedWalletIds is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(buyer);
-        game.purchaseWhalePass{value: 4 ether}(buyer, 1, bytes32(0));
+        game.purchaseWhalePass{value: 4 ether}(0, 1, bytes32(0));
 
         _assertBoostUsed(vm.getRecordedLogs(), buyer);
         (uint256 s0,) = _boon(id);
@@ -459,21 +460,21 @@ contract BoonPackedWalletIds is DeployProtocol {
     function _whaleOverpay(address buyer) private returns (uint256) {
         vm.deal(buyer, 10 ether);
         vm.prank(buyer);
-        game.purchaseWhalePass{value: 5 ether}(buyer, 1, bytes32(0));
+        game.purchaseWhalePass{value: 5 ether}(0, 1, bytes32(0));
         return game.afkingFundingOf(buyer);
     }
 
     function _whaleCost(address buyer, uint256 quantity) private returns (uint256) {
         vm.deal(buyer, 30 ether);
         vm.prank(buyer);
-        game.purchaseWhalePass{value: 20 ether}(buyer, quantity, bytes32(0));
+        game.purchaseWhalePass{value: 20 ether}(0, quantity, bytes32(0));
         return 20 ether - game.afkingFundingOf(buyer);
     }
 
     function _lazyOverpay(address buyer) private returns (uint256) {
         vm.deal(buyer, 10 ether);
         vm.prank(buyer);
-        game.purchaseLazyPass{value: 2 ether}(buyer, bytes32(0));
+        game.purchaseLazyPass{value: 2 ether}(0, bytes32(0));
         return game.afkingFundingOf(buyer);
     }
 
@@ -481,7 +482,7 @@ contract BoonPackedWalletIds is DeployProtocol {
         vm.deal(buyer, 500 ether);
         vm.recordLogs();
         vm.prank(buyer);
-        game.purchaseDeityPass{value: 400 ether}(buyer, symbol, bytes32(0));
+        game.purchaseDeityPass{value: 400 ether}(0, symbol, bytes32(0));
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter == address(game) && logs[i].topics[0] == DEITY_PURCHASED) {
@@ -652,7 +653,7 @@ contract BoonPackedWalletIds is DeployProtocol {
         vm.recordLogs();
         vm.deal(fresh, 500 ether);
         vm.prank(fresh);
-        game.purchaseDeityPass{value: 400 ether}(fresh, 5, bytes32(0));
+        game.purchaseDeityPass{value: 400 ether}(0, 5, bytes32(0));
         Vm.Log[] memory logs = vm.getRecordedLogs();
         _assertRegisteredOnce(logs, fresh);
         uint256 freshPrice;

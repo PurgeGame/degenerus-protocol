@@ -135,11 +135,6 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
             bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)),
             bytes32(lrPacked)
         );
-
-        // The crank resolve sub-call delegatecalls resolveBets with msg.sender == game,
-        // so the game must be the bet owner's approved operator (the documented relaxation).
-        vm.prank(player);
-        game.setOperatorApproval(address(game), true);
     }
 
     // =========================================================================
@@ -212,7 +207,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         uint32 customTraits = _losingTicketFor(INDEX, FIXED_WORD);
         uint128 betAmount = 0.01 ether;
         vm.prank(player);
-        game.placeDegeneretteBet{value: betAmount}(address(0), 0, betAmount, 1, uint8(customTraits & 7));
+        game.placeDegeneretteBet{value: betAmount}(0, 0, betAmount, 1, uint8(customTraits & 7));
 
         assertEq(DQ.lastBetId(vm, address(game), INDEX), readBetsBefore, "no bet binds to the worded index");
         assertEq(DQ.lastBetId(vm, address(game), INDEX ^ 1), writeBetsBefore + 1, "the bet binds to the unworded write buffer");
@@ -236,7 +231,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         // Re-seed FIXED behavior: use the engineered winning word at INDEX.
         uint128 betAmount = 0.01 ether;
         vm.prank(player);
-        game.placeDegeneretteBet{value: betAmount}(address(0), 0, betAmount, 1, uint8(winTicket & 7));
+        game.placeDegeneretteBet{value: betAmount}(0, 0, betAmount, 1, uint8(winTicket & 7));
         uint64 betId = DQ.lastBetId(vm, address(game), INDEX);
 
         // Seed the live future prize pool so the winning ETH payout is solvent.
@@ -439,7 +434,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         // Plan 335-02 settled the O(1) write shape: `whalePassClaims[player] += 1;` inside the
         // (post-USER-simplification) one-line whale-pass activation body.
         assertGt(
-            _countOccurrences(src, "_addHalfPasses(_walletIdOf(player), 2)"),
+            _countOccurrences(src, "_addHalfPasses(id, 2)"),
             0,
             "WHALE-01: box-open O(1) half-pass accumulator write byte-present"
         );
@@ -631,7 +626,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         // WhaleModule internal). The credit is bound by the player arg, not msg.sender.
         // -------------------------------------------------------------------
         vm.prank(claimant);
-        game.claimWhalePass(claimant);
+        game.claimWhalePass(0);
 
         // -------------------------------------------------------------------
         // WHALE-02 attestation: the accumulator is consumed at claim (WhaleModule:1024).
@@ -873,7 +868,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         uint32 customTraits = _losingTicketFor(INDEX, FIXED_WORD);
         uint128 betAmount = 0.01 ether;
         vm.prank(better);
-        game.placeDegeneretteBet{value: betAmount}(address(0), 0, betAmount, 1, uint8(customTraits & 7));
+        game.placeDegeneretteBet{value: betAmount}(0, 0, betAmount, 1, uint8(customTraits & 7));
         betId = DQ.lastBetId(vm, address(game), INDEX);
     }
 
@@ -881,7 +876,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
         game.purchase{value: lootboxAmount + 0.01 ether}(
-            buyer,
+            0,
             400,
             BoxOrderLib.boCustomFloor(lootboxAmount),
             bytes32(0),
@@ -971,15 +966,13 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         uint48 atIndex
     ) internal returns (uint256 creditDelta) {
         vm.deal(who, 1000 ether);
-        vm.prank(who);
-        game.setOperatorApproval(address(game), true);
 
         // Point the live daily index at `atIndex` (word still 0) for placement, find an 8/8 win.
         _setLootboxRngIndex(atIndex);
         (uint32 winTicket, uint256 word) = _findWinningCombo(atIndex);
         uint128 betAmount = 0.01 ether;
         vm.prank(who);
-        game.placeDegeneretteBet{value: betAmount}(address(0), 0, betAmount, 1, uint8(winTicket & 7));
+        game.placeDegeneretteBet{value: betAmount}(0, 0, betAmount, 1, uint8(winTicket & 7));
 
         _seedFuturePrizePool(10_000 ether);
         uint256 pre = game.claimableWinningsOf(who);

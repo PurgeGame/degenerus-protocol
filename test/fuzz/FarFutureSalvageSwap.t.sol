@@ -402,7 +402,7 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
         assertLe(poolBefore, backingBefore, "solvency must hold BEFORE the swap");
 
         vm.prank(seller);
-        game.sellFarFutureEntries(seller, levels, qtys, idxs);
+        game.sellFarFutureEntries(0, levels, qtys, idxs);
 
         uint256 poolAfter = game.claimablePoolView();
         uint256 backingAfter = address(game).balance + mockStETH.balanceOf(address(game));
@@ -450,7 +450,7 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
         );
 
         vm.prank(seller);
-        game.sellFarFutureEntries(seller, levels, qtys, idxs);
+        game.sellFarFutureEntries(0, levels, qtys, idxs);
 
         // Same unit math as the mint body: qty in purchase units (400 = one whole
         // ticket), then whole tickets.
@@ -489,7 +489,7 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
             assertLt(budgetSmall, oneEntryWei, "fixture: sub-floor budget must be below one entry's price");
             vm.prank(seller);
             vm.expectRevert();
-            game.sellFarFutureEntries(seller, levels, qtys, idxs);
+            game.sellFarFutureEntries(0, levels, qtys, idxs);
         }
 
         // A bundle that clears the entry floor succeeds; the ticket leg delivers >= one entry.
@@ -500,7 +500,7 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
         assertGe(ticketWeiOk, oneEntryWei, "ticket leg must deliver >= 1 entry (the new floor)");
 
         vm.prank(seller);
-        game.sellFarFutureEntries(seller, levels2, qtys2, idxs2);
+        game.sellFarFutureEntries(0, levels2, qtys2, idxs2);
         // The current-level mint queued tickets for the seller (the entry-granular recycled mint); at
         // minimum the swap did not revert and the far entries cleared.
         assertEq(_ownedEntries(seller, uint24(levels2[0])), 0, "far entries must clear on a floor-clearing swap");
@@ -542,7 +542,7 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
             game.previewSellFarFutureEntries(seller, levels, qtys);
             vm.prank(seller);
             vm.expectRevert();
-            game.sellFarFutureEntries(seller, levels, qtys, idxs);
+            game.sellFarFutureEntries(0, levels, qtys, idxs);
         }
 
         // Partial WHOLE-ticket sale: sell 4 of 8 -> seller keeps 4 (NOT popped), buyer +4.
@@ -554,7 +554,7 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
         uint256 lenBefore = _ffQueueLen(L);
 
         vm.prank(seller);
-        game.sellFarFutureEntries(seller, levels, qtys, idxs);
+        game.sellFarFutureEntries(0, levels, qtys, idxs);
 
         assertEq(_ownedEntries(seller, L), 4, "seller far entries drop by exactly one whole ticket");
         assertEq(_ffQueueLen(L), lenBefore, "partial whole-ticket sell must NOT pop the seller");
@@ -597,14 +597,14 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
         _seedClaimable(ContractAddresses.SDGNRS, totalBudget + 1 ether - 1);
         vm.prank(seller);
         vm.expectRevert();
-        game.sellFarFutureEntries(seller, levels, qtys, idxs);
+        game.sellFarFutureEntries(0, levels, qtys, idxs);
 
         // Re-seed far tickets (the reverted call did not consume them, but re-seed defensively) and fund to
         // EXACTLY budget + 1 ether -> floor satisfied -> succeeds.
         (uint32[] memory levels2, uint256[] memory qtys2, uint256[] memory idxs2) =
             _setupExecutableSwap(6, 100, uint256(keccak256("eth_floor")), totalBudget + 1 ether);
         vm.prank(seller);
-        game.sellFarFutureEntries(seller, levels2, qtys2, idxs2);
+        game.sellFarFutureEntries(0, levels2, qtys2, idxs2);
         // Leaves >= 1 ether in SDGNRS claimable.
         assertGe(game.claimableWinningsOf(ContractAddresses.SDGNRS), 1 ether, ">=1 ETH floor must remain in SDGNRS");
     }
@@ -627,7 +627,7 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
             }
             vm.prank(seller);
             vm.expectRevert();
-            game.sellFarFutureEntries(seller, levels, qtys, idxs);
+            game.sellFarFutureEntries(0, levels, qtys, idxs);
         }
 
         // Mismatched lengths -> revert.
@@ -637,7 +637,7 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
             uint256[] memory idxs = new uint256[](2);
             vm.prank(seller);
             vm.expectRevert();
-            game.sellFarFutureEntries(seller, levels, qtys, idxs);
+            game.sellFarFutureEntries(0, levels, qtys, idxs);
         }
 
         // len == 32 is ACCEPTED: seed 32 distinct distances and execute.
@@ -653,7 +653,7 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
             }
             vm.prank(seller);
             // Must NOT revert on the length gate; it executes (budget clears one ticket easily with 32 lines).
-            game.sellFarFutureEntries(seller, levels, qtys, idxs);
+            game.sellFarFutureEntries(0, levels, qtys, idxs);
             // All 32 distances fully sold.
             for (uint256 i = 0; i < 32; ++i) {
                 assertEq(_ownedEntries(seller, uint24(cl + 6 + i)), 0, "len==32: every far line must clear");
@@ -679,7 +679,7 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
         uint256[] memory qtys = new uint256[](1); qtys[0] = 200;
         uint256[] memory indices = new uint256[](1); indices[0] = index;
         vm.prank(seller);
-        game.sellFarFutureEntries(seller, levels, qtys, indices);
+        game.sellFarFutureEntries(0, levels, qtys, indices);
         expected[index] = expected[n - 1];
         assertEq(_ffQueueLen(lvl), n - 1);
         for (uint256 i; i < n - 1; ++i) {
@@ -710,7 +710,7 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
             qtys[0] = 200; // 50 whole tickets = 200 entries -> full sell-out
             idxs[0] = idxFull;
             vm.prank(seller);
-            game.sellFarFutureEntries(seller, levels, qtys, idxs);
+            game.sellFarFutureEntries(0, levels, qtys, idxs);
         }
         // membership <=> packed != 0: seller packed == 0 AND seller popped from the queue.
         assertEq(_ownedEntries(seller, Lfull), 0, "full sell-out must zero the packed slot");
@@ -729,7 +729,7 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
             qtys[0] = 160; // partial: 160 of 400 entries (40 of 100 whole) -> packed stays non-zero
             idxs[0] = idxPart;
             vm.prank(seller);
-            game.sellFarFutureEntries(seller, levels, qtys, idxs);
+            game.sellFarFutureEntries(0, levels, qtys, idxs);
         }
         assertGt(_ownedEntries(seller, Lpart), 0, "partial sell must leave packed != 0");
         assertEq(_ffQueueLen(Lpart), lenPartBefore + 1, "partial sell must NOT pop the seller");
@@ -767,7 +767,7 @@ contract FarFutureSalvageSwapTest is DeployProtocol {
             idxs[0] = 0; // index 0 is a constructor-seeded address (sDGNRS), NOT the seller -> stale -> revert
             vm.prank(seller);
             vm.expectRevert();
-            game.sellFarFutureEntries(seller, levels, qtys, idxs);
+            game.sellFarFutureEntries(0, levels, qtys, idxs);
         }
     }
 }

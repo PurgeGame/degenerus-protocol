@@ -15,9 +15,9 @@ contract SdgnrsStethReserveDoubleBook is RedemptionFixture {
         _terminalize();
         address first = reverse ? bob : alice;
         address second = reverse ? alice : bob;
-        vm.prank(first); sdgnrs.claimRedemption(first, id);
+        vm.prank(first); sdgnrs.claimRedemption(0, id);
         assertGe(mockStETH.balanceOf(address(sdgnrs)), sdgnrs.pendingRedemptionEthValue());
-        vm.prank(second); sdgnrs.claimRedemption(second, id);
+        vm.prank(second); sdgnrs.claimRedemption(0, id);
         assertEq(mockStETH.balanceOf(alice), a);
         assertEq(mockStETH.balanceOf(bob), b);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
@@ -43,7 +43,7 @@ contract SdgnrsStethReserveDoubleBook is RedemptionFixture {
         assertGe(mockStETH.balanceOf(address(sdgnrs)), sdgnrs.pendingRedemptionEthValue());
         assertTrue(_work(9_000_000));
         assertEq(sdgnrs.pendingRedemptionEthValue(), reserved);
-        vm.prank(alice); sdgnrs.claimParkedRedemption(alice, first);
+        vm.prank(alice); sdgnrs.claimParkedRedemption(0, first);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }
 }

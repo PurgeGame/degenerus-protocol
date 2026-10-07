@@ -28,9 +28,11 @@ import {IDegenerusGame, MintPaymentKind} from "../interfaces/IDegenerusGame.sol"
 import {RECORD_KIND_BUY, RECORD_KIND_LUCKBOX} from "../interfaces/ICoinflip.sol";
 import {
     IDegenerusGameBoonModule,
-    IDegenerusGameLootboxModule
+    IDegenerusGameLootboxModule,
+    IDegenerusGameMintModule
 } from "../interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
+import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
@@ -70,7 +72,7 @@ import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
  * Bits 120-143: frozenUntilLevel   - Whale pass: freeze stats until this level (0 = not frozen)
  * Bits 144-145: whalePassType      - Active pass type (0=none, 1=lazy/10-lvl, 3=whale/100-lvl) [Activity Score]
  * Bit  146:     seatClaimed        - AFKing seat mint latch
- * Bit  147:     seatEncumbered     - AFKing seat encumbrance latch
+ * Bit  147:     smurfFlag          - Smurf account (set once by createSmurf)
  * Bits 148-171: mintStreakLast     - Last level credited for mint streak
  * Bit  172:     hasDeityPass       - Deity pass flag
  * Bits 173-196: affBonusLevel      - Cached affiliate bonus level
@@ -325,18 +327,20 @@ contract DegenerusGameMintModule is
     }
 
     /// @notice Explicit-ethValue ticket-buy entry: like `purchase`, but the fresh-ETH portion
-    ///         is the `ethValue` parameter rather than `msg.value`. Sole caller: the facade's
-    ///         foil purchase, which funds the ticket/lootbox leg with the fresh ETH it carved
-    ///         while the buyer's msg.value is in flight (that msg.value is ignored here — only
-    ///         ethValue is spent). payable so the carried msg.value does not revert the
-    ///         delegatecall.
+    ///         is the `ethValue` parameter rather than `msg.value`. Callers: the facade's foil
+    ///         purchase, which funds the ticket/lootbox leg with the fresh ETH it carved while
+    ///         the buyer's msg.value is in flight (that msg.value is ignored here — only
+    ///         ethValue is spent), and createSmurf's one ticket. payable so the carried
+    ///         msg.value does not revert the delegatecall.
+    /// @param payerId Ledger the claimable/AFKing legs debit (0 = the buyer's own).
     function purchaseWith(
         address buyer,
         uint256 entryQuantityScaled,
         uint256 boxOrder,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
-        uint256 ethValue
+        uint256 ethValue,
+        uint32 payerId
     ) external payable {
         _purchaseForWith(
             buyer,
@@ -344,8 +348,63 @@ contract DegenerusGameMintModule is
             boxOrder,
             affiliateCode,
             payKind,
-            ethValue
+            ethValue,
+            payerId
         );
+    }
+
+    /// @notice Create a smurf account owned by the caller, give it the caller's referrer and buy
+    ///         it one whole ticket paid by the caller (body of Game.createSmurf).
+    /// @dev The owner must already hold a wallet ID; a smurf key is never a caller, so smurfs
+    ///      never own smurfs. Order: (1) resolve and lock the owner's referral exactly as a
+    ///      purchase does — a zero-amount `payAffiliate`, which may register a default-code
+    ///      owner, so the smurf ID is taken only after it; (2) allocate the smurf: paid admission
+    ///      at the ticket price, the derived key's mint word must be empty, the table element
+    ///      carries the owner ID and the mint word the ID and the smurf flag; (3) copy the
+    ///      owner's referral word to the smurf, locked; (4) buy the ticket for the smurf with the
+    ///      owner's fresh ETH and the owner's claimable/AFKing legs per `payKind`. Fresh ETH above
+    ///      the price credits the owner's AFKing balance. The ticket, mint history and quest
+    ///      progress belong to the smurf.
+    /// @param affiliateCode Referral code applied to the owner if its referral is unset.
+    /// @param payKind How the owner funds the ticket.
+    /// @return smurfId The new account's wallet ID.
+    function createSmurf(bytes32 affiliateCode, MintPaymentKind payKind)
+        external
+        payable
+        returns (uint32 smurfId)
+    {
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        uint32 ownerId = _requireWalletId(msg.sender);
+        affiliate.payAffiliate(0, affiliateCode, msg.sender, ownerId, level + 1, true, 0);
+        uint256 ticketCost = PriceLookupLib.priceForLevel(_activeTicketLevel());
+
+        uint256 position = wallets.length;
+        if (position > PAID_ADMISSION_WALLETS && ticketCost < PAID_ADMISSION_MIN_SPEND) revert E();
+        if (position > type(uint32).max) revert E();
+        smurfId = uint32(position);
+        address key = _smurfKey(msg.sender, smurfId);
+        if (mintPacked_[key] != 0) revert E();
+        wallets.push(uint256(uint160(key)) | (uint256(ownerId) << 160));
+        mintPacked_[key] = (position << BitPackingLib.WALLET_ID_SHIFT)
+            | (uint256(1) << BitPackingLib.SMURF_FLAG_SHIFT);
+        emit WalletRegistered(smurfId, key);
+        emit SmurfCreated(ownerId, smurfId);
+
+        affiliate.copyReferral(msg.sender, key);
+
+        uint256 fresh = payKind == MintPaymentKind.Claimable
+            ? 0
+            : (msg.value < ticketCost ? msg.value : ticketCost);
+        if (msg.value > fresh) _creditAfkingValue(ownerId, msg.value - fresh);
+        // Nested delegatecall into this module's own explicit-value entry (the Game's storage
+        // context): one shared copy of the purchase body serves this rare path.
+        (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(
+            abi.encodeWithSelector(
+                IDegenerusGameMintModule.purchaseWith.selector,
+                key, 4 * QTY_SCALE, 0, bytes32(0), payKind, fresh, ownerId
+            )
+        );
+        if (!ok) _revertDelegate(data);
     }
 
     /// @notice Redeem FLIP for current-jackpot tickets — allowed only inside the jackpot window.
@@ -354,12 +413,15 @@ contract DegenerusGameMintModule is
     ///      jackpot days (later daily locks do not close it), and is cleared by the advance at the
     ///      final jackpot day's RNG request. While closed, FLIP ticket purchases revert so bonus
     ///      tickets and prize ETH accrue to real-ETH buyers.
-    /// @param buyer Recipient of the purchased tickets.
+    ///      Raw msg.data target of Game.redeemFlip: resolves the account here.
+    /// @param id Account receiving the purchased tickets (0 = caller; account rule); the FLIP
+    ///        burns from its payee.
     /// @param entryQuantityScaled Purchase units: 100 = one entry (a quarter ticket), 400 = one whole ticket.
     function redeemFlip(
-        address buyer,
+        uint32 id,
         uint256 entryQuantityScaled
     ) external {
+        (address buyer, ) = _resolveAccount(id);
         _redeemFlipFor(buyer, entryQuantityScaled);
     }
 
@@ -401,9 +463,9 @@ contract DegenerusGameMintModule is
             ) = _callTicketPurchase(
                     buyer,
                     0,
+                    0,
                     entryQuantityScaled,
                     MintPaymentKind.DirectEth,
-                    true,
                     0,
                     jackpotPhaseFlag
                 );
@@ -511,8 +573,8 @@ contract DegenerusGameMintModule is
 
     /// @notice Sell far-future ticket entries (current-level tickets + cash; -EV exit) to sDGNRS, or to
     ///         the vault on the owner-enabled fallback when sDGNRS cannot fund the swap.
-    /// @dev Delegatecalled from DegenerusGame.sellFarFutureEntries with an already-resolved `player`
-    ///      (so no _resolvePlayer here). Mass-sells far-future ticket ENTRIES (4 entries = 1 whole ticket;
+    /// @dev Raw msg.data target of DegenerusGame.sellFarFutureEntries; resolves seller account `id`
+    ///      under the account rule. Mass-sells far-future ticket ENTRIES (4 entries = 1 whole ticket;
     ///      2 <= d = L - currentLevel <= 100) for ONE aggregated current-level mint (a normal recycled
     ///      Claimable mint) + a cash
     ///      residual. The counterparty is resolved by _resolveSalvageBuyer: sDGNRS first (funded from
@@ -526,11 +588,12 @@ contract DegenerusGameMintModule is
     ///                   queue index.
     /// @custom:reverts RngLocked While the RNG window is locked (freeze invariant).
     function sellFarFutureEntries(
-        address player,
+        uint32 id,
         uint32[] calldata levels,
         uint256[] calldata quantities,
         uint256[] calldata queueIndices
     ) external {
+        (address player, ) = _resolveAccount(id);
         if (rngLockedFlag) revert RngLocked();
         if (gameOver) revert E();
         if (_livenessTriggered()) revert E();
@@ -698,7 +761,8 @@ contract DegenerusGameMintModule is
             cachedJpFlag,
             cachedLevel,
             priceWei,
-            ticketCost
+            ticketCost,
+            buyerId
         );
         // The ordinary leg's cost is the quote above: same input, same active level.
         if (boxWord != 0) _appendBoxOrder(buyer, boxWord, cost - ticketCost);
@@ -726,13 +790,15 @@ contract DegenerusGameMintModule is
         ticketCost = (priceWei * entryQuantityScaled) / (4 * QTY_SCALE);
     }
 
+    /// @dev `payerId` as in _purchaseForWithCached (0 = the buyer).
     function _purchaseForWith(
         address buyer,
         uint256 entryQuantityScaled,
         uint256 boxOrder,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
-        uint256 ethValue
+        uint256 ethValue,
+        uint32 payerId
     ) private {
         (
             bool cachedJpFlag,
@@ -750,7 +816,8 @@ contract DegenerusGameMintModule is
             cachedJpFlag,
             cachedLevel,
             priceWei,
-            ticketCost
+            ticketCost,
+            payerId
         );
         if (boxWord != 0) _appendBoxOrder(buyer, boxWord, _boxQuote(boxOrder));
     }
@@ -785,7 +852,9 @@ contract DegenerusGameMintModule is
 
     /// @dev Core purchase body. `cachedJpFlag`/`cachedLevel`/`priceWei`/`ticketCost` are the
     ///      caller's same-frame _purchaseCostInputs snapshot (no external call sits between
-    ///      that read and this frame, so the values cannot have changed).
+    ///      that read and this frame, so the values cannot have changed). `payerId` is the
+    ///      ledger the claimable/AFKing legs debit: the buyer's own (0 = the buyer), or a smurf's
+    ///      owner on its creation ticket.
     function _purchaseForWithCached(
         address buyer,
         uint256 entryQuantityScaled,
@@ -796,11 +865,13 @@ contract DegenerusGameMintModule is
         bool cachedJpFlag,
         uint24 cachedLevel,
         uint256 priceWei,
-        uint256 ticketCost
+        uint256 ticketCost,
+        uint32 payerId
     ) private returns (uint256 boxWord) {
         if (_livenessTriggered()) revert E();
         // Every caller registered the buyer before this frame; the mint word is warm.
         uint32 buyerId = _walletIdOf(buyer);
+        if (payerId == 0) payerId = buyerId;
 
         // Biggest-buy record, armed up front so any claim seeds the flip credit this
         // purchase already pays out below — the bounty rides the buy's own credit
@@ -880,7 +951,7 @@ contract DegenerusGameMintModule is
                 // here; the mint leg has not run yet) then afking. afking is fresh-ETH-
                 // equivalent for routing; claimable is recycled. DirectEth skips claimable.
                 (uint256 cUsed, uint256 aUsed) = _settleShortfallNoPool(
-                    buyerId,
+                    payerId,
                     shortfall,
                     payKind != MintPaymentKind.DirectEth
                 );
@@ -921,9 +992,9 @@ contract DegenerusGameMintModule is
             ) = _callTicketPurchase(
                     buyer,
                     buyerId,
+                    payerId,
                     entryQuantityScaled,
                     payKind,
-                    false,
                     remainingEth,
                     cachedJpFlag
                 );
@@ -1114,12 +1185,14 @@ contract DegenerusGameMintModule is
     ///         plus an optional claimable shortfall.
     /// @dev The box queues at the current lootbox RNG index and resolves off the
     ///      committed word later (RNG-freeze discipline). Reverts once presaleOver.
-    /// @param buyer Player receiving the box (already operator-resolved by the entrypoint).
+    /// @param id Account receiving the box (0 = caller; account rule). Raw msg.data target of
+    ///        Game.buyPresaleBox.
     /// @param boxAmount Requested box ETH (>= PRESALE_BOX_MIN, checked pre-clamp).
-    function buyPresaleBox(address buyer, uint256 boxAmount) external payable {
+    function buyPresaleBox(uint32 id, uint256 boxAmount) external payable {
         // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
         // deployed module would trap the in-flight msg.value against empty local state.
         if (address(this) != ContractAddresses.GAME) revert E();
+        (address buyer, ) = _resolveAccount(id);
         (uint32 buyerId, ) = _registerWallet(buyer, boxAmount);
         _buyPresaleBoxFor(buyer, buyerId, boxAmount, msg.value, 0, 0);
     }
@@ -1129,7 +1202,8 @@ contract DegenerusGameMintModule is
     ///         own cost (none for Claimable payKind); the rest of msg.value funds the box,
     ///         with any shortfall drawn from the buyer's claimable, then afking balance. The
     ///         box is gated by the just-earned + banked presale-box credit.
-    /// @param buyer Player receiving both legs (already operator-resolved by the entrypoint).
+    /// @param id Account receiving both legs (0 = caller; account rule). Raw msg.data target of
+    ///        Game.buyLootboxAndPresaleBox.
     /// @param entryQuantityScaled Tickets to buy (0 to skip).
     /// @param boxOrder Packed box order (0 to skip): [small:8][med:8][large:8][customCount:8][customSize:56 gwei].
     /// @param affiliateCode Affiliate/referral code for the mint leg.
@@ -1137,13 +1211,14 @@ contract DegenerusGameMintModule is
     /// @param boxAmount Requested presale-box ETH (>= PRESALE_BOX_MIN; leftover msg.value
     ///        first, then the buyer's claimable/afking).
     function buyLootboxAndPresaleBox(
-        address buyer,
+        uint32 id,
         uint256 entryQuantityScaled,
         uint256 boxOrder,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
         uint256 boxAmount
     ) external payable {
+        (address buyer, ) = _resolveAccount(id);
         // Split msg.value across both legs so the box accepts the same funding mix as
         // every other purchase. The mint leg takes fresh ETH up to its own cost — capped
         // so the Combined/DirectEth payment guards never revert on or strand overpay;
@@ -1172,7 +1247,8 @@ contract DegenerusGameMintModule is
             cachedJpFlag,
             cachedLevel,
             priceWei,
-            ticketCost
+            ticketCost,
+            buyerId
         );
         // Both box legs share this call's one entry; the presale leg appends it.
         _buyPresaleBoxFor(buyer, buyerId, boxAmount, msg.value - mintFresh, boxWord, mintCost - ticketCost);
@@ -1268,6 +1344,8 @@ contract DegenerusGameMintModule is
 
     /// @dev Execute ticket purchase: payment, boost, affiliate routing, quest unit accumulation.
     ///      x00 century bonus and ticket queuing are handled by _purchaseFor after score computation.
+    ///      `payerId` is the ledger an ETH leg's claimable/AFKing draw debits; zero selects the
+    ///      FLIP leg (burned from the buyer's payee), which has no ledger payer.
     /// @return bonusCredit Bulk/recycle bonus flip credit (affiliate kickback is added by the caller)
     /// @return adjustedQty32 Adjusted ticket quantity (with boost, without x00 bonus)
     /// @return targetLevel The level tickets are queued to
@@ -1277,9 +1355,9 @@ contract DegenerusGameMintModule is
     function _callTicketPurchase(
         address buyer,
         uint32 buyerId,
+        uint32 payerId,
         uint256 quantity,
         MintPaymentKind payKind,
-        bool payInCoin,
         uint256 value,
         bool cachedJpFlag
     )
@@ -1324,6 +1402,7 @@ contract DegenerusGameMintModule is
         ) revert E();
 
         uint256 adjustedQuantity = quantity;
+        bool payInCoin = payerId == 0;
         if (!payInCoin) {
             // Nested delegatecall straight into the boon module (this frame already
             // runs in the Game's storage context), skipping the external self-call
@@ -1353,11 +1432,12 @@ contract DegenerusGameMintModule is
         if (payInCoin) {
             // The FLIP leg is a paying entry: register the buyer at its ETH-equivalent price
             // before anything else in this purchase loads the buyer's mint word.
-            _registerWallet(buyer, costWei);
-            // Token debits round up: a fractional ticket price must not undercharge.
+            (, uint256 word) = _registerWallet(buyer, costWei);
+            // Token debits round up: a fractional ticket price must not undercharge. The FLIP
+            // burns from the account's payee (the owner for a smurf).
             uint256 coinCost = (quantity * (PRICE_COIN_UNIT / 4) + QTY_SCALE - 1) /
                 QTY_SCALE;
-            _coinReceive(buyer, coinCost);
+            _coinReceive(_payeeOfWord(buyer, word), coinCost);
 
             // MINT_FLIP quest units (the reward is credited by the caller).
             uint32 questQty = uint32(quantity / (4 * QTY_SCALE));
@@ -1375,7 +1455,7 @@ contract DegenerusGameMintModule is
                 ticketFutureShare,
                 ticketClaimableDraw,
                 ticketClaimableUsed
-            ) = _recordMintPayment(buyerId, costWei, payKind, value);
+            ) = _recordMintPayment(payerId, costWei, payKind, value);
             // Mint-data recording runs after payment, before quest eligibility is checked.
             _recordMintData(buyer, targetLevel, mintUnits);
 

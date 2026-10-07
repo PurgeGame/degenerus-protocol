@@ -150,7 +150,7 @@ const STAGE_JACKPOT_PHASE_ENDED   = 9n;
 
 async function buyFullTickets(game, buyer, n, totalEth) {
   return game.connect(buyer).purchase(
-    ZERO_ADDRESS,
+    0,
     BigInt(n) * 400n,
     0n,
     ZERO_BYTES32,
@@ -163,7 +163,7 @@ async function buyFullTickets(game, buyer, n, totalEth) {
 async function heavyPurchases(game, buyers) {
   for (const buyer of buyers) {
     try {
-      await game.connect(buyer).purchaseWhalePass(buyer.address, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
+      await game.connect(buyer).purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
     } catch (_) {
       // Whale-bundle intro-price slot may be exhausted for some buyers; fall through to ticket purchases.
     }
@@ -174,7 +174,7 @@ async function heavyPurchases(game, buyers) {
 /** Buy 1 full ticket (400 qty) at level-0 intro price (0.01 ETH). */
 async function buyOneTicket(game, buyer) {
   return game.connect(buyer).purchase(
-    ZERO_ADDRESS,
+    0,
     400n,
     0n,
     ZERO_BYTES32,
@@ -209,9 +209,9 @@ async function setupSplitTriggeringFixture(fixture, count) {
   const pricePerBundle = eth(2.4);
   for (const buyer of players.slice(0, 5)) {
     try {
-      await game.connect(buyer).purchaseWhalePass(buyer.address, 20, hre.ethers.ZeroHash, { value: 20n * pricePerBundle });
+      await game.connect(buyer).purchaseWhalePass(0, 20, hre.ethers.ZeroHash, { value: 20n * pricePerBundle });
     } catch (_) {
-      try { await game.connect(buyer).purchaseWhalePass(buyer.address, 20, hre.ethers.ZeroHash, { value: 20n * eth(4) }); } catch (_) { /* fallthrough */ }
+      try { await game.connect(buyer).purchaseWhalePass(0, 20, hre.ethers.ZeroHash, { value: 20n * eth(4) }); } catch (_) { /* fallthrough */ }
     }
   }
 

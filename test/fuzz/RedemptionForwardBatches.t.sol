@@ -311,14 +311,14 @@ contract RedemptionForwardBatchesTest is RedemptionFixture {
         (uint256 preview,) = sdgnrs.previewBurnValue(amount);
         before = _received(alice);
         vm.prank(alice);
-        sdgnrs.claimRedemption(alice, id);
+        sdgnrs.claimRedemption(0, id);
         assertEq(_received(alice) - before, bobWithEscrow, "the open claim unwinds at the game-over burn price");
         assertEq(preview, bobWithEscrow, "the preview shows the game-over price");
         assertEq(_claimTokens(alice, id), 0);
         assertEq(_escrow(), 0, "the unwind leaves the escrow");
         vm.expectRevert(sDGNRS.NoClaim.selector);
         vm.prank(alice);
-        sdgnrs.claimRedemption(alice, id);
+        sdgnrs.claimRedemption(0, id);
     }
 
     /// @dev (d) Liveness fires while a closed batch waits for settlement: its pre-freeze word is
@@ -351,13 +351,13 @@ contract RedemptionForwardBatchesTest is RedemptionFixture {
 
         uint256 before = _received(alice);
         vm.prank(alice);
-        sdgnrs.claimRedemption(alice, first);
+        sdgnrs.claimRedemption(0, first);
         assertEq(_received(alice) - before, ethBase, "100% direct at roll 100");
 
         (uint256 preview,) = sdgnrs.previewBurnValue(amount);
         before = _received(bob);
         vm.prank(bob);
-        sdgnrs.claimRedemption(bob, first + 1);
+        sdgnrs.claimRedemption(0, first + 1);
         assertEq(_received(bob) - before, preview, "the open batch unwinds at the game-over price");
     }
 
@@ -382,7 +382,7 @@ contract RedemptionForwardBatchesTest is RedemptionFixture {
         assertEq(flip, 0);
         uint256 before = _received(alice);
         vm.prank(alice);
-        sdgnrs.claimRedemption(alice, first);
+        sdgnrs.claimRedemption(0, first);
         assertEq(_received(alice) - before, ethBase, "100% direct at roll 100");
     }
 

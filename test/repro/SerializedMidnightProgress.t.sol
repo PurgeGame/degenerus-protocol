@@ -26,21 +26,16 @@ contract SerializedMidnightProgressTest is MiddayFrozenPoolLatch {
         _fulfillPending();
         assertFalse(_ticketsFullyProcessed(), "nonvacuity: read tickets remain");
         assertFalse(game.boxIndexComplete(RecyclingState.readBuffer(address(game))), "nonvacuity: read box frontier remains");
-        uint256 existing = game.subscriberCount();
+        uint256 existing = game.subscriberSetLength();
         for (uint256 i; i + existing < subscribers; ++i) {
             address owner = address(uint160(0xF00000 + i));
             vm.deal(owner, 10 ether);
-            _grantSeat(owner);
-            // The free mint tranche has 1,000 seats. Fill the remaining live
-            // subscriber set through the real 998-seat vault tranche.
-            if (afkingSubToken.balanceOf(owner) == 0) {
-                vm.prank(address(vault));
-                afkingSubToken.vaultMintSeats(owner, 1);
-            }
+            _giveWalletId(owner);
+            uint256 seat = _grantSeat(owner);
             vm.prank(owner);
-            game.subscribe{value: 1 ether}(address(0), false, false, 1, address(0));
+            game.subscribe{value: 1 ether}(0, false, false, 1, 0, seat);
         }
-        if (subscribers != 0) assertEq(game.subscriberCount(), subscribers, "nonvacuity: full subscriber ring");
+        if (subscribers != 0) assertEq(game.subscriberSetLength(), subscribers, "nonvacuity: full subscriber ring");
         // Subscribing queues indexed cover boxes, also bound to the next write cohort.
         vm.warp(vm.getBlockTimestamp() + 1 days);
         previousRequest = mockVRF.lastRequestId();

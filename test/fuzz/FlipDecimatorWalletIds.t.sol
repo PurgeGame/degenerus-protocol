@@ -118,13 +118,13 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
 
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
-        game.depositAfkingFunding{value: amount}(who);
+        game.depositAfkingFunding{value: amount}(_giveWalletId(who));
     }
 
     function _subscribeLootbox(address who, uint8 q) internal {
-        _grantSeat(who);
+        uint256 seat = _grantSeat(who);
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, address(0));
+        game.subscribe(0, false, false, q, 0, seat);
     }
 
     /// @dev Deliver one funded day to the live sub set and open the pending box.
@@ -180,7 +180,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
         vm.expectCall(address(game), abi.encodeWithSelector(DegenerusGame.recordDecBurn.selector, p, lvl), 1);
         vm.recordLogs();
         vm.prank(p);
-        coin.decimatorBurn(address(0), BURN, 0);
+        coin.decimatorBurn(0, BURN, 0);
 
         (uint256 n, uint32 rid, address owner) = _registrations(vm.getRecordedLogs());
         assertEq(n, 1, "exactly one WalletRegistered");
@@ -213,7 +213,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
         vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleDecimator, (id, BURN)), 1);
         vm.recordLogs();
         vm.prank(p);
-        coin.decimatorBurn(address(0), BURN, 0);
+        coin.decimatorBurn(0, BURN, 0);
         (n,,) = _registrations(vm.getRecordedLogs());
         assertEq(n, 0, "no event on the burn either");
         assertEq(_walletCount(), walletsBefore);
@@ -247,7 +247,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
             1
         );
         vm.prank(p);
-        coin.decimatorBurn(address(0), BURN, 0);
+        coin.decimatorBurn(0, BURN, 0);
         assertEq(coinflip.coinflipAmount(p), reward, "quest reward credited by ID");
     }
 
@@ -294,7 +294,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
             1
         );
         vm.prank(p);
-        coin.decimatorBurn(address(0), BURN, 0);
+        coin.decimatorBurn(0, BURN, 0);
     }
 
     /// @notice Past PAID_ADMISSION_WALLETS a new burner reverts (the burn rolls back); an existing
@@ -310,12 +310,12 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
 
         vm.expectRevert(abi.encodeWithSignature("E()"));
         vm.prank(n);
-        coin.decimatorBurn(address(0), BURN, 0);
+        coin.decimatorBurn(0, BURN, 0);
         assertEq(coin.balanceOf(n), 10_000);
         assertEq(_gameId(n), 0);
 
         vm.prank(e);
-        coin.decimatorBurn(address(0), BURN, 0);
+        coin.decimatorBurn(0, BURN, 0);
         assertEq(_entryOwner(eid, lvl), eid);
     }
 

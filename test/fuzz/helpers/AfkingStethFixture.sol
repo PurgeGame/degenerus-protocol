@@ -68,7 +68,6 @@ contract AfkingStethHost is DegenerusGame, WalletSeed {
         sub.affiliateBase = 31;
         sub.pendingFlip = 17;
         sub.subStreakLatch = 9;
-        mintPacked_[player] |= uint256(1) << BitPackingLib.SEAT_ENCUMBERED_SHIFT;
         if (prepaid != 0) _creditAfkingValue(source == address(0) ? id : sourceId, prepaid);
         if (claimable != 0) {
             _creditClaimable(id, claimable);

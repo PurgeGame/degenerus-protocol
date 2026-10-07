@@ -104,7 +104,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
     function _buyWriteBox() private {
         vm.prank(PLAYER);
         game.purchase{value: 1 ether}(
-            PLAYER, 0, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
+            0, 0, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
     }
 

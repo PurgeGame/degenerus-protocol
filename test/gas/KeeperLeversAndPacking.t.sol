@@ -107,8 +107,9 @@ contract KeeperLeversAndPacking is DeployProtocol {
         vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(lrPacked));
 
         // The crank resolve delegatecall has msg.sender == address(game); approve it as operator.
+        _giveWalletId(player);
         vm.prank(player);
-        game.setOperatorApproval(address(game), true);
+        game.setOperatorApproval(0, address(game), true);
     }
 
     // =========================================================================

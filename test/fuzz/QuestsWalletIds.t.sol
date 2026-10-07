@@ -137,7 +137,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
     function _buy(address buyer) private returns (uint32) {
         vm.deal(buyer, buyer.balance + price);
         vm.prank(buyer);
-        game.purchase{value: price}(buyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: price}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         return game.walletIdOf(buyer);
     }
 
@@ -226,7 +226,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         vm.record();
         vm.startStateDiffRecording();
         vm.prank(p);
-        coinflip.depositCoinflip(address(0), 1_000);
+        coinflip.depositCoinflip(0, 1_000);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         (, bytes32[] memory writes) = vm.accesses(address(quests));
         uint32 id = game.walletIdOf(p);
@@ -245,7 +245,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         vm.record();
         vm.startStateDiffRecording();
         vm.prank(g);
-        coinflip.depositCoinflip(r, 1_000);
+        coinflip.depositCoinflip(rid, 1_000);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         (, bytes32[] memory writes) = vm.accesses(address(quests));
         uint32 gid = game.walletIdOf(g);
@@ -265,7 +265,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         vm.record();
         vm.startStateDiffRecording();
         vm.prank(p);
-        coin.decimatorBurn(address(0), 2_000, 0);
+        coin.decimatorBurn(0, 2_000, 0);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         (, bytes32[] memory writes) = vm.accesses(address(quests));
         uint32 id = game.walletIdOf(p);
@@ -306,7 +306,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         vm.record();
         vm.startStateDiffRecording();
         vm.prank(b);
-        game.purchase{value: 1 ether}(b, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        game.purchase{value: 1 ether}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         (, bytes32[] memory writes) = vm.accesses(address(quests));
         uint32 id = game.walletIdOf(b);
@@ -348,7 +348,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         vm.record();
         vm.startStateDiffRecording();
         vm.prank(p);
-        game.placeDegeneretteBet{value: 0.01 ether}(address(0), 0, 0.01 ether, 1, 9);
+        game.placeDegeneretteBet{value: 0.01 ether}(0, 0, 0.01 ether, 1, 9);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         (, bytes32[] memory writes) = vm.accesses(address(quests));
         uint32 pid = game.walletIdOf(p);
@@ -363,7 +363,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         vm.record();
         vm.startStateDiffRecording();
         vm.prank(g);
-        game.placeDegeneretteBet{value: 0.01 ether}(r, 0, 0.01 ether, 1, 9);
+        game.placeDegeneretteBet{value: 0.01 ether}(rid, 0, 0.01 ether, 1, 9);
         acc = vm.stopAndReturnStateDiff();
         (, writes) = vm.accesses(address(quests));
         uint32 gid = game.walletIdOf(g);
@@ -422,13 +422,13 @@ contract QuestsWalletIdsTest is DeployProtocol {
     function test_BeginAndFinalizeAfkingFromSubscriptionKeySubId() public {
         address p = makeAddr("afkSub");
         uint32 id = _giveWalletId(p); // funding is credited by wallet ID
-        _grantSeat(p);
+        uint256 seat = _grantSeat(p);
         vm.deal(address(this), 50 ether);
-        game.depositAfkingFunding{value: 50 ether}(p);
+        game.depositAfkingFunding{value: 50 ether}(id);
         vm.record();
         vm.startStateDiffRecording();
         vm.prank(p);
-        game.subscribe(address(0), false, false, 1, address(0));
+        game.subscribe(0, false, false, 1, 0, seat);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         (, bytes32[] memory writes) = vm.accesses(address(quests));
         assertEq(_onlyId(acc, address(game), quests.beginAfking.selector), id);
@@ -437,7 +437,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
 
         vm.startStateDiffRecording();
         vm.prank(p);
-        game.subscribe(address(0), false, false, 0, address(0));
+        game.subscribe(0, false, false, 0, 0, 0);
         acc = vm.stopAndReturnStateDiff();
         assertEq(_onlyId(acc, address(game), quests.finalizeAfking.selector), id);
         assertEq(_field(id, OFF_AFKING, 8), 0, "finalized under the sub ID");
@@ -654,13 +654,14 @@ contract QuestsWalletIdsTest is DeployProtocol {
 
     function _smite(address target, uint8 symbol) private {
         address d = makeAddr(string(abi.encodePacked("mbgDeity", symbol)));
+        uint32 targetId = game.walletIdOf(target);
         vm.deal(d, 200 ether);
         vm.prank(d);
-        game.purchaseDeityPass{value: 100 ether}(d, symbol, bytes32(0));
+        game.purchaseDeityPass{value: 100 ether}(0, symbol, bytes32(0));
         vm.prank(address(game));
         coin.mintForGame(d, 1_000);
         vm.prank(d);
-        game.smite(symbol, target);
+        game.smite(symbol, targetId);
     }
 
     function test_RegistrationOnlyAndSmiteOnlyWordsCannotBet() public {
@@ -671,15 +672,14 @@ contract QuestsWalletIdsTest is DeployProtocol {
         assertFalse(earns);
         assertEq(id, rid);
 
+        // A smite names an allocated account (ID 0 is the caller), so the curse lands on a
+        // wallet that already holds an ID.
         address s = makeAddr("mbgSmitten");
+        uint32 sid = _giveWalletId(s);
         _smite(s, 1);
         uint256 w = game.mintPackedFor(s);
         assertGt(w, 0, "the smite wrote the word");
-        assertEq(w >> BitPackingLib.WALLET_ID_SHIFT, 0, "and no ID");
-        (may,, id) = quests.marketBetGates(s, 1);
-        assertFalse(may, "curse alone");
-        assertEq(id, 0);
-        uint32 sid = _giveWalletId(s);
+        assertEq(w >> BitPackingLib.WALLET_ID_SHIFT, sid, "the word carries the ID");
         (may,, id) = quests.marketBetGates(s, 1);
         assertFalse(may, "curse plus registration");
         assertEq(id, sid);
@@ -701,31 +701,32 @@ contract QuestsWalletIdsTest is DeployProtocol {
         vm.deal(p, 300 ether);
         if (door == 0) {
             vm.prank(p);
-            game.purchase{value: price}(p, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+            game.purchase{value: price}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         } else if (door == 1) {
             vm.prank(p);
-            game.purchase{value: 1 ether}(p, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+            game.purchase{value: 1 ether}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
         } else if (door == 2) {
             vm.prank(p);
-            game.purchaseLazyPass{value: 1 ether}(p, bytes32(0));
+            game.purchaseLazyPass{value: 1 ether}(0, bytes32(0));
         } else if (door == 3) {
             vm.prank(p);
-            game.purchaseWhalePass{value: 20 ether}(p, 1, bytes32(0));
+            game.purchaseWhalePass{value: 20 ether}(0, 1, bytes32(0));
         } else if (door == 4) {
             vm.prank(p);
-            game.purchaseDeityPass{value: 100 ether}(p, 7, bytes32(0));
+            game.purchaseDeityPass{value: 100 ether}(0, 7, bytes32(0));
         } else if (door == 5) {
             vm.prank(p);
-            game.placeDegeneretteBet{value: 0.01 ether}(address(0), 0, 0.01 ether, 1, 9);
+            game.placeDegeneretteBet{value: 0.01 ether}(0, 0, 0.01 ether, 1, 9);
         } else if (door == 6) {
             vm.prank(address(game));
             coin.mintForGame(p, 10_000);
             vm.prank(p);
-            coinflip.depositCoinflip(address(0), 1_000);
+            coinflip.depositCoinflip(0, 1_000);
         } else if (door == 7) {
             vm.prank(makeAddr("mbgReferrer"));
             affiliate.referPlayer(bytes32(uint256(uint160(p))));
         } else {
+            _giveWalletId(p);
             _smite(p, 8);
         }
     }
@@ -785,7 +786,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         );
         vm.startStateDiffRecording();
         vm.prank(p);
-        parimutuel.placeBet(address(0), true);
+        parimutuel.placeBet(0, true);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         bytes[] memory r = _calls(acc, address(parimutuel), address(quests), quests.recordGrowthBet.selector);
         assertEq(r.length, 1);

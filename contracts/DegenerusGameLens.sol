@@ -173,7 +173,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
     /// @notice The full afking Sub record (one game-storage slot) plus the unified
     ///         effective quest streak the activity score reads.
     struct SubFull {
-        bool active; // dailyQuantity != 0 (same predicate as DegenerusGame.subInfo)
+        bool active; // dailyQuantity != 0 (a live run)
         uint8 dailyQuantity;
         uint8 flags; // bit 1 = drainGameCreditFirst; bit 2 = useTickets
         uint16 score; // frozen activity score stamp (box EV input)
@@ -269,9 +269,9 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
       |                        AFKING SUB RECORD                             |
       +======================================================================+*/
 
-    /// @notice The full Sub record for `player` — every field of the packed slot
-    ///         DegenerusGame.subInfo exposes four of — plus the unified effective
-    ///         quest streak (the same value _effectiveQuestStreak feeds the score).
+    /// @notice The full Sub record for `player` — every field of the packed slot — plus the
+    ///         unified effective quest streak (the same value _effectiveQuestStreak feeds the
+    ///         score).
     function subInfoFull(address game, address player) external view returns (SubFull memory s) {
         uint256 base;
         assembly {

@@ -10,6 +10,19 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///         withdrawable afking balance instead of reverting, stranding, or funding the pool.
 ///         Assertions read the real afkingFundingOf getter (slot-free).
 contract OverpayToAfking is DeployProtocol {
+
+    mapping(address => uint32) private _aidCache;
+
+    /// @dev Wallet ID of `a`, registering it when it holds none. Call before any `vm.prank`.
+    function _aid(address a) internal returns (uint32 id) {
+        id = _aidCache[a];
+        if (id == 0) {
+            id = game.walletIdOf(a);
+            if (id == 0) id = _giveWalletId(a);
+            _aidCache[a] = id;
+        }
+    }
+
     function setUp() public {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
@@ -24,7 +37,7 @@ contract OverpayToAfking is DeployProtocol {
 
         vm.prank(buyer);
         game.purchase{value: cost + over}(
-            buyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
+            0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
         );
 
         assertEq(game.afkingFundingOf(buyer), over, "mint overpay -> afking");
@@ -37,13 +50,14 @@ contract OverpayToAfking is DeployProtocol {
         // Fund the buyer's afking so the mint itself can settle from afking, and send
         // stray msg.value on a Claimable buy: the msg.value is pure overpay -> afking.
         vm.deal(buyer, 1 ether);
+        uint32 aid_ = _aid(buyer);
         vm.prank(buyer);
-        game.depositAfkingFunding{value: 0.5 ether}(buyer); // mint will draw from here
+        game.depositAfkingFunding{value: 0.5 ether}(aid_); // mint will draw from here
 
         uint256 stray = 0.03 ether;
         vm.prank(buyer);
         game.purchase{value: stray}(
-            buyer, 400, 0, bytes32(0), MintPaymentKind.Claimable, false
+            0, 400, 0, bytes32(0), MintPaymentKind.Claimable, false
         );
 
         // 0.5 deposited, 0.01 spent on the ticket from afking, +0.03 stray credited back.
@@ -73,7 +87,7 @@ contract OverpayToAfking is DeployProtocol {
 
         vm.prank(buyer);
         game.buyLootboxAndPresaleBox{value: mintCost + boxAmount + over}(
-            buyer, 9600, 0, bytes32(0), MintPaymentKind.DirectEth, boxAmount
+            0, 9600, 0, bytes32(0), MintPaymentKind.DirectEth, boxAmount
         );
 
         assertEq(game.afkingFundingOf(buyer), over, "combined overpay -> afking");
@@ -88,7 +102,7 @@ contract OverpayToAfking is DeployProtocol {
         vm.deal(buyer, price + over);
 
         vm.prank(buyer);
-        game.purchaseWhalePass{value: price + over}(buyer, 1, bytes32(0));
+        game.purchaseWhalePass{value: price + over}(0, 1, bytes32(0));
 
         assertEq(game.afkingFundingOf(buyer), over, "pass overpay -> afking");
     }
@@ -97,8 +111,9 @@ contract OverpayToAfking is DeployProtocol {
     function test_DepositAfkingFundingStillWorks() public {
         address buyer = makeAddr("depositor");
         vm.deal(buyer, 1 ether);
+        uint32 aid_ = _aid(buyer);
         vm.prank(buyer);
-        game.depositAfkingFunding{value: 1 ether}(buyer);
+        game.depositAfkingFunding{value: 1 ether}(aid_);
         assertEq(game.afkingFundingOf(buyer), 1 ether, "deposit credited");
     }
 
@@ -114,7 +129,7 @@ contract OverpayToAfking is DeployProtocol {
         assertEq(game.afkingFundingOf(buyer), amt);
 
         vm.prank(buyer);
-        game.withdrawAfkingFunding(amt);
+        game.withdrawAfkingFunding(0, amt);
 
         assertEq(game.afkingFundingOf(buyer), 0, "withdrew all");
         assertEq(buyer.balance, amt, "ETH back in wallet");
@@ -136,14 +151,15 @@ contract OverpayToAfking is DeployProtocol {
         afkingSubToken.mintSeatFor(sub);
         vm.prank(sub);
         game.purchase{value: 0.01 ether}(
-            sub, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
+            0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
         );
 
         uint256 funded = 1 ether;
         vm.expectEmit(true, false, false, true, address(game));
         emit AfkingFunded(sub, funded);
+        uint256 seat = _seatOf(sub);
         vm.prank(sub);
-        game.subscribe{value: funded}(address(0), false, true, 1, address(0));
+        game.subscribe{value: funded}(0, false, true, 1, 0, seat);
     }
 
     /// @notice On an operator-funded sub the credit — and the log — name the FUNDER's
@@ -157,18 +173,20 @@ contract OverpayToAfking is DeployProtocol {
         afkingSubToken.mintSeatFor(sub);
         vm.prank(sub);
         game.purchase{value: 0.01 ether}(
-            sub, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
+            0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
         );
 
         // The funder consents to fund this subscriber.
+        uint32 funderId = _aid(funder);
+        uint256 seat = _seatOf(sub);
         vm.prank(funder);
-        game.setOperatorApproval(sub, true);
+        game.setOperatorApproval(0, sub, true);
 
         uint256 funded = 1 ether;
         vm.expectEmit(true, false, false, true, address(game));
         emit AfkingFunded(funder, funded);
         vm.prank(sub);
-        game.subscribe{value: funded}(address(0), false, true, 1, funder);
+        game.subscribe{value: funded}(0, false, true, 1, funderId, seat);
 
         assertEq(game.afkingFundingOf(sub), 0, "subscriber's own bucket untouched");
     }

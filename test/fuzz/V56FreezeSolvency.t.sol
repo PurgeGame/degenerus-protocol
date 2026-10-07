@@ -43,6 +43,25 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///   (`foundry.toml [fuzz] seed=0xdeadbeef`); the assertions are an unseeded-invariant subset of the seeded
 ///   closure (Pitfall 5). Test-only: ZERO contracts/*.sol mutation.
 contract V56FreezeSolvency is DeployProtocol {
+
+    mapping(address => uint32) private _aidCache;
+
+    /// @dev Wallet ID of `a`, registering it when it holds none. Call before any `vm.prank`.
+    function _aid(address a) internal returns (uint32 id) {
+        id = _aidCache[a];
+        if (id == 0) {
+            id = game.walletIdOf(a);
+            if (id == 0) id = _giveWalletId(a);
+            _aidCache[a] = id;
+        }
+    }
+
+    /// @dev Wallet IDs of `a`, registering any that hold none.
+    function _aids(address[] memory a) internal returns (uint32[] memory ids) {
+        ids = new uint32[](a.length);
+        for (uint256 i; i < a.length; ++i) ids[i] = _aid(a[i]);
+    }
+
     // -------------------------------------------------------------------------
     // Game-resident storage slots + the v56 Sub-slot offset block (V56AfkingGasMarginal:68-89)
     // -------------------------------------------------------------------------
@@ -133,7 +152,7 @@ contract V56FreezeSolvency is DeployProtocol {
             } else if (action == 4) {
                 // claimAfkingFlip: pulls the accrued FLIP — must NOT move claimablePool.
                 uint256 poolBefore = _claimablePool();
-                game.claimAfkingFlip(_pair(a, b));
+                game.claimAfkingFlip(_aids(_pair(a, b)));
                 assertEq(_claimablePool(), poolBefore, "claimAfkingFlip left claimablePool byte-unchanged (OFF the ETH path)");
             } else if (action == 5) {
                 // unsub a (tombstone) — only if currently an active sub (a real user can't cancel a
@@ -141,7 +160,7 @@ contract V56FreezeSolvency is DeployProtocol {
                 // pool stays reserved against the residual funding.
                 if (_subscriberIndexOf(a) != 0 && _dailyQtyOf(a) != 0) {
                     vm.prank(a);
-                    game.subscribe(address(0), false, false, 0, address(0));
+                    game.subscribe(0, false, false, 0, 0, 0);
                 }
             } else if (action == 6) {
                 // re-sub a (re-uses the in-place slot) if it is not currently active. Top up its funding
@@ -187,7 +206,7 @@ contract V56FreezeSolvency is DeployProtocol {
 
         // Claiming the FLIP moves no ETH: the pool is byte-unchanged across the claim.
         uint256 poolBeforeClaim = _claimablePool();
-        game.claimAfkingFlip(_singleton(p));
+        game.claimAfkingFlip(_aids(_singleton(p)));
         assertEq(_claimablePool(), poolBeforeClaim, "claimAfkingFlip: claimablePool byte-unchanged (FLIP is OFF the ETH/pool path)");
         assertEq(_pendingFlipOf(p), 0, "the FLIP was paid (pendingFlip zeroed)");
         _assertSolvent("post-claim");
@@ -255,7 +274,7 @@ contract V56FreezeSolvency is DeployProtocol {
         // an ETH/pool debit) — this is the exact equality the acceptance criterion demands.
         uint256 poolBefore = _claimablePool();
         uint256 stakeBefore = coinflip.coinflipAmount(p);
-        game.claimAfkingFlip(_singleton(p));
+        game.claimAfkingFlip(_aids(_singleton(p)));
         assertEq(_claimablePool(), poolBefore, "FLIP claim: claimablePool byte-unchanged (OFF the ETH path)");
         assertEq(coinflip.coinflipAmount(p) - stakeBefore, owed, "FLIP claim paid via creditFlip (not an ETH move)");
         assertEq(_pendingFlipOf(p), 0, "pendingFlip zeroed (paid exactly once, CEI)");
@@ -539,14 +558,15 @@ contract V56FreezeSolvency is DeployProtocol {
     }
 
     function _subscribeLootbox(address who, uint8 q) internal {
+        uint256 seat = _grantSeat(who);
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, address(0)); // self, lootbox mode, no reinvest
+        game.subscribe(0, false, false, q, 0, seat); // self, lootbox mode, no reinvest
     }
 
     function _fundPool(address who, uint256 amount) internal {
         _giveWalletId(who);
         vm.deal(address(this), amount);
-        game.depositAfkingFunding{value: amount}(who);
+        game.depositAfkingFunding{value: amount}(_aid(who));
     }
 
     function _singleton(address a) internal pure returns (address[] memory arr) {

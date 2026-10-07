@@ -65,7 +65,7 @@ contract TicketTrackingHandler is Test {
 
         vm.prank(currentActor);
         try game.purchase{value: totalCost}(
-            currentActor,
+            0,
             qty,
             BoxOrderLib.boCustomFloor(lootboxAmt),
             bytes32(0),

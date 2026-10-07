@@ -27,7 +27,8 @@ import {MineFlipGas} from "../libraries/MineFlipGas.sol";
  */
 
 /// @title IsDGNRS
-/// @notice Interface for the sDGNRS token contract (contract-to-contract calls only)
+/// @notice Interface for the sDGNRS token contract (contract-to-contract calls, plus the two
+///         ID-taking redemption-claim doors)
 /// @dev sDGNRS is backed by ETH, stETH, and FLIP reserves with pool-based distribution
 interface IsDGNRS {
     /// @notice sDGNRS reward pools (initial allocations plus ongoing-pool century refills)
@@ -51,7 +52,8 @@ interface IsDGNRS {
     function poolBalance(Pool pool) external view returns (uint256);
 
     /// @notice Transfer sDGNRS from a pool to a recipient
-    /// @dev Restricted to the game contract.
+    /// @dev Restricted to the game contract. Game passes the recipient account's payee (an
+    ///      ordinary wallet's own address, or a smurf's owner), never a smurf key.
     /// @param pool Pool identifier to transfer from
     /// @param to Recipient address
     /// @param amount Amount of sDGNRS to transfer
@@ -73,6 +75,26 @@ interface IsDGNRS {
     /// @return stethOut stETH received (0 during active game)
     /// @return flipOut FLIP received (0 during active game)
     function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut);
+
+    /// @notice Claim account `id`'s resolved gambling-burn redemption in batch `batchId`.
+    /// @dev Authorized: `id == 0` is the caller (ID from sDGNRS's own forward word); a nonzero
+    ///      `id` needs Game `resolveAccount(id, msg.sender).authorized` (the account's key, a
+    ///      smurf's owner, or an approved operator). The direct half credits the account's Game
+    ///      claimable by ID and the lootbox half resolves for the account; after game over the
+    ///      terminal ETH/stETH (including an open-batch unwind) pays the account's PAYEE.
+    /// @param id Claimant account (0 = caller).
+    /// @param batchId Redemption batch to claim.
+    /// @custom:reverts Unauthorized If the caller may not act for `id`.
+    /// @custom:reverts E (Game) If `id` is unallocated.
+    function claimRedemption(uint32 id, uint32 batchId) external;
+
+    /// @notice Claim account `id`'s parked redemption in batch `batchId`.
+    /// @dev Authorized and paid exactly as `claimRedemption`.
+    /// @param id Claimant account (0 = caller).
+    /// @param batchId Redemption batch to claim.
+    /// @custom:reverts Unauthorized If the caller may not act for `id`.
+    /// @custom:reverts E (Game) If `id` is unallocated.
+    function claimParkedRedemption(uint32 id, uint32 batchId) external;
 
     /// @notice Transfer sDGNRS from the wrapper to a recipient (DGNRS wrapper only)
     /// @param to Recipient address

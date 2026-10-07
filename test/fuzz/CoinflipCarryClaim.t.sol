@@ -72,12 +72,13 @@ contract CoinflipCarryClaim is DeployProtocol {
         stake = 100_000;
         vm.prank(GAME);
         coin.mintForGame(player, stake);
+        uint32 playerId = _giveWalletId(player);
         vm.prank(player);
-        game.setOperatorApproval(operator, true);
+        game.setOperatorApproval(0, operator, true);
         vm.prank(player);
-        coinflip.setCoinflipAutoRebuy(address(0), true, takeProfit);
+        coinflip.setCoinflipAutoRebuy(0, true, takeProfit);
         vm.prank(operator);
-        coinflip.depositCoinflip(player, stake);
+        coinflip.depositCoinflip(playerId, stake);
     }
 
     /// @dev Win payout for `stake` on day `epoch`, plus the capped recycle bonus the
@@ -98,7 +99,7 @@ contract CoinflipCarryClaim is DeployProtocol {
         uint256 balBefore = coin.balanceOf(player);
 
         vm.prank(player);
-        uint256 claimed = coinflip.claimCoinflipCarry(address(0), take);
+        uint256 claimed = coinflip.claimCoinflipCarry(0, take);
 
         assertEq(claimed, take, "claims exactly the requested amount");
         assertEq(coin.balanceOf(player) - balBefore, take, "claimed FLIP minted to wallet");
@@ -115,7 +116,7 @@ contract CoinflipCarryClaim is DeployProtocol {
         _resolveDay(4, true);
         uint256 expectedNext = _carryAfterWin(expectedCarry - take, 4);
         vm.prank(player);
-        coinflip.claimCoinflipCarry(address(0), 0); // settle-only probe (claims nothing)
+        coinflip.claimCoinflipCarry(0, 0); // settle-only probe (claims nothing)
         (, , uint256 carryNext, ) = coinflip.coinflipAutoRebuyInfo(player);
         assertEq(carryNext, expectedNext, "remainder kept rolling and compounded");
     }
@@ -126,7 +127,7 @@ contract CoinflipCarryClaim is DeployProtocol {
         uint256 expectedCarry = _carryAfterWin(stake, 3);
 
         vm.prank(player);
-        uint256 claimed = coinflip.claimCoinflipCarry(address(0), type(uint256).max);
+        uint256 claimed = coinflip.claimCoinflipCarry(0, type(uint256).max);
 
         assertEq(claimed, expectedCarry, "claim caps at the full carry");
         (bool enabled, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(player);
@@ -140,7 +141,7 @@ contract CoinflipCarryClaim is DeployProtocol {
         _resolveDay(4, false); // the rolled carry dies on day 4, not yet walked for the player
 
         vm.prank(player);
-        uint256 claimed = coinflip.claimCoinflipCarry(address(0), type(uint256).max);
+        uint256 claimed = coinflip.claimCoinflipCarry(0, type(uint256).max);
 
         assertEq(claimed, 0, "the loss is settled first - nothing to extract around it");
         (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(player);
@@ -165,7 +166,7 @@ contract CoinflipCarryClaim is DeployProtocol {
         uint256 expectedCarry = remainder + bonus;
 
         vm.prank(player);
-        uint256 claimed = coinflip.claimCoinflipCarry(address(0), type(uint256).max);
+        uint256 claimed = coinflip.claimCoinflipCarry(0, type(uint256).max);
 
         assertEq(
             claimed,
@@ -188,7 +189,7 @@ contract CoinflipCarryClaim is DeployProtocol {
 
         // The banked side pays out through claimCoinflips, not the carry path.
         vm.prank(player);
-        uint256 storedClaimed = coinflip.claimCoinflips(address(0), type(uint256).max);
+        uint256 storedClaimed = coinflip.claimCoinflips(0, type(uint256).max);
         assertEq(storedClaimed, reserved, "banked take-profit claims via claimCoinflips");
         assertEq(
             coin.balanceOf(player),
@@ -205,7 +206,7 @@ contract CoinflipCarryClaim is DeployProtocol {
 
         vm.prank(player);
         vm.expectRevert(Coinflip.RngLocked.selector);
-        coinflip.claimCoinflipCarry(address(0), 1);
+        coinflip.claimCoinflipCarry(0, 1);
     }
 
     /// The other side: day 3's payouts are applied and the lock is STILL held (mineFlip
@@ -218,7 +219,7 @@ contract CoinflipCarryClaim is DeployProtocol {
 
         _lockRng();
         vm.prank(player);
-        uint256 claimed = coinflip.claimCoinflipCarry(address(0), 1);
+        uint256 claimed = coinflip.claimCoinflipCarry(0, 1);
         vm.clearMockedCalls();
 
         assertEq(claimed, 1, "settled carry withdraws under a still-held lock");
@@ -249,7 +250,7 @@ contract CoinflipCarryClaim is DeployProtocol {
         _enterRebuyWithStake(50_000); // take-profit banks chunks AND leaves a carry
         _resolveDay(3, true);
         vm.prank(player);
-        coinflip.claimCoinflipCarry(address(0), 0); // settle while day 3 is applied
+        coinflip.claimCoinflipCarry(0, 0); // settle while day 3 is applied
         _warpToDay(4); // day 4 unapplied: the position is frozen and the carry rides it
 
         (, , uint256 carryBefore, ) = coinflip.coinflipAutoRebuyInfo(player);
@@ -270,12 +271,12 @@ contract CoinflipCarryClaim is DeployProtocol {
         _enterRebuyWithStake();
         _resolveDay(3, true);
         vm.prank(player);
-        coinflip.claimCoinflipCarry(address(0), 0);
+        coinflip.claimCoinflipCarry(0, 0);
         (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(player);
         assertGt(carry, 0, "precondition: a carry exists to strand");
 
         vm.prank(player);
-        coinflip.setCoinflipAutoRebuy(address(0), false, 0);
+        coinflip.setCoinflipAutoRebuy(0, false, 0);
 
         (bool enabled, , uint256 carryAfter, ) = coinflip.coinflipAutoRebuyInfo(player);
         assertFalse(enabled, "position is disabled");
@@ -308,7 +309,7 @@ contract CoinflipCarryClaim is DeployProtocol {
         _enterRebuyWithStake(50_000);
         _resolveDay(3, true);
         vm.prank(player);
-        coinflip.claimCoinflipCarry(address(0), 0); // settle while day 3 is applied
+        coinflip.claimCoinflipCarry(0, 0); // settle while day 3 is applied
         _warpToDay(4); // day 4 unapplied: its word may be public, the carry rides it
 
         (, , uint256 carry0, ) = coinflip.coinflipAutoRebuyInfo(player);
@@ -317,23 +318,23 @@ contract CoinflipCarryClaim is DeployProtocol {
         // --- gated mutators: every one shut ---
         vm.prank(player);
         vm.expectRevert(Coinflip.RngLocked.selector);
-        coinflip.setCoinflipAutoRebuy(address(0), false, 0);
+        coinflip.setCoinflipAutoRebuy(0, false, 0);
 
         vm.prank(player);
         vm.expectRevert(Coinflip.RngLocked.selector);
-        coinflip.setCoinflipAutoRebuy(address(0), true, 1);
+        coinflip.setCoinflipAutoRebuy(0, true, 1);
 
         vm.prank(player);
         vm.expectRevert(Coinflip.RngLocked.selector);
-        coinflip.setCoinflipAutoRebuyTakeProfit(address(0), 1);
+        coinflip.setCoinflipAutoRebuyTakeProfit(0, 1);
 
         vm.prank(player);
         vm.expectRevert(Coinflip.RngLocked.selector);
-        coinflip.claimCoinflipCarry(address(0), type(uint256).max);
+        coinflip.claimCoinflipCarry(0, type(uint256).max);
 
         // --- ungated settle paths: open, and provably carry-neutral ---
         vm.prank(player);
-        coinflip.claimCoinflips(address(0), type(uint256).max);
+        coinflip.claimCoinflips(0, type(uint256).max);
         vm.prank(ContractAddresses.COIN);
         coinflip.consumeCoinflipsForBurn(player, type(uint256).max);
         vm.prank(ContractAddresses.COIN);
@@ -343,7 +344,7 @@ contract CoinflipCarryClaim is DeployProtocol {
         vm.prank(GAME);
         coin.mintForGame(player, 10_000);
         vm.prank(player);
-        coinflip.depositCoinflip(address(0), 10_000);
+        coinflip.depositCoinflip(0, 10_000);
 
         (, , uint256 carry1, ) = coinflip.coinflipAutoRebuyInfo(player);
         assertEq(carry1, carry0, "no reachable path moved the carry riding the unapplied day");
@@ -352,6 +353,6 @@ contract CoinflipCarryClaim is DeployProtocol {
     function test_RevertsWithoutAutoRebuy() public {
         vm.prank(player);
         vm.expectRevert(Coinflip.AutoRebuyNotEnabled.selector);
-        coinflip.claimCoinflipCarry(address(0), 1);
+        coinflip.claimCoinflipCarry(0, 1);
     }
 }

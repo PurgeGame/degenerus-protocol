@@ -20,6 +20,19 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///      `level + 1` and the pack costs exactly `FOIL_PACK_TICKETS * priceForLevel(level + 1)`
 ///      (snapShift is 0 — the exponent case is pinned by FoilSnapPayout).
 contract FoilAfkingFunding is DeployProtocol {
+
+    mapping(address => uint32) private _aidCache;
+
+    /// @dev Wallet ID of `a`, registering it when it holds none. Call before any `vm.prank`.
+    function _aid(address a) internal returns (uint32 id) {
+        id = _aidCache[a];
+        if (id == 0) {
+            id = game.walletIdOf(a);
+            if (id == 0) id = _giveWalletId(a);
+            _aidCache[a] = id;
+        }
+    }
+
     /// @dev FOIL_PACK_TICKETS — the pack is priced at ten ticket prices.
     uint256 private constant FOIL_PACK_TICKETS = 10;
 
@@ -75,13 +88,14 @@ contract FoilAfkingFunding is DeployProtocol {
 
     function _fundAfking(address who, uint256 amt) internal {
         vm.deal(who, who.balance + amt);
+        uint32 aid_ = _aid(who);
         vm.prank(who);
-        game.depositAfkingFunding{value: amt}(who);
+        game.depositAfkingFunding{value: amt}(aid_);
     }
 
     function _buyFoil(address who, uint256 ethSent, MintPaymentKind kind) internal {
         vm.prank(who);
-        game.purchase{value: ethSent}(who, 0, 0, bytes32(0), kind, true);
+        game.purchase{value: ethSent}(0, 0, 0, bytes32(0), kind, true);
     }
 
     function _newPlayer(string memory label) internal returns (address who) {
@@ -99,7 +113,7 @@ contract FoilAfkingFunding is DeployProtocol {
         vm.deal(who, who.balance + 1_000 ether);
         vm.prank(who);
         vm.expectRevert(bytes4(keccak256("FoilAlreadyBought()")));
-        game.purchase{value: cost}(who, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        game.purchase{value: cost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -183,14 +197,14 @@ contract FoilAfkingFunding is DeployProtocol {
         _fundAfking(a, cost - 1);
         vm.prank(a);
         vm.expectRevert(insolvent);
-        game.purchase{value: 0}(a, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        game.purchase{value: 0}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
 
         address b = _newPlayer("foilShortCombined");
         _seedClaimable(b, cost / 4);
         _fundAfking(b, cost / 4);
         vm.prank(b);
         vm.expectRevert(insolvent);
-        game.purchase{value: 0}(b, 0, 0, bytes32(0), MintPaymentKind.Combined, true);
+        game.purchase{value: 0}(0, 0, 0, bytes32(0), MintPaymentKind.Combined, true);
     }
 
     // ──────────────────────────────────────────────────────────────────────

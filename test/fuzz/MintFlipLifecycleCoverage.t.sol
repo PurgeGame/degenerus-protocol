@@ -499,14 +499,21 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
     }
 
     function _subscribeLootbox(address who, uint8 q) internal {
+        uint256 seat_who = _grantSeat(who);
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, address(0)); // self, lootbox mode, no reinvest
+        game.subscribe(0, false, false, q, 0, seat_who); // self, lootbox mode, no reinvest
     }
 
     function _fundPool(address who, uint256 amount) internal {
         _giveWalletId(who);
         vm.deal(address(this), amount);
-        game.depositAfkingFunding{value: amount}(who);
+        game.depositAfkingFunding{value: amount}(_idOf(who));
+    }
+
+    /// @dev `who`'s wallet ID, registering one through the production hook when it has none.
+    function _idOf(address who) internal returns (uint32 id) {
+        id = game.walletIdOf(who);
+        if (id == 0) id = _giveWalletId(who);
     }
 
     function _grantDeityPass(address who) internal {

@@ -105,7 +105,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
         vm.prank(address(game));
         wwxrp.mintPrize(player, amount);
         vm.prank(player);
-        wwxrp.enter(amount);
+        wwxrp.enter(0, amount);
     }
 
     /// @dev Mirror of the contract's winner-roll derivation.
@@ -148,7 +148,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
         vm.expectEmit(true, true, false, true, address(wwxrp));
         emit IncineratorEntered(100, alice, 0, amt, amt, amt);
         vm.prank(alice);
-        wwxrp.enter(amt);
+        wwxrp.enter(0, amt);
 
         (uint256 total, uint32 count) = wwxrp.incineratorInfo(100);
         assertEq(total, amt, "whole-token score at 1.0x activity");
@@ -435,7 +435,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
         vm.prank(address(game));
         coin.mintForGame(who, amount);
         vm.prank(who);
-        coinflip.depositCoinflip(address(0), amount);
+        coinflip.depositCoinflip(0, amount);
     }
 
     function _seedNextPrizePool(uint256 targetNext) internal {
@@ -464,7 +464,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
         if (who.balance < cost) vm.deal(who, cost + 10 ether);
 
         vm.prank(who);
-        try game.purchase{value: cost}(who, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+        try game.purchase{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
     }
 
     /// @dev Fulfill any pending VRF request with a parity-forced word: even

@@ -56,6 +56,24 @@ interface IDegenerusCoin {
     /// @param amount The FLIP (whole tokens) to destroy.
     function burnCoinForSalvage(address target, uint256 amount) external;
 
+    /// @notice Burn FLIP during an active Decimator window for account `id`'s weighted entry.
+    /// @dev Authorized: `id == 0` is the caller (no Game resolution call; on a first burn the
+    ///      caller registers through Game `registerWallet(msg.sender, true)`, a paying action). A
+    ///      nonzero `id` needs Game `resolveAccount(id, msg.sender).authorized` (the account's key,
+    ///      a smurf's owner, or an approved operator). The FLIP burns from the account's PAYEE
+    ///      (wallet balance, then the payee's settled coinflip winnings for a shortfall); the
+    ///      quest, boon, activity multiplier and the Decimator entry (`recordDecBurn(key, ...)`)
+    ///      belong to the account.
+    /// @param id Account the entry belongs to (0 = caller).
+    /// @param amount Amount (whole FLIP) to burn; must satisfy the 2,000 FLIP minimum.
+    /// @param chips The entry's board (zero to seven named chips); the last burn's board counts.
+    /// @custom:reverts NotApproved If the caller may not act for `id`.
+    /// @custom:reverts E (Game) If `id` is unallocated, or a new self burner registers past paid
+    ///                 admission.
+    /// @custom:reverts AmountLTMin If `amount` is below the minimum.
+    /// @custom:reverts NotDecimatorWindow If no Decimator window is open.
+    function decimatorBurn(uint32 id, uint256 amount, uint32 chips) external;
+
     /// @notice GAME-only sDGNRS decimator entry; the advance calls it at most once per opening (a stalled arming word skips it).
     /// @param lvl Resolution level for the opening window (current game level + 1).
     /// @param cap Whole-FLIP spending cap: 4x the previous sealed round's average credited stack (8,000 before any).

@@ -37,7 +37,7 @@ describe("SURF-06 — mineFlip STAGE_PURCHASE_DAILY gas under the 10M per-chunk 
     const players = [alice, bob, carol, dan, eve];
     for (const p of players) {
       await game.connect(p).purchase(
-        ZERO_ADDRESS,
+        0,
         400n,
         0n,
         ZERO_BYTES32,

@@ -46,6 +46,19 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///   from V61CurseSet / V61Smite / V61AfpayWaterfall. Seeded-fuzz deterministic (foundry seed 0xdeadbeef).
 ///   Test-only: ZERO contracts/*.sol mutation.
 contract V61RngFreezeIntact is DeployProtocol {
+
+    mapping(address => uint32) private _aidCache;
+
+    /// @dev Wallet ID of `a`, registering it when it holds none. Call before any `vm.prank`.
+    function _aid(address a) internal returns (uint32 id) {
+        id = _aidCache[a];
+        if (id == 0) {
+            id = game.walletIdOf(a);
+            if (id == 0) id = _giveWalletId(a);
+            _aidCache[a] = id;
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Game-resident storage slots + mintPacked_ field shifts (378-01 key + BitPackingLib)
     // -------------------------------------------------------------------------
@@ -307,7 +320,7 @@ contract V61RngFreezeIntact is DeployProtocol {
         vm.deal(buyer, ethSent);
         vm.recordLogs();
         vm.prank(buyer);
-        game.purchase{value: ethSent}(buyer, 400, 0, bytes32(0), MintPaymentKind.Combined, false);
+        game.purchase{value: ethSent}(0, 400, 0, bytes32(0), MintPaymentKind.Combined, false);
 
         o.claimableDelta = claimableBefore - game.claimableWinningsOf(buyer);
         o.afkingDelta = afkingBefore - game.afkingFundingOf(buyer);
@@ -332,7 +345,7 @@ contract V61RngFreezeIntact is DeployProtocol {
     ) internal returns (uint8 curse, uint256 score) {
         _perturbBlock(blockBump, warpBump, prevrandao, coinbaseName);
         vm.prank(p);
-        game.claimWinnings(p);
+        game.claimWinnings(0);
         curse = game.curseCountOf(p);
         score = activityScoreOf(address(game), p);
     }
@@ -351,8 +364,9 @@ contract V61RngFreezeIntact is DeployProtocol {
         string memory coinbaseName
     ) internal returns (uint8 curse) {
         _perturbBlock(blockBump, warpBump, prevrandao, coinbaseName);
+        _aid(smitee);
         vm.prank(deity);
-        game.smite(deityId, smitee);
+        game.smite(deityId, _aid(smitee));
         curse = game.curseCountOf(smitee);
     }
 

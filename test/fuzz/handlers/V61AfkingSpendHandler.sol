@@ -136,8 +136,9 @@ contract V61AfkingSpendHandler is Test {
         if (game.gameOver()) return;
         uint256 amt = bound(amtSeed, 0.01 ether, 100 ether);
         if (amt > currentActor.balance) return;
+        uint32 actorId = game.walletIdOf(currentActor);
         vm.prank(currentActor);
-        try game.depositAfkingFunding{value: amt}(currentActor) {
+        try game.depositAfkingFunding{value: amt}(actorId) {
             ghost_afkingDeposited += amt;
         } catch {}
     }
@@ -170,7 +171,7 @@ contract V61AfkingSpendHandler is Test {
 
         vm.recordLogs();
         vm.prank(currentActor);
-        try game.purchase{value: ethSent}(currentActor, qty, 0, bytes32(0), kind, false) {
+        try game.purchase{value: ethSent}(0, qty, 0, bytes32(0), kind, false) {
             success_afkingBuy++;
             ghost_afkingDrawn += _afkingSpentAmount(currentActor);
         } catch {}
@@ -187,7 +188,7 @@ contract V61AfkingSpendHandler is Test {
         calls_staleCashout++;
         uint256 balBefore = currentActor.balance;
         vm.prank(currentActor);
-        try game.claimWinnings(currentActor) {
+        try game.claimWinnings(0) {
             success_staleCashout++;
             if (currentActor.balance > balBefore) ghost_cashedOut += currentActor.balance - balBefore;
         } catch {}
@@ -206,8 +207,10 @@ contract V61AfkingSpendHandler is Test {
         vm.prank(address(game));
         try coin.mintForGame(deity, SMITE_BURN) {} catch {}
         uint256 flipBefore = coin.balanceOf(deity);
+        uint32 smiteeId = game.walletIdOf(smitee);
+        if (smiteeId == 0) return;
         vm.prank(deity);
-        try game.smite(deityId, smitee) {
+        try game.smite(deityId, smiteeId) {
             success_smite++;
             if (flipBefore > coin.balanceOf(deity)) ghost_smiteBurned += flipBefore - coin.balanceOf(deity);
         } catch {}
@@ -224,8 +227,10 @@ contract V61AfkingSpendHandler is Test {
         address target = actors[bound(targetSeed, 0, actors.length - 1)];
         vm.prank(address(game));
         try coin.mintForGame(currentActor, DECURSE_BURN) {} catch {}
+        uint32 targetId = game.walletIdOf(target);
+        if (targetId == 0) return;
         vm.prank(currentActor);
-        try game.decurse(target) {} catch {}
+        try game.decurse(targetId) {} catch {}
     }
 
     // =========================================================================
@@ -244,7 +249,7 @@ contract V61AfkingSpendHandler is Test {
         uint256 small = (priceWei * 400) / 400; // one whole ticket to satisfy the daily gate
         if (small != 0 && small <= currentActor.balance) {
             vm.prank(currentActor);
-            try game.purchase{value: small}(currentActor, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+            try game.purchase{value: small}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         }
 
         for (uint256 i; i < 3; i++) {

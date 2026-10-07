@@ -176,7 +176,7 @@ describe("BafCreditRouting", function () {
     // coinflipBalance[nextDay][alice] mapping.
     await coinflip
       .connect(alice)
-      .depositCoinflip(alice.address, flip(100));
+      .depositCoinflip(0, flip(100));
 
     // Drive day cycle with winning flip word (bit 0 = 1).
     await driveDailyCycleWinningFlip(game, deployer, mockVRF, 0xdeadbeefn);
@@ -228,7 +228,7 @@ describe("BafCreditRouting", function () {
       const balBefore = await coin.balanceOf(alice.address);
       const tx = await coinflip
         .connect(alice)
-        .claimCoinflips(alice.address, flip(10000));
+        .claimCoinflips(0, flip(10000));
       expect(await coin.balanceOf(alice.address)).to.be.gt(balBefore);
       const events = await getEvents(tx, fixture.jackpots, "BafFlipRecorded");
       const aliceId = await fixture.game.walletIdOf(alice.address);
@@ -257,7 +257,7 @@ describe("BafCreditRouting", function () {
       await expect(
         coinflip
           .connect(alice)
-          .depositCoinflip(alice.address, flip(100))
+          .depositCoinflip(0, flip(100))
       ).to.not.be.reverted;
     });
 
@@ -277,7 +277,7 @@ describe("BafCreditRouting", function () {
       await setSlot0Bool(gameAddr, 15, false); // jackpotPhaseFlag
 
       await expect(
-        coinflip.connect(alice).claimCoinflips(alice.address, flip(10000))
+        coinflip.connect(alice).claimCoinflips(0, flip(10000))
       ).to.not.be.reverted;
     });
   });
@@ -300,7 +300,7 @@ describe("BafCreditRouting", function () {
 
       // The predicate (level % 10 == 0) is false at level 5 — claim proceeds.
       await expect(
-        coinflip.connect(alice).claimCoinflips(alice.address, flip(10000))
+        coinflip.connect(alice).claimCoinflips(0, flip(10000))
       ).to.not.be.reverted;
     });
 
@@ -319,7 +319,7 @@ describe("BafCreditRouting", function () {
       await expect(
         coinflip
           .connect(alice)
-          .depositCoinflip(alice.address, flip(100))
+          .depositCoinflip(0, flip(100))
       ).to.not.be.reverted;
     });
 
@@ -336,7 +336,7 @@ describe("BafCreditRouting", function () {
       await setSlot0Bool(gameAddr, 15, false);
 
       await expect(
-        coinflip.connect(alice).claimCoinflips(alice.address, flip(10000))
+        coinflip.connect(alice).claimCoinflips(0, flip(10000))
       ).to.not.be.reverted;
     });
   });
@@ -355,7 +355,7 @@ describe("BafCreditRouting", function () {
       // bafLevel = purchaseLevel_ = 1 → _bafBracketLevel(1) = 10.
       const tx = await coinflip
         .connect(alice)
-        .claimCoinflips(alice.address, flip(10000));
+        .claimCoinflips(0, flip(10000));
       const events = await getEvents(tx, jackpots, "BafFlipRecorded");
 
       // Expect at least one BafFlipRecorded for alice into bracket 10.
@@ -393,7 +393,7 @@ describe("BafCreditRouting", function () {
 
       const tx = await coinflip
         .connect(alice)
-        .claimCoinflips(alice.address, flip(10000));
+        .claimCoinflips(0, flip(10000));
       const events = await getEvents(tx, jackpots, "BafFlipRecorded");
 
       const aliceId = await fixture.game.walletIdOf(alice.address);
@@ -421,7 +421,7 @@ describe("BafCreditRouting", function () {
 
       const tx = await coinflip
         .connect(alice)
-        .claimCoinflips(alice.address, flip(10000));
+        .claimCoinflips(0, flip(10000));
       const events = await getEvents(tx, jackpots, "BafFlipRecorded");
       const aliceId = await fixture.game.walletIdOf(alice.address);
       const aliceEvents = events.filter(
@@ -450,7 +450,7 @@ describe("BafCreditRouting", function () {
 
       const tx = await coinflip
         .connect(alice)
-        .claimCoinflips(alice.address, flip(10000));
+        .claimCoinflips(0, flip(10000));
       const events = await getEvents(tx, jackpots, "BafFlipRecorded");
       const aliceId = await fixture.game.walletIdOf(alice.address);
       const aliceEvents = events.filter(
@@ -475,7 +475,7 @@ describe("BafCreditRouting", function () {
 
       const tx = await coinflip
         .connect(alice)
-        .claimCoinflips(alice.address, flip(10000));
+        .claimCoinflips(0, flip(10000));
       const events = await getEvents(tx, jackpots, "BafFlipRecorded");
       const aliceId = await fixture.game.walletIdOf(alice.address);
       const aliceEvents = events.filter(
@@ -512,7 +512,7 @@ describe("BafCreditRouting", function () {
 
       const tx = await coinflip
         .connect(alice)
-        .claimCoinflips(alice.address, flip(10000));
+        .claimCoinflips(0, flip(10000));
       const events = await getEvents(tx, jackpots, "BafFlipRecorded");
       const aliceId = await fixture.game.walletIdOf(alice.address);
       const aliceEvents = events.filter(
@@ -544,7 +544,7 @@ describe("BafCreditRouting", function () {
 
       const tx = await coinflip
         .connect(alice)
-        .claimCoinflips(alice.address, flip(10000));
+        .claimCoinflips(0, flip(10000));
       const events = await getEvents(tx, jackpots, "BafFlipRecorded");
       const aliceId = await fixture.game.walletIdOf(alice.address);
       const aliceEvents = events.filter(
@@ -606,7 +606,7 @@ describe("BafCreditRouting", function () {
 
       const tx = await coinflip
         .connect(alice)
-        .claimCoinflips(alice.address, flip(10000));
+        .claimCoinflips(0, flip(10000));
       const events = await getEvents(tx, jackpots, "BafFlipRecorded");
       const aliceId = await fixture.game.walletIdOf(alice.address);
       const aliceEvents = events.filter(
@@ -656,7 +656,7 @@ describe("BafCreditRouting", function () {
 
       const tx = await coinflip
         .connect(alice)
-        .claimCoinflips(alice.address, flip(10000));
+        .claimCoinflips(0, flip(10000));
       const events = await getEvents(tx, jackpots, "BafFlipRecorded");
       const aliceId = await fixture.game.walletIdOf(alice.address);
       const aliceEvents = events.filter(

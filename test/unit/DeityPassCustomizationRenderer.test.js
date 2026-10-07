@@ -2,7 +2,7 @@ import { expect } from "chai";
 import hre from "hardhat";
 import { readFileSync } from "node:fs";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
-import { deployFullProtocol, restoreAddresses } from "../helpers/deployFixture.js";
+import { deployFullProtocol, giveWalletId, restoreAddresses } from "../helpers/deployFixture.js";
 import { wireIcons32 } from "../../scripts/lib/deployHelpers.js";
 
 const ICONS = JSON.parse(readFileSync("scripts/data/icons32Data.symbolOrder.json", "utf8"));
@@ -97,8 +97,8 @@ describe("DeityPassCustomizationRenderer", function () {
 
   it("rejects other holders, the Vault administrator, game, and approved game operators on every mutation", async function () {
     const { deityPass, renderer, game, alice, bob, deployer } = await loadFixture(fixture);
-    await game.connect(alice).setOperatorApproval(bob.address, true);
-    expect(await game.isOperatorApproved(alice.address, bob.address)).to.equal(true);
+    await giveWalletId(game, alice.address);
+    await game.connect(alice).setOperatorApproval(0, bob.address, true);
     const gameSigner = await impersonate(await game.getAddress());
     for (const caller of [bob, deployer, gameSigner]) {
       const target = renderer.connect(caller);

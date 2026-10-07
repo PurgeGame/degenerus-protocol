@@ -61,7 +61,7 @@ describe("Distress-Mode Lootboxes", function () {
     // error before the call is even made. Every other amount in this file is an
     // exact multiple of 1 gwei (whole/fractional ETH), so the floor is exact there too.
     return game.connect(player).purchase(
-      ZERO_ADDRESS,
+      0,
       0n,
       boCustomFloor(amount),
       ZERO_BYTES32,

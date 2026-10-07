@@ -166,16 +166,18 @@ contract BoonStaticDiscard is DeployProtocol {
         address deity = makeAddr("parityDeity");
         vm.deal(deity, 100 ether);
         vm.prank(deity);
-        game.purchaseDeityPass{value: 24 ether}(deity, 5, bytes32(0));
+        game.purchaseDeityPass{value: 24 ether}(0, 5, bytes32(0));
 
         (uint8[3] memory menu, , ) = viewer.deityBoonSlots(address(game), deity);
 
         for (uint8 s2 = 0; s2 < 3; s2++) {
             address recipient = makeAddr(string(abi.encodePacked("parityRecipient", s2)));
             _giveWalletId(recipient);
+            uint32 deityId = game.walletIdOf(deity);
+            uint32 recipientId = game.walletIdOf(recipient);
             vm.recordLogs();
             vm.prank(deity);
-            game.issueDeityBoon(deity, recipient, s2);
+            game.issueDeityBoon(deityId, recipientId, s2);
 
             Vm.Log[] memory logs = vm.getRecordedLogs();
             bool found;

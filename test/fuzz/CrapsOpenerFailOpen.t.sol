@@ -54,7 +54,7 @@ contract CrapsOpenerFailOpen is DeployProtocol {
         vm.warp(_dayStart() + 1 days + 5 minutes);
         (,,,, uint256 priceWei) = game.purchaseInfo();
         vm.prank(keeper);
-        game.purchase{value: priceWei}(keeper, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         for (uint256 i; i < 6; i++) {
             _crank();
             if (game.rngLocked()) break;

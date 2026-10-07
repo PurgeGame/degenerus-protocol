@@ -222,15 +222,15 @@ contract BafWeightedDrawTest is DeployProtocol {
         vm.prank(GAME);
         coin.mintForGame(bob, 1_000);
         vm.prank(bob);
-        coinflip.depositCoinflip(alice, 1_000);
+        coinflip.depositCoinflip(aliceId, 1_000);
 
         // Approved-operator deposit: operator spends alice's FLIP for her stake.
         vm.prank(alice);
-        game.setOperatorApproval(operator, true);
+        game.setOperatorApproval(0, operator, true);
         vm.prank(GAME);
         coin.mintForGame(alice, 1_000);
         vm.prank(operator);
-        coinflip.depositCoinflip(alice, 1_000);
+        coinflip.depositCoinflip(aliceId, 1_000);
 
         // Protocol flip credit (quest-reward shape).
         vm.prank(ContractAddresses.QUESTS);
@@ -281,7 +281,7 @@ contract BafWeightedDrawTest is DeployProtocol {
         // Day-3 deposits stake day 4: arm day 4 and rebet out of the winnings.
         _arm(4);
         vm.prank(alice);
-        coinflip.depositCoinflip(address(0), 500);
+        coinflip.depositCoinflip(0, 500);
 
         (, uint96 total, uint32 count) = coinflip.bafDrawInfo();
         assertEq(count, 1, "the rebet enters once");
@@ -411,7 +411,7 @@ contract BafWeightedDrawTest is DeployProtocol {
         vm.prank(GAME);
         coin.mintForGame(who, amount);
         vm.prank(who);
-        coinflip.depositCoinflip(address(0), amount);
+        coinflip.depositCoinflip(0, amount);
     }
 
     /// @dev Scan words until the draw's domain hash lands exactly on `target`.

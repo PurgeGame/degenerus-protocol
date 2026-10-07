@@ -272,7 +272,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *      Fund distribution:
      *      - Pre-game (level 0): 30% next pool, 70% future pool
      *      - Post-game (level > 0): 5% next pool, 95% future pool
-     * @param buyer The address receiving the pass.
+     * @param buyer The account receiving the pass (resolved by the Game; its payee takes the token payouts).
      * @param quantity Number of passes to purchase (1-100).
      * @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code).
      * @custom:reverts GameOver When gameOver is true.
@@ -399,7 +399,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     ///      ticket award, pays the affiliate legs, the batched DGNRS minter reward, the pool split,
     ///      the bundled lootbox, the early Craps credit and the one-time seat. Shared by the player
     ///      route and the sDGNRS automatic purchase, so the two can never diverge.
-    /// @param buyer The address receiving the pass.
+    /// @param buyer The account receiving the pass (resolved by the Game; its payee takes the token payouts).
     /// @param passLevel `level + 1`, cached by the caller (invariant across the call).
     /// @param quantity Paid passes (1..WHALE_MAX_QUANTITY).
     /// @param totalPrice The canonical quote for `quantity` at these boon terms.
@@ -628,7 +628,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *      - Boon purchases apply the boon's tier discount (10/25/50%) to the payment amount.
      *      - Affiliate: fresh 25% (affiliate levels 1-3, i.e. current level 0-2) or 20% (4+), 5% recycled, of the price
      *        in FLIP, exactly like a ticket mint (kickback share credited back to the buyer).
-     * @param buyer The address receiving the pass.
+     * @param buyer The account receiving the pass (resolved by the Game; its payee takes the token payouts).
      * @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code).
      * @custom:reverts OnlyDelegatecall When invoked outside the Game delegatecall context.
      * @custom:reverts InvalidLevelForPass When the level is not 0-2, x9 (excl. x99), any x0, or a century x00 in its purchase phase, and no boon applies.
@@ -833,7 +833,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *      Fund distribution:
      *      - Pre-game (level 0): 30% next pool, 70% future pool
      *      - Post-game (level > 0): 5% next pool, 95% future pool
-     * @param buyer The address receiving the pass.
+     * @param buyer The account receiving the pass (resolved by the Game; its payee takes the token payouts).
      * @param symbolId Symbol to claim (0-31: Q0 Crypto 0-7, Q1 Zodiac 8-15, Q2 Cards 16-23, Q3 Dice 24-31).
      * @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code).
      * @custom:reverts OnlyDelegatecall When invoked outside the Game delegatecall context.
@@ -866,9 +866,18 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         if (affiliateCode != bytes32(0)) {
             affiliate.payAffiliate(0, affiliateCode, buyer, 0, level + 1, true, 0);
         }
-        // One deity per buyer; the shared registration helper sets the ownership bit.
+        // One deity per main wallet: the buyer's main is its payee (the owner for a smurf), and
+        // no existing deity (at most 32) may share it. The shared registration helper sets the
+        // buying account's own ownership bit.
         uint256 mp = mintPacked_[buyer];
         if (mp >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0) revert AlreadyOwnsDeityPass();
+        {
+            address main = _payeeOfWord(buyer, mp);
+            uint256 deities = _deityCount();
+            for (uint256 i; i < deities; ++i) {
+                if (_payee(_walletElement(_deityIdAt(i))) == main) revert AlreadyOwnsDeityPass();
+            }
+        }
 
         uint256 basePrice = _deityPassBasePrice(deityPassSales);
 
@@ -1006,7 +1015,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     // -------------------------------------------------------------------------
 
     /// @dev Shared paid/genesis ownership registration. Callers queue the initial
-    ///      range separately so genesis can append both owners in one packed group.
+    ///      range separately so genesis can append both owners in one packed group. The
+    ///      buying account holds HAS_DEITY_PASS; the soulbound NFT mints to its payee.
     function _registerDeity(address buyer, uint32 buyerId, uint8 symbolId) private {
         uint256 mp = mintPacked_[buyer];
         if (mp >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0) revert AlreadyOwnsDeityPass();
@@ -1017,7 +1027,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         deityBySymbol[symbolId] = buyerId;
         _pushDeityId(buyerId);
         emit MintRecorded(buyer, packed);
-        IDegenerusDeityPassMint(ContractAddresses.DEITY_PASS).mint(buyer, symbolId);
+        IDegenerusDeityPassMint(ContractAddresses.DEITY_PASS).mint(_payeeOfWord(buyer, mp), symbolId);
     }
 
     /// @dev Credit both genesis wallets for one level under their protocol wallet IDs. Packed
@@ -1065,7 +1075,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     ///      them, minus the repeated cross-contract calls and writes. A protocol self-award (the
     ///      sDGNRS automatic purchase) burns at the token. Bounded by `WHALE_MAX_QUANTITY`.
     ///      Affiliates are compensated in FLIP by the purchase path (payAffiliate), not DGNRS.
-    /// @param buyer The pass purchaser receiving the minter reward.
+    /// @param buyer The pass-buying account; the minter reward goes to its payee.
     /// @param quantity Paid passes bought (1..WHALE_MAX_QUANTITY).
     function _rewardWhalePassDgnrs(address buyer, uint256 quantity) private {
         uint256 whaleReserve = dgnrs.poolBalance(IsDGNRS.Pool.Whale);
@@ -1081,13 +1091,13 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         }
         uint256 reward = whaleReserve - remaining;
         if (reward != 0) {
-            dgnrs.transferFromPool(IsDGNRS.Pool.Whale, buyer, reward);
+            dgnrs.transferFromPool(IsDGNRS.Pool.Whale, _payeeOf(buyer), reward);
         }
     }
 
     /// @dev Distribute DGNRS rewards for deity pass purchase to buyer and affiliates. Referrers
     ///      are wallet IDs, paid at their payees; a zero hop is skipped.
-    /// @param buyer The pass purchaser receiving 5% of whale pool.
+    /// @param buyer The pass-buying account; its payee receives 5% of whale pool.
     /// @param affiliateId Direct referrer (receives 0.5% of the unreserved affiliate pool).
     /// @param upline1Id Second-level referrer (receives 0.1% of the unreserved affiliate pool).
     /// @param upline2Id Third-level referrer (receives 0.05% of the unreserved affiliate pool).
@@ -1108,7 +1118,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             if (totalReward != 0) {
                 dgnrs.transferFromPool(
                     IsDGNRS.Pool.Whale,
-                    buyer,
+                    _payeeOf(buyer),
                     totalReward
                 );
             }
@@ -1266,16 +1276,17 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         return index < len ? _bucketIdAtUnchecked(lvl, trait, index) : deity;
     }
 
-    /// @notice Claim deferred whale pass rewards for a player.
+    /// @notice Claim deferred whale pass rewards for account `id`.
     /// @dev Awards deterministic tickets based on pre-calculated half-pass count.
     ///      Tickets start at current level + 1 to avoid giving tickets for an already-active level.
-    /// @param player Player address to claim for.
-    /// @custom:reverts NothingToClaim If the player has no pending whale-pass claims.
-    function claimWhalePass(address player) external {
+    ///      Permissionless: it only awards the account its own tickets and moves no value.
+    /// @param id Account to claim for (0 = caller, which must hold an ID; otherwise allocated).
+    /// @custom:reverts NothingToClaim If the account has no pending whale-pass claims.
+    function claimWhalePass(uint32 id) external {
         if (_livenessTriggered()) revert GameOver();
-        // Half passes are only ever credited to wallet IDs; an unregistered address reads the
-        // always-empty element 0. Read and clear before awarding to avoid double-claiming.
-        uint32 id = _walletIdOf(player);
+        address player;
+        (id, player, ) = _creditAccount(id);
+        // Read and clear before awarding to avoid double-claiming.
         uint256 halfPasses = _takeHalfPasses(id);
         if (halfPasses == 0) revert NothingToClaim();
 
@@ -1292,9 +1303,10 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         _queueHalfPassAward(id, startLevel, 100, halfPasses);
     }
 
-    /// @dev One-per-address-LIFETIME AFKing seat latch. The seat is a perk of BUYING a
+    /// @dev One-per-account-LIFETIME AFKing seat latch. The seat is a perk of BUYING a
     ///      pass, never of winning or being handed one, so this fires only where an
-    ///      address pays for its own pass (whale/lazy/deity purchase). Passes that arrive
+    ///      account pays for its own pass (whale/lazy/deity purchase); the seat mints to the
+    ///      account's payee (the owner for a smurf). Passes that arrive
     ///      any other way — the whale-pass claim and every `whalePassClaims` feeder behind
     ///      it, and a deity buyer's conferred affiliate pass — mint no seat. The seat
     ///      ARRIVES here: `mintSeatFor` mints it with deterministic default art the holder
@@ -1302,10 +1314,10 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     ///      between a purchased pass and its seat. The token silently declines once its
     ///      1,000-seat free tranche is exhausted, so this never brings down a purchase.
     ///
-    ///      The `mintPacked_` bit is the ONLY once-per-address guard — the token keeps no
+    ///      The `mintPacked_` bit is the ONLY once-per-account guard — the token keeps no
     ///      twin and mints whatever it is handed. So the bit is set BEFORE the call, and
     ///      every call site keeps this last in its function, where no later whole-word
-    ///      write to `mintPacked_[who]` can clobber it. Each address consumes its one
+    ///      write to `mintPacked_[who]` can clobber it. Each account consumes its one
     ///      chance exactly once, and every pass purchase after the first pays only the
     ///      bit test — no external call on the repeat path.
     /// @dev Genesis: both protocol wallets already hold the construction seats (serials 1 and 2,
@@ -1326,21 +1338,23 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                 (uint256(1) << BitPackingLib.SEAT_CLAIMED_SHIFT);
             mintPacked_[who] = seatPacked;
             emit MintRecorded(who, seatPacked);
-            IAFKingSeatMint(ContractAddresses.AFKING_SUB_TOKEN).mintSeatFor(who);
+            IAFKingSeatMint(ContractAddresses.AFKING_SUB_TOKEN).mintSeatFor(_payeeOfWord(who, packed));
         }
     }
 }
 
 /// @dev Minimal interface for the GAME-gated AFKing seat mint.
 interface IAFKingSeatMint {
-    /// @param to Pass purchaser receiving a free-tranche seat (silent no-op once the
-    ///        1,000-seat free tranche is exhausted).
+    /// @param to The pass-buying account's payee (its own key, or a smurf's owner), receiving a
+    ///        free-tranche seat (silent no-op once the 1,000-seat free tranche is exhausted).
+    ///        The once-per-account latch (SEAT_CLAIMED) stays on the buying account's own word.
     function mintSeatFor(address to) external;
 }
 
 /// @dev Minimal interface for minting deity pass ERC721 tokens.
 interface IDegenerusDeityPassMint {
-    /// @param to Recipient of the minted deity pass.
+    /// @param to Recipient of the minted deity pass: the buying account's main wallet (its
+    ///        payee), never a smurf key.
     /// @param tokenId Token ID to mint (matches the deity symbol ID).
     function mint(address to, uint256 tokenId) external;
 }

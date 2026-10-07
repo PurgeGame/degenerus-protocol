@@ -158,7 +158,7 @@ contract CustomerHotPathGasTest is DeployProtocol {
         return false;
     }
 
-    function _deposit(uint256 amount) private { vm.prank(PLAYER); coinflip.depositCoinflip(address(0), amount); }
+    function _deposit(uint256 amount) private { vm.prank(PLAYER); coinflip.depositCoinflip(0, amount); }
     function _boon(bool craps, bool expired) private {
         uint32 id = game.walletIdOf(PLAYER);
         bytes memory code = address(game).code;
@@ -201,7 +201,7 @@ contract CustomerHotPathGasTest is DeployProtocol {
     }
     function _claimMeasure(string memory label, uint24 days_, bool rebuy) private {
         _claims(days_, rebuy); _begin();
-        vm.prank(PLAYER); coinflip.claimCoinflips(address(0), type(uint256).max);
+        vm.prank(PLAYER); coinflip.claimCoinflips(0, type(uint256).max);
         _end(label);
     }
     function test_Gas_ClaimOne() public { _claimMeasure("claim_1", 1, false); }
@@ -212,7 +212,7 @@ contract CustomerHotPathGasTest is DeployProtocol {
 
     function _degen(uint8 currency, uint8 symbol, uint256 fresh) private {
         vm.prank(PLAYER);
-        game.placeDegeneretteBet{value:fresh}(address(0), currency, currency == 0 ? uint128(0.01 ether) : 1000, 1, symbol);
+        game.placeDegeneretteBet{value:fresh}(0, currency, currency == 0 ? uint128(0.01 ether) : 1000, 1, symbol);
     }
     function test_Gas_DegeneretteEthFirst() public { _begin(); _degen(0, 3, 0.01 ether); _end("degen_eth_first"); }
     function test_Gas_DegeneretteEthRepeat() public {
@@ -289,7 +289,7 @@ contract CustomerHotPathGasTest is DeployProtocol {
         uint256 stakes = uint256(vm.load(address(coinflip), stakeSlot));
         vm.store(address(coinflip), stakeSlot, bytes32(stakes | (uint256(777) << 96))); // future day 35
         vm.startStateDiffRecording();
-        vm.prank(PLAYER); coinflip.claimCoinflips(address(0), type(uint256).max);
+        vm.prank(PLAYER); coinflip.claimCoinflips(0, type(uint256).max);
         Vm.AccountAccess[] memory calls = vm.stopAndReturnStateDiff();
         uint256 writes;
         for (uint256 i; i < calls.length; ++i) for (uint256 j; j < calls[i].storageAccesses.length; ++j) {
@@ -299,7 +299,7 @@ contract CustomerHotPathGasTest is DeployProtocol {
         assertEq(writes, 1, "one flush for the whole stake word");
         assertEq(uint256(vm.load(address(coinflip), stakeSlot)), (uint256(1000) << 32) | (uint256(777) << 96));
         uint256 balance = coin.balanceOf(PLAYER);
-        vm.prank(PLAYER); coinflip.claimCoinflips(address(0), type(uint256).max);
+        vm.prank(PLAYER); coinflip.claimCoinflips(0, type(uint256).max);
         assertEq(coin.balanceOf(PLAYER), balance, "no replay payout");
     }
 

@@ -36,6 +36,19 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///   funded subscription (depositAfkingFunding + subscribe). dailyIdx is seeded to 100 (the staleness/day basis)
 ///   for parity with the curse harness, irrelevant to smite itself. Test-only: ZERO contracts/*.sol mutation.
 contract V61Smite is DeployProtocol {
+
+    mapping(address => uint32) private _aidCache;
+
+    /// @dev Wallet ID of `a`, registering it when it holds none. Call before any `vm.prank`.
+    function _aid(address a) internal returns (uint32 id) {
+        id = _aidCache[a];
+        if (id == 0) {
+            id = game.walletIdOf(a);
+            if (id == 0) id = _giveWalletId(a);
+            _aidCache[a] = id;
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Game-resident storage slots + mintPacked_ field shifts (378-01 key + BitPackingLib)
     // -------------------------------------------------------------------------
@@ -80,9 +93,10 @@ contract V61Smite is DeployProtocol {
         _fundFlip(attacker, SMITE_BURN); // funded so a revert is the gate, not insufficient balance
 
         uint256 flipBefore = coin.balanceOf(attacker);
+        _aid(smitee);
         vm.prank(attacker);
         vm.expectRevert();
-        game.smite(deityId, smitee);
+        game.smite(deityId, _aid(smitee));
 
         assertEq(coin.balanceOf(attacker), flipBefore, "ownerOf gate: NON-owner caller burned nothing");
         assertEq(game.curseCountOf(smitee), 0, "ownerOf gate: smitee not cursed");
@@ -104,9 +118,10 @@ contract V61Smite is DeployProtocol {
 
         uint256 flipBefore = coin.balanceOf(deity);
         uint256 curseBefore = game.curseCountOf(afker);
+        _aid(afker);
         vm.prank(deity);
         vm.expectRevert();
-        game.smite(deityId, afker);
+        game.smite(deityId, _aid(afker));
 
         assertEq(coin.balanceOf(deity), flipBefore, "active-afker immunity: reverts pre-burn (no FLIP burned)");
         assertEq(game.curseCountOf(afker), curseBefore, "active-afker immunity: curse unchanged");
@@ -125,9 +140,10 @@ contract V61Smite is DeployProtocol {
         _fundFlip(deity, SMITE_BURN);
 
         uint256 flipBefore = coin.balanceOf(deity);
+        _aid(smitee);
         vm.prank(deity);
         vm.expectRevert();
-        game.smite(deityId, smitee);
+        game.smite(deityId, _aid(smitee));
 
         assertEq(coin.balanceOf(deity), flipBefore, "ceiling: reverts pre-burn (no FLIP burned)");
         assertEq(game.curseCountOf(smitee), SMITE_CEILING, "ceiling: curse unchanged at 10");
@@ -141,15 +157,17 @@ contract V61Smite is DeployProtocol {
         _seedCurse(smitee, 8); // one stack below the ceiling
         _fundFlip(deity, SMITE_BURN * 2);
 
+        _aid(smitee);
         vm.prank(deity);
-        game.smite(deityId, smitee);
+        game.smite(deityId, _aid(smitee));
         assertEq(game.curseCountOf(smitee), 10, "smite from 8 to 10 (at the ceiling)");
 
         // Now at 10 ⇒ the ceiling blocks the next smite.
         uint256 flipMid = coin.balanceOf(deity);
+        _aid(smitee);
         vm.prank(deity);
         vm.expectRevert();
-        game.smite(deityId, smitee);
+        game.smite(deityId, _aid(smitee));
         assertEq(game.curseCountOf(smitee), 10, "ceiling blocks the next smite (stays 10)");
         assertEq(coin.balanceOf(deity), flipMid, "ceiling block: no second burn");
     }
@@ -168,10 +186,11 @@ contract V61Smite is DeployProtocol {
         assertEq(game.curseCountOf(smitee), 0, "pre: smitee not cursed");
 
         uint256 flipBefore = coin.balanceOf(deity);
+        _aid(smitee);
         vm.expectEmit(true, true, false, false, address(game));
         emit Smited(deityId, smitee);
         vm.prank(deity);
-        game.smite(deityId, smitee);
+        game.smite(deityId, _aid(smitee));
 
         assertEq(game.curseCountOf(smitee), 2, "smite added one stack (+2 points)");
         assertEq(flipBefore - coin.balanceOf(deity), SMITE_BURN, "smite burned EXACTLY 200 FLIP (PRICE_COIN_UNIT/5)");
@@ -197,8 +216,9 @@ contract V61Smite is DeployProtocol {
         _seedCurse(smitee, 8);
         _fundFlip(deity, SMITE_BURN);
 
+        _aid(smitee);
         vm.prank(deity);
-        game.smite(deityId, smitee);
+        game.smite(deityId, _aid(smitee));
         assertEq(game.curseCountOf(smitee), 10, "smite saturates at its 10-point ceiling (never past)");
         assertLe(game.curseCountOf(smitee), CURSE_COUNT_CAP, "smite never exceeds the 20 counter cap");
     }
@@ -216,8 +236,9 @@ contract V61Smite is DeployProtocol {
         _seedCurse(smitee, 4); // as if from two stale cashouts
         _fundFlip(deity, SMITE_BURN);
 
+        _aid(smitee);
         vm.prank(deity);
-        game.smite(deityId, smitee);
+        game.smite(deityId, _aid(smitee));
         assertEq(game.curseCountOf(smitee), 6, "shared counter: cashout (4) + smite (2) == 6 on one counter");
     }
 
@@ -228,14 +249,15 @@ contract V61Smite is DeployProtocol {
         address smitee = makeAddr("buyclear_smitee");
         _seedCurse(smitee, 4); // cashout component
         _fundFlip(deity, SMITE_BURN);
+        _aid(smitee);
         vm.prank(deity);
-        game.smite(deityId, smitee); // + smite component ⇒ 6 combined
+        game.smite(deityId, _aid(smitee)); // + smite component ⇒ 6 combined
         assertEq(game.curseCountOf(smitee), 6, "pre: combined cashout+smite == 6");
 
         uint256 cost = _oneTicketCost();
         vm.deal(smitee, cost);
         vm.prank(smitee);
-        game.purchase{value: cost}(smitee, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: cost}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(game.curseCountOf(smitee), 0, "single >=1-ticket buy cleared BOTH sources");
     }
 
@@ -248,13 +270,15 @@ contract V61Smite is DeployProtocol {
         address curer = makeAddr("decclear_curer");
         _seedCurse(smitee, 4);
         _fundFlip(deity, SMITE_BURN);
+        _aid(smitee);
         vm.prank(deity);
-        game.smite(deityId, smitee); // ⇒ 6 combined
+        game.smite(deityId, _aid(smitee)); // ⇒ 6 combined
         assertEq(game.curseCountOf(smitee), 6, "pre: combined == 6");
 
         _fundFlip(curer, DECURSE_BURN);
+        _aid(smitee);
         vm.prank(curer);
-        game.decurse(smitee);
+        game.decurse(_aid(smitee));
         assertEq(game.curseCountOf(smitee), 0, "decurse cleared BOTH sources for 100 FLIP");
     }
 
@@ -265,8 +289,9 @@ contract V61Smite is DeployProtocol {
         _fundFlip(deity, SMITE_BURN);
         uint256 flipBefore = coin.balanceOf(deity);
 
+        _aid(deity);
         vm.prank(deity);
-        game.smite(deityId, deity); // self-smite
+        game.smite(deityId, _aid(deity)); // self-smite
         assertEq(game.curseCountOf(deity), 2, "self-smite added a stack to the deity");
         assertEq(flipBefore - coin.balanceOf(deity), SMITE_BURN, "self-smite burned 200 FLIP");
     }
@@ -355,13 +380,13 @@ contract V61Smite is DeployProtocol {
     }
 
     function _subscribeLootbox(address who, uint8 q) internal {
-        _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (NoCoin without it)
+        uint256 seat = _grantSeat(who); // a new run burns one seat
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, address(0));
+        game.subscribe(0, false, false, q, 0, seat);
     }
 
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
-        game.depositAfkingFunding{value: amount}(who);
+        game.depositAfkingFunding{value: amount}(_aid(who));
     }
 }

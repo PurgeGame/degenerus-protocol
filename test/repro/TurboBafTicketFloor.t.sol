@@ -285,7 +285,7 @@ contract TurboBafTicketFloor is DeployProtocol {
 
     function _tryCoinflipDeposit() internal {
         vm.prank(buyer);
-        try coinflip.depositCoinflip(buyer, 500) {} catch {}
+        try coinflip.depositCoinflip(0, 500) {} catch {}
     }
 
     // ---------------------------------------------------------------------
@@ -327,7 +327,7 @@ contract TurboBafTicketFloor is DeployProtocol {
         if (rngLocked_) return;
         vm.prank(player);
         game.purchase{value: (priceWei * 4000) / 400}(
-            player,
+            0,
             4000,
             0,
             bytes32(0),
@@ -357,7 +357,7 @@ contract TurboBafTicketFloor is DeployProtocol {
         if (_settleReadsUntilRequest()) return _ticketWriteSlot() != before;
         vm.prank(buyer);
         game.purchase{value: 2 ether}(
-            buyer,
+            0,
             0,
             BoxOrderLib.boCustom(2 ether),
             bytes32(0),

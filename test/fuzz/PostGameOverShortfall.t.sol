@@ -68,10 +68,10 @@ contract PostGameOverShortfall is DeployProtocol {
 
         vm.prank(alice);
         vm.expectRevert();
-        game.claimWinnings(alice);
+        game.claimWinnings(0);
 
         vm.prank(alice);
-        game.claimWinnings(alice, 4 ether);
+        game.claimWinnings(0, 4 ether);
         assertEq(alice.balance, 4 ether, "the ETH that exists was not paid");
         assertEq(game.claimableWinningsOf(alice), 6 ether, "the rest did not stay claimable");
     }

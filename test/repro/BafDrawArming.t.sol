@@ -56,7 +56,7 @@ contract BafDrawArming is DeployProtocol {
 
         // A minimum-size deposit inside the sealed last-purchase window enters.
         vm.prank(minnow);
-        coinflip.depositCoinflip(address(0), 100);
+        coinflip.depositCoinflip(0, 100);
 
         (, uint96 total, uint32 count) = coinflip.bafDrawInfo();
         assertEq(count, 1, "the sealed-window deposit entered the draw");
@@ -125,7 +125,7 @@ contract BafDrawArming is DeployProtocol {
 
     function _tryCoinflipDeposit() internal {
         vm.prank(buyer);
-        try coinflip.depositCoinflip(buyer, 500) {} catch {}
+        try coinflip.depositCoinflip(0, 500) {} catch {}
     }
 
     /// @dev One driver step. The engine composes every admitted checkpoint into a call and the
@@ -159,7 +159,7 @@ contract BafDrawArming is DeployProtocol {
         if (rngLocked_) return;
         vm.prank(buyer);
         game.purchase{value: (priceWei * 4000) / 400}(
-            buyer,
+            0,
             4000,
             0,
             bytes32(0),

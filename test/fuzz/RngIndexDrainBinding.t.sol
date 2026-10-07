@@ -62,7 +62,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         uint256 total = ticketCost + lootboxWei;
         vm.prank(buyer);
         game.purchase{value: total}(
-            buyer,
+            0,
             qty,
             BoxOrderLib.boCustomFloor(lootboxWei),
             bytes32(0),
@@ -224,7 +224,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         uint256 ticketCost = (priceWei * 400) / 400;
         vm.prank(buyerB);
         game.purchase{value: ticketCost + 1 ether}(
-            buyerB, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
+            0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         assertEq(_boxIdAt0(idxLive), game.walletIdOf(buyerB), "box B not keyed at the LIVE post-request index");
         assertEq(_presaleBoxEth(idxLive, buyerB), 1 ether, "box B applied-ETH not at live index");

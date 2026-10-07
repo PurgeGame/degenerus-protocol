@@ -32,7 +32,7 @@ contract AfkingAffiliateCacheHost is DegenerusGame, WalletSeed {
         // A pass/seat holder with actual prior purchases. The prior level's cache
         // is stale on the first buy after24; a subsequent buy already has tag24.
         mintPacked_[player] |= uint256(23) | (uint256(10) << 24)
-            | (uint256(today - 1) << BitPackingLib.DAY_SHIFT) | (uint256(1) << BitPackingLib.SEAT_ENCUMBERED_SHIFT)
+            | (uint256(today - 1) << BitPackingLib.DAY_SHIFT)
             | (uint256(cacheHit ? 24 : 23) << BitPackingLib.AFFILIATE_BONUS_LEVEL_SHIFT);
         Sub storage sub = _subOf[id];
         sub.setPosition = 1;

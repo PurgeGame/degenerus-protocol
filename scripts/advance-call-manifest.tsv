@@ -32,10 +32,7 @@ CRANK-SELF	IReadCohortLifecycle.registerRngSlot	_armSlot	CrapsBattle.sol	BARE		S
 OFF-CRANK	IFlipCoin.burnCoin	_burnCoin	CrapsBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
 OFF-CRANK	IFlipCoin.burnCoinForCraps	_burnForCraps	CrapsBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
 CRANK-SELF	yul:delegatecall	_delegateJackpot	CrapsBattle.sol	BARE		Self call/delegate into pinned own Craps module; bounded lifecycle/settlement effects, failure atomic.
-OFF-CRANK	IGameCraps.level	_entryPrice	CrapsBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
-OFF-CRANK	IGameCraps.mintPackedFor	_entryPrice	CrapsBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
 OFF-CRANK	IGameCraps.rngLocked	_joinableSlot	CrapsBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
-OFF-CRANK	IVaultOwnership.isVaultOwner	_mayOpenBattle	CrapsBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
 OFF-CRANK	IReadCohortLifecycle.admitCustom	_place	CrapsBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
 CRANK-PINNED	IGameCraps.rngLocked	_rememberBoard	CrapsBattle.sol	BARE	test/craps/CrapsPins.sol	Pinned Game view; fixed slot read for scheduled board update.
 CRANK-SELF	IHighRollerReserve.settleHighRollerReserve	_resolveSlotRange	CrapsBattle.sol	BARE		Self call/delegate into pinned own Craps module; bounded lifecycle/settlement effects, failure atomic.
@@ -44,7 +41,6 @@ CRANK-TRY	IFlipCoin.burnCoin	_seatBody	CrapsBattle.sol	TRY		Caught request/burn 
 CRANK-PINNED	ICoinflipStake.creditFlipBatch	_settleBatch	CrapsBattle.sol	BARE	test/fuzz/CrapsProtocolWiring.t.sol	Pinned Coinflip batch credits; bounded seats; caller CRAPS is authorized and amounts come from field settlement.
 CRANK-PINNED	ICrapsEngine.settleBattle	_settlementOf	CrapsBattle.sol	BARE	test/craps/CrapsHighReserve.t.sol	Pinned immutable CrapsEngine resolves committed valid terms, bounded by settlement work budget.
 OFF-CRANK	lowlevel:call	constructor	CrapsBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
-OFF-CRANK	ICrapsEngine.customDefinition	createBattle	CrapsBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
 OFF-CRANK	IVaultOwnership.isVaultOwner	setBattleCreator	JackpotBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
 OFF-CRANK	delegatecall:IGameAfkingModule.maybeCurse	_claimWinningsWithCurse	DegenerusGame.sol	BARE		claimWinnings / claimWinnings(amount) player claim path; GNRUS, sDGNRS and VAULT redemptions call it as players
 OFF-CRANK	IStETH.balanceOf	_payoutWithEthFallback	DegenerusGame.sol	BARE		VAULT-only claimWinningsStethFirst payout
@@ -66,8 +62,8 @@ OFF-CRANK	IStETH.submit	adminStakeEthForStEth	DegenerusGame.sol	TRY		vault-owner
 OFF-CRANK	IStETH.balanceOf	adminSwapEthForStEth	DegenerusGame.sol	BARE		ADMIN-only ETH->stETH swap
 OFF-CRANK	IStETH.transfer	adminSwapEthForStEth	DegenerusGame.sol	BARE		ADMIN-only ETH->stETH swap
 OFF-CRANK	IGameMinerView.minerAction	advanceDue	DegenerusGame.sol	BARE		Read-only work discovery or manual box entry; automatic engine dispatch uses its shared selector and direct worker delegates.
-OFF-CRANK	delegatecall:IDegenerusGameMintModule.buyLootboxAndPresaleBox	buyLootboxAndPresaleBox	DegenerusGame.sol	BARE		player lootbox+presale purchase entry
-OFF-CRANK	delegatecall:IDegenerusGameMintModule.buyPresaleBox	buyPresaleBox	DegenerusGame.sol	BARE		player presale box purchase
+OFF-CRANK	lowlevel:delegatecall	buyLootboxAndPresaleBox	DegenerusGame.sol	BARE		player lootbox+presale purchase entry (raw msg.data forward; the Mint module resolves the account)
+OFF-CRANK	lowlevel:delegatecall	buyPresaleBox	DegenerusGame.sol	BARE		player presale box purchase (raw msg.data forward; the Mint module resolves the account)
 OFF-CRANK	lowlevel:delegatecall	claimAffiliateDgnrs	DegenerusGame.sol	BARE		player affiliate DGNRS claim
 OFF-CRANK	lowlevel:delegatecall	claimAfkingFlip	DegenerusGame.sol	BARE		player entry claimAfkingFlip
 OFF-CRANK	lowlevel:delegatecall	claimBingo	DegenerusGame.sol	BARE		player entry claimBingo
@@ -76,7 +72,6 @@ OFF-CRANK	lowlevel:delegatecall	claimFoilMatch	DegenerusGame.sol	BARE		player fo
 OFF-CRANK	lowlevel:delegatecall	claimFoilMatchMany	DegenerusGame.sol	BARE		player foil-match batch claim
 OFF-CRANK	lowlevel:delegatecall	claimGoldenTicket	DegenerusGame.sol	BARE		player golden-ticket claim
 OFF-CRANK	lowlevel:delegatecall	claimWhalePass	DegenerusGame.sol	BARE		player whale pass claim
-OFF-CRANK	lowlevel:delegatecall	clearSeatEncumbrance	DegenerusGame.sol	BARE		reached only from AFKingSubscriptionToken.reclaimSeat (player seat reclaim)
 OFF-CRANK	lowlevel:call	constructor	DegenerusGame.sol	BARE		deploy-time ENS reverse-name registration; result ignored; unreachable after construction
 OFF-CRANK	lowlevel:delegatecall	consumeCoinflipBoon	DegenerusGame.sol	BARE		FLIP / COINFLIP deposit-path callback (recordAmount != 0; payout re-stakes use 0), or WWXRP player entry (only when the entrant's WWXRP lane holds a tier) / trusted-minter ecosystem consumption; WWXRP mint and draw settlement never consume boons
 CRANK-SELF	delegatecall:IDegenerusGameBoonModule.consumeDecimatorBoost	consumeDecimatorBoon	DegenerusGame.sol	BARE		FLIP decimator callback, including opening-day autoDecimatorBurn; own-storage boon consume
@@ -86,7 +81,7 @@ OFF-CRANK	lowlevel:delegatecall	drainAffiliateBase	DegenerusGame.sol	BARE		reach
 CRANK-SELF	lowlevel:delegatecall	emitDailyWinningTraits	DegenerusGame.sol	BARE		OnlySelf facade self-called from advanceGame (purchaseLevel==1 daily) -> GAME_JACKPOT_MODULE.emitDailyWinningTraits; bubble intentional
 OFF-CRANK	lowlevel:delegatecall	floorAfkingStreakBase	DegenerusGame.sol	BARE		QUESTS.handleFoilPurchase callback on a player foil-pack purchase
 OFF-CRANK	lowlevel:delegatecall	initProtocolDeity	DegenerusGame.sol	BARE		Post-deployment batch registration and perpetual-ticket seeding for both protocol deities; creator only
-OFF-CRANK	delegatecall:IDegenerusGameBoonModule.issueDeityBoon	issueDeityBoon	DegenerusGame.sol	BARE		player deity boon issuance
+OFF-CRANK	lowlevel:delegatecall	issueDeityBoon	DegenerusGame.sol	BARE		player deity boon issuance (raw msg.data forward; the Boon module resolves the deity account)
 CRANK-SELF	delegatecall:IDegenerusGameMinerModule.mineFlip	mineFlip	DegenerusGame.sol	BARE		single miner entry -> GAME_MINER_MODULE.mineFlip; derived priority, measured shared allowance, and original caller preserved
 OFF-CRANK	yul:delegatecall	minerAction	DegenerusGame.sol	BARE		Read-only work discovery or manual box entry; automatic engine dispatch uses its shared selector and direct worker delegates.
 OFF-CRANK	IGameMinerView.minerAction	nextMinerAction	DegenerusGame.sol	BARE		Read-only work discovery or manual box entry; automatic engine dispatch uses its shared selector and direct worker delegates.
@@ -96,13 +91,13 @@ OFF-CRANK	lowlevel:delegatecall	placeDegeneretteBet	DegenerusGame.sol	BARE		play
 OFF-CRANK	lowlevel:delegatecall	previewSellFarFutureEntries	DegenerusGame.sol	BARE		view preview of a far-future sale delegated to Mint
 CRANK-SELF	lowlevel:delegatecall	recordAfkingSecondary	DegenerusGame.sol	BARE		QUESTS callback on opening-day autoDecimatorBurn secondary completion; own-storage afking streak update
 CRANK-SELF	lowlevel:delegatecall	recordDecBurn	DegenerusGame.sol	BARE		FLIP decimator callback, including opening-day autoDecimatorBurn; own-storage entry accounting
-OFF-CRANK	delegatecall:IDegenerusGameMintModule.redeemFlip	redeemFlip	DegenerusGame.sol	BARE		player / VAULT redeemFlip entry
+OFF-CRANK	lowlevel:delegatecall	redeemFlip	DegenerusGame.sol	BARE		player / VAULT redeemFlip entry (raw msg.data forward; the Mint module resolves the account)
 CRANK-CAUGHT	lowlevel:delegatecall	resolveRedemptionLootbox	DegenerusGame.sol	BARE		Automatic settlement crosses sDGNRS._runRedemptionWork try this.settleRedemptionHead; dependency refusal parks that claim and preserves its word/reserve. Gas failures rethrow.
 OFF-CRANK	IDegenerusCoin.burnCoin	reverseFlip	DegenerusGame.sol	BARE		player reverseFlip entry
 CRANK-SELF	lowlevel:delegatecall	runBafJackpot	DegenerusGame.sol	BARE		OnlySelf facade self-called from _consolidatePoolsAndRewardJackpots -> GAME_JACKPOT_MODULE.runBafJackpot; bubble intentional
 CRANK-SELF	lowlevel:delegatecall	runDecimatorJackpot	DegenerusGame.sol	BARE		OnlySelf facade self-called from _consolidatePoolsAndRewardJackpots -> GAME_DECIMATOR_MODULE.runDecimatorJackpot; bubble intentional
 CRANK-SELF	lowlevel:delegatecall	runTerminalJackpotWork	DegenerusGame.sol	BARE		OnlySelf facade self-called from GameOverModule._resumeTerminalPayout (mineFlip terminal stage) -> GAME_JACKPOT_MODULE; bubble intentional
-OFF-CRANK	delegatecall:IDegenerusGameMintModule.sellFarFutureEntries	sellFarFutureEntries	DegenerusGame.sol	BARE		player / VAULT far-future entry sale
+OFF-CRANK	lowlevel:delegatecall	sellFarFutureEntries	DegenerusGame.sol	BARE		player / VAULT far-future entry sale (raw msg.data forward; the Mint module resolves the account)
 OFF-CRANK	lowlevel:delegatecall	smite	DegenerusGame.sol	BARE		player entry smite (deity holder)
 OFF-CRANK	lowlevel:delegatecall	subscribe	DegenerusGame.sol	BARE		player / sDGNRS / VAULT subscribe entry (afking module); never reached from a crank root
 OFF-CRANK	lowlevel:delegatecall	updateVrfCoordinatorAndSub	DegenerusGame.sol	BARE		ADMIN governance coordinator rotation (DegenerusAdmin is the caller)
@@ -162,7 +157,6 @@ CRANK-PINNED	IsDGNRS.poolBalance	_awardDegeneretteDgnrs	modules/DegenerusGameDeg
 CRANK-PINNED	IsDGNRS.transferFromPool	_awardDegeneretteDgnrs	modules/DegenerusGameDegeneretteModule.sol	BARE	test/fuzz/DegeneretteSweep.t.sol	S>=7 award; callee onlyGame, clamps to the pool; skipped at a zero pool or zero reward
 OFF-CRANK	IDegenerusCoin.burnCoin	_collectBetFunds	modules/DegenerusGameDegeneretteModule.sol	BARE		Bet placement only (FLIP stake burn)
 OFF-CRANK	delegatecall:IDegenerusGameBoonModule.consumeDegeneretteBoon	_consumeDegeneretteBoon	modules/DegenerusGameDegeneretteModule.sol	BARE		Bet placement only (self-funded stake boon)
-CRANK-PINNED	IDegenerusCoin.mintForGame	_flipSpinChain	modules/DegenerusGameDegeneretteModule.sol	BARE	test/fuzz/DegeneretteSweep.t.sol	Record-bounty FLIP chain mint for a swept bet that armed the record; box FLIP chains return instead of minting
 CRANK-PINNED	IDegenerusCoin.mintForGame	_flushOwner	modules/DegenerusGameDegeneretteModule.sol	BARE	test/fuzz/DegeneretteSweep.t.sol	Owner-run FLIP flush on the mineFlip bet sweep (and manual resolve); callee GAME-gated plain mint, zero-skipped here
 OFF-CRANK	IDegenerusQuests.handleDegenerette	_placeDegeneretteBet	modules/DegenerusGameDegeneretteModule.sol	BARE		Bet placement only; the keeper never places a bet
 OFF-CRANK	ICoinflip.armRecord	_placeDegeneretteBetCore	modules/DegenerusGameDegeneretteModule.sol	BARE		Bet placement only (biggest-spin record arm)
@@ -272,7 +266,7 @@ OFF-CRANK	IDegenerusDeityPassOwner.ownerOf	smite	modules/GameAfkingModule.sol	BA
 OFF-CRANK	IDegenerusAffiliate.claim	subscribe	modules/GameAfkingModule.sol	BARE		Player subscribe entry (self-consent or operator approval); affiliate drain leg
 OFF-CRANK	IDegenerusQuests.beginAfking	subscribe	modules/GameAfkingModule.sol	BARE		Player subscribe entry; quest afking start
 OFF-CRANK	IQuestCompletionView.questCompletionToday	subscribe	modules/GameAfkingModule.sol	BARE		Player subscribe entry; quest completion view
-OFF-CRANK	ISeatToken.balanceOf	subscribe	modules/GameAfkingModule.sol	BARE		Player subscribe entry; seat balance view
+OFF-CRANK	ISeatToken.consumeSeat	subscribe	modules/GameAfkingModule.sol	BARE		Player subscribe entry: a new non-exempt run burns one of the payee's seats before the run is written; never reached from a crank root
 CRANK-PINNED	IDegenerusQuests.effectiveBaseStreakAndAfking	_effectiveQuestStreak	storage/DegenerusGameStorage.sol	BARE	test/fuzz/SdgnrsAutoDecimator.t.sol	opening-day autoDecimatorBurn reads the ordinary activity score after quest completion; view-only quest state read
 CRANK-PINNED	IGameMinerMaintenance.minerMaintenancePending	_minerMaintenancePending	storage/DegenerusGameStorage.sol	BARE	test/craps/CrapsScheduledCursor.t.sol	Bounded table head-discovery view; direct lifecycle test distinguishes write maintenance, committed read exclusion and resolved cleanup.
 CRANK-PINNED	IsDGNRS.redemptionSettlementPending	_rngConsumerStage	storage/DegenerusGameStorage.sol	BARE	test/repro/ForcedRedemptionSessionWord.t.sol	Pinned sDGNRS pending-work view prevents later consumers and fresh requests before FIFO cleanup.
@@ -293,5 +287,15 @@ OFF-CRANK	delegatecall:IDegenerusGameFoilPackModule.purchaseWithFoil	purchase	De
 OFF-CRANK	lowlevel:delegatecall	_moduleCall	modules/DegenerusGameFoilPackModule.sol	BARE		private sibling-module dispatch used only by purchaseWithFoil (player purchase entry): GAME_LOOTBOX_MODULE.quoteBoxOrder and GAME_MINT_MODULE.purchaseWith; the keeper and drain paths never enter it; failures bubble
 CRANK-SELF	lowlevel:delegatecall	registerWallet	DegenerusGame.sol	BARE		wallet-ID hook into the Ticket module for trusted protocol callers (Affiliate/Coinflip/Craps/Parimutuel/WWXRP/Admin/Coin allowlist, enforced in the module); no ticket queue or RNG effect. One crank path: the opening-day autoDecimatorBurn, where FLIP registers SDGNRS, which holds ID 2 from Game construction, so _registerWallet returns it before any write or admission check; every other caller is a player or configuration door
 OFF-CRANK	lowlevel:delegatecall	creditMiddayRng	DegenerusGame.sol	BARE		Admin LINK-donation credit forwarded to the RNG module body (donor registers a wallet ID); runs on a player LINK transfer, not from the crank
-OFF-CRANK	IGameCrapsWorkStage.registerWallet	_walletWord	storage/CrapsBattleStorage.sol	BARE		Craps door prologue (bets, passes, slip amendments, board saves, day upgrades and conversions) and the vault comp recipient: the caller's wallet ID through the Game hook when the address word holds none; settlement and the scheduled crank use the IDs stored in bets and seats and never call it
+OFF-CRANK	IGameCrapsWorkStage.registerWallet	_walletWord	storage/CrapsBattleStorage.sol	BARE		Craps door prologue (bets, passes, slip amendments, board saves, day upgrades and conversions): the caller's wallet ID through the Game hook when the address word holds none; settlement and the scheduled crank use the IDs stored in bets and seats and never call it
 CRANK-PINNED	IGameCrapsWorkStage.rngConsumerStage	_readCrapsStage	storage/CrapsBattleStorage.sol	BARE	test/fuzz/CrapsProtocolWiring.t.sol	Pinned GAME view of the RNG consumer stage, read by the Craps keeper workers (_keepScheduled, _keepRngCohort) before admitting work; storage reads only
+OFF-CRANK	lowlevel:delegatecall	createSmurf	DegenerusGame.sol	BARE		player smurf creation (raw msg.data forward to the Mint module)
+OFF-CRANK	IDegenerusAffiliate.payAffiliate	createSmurf	modules/DegenerusGameMintModule.sol	BARE		Player createSmurf: zero-amount referral resolution that locks the owner's referral before the smurf ID is allocated
+OFF-CRANK	IDegenerusAffiliate.copyReferral	createSmurf	modules/DegenerusGameMintModule.sol	BARE		Player createSmurf: copies the owner's resolved referral word to the new smurf key (Game-only Affiliate door)
+OFF-CRANK	delegatecall:IDegenerusGameMintModule.purchaseWith	createSmurf	modules/DegenerusGameMintModule.sol	BARE		Player createSmurf: nested delegatecall into this module's own purchase body for the smurf's one owner-paid ticket
+OFF-CRANK	IGameCraps.resolveAccount	_resolveAccount	CrapsBattle.sol	BARE		Player-door and vault-comp account resolution (key, payee, authorization) through the pinned Game view; unreachable from required settlement work.
+OFF-CRANK	IGameCraps.mintPackedFor	_newcomer	CrapsBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
+OFF-CRANK	IGameCraps.level	_newcomer	CrapsBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
+OFF-CRANK	IGameCraps.resolveAccount	_accountId	JackpotBattle.sol	BARE		Pass-door account resolution (convertNormalToHigh, upgradeReservedDay); unreachable from required settlement work.
+OFF-CRANK	ICrapsEngine.customDefinition	createBattle	JackpotBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
+OFF-CRANK	IVaultOwnership.isVaultOwner	createBattle	JackpotBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.

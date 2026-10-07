@@ -188,7 +188,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
     function _assertPreferredBoardFrozen() private {
         if (!game.rngLocked()) return;
         vm.prank(address(0xC0FFEE)); vm.expectRevert(CrapsBattleStorage.BetLocked.selector);
-        crapsBattle.setPreferredBoard(3);
+        crapsBattle.setPreferredBoard(0, 3);
     }
 
     function _deliverMockVrf(uint256 reqId, uint256 word) internal {
@@ -307,7 +307,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
         address buyer = makeAddr("midDayRotationBuyer");
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
-        game.purchase{value: 1.01 ether}(buyer, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: 1.01 ether}(0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
 
         mockVRF.fundSubscription(1, 100e18);
     }

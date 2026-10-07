@@ -161,7 +161,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // Place bet (goes to live pools since not frozen)
         uint128 betAmount = 0.01 ether;
         vm.prank(player);
-        game.placeDegeneretteBet{value: betAmount}(address(0), 0, betAmount, 1, uint8(customTraits & 7));
+        game.placeDegeneretteBet{value: betAmount}(0, 0, betAmount, 1, uint8(customTraits & 7));
 
         // Live pools should have increased (unfrozen path uses _setPrizePools)
         uint256 postBetLiveFuture = _readFuturePrizePool();
@@ -814,7 +814,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     {
         uint256 ethValue = currency == CURRENCY_ETH ? uint256(perTicket) * spins : 0;
         vm.prank(player);
-        game.placeDegeneretteBet{value: ethValue}(address(0), currency, perTicket, spins, uint8(ticket & 7));
+        game.placeDegeneretteBet{value: ethValue}(0, currency, perTicket, spins, uint8(ticket & 7));
         betId = DQ.lastBetId(vm, address(game), _activeIndex());
     }
 

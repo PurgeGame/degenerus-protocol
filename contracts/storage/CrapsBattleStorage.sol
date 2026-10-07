@@ -96,13 +96,19 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     /// @notice An action that pays nothing needs its wallet's existing Game wallet ID.
     error NoWalletId();
 
+    /// @notice The caller may not act for the named account: it is not the account's key, a
+    ///         smurf's owner or an approved operator.
+    error NotApproved();
+
     /// @dev The protocol bodies' Game wallet IDs, reserved at Game construction.
     uint32 internal constant _VAULT_ID = 1;
     uint32 internal constant _SDGNRS_ID = 2;
 
-    /// @dev A paying account packed into one word: its address in bits 0..159 (the FLIP burn and
-    ///      newcomer pricing are by address) and its wallet ID above, at this shift.
+    /// @dev A paying account packed into one word: the address its FLIP burns come from (the
+    ///      payee) in bits 0..159, its wallet ID in bits 160..191, and `_ACCOUNT_NEWCOMER` when
+    ///      the account's mint history prices its paid burns at the newcomer rate.
     uint256 internal constant _ACCOUNT_ID_SHIFT = 160;
+    uint256 internal constant _ACCOUNT_NEWCOMER = 1 << 192;
 
     /// @notice Six windows per day: five ordinary battles, then the daily jackpot battle (period 5).
     uint256 internal constant _BONUS_PERIODS_PER_DAY = 6;
@@ -620,7 +626,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      _loadDaySeat authenticates and strips the day before checking membership.
     ///      Keyed by wallet ID. Day-ticket gates ask NONZERO — one ticket per wallet per day, and a bar on any single window of that
     ///      day, since the ticket already sits in all of them — but storing the seat is what lets
-    ///      an upgrade name the caller's own ticket as `(daySlot << 64) | seat` without a walk.
+    ///      an upgrade name the account's own ticket as `(daySlot << 64) | seat` without a walk.
     ///      Nothing here records how the seat was PAID for: a bought, pass-funded and prepaid
     ///      seat are indistinguishable, which is the point.
     mapping(uint256 => mapping(uint32 => uint256)) internal _daySeated;
@@ -655,11 +661,12 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      is what lets a custom battle behave exactly like a bonus window.
     mapping(uint256 => uint256) internal _customBattle;
 
-    /// @dev A wallet's forward word, keyed by address: the preferred board in bits 64..83 (two
-    ///      bits per leg), bit 84 set on its first save and never cleared, and the holder's Game
-    ///      wallet ID in bits 85..116, filled from the Game by the first board save and never
-    ///      changed. Bits 0..63 are zero. Every board door reads it first, so a bet learns its
-    ///      owner's ID and the unchanged-board fast path from one read.
+    /// @dev An account's forward word, keyed by its account key: the preferred board in bits
+    ///      64..83 (two bits per leg), bit 84 set on its first save and never cleared, and the
+    ///      account's Game wallet ID in bits 85..116, filled by the first board save from the
+    ///      Game's registration or account resolution and never changed. Bits 0..63 are zero.
+    ///      Every board door reads it first, so a bet learns its owner's ID and the
+    ///      unchanged-board fast path from one read.
     mapping(address => uint256) internal _passCredits;
 
     /// @dev A wallet's UNCOMMITTED day-pass credits and its board, keyed by Game wallet ID: the
@@ -676,7 +683,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      debit and the reservation are one contract's storage and atomic by construction.
     ///
     ///      Credits never expire and are not transferable. They are AWARDED only by the pinned
-    ///      game and spent only by their owner. CrapsPreferenceLib pins this mapping's slot for
+    ///      game and spent only for their account. CrapsPreferenceLib pins this mapping's slot for
     ///      the Game's jackpot battle batch read.
     mapping(uint32 => uint256) internal _passCreditsById;
 

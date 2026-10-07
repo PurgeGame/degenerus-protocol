@@ -52,6 +52,19 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///      GAME_AFKING_MODULE; the two SUB-09 self-subscribes VAULT + SDGNRS already in the set). Test
 ///      subs are driven through the public game.subscribe() API. Test-only: no contracts/*.sol mutated.
 contract AfKingConcurrency is DeployProtocol {
+
+    mapping(address => uint32) private _aidCache;
+
+    /// @dev Wallet ID of `a`, registering it when it holds none. Call before any `vm.prank`.
+    function _aid(address a) internal returns (uint32 id) {
+        id = _aidCache[a];
+        if (id == 0) {
+            id = game.walletIdOf(a);
+            if (id == 0) id = _giveWalletId(a);
+            _aidCache[a] = id;
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Game-resident storage slots (via `forge inspect DegenerusGame storageLayout`).
     // -------------------------------------------------------------------------
@@ -135,12 +148,13 @@ contract AfKingConcurrency is DeployProtocol {
         uint256 lenBefore = _subscribersLen();
 
         vm.prank(sub);
-        game.subscribe(address(0), false, false, 0, address(0)); // tombstone, still in set
+        game.subscribe(0, false, false, 0, 0, 0); // tombstone, still in set
         assertEq(_subscriberIndexOf(sub), idx, "tombstone in set, same index");
 
-        // Re-subscribe the still-in-set tombstoned address.
+        // Re-subscribe the still-in-set tombstoned address (a new run burns a new seat).
+        uint256 seat = _grantSeat(sub);
         vm.prank(sub);
-        game.subscribe(address(0), false, false, 3, address(0));
+        game.subscribe(0, false, false, 3, 0, seat);
         assertEq(_subscriberIndexOf(sub), idx, "re-subscribe kept the same set slot (idempotent _addToSet)");
         assertEq(_subscribersLen(), lenBefore, "re-subscribe of an in-set tombstone never double-adds");
         assertEq(_dailyQtyOf(sub), 3, "re-subscribe reactivated the sub (dailyQuantity restored)");
@@ -165,14 +179,14 @@ contract AfKingConcurrency is DeployProtocol {
         assertGt(fundedBefore, 0, "sub has stranded afking ETH");
 
         vm.prank(sub);
-        game.subscribe(address(0), false, false, 0, address(0)); // tombstone
+        game.subscribe(0, false, false, 0, 0, 0); // tombstone
         assertGt(_subscriberIndexOf(sub), 0, "v55: cancel is an in-place tombstone -- still in set");
         assertEq(_dailyQtyOf(sub), 0, "cancel wrote the in-place sentinel");
         assertEq(game.afkingFundingOf(sub), fundedBefore, "cancel did not confiscate the afking ETH");
 
         uint256 balBefore = sub.balance;
         vm.prank(sub);
-        game.withdrawAfkingFunding(fundedBefore);
+        game.withdrawAfkingFunding(0, fundedBefore);
         assertEq(game.afkingFundingOf(sub), 0, "afking ETH drained on withdraw");
         assertEq(sub.balance - balBefore, fundedBefore, "stranded afking ETH returned to the cancelled sub");
     }
@@ -227,11 +241,11 @@ contract AfKingConcurrency is DeployProtocol {
         for (uint256 i; i < n; i++) {
             address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
             subs[i] = who;
-            _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (sub <=> coin)
+            uint256 seat = _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (sub <=> coin)
             _approveKeeper(who);
             _fundPool(who, 1 ether); // fund BEFORE subscribe to ground the NEW-run cover-buy (D-12)
             vm.prank(who);
-            game.subscribe(address(0), false, false, 1, address(0)); // self, lootbox mode, qty 1
+            game.subscribe(0, false, false, 1, 0, seat); // self, lootbox mode, qty 1
         }
     }
 
@@ -244,23 +258,25 @@ contract AfKingConcurrency is DeployProtocol {
             subs[i] = who;
             _approveKeeper(who);
             _fundPool(who, 1 ether); // fund BEFORE subscribe to ground the NEW-run cover-buy (D-12); still NO deity
+            uint256 seat = _grantSeat(who);
             vm.prank(who);
-            game.subscribe(address(0), false, false, 1, address(0)); // self, lootbox mode, qty 1, NO deity
+            game.subscribe(0, false, false, 1, 0, seat); // self, lootbox mode, qty 1, NO deity
         }
     }
 
     /// @dev Approve the game (the afking module is game-resident) as `who`'s operator. Self-funded
     ///      subs don't strictly need it, but it keeps parity with operator-funded paths.
     function _approveKeeper(address who) internal {
+        _aid(who);
         vm.prank(who);
-        game.setOperatorApproval(address(game), true);
+        game.setOperatorApproval(0, address(game), true);
     }
 
     /// @dev Credit `who`'s afkingFunding bucket with `amount` ETH (Δ5: depositAfkingFunding replaces
     ///      AfKing.depositFor).
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
-        game.depositAfkingFunding{value: amount}(who);
+        game.depositAfkingFunding{value: amount}(_aid(who));
     }
 
     /// @dev Grant `who` the permanent deity bit so _passHorizonOf(who) == type(uint24).max. RE-DERIVED

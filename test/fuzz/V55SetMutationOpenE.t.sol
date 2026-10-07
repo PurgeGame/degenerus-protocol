@@ -45,6 +45,19 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///      pinned slot via `forge inspect storage DegenerusGame` (the AfKing-standalone-layout constants are
 ///      WRONG). Test-only: no contracts/*.sol mutated.
 contract V55SetMutationOpenE is DeployProtocol {
+
+    mapping(address => uint32) private _aidCache;
+
+    /// @dev Wallet ID of `a`, registering it when it holds none. Call before any `vm.prank`.
+    function _aid(address a) internal returns (uint32 id) {
+        id = _aidCache[a];
+        if (id == 0) {
+            id = game.walletIdOf(a);
+            if (id == 0) id = _giveWalletId(a);
+            _aidCache[a] = id;
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Game-resident storage slots (RE-DERIVED via `forge inspect DegenerusGame storageLayout`, post
     // Stage B Game-storage packing — corrected to authoritative values).
@@ -84,9 +97,12 @@ contract V55SetMutationOpenE is DeployProtocol {
     function testOpenEConsentGateUnapprovedReverts() public {
         address s = makeAddr("openE_s");
         address m = makeAddr("openE_m");
+        uint256 seat = _grantSeat(m);
+        uint32 sId = _aid(s);
+        _aid(m);
         vm.prank(m);
         vm.expectRevert(abi.encodeWithSignature("NotApproved()"));
-        game.subscribe(address(0), false, true, 1, s); // S has not approved M -> REVERT
+        game.subscribe(0, false, true, 1, sId, seat); // S has not approved M -> REVERT
     }
 
 
@@ -119,13 +135,14 @@ contract V55SetMutationOpenE is DeployProtocol {
     }
 
     function _subscribeLootbox(address who, uint8 q) internal {
+        uint256 seat = _grantSeat(who);
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, address(0)); // self, lootbox mode, no reinvest
+        game.subscribe(0, false, false, q, 0, seat); // self, lootbox mode, no reinvest
     }
 
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
-        game.depositAfkingFunding{value: amount}(who);
+        game.depositAfkingFunding{value: amount}(_aid(who));
     }
 
     /// @dev Forcibly remove `who` from `_subscribers` (the orphan condition): zero its

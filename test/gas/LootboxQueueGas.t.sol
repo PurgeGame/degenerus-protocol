@@ -125,12 +125,12 @@ contract LootboxQueueGasTest is DeployProtocol {
     function _ticket(address buyer, uint256 quantity) private {
         uint256 value = _price() * quantity / 400;
         vm.prank(buyer);
-        game.purchase{value: value}(buyer, quantity, 0, 0, MintPaymentKind.DirectEth, false);
+        game.purchase{value: value}(0, quantity, 0, 0, MintPaymentKind.DirectEth, false);
     }
 
     function _box(address buyer, uint256 order, uint256 value) private {
         vm.prank(buyer);
-        game.purchase{value: value}(buyer, 0, order, 0, MintPaymentKind.DirectEth, false);
+        game.purchase{value: value}(0, 0, order, 0, MintPaymentKind.DirectEth, false);
     }
 
     function _report(string memory scenario) private {
@@ -204,7 +204,7 @@ contract LootboxQueueGasTest is DeployProtocol {
         _restoreGame();
         uint256 price = _price();
         vm.prank(REG);
-        game.purchase{value: price * 2}(REG, 400, 1, 0, MintPaymentKind.DirectEth, false);
+        game.purchase{value: price * 2}(0, 400, 1, 0, MintPaymentKind.DirectEth, false);
         _report("box_and_ticket_registered_recycled");
     }
 
@@ -215,7 +215,7 @@ contract LootboxQueueGasTest is DeployProtocol {
         _seeder().dirtyWritePositions(1);
         _restoreGame();
         vm.prank(REG);
-        game.buyPresaleBox{value: 0.1 ether}(REG, 0.1 ether);
+        game.buyPresaleBox{value: 0.1 ether}(0, 0.1 ether);
         _report("presale_only_recycled");
     }
 
@@ -225,7 +225,7 @@ contract LootboxQueueGasTest is DeployProtocol {
         _restoreGame();
         uint256 price = _price();
         vm.prank(REG);
-        game.buyLootboxAndPresaleBox{value: price + 0.1 ether}(REG, 0, 1, 0, MintPaymentKind.DirectEth, 0.1 ether);
+        game.buyLootboxAndPresaleBox{value: price + 0.1 ether}(0, 0, 1, 0, MintPaymentKind.DirectEth, 0.1 ether);
         _report("presale_same_call_recycled");
     }
 
@@ -234,22 +234,22 @@ contract LootboxQueueGasTest is DeployProtocol {
     /// @dev Same scenario as WalletIdentityGas.degenerette_eth_registered.
     function test_Gas_DegeneretteEthRegistered() public {
         vm.prank(REG);
-        game.placeDegeneretteBet{value: 0.01 ether}(address(0), 0, uint128(0.01 ether), 1, 3);
+        game.placeDegeneretteBet{value: 0.01 ether}(0, 0, uint128(0.01 ether), 1, 3);
         _report("degenerette_eth_registered");
     }
 
     function test_Gas_DegeneretteEthRepeat() public {
         vm.prank(REG);
-        game.placeDegeneretteBet{value: 0.01 ether}(address(0), 0, uint128(0.01 ether), 1, 3);
+        game.placeDegeneretteBet{value: 0.01 ether}(0, 0, uint128(0.01 ether), 1, 3);
         vm.prank(REG);
-        game.placeDegeneretteBet{value: 0.01 ether}(address(0), 0, uint128(0.01 ether), 1, 3);
+        game.placeDegeneretteBet{value: 0.01 ether}(0, 0, uint128(0.01 ether), 1, 3);
         _report("degenerette_eth_repeat");
     }
 
     function test_Gas_FoilTicket() public {
         uint256 price = _price();
         vm.prank(REG);
-        game.purchase{value: price * 11}(REG, 400, 0, 0, MintPaymentKind.DirectEth, true);
+        game.purchase{value: price * 11}(0, 400, 0, 0, MintPaymentKind.DirectEth, true);
         _report("foil_ticket_registered");
     }
 
@@ -258,13 +258,13 @@ contract LootboxQueueGasTest is DeployProtocol {
     /// @dev Same scenario as WalletIdentityGas.whale_pass_registered (one pass, one box entry).
     function test_Gas_WhalePassRegistered() public {
         vm.prank(REG);
-        game.purchaseWhalePass{value: 4 ether}(REG, 1, 0);
+        game.purchaseWhalePass{value: 4 ether}(0, 1, 0);
         _report("whale_pass_registered");
     }
 
     function test_Gas_WhalePassTen() public {
         vm.prank(REG);
-        game.purchaseWhalePass{value: 40 ether}(REG, 10, 0);
+        game.purchaseWhalePass{value: 40 ether}(0, 10, 0);
         _report("whale_pass_10_registered");
     }
 

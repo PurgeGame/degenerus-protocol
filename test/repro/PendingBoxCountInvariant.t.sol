@@ -78,7 +78,7 @@ contract PendingBoxCountInvariant is DeployProtocol {
             _assertInvariant("after re-arming a pending box via poke");
         }
         vm.prank(cancelled);
-        game.subscribe(address(0), false, false, 0, address(0)); // qty 0 = cancel (tombstone)
+        game.subscribe(0, false, false, 0, 0, 0); // qty 0 = cancel (tombstone)
         _assertInvariant("after cancelling a sub with a pending box (tombstone retains markers)");
 
         _drainDay(uint256(keccak256("pb_c2")) | 1, false);
@@ -94,8 +94,9 @@ contract PendingBoxCountInvariant is DeployProtocol {
         _stampToRequest(uint256(keccak256("pb_w3")) | 1);
         _drainDay(uint256(keccak256("pb_c3")) | 1, false);
         _assertInvariant("after the tombstone-reclaim STAGE");
+        uint256 seat = _grantSeat(cancelled);
         vm.prank(cancelled);
-        game.subscribe(address(0), false, false, 1, address(0));
+        game.subscribe(0, false, false, 1, 0, seat);
         _assertInvariant("after re-subscribing the reclaimed sub");
         _stampToRequest(uint256(keccak256("pb_w4")) | 1);
         _assertInvariant("after the post-re-subscribe STAGE stamp");
@@ -250,16 +251,18 @@ contract PendingBoxCountInvariant is DeployProtocol {
         for (uint256 i; i < n; ++i) {
             address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
             subs[i] = who;
-            _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (NoCoin without it)
+            uint256 seat = _grantSeat(who);
             _fundPool(who, poolEach);
             vm.prank(who);
-            game.subscribe(address(0), false, isTicket, 1, address(0));
+            game.subscribe(0, false, isTicket, 1, 0, seat);
         }
     }
 
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
-        game.depositAfkingFunding{value: amount}(who);
+        uint32 id = game.walletIdOf(who);
+        if (id == 0) id = _giveWalletId(who);
+        game.depositAfkingFunding{value: amount}(id);
     }
 
     function _fulfillPending(uint256 vrfWord) internal {

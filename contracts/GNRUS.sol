@@ -35,8 +35,8 @@ interface ISDGNRSSnapshot {
 
 /// @notice Minimal interface for DegenerusGame donation-facing functions used by GNRUS.
 interface IDegenerusGameDonations {
-    /// @notice Claim accumulated ETH winnings for a player.
-    function claimWinnings(address player) external;
+    /// @notice Claim account `id`'s accumulated ETH winnings (0 = caller; GNRUS passes 0).
+    function claimWinnings(uint32 id) external;
     /// @notice View claimable ETH winnings for a player.
     function claimableWinningsOf(address player) external view returns (uint256);
 }
@@ -390,7 +390,7 @@ contract GNRUS {
 
         // Pay from on-hand first (ETH-preferred), pull remainder from game
         if (owed > ethBal + stethBal) {
-            game.claimWinnings(address(this));
+            game.claimWinnings(0);
             ethBal = address(this).balance;
             stethBal = steth.balanceOf(address(this));
         }

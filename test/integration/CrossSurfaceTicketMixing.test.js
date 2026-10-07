@@ -350,7 +350,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
       expect(root, "current RNG buffer storage root").to.not.be.undefined;
       const flags = BigInt(await hre.ethers.provider.getStorage(await game.getAddress(), root.slot)) >> (BigInt(root.offset) * 8n);
       const index = (flags >> 12n) & 1n;
-      await game.connect(alice).purchase(alice.address, 0n, boCustom(eth(1)), ZERO_BYTES32, 0, false, { value: eth(1) });
+      await game.connect(alice).purchase(0, 0n, boCustom(eth(1)), ZERO_BYTES32, 0, false, { value: eth(1) });
       // 1 ETH of pending box value meets the mid-day threshold: an ordinary mineFlip requests.
       const request = await requestMiddayRng(game, deployer, mockVRF);
       const artifact = await hre.artifacts.readArtifact("DegenerusGameLootboxModule");

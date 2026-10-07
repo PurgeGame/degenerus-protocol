@@ -192,7 +192,7 @@ abstract contract StallCreditBase is DeployProtocol {
         vm.deal(donor, 1 ether);
         vm.prank(donor);
         game.purchase{value: 0.01 ether}(
-            donor, 0, BoxOrderLib.boCustom(0.01 ether), bytes32(0), MintPaymentKind.DirectEth, false
+            0, 0, BoxOrderLib.boCustom(0.01 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         mockFeed.setUpdatedAt(block.timestamp); // the credit charge prices off a fresh feed
         vm.prank(ContractAddresses.ADMIN);

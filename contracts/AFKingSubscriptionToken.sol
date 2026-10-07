@@ -27,59 +27,30 @@ pragma solidity 0.8.34;
 /**
  * @title AFKing Subscription Token
  * @author Burnie Degenerus
- * @notice The afking seat license: holding at least 1 seat is the sole
- *         credential for an afking-mode subscription on the game. A
- *         2,000-serial ERC721 collection with fully on-chain SVG art. A seat
- *         is MINTED to its holder (no claim step): buying a pass mints one
- *         game-side, and the vault mints from its own tranche. Art starts at a
- *         deterministic default and every holder may restyle it — symbol (0-31)
- *         plus ANY 24-bit RGB background and trim — cosmetic only (the game
- *         reads nothing but balanceOf).
+ * @notice The afking seat: starting an afking-mode subscription on the game
+ *         burns one seat held by the subscribing account's payee. An ERC721
+ *         collection with fully on-chain SVG art. A seat is MINTED to its
+ *         holder (no claim step): buying a pass mints one game-side, and the
+ *         vault mints more once the free tranche is gone. Art starts at a
+ *         deterministic default and every holder may restyle it — symbol
+ *         (0-31) plus ANY 24-bit RGB background and trim — cosmetic only.
  *
- * @dev SEAT MODEL (sub <=> seat):
- *      - Fixed 2,000 serials, minted only through three bounded tranches:
- *        2 construction seats — serial 1 to SDGNRS, serial 2 to the VAULT
- *        (default colors). SDGNRS has no ERC721-out path; the vault can move
- *        seats via afkingSeatTransfer but the seat lock keeps it holding at
- *        least one while subscribed, which it perpetually is — a 1,000-seat
- *        FREE tranche minted to pass buyers when they buy (one per address
- *        for life, enforced by the game's SEAT_CLAIMED latch; past 1,000 a
- *        pass simply confers no seat), and a 998-seat VAULT tranche the vault
- *        mints directly to any recipient via its owner-gated afkingSeatMint —
- *        locked until the free tranche's 1,000 are gone, so paid seats can
- *        never crowd out free ones.
- *        2 + 1,000 + 998 = 2,000: the tranche accounting IS the supply cap
- *        (MAX_SERIAL is a fail-loud backstop).
- *      - The game gates subscribe on balanceOf >= 1. Ownership is checked
- *        ONLY there; the seat lock below blocks an encumbered holder's
- *        last-seat transfer until they unsubscribe cleanly (an eviction
- *        forfeits the seat instead — see EVICTION FORFEIT).
- *
- * @dev SEAT LOCK (the only nonstandard ERC721 transfer behavior):
- *      Whenever a transfer takes a sender's balance to exactly 0, it
- *      STATICCALLs the game's subInfo view and mintPackedFor's
- *      SEAT_ENCUMBERED bit and reverts SeatInUse while either holds: an
- *      ACTIVE afking subscription, or a still-set encumbrance latch (an
- *      eviction forfeit awaiting reclaimSeat). The seat is the credential
- *      (sub <=> seat), so an active subscriber cannot part with their last
- *      seat — a manual unsubscribe clears both and frees the seat to sell
- *      in the next tx. Multi-seat holders and plain holders are never
- *      blocked; a self-transfer nets to a nonzero balance and never
- *      triggers the check. The game calls here are read-only — mints
- *      cannot cross to zero, and there is no burn path.
- *
- * @dev EVICTION FORFEIT (reclaimSeat): the game's subscribe sets the
- *      holder's SEAT_ENCUMBERED latch and only a manual cancel clears it,
- *      so an evicted (funding-killed) sub leaves the bit set with no
- *      active sub — the provable forfeit state. While it holds: the seat
- *      lock traps the holder's last seat, tokenURI renders the evicted
- *      WWXRP art, the game refuses a fresh subscribe (SeatForfeited), and
- *      ANYONE may call reclaimSeat to force-transfer exactly one of the
- *      holder's seats to the VAULT (which re-sells via its owner-gated
- *      afkingSeatTransfer). The reclaim then clears the latch through the
- *      game's AFKING_SUB_TOKEN-only clearSeatEncumbrance, ending the
- *      forfeit: no second seat is seizable, remaining seats transfer
- *      freely, and the address may subscribe again once it holds a seat.
+ * @dev SEAT MODEL (one seat per subscription):
+ *      - Mints: 2 construction seats — serial 1 to SDGNRS, serial 2 to the
+ *        VAULT (default colors); a 1,000-seat FREE tranche minted to pass
+ *        buyers when they buy (one per account for life, enforced by the
+ *        game's SEAT_CLAIMED latch; a smurf's seat goes to its owner; past
+ *        1,000 a pass confers no seat); and vault mints to any recipient via
+ *        the vault's owner-gated afkingSeatMint, refused until the free
+ *        tranche is gone and allowed only while live seats plus the game's
+ *        subscriber-set length stay within SEAT_CAP.
+ *      - Burns: the game's subscribe calls consumeSeat when it starts a new
+ *        run (never for the exempt VAULT/SDGNRS subscriptions). Changing a
+ *        live run burns nothing.
+ *      - Every non-exempt subscriber-set entry burned a seat, so the cap on
+ *        vault mints also bounds the set the game iterates each day.
+ *      - Serials count up and are never reused; totalSupply is the live count.
+ *      - Transfers are plain ERC721 and read nothing from the game.
  *
  * @dev ART (the protocol's three-ring ticket badge, one big badge instead
  *      of four quadrants): a rounded card filled with the buyer's
@@ -95,7 +66,6 @@ pragma solidity 0.8.34;
  */
 
 import {ContractAddresses} from "./ContractAddresses.sol";
-import {BitPackingLib} from "./libraries/BitPackingLib.sol";
 import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
@@ -113,34 +83,12 @@ interface IIcons32 {
     function symbol(uint256 quadrant, uint8 idx) external view returns (string memory);
 }
 
-/// @dev Game surface consumed by this token: subInfo backs the seat lock
-///      (only `active` — the first return — is read: true while the holder
-///      has a live afking subscription); mintPackedFor backs the seat lock /
-///      forfeit checks (the SEAT_ENCUMBERED bit) — the game keeps its own
-///      SEAT_CLAIMED latch as the once-per-address mint gate, which this token
-///      does not read; clearSeatEncumbrance is
-///      the one mutator — AFKING_SUB_TOKEN-only game-side, called by
-///      reclaimSeat after seizing a forfeited seat.
+/// @dev Game surface consumed by this token: the subscriber-set length for the capped
+///      vault mint. Transfers read nothing from the Game.
 interface ISeatGameViews {
-    /// @notice Clears the seat-encumbered flag on `holder`'s subscription, as implemented by
-    ///         DegenerusGame.
-    function clearSeatEncumbrance(address holder) external;
-
-    /// @notice A player's afking subscription status, as implemented by DegenerusGame.
-    function subInfo(
-        address player
-    )
-        external
-        view
-        returns (
-            bool active,
-            uint8 dailyQuantity,
-            uint24 afkingStartDay,
-            uint24 afkCoveredThroughDay
-        );
-
-    /// @notice Packed seat-lock/forfeit data for `player`'s mint, as implemented by DegenerusGame.
-    function mintPackedFor(address player) external view returns (uint256);
+    /// @notice Length of the Game's AFKing subscriber set (live subs, the two exempt protocol
+    ///         subs and tombstones awaiting reclaim), as implemented by DegenerusGame.
+    function subscriberSetLength() external view returns (uint256);
 }
 
 /// @dev Vault interface for DGVE ownership check (admin surface auth).
@@ -149,10 +97,10 @@ interface IDegenerusVaultOwner {
     function isVaultOwner(address account) external view returns (bool);
 }
 
-/// @notice Optional external renderer interface (v1).
+/// @notice Optional external renderer interface.
 /// @dev A reverting or empty external render falls back to the internal renderer;
 ///      the staticcall is not gas-capped, and the renderer is owner-set and trusted.
-interface ISeatRendererV1 {
+interface ISeatRenderer {
     /// @notice Renders a seat's full SVG/metadata art, as implemented by the owner-set renderer.
     function render(
         uint256 tokenId,
@@ -161,10 +109,7 @@ interface ISeatRendererV1 {
         uint24 trimRgb,
         string calldata symbolName,
         string calldata iconPath,
-        bool isCrypto,
-        bool seatLocked,
-        string calldata backgroundColor,
-        string calldata trimColor
+        bool isCrypto
     ) external view returns (string memory);
 }
 
@@ -197,23 +142,15 @@ contract AFKingSubscriptionToken {
     /// @notice symbolId >= 32 on a restyle
     error InvalidTrait();
 
-    /// @notice Thrown when a transfer would empty an encumbered holder's
-    ///         balance — an active subscriber unsubscribes before selling the
-    ///         seat; an evicted holder's seat is forfeit until reclaimSeat
-    error SeatInUse();
-
-    /// @notice reclaimSeat target's holder is not in the eviction-forfeit
-    ///         state (SEAT_ENCUMBERED set with no active sub)
-    error NotEvicted();
-
-    /// @notice Vault-tranche mints are locked until all 1,000 free-tranche
-    ///         seats are minted
+    /// @notice Vault mints are refused until all 1,000 free-tranche seats are
+    ///         minted
     error FreeTrancheOpen();
 
-    /// @notice Mint would exceed the vault's 998-seat tranche
-    error GrantExceedsTranche();
+    /// @notice A vault mint would take live seats plus the game's subscriber
+    ///         set past SEAT_CAP
+    error SeatCapReached();
 
-    /// @notice Thrown when a vault-tranche mint is not from the vault
+    /// @notice Thrown when a vault mint is not from the vault
     error OnlyVault();
 
     /// @notice Caller is not the GAME contract
@@ -222,17 +159,13 @@ contract AFKingSubscriptionToken {
     /// @notice Safe transfer to a contract that did not accept the token
     error UnsafeRecipient();
 
-    /// @notice Thrown when a mint would exceed the 2,000-serial max supply
-    ///         (unreachable through the tranche accounting; fail-loud backstop)
-    error SupplyCapped();
-
     /*+======================================================================+
       |                              EVENTS                                  |
       +======================================================================+*/
 
-    /// @notice ERC721 transfer (from = address(0) for mints)
+    /// @notice ERC721 transfer (from = address(0) for mints, to = address(0) for burns)
     /// @param from Previous holder (zero on mint).
-    /// @param to New holder.
+    /// @param to New holder (zero on burn).
     /// @param tokenId The seat's serial.
     event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
 
@@ -248,8 +181,8 @@ contract AFKingSubscriptionToken {
     /// @param approved True to approve, false to revoke.
     event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
     /// @notice Emitted when a seat is minted — on a pass PURCHASE (game-driven) or
-    ///         from the vault's 998-seat tranche. Art is the deterministic default and
-    ///         is restylable at any time via setSeatTraits.
+    ///         by a vault mint. Art is the deterministic default and is restylable at
+    ///         any time via setSeatTraits.
     /// @param to Seat recipient
     /// @param tokenId Serial minted
     /// @param symbolId Default icon index
@@ -263,16 +196,10 @@ contract AFKingSubscriptionToken {
         uint24 trimRgb
     );
 
-    /// @notice The vault minted seats from its 998-seat tranche
+    /// @notice The vault minted seats
     /// @param to Seat recipient
     /// @param amount Seats minted in this call
-    /// @param minted Lifetime total minted from the tranche after this call (<= 998)
-    event VaultSeatsMinted(address indexed to, uint256 amount, uint256 minted);
-
-    /// @notice An evicted holder's forfeited seat was reclaimed to the vault
-    /// @param holder Evicted holder the seat was seized from
-    /// @param tokenId Serial force-transferred to the VAULT
-    event SeatReclaimed(address indexed holder, uint256 indexed tokenId);
+    event VaultSeatsMinted(address indexed to, uint256 amount);
 
     /// @notice Emitted when a seat owner restyles their card art.
     /// @param tokenId Seat serial restyled
@@ -299,12 +226,9 @@ contract AFKingSubscriptionToken {
     ///         pass buyers
     uint256 public constant FREE_TRANCHE = 1000;
 
-    /// @notice Vault claim-rights allowance (SDGNRS and the vault each hold
-    ///         a construction seat; 2 + 1,000 + 998 = the 2,000-serial supply)
-    uint256 public constant VAULT_TRANCHE = 998;
-
-    /// @notice Hard serial cap — the tranche accounting sums to exactly this
-    uint256 public constant MAX_SERIAL = 2000;
+    /// @notice A vault mint must leave live seats plus the game's subscriber-set
+    ///         length at or below this
+    uint256 public constant SEAT_CAP = 2000;
 
     /// @dev Default colors for the two construction seats: the deity-pass
     ///      card look (light ground, purple trim).
@@ -337,8 +261,7 @@ contract AFKingSubscriptionToken {
       |                          WIRED CONTRACTS                             |
       +======================================================================+*/
 
-    /// @dev Game contract: seat-lock subInfo view + the SEAT_ENCUMBERED
-    ///      forfeit latch (mintPackedFor)
+    /// @dev Game contract: the subscriber-set length read by the capped vault mint
     ISeatGameViews private constant game =
         ISeatGameViews(ContractAddresses.GAME);
 
@@ -363,14 +286,14 @@ contract AFKingSubscriptionToken {
     /// @notice Optional external renderer (address(0) = internal only)
     address public renderer;
 
-    /// @notice Next serial to mint (serials are 1-2000; monotonic, no burn)
-    uint16 public nextSerial;
+    /// @notice Next serial to mint (serials start at 1, count up and are never reused)
+    uint32 public nextSerial;
 
     /// @notice Free-tranche seats minted so far (of FREE_TRANCHE)
     uint16 public freeClaims;
 
-    /// @notice Vault-tranche seats minted lifetime (of VAULT_TRANCHE)
-    uint16 public vaultGranted;
+    /// @dev Live seats: minted minus burned; never above SEAT_CAP.
+    uint16 private liveSeats;
 
     modifier onlyOwner() {
         if (!vault.isVaultOwner(msg.sender)) revert NotAuthorized();
@@ -381,13 +304,9 @@ contract AFKingSubscriptionToken {
     ///         ENS reverse name.
     constructor() {
         // The protocol self-subscribers' construction seats: serial 1 to SDGNRS,
-        // serial 2 to the VAULT (default colors). SDGNRS has no transfer surface,
-        // so serial 1 never leaves. The vault can transfer any seat it holds, but
-        // the seat lock binds the LAST seat of an active subscriber, which the
-        // vault perpetually is — so it always keeps at least one seat (the vault's
-        // 998-seat tranche mints fresh serials to others). Both hold real seats
-        // forever and the game's coin gate and the seat lock need no protocol
-        // special cases.
+        // serial 2 to the VAULT (default colors). Their own subscriptions are exempt
+        // from the seat burn. SDGNRS has no transfer surface, so serial 1 never
+        // leaves; the vault may transfer serial 2 like any seat it holds.
         nextSerial = 1;
         _mintSeat(ContractAddresses.SDGNRS, 0, DEFAULT_BG, DEFAULT_TRIM);
         _mintSeat(ContractAddresses.VAULT, 0, DEFAULT_BG, DEFAULT_TRIM);
@@ -414,9 +333,9 @@ contract AFKingSubscriptionToken {
     /// @notice The collection symbol.
     function symbol() external pure returns (string memory) { return "AFK"; }
 
-    /// @notice Seats minted so far (serials 1..totalSupply; no burn path)
+    /// @notice Live seats: minted minus burned by subscriptions.
     function totalSupply() external view returns (uint256) {
-        return uint256(nextSerial) - 1;
+        return liveSeats;
     }
 
     /*+======================================================================+
@@ -435,14 +354,14 @@ contract AFKingSubscriptionToken {
     ///
     ///      Silent no-op (never a revert) on an exhausted 1,000-seat tranche and on the
     ///      zero address, because this rides inside a purchase and must never brick one.
-    ///      Past the tranche a pass simply confers no seat; the vault's separate 998-seat
-    ///      tranche is untouched by this path.
+    ///      Past the tranche a pass simply confers no seat. Every free mint precedes the
+    ///      first vault mint, so this path needs no cap check.
     ///
-    ///      The one-per-address limit is GAME-side, not here: the caller sets its
-    ///      SEAT_CLAIMED latch before calling and mints only on the transition, so this
-    ///      function mints whatever it is handed. The game never calls it for a won or
-    ///      conferred pass, including a deity purchase's affiliate reward.
-    /// @param to Pass purchaser receiving the seat
+    ///      The one-per-account limit is GAME-side, not here: the caller sets the buying
+    ///      account's SEAT_CLAIMED latch before calling and mints only on the transition,
+    ///      so this function mints whatever it is handed. The game never calls it for a
+    ///      won or conferred pass, including a deity purchase's affiliate reward.
+    /// @param to The buying account's payee (its own key, or a smurf's owner)
     /// @custom:reverts OnlyGame When the caller is not the GAME contract
     function mintSeatFor(address to) external {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
@@ -507,36 +426,56 @@ contract AFKingSubscriptionToken {
         emit SeatRestyled(tokenId, symbolId, bgRgb, trimRgb);
     }
 
-    /// @notice Mint seats from the vault's 998-seat tranche straight to a
-    ///         recipient (vault only — reached through the vault's owner-gated
-    ///         afkingSeatMint), each with default art the recipient may
-    ///         restyle. Locked until the free tranche's 1,000 seats are all
-    ///         out, so paid seats can never crowd out free ones.
+    /// @notice Mint seats straight to a recipient (vault only — reached through the
+    ///         vault's owner-gated afkingSeatMint), each with default art the recipient
+    ///         may restyle. Refused until the free tranche's 1,000 seats are all out, so
+    ///         paid seats never crowd out free ones; then allowed while live seats plus
+    ///         `amount` plus the game's subscriber-set length stay within SEAT_CAP. Each
+    ///         subscription removed from the set frees one more.
     /// @param to Seat recipient
     /// @param amount Seats to mint
     /// @custom:reverts OnlyVault When caller is not the vault contract
     /// @custom:reverts ZeroAddress When to is address(0)
     /// @custom:reverts FreeTrancheOpen While fewer than 1,000 free seats are out
-    /// @custom:reverts GrantExceedsTranche When lifetime tranche mints would pass 998
+    /// @custom:reverts SeatCapReached When live seats + amount + the subscriber-set
+    ///                 length would pass SEAT_CAP
     function vaultMintSeats(address to, uint256 amount) external {
         if (msg.sender != ContractAddresses.VAULT) revert OnlyVault();
         if (to == address(0)) revert ZeroAddress();
         if (freeClaims < FREE_TRANCHE) revert FreeTrancheOpen();
-        uint256 minted = uint256(vaultGranted) + amount;
-        if (minted > VAULT_TRANCHE) revert GrantExceedsTranche();
-        vaultGranted = uint16(minted);
+        if (uint256(liveSeats) + amount + game.subscriberSetLength() > SEAT_CAP)
+            revert SeatCapReached();
         for (uint256 i; i < amount; ) {
             _mintDefaultSeat(to);
             unchecked {
                 ++i;
             }
         }
-        emit VaultSeatsMinted(to, amount, minted);
+        emit VaultSeatsMinted(to, amount);
     }
 
-    /// @dev Mint the next serial with packed traits. The three tranches
-    ///      (2 construction + 1,000 free + 998 vault) sum to MAX_SERIAL
-    ///      exactly, so the cap check is an unreachable fail-loud backstop.
+    /// @notice Burn seat `seatId` held by `holder` to start a subscription run (GAME only).
+    /// @dev The game calls this from subscribe before it writes a new run; `holder` is
+    ///      the subscribing account's payee, which the game has already authorized, so no
+    ///      ERC721 approval is consulted. Never called for the exempt VAULT/SDGNRS
+    ///      subscriptions. Makes no external call. The burned serial is never reminted,
+    ///      so its approval and trait lane are left behind unreadable.
+    /// @param holder The subscribing account's payee (never the zero address)
+    /// @param seatId Seat serial to burn
+    /// @custom:reverts OnlyGame When the caller is not the GAME contract
+    /// @custom:reverts InvalidToken When `holder` does not hold `seatId`
+    function consumeSeat(address holder, uint256 seatId) external {
+        if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
+        if (_owners[seatId] != holder) revert InvalidToken();
+        unchecked {
+            _balances[holder] -= 1;
+            liveSeats -= 1;
+        }
+        delete _owners[seatId];
+        emit Transfer(holder, address(0), seatId);
+    }
+
+    /// @dev Mint the next serial with packed traits.
     function _mintSeat(
         address to,
         uint8 symbolId,
@@ -544,9 +483,9 @@ contract AFKingSubscriptionToken {
         uint24 trimRgb
     ) private returns (uint256 tokenId) {
         tokenId = nextSerial;
-        if (tokenId > MAX_SERIAL) revert SupplyCapped();
         unchecked {
-            nextSerial = uint16(tokenId + 1);
+            nextSerial = uint32(tokenId + 1);
+            liveSeats += 1;
             _balances[to] += 1;
         }
         _owners[tokenId] = to;
@@ -632,18 +571,10 @@ contract AFKingSubscriptionToken {
         emit ApprovalForAll(msg.sender, operator, approved);
     }
 
-    /// @notice Transfer a seat — enforces the seat lock: a transfer that
-    ///         empties an encumbered holder's balance reverts SeatInUse.
-    ///         A manual unsubscribe clears both halves of the lock (the
-    ///         cancel tombstone reads inactive and the encumbrance latch is
-    ///         cleared in the same tx), so a clean leaver's seat sells in
-    ///         the very next tx; an evicted holder's latch stays set, so
-    ///         their last seat is trapped until reclaimSeat forfeits it.
+    /// @notice Transfer a seat (plain ERC721; reads nothing from the game).
     /// @custom:reverts InvalidToken When the serial is not minted or `from` is not its owner
     /// @custom:reverts ZeroAddress When to is address(0)
     /// @custom:reverts NotAuthorized When caller is neither owner, approved, nor operator
-    /// @custom:reverts SeatInUse When this transfer would empty the balance of
-    ///                 an active subscriber or an unreclaimed evicted holder
     function transferFrom(address from, address to, uint256 tokenId) public {
         if (to == address(0)) revert ZeroAddress();
         address ownerAddr = _owners[tokenId];
@@ -661,61 +592,6 @@ contract AFKingSubscriptionToken {
         }
         _owners[tokenId] = to;
         emit Transfer(from, to, tokenId);
-
-        // Seat lock: a self-transfer nets to the original balance before this
-        // check, so it can never trigger. Both game calls are read-only.
-        // Blocked while EITHER holds — an active sub, or a still-set
-        // SEAT_ENCUMBERED latch (an eviction forfeit awaiting reclaimSeat).
-        if (_balances[from] == 0) {
-            (bool active, , , ) = game.subInfo(from);
-            if (
-                active ||
-                (game.mintPackedFor(from) >>
-                    BitPackingLib.SEAT_ENCUMBERED_SHIFT) &
-                    1 !=
-                0
-            ) revert SeatInUse();
-        }
-    }
-
-    /// @notice Collect an eviction forfeit: force-transfer `tokenId` from its
-    ///         evicted holder to the VAULT and clear the holder's encumbrance
-    ///         latch. Permissionless — the holder is in the forfeit state
-    ///         (SEAT_ENCUMBERED set with no active sub) only after an eviction,
-    ///         so there is nothing to grief: the seizure target is fixed (the
-    ///         VAULT) and exactly one seat per eviction is seizable (the latch
-    ///         clear below ends the forfeit). The evicted holder may call this
-    ///         themselves to settle up and re-enter with another seat. The
-    ///         vault re-sells repossessions via its owner-gated
-    ///         afkingSeatTransfer.
-    /// @param tokenId Serial to seize; must be owned by an evicted holder.
-    /// @custom:reverts InvalidToken When the serial is not minted
-    /// @custom:reverts NotEvicted When the holder has an active sub or no
-    ///                 encumbrance latch set (nothing is forfeit)
-    function reclaimSeat(uint256 tokenId) external {
-        address holder = ownerOf(tokenId);
-        (bool active, , , ) = game.subInfo(holder);
-        if (
-            active ||
-            (game.mintPackedFor(holder) >>
-                BitPackingLib.SEAT_ENCUMBERED_SHIFT) &
-                1 ==
-            0
-        ) revert NotEvicted();
-
-        delete _tokenApprovals[tokenId];
-        unchecked {
-            _balances[holder] -= 1;
-            _balances[ContractAddresses.VAULT] += 1;
-        }
-        _owners[tokenId] = ContractAddresses.VAULT;
-        emit Transfer(holder, ContractAddresses.VAULT, tokenId);
-
-        // Settle the forfeit game-side: clears SEAT_ENCUMBERED (this token is
-        // the only authorized caller), so no second seat is seizable and the
-        // holder may subscribe again once they hold a seat.
-        game.clearSeatEncumbrance(holder);
-        emit SeatReclaimed(holder, tokenId);
     }
 
     /// @notice transferFrom + ERC721Receiver acceptance check for contracts
@@ -761,104 +637,29 @@ contract AFKingSubscriptionToken {
       |                             TOKEN URI                                |
       +======================================================================+*/
 
-    /// @notice On-chain SVG metadata for each seat. LIVE state, dynamic per
-    ///         holder: a seat is "Locked" while the seat lock would block its
-    ///         transfer (the holder is encumbered — active sub or unreclaimed
-    ///         eviction — and this is their only seat), rendering a corner
-    ///         padlock and a Status attribute; it reads "Transferable" again
-    ///         the moment the holder unsubscribes cleanly or gains a second
-    ///         seat. An EVICTED holder's seats render the forfeit art instead:
-    ///         the WWXRP mark (the XRP glyph, Icons32 index 0) near-full-card
-    ///         with NO badge rings, a WWXRP wordmark at the card foot, and
-    ///         Status "Evicted - reclaimable" — flipping back to the normal
-    ///         badge art as soon as the seat is reclaimed to the vault (a
-    ///         clean holder again) or the forfeit is otherwise settled.
+    /// @notice On-chain SVG metadata for each live seat: the seat's own art and traits.
     /// @dev Uses the internal renderer by default; an owner-set external renderer may override.
     ///      A reverting or empty return falls back to internal render. The staticcall is not
     ///      gas-capped, so tokenURI integrity relies on the owner setting a sane renderer.
-    ///      Evicted seats always internal-render (the renderer interface carries no
-    ///      evicted flag).
+    /// @custom:reverts InvalidToken When the serial is not live (never minted, or burned)
     function tokenURI(uint256 tokenId) external view returns (string memory) {
         (uint8 symbolId, uint24 bgRgb, uint24 trimRgb) = seatTraits(tokenId);
 
-        bool seatLocked;
-        bool evicted;
-        {
-            address holder = _owners[tokenId];
-            (bool active, , , ) = game.subInfo(holder);
-            bool encumbered = (game.mintPackedFor(holder) >>
-                BitPackingLib.SEAT_ENCUMBERED_SHIFT) &
-                1 !=
-                0;
-            evicted = encumbered && !active;
-            seatLocked = (active || encumbered) && _balances[holder] == 1;
-        }
-
-        IIcons32 icons = IIcons32(ContractAddresses.ICONS_32);
-        string memory iconPath = icons.data(symbolId);
-        uint8 quadrant = symbolId / 8;
         uint8 symbolIdx = symbolId % 8;
-        string memory symbolName = icons.symbol(quadrant, symbolIdx);
+        string memory symbolName = IIcons32(ContractAddresses.ICONS_32).symbol(symbolId / 8, symbolIdx);
         if (bytes(symbolName).length == 0) {
             symbolName = string(abi.encodePacked("Dice ", Strings.toString(symbolIdx + 1)));
         }
-        bool isCrypto = quadrant == 0;
+        string memory svg = _renderSvg(tokenId, symbolId, bgRgb, trimRgb, symbolName);
         string memory backgroundColor = _rgbToHex(bgRgb);
         string memory trimColor = _rgbToHex(trimRgb);
 
-        // Evicted seats always internal-render the forfeit art; otherwise the
-        // external renderer runs first and the internal render is the fallback
-        // (renderer unset, call fails, or empty return).
-        string memory svg;
-        address rendererAddr = evicted ? address(0) : renderer;
-        if (rendererAddr != address(0)) {
-            (bool ok, string memory extSvg) = _tryRenderExternal(
-                rendererAddr,
-                tokenId,
-                symbolId,
-                bgRgb,
-                trimRgb,
-                symbolName,
-                iconPath,
-                isCrypto,
-                seatLocked
-            );
-            if (ok && bytes(extSvg).length != 0) {
-                svg = extSvg;
-            }
-        }
-        if (bytes(svg).length == 0) {
-            svg = evicted
-                ? _renderEvictedSvg(
-                    icons.data(0),
-                    seatLocked,
-                    backgroundColor,
-                    trimColor
-                )
-                : _renderSvgInternal(
-                    iconPath,
-                    quadrant,
-                    symbolIdx,
-                    isCrypto,
-                    seatLocked,
-                    backgroundColor,
-                    trimColor,
-                    symbolId == GOLD_DICE6_SYMBOL_ID && trimRgb == GOLD_RGB
-                );
-        }
-
         string memory json = string(abi.encodePacked(
             '{"name":"AFK Sub #', Strings.toString(tokenId), ' - ', symbolName,
-            '","description":"AFKing seat license. Holding a seat is the sole credential for an afking-mode subscription.",',
+            '","description":"AFKing seat. Starting an afking-mode subscription burns one seat.",',
             '"attributes":[{"trait_type":"Symbol","value":"', symbolName,
             '"},{"trait_type":"Background","value":"', backgroundColor,
             '"},{"trait_type":"Trim","value":"', trimColor,
-            '"},{"trait_type":"Status","value":"',
-            evicted
-                ? "Evicted - reclaimable"
-                : seatLocked
-                    ? "Locked - seat in use"
-                    : "Transferable",
             '"}],"image":"data:image/svg+xml;base64,',
             Base64.encode(bytes(svg)),
             '"}'
@@ -870,6 +671,31 @@ contract AFKingSubscriptionToken {
         ));
     }
 
+    /// @dev The seat's SVG: the external renderer first, the internal render as the
+    ///      fallback (renderer unset, call fails, or empty return). Quadrant =
+    ///      symbolId / 8; quadrant 0 holds the crypto symbols.
+    function _renderSvg(
+        uint256 tokenId,
+        uint8 symbolId,
+        uint24 bgRgb,
+        uint24 trimRgb,
+        string memory symbolName
+    ) private view returns (string memory svg) {
+        string memory iconPath = IIcons32(ContractAddresses.ICONS_32).data(symbolId);
+        svg = _tryRenderExternal(tokenId, symbolId, bgRgb, trimRgb, symbolName, iconPath, symbolId < 8);
+        if (bytes(svg).length == 0) {
+            svg = _renderSvgInternal(
+                iconPath,
+                symbolId / 8,
+                symbolId % 8,
+                symbolId < 8,
+                _rgbToHex(bgRgb),
+                _rgbToHex(trimRgb),
+                symbolId == GOLD_DICE6_SYMBOL_ID && trimRgb == GOLD_RGB
+            );
+        }
+    }
+
     /// @dev The protocol's three-ring badge, one big badge centered on the
     ///      card: outer ring in the trim color, middle #111, inner #fff,
     ///      symbol fitted into the inner circle. Non-crypto symbols are
@@ -879,7 +705,6 @@ contract AFKingSubscriptionToken {
         uint8 quadrant,
         uint8 symbolIdx,
         bool isCrypto,
-        bool seatLocked,
         string memory backgroundColor,
         string memory trimColor,
         bool goldDice6
@@ -925,60 +750,8 @@ contract AFKingSubscriptionToken {
             '" stroke-width="2.2"/>',
             _rings(trimColor, goldDice6),
             symbolGroup,
-            seatLocked ? _lockGlyph() : "",
             "</svg>"
         ));
-    }
-
-    /// @dev Evicted-seat forfeit art: the card in the holder's colors carrying
-    ///      the WWXRP mark — the XRP glyph (source colors, passed in from
-    ///      Icons32 index 0) blown up near-full-card with NO badge rings,
-    ///      centered 4 units above center — over a WWXRP wordmark at the card
-    ///      foot, plus the padlock while the seat lock traps this seat.
-    function _renderEvictedSvg(
-        string memory xrpPath,
-        bool seatLocked,
-        string memory backgroundColor,
-        string memory trimColor
-    ) private pure returns (string memory) {
-        // 76-unit glyph box on the ±50 card, leaving the foot row for the
-        // wordmark: scale = 76e6 / 512; center via the box-centering translate,
-        // then lift the glyph 4 units.
-        uint32 sSym1e6 = uint32((uint256(76) * 1_000_000) / ICON_VB);
-        int256 t = -(int256(uint256(ICON_VB)) * int256(uint256(sSym1e6))) / 2;
-        string memory glyph = string(
-            abi.encodePacked(
-                "<g transform='",
-                _mat6(sSym1e6, t, t - 4_000_000),
-                "'><g style='vector-effect:non-scaling-stroke'>",
-                xrpPath,
-                "</g></g>"
-            )
-        );
-        return string(abi.encodePacked(
-            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="-51 -51 102 102">'
-            '<rect x="-50" y="-50" width="100" height="100" rx="12" fill="',
-            backgroundColor,
-            '" stroke="',
-            trimColor,
-            '" stroke-width="2.2"/>',
-            glyph,
-            '<text y="45" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="',
-            trimColor,
-            '">WWXRP</text>',
-            seatLocked ? _lockGlyph() : "",
-            "</svg>"
-        ));
-    }
-
-    /// @dev Corner padlock shown while the seat lock binds this token: a
-    ///      dark disc with a white padlock at the card's bottom-right,
-    ///      outside the outer ring — legible on any player color pick.
-    function _lockGlyph() private pure returns (string memory) {
-        return
-            '<circle cx="36" cy="36" r="11" fill="#111" stroke="#fff" stroke-width="1.5"/>'
-            '<path d="M31.5 35 v-3.5 a4.5 4.5 0 0 1 9 0 V35" fill="none" stroke="#fff" stroke-width="2.2"/>'
-            '<rect x="29.5" y="34.5" width="13" height="9" rx="1.8" fill="#fff"/>';
     }
 
     /// @dev Concentric badge rings centered on the card (cx/cy default 0).
@@ -1001,34 +774,30 @@ contract AFKingSubscriptionToken {
         ));
     }
 
+    /// @dev The owner-set renderer's SVG, or empty when no renderer is set or the
+    ///      call reverts (an empty return also reads as empty).
     function _tryRenderExternal(
-        address rendererAddr,
         uint256 tokenId,
         uint8 symbolId,
         uint24 bgRgb,
         uint24 trimRgb,
         string memory symbolName,
         string memory iconPath,
-        bool isCrypto,
-        bool seatLocked
-    ) private view returns (bool ok, string memory svg) {
-        try ISeatRendererV1(rendererAddr).render(
+        bool isCrypto
+    ) private view returns (string memory svg) {
+        address rendererAddr = renderer;
+        if (rendererAddr == address(0)) return svg;
+        try ISeatRenderer(rendererAddr).render(
             tokenId,
             symbolId,
             bgRgb,
             trimRgb,
             symbolName,
             iconPath,
-            isCrypto,
-            seatLocked,
-            _rgbToHex(bgRgb),
-            _rgbToHex(trimRgb)
+            isCrypto
         ) returns (string memory out) {
-            if (bytes(out).length == 0) return (false, "");
-            return (true, out);
-        } catch {
-            return (false, "");
-        }
+            svg = out;
+        } catch {}
     }
 
     function _rgbToHex(uint24 rgb) private pure returns (string memory) {

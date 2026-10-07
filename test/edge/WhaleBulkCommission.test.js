@@ -1,7 +1,8 @@
 import { expect } from "chai";
 import hre from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
-import { deployFullProtocol, restoreAddresses } from "../helpers/deployFixture.js";
+import { giveWalletId,
+  deployFullProtocol, restoreAddresses } from "../helpers/deployFixture.js";
 import { seedTicketQueue, entryOwnerRecordSlot } from "../helpers/bucketSeed.js";
 
 describe("Whale bulk commission", function () {
@@ -37,7 +38,7 @@ describe("Whale bulk commission", function () {
         const code = hre.ethers.encodeBytes32String("bulk-referral");
         await affiliate.connect(alice).createAffiliateCode(code, 25);
         const price = hre.ethers.parseEther(level <= 3 ? "2.4" : "4") * BigInt(quantity);
-        await game.connect(bob).purchaseWhalePass(bob.address, quantity, code, { value: price });
+        await game.connect(bob).purchaseWhalePass(0, quantity, code, { value: price });
         const ticketPrice = hre.ethers.parseEther(level < 4 ? "0.01" : "0.02");
         const rateBps = level < 3 ? 2500n : 2000n;
         const bulkDivisor = quantity >= 5 ? 2n : 1n;
@@ -54,8 +55,8 @@ describe("Whale bulk commission", function () {
       await affiliate.connect(alice).createAffiliateCode(code, 0);
       const price = hre.ethers.parseEther("12");
       const fresh = price * freshPercent / 100n;
-      await game.connect(bob).depositAfkingFunding(bob.address, { value: price - fresh });
-      await game.connect(bob).purchaseWhalePass(bob.address, 5, code, { value: fresh });
+      await game.connect(bob).depositAfkingFunding(await giveWalletId(game, bob.address), { value: price - fresh });
+      await game.connect(bob).purchaseWhalePass(0, 5, code, { value: fresh });
       const conversion = 100_000n;
       expect(await affiliate.totalAffiliateScore(1)).to.equal(
         fresh * conversion / 8n + (price - fresh) * conversion / 20n,

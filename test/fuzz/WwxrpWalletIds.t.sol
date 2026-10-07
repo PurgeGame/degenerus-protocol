@@ -55,7 +55,7 @@ contract WwxrpWalletIdsTest is DeployProtocol {
     function _enter(address p, uint256 amount) internal {
         _fund(p, amount);
         vm.prank(p);
-        wwxrp.enter(amount);
+        wwxrp.enter(0, amount);
     }
 
     function _gameId(address p) internal view returns (uint32) {
@@ -138,7 +138,7 @@ contract WwxrpWalletIdsTest is DeployProtocol {
         vm.expectCall(address(game), abi.encodeCall(DegenerusGame.registerWallet, (p, true)), 1);
         vm.recordLogs();
         vm.prank(p);
-        wwxrp.enter(100);
+        wwxrp.enter(0, 100);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         (uint256 n, uint32 rid, address owner) = _registrations(logs);
@@ -169,7 +169,7 @@ contract WwxrpWalletIdsTest is DeployProtocol {
         assertTrue(seen);
 
         vm.prank(p);
-        wwxrp.enter(100);
+        wwxrp.enter(0, 100);
         (eid,) = wwxrp.entryAt(day, bucket, 1);
         assertEq(eid, expectedId, "same bucket, same ID; no second registration");
     }
@@ -196,11 +196,11 @@ contract WwxrpWalletIdsTest is DeployProtocol {
         vm.store(address(game), bytes32(GameSlots.WALLETS), bytes32(uint256(3_000_000_001)));
         vm.expectRevert(abi.encodeWithSignature("E()"));
         vm.prank(n);
-        wwxrp.enter(100);
+        wwxrp.enter(0, 100);
         assertEq(wwxrp.balanceOf(n), 1_000);
         uint24 day = _today();
         vm.prank(e);
-        wwxrp.enter(100);
+        wwxrp.enter(0, 100);
         (uint32 got,) = wwxrp.entryAt(day, wwxrp.bucketOf(day, eid), 0);
         assertEq(got, eid);
     }
@@ -322,7 +322,7 @@ contract WwxrpWalletIdsTest is DeployProtocol {
 
         vm.record();
         vm.prank(p1);
-        wwxrp.enter(100);
+        wwxrp.enter(0, 100);
         (, bytes32[] memory writes) = vm.accesses(address(wwxrp));
         bytes32 s0 = _incinSlot(200, 0);
         uint256 hits;
@@ -332,7 +332,7 @@ contract WwxrpWalletIdsTest is DeployProtocol {
         }
         assertEq(hits, 1, "one struct store");
         vm.prank(p2);
-        wwxrp.enter(300);
+        wwxrp.enter(0, 300);
         uint32 id1 = _gameId(p1);
         uint32 id2 = _gameId(p2);
 

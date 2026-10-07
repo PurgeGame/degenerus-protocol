@@ -72,7 +72,7 @@ async function wordOf(game, index) {
 async function purchase(f, player, packed, nominal) {
   // A real ticket purchase supplies the ordinary activity score; no storage seeding.
   await f.game.connect(player).purchase(
-    player.address, 400n, packed, ZERO_BYTES32, 0, false, { value: nominal + eth(0.01) },
+    0, 400n, packed, ZERO_BYTES32, 0, false, { value: nominal + eth(0.01) },
   );
 }
 

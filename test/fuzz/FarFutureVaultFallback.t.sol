@@ -262,7 +262,7 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
         uint256 sellerStakeBefore = coinflip.coinflipAmount(seller);
 
         vm.prank(seller);
-        game.sellFarFutureEntries(seller, levels, qtys, idxs);
+        game.sellFarFutureEntries(0, levels, qtys, idxs);
 
         (, , uint256 carryAfter, ) = coinflip.coinflipAutoRebuyInfo(ContractAddresses.SDGNRS);
         assertEq(carryBefore - carryAfter, flipExec, "carry drained by exactly the FLIP leg");
@@ -303,7 +303,7 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
 
         vm.prank(seller);
         vm.expectRevert();
-        game.sellFarFutureEntries(seller, levels, qtys, idxs);
+        game.sellFarFutureEntries(0, levels, qtys, idxs);
     }
 
     /// @notice With sDGNRS starved and the vault fallback ENABLED + funded above its floor, the vault buys:
@@ -330,7 +330,7 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
         uint256 sellerClaimBefore = game.claimableWinningsOf(seller);
 
         vm.prank(seller);
-        game.sellFarFutureEntries(seller, levels, qtys, idxs);
+        game.sellFarFutureEntries(0, levels, qtys, idxs);
 
         assertEq(_ownedEntries(ContractAddresses.VAULT, L), vaultEntriesBefore + 100 * 4, "vault received the far entries");
         assertEq(_ownedEntries(seller, L), 0, "seller far entries cleared");
@@ -363,7 +363,7 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
         uint32 vaultEntriesBefore = _ownedEntries(ContractAddresses.VAULT, L);
 
         vm.prank(seller);
-        game.sellFarFutureEntries(seller, levels, qtys, idxs);
+        game.sellFarFutureEntries(0, levels, qtys, idxs);
 
         assertEq(_ownedEntries(seller, L), 0, "seller far entries cleared");
         assertEq(_ownedEntries(ContractAddresses.VAULT, L), vaultEntriesBefore + 100 * 4, "vault received the far entries");
@@ -392,12 +392,12 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
         _seedClaimable(ContractAddresses.VAULT, budget + floorWei - 1);
         vm.prank(seller);
         vm.expectRevert();
-        game.sellFarFutureEntries(seller, levels, qtys, idxs);
+        game.sellFarFutureEntries(0, levels, qtys, idxs);
 
         // Exactly budget + floor -> succeeds (far tickets persisted through the revert).
         _seedClaimable(ContractAddresses.VAULT, budget + floorWei);
         vm.prank(seller);
-        game.sellFarFutureEntries(seller, levels, qtys, idxs);
+        game.sellFarFutureEntries(0, levels, qtys, idxs);
         assertEq(_ownedEntries(seller, L), 0, "seller far entries cleared on the funded buy");
         assertGe(game.claimableWinningsOf(ContractAddresses.VAULT), floorWei, "floor preserved");
     }
@@ -454,7 +454,7 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
 
         assertLe(game.claimablePoolView(), _backing(), "solvency holds before");
         vm.prank(seller);
-        game.sellFarFutureEntries(seller, levels, qtys, idxs);
+        game.sellFarFutureEntries(0, levels, qtys, idxs);
         assertLe(game.claimablePoolView(), _backing(), "solvency holds after vault buy");
     }
 
@@ -466,7 +466,7 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
 
         assertLe(game.claimablePoolView(), _backing(), "solvency holds before");
         vm.prank(seller);
-        game.sellFarFutureEntries(seller, levels, qtys, idxs);
+        game.sellFarFutureEntries(0, levels, qtys, idxs);
         assertLe(game.claimablePoolView(), _backing(), "solvency holds after afking buy");
     }
 
@@ -495,7 +495,7 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
         vm.expectEmit(true, true, false, false, address(game));
         emit FarFutureSwap(seller, ContractAddresses.SDGNRS, 0, 0, 0, 0, 0);
         vm.prank(seller);
-        game.sellFarFutureEntries(seller, levels, qtys, idxs);
+        game.sellFarFutureEntries(0, levels, qtys, idxs);
 
         assertEq(game.claimableWinningsOf(ContractAddresses.VAULT), vaultClaimBefore, "vault claimable untouched");
         assertEq(_afkOf(ContractAddresses.VAULT), vaultAfkBefore, "vault afking untouched");
@@ -512,7 +512,7 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
         _seedAfking(ContractAddresses.VAULT, 2 ether - 1);
         vm.prank(seller);
         vm.expectRevert();
-        game.sellFarFutureEntries(seller, levels, qtys, idxs);
+        game.sellFarFutureEntries(0, levels, qtys, idxs);
     }
 
     /// @notice Mixed funding: claimable is drained FIRST, then afking covers the remainder, floor preserved.
@@ -525,7 +525,7 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
 
         uint256 afkBefore = _afkOf(ContractAddresses.VAULT);
         vm.prank(seller);
-        game.sellFarFutureEntries(seller, levels, qtys, idxs);
+        game.sellFarFutureEntries(0, levels, qtys, idxs);
 
         assertEq(game.claimableWinningsOf(ContractAddresses.VAULT), 0, "claimable drained first");
         assertLt(_afkOf(ContractAddresses.VAULT), afkBefore, "afking covered the remainder");
@@ -566,7 +566,7 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
 
         (, , uint256 carryBefore, ) = coinflip.coinflipAutoRebuyInfo(ContractAddresses.SDGNRS);
         vm.prank(seller);
-        game.sellFarFutureEntries(seller, levels, qtys, idxs);
+        game.sellFarFutureEntries(0, levels, qtys, idxs);
 
         assertEq(
             coinflip.previewClaimCoinflips(ContractAddresses.SDGNRS),
@@ -660,7 +660,7 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
         vm.expectEmit(true, true, true, true, address(game));
         emit FarFutureSwap(seller, ContractAddresses.SDGNRS, 1, tb, tw, ec, bt);
         vm.prank(seller);
-        game.sellFarFutureEntries(seller, levels, qtys, idxs);
+        game.sellFarFutureEntries(0, levels, qtys, idxs);
     }
 
     /// @notice Value conservation: ethCashWei + value(flipTokens) == cashWei for every jitter word, so the
@@ -695,7 +695,7 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
 
         uint256 qlenBefore = _ffQueueLen(L); // constructor-seeded members + the seller
         vm.prank(seller);
-        game.sellFarFutureEntries(seller, levels, qtys, idxs);
+        game.sellFarFutureEntries(0, levels, qtys, idxs);
         // Seller fully sold -> popped (-1); vault already a member -> no push (+0). A double-push would
         // leave the length unchanged instead of decremented.
         assertEq(_ffQueueLen(L), qlenBefore - 1, "seller popped, vault not double-pushed");

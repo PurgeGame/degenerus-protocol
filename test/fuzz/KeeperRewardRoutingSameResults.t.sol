@@ -492,7 +492,13 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     function _fundAfking(address who, uint256 amount) internal {
         _giveWalletId(who);
         vm.deal(address(this), amount);
-        game.depositAfkingFunding{value: amount}(who);
+        game.depositAfkingFunding{value: amount}(_idOf(who));
+    }
+
+    /// @dev `who`'s wallet ID, registering one through the production hook when it has none.
+    function _idOf(address who) internal returns (uint32 id) {
+        id = game.walletIdOf(who);
+        if (id == 0) id = _giveWalletId(who);
     }
 
     /// @dev Read `who`'s lastAutoBoughtDay (_subOf slot 52, uint24 bytes 11..13 of the packed Sub slot).
@@ -615,7 +621,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         if (cost == 0) return;
         if (who.balance < cost + 1 ether) vm.deal(who, cost + 10 ether);
         vm.prank(who);
-        game.purchase{value: cost}(who, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false);
     }
 
     function _fulfillVrfIfPending(uint256 word) internal {

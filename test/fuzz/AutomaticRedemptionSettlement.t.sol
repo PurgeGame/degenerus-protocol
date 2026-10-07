@@ -138,18 +138,19 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
         vm.deal(address(sdgnrs), eth);
         vm.prank(address(0xDEAD));
         mockStETH.transfer(address(sdgnrs), st);
+        uint32 aliceId = game.walletIdOf(alice);
         vm.expectRevert(sDGNRS.Unauthorized.selector);
         vm.prank(bob);
-        sdgnrs.claimParkedRedemption(alice, day);
+        sdgnrs.claimParkedRedemption(aliceId, day);
         uint256 before = game.claimableWinningsOf(alice);
         vm.prank(alice);
-        sdgnrs.claimParkedRedemption(alice, day);
+        sdgnrs.claimParkedRedemption(0, day);
         assertGt(game.claimableWinningsOf(alice), before, "parked claim pays its direct half");
         (a,) = sdgnrs.pendingRedemptions(game.walletIdOf(alice), day);
         assertEq(a, 0);
         vm.expectRevert(sDGNRS.NoClaim.selector);
         vm.prank(alice);
-        sdgnrs.claimParkedRedemption(alice, day);
+        sdgnrs.claimParkedRedemption(0, day);
     }
 
     /// @dev The Game re-raises an out-of-gas module call as EmptyRevert(). Settlement must treat
@@ -201,7 +202,7 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
 
         vm.etch(ContractAddresses.GAME_BOON_MODULE, original);
         vm.prank(alice);
-        sdgnrs.claimParkedRedemption(alice, day);
+        sdgnrs.claimParkedRedemption(0, day);
         (a,) = sdgnrs.pendingRedemptions(game.walletIdOf(alice), day);
         assertEq(a, 0, "the parked claim settles once the dependency answers");
     }
@@ -292,9 +293,9 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
         mockStETH.transfer(address(sdgnrs), st);
         vm.recordLogs();
         vm.prank(alice);
-        sdgnrs.claimParkedRedemption(alice, day);
+        sdgnrs.claimParkedRedemption(0, day);
         vm.prank(bob);
-        sdgnrs.claimParkedRedemption(bob, day);
+        sdgnrs.claimParkedRedemption(0, day);
         assertEq(_claimTranscript(), automatic, "parked claims use the frozen cohort word");
     }
 
@@ -303,7 +304,7 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
         // A burner holds a wallet ID: the receiver gets one with a one-ticket purchase.
         vm.deal(address(receiver), 1 ether);
         vm.prank(address(receiver));
-        game.purchase{value: 0.01 ether}(address(receiver), 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: 0.01 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         uint256 amount = sdgnrs.totalSupply() / 1000;
         vm.prank(address(game));
         assertEq(sdgnrs.transferFromPool(sDGNRS.Pool.Whale, address(receiver), amount), amount);
@@ -338,7 +339,7 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
         // The self-claim is the terminal door only: a live game settles through mineFlip.
         vm.expectRevert(sDGNRS.NotGameOver.selector);
         vm.prank(alice);
-        sdgnrs.claimRedemption(alice, day);
+        sdgnrs.claimRedemption(0, day);
         bytes memory original = address(game).code;
         vm.etch(address(game), type(RedemptionTerminalSeeder).runtimeCode);
         RedemptionTerminalSeeder(payable(address(game))).end();
@@ -347,7 +348,7 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
         uint256 remaining = sdgnrs.pendingRedemptionEthValue();
         uint256 beforeBalance = alice.balance;
         vm.prank(alice);
-        sdgnrs.claimRedemption(alice, day);
+        sdgnrs.claimRedemption(0, day);
         assertEq(alice.balance - beforeBalance, remaining);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }

@@ -11,6 +11,19 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///         the intervening gap without purchases or seat draws on either skipped day.
 ///         Only the last gap word and W are retained in the tagged two-day word ring.
 contract GapDayRewalkAfkingStage is DeployProtocol {
+
+    mapping(address => uint32) private _aidCache;
+
+    /// @dev Wallet ID of `a`, registering it when it holds none. Call before any `vm.prank`.
+    function _aid(address a) internal returns (uint32 id) {
+        id = _aidCache[a];
+        if (id == 0) {
+            id = game.walletIdOf(a);
+            if (id == 0) id = _giveWalletId(a);
+            _aidCache[a] = id;
+        }
+    }
+
     // forge inspect DegenerusGame storage: _subOf@52 (address => Sub, one packed slot); slot 0 packs
     // purchaseStartDay u24 @0 · dailyIdx u24 @3 · ...
     uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;
@@ -105,9 +118,10 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
         assertEq(game.rngWordForDay(R + 2), predictedG2, "last gap word derives from W's fresh word");
         assertEq(game.rngWordForDay(W), WORD_FRESH, "W records its fresh word");
         assertEq(_dailyIdx(), W - 1, "gap credited without running either skipped day");
+        uint256 seat = _grantSeat(atk);
         vm.prank(atk);
         vm.expectRevert(RngLocked.selector);
-        game.subscribe(address(0), false, false, 2, address(0));
+        game.subscribe(0, false, false, 2, 0, seat);
 
         _advanceUntilUnlocked();
         Vm.Log[] memory sealLogs = vm.getRecordedLogs();
@@ -159,15 +173,15 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
     // ---------------------------------------------------------------- helpers
 
     function _setupSub(address who) internal {
-        _grantSeat(who);
+        uint256 seat = _grantSeat(who);
         _fundPool(who, 200 ether);
         vm.prank(who);
-        game.subscribe(address(0), false, false, 1, address(0));
+        game.subscribe(0, false, false, 1, 0, seat);
     }
 
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
-        game.depositAfkingFunding{value: amount}(who);
+        game.depositAfkingFunding{value: amount}(_aid(who));
     }
 
     function _runStageNewDay(uint256 vrfWord) internal {

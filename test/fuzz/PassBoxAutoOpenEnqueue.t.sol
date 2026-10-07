@@ -35,7 +35,7 @@ contract PassBoxAutoOpenEnqueue is DeployProtocol {
         // Whale pass at level 0: passLevel = 1 -> early price 2.4 ETH, quantity 1, no century gate.
         // The pass deposits a 10%-of-price lootbox via _recordLootboxEntry.
         vm.prank(buyer);
-        game.purchaseWhalePass{value: 2.4 ether}(buyer, 1, bytes32(0));
+        game.purchaseWhalePass{value: 2.4 ether}(0, 1, bytes32(0));
 
         assertEq(
             RecyclingState.boxCount(address(game), idx),

@@ -116,7 +116,7 @@ contract IncineratorStallAwardGuard is DeployProtocol {
         vm.prank(address(game));
         wwxrp.mintPrize(player, amount);
         vm.prank(player);
-        wwxrp.enter(amount);
+        wwxrp.enter(0, amount);
     }
 
     /// @dev Mirror of the contract's winner-roll derivation.
@@ -363,7 +363,7 @@ contract IncineratorStallAwardGuard is DeployProtocol {
         vm.prank(address(game));
         coin.mintForGame(who, amount);
         vm.prank(who);
-        coinflip.depositCoinflip(address(0), amount);
+        coinflip.depositCoinflip(0, amount);
     }
 
     function _seedNextPrizePool(uint256 targetNext) internal {
@@ -392,7 +392,7 @@ contract IncineratorStallAwardGuard is DeployProtocol {
         if (who.balance < cost) vm.deal(who, cost + 10 ether);
 
         vm.prank(who);
-        try game.purchase{value: cost}(who, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+        try game.purchase{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
     }
 
     /// @dev Fulfill any pending VRF request with a parity-forced word: even

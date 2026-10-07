@@ -45,6 +45,19 @@ import {GameSlots} from "../../helpers/GameSlots.sol";
 ///
 /// @dev Test-only: ZERO contracts/*.sol mutation.
 contract V61SolvencyAfpay is DeployProtocol {
+
+    mapping(address => uint32) private _aidCache;
+
+    /// @dev Wallet ID of `a`, registering it when it holds none. Call before any `vm.prank`.
+    function _aid(address a) internal returns (uint32 id) {
+        id = _aidCache[a];
+        if (id == 0) {
+            id = game.walletIdOf(a);
+            if (id == 0) id = _giveWalletId(a);
+            _aidCache[a] = id;
+        }
+    }
+
     V61AfkingSpendHandler public handler;
     SolvencyActionHandler public solvencyHandler;
 
@@ -190,8 +203,9 @@ contract V61SolvencyAfpay is DeployProtocol {
         _grantDeityScoreBit(p);
         uint256 afk = 50 ether;
         vm.deal(p, afk);
+        uint32 aid_ = _aid(p);
         vm.prank(p);
-        game.depositAfkingFunding{value: afk}(p); // real paired afking credit
+        game.depositAfkingFunding{value: afk}(aid_); // real paired afking credit
 
         uint256 cost = _oneTicketCost();
         uint256 ethSent = cost / 4;
@@ -202,7 +216,7 @@ contract V61SolvencyAfpay is DeployProtocol {
 
         vm.deal(p, ethSent);
         vm.prank(p);
-        game.purchase{value: ethSent}(p, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: ethSent}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
 
         assertEq(afkingBefore - game.afkingFundingOf(p), expAfkingDrawn, "afking drawn == the shortfall");
         assertEq(poolBefore - game.claimablePoolView(), expAfkingDrawn, "claimablePool dropped by exactly the afking drawn (paired debit)");
@@ -222,8 +236,9 @@ contract V61SolvencyAfpay is DeployProtocol {
 
         // Credit: deposit afking (pairs claimablePool +=).
         vm.deal(p, 30 ether);
+        uint32 aid_ = _aid(p);
         vm.prank(p);
-        game.depositAfkingFunding{value: 30 ether}(p);
+        game.depositAfkingFunding{value: 30 ether}(aid_);
         _assertIdentityHolds(_singleton3(p));
         assertEq(game.afkingFundingOf(p), 30 ether, "credit: afking high half == 30 ETH");
         assertEq(game.claimableWinningsOf(p), 0, "credit: claimable low half untouched (0)");
@@ -233,7 +248,7 @@ contract V61SolvencyAfpay is DeployProtocol {
         uint256 ethSent = cost / 5;
         vm.deal(p, ethSent);
         vm.prank(p);
-        game.purchase{value: ethSent}(p, 400, 0, bytes32(0), MintPaymentKind.Combined, false);
+        game.purchase{value: ethSent}(0, 400, 0, bytes32(0), MintPaymentKind.Combined, false);
 
         _assertIdentityHolds(_singleton3(p));
         assertEq(game.claimableWinningsOf(p), 0, "debit: claimable half STILL untouched (afking covered the shortfall)");
@@ -260,7 +275,7 @@ contract V61SolvencyAfpay is DeployProtocol {
         uint256 poolBefore = game.claimablePoolView();
         uint256 balBefore = p.balance;
         vm.prank(p);
-        game.claimWinnings(p); // the real stale-cashout claim path (debit pairs claimablePool -=)
+        game.claimWinnings(0); // the real stale-cashout claim path (debit pairs claimablePool -=)
 
         // claimWinnings drains claimable to the 1-wei sentinel; the payout is claimable - 1.
         assertEq(p.balance - balBefore, claimable - 1, "stale cashout paid out claimable to the sentinel");
@@ -280,16 +295,18 @@ contract V61SolvencyAfpay is DeployProtocol {
         address funded = makeAddr("scen_smite_funded");
         _grantDeityScoreBit(funded);
         vm.deal(funded, 40 ether);
+        uint32 aid_ = _aid(funded);
         vm.prank(funded);
-        game.depositAfkingFunding{value: 40 ether}(funded); // non-zero pool
+        game.depositAfkingFunding{value: 40 ether}(aid_); // non-zero pool
 
         (address d, uint256 dId) = _mintDeity("scen_smite_deity");
         address smitee = makeAddr("scen_smitee");
         _fundFlip(d, SMITE_BURN);
 
         uint256 poolBefore = game.claimablePoolView();
+        uint32 smiteeId = _aid(smitee);
         vm.prank(d);
-        game.smite(dId, smitee);
+        game.smite(dId, smiteeId);
 
         assertEq(game.curseCountOf(smitee), 2, "smite added a stack (non-vacuity)");
         assertEq(game.claimablePoolView(), poolBefore, "smite is pool-neutral: claimablePool moved by EXACTLY zero");
@@ -299,8 +316,9 @@ contract V61SolvencyAfpay is DeployProtocol {
         address curer = makeAddr("scen_curer");
         _fundFlip(curer, PRICE_COIN_UNIT / 10);
         uint256 poolBeforeDecurse = game.claimablePoolView();
+        _aid(smitee);
         vm.prank(curer);
-        game.decurse(smitee);
+        game.decurse(_aid(smitee));
         assertEq(game.curseCountOf(smitee), 0, "decurse cleared the curse (non-vacuity)");
         assertEq(game.claimablePoolView(), poolBeforeDecurse, "decurse is pool-neutral: claimablePool moved by EXACTLY zero");
     }

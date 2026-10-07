@@ -5,6 +5,7 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {GameAfkingModule} from "../../contracts/modules/GameAfkingModule.sol";
 import {AFKingSubscriptionToken} from "../../contracts/AFKingSubscriptionToken.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {Vm} from "forge-std/Vm.sol";
 
@@ -35,6 +36,19 @@ contract SubscriptionUpdateSeeder is DegenerusGameStorage {
 /// pre-change GameAfkingModule artifact. AFKING_UPDATE_USE_BASELINE switches
 /// the measured scenarios to that runtime with otherwise identical fixtures.
 contract SubscriptionUpdateGasTest is DeployProtocol {
+
+    mapping(address => uint32) private _aidCache;
+
+    /// @dev Wallet ID of `a`, registering it when it holds none. Call before any `vm.prank`.
+    function _aid(address a) internal returns (uint32 id) {
+        id = _aidCache[a];
+        if (id == 0) {
+            id = game.walletIdOf(a);
+            if (id == 0) id = _giveWalletId(a);
+            _aidCache[a] = id;
+        }
+    }
+
     address private constant PLAYER = address(0xA11CE);
     address private constant SOURCE_A = address(0xF001);
     address private constant SOURCE_B = address(0xF002);
@@ -48,11 +62,11 @@ contract SubscriptionUpdateGasTest is DeployProtocol {
         vm.warp(block.timestamp + 1 days);
         seatId = _grantSeat(PLAYER);
         vm.deal(address(this), 300 ether);
-        game.depositAfkingFunding{value: 100 ether}(PLAYER);
-        game.depositAfkingFunding{value: 100 ether}(SOURCE_A);
-        game.depositAfkingFunding{value: 100 ether}(SOURCE_B);
-        vm.prank(SOURCE_A); game.setOperatorApproval(PLAYER, true);
-        vm.prank(SOURCE_B); game.setOperatorApproval(PLAYER, true);
+        game.depositAfkingFunding{value: 100 ether}(_aid(PLAYER));
+        game.depositAfkingFunding{value: 100 ether}(_aid(SOURCE_A));
+        game.depositAfkingFunding{value: 100 ether}(_aid(SOURCE_B));
+        vm.prank(SOURCE_A); game.setOperatorApproval(0, PLAYER, true);
+        vm.prank(SOURCE_B); game.setOperatorApproval(0, PLAYER, true);
         candidateCode = address(afkingModule).code;
         string memory path = vm.envOr("AFKING_UPDATE_BASELINE_FILE", string(""));
         if (bytes(path).length != 0) baselineCode = vm.parseJsonBytes(vm.readFile(path), ".runtime");
@@ -62,8 +76,22 @@ contract SubscriptionUpdateGasTest is DeployProtocol {
         }
     }
 
+    function _srcId(address source) private returns (uint32) {
+        return source == address(0) ? 0 : _aid(source);
+    }
+
+    function _subscribeRaw(uint8 quantity, uint32 sourceId, uint256 seat) private {
+        vm.prank(PLAYER); game.subscribe(0, false, true, quantity, sourceId, seat);
+    }
+
     function _subscribe(uint8 quantity, address source) private {
-        vm.prank(PLAYER); game.subscribe(address(0), false, true, quantity, source);
+        uint32 sourceId = _srcId(source);
+        uint256 seat = quantity == 0 ? 0 : _grantSeat(PLAYER);
+        _subscribeRaw(quantity, sourceId, seat);
+    }
+
+    function _qty() private view returns (uint8) {
+        return uint8(uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(PLAYER)), GameSlots.SUB_OF)))));
     }
 
     function _source(uint8 index) private pure returns (address) {
@@ -86,9 +114,11 @@ contract SubscriptionUpdateGasTest is DeployProtocol {
     }
 
     function _measure(string memory label, uint8 quantity, address source) private {
+        uint32 sourceId = _srcId(source);
+        uint256 seat = _grantSeat(PLAYER);
         vm.recordLogs();
         vm.startStateDiffRecording();
-        _subscribe(quantity, source);
+        _subscribeRaw(quantity, sourceId, seat);
         uint256 gasUsed = vm.snapshotGasLastCall("subscription-update", label);
         (bytes32 state, uint256 reads, uint256 writes) = _digest(vm.stopAndReturnStateDiff());
         bytes32 events = keccak256(abi.encode(vm.getRecordedLogs()));
@@ -116,24 +146,21 @@ contract SubscriptionUpdateGasTest is DeployProtocol {
         assertEq(flags & 1, 0);
     }
 
-    function test_ActiveUpdateKeepsLastSeatLocked() public {
-        _subscribe(1, address(0)); _subscribe(2, address(0));
-        vm.prank(PLAYER); vm.expectRevert(AFKingSubscriptionToken.SeatInUse.selector);
-        afkingSubToken.transferFrom(PLAYER, BUYER, seatId);
-        vm.expectRevert(AFKingSubscriptionToken.NotEvicted.selector);
-        afkingSubToken.reclaimSeat(seatId);
-        assertEq(afkingSubToken.balanceOf(PLAYER), 1);
+    function test_ActiveUpdateBurnsNoSeat() public {
+        _subscribe(1, address(0));
+        assertEq(afkingSubToken.balanceOf(PLAYER), 0, "the new run burned the seat");
+        uint256 seat = _grantSeat(PLAYER);
+        _subscribeRaw(2, 0, seat);
+        assertEq(afkingSubToken.balanceOf(PLAYER), 1, "a change of a live run burns no seat");
+        assertEq(afkingSubToken.ownerOf(seat), PLAYER);
     }
 
-    function test_CancelSellStillRequiresSeatOnReentry() public {
+    function test_ReentryAfterCancelNeedsANewSeat() public {
         _subscribe(1, address(0)); _subscribe(0, address(0));
-        vm.prank(PLAYER); afkingSubToken.transferFrom(PLAYER, BUYER, seatId);
-        vm.prank(PLAYER); vm.expectRevert(GameAfkingModule.NoCoin.selector);
-        game.subscribe(address(0), false, true, 2, address(0));
-        vm.prank(BUYER); afkingSubToken.transferFrom(BUYER, PLAYER, seatId);
+        vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
+        _subscribeRaw(2, 0, seatId);
         _subscribe(2, address(0));
-        (bool active, uint8 quantity,,) = game.subInfo(PLAYER);
-        assertTrue(active); assertEq(quantity, 2);
+        assertEq(_qty(), 2);
     }
 
     function testFuzz_TransitionMatchesHistoricalRuntime(
@@ -145,8 +172,10 @@ contract SubscriptionUpdateGasTest is DeployProtocol {
             _subscribe(0, _source(initialSource));
             if (lifecycle % 3 == 2) _reclaimCanceled();
         }
+        uint32 nextSourceId = _srcId(_source(nextSource));
+        uint256 fuzzSeat = _grantSeat(PLAYER);
         bytes memory callData = abi.encodeWithSelector(
-            game.subscribe.selector, address(0), drainFirst, tickets, quantity, _source(nextSource)
+            game.subscribe.selector, uint32(0), drainFirst, tickets, quantity, nextSourceId, fuzzSeat
         );
         uint256 snapshot = vm.snapshotState();
         vm.etch(address(afkingModule), baselineCode);

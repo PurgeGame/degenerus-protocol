@@ -71,6 +71,19 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///      `amount` after the AFKing Subscription Token credential deleted the stored `validThroughLevel` pass horizon).
 ///      Test-only: ZERO contracts/*.sol mutated.
 contract V56AfkingGasMarginal is DeployProtocol {
+
+    mapping(address => uint32) private _aidCache;
+
+    /// @dev Wallet ID of `a`, registering it when it holds none. Call before any `vm.prank`.
+    function _aid(address a) internal returns (uint32 id) {
+        id = _aidCache[a];
+        if (id == 0) {
+            id = game.walletIdOf(a);
+            if (id == 0) id = _giveWalletId(a);
+            _aidCache[a] = id;
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Game-resident storage slots (forge inspect DegenerusGame storageLayout, v61)
     // -------------------------------------------------------------------------
@@ -752,10 +765,10 @@ contract V56AfkingGasMarginal is DeployProtocol {
             if (uint16(seed >> 40) % 20 == 19) subs[found++] = who;
         }
         for (uint256 i; i < m; ++i) {
-            _grantSeat(subs[i]);
+            uint256 seat = _grantSeat(subs[i]);
             _fundPool(subs[i], 5 ether);
             vm.prank(subs[i]);
-            game.subscribe(address(0), false, false, 1, address(0));
+            game.subscribe(0, false, false, 1, 0, seat);
         }
         _stampNewDay(word);
         require(_readStampDay(subs) == day, "fixture: the forced boxes are stamped for the predicted day");
@@ -838,10 +851,10 @@ contract V56AfkingGasMarginal is DeployProtocol {
         _setupFundedSubs(AFKING_PADS, "v_pad_", 5 ether, false);
         // AFKING backlog: a funded lootbox sub gets a stamped box.
         address afk = makeAddr("v_afk");
-        _grantSeat(afk);
+        uint256 seat = _grantSeat(afk);
         _fundPool(afk, 5 ether); // fund BEFORE subscribe to ground the NEW-run cover-buy (D-12)
         vm.prank(afk);
-        game.subscribe(address(0), false, false, 1, address(0));
+        game.subscribe(0, false, false, 1, 0, seat);
         _settleGame(0xA0F1 ^ 0xF00D);
         _finishIndexedReadConsumers();
 
@@ -850,7 +863,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         address human = makeAddr("v_human");
         vm.deal(human, 5 ether);
         vm.prank(human);
-        game.purchase{value: 1.01 ether}(human, 400, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: 1.01 ether}(0, 400, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
 
         _stampNewDay(0xA0F1);
         address[] memory subject = new address[](1);
@@ -954,10 +967,10 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // Stop at the session's AFKing stage with the subject pending (padding subs ahead in the ring).
         _setupFundedSubs(AFKING_PADS, "vsel_pad_", 5 ether, false);
         address afk = makeAddr("vsel_afk");
-        _grantSeat(afk);
+        uint256 seat = _grantSeat(afk);
         _fundPool(afk, 5 ether); // fund BEFORE subscribe to ground the NEW-run cover-buy (D-12)
         vm.prank(afk);
-        game.subscribe(address(0), false, false, 1, address(0));
+        game.subscribe(0, false, false, 1, 0, seat);
         _stampNewDay(0xE0F1);
         address[] memory subject = new address[](1);
         subject[0] = afk;
@@ -1064,10 +1077,10 @@ contract V56AfkingGasMarginal is DeployProtocol {
         for (uint256 i; i < n; ++i) {
             address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
             subs[i] = who;
-            _grantSeat(who);
+            uint256 seat = _grantSeat(who);
             _fundPool(who, 5 ether);
             vm.prank(who);
-            game.subscribe(address(0), false, false, 1, address(0));
+            game.subscribe(0, false, false, 1, 0, seat);
         }
         // OPEN the grounded subscribe's pending boxes first — the no-orphan guard dominates the funding-kill
         // branch, so a pending-box sub would be skipped, not killed. Then drain each sub's remaining
@@ -1079,7 +1092,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
             uint256 bal = game.afkingFundingOf(subs[i]);
             if (bal > 0) {
                 vm.prank(subs[i]);
-                game.withdrawAfkingFunding(bal);
+                game.withdrawAfkingFunding(0, bal);
             }
         }
         uint256 preCount = _subscriberCount();
@@ -1203,13 +1216,13 @@ contract V56AfkingGasMarginal is DeployProtocol {
         for (uint256 i; i < n; ++i) {
             address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
             subs[i] = who;
-            _grantSeat(who);
+            uint256 seat = _grantSeat(who);
             // Fund BEFORE subscribe so the grounded NEW-run cover-buy is funded (D-12 — an unfunded start
             // reverts MustPurchaseToBeginAfking).
             _fundPool(who, poolEach);
             vm.prank(who);
             // self, mode = isTicket, qty 1, reinvest 0, self-funded
-            game.subscribe(address(0), false, isTicket, 1, address(0));
+            game.subscribe(0, false, isTicket, 1, 0, seat);
         }
     }
 
@@ -1241,7 +1254,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // earlier paying action; registration returns the existing ID when there is one.
         _giveWalletId(who);
         vm.deal(address(this), amount);
-        game.depositAfkingFunding{value: amount}(who);
+        game.depositAfkingFunding{value: amount}(_aid(who));
     }
 
     /// @dev Finish the current day, then open a NEW day up to its daily request: the subscriber STAGE
@@ -1611,10 +1624,10 @@ contract V56AfkingGasMarginal is DeployProtocol {
         for (uint256 i; i < n; ++i) {
             address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
             subs[i] = who;
-            _grantSeat(who);
+            uint256 seat = _grantSeat(who);
             _fundPool(who, 5 ether);
             vm.prank(who);
-            game.subscribe(address(0), false, false, 1, address(0));
+            game.subscribe(0, false, false, 1, 0, seat);
         }
         vm.startPrank(makeAddr(string(abi.encodePacked(prefix, "ev_open"))));
         _mineAll(64);
@@ -1623,7 +1636,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
             uint256 bal = game.afkingFundingOf(subs[i]);
             if (bal > 0) {
                 vm.prank(subs[i]);
-                game.withdrawAfkingFunding(bal);
+                game.withdrawAfkingFunding(0, bal);
             }
         }
         uint256 preCount = _subscriberCount();
@@ -1726,7 +1739,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
             uint256 funding = game.afkingFundingOf(players[i]);
             if (funding != 0) {
                 vm.prank(players[i]);
-                game.withdrawAfkingFunding(funding);
+                game.withdrawAfkingFunding(0, funding);
             }
         }
         _warpToBoundary(false);
@@ -1862,11 +1875,11 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // THE STRUCTURAL PROTECTION: a NEW subscribe in this exact window REVERTS — so no buy-sub can join the
         // re-opened chunk. The v45 freeze invariant IS the reason the composition can never carry a heavy chunk.
         address newBuyer = makeAddr("frzbuf_newbuyer");
-        _grantSeat(newBuyer);
+        uint256 seat = _grantSeat(newBuyer);
         _fundPool(newBuyer, 50 ether);
         vm.prank(newBuyer);
         vm.expectRevert(); // RngLocked() — GameAfkingModule:328, blocks create/replace/cancel under the lock
-        game.subscribe(address(0), false, false, 1, address(0));
+        game.subscribe(0, false, false, 1, 0, seat);
 
         // THE ENTRY GATE, proven organically: drive the buffered-clamp consuming drain and
         // assert the subscriber STAGE did not run in ANY locked call — zero PlayerSkipped
@@ -1935,5 +1948,4 @@ contract V56AfkingGasMarginal is DeployProtocol {
             require(_lastBoughtDayOf(subs[i]) == processDay + 5, "skip non-vacuity: each sub skipped (not re-stamped)");
         }
     }
-
 }

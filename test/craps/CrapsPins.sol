@@ -80,6 +80,41 @@ contract MockGame {
         score[player] = s;
     }
 
+    /// @dev Smurf owner lane (smurf ID => owner ID) and per-ID operator approvals, mirroring the
+    ///      Game's account rule for `resolveAccount`.
+    mapping(uint32 => uint32) public smurfOwnerOf;
+    mapping(uint32 => mapping(address => bool)) public operatorApproved;
+
+    error E();
+
+    /// @dev Allocate `key` as a smurf of `ownerId` (the next ID), as Game `createSmurf` does.
+    function registerSmurf(address key, uint32 ownerId) external returns (uint32 id) {
+        id = ++walletCount;
+        walletIdOf[key] = id;
+        ownerOfId[id] = key;
+        smurfOwnerOf[id] = ownerId;
+        slots[GameSlotKeys.walletElement(id)] = bytes32(uint256(uint160(key)) | (uint256(ownerId) << 160));
+    }
+
+    function setOperatorApproval(uint32 id, address operator, bool approved) external {
+        operatorApproved[id][operator] = approved;
+    }
+
+    /// @dev The Game's account resolution: key, payee (the owner's key for a smurf) and whether
+    ///      `caller` is the payee or an operator approved for `id`. Reverts `E` for 0 or unallocated.
+    function resolveAccount(uint32 id, address caller)
+        external
+        view
+        returns (address key, address payee, bool authorized)
+    {
+        if (id == 0 || id > walletCount) revert E();
+        key = ownerOfId[id];
+        uint32 owner = smurfOwnerOf[id];
+        payee = owner == 0 ? key : ownerOfId[owner];
+        authorized = payee == caller || operatorApproved[id][caller];
+    }
+
+
     function extsload(bytes32 slot) external view returns (bytes32) {
         return slots[slot];
     }

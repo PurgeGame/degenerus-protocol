@@ -103,7 +103,7 @@ contract WardenLbxClosingBoxOrder is DeployProtocol {
         vm.deal(buyer, amount);
         position = RecyclingState.boxCount(address(game), _lrIndex());
         vm.prank(buyer);
-        game.buyPresaleBox{value: amount}(buyer, amount);
+        game.buyPresaleBox{value: amount}(0, amount);
         assertEq(RecyclingState.boxCount(address(game), _lrIndex()), position + 1, "one entry per purchase");
     }
 

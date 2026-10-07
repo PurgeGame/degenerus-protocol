@@ -63,7 +63,7 @@ contract CrapsCompDonationTest is DeployProtocol {
         vault.setCrapsCompAllowance(delegate, 25_800);
         uint256[] memory codes = new uint256[](1);
         // Bank one normal day pass for the player: 24,800 FLIP.
-        codes[0] = uint256(uint160(player)) | (uint256(4) << 160) | (uint256(1) << 200);
+        codes[0] = uint256(game.walletIdOf(player)) | (uint256(4) << 160) | (uint256(1) << 200);
         vm.prank(delegate);
         vault.crapsComp(codes);
         assertEq(vault.crapsCompAllowanceOf(delegate), 1_000);

@@ -11,7 +11,6 @@ import {
   eth,
   getEvents,
   getEvent,
-  ZERO_ADDRESS,
 } from "../helpers/testUtils.js";
 
 /*
@@ -57,7 +56,7 @@ async function giveFlip(coin, player, amount, minterAddr) {
  * player's balance — no approval needed.
  */
 async function deposit(coinflip, player, amount) {
-  return coinflip.connect(player).depositCoinflip(ZERO_ADDRESS, amount);
+  return coinflip.connect(player).depositCoinflip(0, amount);
 }
 
 /**
@@ -196,8 +195,8 @@ describe("Coinflip", function () {
       // player's). Fund bob, then gift to alice.
       await giveFlip(coin, bob, flip(500), await coinflip.getAddress());
       // A gift recipient pays nothing, so it must already hold a wallet ID.
-      await giveWalletId(game, alice.address);
-      const tx = await coinflip.connect(bob).depositCoinflip(alice.address, flip(200));
+      const aliceId = await giveWalletId(game, alice.address);
+      const tx = await coinflip.connect(bob).depositCoinflip(aliceId, flip(200));
       const ev = await getEvent(tx, coinflip, "CoinflipDeposit");
       expect(ev.args.player).to.equal(alice.address);
       expect(ev.args.creditedFlip).to.equal(flip(200));
@@ -207,7 +206,7 @@ describe("Coinflip", function () {
 
     it("zero amount deposit emits CoinflipDeposit with amount 0", async function () {
       const { coinflip, alice } = await loadFixture(deployFullProtocol);
-      const tx = await coinflip.connect(alice).depositCoinflip(ZERO_ADDRESS, 0);
+      const tx = await coinflip.connect(alice).depositCoinflip(0, 0);
       const ev = await getEvent(tx, coinflip, "CoinflipDeposit");
       expect(ev.args.creditedFlip).to.equal(0n);
     });
@@ -390,8 +389,8 @@ describe("Coinflip", function () {
       // (funded from bob's own FLIP) — and per _addDailyFlip, an indirect deposit
       // (player != msg.sender) never arms the flip record, however large.
       await giveFlip(coin, bob, flip(400_000), await coinflip.getAddress());
-      await giveWalletId(game, alice.address);
-      const tx = await coinflip.connect(bob).depositCoinflip(alice.address, flip(300_000));
+      const aliceId = await giveWalletId(game, alice.address);
+      const tx = await coinflip.connect(bob).depositCoinflip(aliceId, flip(300_000));
       const evs = await getEvents(tx, coinflip, "BigRecordUpdated");
       expect(evs.length).to.equal(0);
       expect(await coinflip.biggestFlipEver()).to.equal(0n);
@@ -594,7 +593,7 @@ describe("Coinflip", function () {
       const { coinflip, game, alice } = await loadFixture(deployFullProtocol);
       expect(await game.rngLocked()).to.equal(false);
       await expect(
-        coinflip.connect(alice).claimCoinflips(ZERO_ADDRESS, flip(100))
+        coinflip.connect(alice).claimCoinflips(0, flip(100))
       ).to.not.be.revertedWithCustomError(coinflip, "RngLocked");
     });
 
@@ -602,7 +601,7 @@ describe("Coinflip", function () {
       const { coinflip, alice } = await loadFixture(deployFullProtocol);
       const claimed = await coinflip
         .connect(alice)
-        .claimCoinflips.staticCall(ZERO_ADDRESS, flip(100));
+        .claimCoinflips.staticCall(0, flip(100));
       expect(claimed).to.equal(0n);
     });
 
@@ -610,15 +609,16 @@ describe("Coinflip", function () {
       const { coinflip, alice } = await loadFixture(deployFullProtocol);
       // No balance, but call should not revert with access error
       await expect(
-        coinflip.connect(alice).claimCoinflips(alice.address, flip(100))
+        coinflip.connect(alice).claimCoinflips(0, flip(100))
       ).to.not.be.reverted;
     });
 
     it("claimCoinflips reverts with NotApproved when operator not approved", async function () {
-      const { coinflip, alice, bob } = await loadFixture(deployFullProtocol);
+      const { coinflip, game, alice, bob } = await loadFixture(deployFullProtocol);
+      const aliceId = await giveWalletId(game, alice.address);
       // bob tries to claim on behalf of alice without approval
       await expect(
-        coinflip.connect(bob).claimCoinflips(alice.address, flip(100))
+        coinflip.connect(bob).claimCoinflips(aliceId, flip(100))
       ).to.be.revertedWithCustomError(coinflip, "NotApproved");
     });
 
@@ -873,7 +873,7 @@ describe("Coinflip", function () {
       await applyToday(hre.ethers, game, coinflip);
       const tx = await coinflip
         .connect(alice)
-        .setCoinflipAutoRebuy(ZERO_ADDRESS, true, flip(1000));
+        .setCoinflipAutoRebuy(0, true, flip(1000));
       const ev = await getEvent(tx, coinflip, "CoinflipAutoRebuyToggled");
       expect(ev.args.player).to.equal(alice.address);
       expect(ev.args.enabled).to.equal(true);
@@ -884,7 +884,7 @@ describe("Coinflip", function () {
       await applyToday(hre.ethers, game, coinflip);
       const tx = await coinflip
         .connect(alice)
-        .setCoinflipAutoRebuy(ZERO_ADDRESS, true, flip(5000));
+        .setCoinflipAutoRebuy(0, true, flip(5000));
       const ev = await getEvent(tx, coinflip, "CoinflipAutoRebuyStopSet");
       expect(ev.args.stopAmount).to.equal(flip(5000));
     });
@@ -894,11 +894,11 @@ describe("Coinflip", function () {
       await applyToday(hre.ethers, game, coinflip);
       await coinflip
         .connect(alice)
-        .setCoinflipAutoRebuy(ZERO_ADDRESS, true, flip(1000));
+        .setCoinflipAutoRebuy(0, true, flip(1000));
       await expect(
         coinflip
           .connect(alice)
-          .setCoinflipAutoRebuy(ZERO_ADDRESS, true, flip(1000))
+          .setCoinflipAutoRebuy(0, true, flip(1000))
       ).to.be.revertedWithCustomError(coinflip, "AutoRebuyAlreadyEnabled");
     });
 
@@ -907,10 +907,10 @@ describe("Coinflip", function () {
       await applyToday(hre.ethers, game, coinflip);
       await coinflip
         .connect(alice)
-        .setCoinflipAutoRebuy(ZERO_ADDRESS, true, flip(1000));
+        .setCoinflipAutoRebuy(0, true, flip(1000));
       const tx = await coinflip
         .connect(alice)
-        .setCoinflipAutoRebuy(ZERO_ADDRESS, false, 0n);
+        .setCoinflipAutoRebuy(0, false, 0n);
       const ev = await getEvent(tx, coinflip, "CoinflipAutoRebuyToggled");
       expect(ev.args.enabled).to.equal(false);
     });
@@ -920,7 +920,7 @@ describe("Coinflip", function () {
       await applyToday(hre.ethers, game, coinflip);
       await coinflip
         .connect(alice)
-        .setCoinflipAutoRebuy(ZERO_ADDRESS, true, flip(2000));
+        .setCoinflipAutoRebuy(0, true, flip(2000));
       const info = await coinflip.coinflipAutoRebuyInfo(alice.address);
       expect(info.enabled).to.equal(true);
       expect(info.stop).to.equal(flip(2000));
@@ -929,8 +929,8 @@ describe("Coinflip", function () {
     it("coinflipAutoRebuyInfo enabled=false after disabling", async function () {
       const { game, coinflip, alice } = await loadFixture(deployFullProtocol);
       await applyToday(hre.ethers, game, coinflip);
-      await coinflip.connect(alice).setCoinflipAutoRebuy(ZERO_ADDRESS, true, flip(1000));
-      await coinflip.connect(alice).setCoinflipAutoRebuy(ZERO_ADDRESS, false, 0n);
+      await coinflip.connect(alice).setCoinflipAutoRebuy(0, true, flip(1000));
+      await coinflip.connect(alice).setCoinflipAutoRebuy(0, false, 0n);
       const info = await coinflip.coinflipAutoRebuyInfo(alice.address);
       expect(info.enabled).to.equal(false);
     });
@@ -947,19 +947,19 @@ describe("Coinflip", function () {
 
       // Arming: open even though today is unapplied.
       await expect(
-        coinflip.connect(alice).setCoinflipAutoRebuy(ZERO_ADDRESS, true, flip(1000))
+        coinflip.connect(alice).setCoinflipAutoRebuy(0, true, flip(1000))
       ).to.not.be.reverted;
 
       // Now armed, the EXIT would cash the carry out, so it is frozen.
       await expect(
-        coinflip.connect(alice).setCoinflipAutoRebuy(ZERO_ADDRESS, false, 0)
+        coinflip.connect(alice).setCoinflipAutoRebuy(0, false, 0)
       ).to.be.revertedWithCustomError(coinflip, "RngLocked");
 
       // ...and opens the moment today's word is processed.
       await applyToday(hre.ethers, game, coinflip);
       expect(await coinflip.flipResolvedToday()).to.equal(true);
       await expect(
-        coinflip.connect(alice).setCoinflipAutoRebuy(ZERO_ADDRESS, false, 0)
+        coinflip.connect(alice).setCoinflipAutoRebuy(0, false, 0)
       ).to.not.be.reverted;
     });
   });
@@ -971,7 +971,7 @@ describe("Coinflip", function () {
       await expect(
         coinflip
           .connect(alice)
-          .setCoinflipAutoRebuyTakeProfit(ZERO_ADDRESS, flip(1000))
+          .setCoinflipAutoRebuyTakeProfit(0, flip(1000))
       ).to.be.revertedWithCustomError(coinflip, "AutoRebuyNotEnabled");
     });
 
@@ -980,10 +980,10 @@ describe("Coinflip", function () {
       await applyToday(hre.ethers, game, coinflip);
       await coinflip
         .connect(alice)
-        .setCoinflipAutoRebuy(ZERO_ADDRESS, true, flip(1000));
+        .setCoinflipAutoRebuy(0, true, flip(1000));
       const tx = await coinflip
         .connect(alice)
-        .setCoinflipAutoRebuyTakeProfit(ZERO_ADDRESS, flip(3000));
+        .setCoinflipAutoRebuyTakeProfit(0, flip(3000));
       const ev = await getEvent(tx, coinflip, "CoinflipAutoRebuyStopSet");
       expect(ev.args.stopAmount).to.equal(flip(3000));
       const info = await coinflip.coinflipAutoRebuyInfo(alice.address);
@@ -1049,7 +1049,7 @@ describe("Coinflip", function () {
     it("coinflipAutoRebuyInfo startDay is lastClaim day when enabled", async function () {
       const { game, coinflip, alice } = await loadFixture(deployFullProtocol);
       await applyToday(hre.ethers, game, coinflip);
-      await coinflip.connect(alice).setCoinflipAutoRebuy(ZERO_ADDRESS, true, flip(1000));
+      await coinflip.connect(alice).setCoinflipAutoRebuy(0, true, flip(1000));
       const info = await coinflip.coinflipAutoRebuyInfo(alice.address);
       // carry should be 0 initially
       expect(info.carry).to.equal(0n);
@@ -1093,7 +1093,7 @@ describe("Coinflip", function () {
 
       // Claim should succeed and mint tokens
       await expect(
-        coinflip.connect(alice).claimCoinflips(ZERO_ADDRESS, preview)
+        coinflip.connect(alice).claimCoinflips(0, preview)
       ).to.not.be.reverted;
     });
 
@@ -1112,7 +1112,7 @@ describe("Coinflip", function () {
       await resolveDay(hre.ethers, game, coinflip, epoch, 2n);
 
       // Claim triggers WWXRP mint for losses
-      await coinflip.connect(alice).claimCoinflips(ZERO_ADDRESS, flip(999999));
+      await coinflip.connect(alice).claimCoinflips(0, flip(999999));
 
       const wwxrpBal = await wwxrp.balanceOf(alice.address);
       expect(wwxrpBal).to.be.gte(flip(1)); // 1 WWXRP per loss
@@ -1127,7 +1127,7 @@ describe("Coinflip", function () {
       await giveFlip(coin, alice, flip(5000), await coinflip.getAddress());
 
       // Enable auto-rebuy with no take profit (all carries forward)
-      await coinflip.connect(alice).setCoinflipAutoRebuy(ZERO_ADDRESS, true, 0n);
+      await coinflip.connect(alice).setCoinflipAutoRebuy(0, true, 0n);
 
       // First deposit
       await deposit(coinflip, alice, flip(1000));
@@ -1137,7 +1137,7 @@ describe("Coinflip", function () {
       await resolveDay(hre.ethers, game, coinflip, currentDay + 1n, 1n);
 
       // Disable auto-rebuy to collect winnings
-      const tx = await coinflip.connect(alice).setCoinflipAutoRebuy(ZERO_ADDRESS, false, 0n);
+      const tx = await coinflip.connect(alice).setCoinflipAutoRebuy(0, false, 0n);
       // Should emit CoinflipAutoRebuyToggled(false)
       const ev = await getEvent(tx, coinflip, "CoinflipAutoRebuyToggled");
       expect(ev.args.enabled).to.equal(false);

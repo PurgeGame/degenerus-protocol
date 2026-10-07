@@ -191,9 +191,9 @@ contract FinalSweepPayoutLegs is DeployProtocol {
     function test_aShortfallSplitsWhatExistsProRata() public {
         _driveToGameOver();
         vm.deal(address(this), 21 ether);
-        game.depositAfkingFunding{value: 12 ether}(ContractAddresses.VAULT);
-        game.depositAfkingFunding{value: 6 ether}(ContractAddresses.SDGNRS);
-        game.depositAfkingFunding{value: 3 ether}(ContractAddresses.GNRUS);
+        game.depositAfkingFunding{value: 12 ether}(game.walletIdOf(ContractAddresses.VAULT));
+        game.depositAfkingFunding{value: 6 ether}(game.walletIdOf(ContractAddresses.SDGNRS));
+        game.depositAfkingFunding{value: 3 ether}(game.walletIdOf(ContractAddresses.GNRUS));
         uint256 oV = _owed(ContractAddresses.VAULT);
         uint256 oS = _owed(ContractAddresses.SDGNRS);
         uint256 oG = _owed(ContractAddresses.GNRUS);

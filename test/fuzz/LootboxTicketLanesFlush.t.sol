@@ -54,7 +54,7 @@ contract LootboxTicketLanesFlush is DeployProtocol {
         (, , , , uint256 priceWei) = game.purchaseInfo();
         if (priceWei != 0 && priceWei <= actor.balance) {
             vm.prank(actor);
-            try game.purchase{value: priceWei}(actor, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+            try game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         }
         for (uint256 i; i < 10 && !game.rngLocked(); i++) {
             vm.warp(block.timestamp + 1 days);
@@ -146,7 +146,7 @@ contract LootboxTicketLanesFlush is DeployProtocol {
         // Thirty smalls spread over the target band, plus a one-ETH custom so the pending ETH
         // clears the mid-day request threshold.
         vm.prank(actor);
-        game.purchase{value: 30 * priceWei + 2 ether}(actor, 400, BoxOrderLib.boOrder(30, 0, 0, 1, 1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: 30 * priceWei + 2 ether}(0, 400, BoxOrderLib.boOrder(30, 0, 0, 1, 1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         uint256 reqId = _mineMiddayRequest(actor);
         uint256 base = game.level();
 

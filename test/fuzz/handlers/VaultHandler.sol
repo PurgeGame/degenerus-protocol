@@ -128,7 +128,7 @@ contract VaultHandler is Test {
 
         vm.prank(currentActor);
         try game.purchase{value: cost}(
-            currentActor,
+            0,
             qty,
             0,
             bytes32(0),

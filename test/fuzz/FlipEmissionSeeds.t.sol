@@ -214,7 +214,7 @@ contract FlipEmissionSeeds is DeployProtocol {
 
         uint256 allowanceBefore = coin.vaultMintAllowance();
         vm.prank(VAULT);
-        uint256 claimed = coinflip.claimCoinflips(address(0), type(uint256).max);
+        uint256 claimed = coinflip.claimCoinflips(0, type(uint256).max);
 
         assertEq(claimed, expected, "vault claim settles every survived seed payout");
         // VAULT mints redirect to the uncirculated allowance leg.

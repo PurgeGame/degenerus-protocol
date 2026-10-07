@@ -353,5 +353,4 @@ NOT-RNG	PARAM	word	_appendBoxOrder	modules/DegenerusGameMintModule.sol	packed bo
 NOT-RNG	PARAM	word	applyBoxOrderScore	modules/DegenerusGameLootboxModule.sol	in-flight packed box entry gaining its score and EV fraction; not a VRF value
 NOT-RNG	PARAM	word	_boxEntryCount	storage/DegenerusGameStorage.sol	counts the boxes of a packed box entry; not a VRF value
 NOT-RNG	PARAM	word	_buyPresaleBoxFor	modules/DegenerusGameMintModule.sol	the same call's in-flight ordinary entry the presale fields join; not a VRF value
-NOT-RNG	PARAM	word	_account	CrapsBattle.sol	The caller's Craps address word (board, INITIALIZED, cached wallet ID); packs msg.sender with the ID; contains no RNG value.
-NOT-RNG	PARAM	word	_rememberBoard	CrapsBattle.sol	The caller's Craps address word (board, INITIALIZED, cached wallet ID) from the door prologue; contains no RNG value.
+NOT-RNG	PARAM	word	_rememberBoard	CrapsBattle.sol	The account's Craps address word (board, INITIALIZED, cached wallet ID) from the door prologue; contains no RNG value.

@@ -294,7 +294,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
 
     /// @notice No second free-tranche seat: the automatic purchase leaves the seat token untouched.
     function test_NoSecondSeat_OnAutomaticPurchase() public {
-        uint16 serial0 = afkingSubToken.nextSerial();
+        uint32 serial0 = afkingSubToken.nextSerial();
         _runLevelStage(4, 1_000 ether, 0x5D70700);
         (bool bought,,) = _lastWhalePurchase();
         assertTrue(bought, "fixture: bought");
@@ -377,7 +377,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
         uint256 pool0 = sdgnrs.poolBalance(sDGNRS.Pool.Whale);
         uint256 bal0 = sdgnrs.balanceOf(whale);
         vm.prank(whale);
-        game.purchaseWhalePass{value: 20 ether}(whale, 5, bytes32(0));
+        game.purchaseWhalePass{value: 20 ether}(0, 5, bytes32(0));
         uint256 remaining = pool0;
         for (uint256 i; i < 5; ++i) remaining -= remaining / 100;
         assertEq(sdgnrs.poolBalance(sDGNRS.Pool.Whale), remaining, "player: pool after == recurrence");

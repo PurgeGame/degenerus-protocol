@@ -38,7 +38,7 @@ pragma solidity 0.8.34;
  *      [120-143] FROZEN_UNTIL_LEVEL_SHIFT    - Frozen level for lazy/whale passes (24 bits)
  *      [144-145] WHALE_PASS_TYPE_SHIFT       - Pass type (2 bits: 0=none, 1=lazy/10-lvl, 3=whale/100-lvl)
  *      [146]     SEAT_CLAIMED_SHIFT          - AFKing seat mint latch (1 bit)
- *      [147]     SEAT_ENCUMBERED_SHIFT       - AFKing seat encumbrance latch (1 bit)
+ *      [147]     SMURF_FLAG_SHIFT            - Smurf account flag (1 bit; written only by createSmurf)
  *      [148-171] MINT_STREAK_LAST_COMPLETED  - Last level credited for mint streak (24 bits, managed by MintStreakUtils)
  *      [172]     HAS_DEITY_PASS_SHIFT        - Deity pass flag (1 bit)
  *      [173-196] AFFILIATE_BONUS_LEVEL_SHIFT - Cached affiliate bonus level (24 bits)
@@ -90,24 +90,19 @@ library BitPackingLib {
     uint256 internal constant WHALE_PASS_TYPE_SHIFT = 144;
 
     /// @notice Bit position for the AFKing seat latch (bit 146). Set on an
-    ///         address's FIRST pass PURCHASE (whale/lazy/deity), which is also
-    ///         when the seat is minted; one free-tranche seat per address,
-    ///         ever. Passes that are won (the whale-pass claim lane) or
-    ///         conferred (a deity buyer's affiliate) never set it. This bit is
-    ///         the sole once-per-address guard — the token caps the tranche at
-    ///         1,000 but keeps no per-address record of its own.
+    ///         account's FIRST pass PURCHASE (whale/lazy/deity), which is also
+    ///         when the seat is minted to the account's payee; one free-tranche
+    ///         seat per account, ever. Passes that are won (the whale-pass claim
+    ///         lane) or conferred (a deity buyer's affiliate) never set it. This
+    ///         bit is the sole once-per-account guard — the token caps the tranche
+    ///         at 1,000 but keeps no per-account record of its own.
     uint256 internal constant SEAT_CLAIMED_SHIFT = 146;
 
-    /// @notice Bit position for the AFKing seat encumbrance latch (bit 147).
-    ///         Set by a fresh subscribe, cleared by a manual cancel and by the
-    ///         AFKING_SUB_TOKEN-only clearSeatEncumbrance — an eviction leaves
-    ///         it set, so `encumbered && !active` proves an uncollected
-    ///         eviction forfeit. While set: the AFKing Subscription Token's
-    ///         transfer guard blocks the holder's last-seat exit, tokenURI
-    ///         renders the evicted art once the sub is inactive, reclaimSeat
-    ///         can seize one seat to the vault, and a fresh subscribe reverts
-    ///         SeatForfeited.
-    uint256 internal constant SEAT_ENCUMBERED_SHIFT = 147;
+    /// @notice Bit position for the smurf flag (bit 147). Set once, by createSmurf, on
+    ///         a smurf key's mint word. A path holding a mint word decides the payee
+    ///         from it: clear means the key is the payee; set means the owner lane of
+    ///         the wallet-table element names the payee.
+    uint256 internal constant SMURF_FLAG_SHIFT = 147;
 
     /// @notice Bit position for last level credited for mint streak (bits 148-171)
     uint256 internal constant MINT_STREAK_LAST_COMPLETED_SHIFT = 148;

@@ -7,9 +7,28 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
-import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 contract AfkingStethFundingTest is DeployProtocol {
+
+    mapping(address => uint32) private _aidCache;
+
+    /// @dev Wallet ID of `a`, registering it when it holds none. Call before any `vm.prank`.
+    function _aid(address a) internal returns (uint32 id) {
+        id = _aidCache[a];
+        if (id == 0) {
+            id = game.walletIdOf(a);
+            if (id == 0) id = _giveWalletId(a);
+            _aidCache[a] = id;
+        }
+    }
+
+
+    /// @dev operatorApprovals[id][op] read from storage.
+    function _approved(uint32 id, address op) internal view returns (bool) {
+        bytes32 inner = keccak256(abi.encode(uint256(id), GameSlots.OPERATOR_APPROVALS));
+        return uint256(vm.load(address(game), keccak256(abi.encode(op, inner)))) != 0;
+    }
     AfkingStethHost internal host;
     AdversarialAfkingSteth internal badToken;
     address internal constant PLAYER = address(0xA11CE);
@@ -28,8 +47,9 @@ contract AfkingStethFundingTest is DeployProtocol {
 
     function _consent(address funder, address player) internal {
         if (funder == player) return;
+        _aid(funder);
         vm.prank(funder);
-        game.setOperatorApproval(player, true);
+        game.setOperatorApproval(0, player, true);
     }
 
     function _authorize(address funder, address player, uint256 allowance_) internal {
@@ -77,7 +97,6 @@ contract AfkingStethFundingTest is DeployProtocol {
         assertEq(sub.affiliateBase, 0, "unclaimed affiliate accrual forfeited");
         assertEq(sub.pendingFlip, 0, "unclaimed FLIP forfeited");
         assertEq(host.entries(player), 0, "no tickets delivered");
-        assertEq((game.mintPackedFor(player) >> BitPackingLib.SEAT_ENCUMBERED_SHIFT) & 1, 1, "seat remains forfeit");
     }
 
     function testFuzz_OnlyResidualPaidBothOrdersAndSources(
@@ -134,11 +153,11 @@ contract AfkingStethFundingTest is DeployProtocol {
         mockStETH.mint(FUNDER, 1 ether);
         vm.startPrank(FUNDER);
         mockStETH.approve(address(game), type(uint256).max);
-        game.setOperatorApproval(NEXT, true);
+        game.setOperatorApproval(0, NEXT, true);
         vm.stopPrank();
         vm.prank(PLAYER);
-        game.setOperatorApproval(FUNDER, true);
-        assertFalse(game.isOperatorApproved(FUNDER, PLAYER));
+        game.setOperatorApproval(0, FUNDER, true);
+        assertFalse(_approved(game.walletIdOf(FUNDER), PLAYER));
         _expectNoTokenCalls();
         _work();
         _assertEvicted(PLAYER);
@@ -146,13 +165,15 @@ contract AfkingStethFundingTest is DeployProtocol {
 
     function test_OperatorApprovalIsPairScopedAndRevocableWhileLockedOrClosed() public {
         _consent(FUNDER, PLAYER);
-        assertFalse(game.isOperatorApproved(FUNDER, NEXT));
+        uint32 funderId = game.walletIdOf(FUNDER);
+        assertFalse(_approved(funderId, NEXT));
         host.setLock(true);
         vm.prank(FUNDER);
-        game.setOperatorApproval(PLAYER, false);
+        game.setOperatorApproval(0, PLAYER, false);
+        assertFalse(_approved(funderId, PLAYER));
         host.setClosed(true);
         _consent(FUNDER, PLAYER);
-        assertTrue(game.isOperatorApproved(FUNDER, PLAYER));
+        assertTrue(_approved(funderId, PLAYER));
     }
 
     function test_WrongSpenderAllowanceCannotPay() public {
@@ -171,11 +192,11 @@ contract AfkingStethFundingTest is DeployProtocol {
         mockStETH.mint(FUNDER, 1 ether);
         _authorize(FUNDER, PLAYER, type(uint256).max);
         vm.prank(FUNDER);
-        game.setOperatorApproval(PLAYER, false);
+        game.setOperatorApproval(0, PLAYER, false);
         _work();
         _assertEvicted(PLAYER);
         _consent(FUNDER, PLAYER);
-        assertTrue(game.isOperatorApproved(FUNDER, PLAYER));
+        assertTrue(_approved(game.walletIdOf(FUNDER), PLAYER));
         assertEq(mockStETH.balanceOf(FUNDER), 1 ether);
     }
 
@@ -187,7 +208,7 @@ contract AfkingStethFundingTest is DeployProtocol {
         mockStETH.approve(address(game), 0);
         _work();
         _assertEvicted(PLAYER);
-        assertTrue(game.isOperatorApproved(FUNDER, PLAYER));
+        assertTrue(_approved(game.walletIdOf(FUNDER), PLAYER));
     }
 
     function test_SourceChangeRequiresNewWalletOperatorApproval() public {
@@ -360,41 +381,42 @@ contract AfkingStethFundingTest is DeployProtocol {
         MineFlipGas.Result memory result = host.subWork(WORK_GAS);
         assertFalse(result.progressed);
         assertGt(host.memberOf(PLAYER), 0, "terminal drain owns closed-game membership");
+        uint256 seat = _grantSeat(PLAYER);
         vm.prank(PLAYER);
         vm.expectRevert(abi.encodeWithSignature("GameOver()"));
-        game.subscribe(address(0), false, true, 1, address(0));
+        game.subscribe(0, false, true, 1, 0, seat);
     }
 
     function test_NewSubscribeAndActiveCoverBuyUseFallback() public {
-        _grantSeat(PLAYER);
-        _giveWalletId(FUNDER); // a funding source must already hold a wallet ID
+        uint256 seat = _grantSeat(PLAYER);
+        _aid(PLAYER);
+        uint32 funderId = _aid(FUNDER); // a funding source must already hold a wallet ID
         mockStETH.mint(FUNDER, 1 ether);
         _authorize(FUNDER, PLAYER, type(uint256).max);
-        vm.prank(FUNDER);
-        game.setOperatorApproval(PLAYER, true);
         vm.prank(PLAYER);
-        game.subscribe(address(0), false, true, 1, FUNDER);
+        game.subscribe(0, false, true, 1, funderId, seat);
         assertEq(mockStETH.balanceOf(FUNDER), 1 ether - host.price());
         uint256 firstEntries = host.entries(PLAYER);
         vm.warp(block.timestamp + 1 days);
         host.nextDay();
         vm.prank(PLAYER);
-        game.subscribe(address(0), false, true, 2, FUNDER);
+        game.subscribe(0, false, true, 2, funderId, 0);
         assertEq(mockStETH.balanceOf(FUNDER), 1 ether - 3 * host.price());
         assertGt(host.entries(PLAYER), firstEntries);
         assertEq(host.stateOf(PLAYER).lastAutoBoughtDay, game.currentDayView());
     }
 
     function test_NewSubscribeFailureRevertsButActiveUnfundedCoverBuySkips() public {
-        _grantSeat(PLAYER);
+        uint256 seat = _grantSeat(PLAYER);
+        _aid(PLAYER);
         _authorize(PLAYER, PLAYER, type(uint256).max);
         vm.prank(PLAYER);
         vm.expectRevert(abi.encodeWithSignature("MustPurchaseToBeginAfking()"));
-        game.subscribe(address(0), false, true, 1, address(0));
+        game.subscribe(0, false, true, 1, 0, seat);
         assertEq(host.memberOf(PLAYER), 0);
         _add(PLAYER, address(0), false, true, 1, 0, 0);
         vm.prank(PLAYER);
-        game.subscribe(address(0), false, true, 2, address(0));
+        game.subscribe(0, false, true, 2, 0, seat);
         assertGt(host.memberOf(PLAYER), 0, "unpaid optional cover buy does not evict");
         assertEq(host.stateOf(PLAYER).lastAutoBoughtDay, game.currentDayView() - 1);
         _work();
@@ -402,27 +424,19 @@ contract AfkingStethFundingTest is DeployProtocol {
     }
 
     function test_AllowancePersistsThroughCancellationAndReenrollment() public {
-        _grantSeat(PLAYER);
+        uint256 seat = _grantSeat(PLAYER);
         mockStETH.mint(PLAYER, 1 ether);
         _authorize(PLAYER, PLAYER, type(uint256).max);
-        vm.startPrank(PLAYER);
-        game.subscribe(address(0), false, true, 1, address(0));
-        game.subscribe(address(0), false, true, 0, address(0));
-        game.subscribe(address(0), false, true, 1, address(0));
-        vm.stopPrank();
+        _aid(PLAYER);
+        vm.prank(PLAYER);
+        game.subscribe(0, false, true, 1, 0, seat);
+        vm.prank(PLAYER);
+        game.subscribe(0, false, true, 0, 0, 0);
+        uint256 seat2 = _grantSeat(PLAYER);
+        vm.prank(PLAYER);
+        game.subscribe(0, false, true, 1, 0, seat2);
         assertEq(mockStETH.allowance(PLAYER, address(game)), type(uint256).max);
         assertEq(mockStETH.balanceOf(PLAYER), 1 ether - host.price(), "same-day re-enrollment does not double-pay");
-    }
-
-    function test_SeatCanBeReclaimedAfterFailedFallback() public {
-        uint256 seat = _grantSeat(PLAYER);
-        _add(PLAYER, address(0), false, true, 1, 0, 0);
-        _authorize(PLAYER, PLAYER, 0);
-        _work();
-        _assertEvicted(PLAYER);
-        afkingSubToken.reclaimSeat(seat);
-        assertEq(afkingSubToken.ownerOf(seat), ContractAddresses.VAULT);
-        assertEq(mockStETH.allowance(PLAYER, address(game)), 0);
     }
 
     function test_AtomicPullRechecksConfiguredSource() public {

@@ -50,8 +50,9 @@ pragma solidity 0.8.34;
  *        that day's direct depositors burned and lost (flip credit, not ETH)
  *
  * @dev DAILY DRAW (per participation day d):
- *      - A player burns at least 25 WWXRP via enter(); the burn and the
- *        recorded entry always belong to msg.sender.
+ *      - A player burns at least 25 WWXRP via enter() for an account it may
+ *        act for; the entry belongs to that account and the burn comes from
+ *        the account's payee.
  *      - Every entrant maps to exactly one of 10 buckets for day d:
  *        bucket = keccak(domain, chainid, this, d, walletId) % 10, keyed by the
  *        entrant's permanent Game wallet ID (an entrant without one registers on
@@ -123,6 +124,12 @@ interface IDrawGame {
     /// @notice `player`'s permanent Game wallet ID (0 = none; never allocates).
     function walletIdOf(address player) external view returns (uint32);
 
+    /// @notice Resolve account `id` for `caller`: key, payee and whether `caller` may act for it
+    ///         (its key, a smurf's owner, or an approved operator). Reverts for an unallocated
+    ///         or zero `id`; never reverts on authorization. `enter` requires `authorized`.
+    function resolveAccount(uint32 id, address caller)
+        external view returns (address key, address payee, bool authorized);
+
     /// @notice DegenerusGame's current level.
     function level() external view returns (uint24);
 
@@ -177,7 +184,7 @@ contract WWXRP {
 
     /// @notice Emitted for every recorded daily-draw entry
     /// @param day Participation day (settles on rngWordForDay(day + 1))
-    /// @param player Entrant (always msg.sender of the burn)
+    /// @param player Key of the entrant account (the caller for a self entry)
     /// @param bucket Deterministic bucket for (day, entrant wallet ID)
     /// @param entryIndex Index of this entry within the bucket
     /// @param burnAmount WWXRP burned (0 decimals)
@@ -213,7 +220,7 @@ contract WWXRP {
 
     /// @notice Emitted for every recorded century BAF-incinerator entry
     /// @param bracket Century bracket the burn bets on (level x00)
-    /// @param player Entrant (always msg.sender of the burn)
+    /// @param player Key of the entrant account (the caller for a self entry)
     /// @param entryIndex Index of this entry within the bracket
     /// @param burnAmount WWXRP burned (0 decimals)
     /// @param effectiveScore Activity- and boon-weighted score recorded for this burn
@@ -298,6 +305,10 @@ contract WWXRP {
 
     /// @notice Thrown when the day's draw prize was already claimed
     error AlreadyClaimed();
+
+    /// @notice Thrown when the caller may not act for the account: it is neither the account's
+    ///         key, a smurf's owner, nor an approved operator
+    error NotApproved();
 
     /*+======================================================================+
       |                         ERC20 STATE                                  |
@@ -673,14 +684,15 @@ contract WWXRP {
       |                        DAILY DRAW: ENTRY                             |
       +======================================================================+*/
 
-    /// @notice Burn WWXRP from the caller for a weighted entry in today's draw.
+    /// @notice Burn WWXRP for a weighted entry of account `id` in today's draw.
     ///         During a level x99 the same burn also enters the century
     ///         BAF-incinerator draw for the upcoming x00 bracket.
-    /// @dev The burned balance and the entry belong to msg.sender only — no
-    ///      beneficiary parameter, so nobody can burn another player's balance
-    ///      or attach another player's activity score. The entry pays, so a
-    ///      first-time entrant registers its Game wallet ID; the entry, the
-    ///      bucket and the boon are keyed by that ID. Multiple burns per day
+    /// @dev Authorized: `id == 0` is the caller (no Game resolution call); any other
+    ///      ID needs Game `resolveAccount` to authorize the caller (the account's key,
+    ///      a smurf's owner or an approved operator). The WWXRP burns from the
+    ///      account's payee; the activity score, the entry, the bucket and the boon
+    ///      are the account's, keyed by its wallet ID. The entry pays, so a
+    ///      first-time self entrant registers its Game wallet ID. Multiple burns per day
     ///      are allowed; each records its own activity snapshot and interval. One live
     ///      WWXRP boon boosts both draw weights from that burn; the token burn is unchanged.
     ///      Entry stays open during the daily RNG lock (like flip deposits):
@@ -691,22 +703,34 @@ contract WWXRP {
     ///      incinerator piggyback needs no such care: its deciding word's
     ///      request bumps the level off x99 first (see
     ///      _recordIncineratorEntry).
+    /// @param id Account the entry belongs to (0 = caller).
     /// @param amount WWXRP to burn (0 decimals, at least MIN_BURN). The full
     ///        amount burns; winner weight counts whole WWXRP only.
     /// @custom:reverts BelowMinBurn When amount is under 25 WWXRP.
+    /// @custom:reverts NotApproved When the caller may not act for `id`.
     /// @custom:reverts ScoreOverflow When the bucket entry count would overflow.
-    /// @custom:reverts InsufficientBalance When the caller's balance is short.
-    /// @custom:reverts E (Game) When a new entrant must register past paid admission.
-    function enter(uint256 amount) external {
+    /// @custom:reverts InsufficientBalance When the payee's balance is short.
+    /// @custom:reverts E (Game) When `id` is unallocated, or a new self entrant must
+    ///                 register past paid admission.
+    function enter(uint32 id, uint256 amount) external {
         if (amount < MIN_BURN) revert BelowMinBurn();
+        address key = msg.sender;
+        address payee = msg.sender;
+        if (id != 0) {
+            bool authorized;
+            (key, payee, authorized) = game.resolveAccount(id, msg.sender);
+            if (!authorized) revert NotApproved();
+        }
 
         // Same pure wall-clock math as the game's own day index — no external
         // call needed. Words for day+1 cannot exist yet: the game only ever
         // records words for days <= the current wall day.
         uint24 day = GameTimeLib.currentDayIndex();
-        // The activity read carries the entrant's wallet ID from the same mint word; a
-        // first-time entrant registers (the burn pays) before anything keys on the ID.
-        (uint256 score, uint32 id) = game.playerActivityScoreCached(msg.sender);
+        // The activity read carries the account's wallet ID from the same mint word (for a
+        // resolved account, `id` itself); a first-time self entrant registers (the burn pays)
+        // before anything keys on the ID.
+        uint256 score;
+        (score, id) = game.playerActivityScoreCached(key);
         if (id == 0) id = game.registerWallet(msg.sender, true);
         // Consume once for the whole burn. Both draws share the same activity/boon snapshot;
         // both daily and century weights floor to whole WWXRP at the same BPS boundaries.
@@ -742,14 +766,14 @@ contract WWXRP {
         // draw (at whole-token precision there — no whole-token truncation).
         uint24 lvl = game.level();
         if (lvl % 100 == 99) {
-            _recordIncineratorEntry(lvl + 1, id, amount, fullWeight);
+            _recordIncineratorEntry(lvl + 1, key, id, amount, fullWeight);
         }
 
-        _burn(msg.sender, amount);
+        _burn(payee, amount);
 
         emit DrawEntered(
             day,
-            msg.sender,
+            key,
             bucket,
             uint32(count),
             amount,
@@ -1019,6 +1043,7 @@ contract WWXRP {
     /// @custom:reverts ScoreOverflow When the bracket entry count would overflow.
     function _recordIncineratorEntry(
         uint24 bracket,
+        address key,
         uint32 id,
         uint256 amount,
         uint256 effective
@@ -1039,7 +1064,7 @@ contract WWXRP {
 
         emit IncineratorEntered(
             bracket,
-            msg.sender,
+            key,
             uint32(count),
             amount,
             effective,

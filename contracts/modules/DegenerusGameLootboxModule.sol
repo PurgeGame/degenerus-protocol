@@ -778,14 +778,14 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             }
         }
         if (acc.dgnrs != 0) {
-            uint256 paid = _creditDgnrsReward(player, acc.dgnrs);
+            uint256 paid = _creditDgnrsReward(id, acc.dgnrs);
             // One aggregated emit for the entry's remaining batch, under its OWN event: reusing the per-box
             // LootBoxDgnrsReward schema would silently put DGNRS units in a field indexers
             // read as box ETH.
             if (paid != 0) emit LootBoxDgnrsBatch(player, acc.dgnrs, paid);
         }
         if (acc.flip != 0) coinflip.creditFlip(id, acc.flip);
-        if (acc.wwxrp != 0) wwxrp.mintPrize(player, acc.wwxrp);
+        if (acc.wwxrp != 0) wwxrp.mintPrize(_payee(_walletElement(id)), acc.wwxrp);
         if ((acc.passNormal | acc.passHigh) != 0) _deliverPasses(player, id, acc);
     }
 
@@ -986,7 +986,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      WWXRP dud), 40% DGNRS, 10% WWXRP. The closing purchase's box is the last presale box
     ///      ever appended and the FIFO settles it last, so it also takes whatever remains in
     ///      Pool.PresaleBox: no other entry can draw from that pool afterwards.
-    /// @param player Box owner.
+    /// @param player Box owner (account key; its payee takes the token prizes).
     /// @param ref Event tag (QUEUED_ENTRY_TAG | position << 1 | buffer).
     /// @param amount Exact applied presale wei.
     /// @param entry The entry word (frozen tier and closing flag).
@@ -1002,6 +1002,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint24 currentLevel
     ) private {
         bool closing = entry & LB_CLOSING != 0;
+        // The entry word's low 32 bits are the owner's wallet ID; its element is warm.
+        address payee = _payee(_walletElement(uint32(entry)));
         uint256 outcome = uint16(seed) % 100;
         uint256 flipOut;
         uint256 dgnrsOut;
@@ -1064,7 +1066,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                     else passNormal = uint32(passCount);
                 } else {
                     wwxrpOut = LOOTBOX_WWXRP_PRIZE;
-                    wwxrp.mintPrize(player, wwxrpOut);
+                    wwxrp.mintPrize(payee, wwxrpOut);
                 }
             }
             if (flipOut != 0) {
@@ -1072,11 +1074,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             }
         } else if (outcome < 90) {
             // 40% DGNRS: 5-tier %-of-pool curve keyed on the tier frozen at purchase.
-            dgnrsOut = _presaleBoxDgnrsReward(player, amount, (entry >> LB_TIER_SHIFT) & 7);
+            dgnrsOut = _presaleBoxDgnrsReward(payee, amount, (entry >> LB_TIER_SHIFT) & 7);
         } else {
             // 10% WWXRP: 1 token flavor "dud".
             wwxrpOut = LOOTBOX_WWXRP_PRIZE;
-            wwxrp.mintPrize(player, wwxrpOut);
+            wwxrp.mintPrize(payee, wwxrpOut);
         }
 
         emit PresaleBoxOpened(player, ref, amount, flipOut, dgnrsOut, wwxrpOut, closing, passNormal, passHigh);
@@ -1085,7 +1087,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             uint256 remaining = dgnrs.poolBalance(IsDGNRS.Pool.PresaleBox);
             if (remaining != 0) {
                 emit PresaleBoxRemainderSwept(
-                    player, dgnrs.transferFromPool(IsDGNRS.Pool.PresaleBox, player, remaining)
+                    player, dgnrs.transferFromPool(IsDGNRS.Pool.PresaleBox, payee, remaining)
                 );
             }
         }
@@ -1094,11 +1096,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Presale-box DGNRS award: tierMultiplier x base x boxEth, base = poolStart/40, at
     ///      the tier frozen at purchase (`_presaleTier`: 3.0x, 2.5x, 2.0x, 1.5x, 1.0x for tiers
     ///      0..4). Snapshots Pool.PresaleBox into presaleBoxDgnrsPoolStart on first resolution.
-    /// @param player Box owner to credit.
+    /// @param payee The box owner's payee, credited.
     /// @param amount Box ETH for this resolution.
     /// @param tier Frozen tier 0..4.
     /// @return paid Actual DGNRS transferred from the pool.
-    function _presaleBoxDgnrsReward(address player, uint256 amount, uint256 tier) private returns (uint256 paid) {
+    function _presaleBoxDgnrsReward(address payee, uint256 amount, uint256 tier) private returns (uint256 paid) {
         uint256 poolStart = presaleBoxDgnrsPoolStart;
         if (poolStart == 0) {
             poolStart = dgnrs.poolBalance(IsDGNRS.Pool.PresaleBox);
@@ -1112,7 +1114,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 tierTenths = PRESALE_BOX_DGNRS_TIER1_TENTHS - PRESALE_BOX_DGNRS_TIER_STEP_TENTHS * tier;
         uint256 dgnrsAmount = SigFigLib.floorToThreeSigFigs((poolStart * tierTenths * amount) / (400 * 1 ether));
         if (dgnrsAmount == 0) return 0;
-        paid = dgnrs.transferFromPool(IsDGNRS.Pool.PresaleBox, player, dgnrsAmount);
+        paid = dgnrs.transferFromPool(IsDGNRS.Pool.PresaleBox, payee, dgnrsAmount);
     }
 
     /// @notice Resolve an internal ETH reward spin's recirculated lootbox (normal 10 ETH cap).
@@ -1723,7 +1725,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                     uint256 pendingDgnrs = acc.dgnrs;
                     if (pendingDgnrs != 0) {
                         acc.dgnrs = 0;
-                        uint256 paid = _creditDgnrsReward(player, pendingDgnrs);
+                        uint256 paid = _creditDgnrsReward(acc.id, pendingDgnrs);
                         if (paid != 0) emit LootBoxDgnrsBatch(player, pendingDgnrs, paid);
                     }
                     _callEthSpin(player, acc.id, ethStake, activityScore, EntropyLib.hash2(seed, BOX_ETH_SPIN_TAG));
@@ -2001,12 +2003,13 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
     }
 
-    /// @dev Credit DGNRS reward to player from pool only.
-    /// @param player Player to credit
+    /// @dev Credit DGNRS reward from the Lootbox pool to box owner `id`'s payee (its own key,
+    ///      or the owner's for a smurf). The element read is warm on the queued-entry path.
+    /// @param id Box owner's wallet ID
     /// @param amount Requested DGNRS amount to credit
     /// @return paid Actual DGNRS amount paid from pool
-    function _creditDgnrsReward(address player, uint256 amount) private returns (uint256 paid) {
+    function _creditDgnrsReward(uint32 id, uint256 amount) private returns (uint256 paid) {
         if (amount == 0) return 0;
-        paid = dgnrs.transferFromPool(IsDGNRS.Pool.Lootbox, player, amount);
+        paid = dgnrs.transferFromPool(IsDGNRS.Pool.Lootbox, _payee(_walletElement(id)), amount);
     }
 }

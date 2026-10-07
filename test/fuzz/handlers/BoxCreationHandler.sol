@@ -224,7 +224,7 @@ contract BoxCreationHandler is Test {
         Pre memory pre = _pre();
         vm.recordLogs();
         vm.prank(currentActor);
-        try game.purchase{value: value}(currentActor, 400, BoxOrderLib.boCustomFloor(lootboxAmt), bytes32(0), kind, false) {
+        try game.purchase{value: value}(0, 400, BoxOrderLib.boCustomFloor(lootboxAmt), bytes32(0), kind, false) {
             boxesCreated_mintLootbox++;
             _checkAppend(pre, Expect({custom: 1, sizeWei: size, presaleWei: 0, tier: 0, closing: false, maxAmount: size}));
         } catch {
@@ -247,7 +247,7 @@ contract BoxCreationHandler is Test {
         Pre memory pre = _pre();
         vm.recordLogs();
         vm.prank(currentActor);
-        try game.purchaseWhalePass{value: cost}(currentActor, qty, bytes32(0)) {
+        try game.purchaseWhalePass{value: cost}(0, qty, bytes32(0)) {
             boxesCreated_whale++;
             _checkAppend(pre, Expect({custom: qty, sizeWei: 0, presaleWei: 0, tier: 0, closing: false, maxAmount: type(uint256).max}));
         } catch {
@@ -265,7 +265,7 @@ contract BoxCreationHandler is Test {
         Pre memory pre = _pre();
         vm.recordLogs();
         vm.prank(currentActor);
-        try game.purchaseLazyPass{value: cost}(currentActor, bytes32(0)) {
+        try game.purchaseLazyPass{value: cost}(0, bytes32(0)) {
             boxesCreated_lazy++;
             _checkAppend(pre, Expect({custom: 1, sizeWei: 0, presaleWei: 0, tier: 0, closing: false, maxAmount: type(uint256).max}));
         } catch {
@@ -286,7 +286,7 @@ contract BoxCreationHandler is Test {
         Pre memory pre = _pre();
         vm.recordLogs();
         vm.prank(currentActor);
-        try game.purchaseDeityPass{value: cost}(currentActor, symbolId, bytes32(0)) {
+        try game.purchaseDeityPass{value: cost}(0, symbolId, bytes32(0)) {
             boxesCreated_deity++;
             _checkAppend(pre, Expect({custom: 1, sizeWei: 0, presaleWei: 0, tier: 0, closing: false, maxAmount: type(uint256).max}));
         } catch {
@@ -319,7 +319,7 @@ contract BoxCreationHandler is Test {
         Pre memory pre = _pre();
         vm.recordLogs();
         vm.prank(currentActor);
-        try game.buyPresaleBox{value: boxAmount}(currentActor, boxAmount) {
+        try game.buyPresaleBox{value: boxAmount}(0, boxAmount) {
             boxesCreated_presale++;
             _checkAppend(pre, Expect({custom: 0, sizeWei: 0, presaleWei: applied, tier: tier, closing: applied == remaining, maxAmount: 0}));
         } catch {
@@ -348,7 +348,7 @@ contract BoxCreationHandler is Test {
             uint48 wb = RecyclingState.writeBuffer(address(game));
             uint256 count = RecyclingState.boxCount(address(game), wb);
             vm.prank(currentActor);
-            try game.purchase{value: priceWei}(currentActor, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {
+            try game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {
                 if (RecyclingState.writeBuffer(address(game)) != wb || RecyclingState.boxCount(address(game), wb) != count) {
                     _appendViolation("a ticket-only purchase appended a box entry");
                 }

@@ -61,7 +61,7 @@ contract DegeneretteSweepGas is DeployProtocol {
             address who = _bettor(i);
             vm.prank(who);
             game.placeDegeneretteBet{value: currency == 0 ? uint256(perSpin) * spins : 0}(
-                address(0), currency, perSpin, spins, SYMBOL
+                0, currency, perSpin, spins, SYMBOL
             );
         }
         if (smallPool) {

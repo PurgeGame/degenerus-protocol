@@ -95,7 +95,7 @@ describe("GameOver", function () {
     await game
       .connect(buyer)
       .purchase(
-        ZERO_ADDRESS,
+        0,
         BigInt(qty) * 100n,
         0n,
         ZERO_BYTES32,
@@ -261,7 +261,7 @@ describe("GameOver", function () {
       // 20 ETH cap, so min(pricePaid, 20 ETH) binds at exactly 20 ETH.
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
       expect(await game.level()).to.equal(0n);
 
@@ -288,12 +288,12 @@ describe("GameOver", function () {
       const price1 = eth(24);
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: price1 });
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: price1 });
 
       const price2 = eth(25);
       await game
         .connect(bob)
-        .purchaseDeityPass(bob.address, 1, hre.ethers.ZeroHash, { value: price2 });
+        .purchaseDeityPass(0, 1, hre.ethers.ZeroHash, { value: price2 });
 
       // Isolate the capped refunds from their perpetual-ticket jackpot winnings.
       const aliceBefore = await game.claimableWinningsOf(alice.address);
@@ -342,7 +342,7 @@ describe("GameOver", function () {
         game
           .connect(alice)
           .purchase(
-            ZERO_ADDRESS,
+            0,
             100n,
             0n,
             ZERO_BYTES32,
@@ -372,7 +372,7 @@ describe("GameOver", function () {
       expect(await game.gameOver()).to.be.true;
       await expect(game
           .connect(alice)
-          .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) }))
+          .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) }))
         .to.be.revertedWithCustomError(game, "GameOver");
     });
   });
@@ -436,7 +436,7 @@ describe("GameOver", function () {
       const deityPrice = eth(24);
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: deityPrice });
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: deityPrice });
 
       await advanceTime(SECONDS_912_DAYS + 86400);
       await triggerGameOverAtLevel0(game, deployer, mockVRF);
@@ -444,7 +444,7 @@ describe("GameOver", function () {
       const claimable = await game.claimableWinningsOf(alice.address);
       if (claimable > 0n) {
         const balBefore = await hre.ethers.provider.getBalance(alice.address);
-        const tx = await game.connect(alice).claimWinnings(alice.address);
+        const tx = await game.connect(alice)["claimWinnings(uint32)"](0);
         const receipt = await tx.wait();
         const gasUsed = receipt.gasUsed * receipt.gasPrice;
         const balAfter = await hre.ethers.provider.getBalance(alice.address);

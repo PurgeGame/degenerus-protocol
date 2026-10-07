@@ -18,7 +18,7 @@ contract DelegateOnlyGuards is DeployProtocol {
 
     function test_buyPresaleBox_directCallReverts() public {
         vm.expectRevert();
-        mintModule.buyPresaleBox{value: 1 ether}(address(this), 1 ether);
+        mintModule.buyPresaleBox{value: 1 ether}(0, 1 ether);
     }
 
     function test_purchaseLazyPass_directCallReverts() public {

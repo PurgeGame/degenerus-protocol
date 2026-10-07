@@ -46,6 +46,19 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///      storageLayout`): `_subOf = 54`, `_subscribers = 56`, `_subCursor/_subOpenCursor = 58`,
 ///      `rngWordByDay = 10`. Test-only: ZERO contracts/*.sol mutated.
 contract OpenWalkCompositionGas is DeployProtocol {
+
+    mapping(address => uint32) private _aidCache;
+
+    /// @dev Wallet ID of `a`, registering it when it holds none. Call before any `vm.prank`.
+    function _aid(address a) internal returns (uint32 id) {
+        id = _aidCache[a];
+        if (id == 0) {
+            id = game.walletIdOf(a);
+            if (id == 0) id = _giveWalletId(a);
+            _aidCache[a] = id;
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Game-resident storage slots (ported verbatim from V56AfkingGasMarginal.t.sol)
     // -------------------------------------------------------------------------
@@ -283,16 +296,16 @@ contract OpenWalkCompositionGas is DeployProtocol {
         for (uint256 i; i < n; ++i) {
             address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
             subs[i] = who;
-            _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (NoCoin without it)
+            uint256 seat = _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (a new run burns one seat)
             _fundPool(who, poolEach);
             vm.prank(who);
-            game.subscribe(address(0), false, isTicket, 1, address(0));
+            game.subscribe(0, false, isTicket, 1, 0, seat);
         }
     }
 
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
-        game.depositAfkingFunding{value: amount}(who);
+        game.depositAfkingFunding{value: amount}(_aid(who));
     }
 
     /// @dev Drive a fresh new-day STAGE then land the day's word (the per-sub stamp becomes a

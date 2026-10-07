@@ -60,7 +60,7 @@ describe("CharityGameHooks", function () {
     const buyerCount = Math.min(signers.length, 10);
     for (let i = 0; i < buyerCount; i++) {
       await game.connect(signers[i]).purchase(
-        signers[i].address,
+        0,
         ticketQty,
         0n,
         ZERO_BYTES32,

@@ -33,6 +33,19 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///   warping the day clock (lastEthDay stays 0 for a vm.store-seeded claimant ⇒ stale once _currentMintDay()
 ///   >= 5). Seeded-fuzz deterministic (foundry seed 0xdeadbeef). Test-only: ZERO contracts/*.sol mutation.
 contract V61CurseSet is DeployProtocol {
+
+    mapping(address => uint32) private _aidCache;
+
+    /// @dev Wallet ID of `a`, registering it when it holds none. Call before any `vm.prank`.
+    function _aid(address a) internal returns (uint32 id) {
+        id = _aidCache[a];
+        if (id == 0) {
+            id = game.walletIdOf(a);
+            if (id == 0) id = _giveWalletId(a);
+            _aidCache[a] = id;
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Game-resident storage slots + mintPacked_ field shifts (378-01 key + BitPackingLib)
     // -------------------------------------------------------------------------
@@ -83,7 +96,7 @@ contract V61CurseSet is DeployProtocol {
         assertEq(game.curseCountOf(p), 0, "pre: no curse");
 
         vm.prank(p);
-        game.claimWinnings(p);
+        game.claimWinnings(0);
 
         assertEq(game.curseCountOf(p), 2, "stale cashout SET: curse += 2");
     }
@@ -99,7 +112,7 @@ contract V61CurseSet is DeployProtocol {
         for (uint256 i; i < 3; i++) {
             _seedClaimable(infra[i], 10 ether);
             vm.prank(infra[i]);
-            game.claimWinnings(infra[i]);
+            game.claimWinnings(0);
             assertEq(game.curseCountOf(infra[i]), 0, "infra exempt: curse stays 0");
         }
         // Contrast: an ordinary stale claimant in the same conditions IS cursed.
@@ -112,7 +125,7 @@ contract V61CurseSet is DeployProtocol {
         _seedClaimable(fresh, 10 ether);
         _seedLastEthDay(fresh, _currentDay()); // claimed/minted "today" ⇒ lastEthDay + 5 > currentDay ⇒ exempt
         vm.prank(fresh);
-        game.claimWinnings(fresh);
+        game.claimWinnings(0);
         assertEq(game.curseCountOf(fresh), 0, "non-stale exempt: curse stays 0");
 
         assertEq(_cashoutCurseOf(makeAddr("stale_contrast")), 2, "contrast: stale claimant cursed +2");
@@ -124,7 +137,7 @@ contract V61CurseSet is DeployProtocol {
         _seedClaimable(deity, 10 ether);
         _grantDeityPass(deity);
         vm.prank(deity);
-        game.claimWinnings(deity);
+        game.claimWinnings(0);
         assertEq(game.curseCountOf(deity), 0, "deity-pass exempt: curse stays 0");
 
         assertEq(_cashoutCurseOf(makeAddr("deity_contrast")), 2, "contrast: pass-less stale claimant cursed +2");
@@ -137,7 +150,7 @@ contract V61CurseSet is DeployProtocol {
         _seedClaimable(whale, 10 ether);
         _grantWhalePass(whale, 1); // passType 1 (10-level), frozenUntilLevel high
         vm.prank(whale);
-        game.claimWinnings(whale);
+        game.claimWinnings(0);
         assertEq(game.curseCountOf(whale), 0, "whale-pass exempt: curse stays 0");
 
         assertEq(_cashoutCurseOf(makeAddr("whale_contrast")), 2, "contrast: pass-less stale claimant cursed +2");
@@ -155,7 +168,7 @@ contract V61CurseSet is DeployProtocol {
         assertTrue(_dailyQtyOf(afk) != 0, "setup: active afker (dailyQuantity != 0)");
 
         vm.prank(afk);
-        game.claimWinnings(afk);
+        game.claimWinnings(0);
         assertEq(game.curseCountOf(afk), 0, "active-afker exempt: curse stays 0");
 
         assertEq(_cashoutCurseOf(makeAddr("afker_contrast")), 2, "contrast: non-subscribed stale claimant cursed +2");
@@ -175,7 +188,7 @@ contract V61CurseSet is DeployProtocol {
         // Post-gameOver the claim pays out (claimable + afking merge) but maybeCurse bails on the gameOver
         // guard — curseCountOf stays 0.
         vm.prank(p);
-        game.claimWinnings(p);
+        game.claimWinnings(0);
         assertEq(game.curseCountOf(p), 0, "gameOver exempt: curse stays 0");
     }
 
@@ -263,7 +276,7 @@ contract V61CurseSet is DeployProtocol {
             vm.warp(_t);
             _topUpClaimable(p, 5 ether);
             vm.prank(p);
-            game.claimWinnings(p);
+            game.claimWinnings(0);
 
             uint256 expected = (2 * (i + 1)) > CURSE_COUNT_CAP ? CURSE_COUNT_CAP : 2 * (i + 1);
             assertEq(game.curseCountOf(p), expected, "stacking: curseCountOf == min(2N, cap)");
@@ -284,13 +297,13 @@ contract V61CurseSet is DeployProtocol {
         _seedClaimable(p, 10 ether);
 
         vm.prank(p);
-        game.claimWinnings(p); // first claim: drains to the sentinel, sets curse to 2
+        game.claimWinnings(0); // first claim: drains to the sentinel, sets curse to 2
         assertEq(game.curseCountOf(p), 2, "first claim cursed +2");
 
         // Second claim same day: claimable is at the 1-wei sentinel ⇒ nothing to claim ⇒ revert.
         vm.prank(p);
         vm.expectRevert();
-        game.claimWinnings(p);
+        game.claimWinnings(0);
 
         assertEq(game.curseCountOf(p), 2, "no in-day stacking: curse unchanged after the reverted second claim");
     }
@@ -303,7 +316,7 @@ contract V61CurseSet is DeployProtocol {
     function _cashoutCurseOf(address p) internal returns (uint8) {
         _seedClaimable(p, 10 ether);
         vm.prank(p);
-        game.claimWinnings(p);
+        game.claimWinnings(0);
         return game.curseCountOf(p);
     }
 
@@ -495,13 +508,13 @@ contract V61CurseSet is DeployProtocol {
     }
 
     function _subscribeLootbox(address who, uint8 q) internal {
-        _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (NoCoin without it)
+        uint256 seat = _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (a new run burns one seat)
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, address(0));
+        game.subscribe(0, false, false, q, 0, seat);
     }
 
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
-        game.depositAfkingFunding{value: amount}(who);
+        game.depositAfkingFunding{value: amount}(_aid(who));
     }
 }

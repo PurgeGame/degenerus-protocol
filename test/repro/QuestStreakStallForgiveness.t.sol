@@ -362,7 +362,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         vm.warp(block.timestamp + 3 days);
 
         vm.prank(player);
-        game.subscribe(address(0), false, false, 1, address(0));
+        game.subscribe(0, false, false, 1, 0, 0);
 
         uint24 covered = uint24(_subField(player, OFF_SUB_COVERED, 24));
         uint24 shiftedStart = uint24(_subField(player, OFF_SUB_START, 24));
@@ -375,7 +375,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         // intervening phantom day is excluded, and the second funded buy adds one more day.
         vm.warp(block.timestamp + 2 days);
         vm.prank(player);
-        game.subscribe(address(0), false, false, 1, address(0));
+        game.subscribe(0, false, false, 1, 0, 0);
         covered = uint24(_subField(player, OFF_SUB_COVERED, 24));
         shiftedStart = uint24(_subField(player, OFF_SUB_START, 24));
         assertEq(covered - shiftedStart, 2, "retry-day covers compose as two funded days");
@@ -392,7 +392,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         _setDailyIdx(coveredBefore + 2);
         vm.warp(block.timestamp + 5 days);
         vm.prank(player);
-        game.subscribe(address(0), false, false, 1, address(0));
+        game.subscribe(0, false, false, 1, 0, 0);
 
         uint24 today = uint24(game.currentDayView());
         assertEq(_subField(player, OFF_SUB_STREAK_BASE, 16), 12, "the streak base survives the sealed-miss gap");
@@ -460,11 +460,13 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         uint24 today = uint24(game.currentDayView());
         _roll(today);
         _award(player, streak, today);
-        _grantSeat(player); // the AFKing Subscription Token is the subscribe credential (NoCoin without it)
+        uint256 seat = _grantSeat(player);
+        uint32 id = game.walletIdOf(player);
+        if (id == 0) id = _giveWalletId(player);
         vm.deal(address(this), 50 ether);
-        game.depositAfkingFunding{value: 50 ether}(player);
+        game.depositAfkingFunding{value: 50 ether}(id);
         vm.prank(player);
-        game.subscribe(address(0), false, false, 1, address(0));
+        game.subscribe(0, false, false, 1, 0, seat);
         assertEq(_subField(player, OFF_SUB_COVERED, 24), today, "fixture cover buy grounds current day");
     }
 

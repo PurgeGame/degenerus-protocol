@@ -58,15 +58,16 @@ contract RedemptionEdgeCasesTest is RedemptionFixture {
         uint32 id = uint32(bound(seed, 2, type(uint32).max));
         _latchGameOver();
         vm.expectRevert(sDGNRS.NotResolved.selector);
-        vm.prank(alice); sdgnrs.claimRedemption(alice, id);
+        vm.prank(alice); sdgnrs.claimRedemption(0, id);
     }
     function test_ClaimBeforeResolutionAndLiveManualClaimRejected() public {
         _burn(alice, sdgnrs.totalSupply() / 1000);
         uint32 id = _openBatchId(); _closeAsGame();
-        vm.expectRevert(sDGNRS.NotResolved.selector); sdgnrs.claimRedemption(alice, id);
+        vm.expectRevert(sDGNRS.NotResolved.selector); vm.prank(alice); sdgnrs.claimRedemption(0, id);
         _terminalize();
+        uint32 aliceId = game.walletIdOf(alice);
         vm.expectRevert(sDGNRS.Unauthorized.selector);
-        vm.prank(bob); sdgnrs.claimRedemption(alice, id);
+        vm.prank(bob); sdgnrs.claimRedemption(aliceId, id);
     }
     function test_BurnBlockedDuringLiveness() public {
         vm.warp(vm.getBlockTimestamp() + 31 days);
@@ -108,17 +109,18 @@ contract RedemptionEdgeCasesTest is RedemptionFixture {
         uint256 expected = _claimBase(alice,id) * roll / 100;
         _terminalize();
         uint256 before = _received(alice);
-        vm.prank(alice); sdgnrs.claimRedemption(alice,id);
+        vm.prank(alice); sdgnrs.claimRedemption(0, id);
         assertEq(_received(alice) - before, expected);
         vm.expectRevert(sDGNRS.NoClaim.selector);
-        vm.prank(alice); sdgnrs.claimRedemption(alice,id);
+        vm.prank(alice); sdgnrs.claimRedemption(0, id);
     }
     function test_OperatorCanClaimTerminalForOwnerOnly() public {
         _burn(alice, sdgnrs.totalSupply() / 1000);
         uint32 id = _resolveLive(100); _terminalize();
-        vm.prank(alice); game.setOperatorApproval(bob, true);
+        uint32 aliceId = game.walletIdOf(alice);
+        vm.prank(alice); game.setOperatorApproval(0, bob, true);
         uint256 before = _received(alice); uint256 opBefore = _received(bob);
-        vm.prank(bob); sdgnrs.claimRedemption(alice,id);
+        vm.prank(bob); sdgnrs.claimRedemption(aliceId, id);
         assertGt(_received(alice), before); assertEq(_received(bob), opBefore);
     }
 

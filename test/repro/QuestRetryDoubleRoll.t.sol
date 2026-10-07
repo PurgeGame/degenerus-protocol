@@ -252,7 +252,7 @@ contract QuestRetryDoubleRoll is DeployProtocol {
         if (cost == 0) return;
         if (who.balance < cost) vm.deal(who, cost + 10 ether);
         vm.prank(who);
-        try game.purchase{value: cost}(who, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+        try game.purchase{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
     }
 
     function _fulfillVrfIfPending() internal {

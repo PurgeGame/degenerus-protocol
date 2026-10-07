@@ -69,12 +69,12 @@ contract StorageRecyclingLifecycleTest is DeployProtocol {
             uint256 quantity = (20 ether / price) * 400;
             uint256 value = price * quantity / 400 + 1 ether + (foil ? price * 10 : 0);
             vm.prank(buyers[i]);
-            game.purchase{value: value}(buyers[i], quantity, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, foil);
+            game.purchase{value: value}(0, quantity, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, foil);
             purchaseRefund += _refundLastCall();
             purchaseGas += vm.snapshotGasLastCall("lifecycle-purchase");
             if (foil) boughtFoilAt[i] = active;
             vm.prank(buyers[i]);
-            game.placeDegeneretteBet{value: 0.01 ether}(address(0), 0, 0.01 ether, 1, 0);
+            game.placeDegeneretteBet{value: 0.01 ether}(0, 0, 0.01 ether, 1, 0);
             purchaseRefund += _refundLastCall();
             purchaseGas += vm.snapshotGasLastCall("lifecycle-bet");
         }

@@ -78,7 +78,7 @@ describe("GameLifecycle", function () {
     value = eth("0.01")
   ) {
     return game.connect(player).purchase(
-      player.address,  // buyer
+      0,  // buyer
       quantity,        // ticketQuantity (100 = 1 full ticket at TICKET_SCALE)
       0,               // lootBoxAmount (0 = skip)
       ZERO_BYTES32,    // affiliateCode
@@ -154,7 +154,7 @@ describe("GameLifecycle", function () {
       // Sending 0 ETH with 0 ticket quantity should revert (nothing to do).
       await expect(
         game.connect(alice).purchase(
-          alice.address,
+          0,
           0,         // no tickets
           0,         // no lootbox
           ZERO_BYTES32,
@@ -169,7 +169,7 @@ describe("GameLifecycle", function () {
 
       // Send 0.01 ETH ticket + 0.01 ETH lootbox = 0.02 ETH total.
       const tx = await game.connect(alice).purchase(
-        alice.address,
+        0,
         100,
         boCustom(eth("0.01")), // lootBoxAmount
         ZERO_BYTES32,
@@ -399,16 +399,15 @@ describe("GameLifecycle", function () {
     it("bob can purchase on behalf of alice when alice approves bob as operator", async function () {
       const { game, alice, bob } = await loadFixture(deployFullProtocol);
 
-      await game.connect(alice).setOperatorApproval(bob.address, true);
-      expect(await game.isOperatorApproved(alice.address, bob.address)).to.equal(true);
-
       // The beneficiary and the paying operator of a payer-funded purchase both hold wallet IDs.
-      await giveWalletId(game, alice.address);
+      const aliceId = await giveWalletId(game, alice.address);
       await giveWalletId(game, bob.address);
+
+      await game.connect(alice).setOperatorApproval(0, bob.address, true);
 
       // Bob purchases on behalf of alice.
       const tx = await game.connect(bob).purchase(
-        alice.address,
+        aliceId,
         100,
         0,
         ZERO_BYTES32,
@@ -422,27 +421,36 @@ describe("GameLifecycle", function () {
     it("setOperatorApproval emits OperatorApproval event", async function () {
       const { game, alice, bob } = await loadFixture(deployFullProtocol);
 
-      await expect(game.connect(alice).setOperatorApproval(bob.address, true))
+      const aliceId = await giveWalletId(game, alice.address);
+
+      await expect(game.connect(alice).setOperatorApproval(0, bob.address, true))
         .to.emit(game, "OperatorApproval")
-        .withArgs(alice.address, bob.address, true);
+        .withArgs(aliceId, bob.address, true);
     });
 
     it("revoking operator approval prevents further purchases on behalf", async function () {
       const { game, alice, bob } = await loadFixture(deployFullProtocol);
 
-      await game.connect(alice).setOperatorApproval(bob.address, true);
-      await game.connect(alice).setOperatorApproval(bob.address, false);
+      const aliceId = await giveWalletId(game, alice.address);
+      await giveWalletId(game, bob.address);
 
-      expect(await game.isOperatorApproved(alice.address, bob.address)).to.equal(false);
+      await game.connect(alice).setOperatorApproval(0, bob.address, true);
+      await game.connect(alice).setOperatorApproval(0, bob.address, false);
+
+      await expect(
+        game.connect(bob).purchase(aliceId, 100, 0, ZERO_BYTES32, 0, false, { value: eth("0.01") })
+      ).to.be.revertedWithCustomError(game, "NotApproved");
     });
 
     it("unapproved bob cannot purchase on behalf of alice", async function () {
       const { game, alice, bob } = await loadFixture(deployFullProtocol);
 
       // bob is not approved — purchasing on behalf of alice should revert.
+      const aliceId = await giveWalletId(game, alice.address);
+      await giveWalletId(game, bob.address);
       await expect(
         game.connect(bob).purchase(
-          alice.address,
+          aliceId,
           100,
           0,
           ZERO_BYTES32,
@@ -536,7 +544,7 @@ describe("GameLifecycle", function () {
       await expect(
         coinflip
           .connect(alice)
-          .depositCoinflip("0x0000000000000000000000000000000000000000", flip(100))
+          .depositCoinflip(0, flip(100))
       ).to.not.be.reverted;
     });
   });

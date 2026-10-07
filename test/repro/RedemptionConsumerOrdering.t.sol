@@ -31,7 +31,7 @@ contract RedemptionConsumerOrderingTest is RedemptionCloseTools {
         // A real paid ticket guarantees a read-side step after word publication.
         vm.deal(ALICE, 1 ether);
         vm.prank(ALICE);
-        game.purchase{value: 0.01 ether}(ALICE, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: 0.01 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
     }
 
     function _request() private {
@@ -106,7 +106,8 @@ contract RedemptionConsumerOrderingTest is RedemptionCloseTools {
         assertTrue(game.nextMinerAction() != 8, "the engine finishes daily work before MinerAction.Redemption");
         // A live game has no self-claim door: the resolved claim waits for the engine.
         vm.expectRevert(_batchRoll(burnDay) == 0 ? sDGNRS.NotResolved.selector : sDGNRS.NotGameOver.selector);
-        sdgnrs.claimRedemption(ALICE, burnDay);
+        vm.prank(ALICE);
+        sdgnrs.claimRedemption(0, burnDay);
         vm.expectRevert(sDGNRS.RedemptionStageBlocked.selector);
         vm.prank(address(game));
         sdgnrs.runRedemptionWork(7419, 9_000_000);
@@ -130,7 +131,8 @@ contract RedemptionConsumerOrderingTest is RedemptionCloseTools {
         assertTrue(sdgnrs.redemptionSettlementPending());
         // A consumed head cannot be taken again through any door in a live game.
         vm.expectRevert(_batchRoll(burnDay) == 0 ? sDGNRS.NotResolved.selector : sDGNRS.NotGameOver.selector);
-        sdgnrs.claimRedemption(ALICE, burnDay);
+        vm.prank(ALICE);
+        sdgnrs.claimRedemption(0, burnDay);
 
         _mineOneClaim();
         assertEq(_owed(BOB), 0, "the next call resumes at the next beneficiary");

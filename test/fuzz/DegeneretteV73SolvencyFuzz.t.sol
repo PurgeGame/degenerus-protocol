@@ -68,7 +68,7 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
         vm.prank(address(game));
         coin.mintForGame(player, uint256(perTicket) + 1);
         vm.prank(player);
-        game.placeDegeneretteBet(address(0), CURRENCY_FLIP, perTicket, 1, symbol);
+        game.placeDegeneretteBet(0, CURRENCY_FLIP, perTicket, 1, symbol);
         uint64 betId = DQ.lastBetId(vm, address(game), 1);
         uint256 bet = game.degeneretteBetInfo(1, betId);
         uint256 roiBps = _roiBps(DQ.activity(bet));

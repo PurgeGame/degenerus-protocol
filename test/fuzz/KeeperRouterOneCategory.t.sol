@@ -566,14 +566,21 @@ contract KeeperRouterOneCategory is DeployProtocol {
 
     /// @dev Subscribe `who` as a self-funded LOOTBOX-mode sub (the afking box stamp path).
     function _subscribeLootbox(address who, uint8 q) internal {
+        uint256 seat_who = _grantSeat(who);
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, address(0)); // self, lootbox mode, no reinvest
+        game.subscribe(0, false, false, q, 0, seat_who); // self, lootbox mode, no reinvest
     }
 
     /// @dev Credit `who`'s afkingFunding bucket (Δ5: depositAfkingFunding replaces AfKing.depositFor).
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
-        game.depositAfkingFunding{value: amount}(who);
+        game.depositAfkingFunding{value: amount}(_idOf(who));
+    }
+
+    /// @dev `who`'s wallet ID, registering one through the production hook when it has none.
+    function _idOf(address who) internal returns (uint32 id) {
+        id = game.walletIdOf(who);
+        if (id == 0) id = _giveWalletId(who);
     }
 
     /// @dev Grant `who` the permanent deity bit (mintPacked_ is slot 9).
@@ -622,7 +629,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
     function _buyBox(address buyer, uint256 lootboxAmount) internal {
         vm.prank(buyer);
         game.purchase{value: lootboxAmount + 0.01 ether}(
-            buyer, 400, BoxOrderLib.boCustomFloor(lootboxAmount), bytes32(0), MintPaymentKind.DirectEth, false
+            0, 400, BoxOrderLib.boCustomFloor(lootboxAmount), bytes32(0), MintPaymentKind.DirectEth, false
         );
     }
 

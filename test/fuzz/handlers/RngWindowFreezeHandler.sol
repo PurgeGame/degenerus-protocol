@@ -153,11 +153,6 @@ contract RngWindowFreezeHandler is Test {
             address actor = address(uint160(0x60000 + i));
             actors.push(actor);
             vm.deal(actor, 1_000 ether);
-            // The resolve/open sub-calls run with msg.sender == game (the documented crank
-            // relaxation), so each actor approves the game as operator — lets an in-window
-            // placement/resolve reach the contract's freeze guard rather than an approval revert.
-            vm.prank(actor);
-            game.setOperatorApproval(address(game), true);
         }
 
         // Buffer0 is a valid write buffer at deployment; no synthetic counter is needed.
@@ -203,7 +198,7 @@ contract RngWindowFreezeHandler is Test {
         uint256 oneTicket = priceWei; // 400 entries == 1 price (project_ticket_entry_price_units)
         if (oneTicket != 0 && oneTicket <= currentActor.balance) {
             vm.prank(currentActor);
-            try game.purchase{value: oneTicket}(currentActor, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+            try game.purchase{value: oneTicket}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         }
 
         // Advance until a daily request is in flight (rngLocked latches). The daily request only fires at a
@@ -259,7 +254,7 @@ contract RngWindowFreezeHandler is Test {
             return;
         }
         vm.prank(currentActor);
-        try game.placeDegeneretteBet{value: amt}(address(0), 0, amt, 1, uint8(ticketSeed & 7)) {} catch {}
+        try game.placeDegeneretteBet{value: amt}(0, 0, amt, 1, uint8(ticketSeed & 7)) {} catch {}
         _checkFrozenAfterIsolatedAction();
     }
 
@@ -286,7 +281,7 @@ contract RngWindowFreezeHandler is Test {
             return;
         }
         vm.prank(currentActor);
-        try game.purchase{value: cost}(currentActor, qty, BoxOrderLib.boCustomFloor(boxAmt), bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+        try game.purchase{value: cost}(0, qty, BoxOrderLib.boCustomFloor(boxAmt), bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         _checkFrozenAfterIsolatedAction();
     }
 
@@ -457,7 +452,7 @@ contract RngWindowFreezeHandler is Test {
             uint256 cost = priceWei + boxAmt; // 1 whole ticket (400 entries) + the box leg
             if (cost > currentActor.balance) return false;
             vm.prank(currentActor);
-            try game.purchase{value: cost}(currentActor, 400, BoxOrderLib.boCustomFloor(boxAmt), bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+            try game.purchase{value: cost}(0, 400, BoxOrderLib.boCustomFloor(boxAmt), bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
 
             for (uint256 j; j < 4 && !_midDayWindowOpen(); j++) {
                 vm.prank(currentActor);
@@ -487,7 +482,7 @@ contract RngWindowFreezeHandler is Test {
             return;
         }
         vm.prank(currentActor);
-        try game.placeDegeneretteBet{value: amt}(address(0), 0, amt, 1, uint8(ticketSeed & 7)) {} catch {}
+        try game.placeDegeneretteBet{value: amt}(0, 0, amt, 1, uint8(ticketSeed & 7)) {} catch {}
         _checkMidDayFrozenAfterIsolatedAction();
     }
 
@@ -509,7 +504,7 @@ contract RngWindowFreezeHandler is Test {
             return;
         }
         vm.prank(currentActor);
-        try game.purchase{value: cost}(currentActor, qty, BoxOrderLib.boCustomFloor(boxAmt), bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+        try game.purchase{value: cost}(0, qty, BoxOrderLib.boCustomFloor(boxAmt), bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         _checkMidDayFrozenAfterIsolatedAction();
     }
 

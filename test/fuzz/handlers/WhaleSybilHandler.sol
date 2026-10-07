@@ -92,7 +92,7 @@ contract WhaleSybilHandler is Test {
         if (cost > currentActor.balance) return;
 
         vm.prank(currentActor);
-        try game.purchaseWhalePass{value: cost}(currentActor, qty, bytes32(0)) {
+        try game.purchaseWhalePass{value: cost}(0, qty, bytes32(0)) {
             ghost_whaleDeposited += cost;
             ghost_whaleSuccessful++;
             _trackBalance();
@@ -101,7 +101,7 @@ contract WhaleSybilHandler is Test {
             cost = 4 ether * qty;
             if (cost <= currentActor.balance) {
                 vm.prank(currentActor);
-                try game.purchaseWhalePass{value: cost}(currentActor, qty, bytes32(0)) {
+                try game.purchaseWhalePass{value: cost}(0, qty, bytes32(0)) {
                     ghost_whaleDeposited += cost;
                     ghost_whaleSuccessful++;
                     _trackBalance();
@@ -128,7 +128,7 @@ contract WhaleSybilHandler is Test {
 
         vm.prank(currentActor);
         try game.purchase{value: cost}(
-            currentActor,
+            0,
             100,
             0,
             bytes32(0),
@@ -150,7 +150,7 @@ contract WhaleSybilHandler is Test {
         uint256 balBefore = currentActor.balance;
 
         vm.prank(currentActor);
-        try game.claimWinnings(currentActor) {
+        try game.claimWinnings(0) {
             uint256 balAfter = currentActor.balance;
             if (balAfter > balBefore) {
                 ghost_totalClaimed += balAfter - balBefore;

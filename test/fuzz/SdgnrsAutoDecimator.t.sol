@@ -162,7 +162,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScoreCached.selector, player), abi.encode(uint256(500), uint32(0)));
         vm.prank(address(game)); coin.mintForGame(player, 4_000_000);
         vm.recordLogs();
-        vm.prank(player); coin.decimatorBurn(player, 2_000_000, 0);
+        vm.prank(player); coin.decimatorBurn(0, 2_000_000, 0);
         (uint256 firstBase, uint256 firstCredit) = _recorded(vm.getRecordedLogs());
         (uint64 id, uint256 first) = harness.entryFor(5, player);
         assertGt(id, 0);
@@ -170,7 +170,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         assertEq(first, firstBase * ActivityCurveLib.decBattleMultBps(activityScoreOf(address(game), player)) / 10_000);
         _warp(23);
         vm.recordLogs();
-        vm.prank(player); coin.decimatorBurn(player, 2_000_000, 0);
+        vm.prank(player); coin.decimatorBurn(0, 2_000_000, 0);
         (uint256 topupBase,) = _recorded(vm.getRecordedLogs());
         (uint64 again, uint256 total) = harness.entryFor(5, player);
         uint256 mult = ActivityCurveLib.decBattleMultBps(activityScoreOf(address(game), player));
@@ -426,11 +426,11 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         coin.mintForGame(player, 8000);
         vm.startPrank(player);
         vm.expectRevert(FLIP.AmountLTMin.selector);
-        coin.decimatorBurn(player, 1999, 0);
-        coin.decimatorBurn(player, 2000, 0);
+        coin.decimatorBurn(0, 1999, 0);
+        coin.decimatorBurn(0, 2000, 0);
         vm.expectRevert(FLIP.AmountLTMin.selector);
-        coin.decimatorBurn(player, 1999, 0);
-        coin.decimatorBurn(player, 2000, 0);
+        coin.decimatorBurn(0, 1999, 0);
+        coin.decimatorBurn(0, 2000, 0);
         vm.stopPrank();
         assertEq(coin.balanceOf(player), 4000);
         (uint64 id,) = harness.entryFor(5, player);

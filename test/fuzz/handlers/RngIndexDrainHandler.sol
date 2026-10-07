@@ -227,7 +227,7 @@ contract RngIndexDrainHandler is RngIndexDrainOracle {
         (,,,, uint256 priceWei) = game.purchaseInfo();
         uint256 cost = priceWei * qty / 400;
         vm.prank(actor);
-        try game.purchase{value: cost}(actor, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+        try game.purchase{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
     }
 
     function advance() external {

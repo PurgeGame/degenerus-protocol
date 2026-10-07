@@ -34,7 +34,7 @@ contract EthInEventsTest is DeployProtocol {
         vm.recordLogs();
         vm.prank(buyer);
         game.purchase{value: 0.01 ether}(
-            buyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
+            0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
         );
         (uint256 qty, uint256 weiIn, bool found) = _evt2(vm.getRecordedLogs(), TICKETS_SIG, buyer);
         assertTrue(found, "mint emits EntriesBought");
@@ -50,7 +50,7 @@ contract EthInEventsTest is DeployProtocol {
         vm.recordLogs();
         vm.prank(buyer);
         game.purchase{value: 0.05 ether}(
-            buyer, 0, BoxOrderLib.boCustomFloor(0.05 ether), bytes32(0), MintPaymentKind.DirectEth, false
+            0, 0, BoxOrderLib.boCustomFloor(0.05 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         (, , bool found) = _evt2(vm.getRecordedLogs(), TICKETS_SIG, buyer);
         assertFalse(found, "ticketCost==0 -> no EntriesBought");
@@ -61,7 +61,7 @@ contract EthInEventsTest is DeployProtocol {
         vm.deal(buyer, 2.4 ether);
         vm.recordLogs();
         vm.prank(buyer);
-        game.purchaseWhalePass{value: 2.4 ether}(buyer, 1, bytes32(0));
+        game.purchaseWhalePass{value: 2.4 ether}(0, 1, bytes32(0));
         (uint256 quantity, uint256 weiIn, bool found) = _evt2(vm.getRecordedLogs(), WHALE_SIG, buyer);
         assertTrue(found, "whale pass emits WhalePassPurchased");
         assertEq(quantity, 1, "quantity == passes bought");
@@ -73,7 +73,7 @@ contract EthInEventsTest is DeployProtocol {
         vm.deal(buyer, 0.24 ether);
         vm.recordLogs();
         vm.prank(buyer);
-        game.purchaseLazyPass{value: 0.24 ether}(buyer, bytes32(0));
+        game.purchaseLazyPass{value: 0.24 ether}(0, bytes32(0));
         (, uint256 weiIn, bool found) = _evt2(vm.getRecordedLogs(), LAZY_SIG, buyer);
         assertTrue(found, "lazy pass emits LazyPassPurchased");
         assertEq(weiIn, 0.24 ether, "weiIn == totalPrice");
@@ -87,7 +87,7 @@ contract EthInEventsTest is DeployProtocol {
         vm.recordLogs();
         vm.prank(buyer);
         game.purchase{value: 1 ether}(
-            buyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth, true
+            0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, true
         );
         Vm.Log[] memory logs = vm.getRecordedLogs();
         (, uint256 mintWei, bool mintFound) = _evt2(logs, TICKETS_SIG, buyer);

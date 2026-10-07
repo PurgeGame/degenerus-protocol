@@ -148,7 +148,7 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
     function _buy(uint256 size) private {
         vm.prank(PLAYER);
         game.purchase{value: 0.01 ether + size}(
-            PLAYER, 400, BoxOrderLib.boCustoms(1, size), bytes32(0), MintPaymentKind.DirectEth, false
+            0, 400, BoxOrderLib.boCustoms(1, size), bytes32(0), MintPaymentKind.DirectEth, false
         );
     }
 
@@ -447,7 +447,7 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
 
         uint256 withdrawable = afterState.claimable - 1;
         vm.prank(PLAYER);
-        game.claimWinnings(PLAYER);
+        game.claimWinnings(0);
         assertEq(PLAYER.balance, afterState.playerEth + withdrawable, "cash credit is actually withdrawable");
         assertEq(address(game).balance + withdrawable, afterState.eth, "cash withdrawal backing debit");
         assertEq(game.claimablePoolView() + withdrawable, afterState.liability);

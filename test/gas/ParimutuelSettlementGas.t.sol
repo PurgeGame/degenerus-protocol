@@ -53,7 +53,7 @@ contract ParimutuelSettlementGasTest is DeployProtocol {
         vm.prank(address(game));
         coin.mintForGame(who, STAKE);
         vm.prank(who);
-        parimutuel.placeBet(address(0), over);
+        parimutuel.placeBet(0, over);
     }
 
     /// @dev `n` new winners on OVER plus one UNDER loser, sealed OVER.

@@ -183,7 +183,7 @@ contract CustomerFollowupGasTest is DeployProtocol {
     }
     function _degen(uint8 currency, uint8 symbol, uint256 fresh) private {
         vm.prank(PLAYER);
-        game.placeDegeneretteBet{value:fresh}(address(0), currency, currency == 0 ? uint128(0.01 ether) : 1000, 1, symbol);
+        game.placeDegeneretteBet{value:fresh}(0, currency, currency == 0 ? uint128(0.01 ether) : 1000, 1, symbol);
     }
     function test_Gas_DegeneretteEthFirst() public { _begin(); _degen(0, 3, 0.01 ether); _end("degen_eth_first"); }
     function test_Gas_DegeneretteEthRepeat() public {
@@ -237,7 +237,7 @@ contract CustomerFollowupGasTest is DeployProtocol {
         CustomerFollowupSeeder(address(game)).decimatorBoon(id, expired);
         vm.etch(address(game), code);
     }
-    function _dec() private { vm.prank(PLAYER); coin.decimatorBurn(address(0), 2_000, 0); }
+    function _dec() private { vm.prank(PLAYER); coin.decimatorBurn(0, 2_000, 0); }
     function test_Gas_DecimatorFirst() public {
         _prepareDecimator(); _begin(); _dec(); _end("decimator_first");
     }
@@ -258,7 +258,7 @@ contract CustomerFollowupGasTest is DeployProtocol {
         _begin(); vm.prank(address(coin)); game.consumeDecimatorBoon(id); _end("decimator_empty_dispatch");
     }
     function _fundWwxrp() private { vm.prank(address(game)); wwxrp.mintPrize(PLAYER, 10_000); }
-    function _enter() private { vm.prank(PLAYER); wwxrp.enter(100); }
+    function _enter() private { vm.prank(PLAYER); wwxrp.enter(0, 100); }
     function test_Gas_WwxrpFirst() public { _fundWwxrp(); _begin(); _enter(); _end("wwxrp_first"); }
     function test_Gas_WwxrpExistingMint() public {
         _existingMint(); _fundWwxrp(); _begin(); _enter(); _end("wwxrp_existing_mint");

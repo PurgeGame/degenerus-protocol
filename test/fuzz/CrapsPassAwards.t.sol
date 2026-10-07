@@ -55,12 +55,12 @@ contract CrapsPassAwards is DeployProtocol {
 
     function _buyWhale(address who, uint256 qty, uint256 unitPrice) private {
         vm.prank(who);
-        game.purchaseWhalePass{value: unitPrice * qty}(who, qty, bytes32(0));
+        game.purchaseWhalePass{value: unitPrice * qty}(0, qty, bytes32(0));
     }
 
     function _buyDeity(address who, uint8 symbolId) private {
         vm.prank(who);
-        game.purchaseDeityPass{value: DEITY_FIRST_PRICE}(who, symbolId, bytes32(0));
+        game.purchaseDeityPass{value: DEITY_FIRST_PRICE}(0, symbolId, bytes32(0));
     }
 
     // ── Whale: one normal credit per pass below level 10, nothing from 10 ────
@@ -216,7 +216,7 @@ contract CrapsPassAwards is DeployProtocol {
         index = RecyclingState.writeBuffer(address(game));
         presaleBuffer = index;
         vm.prank(who);
-        game.buyPresaleBox{value: amount}(who, amount);
+        game.buyPresaleBox{value: amount}(0, amount);
     }
 
     function _setWord(uint48 index, uint256 word) private {

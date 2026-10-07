@@ -57,7 +57,7 @@ contract LootboxOpenGoldens is DeployProtocol {
         (, , , , uint256 priceWei) = game.purchaseInfo();
         if (priceWei != 0 && priceWei <= actor.balance) {
             vm.prank(actor);
-            try game.purchase{value: priceWei}(actor, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+            try game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         }
         for (uint256 i; i < 10 && !game.rngLocked(); i++) {
             vm.warp(block.timestamp + 1 days);
@@ -122,7 +122,7 @@ contract LootboxOpenGoldens is DeployProtocol {
         uint256 order = BoxOrderLib.boOrder(1, 1, 1, 1, 1 ether);
         uint256 nominal = 31 * priceWei + 1 ether;
         vm.prank(actor);
-        game.purchase{value: nominal + 1 ether}(actor, 400, order, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: nominal + 1 ether}(0, 400, order, bytes32(0), MintPaymentKind.DirectEth, false);
 
         uint256 reqId = _mineMiddayRequest(actor);
 
@@ -192,13 +192,13 @@ contract LootboxOpenGoldens is DeployProtocol {
         whale = makeAddr("goldenBuyer");
         vm.deal(whale, 20 ether);
         vm.prank(whale);
-        game.purchase{value: (6 + 15 + 50) * priceWei + 1 ether + 1 ether}(whale, 400, BoxOrderLib.boOrder(6, 3, 2, 1, 1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: (6 + 15 + 50) * priceWei + 1 ether + 1 ether}(0, 400, BoxOrderLib.boOrder(6, 3, 2, 1, 1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         pre = makeAddr("goldenPresale");
         vm.deal(pre, 5 ether);
         _giveWalletId(pre); // presale credit is keyed by wallet ID
         _grantPresaleCredit(pre, 0.5 ether);
         vm.prank(pre);
-        game.buyPresaleBox{value: 0.5 ether}(pre, 0.5 ether);
+        game.buyPresaleBox{value: 0.5 ether}(0, 0.5 ether);
         assertEq(RecyclingState.boxCount(address(game), 0), 2, "golden fixture: two entries");
         assertEq(BoxOrderLib.boId(RecyclingState.boxEntry(address(game), 0, 0)), 5, "golden fixture: whale wallet ID 5 at position 0");
         assertEq(BoxOrderLib.boId(RecyclingState.boxEntry(address(game), 0, 1)), 6, "golden fixture: presale wallet ID 6 at position 1");

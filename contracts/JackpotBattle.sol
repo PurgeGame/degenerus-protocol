@@ -3,7 +3,7 @@ pragma solidity 0.8.34;
 
 import {MineFlipGas} from "./libraries/MineFlipGas.sol";
 import {Craps} from "./Craps.sol";
-import {ICoinflipStake, IFlipCoin, IGameCraps} from "./CrapsBattle.sol";
+import {ICoinflipStake, ICrapsEngine, IFlipCoin, IGameCraps} from "./CrapsBattle.sol";
 import {CrapsBattleStorage} from "./storage/CrapsBattleStorage.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 import {CrapsPriceLib} from "./libraries/CrapsPriceLib.sol";
@@ -35,6 +35,30 @@ contract JackpotBattle is CrapsBattleStorage {
     uint256 private constant _HIGH_LOSS_BPS = 1200;
     uint256 private constant _HIGH_COMP_SHARE_BPS = 8000;
     event JackpotBattleEntry(uint64 indexed slot, uint256 indexed betId, uint32 indexed playerId, uint256 units, uint32 chips);
+
+    /// @notice Open a custom battle; the table's `createBattle` forwards here. See CrapsBattle.
+    /// @dev The creator roll is checked FIRST so a granted creator never pays for the
+    ///      cross-contract call; the vault's majority holder always qualifies, so the authority
+    ///      behind the grant can never be locked out of its own table.
+    function createBattle(
+        uint32 played,
+        uint8 bankMult,
+        uint16 goalMult,
+        uint24 stakeUnits,
+        uint40 closeTime,
+        bool multiEntry,
+        uint16 highRollerMult
+    ) external returns (uint64 slot) {
+        if (!_battleCreator[msg.sender] && !IVaultOwnership(ContractAddresses.VAULT).isVaultOwner(msg.sender)) {
+            revert NotBattleCreator();
+        }
+        uint256 terms = ICrapsEngine(ContractAddresses.CRAPS_ENGINE).customDefinition(
+            played, bankMult, goalMult, stakeUnits, closeTime, multiEntry, highRollerMult
+        );
+        unchecked { slot = uint64(_CUSTOM_SLOT_BASE + ++_customBattleCount); }
+        _customBattle[slot] = terms;
+        emit CrapsBattleCreated(slot, msg.sender, terms);
+    }
 
     function setBattleCreator(address account, bool allowed) external {
         if (!IVaultOwnership(ContractAddresses.VAULT).isVaultOwner(msg.sender)) revert NotVaultOwner();
@@ -453,9 +477,9 @@ contract JackpotBattle is CrapsBattleStorage {
         return ((board >> _BG_STAKE_SHIFT) & _BSTAKE_MAX) * _BATTLE_STAKE_UNIT;
     }
 
-    function convertNormalToHigh(uint32 highCount) external {
+    function convertNormalToHigh(uint32 id, uint32 highCount) external {
         if (highCount == 0) revert BadPassCount();
-        uint32 id = uint32(_walletWord(msg.sender, false) >> CrapsPreferenceLib.ID_SHIFT);
+        id = _accountId(id);
         uint256 word = _passCreditsById[id];
         uint256 cost;
         uint256 highs;
@@ -471,9 +495,9 @@ contract JackpotBattle is CrapsBattleStorage {
         emit CrapsNormalPassesConverted(id, cost, highCount);
     }
 
-    function upgradeReservedDay(uint24 day) external {
+    function upgradeReservedDay(uint32 id, uint24 day) external {
         if (!_reservableDay(day)) revert DayNotReservable();
-        uint32 id = uint32(_walletWord(msg.sender, false) >> CrapsPreferenceLib.ID_SHIFT);
+        id = _accountId(id);
         uint256 daySlot = _daySlotOf(day);
         uint256 seat = _loadDaySeat(daySlot, id) & _MASK32;
         if (seat == 0) revert NoSuchBet();
@@ -487,6 +511,17 @@ contract JackpotBattle is CrapsBattleStorage {
             _dayTickets[daySlot] += _DT_ALL_HIGH;
         }
         emit CrapsDayWindowsUpgraded(id, day, uint8(_BET_DAYHIGH_MASK >> _BET_HIGH_SHIFT), 0);
+    }
+
+    /// @dev The pass doors' account: `id == 0` is the caller, by its existing wallet ID; any other
+    ///      `id` must be allocated (the Game's resolution reverts otherwise) and the caller
+    ///      authorized for it. These doors move only ID-keyed credits and seats, so neither the
+    ///      key nor the payee is needed.
+    function _accountId(uint32 id) private returns (uint32) {
+        if (id == 0) return uint32(_walletWord(msg.sender, false) >> CrapsPreferenceLib.ID_SHIFT);
+        (,, bool authorized) = IGameCraps(_GAME).resolveAccount(id, msg.sender);
+        if (!authorized) revert NotApproved();
+        return id;
     }
 
     function _daySlotOf(uint256 day) private pure returns (uint256) {

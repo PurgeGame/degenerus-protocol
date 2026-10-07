@@ -30,6 +30,7 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
 
     address private player; // the bet/stake owner (the target)
     address private gifter; // an unrelated third party that funds gifts
+    uint32 private playerId; // the target's wallet ID (gifts and approvals name accounts by ID)
 
     function setUp() public {
         _deployProtocol();
@@ -40,6 +41,7 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
         vm.deal(player, 1000 ether);
         vm.deal(gifter, 1000 ether);
         vm.deal(address(game), 500 ether);
+        playerId = _giveWalletId(player);
 
         // placeDegeneretteBet reverts E() when lootboxRngIndex == 0; seed it to 1.
         uint256 lrPacked = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
@@ -62,7 +64,7 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
     /// @dev claimBingo needs a registered player; a minimum ETH bet registers one.
     function _register(address who) internal {
         vm.prank(who);
-        game.placeDegeneretteBet{value: BET_ETH}(address(0), CURRENCY_ETH, BET_ETH, 1, 0);
+        game.placeDegeneretteBet{value: BET_ETH}(0, CURRENCY_ETH, BET_ETH, 1, 0);
     }
 
     function _fundFlip(address who, uint256 amount) internal {
@@ -81,7 +83,7 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
         uint64 idBefore = _lastBetId();
 
         vm.prank(gifter); // gifter is NOT the player and NOT approved
-        game.placeDegeneretteBet(player, CURRENCY_FLIP, MIN_BET_FLIP, 1, 0);
+        game.placeDegeneretteBet(playerId, CURRENCY_FLIP, MIN_BET_FLIP, 1, 0);
 
         assertEq(coin.balanceOf(player), playerBefore, "no drain: player FLIP untouched");
         assertLt(coin.balanceOf(gifter), gifterBefore, "funder paid the bet");
@@ -97,7 +99,7 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
         uint64 idBefore = _lastBetId();
 
         vm.prank(gifter);
-        game.placeDegeneretteBet{value: BET_ETH}(player, CURRENCY_ETH, BET_ETH, 1, 0);
+        game.placeDegeneretteBet{value: BET_ETH}(playerId, CURRENCY_ETH, BET_ETH, 1, 0);
 
         assertEq(gifter.balance, gifterEthBefore - BET_ETH, "funder's ETH funded the bet");
         assertEq(player.balance, playerEthBefore, "no drain: player ETH untouched");
@@ -109,20 +111,20 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
     function testWwxrpGiftReverts() public {
         vm.prank(gifter);
         vm.expectRevert(UnsupportedCurrency.selector);
-        game.placeDegeneretteBet(player, CURRENCY_WWXRP, 1 ether, 1, 0);
+        game.placeDegeneretteBet(playerId, CURRENCY_WWXRP, 1 ether, 1, 0);
     }
 
     /// @notice An approved operator spends the PLAYER's funds (the old funded-self path), not a gift.
     function testApprovedOperatorSpendsPlayerFunds() public {
         _fundFlip(player, MIN_BET_FLIP);
         vm.prank(player);
-        game.setOperatorApproval(gifter, true);
+        game.setOperatorApproval(0, gifter, true);
 
         uint256 playerBefore = coin.balanceOf(player);
         uint256 gifterBefore = coin.balanceOf(gifter); // 0
 
         vm.prank(gifter);
-        game.placeDegeneretteBet(player, CURRENCY_FLIP, MIN_BET_FLIP, 1, 0);
+        game.placeDegeneretteBet(playerId, CURRENCY_FLIP, MIN_BET_FLIP, 1, 0);
 
         assertEq(coin.balanceOf(player), playerBefore - MIN_BET_FLIP, "approved op spends player's FLIP");
         assertEq(coin.balanceOf(gifter), gifterBefore, "approved operator is not charged");
@@ -143,7 +145,7 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
         emit CoinflipDeposit(player, 0); // assert topic1 (player) only; amount not checked
 
         vm.prank(gifter);
-        coinflip.depositCoinflip(player, amt);
+        coinflip.depositCoinflip(playerId, amt);
 
         assertEq(coin.balanceOf(player), playerBefore, "no drain: player FLIP untouched");
         assertEq(coin.balanceOf(gifter), gifterBefore - amt, "funder's FLIP funded the stake");
@@ -160,27 +162,27 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
         uint32[8] memory slots;
         vm.prank(gifter);
         vm.expectRevert(NotSlotOwner.selector);
-        game.claimBingo(player, 1, 0, slots);
+        game.claimBingo(playerId, 1, 0, slots);
     }
 
-    /// @notice Self-claim (address(0)) resolves to msg.sender (fails later on slot ownership).
+    /// @notice Self-claim (ID 0) resolves to msg.sender (fails later on slot ownership).
     function testClaimBingoSelfPassesGate() public {
         _register(player);
         uint32[8] memory slots;
         vm.prank(player);
         vm.expectRevert(NotSlotOwner.selector);
-        game.claimBingo(address(0), 1, 0, slots);
+        game.claimBingo(0, 1, 0, slots);
     }
 
     /// @notice Operator approval is neither required nor harmful on the permissionless path.
     function testClaimBingoApprovedOperatorPassesGate() public {
         _register(player);
         vm.prank(player);
-        game.setOperatorApproval(gifter, true);
+        game.setOperatorApproval(0, gifter, true);
         uint32[8] memory slots;
         vm.prank(gifter);
         vm.expectRevert(NotSlotOwner.selector);
-        game.claimBingo(player, 1, 0, slots);
+        game.claimBingo(playerId, 1, 0, slots);
     }
 
     // ----- claimAffiliateDgnrs array overload -----
@@ -188,16 +190,16 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
     /// @notice The batch overload is per-item isolated: a list of ineligible affiliates does NOT
     ///         revert (each item's revert is swallowed), unlike the single-affiliate entry.
     function testAffiliateBatchIsolatesIneligible() public {
-        address[] memory affs = new address[](2);
-        affs[0] = player;
-        affs[1] = gifter;
+        uint32[] memory affs = new uint32[](2);
+        affs[0] = playerId;
+        affs[1] = _giveWalletId(gifter);
         vm.prank(gifter); // permissionless: any caller
         game.claimAffiliateDgnrs(affs); // must NOT revert
     }
 
     /// @notice A blank array claims the caller's own — so it propagates the (ineligible) revert.
     function testAffiliateBlankArrayIsSelf() public {
-        address[] memory empty = new address[](0);
+        uint32[] memory empty = new uint32[](0);
         vm.prank(player);
         vm.expectRevert();
         game.claimAffiliateDgnrs(empty);

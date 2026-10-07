@@ -54,7 +54,7 @@ contract StaleBufferedDailyWordClamp is DeployProtocol {
         address buyer = makeAddr("buyer");
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
-        game.purchase{value: 0.05 ether}(buyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: 0.05 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
 
         // Warp via vm.getBlockTimestamp(): the optimizer treats the TIMESTAMP opcode as
         // invariant within a transaction, so `block.timestamp` expressions are unreliable

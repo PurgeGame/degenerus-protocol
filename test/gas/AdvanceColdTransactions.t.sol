@@ -104,21 +104,25 @@ abstract contract ColdSubscriberFixture is DeployProtocol {
         for (uint256 i; i < n; ++i) {
             address player = address(uint160(0xA5700000 + i));
             players[i] = player;
+            _giveWalletId(player);
+            uint256 seat;
             if (i < 1000) {
-                _grantSeat(player);
+                seat = _grantSeat(player);
             } else {
                 _markSeatEligible(player);
                 vm.prank(ContractAddresses.VAULT);
                 afkingSubToken.vaultMintSeats(player, 1);
+                seat = _seatOf(player);
             }
             address source = _split() ? address(uint160(0xA5800000 + i)) : player;
-            game.depositAfkingFunding{value: 50 ether}(source);
+            uint32 sourceId = _split() ? _giveWalletId(source) : game.walletIdOf(player);
+            game.depositAfkingFunding{value: 50 ether}(sourceId);
             if (_split()) {
                 vm.prank(source);
-                game.setOperatorApproval(player, true);
+                game.setOperatorApproval(0, player, true);
             }
             vm.prank(player);
-            game.subscribe(address(0), _split(), mode == 1, 1, _split() ? source : address(0));
+            game.subscribe(0, _split(), mode == 1, 1, _split() ? sourceId : 0, seat);
         }
         if (mode != 3) {
             bytes memory live = address(game).code;
@@ -133,7 +137,7 @@ abstract contract ColdSubscriberFixture is DeployProtocol {
             for (uint256 i; i < n; ++i) {
                 uint256 amount = game.afkingFundingOf(players[i]);
                 vm.prank(players[i]);
-                game.withdrawAfkingFunding(amount);
+                game.withdrawAfkingFunding(0, amount);
             }
         }
         bytes memory original = address(game).code;

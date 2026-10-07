@@ -204,8 +204,8 @@ contract CrapsHighReserveTest is CrapsPins {
 
     function test_upgradesAndCompedHighEntriesQualifyAtTheirAcceptedTerms() public {
         _enter(ALICE, false, true);
-        vm.prank(ALICE); table.upgradeDayWindows(day, 1 << 5);
-        uint256 code = uint160(BOB) | (uint256(1) << 168) | (uint256(5) << 176);
+        vm.prank(ALICE); table.upgradeDayWindows(0, day, 1 << 5);
+        uint256 code = uint256(_idFor(BOB)) | (uint256(1) << 168) | (uint256(5) << 176);
         flip.setCompLane(1_000_000);
         vm.prank(ContractAddresses.VAULT); table.vaultComp(code);
         assertEq(flip.burned(BOB), 0);
@@ -230,7 +230,7 @@ contract CrapsHighReserveTest is CrapsPins {
     function test_lateEntryUpgradeAndDirectHookCannotChangeEligibility() public {
         _enter(ALICE, false, true);
         _lock(50_000);
-        vm.prank(ALICE); vm.expectRevert(); table.upgradeDayWindows(day, 1 << 5);
+        vm.prank(ALICE); vm.expectRevert(); table.upgradeDayWindows(0, day, 1 << 5);
         vm.prank(BOB); vm.expectRevert(); table.enterBonusBattle(5, 0, multiple);
         vm.expectRevert(JackpotBattle.OnlyTableSelf.selector); cold.settleHighRollerReserve(slot);
         _start(_word(true), 0); _finish(1);

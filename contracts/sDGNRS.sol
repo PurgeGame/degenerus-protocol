@@ -38,27 +38,31 @@ import {MineFlipGas} from "./libraries/MineFlipGas.sol";
 interface IDegenerusGamePlayer {
     /// @notice Crank the unified miner router (advance + box opens), paying any earned bounty.
     function mineFlip() external;
-    /// @notice Start or extend a daily afking subscription for `player` (self when 0/msg.sender).
-    /// @dev The afking subscription surface is GAME-resident. sDGNRS self-subscribes
-    ///      (player == address(this) == msg.sender) so the GAME's self-consent path passes
-    ///      with no operator approval.
+    /// @notice Start or extend a daily afking subscription for account `id` (0 = caller).
+    /// @dev The afking subscription surface is GAME-resident. sDGNRS self-subscribes with
+    ///      `id == 0` and `fundingSourceId == 0`. SDGNRS's subscription is exempt from the seat
+    ///      burn, so `seatId` is ignored (pass 0).
     function subscribe(
-        address player,
+        uint32 id,
         bool drainGameCreditFirst,
         bool useTickets,
         uint8 dailyQuantity,
-        address fundingSource
+        uint32 fundingSourceId,
+        uint256 seatId
     ) external payable;
-    /// @notice Claim accumulated ETH winnings for a player.
-    function claimWinnings(address player) external;
+    /// @notice Claim account `id`'s accumulated ETH winnings (0 = caller); pays the payee.
+    function claimWinnings(uint32 id) external;
     /// @notice View claimable ETH winnings for a player.
     function claimableWinningsOf(address player) external view returns (uint256);
     /// @notice Current ordered RNG consumer stage (1 = redemption settlement).
     function rngConsumerStage() external view returns (uint8);
     /// @notice Check if game is over.
     function gameOver() external view returns (bool);
-    /// @notice Check if `operator` is approved to act for `owner` (game operator approval).
-    function isOperatorApproved(address owner, address operator) external view returns (bool);
+    /// @notice Resolve account `id` for `caller`: key, payee and whether `caller` may act for it
+    ///         (its key, a smurf's owner, or an approved operator). Reverts for an unallocated
+    ///         or zero `id`; never reverts on authorization.
+    function resolveAccount(uint32 id, address caller)
+        external view returns (address key, address payee, bool authorized);
     /// @notice Check if the liveness-timeout game-over trigger is active (fires before gameOver latches).
     function livenessTriggered() external view returns (bool);
     /// @notice Get player's activity score and permanent Game wallet ID (0 = none).
@@ -76,8 +80,6 @@ interface IDegenerusGamePlayer {
 
 /// @notice Interface for Coinflip contract methods used by sDGNRS.
 interface ICoinflipPlayer {
-    /// @notice Claim coinflip winnings for a player.
-    function claimCoinflips(address player, uint256 amount) external returns (uint256 claimed);
     /// @notice Preview claimable coinflip winnings for a player.
     function previewClaimCoinflips(address player) external view returns (uint256 mintable);
     /// @notice Settle-then-read sDGNRS's redeemable coinflip backing (seed claimable + carry, disjoint).
@@ -573,22 +575,22 @@ contract sDGNRS {
         external returns (bool)
     {
         if (msg.sender != address(this)) revert Unauthorized();
-        return _claimRedemptionFor(player, walletId, batchId, false, word);
+        return _claimRedemptionFor(player, player, walletId, batchId, false, word);
     }
 
-    /// @notice Settle a parked claim on its batch's word. Player or approved operator only.
+    /// @notice Settle account `id`'s parked claim on its batch's word. The account's key, a smurf's
+    ///         owner or an approved operator only (`id == 0` is the caller).
     /// @dev The word, roll and synthetic flip are fixed, but the lootbox half resolves at the
-    ///      level live at claim time. Terminal claims take the usual direct terminal shape; the
-    ///      word is then unused.
-    function claimParkedRedemption(address player, uint32 batchId) external {
-        uint32 walletId = _walletIdOf(player);
+    ///      level live at claim time. Terminal claims take the usual direct terminal shape, paid
+    ///      to the account's payee; the word is then unused.
+    function claimParkedRedemption(uint32 id, uint32 batchId) external {
+        (address key, address payee, uint32 walletId) = _claimant(id);
         uint256 word = _parkedRedemptionWord[walletId][batchId];
         if (word == 0) revert NoClaim();
-        if (player != msg.sender && !game.isOperatorApproved(player, msg.sender)) revert Unauthorized();
         bool isTerminal = game.gameOver();
         if (!isTerminal && game.livenessTriggered()) revert EndingPending();
         delete _parkedRedemptionWord[walletId][batchId];
-        if (!_claimRedemptionFor(player, walletId, batchId, isTerminal, word)) revert NoClaim();
+        if (!_claimRedemptionFor(key, payee, walletId, batchId, isTerminal, word)) revert NoClaim();
     }
 
     /// @notice Holder base (supply plus the open batch's escrow) immediately after the last century
@@ -748,20 +750,17 @@ contract sDGNRS {
         poolBalances[uint8(Pool.PresaleBox)] = uint128(presaleBoxAmount);
 
         // Protocol-owned self-subscription: claimable-first daily lootbox
-        // buy of flat quantity 1. Self-consent —
-        // sDGNRS IS the player (player == msg.sender). The afking module exempts the
-        // pinned SDGNRS address from its seat-token and purchase gates, so this subscribe
-        // lands before the seat token is deployed; the token's constructor then mints
-        // sDGNRS its construction seat.
-        // The afking surface is GAME-resident; self-subscribe directly against the
-        // GAME (subscriber == msg.sender ⇒ the GAME's self-consent path, no operator
-        // approval needed).
+        // buy of flat quantity 1, for the caller's own account (`id == 0`), self-funded.
+        // The afking module exempts the pinned SDGNRS address from its seat burn and
+        // purchase gates, so this subscribe lands before the seat token is deployed and
+        // `seatId` is ignored; the token's constructor then mints sDGNRS its construction
+        // seat.
         // Coinflip auto-rebuy is NOT enabled here: during the 20-day seed window
         // sDGNRS's daily flip wins accumulate as unminted coinflip claimable backing
         // (sDGNRS never holds a FLIP wallet balance); Coinflip arms perpetual
         // auto-rebuy (0 take-profit) once the final seeded day settles, after which
         // wins roll into the carry.
-        game.subscribe(address(this), true, false, 1, address(0));
+        game.subscribe(0, true, false, 1, 0, 0);
 
         // Pre-approve GAME to pull stETH for both redemption claim legs. Live settlement funds
         // each leg (resolveRedemptionLootbox / creditRedemptionDirect) with msg.value ETH and the
@@ -1050,7 +1049,7 @@ contract sDGNRS {
         uint256 ethBal = address(this).balance;
         uint256 stethBal = steth.balanceOf(address(this));
         if ((value > ethBal || value + _pendingRedemptionEthValue > ethBal + stethBal) && _claimableWinnings() != 0) {
-            game.claimWinnings(address(0));
+            game.claimWinnings(0);
             ethBal = address(this).balance;
             stethBal = steth.balanceOf(address(this));
         }
@@ -1077,38 +1076,39 @@ contract sDGNRS {
     //                       GAMBLING BURN FUNCTIONS
     // =====================================================================
 
-    /// @notice Claim a gambling-burn redemption for `player` in batch `batchId` once the game is over.
+    /// @notice Claim account `id`'s gambling-burn redemption in batch `batchId` once the game is over.
     /// @dev In a live game mineFlip settles every redemption in batch order, so this is the
-    ///      post-gameover door only, and it deletes the claim under `player`'s wallet ID. Only
-    ///      `player` or an operator `player` approved on the GAME may call, since the payout is
-    ///      pushed straight to `player` (ETH, with stETH covering any ETH shortfall) rather than
-    ///      credited to the Game — a game-claimable credit would forfeit in the post-gameover sweep.
+    ///      post-gameover door only, and it deletes the claim under the account's wallet ID. Only
+    ///      the account's key, a smurf's owner or an operator approved for the account on the GAME
+    ///      may call (`id == 0` is the caller), since the payout is pushed straight to the
+    ///      account's payee (ETH, with stETH covering any ETH shortfall) rather than credited to
+    ///      the Game — a game-claimable credit would forfeit in the post-gameover sweep.
     ///      - A closed batch must carry a roll (resolved live, or at a flat 100 by the ending): the rolled amount pays 100% direct, with no lootbox leg
     ///        and no FLIP.
     ///      - The batch still open at game over never closed and has no price or roll: each claim
     ///        unwinds at the plain game-over value of its tokens — exactly what a game-over burn of
     ///        that many tokens pays, through the same payout path. No roll, lootbox or FLIP.
-    /// @param player Claimant whose redemption to settle.
+    /// @param id Claimant account (0 = caller).
     /// @param batchId Batch whose claim to settle.
-    function claimRedemption(address player, uint32 batchId) external {
+    function claimRedemption(uint32 id, uint32 batchId) external {
         bool open = batchId == _openBatch;
         if (!open && redemptionBatches[batchId].roll == 0) revert NotResolved();
         // Only once the game is over, which is irreversible: while the game-over trigger reads true
         // before that, it can still read false again, and a terminal settlement taken then would stick.
         if (!game.gameOver()) revert NotGameOver();
-        if (player != msg.sender && !game.isOperatorApproved(player, msg.sender)) revert Unauthorized();
-        uint32 walletId = _walletIdOf(player);
+        (address key, address payee, uint32 walletId) = _claimant(id);
         if (open) {
-            _unwindOpenClaim(player, walletId, batchId);
+            _unwindOpenClaim(key, payee, walletId, batchId);
             return;
         }
-        if (!_claimRedemptionFor(player, walletId, batchId, true, 0)) revert NoClaim();
+        if (!_claimRedemptionFor(key, payee, walletId, batchId, true, 0)) revert NoClaim();
     }
 
-    /// @dev Pay a claim in the batch still open at game over its tokens' game-over value. The
-    ///      tokens left supply at the burn but stayed in the holder base through the escrow, so
-    ///      the value matches a game-over burn of the same count; the escrow then drops by them.
-    function _unwindOpenClaim(address player, uint32 walletId, uint32 batchId) private {
+    /// @dev Pay a claim in the batch still open at game over its tokens' game-over value, to the
+    ///      account's payee. The tokens left supply at the burn but stayed in the holder base
+    ///      through the escrow, so the value matches a game-over burn of the same count; the
+    ///      escrow then drops by them.
+    function _unwindOpenClaim(address player, address payee, uint32 walletId, uint32 batchId) private {
         uint256 tokens = pendingRedemptions[walletId][batchId].tokens;
         if (tokens == 0) revert NoClaim();
         uint256 value = _gameOverValue(tokens);
@@ -1119,7 +1119,7 @@ contract sDGNRS {
         }
         delete pendingRedemptions[walletId][batchId];
         emit RedemptionClaimed(player, batchId, 0, value, 0, 0);
-        _payGameOverValue(player, value);
+        _payGameOverValue(payee, value);
     }
 
     /// @dev The estimator and execution use identical rounding and dust treatment.
@@ -1138,14 +1138,20 @@ contract sDGNRS {
 
     /// @dev Shared settle core for the miner's batch settlement, parked claims and the post-game-over
     ///      claim. Callers must have verified the batch is resolved and (in terminal mode) that the
-    ///      caller is `player` or an operator `player` approved on the Game, and pass `player`'s
-    ///      wallet ID; the pending-claim existence check lives here, returning false on an empty
-    ///      (wallet ID, batch) slot. The claim, the Game credits and the FLIP credit run by ID;
-    ///      `player` receives terminal ETH, events and the box resolver's address argument.
+    ///      caller may act for the account, and pass the account's key `player`, its `payee` and
+    ///      its wallet ID; the pending-claim existence check lives here, returning false on an
+    ///      empty (wallet ID, batch) slot. The claim, the Game credits and the FLIP credit run by
+    ///      ID; `player` keys events and the box resolver's address argument, and `payee`
+    ///      receives terminal ETH.
     ///      The claim's share of the batch is pro rata by tokens: one close price for every token.
-    function _claimRedemptionFor(address player, uint32 walletId, uint32 batchId, bool isTerminal, uint256 word)
-        private returns (bool)
-    {
+    function _claimRedemptionFor(
+        address player,
+        address payee,
+        uint32 walletId,
+        uint32 batchId,
+        bool isTerminal,
+        uint256 word
+    ) private returns (bool) {
         PendingRedemption memory claim = pendingRedemptions[walletId][batchId];
         if (claim.tokens == 0) return false;
         RedemptionBatch memory batch = redemptionBatches[batchId];
@@ -1180,9 +1186,9 @@ contract sDGNRS {
         emit RedemptionClaimed(player, batchId, batch.roll, ethDirect, lootboxEth, flipPaid);
 
         if (isTerminal) {
-            // 100% direct push (player/operator restriction enforced by callers; the untrusted .call comes after
-            // the slot delete above — CEI).
-            _payEth(player, ethDirect);
+            // 100% direct push to the payee (account authorization enforced by callers; the
+            // untrusted .call comes after the slot delete above — CEI).
+            _payEth(payee, ethDirect);
             return true;
         }
 
@@ -1350,11 +1356,20 @@ contract sDGNRS {
         emit RedemptionSubmitted(beneficiary, amount, id);
     }
 
-    /// @dev `player`'s Game wallet ID: the forward word's cached copy, else the Game's answer
-    ///      (0 = none, which holds no claim).
-    function _walletIdOf(address player) private view returns (uint32 walletId) {
-        walletId = uint32(_redemptionDayValue[player] >> DAY_VALUE_ID_SHIFT);
-        if (walletId == 0) walletId = game.walletIdOf(player);
+    /// @dev Claimant account `id` for the caller: its key, payee and wallet ID. `id == 0` is the
+    ///      caller, whose ID is the forward word's cached copy, else the Game's answer (0 = none,
+    ///      which holds no claim). Any other ID resolves through Game `resolveAccount` (reverts `E`
+    ///      when unallocated) and must authorize the caller.
+    function _claimant(uint32 id) private view returns (address key, address payee, uint32 walletId) {
+        if (id == 0) {
+            walletId = uint32(_redemptionDayValue[msg.sender] >> DAY_VALUE_ID_SHIFT);
+            if (walletId == 0) walletId = game.walletIdOf(msg.sender);
+            return (msg.sender, msg.sender, walletId);
+        }
+        bool authorized;
+        (key, payee, authorized) = game.resolveAccount(id, msg.sender);
+        if (!authorized) revert Unauthorized();
+        walletId = id;
     }
 
     /// @dev ETH + stETH + Game claimable net of every outstanding redemption reserve, floored at 0.

@@ -137,7 +137,7 @@ describe("Paper Parity (Phase 46)", function () {
       const futureBefore = await game.futurePrizePoolView();
       await game
         .connect(alice)
-        .purchase(alice.address, qty, 0, ZeroHash, 0,false,  { value: expectedCost });
+        .purchase(0, qty, 0, ZeroHash, 0,false,  { value: expectedCost });
 
       // Verify pools received funds (90/10 split)
       const nextAfter = await game.nextPrizePoolView();
@@ -156,7 +156,7 @@ describe("Paper Parity (Phase 46)", function () {
 
       await game
         .connect(alice)
-        .purchase(alice.address, qty, 0, ZeroHash, 0,false,  { value: expectedCost });
+        .purchase(0, qty, 0, ZeroHash, 0,false,  { value: expectedCost });
     });
 
     it("10 full tickets (qty=4000) costs 10 * priceWei", async function () {
@@ -170,7 +170,7 @@ describe("Paper Parity (Phase 46)", function () {
 
       await game
         .connect(alice)
-        .purchase(alice.address, qty, 0, ZeroHash, 0,false,  { value: expectedCost });
+        .purchase(0, qty, 0, ZeroHash, 0,false,  { value: expectedCost });
     });
   });
 
@@ -187,7 +187,7 @@ describe("Paper Parity (Phase 46)", function () {
       const costWei = priceWei;
       await game
         .connect(alice)
-        .purchase(alice.address, qty, 0, ZeroHash, 0,false,  { value: costWei });
+        .purchase(0, qty, 0, ZeroHash, 0,false,  { value: costWei });
 
       const nextDelta = (await game.nextPrizePoolView()) - nextBefore;
       const futureDelta =
@@ -216,7 +216,7 @@ describe("Paper Parity (Phase 46)", function () {
 
       await game
         .connect(alice)
-        .purchase(alice.address, 0, boCustom(lootboxAmount), ZeroHash, 0,false,  {
+        .purchase(0, 0, boCustom(lootboxAmount), ZeroHash, 0,false,  {
           value: lootboxAmount,
         });
 
@@ -262,7 +262,7 @@ describe("Paper Parity (Phase 46)", function () {
       // Purchase whale bundle (100-level, bundleType=3)
       await game
         .connect(alice)
-        .purchaseWhalePass(alice.address, 1, hre.ethers.ZeroHash, {
+        .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, {
           value: ethers.parseEther("2.4"),
         });
 
@@ -286,7 +286,7 @@ describe("Paper Parity (Phase 46)", function () {
       // Verify by purchasing -- will revert if price is wrong
       await game
         .connect(alice)
-        .purchaseWhalePass(alice.address, 1, hre.ethers.ZeroHash, {
+        .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, {
           value: expectedPrice,
         });
     });
@@ -301,7 +301,7 @@ describe("Paper Parity (Phase 46)", function () {
       const expectedPrice = ethers.parseEther("0.24");
       await game
         .connect(alice)
-        .purchaseLazyPass(alice.address, hre.ethers.ZeroHash, { value: expectedPrice });
+        .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: expectedPrice });
     });
 
     it("sum-of-10-level-prices at level 3+ (via PriceLookupTester)", async function () {
@@ -358,7 +358,7 @@ describe("Paper Parity (Phase 46)", function () {
       const expectedPrice = ethers.parseEther("24");
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: expectedPrice });
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: expectedPrice });
     });
 
     it("second deity pass (k=1): 25 ETH", async function () {
@@ -367,7 +367,7 @@ describe("Paper Parity (Phase 46)", function () {
       // Buy first pass
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, {
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, {
           value: ethers.parseEther("24"),
         });
 
@@ -375,7 +375,7 @@ describe("Paper Parity (Phase 46)", function () {
       const expectedPrice = ethers.parseEther("25");
       await game
         .connect(bob)
-        .purchaseDeityPass(bob.address, 1, hre.ethers.ZeroHash, { value: expectedPrice });
+        .purchaseDeityPass(0, 1, hre.ethers.ZeroHash, { value: expectedPrice });
     });
 
     it("third deity pass (k=2): 27 ETH", async function () {
@@ -384,12 +384,12 @@ describe("Paper Parity (Phase 46)", function () {
 
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, {
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, {
           value: ethers.parseEther("24"),
         });
       await game
         .connect(bob)
-        .purchaseDeityPass(bob.address, 1, hre.ethers.ZeroHash, {
+        .purchaseDeityPass(0, 1, hre.ethers.ZeroHash, {
           value: ethers.parseEther("25"),
         });
 
@@ -397,7 +397,7 @@ describe("Paper Parity (Phase 46)", function () {
       const expectedPrice = ethers.parseEther("27");
       await game
         .connect(carol)
-        .purchaseDeityPass(carol.address, 2, hre.ethers.ZeroHash, { value: expectedPrice });
+        .purchaseDeityPass(0, 2, hre.ethers.ZeroHash, { value: expectedPrice });
     });
 
   });
@@ -441,7 +441,7 @@ describe("Paper Parity (Phase 46)", function () {
       const price = ethers.parseEther("2.4");
       await game
         .connect(alice)
-        .purchaseWhalePass(alice.address, 1, hre.ethers.ZeroHash, { value: price });
+        .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: price });
 
       const nextDelta = (await game.nextPrizePoolView()) - nextBefore;
       const futureDelta =

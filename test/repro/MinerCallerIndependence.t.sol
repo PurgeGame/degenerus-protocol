@@ -72,7 +72,7 @@ contract MinerCallerIndependenceTest is DeployProtocol {
     function _buy(uint256 amount) private {
         vm.prank(OUTSIDER);
         game.purchase{value: amount}(
-            OUTSIDER, 0, BoxOrderLib.boCustom(amount), bytes32(0), MintPaymentKind.DirectEth, false
+            0, 0, BoxOrderLib.boCustom(amount), bytes32(0), MintPaymentKind.DirectEth, false
         );
     }
 

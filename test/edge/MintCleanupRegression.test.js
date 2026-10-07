@@ -112,7 +112,7 @@ async function parseTraitsGeneratedEvents(receipt, storage, deployDayBoundary) {
 
 async function buyTickets(game, buyer, ticketCount, ethValue) {
   return game.connect(buyer).purchase(
-    ZERO_ADDRESS,
+    0,
     BigInt(ticketCount) * 400n,
     0n,
     ZERO_BYTES32,
@@ -218,7 +218,7 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
       await buyTickets(game, alice, 2000, 30);
       await game
         .connect(alice)
-        .purchaseWhalePass(alice.address, 10, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseWhalePass(0, 10, hre.ethers.ZeroHash, { value: eth(24) });
       await pinDailyEntropy(game, deployer, mockVRF, DAILY_ENTROPY);
 
       const storage = await hre.ethers.getContractAt(
@@ -409,7 +409,7 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
       await buyTickets(game, alice, 2000, 30);
       await game
         .connect(alice)
-        .purchaseWhalePass(alice.address, 10, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseWhalePass(0, 10, hre.ethers.ZeroHash, { value: eth(24) });
       const gameAddr = await game.getAddress();
       const ticketWriteSlot = await readTicketWriteSlot(gameAddr);
       return { fixture, gameAddr, ticketWriteSlot };

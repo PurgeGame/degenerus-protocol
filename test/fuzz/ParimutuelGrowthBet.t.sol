@@ -50,8 +50,6 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
     // growthState(uint24) — the scoring half mocks only the key-0 route tuple; ratchet
     // terms left the market's reads entirely (settlement arrives as a pushed bit).
     bytes4 private constant GROWTH_STATE = bytes4(keccak256("growthState(uint24)"));
-    bytes4 private constant IS_OP_APPROVED =
-        bytes4(keccak256("isOperatorApproved(address,address)"));
     bytes4 private constant MARKET_GATES =
         bytes4(keccak256("marketBetGates(address,uint24)"));
 
@@ -128,7 +126,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
 
     function _bet(address who, bool over) internal {
         vm.prank(who);
-        parimutuel.placeBet(address(0), over);
+        parimutuel.placeBet(0, over);
     }
 
     /// @dev FLIP the settlement stage still owes `who` on `round`: the win quoted by marketState
@@ -292,7 +290,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _mockOpenAt(0, 0, true);
         vm.prank(alice);
         vm.expectRevert();
-        parimutuel.placeBet(address(0), true);
+        parimutuel.placeBet(0, true);
     }
 
     /// Round 1 needs no case of its own: its reference is BOOTSTRAP_PRIZE_POOL, written at
@@ -397,7 +395,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
 
         vm.prank(alice);
         vm.expectRevert();
-        parimutuel.placeBet(address(0), false);
+        parimutuel.placeBet(0, false);
     }
 
     /// A bet spends the player's FLIP, so it stays on the gated side: an unapproved third
@@ -406,14 +404,10 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _fund(alice, STAKE);
         _mockOpenAt(50, 0, true);
 
-        vm.mockCall(
-            address(game),
-            abi.encodeWithSelector(IS_OP_APPROVED, alice, bob),
-            abi.encode(false)
-        );
+        uint32 aliceId = game.walletIdOf(alice);
         vm.prank(bob);
-        vm.expectRevert();
-        parimutuel.placeBet(alice, true);
+        vm.expectRevert(DegenerusParimutuel.NotApproved.selector);
+        parimutuel.placeBet(aliceId, true);
     }
 
     /// An approved operator may bet, and the bet belongs to the player — not the operator.
@@ -421,16 +415,14 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _fund(alice, STAKE);
         _mockOpenAt(50, 0, true);
 
-        vm.mockCall(
-            address(game),
-            abi.encodeWithSelector(IS_OP_APPROVED, alice, bob),
-            abi.encode(true)
-        );
+        uint32 aliceId = game.walletIdOf(alice);
+        vm.prank(alice);
+        game.setOperatorApproval(0, bob, true);
         uint256 aliceBefore = _flipReach(alice);
         uint256 bobBefore = _flipReach(bob);
 
         vm.prank(bob);
-        parimutuel.placeBet(alice, true);
+        parimutuel.placeBet(aliceId, true);
 
         (, , , , uint8 aliceSide, , , ) = parimutuel.marketState(alice, 50);
         (, , , , uint8 bobSide, , , ) = parimutuel.marketState(bob, 50);
@@ -451,7 +443,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _mockOpenAt(50, 0, false);
         vm.prank(alice);
         vm.expectRevert();
-        parimutuel.placeBet(address(0), true);
+        parimutuel.placeBet(0, true);
     }
 
     // =====================================================================
@@ -639,7 +631,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _mockOpenAt(50, 0, true);
         vm.prank(alice);
         vm.expectRevert(DegenerusParimutuel.NotEligible.selector);
-        parimutuel.placeBet(address(0), true);
+        parimutuel.placeBet(0, true);
     }
 
     /// The curse counter is the one mintPacked_ field a third party can write into a
@@ -659,7 +651,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _mockOpenAt(50, 0, true);
         vm.prank(alice);
         vm.expectRevert(DegenerusParimutuel.NotEligible.selector);
-        parimutuel.placeBet(address(0), true);
+        parimutuel.placeBet(0, true);
     }
 
     /// recordGrowthBet is PARIMUTUEL-only — no other caller can mint quest rewards.
@@ -925,7 +917,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _fund(bob, STAKE);
         vm.prank(bob);
         vm.expectRevert(DegenerusParimutuel.MarketClosed.selector);
-        parimutuel.placeBet(address(0), true);
+        parimutuel.placeBet(0, true);
     }
 
     /// @dev Advance(stage, lvl) from the game: STAGE_JACKPOT_PHASE_ENDED (9) precedes

@@ -528,7 +528,7 @@ contract GameWalletIdViews is DeployProtocol {
         vm.deal(buyer, 10 ether);
         uint256 value = 4 * PriceLookupLib.priceForLevel(game.level() + 1);
         vm.prank(buyer);
-        game.purchase{value: value}(buyer, 1_600, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: value}(0, 1_600, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         uint32 buyerId = game.walletIdOf(buyer);
         bytes32 mintSlot = GameSlotKeys.mintPacked(buyer);
         uint256 word = uint256(vm.load(address(game), mintSlot));
@@ -602,8 +602,9 @@ contract GameWalletIdViews is DeployProtocol {
     // =====================================================================
 
     function _place(address caller, address player, uint8 currency, uint128 perSpin, uint8 spins, uint256 value) private {
+        uint32 id = (player == address(0) || player == caller) ? 0 : game.walletIdOf(player);
         vm.prank(caller);
-        game.placeDegeneretteBet{value: value}(player, currency, perSpin, spins, SYMBOL);
+        game.placeDegeneretteBet{value: value}(id, currency, perSpin, spins, SYMBOL);
     }
 
     /// @dev Deliver `word` for the cohort at IDX (as DegeneretteSweep does) and resolve it.
@@ -728,9 +729,10 @@ contract GameWalletIdViews is DeployProtocol {
         vm.store(address(game), bytes32(GameSlots.WALLETS), bytes32(PAID_ADMISSION_WALLETS + 1));
         address small = makeAddr("gift3_small_funder");
         vm.deal(small, 10 ether);
+        uint32 playerId = game.walletIdOf(player);
         vm.prank(small);
         vm.expectRevert(DegenerusGameStorage.E.selector);
-        game.placeDegeneretteBet{value: 0.01 ether}(player, ETH, 0.01 ether, 1, SYMBOL);
+        game.placeDegeneretteBet{value: 0.01 ether}(playerId, ETH, 0.01 ether, 1, SYMBOL);
 
         address large = makeAddr("gift3_large_funder");
         vm.deal(large, 10 ether);
@@ -764,7 +766,7 @@ contract GameWalletIdViews is DeployProtocol {
         vm.deal(buyer, 100 ether);
         vm.recordLogs();
         vm.prank(buyer);
-        game.purchaseDeityPass{value: 100 ether}(buyer, symbol, bytes32(0));
+        game.purchaseDeityPass{value: 100 ether}(0, symbol, bytes32(0));
         logs = vm.getRecordedLogs();
     }
 
@@ -834,7 +836,7 @@ contract GameWalletIdViews is DeployProtocol {
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
         vm.expectRevert(DegenerusGameStorage.E.selector);
-        game.purchaseDeityPass{value: 100 ether}(buyer, 5, bytes32(0));
+        game.purchaseDeityPass{value: 100 ether}(0, 5, bytes32(0));
     }
 
     // =====================================================================
@@ -852,11 +854,11 @@ contract GameWalletIdViews is DeployProtocol {
         uint256 price = PriceLookupLib.priceForLevel(game.level() + 1);
         vm.recordLogs();
         vm.startPrank(buyer);
-        if (kind == 0) game.purchase{value: 4 * price}(buyer, 1_600, 0, code, MintPaymentKind.DirectEth, false);
-        else if (kind == 1) game.purchaseWhalePass{value: 4 ether}(buyer, 1, code);
-        else if (kind == 2) game.purchaseLazyPass{value: 1 ether}(buyer, code);
-        else if (kind == 3) game.purchase{value: 10 * price}(buyer, 0, 0, code, MintPaymentKind.DirectEth, true);
-        else game.purchaseDeityPass{value: 100 ether}(buyer, 7, code);
+        if (kind == 0) game.purchase{value: 4 * price}(0, 1_600, 0, code, MintPaymentKind.DirectEth, false);
+        else if (kind == 1) game.purchaseWhalePass{value: 4 ether}(0, 1, code);
+        else if (kind == 2) game.purchaseLazyPass{value: 1 ether}(0, code);
+        else if (kind == 3) game.purchase{value: 10 * price}(0, 0, 0, code, MintPaymentKind.DirectEth, true);
+        else game.purchaseDeityPass{value: 100 ether}(0, 7, code);
         vm.stopPrank();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         (uint256 n, uint32 ownerId) = _registrations(logs, owner);
@@ -904,7 +906,7 @@ contract GameWalletIdViews is DeployProtocol {
         vm.expectCall(address(coinflip), abi.encodeWithSelector(ICoinflip.creditFlipPair.selector, buyerId));
         vm.recordLogs();
         vm.prank(buyer);
-        game.purchase{value: value}(buyer, 1_600, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: value}(0, 1_600, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         (uint256 winnerCredit,) = _credited(vm.getRecordedLogs(), winnerId);
         assertEq(winnerCredit, 500, "winner leg by its ID");
     }
@@ -922,7 +924,7 @@ contract GameWalletIdViews is DeployProtocol {
         );
         vm.recordLogs();
         vm.prank(buyer);
-        game.redeemFlip(buyer, 4_000);
+        game.redeemFlip(0, 4_000);
         (uint256 n, uint32 id) = _registrations(vm.getRecordedLogs(), buyer);
         assertEq(n, 1, "FLIP payer registered once");
         assertEq(id, expectedId, "new ID");

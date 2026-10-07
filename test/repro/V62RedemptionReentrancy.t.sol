@@ -362,7 +362,7 @@ contract Attacker {
     }
 
     function claim(uint32 day) external {
-        sdgnrs.claimRedemption(address(this), day);
+        sdgnrs.claimRedemption(0, day);
     }
 
     /// @dev Fired by the mixed _payEth ETH .call. While this runs the outer claim has NOT yet

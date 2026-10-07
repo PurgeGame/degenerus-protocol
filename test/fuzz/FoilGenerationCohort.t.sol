@@ -84,18 +84,20 @@ contract FoilCohortHarness is DegenerusGameFoilPackModule, WalletSeed {
     function entries(uint8 trait) external view returns (uint256) { return _bucketLength(1, trait); }
     function seedWord(uint24 day, uint256 word) external { _recordDailyRng(day, word); }
     function retained(uint24 day) external view returns (uint256) { return _retainedDailyWord(day); }
-    function seedGold(address player, uint24 day) external {
+    function seedGold(address player, uint24 day) external returns (uint32 id) {
         // Three gold quadrants qualify for the first ladder rung, no all-gold ticket.
-        foilRecord[1][_seedWallet(player)] = uint256(day) | (uint256(20_000) << _FOIL_MULT_SHIFT)
+        id = _seedWallet(player);
+        foilRecord[1][id] = uint256(day) | (uint256(20_000) << _FOIL_MULT_SHIFT)
             | (uint256(0x0038_3838) << _FOIL_LINES_SHIFT)
             | (uint256(day) << _FOIL_GENERATED_DAY_SHIFT) | (uint256(1) << _FOIL_LEVEL_SHIFT) | _FOIL_READY;
     }
     function claimableDraw(uint24 day) external view returns (bool) { return _foilGoldClaimOpen(day); }
-    function seedMatch(address player, uint256 word) external returns (uint24 day) {
+    function seedMatch(address player, uint256 word) external returns (uint24 day, uint32 id) {
         day = _simulatedDayIndex();
         uint32 line = 0xC5824100; // Crypto 0, Zodiac 1, Cards 2, Dice 6.
         dailyFoilDraw[day & 1] = _packFoilDraw(line, 1, day, word);
-        foilRecord[1][_seedWallet(player)] = uint256(day) | (uint256(line) << _FOIL_LINES_SHIFT)
+        id = _seedWallet(player);
+        foilRecord[1][id] = uint256(day) | (uint256(line) << _FOIL_LINES_SHIFT)
             | (uint256(1) << _FOIL_LEVEL_SHIFT) | _FOIL_READY;
     }
 }
@@ -160,9 +162,9 @@ contract FoilGenerationCohortTest is Test {
         uint256 heroes;
         for (uint256 word; word < 64; ++word) {
             address player = address(uint160(0x1000 + word));
-            uint24 day = h.seedMatch(player, word);
+            (uint24 day, uint32 id) = h.seedMatch(player, word);
             vm.recordLogs();
-            h.claimFoilMatch(player, day, 0);
+            h.claimFoilMatch(id, day, 0);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             bool found;
             for (uint256 i; i < logs.length; ++i) {
@@ -240,28 +242,28 @@ contract FoilGenerationCohortTest is Test {
 
     function test_GoldClaimsTodayAndTomorrowWithoutRevealWord() public {
         uint24 day = GameTimeLib.currentDayIndex();
-        h.seedGold(A, day);
-        h.seedGold(B, day);
-        h.claimGoldenTicket(A, 1);
+        uint32 idA = h.seedGold(A, day);
+        uint32 idB = h.seedGold(B, day);
+        h.claimGoldenTicket(idA, 1);
         vm.warp(vm.getBlockTimestamp() + 1 days);
         h.live();
-        h.claimGoldenTicket(B, 1);
+        h.claimGoldenTicket(idB, 1);
         assertGt(FoilCohortCreditStub(ContractAddresses.COINFLIP).credited(h.walletIdOf(A)), 0);
         assertGt(FoilCohortCreditStub(ContractAddresses.COINFLIP).credited(h.walletIdOf(B)), 0);
         vm.expectRevert();
-        h.claimGoldenTicket(A, 1);
+        h.claimGoldenTicket(idA, 1);
     }
 
     function test_GoldExpiresOnSecondDayEvenWithoutOverwrite() public {
         uint24 day = GameTimeLib.currentDayIndex();
-        h.seedGold(A, day);
+        uint32 idA = h.seedGold(A, day);
         h.seedWord(day, 99);
         vm.warp(vm.getBlockTimestamp() + 2 days);
         h.live();
         assertFalse(h.claimableDraw(day));
         assertEq(h.retained(day), 0);
         vm.expectRevert();
-        h.claimGoldenTicket(A, 1);
+        h.claimGoldenTicket(idA, 1);
     }
 
     function test_RngTagsRejectOldAndFutureParityAliases() public {

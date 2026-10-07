@@ -59,7 +59,7 @@ contract WhaleHandler is Test {
         if (cost > currentActor.balance) return;
 
         vm.prank(currentActor);
-        try game.purchaseWhalePass{value: cost}(currentActor, qty, bytes32(0)) {
+        try game.purchaseWhalePass{value: cost}(0, qty, bytes32(0)) {
             ghost_whalePassDeposited += cost;
         } catch {}
     }
@@ -77,7 +77,7 @@ contract WhaleHandler is Test {
         if (cost > currentActor.balance) return;
 
         vm.prank(currentActor);
-        try game.purchaseLazyPass{value: cost}(currentActor, bytes32(0)) {
+        try game.purchaseLazyPass{value: cost}(0, bytes32(0)) {
             ghost_lazyPassDeposited += cost;
         } catch {}
     }
@@ -106,7 +106,7 @@ contract WhaleHandler is Test {
         if (cost > currentActor.balance) return;
 
         vm.prank(currentActor);
-        try game.purchaseDeityPass{value: cost}(currentActor, uint8(symbolId), bytes32(0)) {
+        try game.purchaseDeityPass{value: cost}(0, uint8(symbolId), bytes32(0)) {
             ghost_deityPassDeposited += cost;
         } catch {}
     }

@@ -525,7 +525,7 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
         uint256[] memory refs = new uint256[](1);
         refs[0] = (uint256(1) << 248) | (uint256(aliceKey) << 32) | pos;
         uint256 before = game.claimableWinningsOf(alice);
-        game.claimDeadVrf(alice, refs);
+        game.claimDeadVrf(game.walletIdOf(alice), refs);
         assertGt(game.claimableWinningsOf(alice), before, "current ticket holder can claim the ending pot");
     }
 
@@ -615,13 +615,13 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
     function _buyCurrent(address player) private {
         (,,,, uint256 price) = game.purchaseInfo();
         vm.prank(player);
-        game.purchase{value: price}(player, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: price}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
     }
 
     function _buyBox(uint256 amount) private {
         vm.prank(alice);
         game.purchase{value: amount}(
-            alice, 0, BoxOrderLib.boCustom(amount), bytes32(0), MintPaymentKind.DirectEth, false
+            0, 0, BoxOrderLib.boCustom(amount), bytes32(0), MintPaymentKind.DirectEth, false
         );
     }
 

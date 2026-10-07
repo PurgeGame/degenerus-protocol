@@ -93,7 +93,7 @@ contract FLIP {
     event Approval(address indexed owner, address indexed spender, uint256 amount);
 
     /// @notice Emitted when a player burns FLIP during a decimator window.
-    /// @param player The burner's address.
+    /// @param player The key of the account the entry belongs to.
     /// @param amountBurned The amount burned (0 decimals).
     /// @param entryId The wallet's accumulated battle entry id.
     event DecimatorBurn(address indexed player, uint256 amountBurned, uint64 entryId);
@@ -142,7 +142,8 @@ contract FLIP {
     /// @notice Decimator burn attempted outside an active decimator window.
     error NotDecimatorWindow();
 
-    /// @notice Caller is not approved to act for the player.
+    /// @notice The caller may not act for the account: it is neither the account's key, a
+    ///         smurf's owner, nor an approved operator.
     error NotApproved();
 
     /// @notice Supply values exceed uint128 bounds.
@@ -573,8 +574,8 @@ contract FLIP {
     }
 
     /// @dev Restricts access to GAME, PARIMUTUEL or CRAPS. Used for: burnCoin.
-    ///      PARIMUTUEL burns exactly one fixed stake, and only from a player who is the
-    ///      caller or has approved them, so the widening reaches no non-consenting balance.
+    ///      PARIMUTUEL burns exactly one fixed stake, and only from the payee of an account whose
+    ///      caller it authorized, so the widening reaches no non-consenting balance.
     ///      Carry-consuming salvage and automatic sDGNRS decimator burns keep plain onlyGame;
     ///      ordinary table bets consume only held FLIP and settled claimables.
     ///      Rejection reuses the shared `OnlyGame()` generic, so a trace names OnlyGame() even
@@ -669,9 +670,9 @@ contract FLIP {
     ///      THE FULL GROSS IS ALWAYS BURNED. The boon is not a discount and pays nothing here: it
     ///      is carried back to the table as a one-hot mask and boosts only that slip's BANKROLL
     ///      RETURN when it settles, so nothing is credited until a run actually comes home.
-    /// @param player The buyer, whose FLIP is burned.
-    /// @param id The buyer's wallet ID, which the table holds before the burn: it keys the craps
-    ///        boon lane and the quest credit.
+    /// @param player The buying account's payee, whose FLIP is burned (a smurf's owner for a smurf).
+    /// @param id The buying account's wallet ID, which the table holds before the burn: it keys
+    ///        the craps boon lane and the quest credit.
     /// @param grossAndFlags The encoded price: (whole FLIP << 8) | action flags.
     /// @return boonMask One-hot tier for the caller to store on the slip — 1, 2 or 4 for the
     ///         tiers the table pays at 5/10/15%, and 0 on every burn that did not consume a boon.
@@ -795,25 +796,28 @@ contract FLIP {
         // battle takes no entry it would refuse, and the advance that called continues.
         if (amount < DECIMATOR_MIN) return 0;
 
-        _recordDecimatorBurn(player, amount, lvl, 0);
+        _recordDecimatorBurn(player, 0, amount, lvl, 0);
     }
 
-    /// @notice Burn FLIP during an active Decimator window to accrue weighted participation.
+    /// @notice Burn FLIP during an active Decimator window to accrue weighted participation for
+    ///         account `id`.
     /// @dev SECURITY: Burns BEFORE downstream calls (CEI pattern).
+    ///      `id == 0` is the caller; any other ID needs Game `resolveAccount` to authorize the
+    ///      caller (the account's key, a smurf's owner or an approved operator). The FLIP burns
+    ///      from the account's payee (wallet balance, then the payee's settled coinflip winnings);
+    ///      the quest, boon, activity multiplier and entry are the account's.
     ///      Quest and boon bonuses add chips before the degen and entry-day multipliers.
-    /// @param player Player address to burn for (address(0) = msg.sender).
+    /// @param id Account the entry belongs to (0 = caller).
     /// @param amount Amount (0 decimals) to burn; must satisfy MIN (2,000 FLIP).
     /// @param chips The entry's board as a normal battle entry takes it (zero to seven named
     ///        chips, the dice scattering the rest); each burn sets it, so the last one counts.
-    function decimatorBurn(address player, uint256 amount, uint32 chips) external {
-        address caller;
-        if (player == address(0) || player == msg.sender) {
-            caller = msg.sender;
-        } else {
-            if (!degenerusGame.isOperatorApproved(player, msg.sender)) {
-                revert NotApproved();
-            }
-            caller = player;
+    function decimatorBurn(uint32 id, uint256 amount, uint32 chips) external {
+        address key = msg.sender;
+        address payee = msg.sender;
+        if (id != 0) {
+            bool authorized;
+            (key, payee, authorized) = degenerusGame.resolveAccount(id, msg.sender);
+            if (!authorized) revert NotApproved();
         }
 
         if (amount < DECIMATOR_MIN) revert AmountLTMin();
@@ -823,27 +827,28 @@ contract FLIP {
         // in level N+1's battle, where the jackpot resolves at the N→N+1 bump.
         uint24 lvl = degenerusGame.level() + 1;
 
-        uint256 consumed = _consumeCoinflipShortfall(caller, amount);
+        uint256 consumed = _consumeCoinflipShortfall(payee, amount);
         // CEI: burn before any downstream calls after coinflip consumption
-        _burn(caller, amount - consumed);
+        _burn(payee, amount - consumed);
 
-        _recordDecimatorBurn(caller, amount, lvl, chips);
+        _recordDecimatorBurn(key, id, amount, lvl, chips);
     }
 
     /// @dev Shared quest, activity, boon and battle-chip accounting after the funding leg is burned.
-    ///      The burn pays, so the burner's wallet ID comes from the Game's registration hook first
-    ///      (an existing wallet gets its ID back with no write); the quest and the boon run by ID,
-    ///      and the Game's own entry write finds the ID already in place. The activity score is
-    ///      read after the quest, so a quest this burn completes counts toward its multiplier.
-    function _recordDecimatorBurn(address caller, uint256 amount, uint24 lvl, uint32 chips) private {
-        uint32 id = degenerusGame.registerWallet(caller, true);
+    ///      `key` is the account; `id` its wallet ID, or 0 for a self burn: the burn pays, so the
+    ///      burner's ID then comes from the Game's registration hook first (an existing wallet gets
+    ///      its ID back with no write). The quest and the boon run by ID, and the Game's own entry
+    ///      write finds the ID already in place. The activity score is read after the quest, so a
+    ///      quest this burn completes counts toward its multiplier.
+    function _recordDecimatorBurn(address key, uint32 id, uint256 amount, uint24 lvl, uint32 chips) private {
+        if (id == 0) id = degenerusGame.registerWallet(key, true);
 
         // Quest processing (reward creditFlipped internally; bonus boosts decimator weight)
         (uint256 questReward,,, bool completed) = questModule.handleDecimator(id, amount);
         uint256 baseAmount = amount + (completed ? questReward : 0);
 
         // Activity score bonus (whole points); the curve self-saturates at its cap.
-        (uint256 bonusPoints, ) = degenerusGame.playerActivityScoreCached(caller);
+        (uint256 bonusPoints, ) = degenerusGame.playerActivityScoreCached(key);
         uint256 decBurnMultBps = ActivityCurveLib.decBattleMultBps(bonusPoints);
 
         // Decimator boon: percent boost on base amount (capped to 50k FLIP).
@@ -854,9 +859,9 @@ contract FLIP {
             baseAmount += boost;
         }
 
-        uint64 entryId = degenerusGame.recordDecBurn(caller, lvl, baseAmount, decBurnMultBps, chips);
+        uint64 entryId = degenerusGame.recordDecBurn(key, lvl, baseAmount, decBurnMultBps, chips);
 
-        emit DecimatorBurn(caller, amount, entryId);
+        emit DecimatorBurn(key, amount, entryId);
     }
 
 }

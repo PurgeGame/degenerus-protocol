@@ -100,7 +100,7 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
         position = host.boxWriteCount();
         uint256 cost = _cost(boxOrder);
         vm.prank(who);
-        host.purchase{value: cost}(who, 0, boxOrder, bytes32(0), MintPaymentKind.DirectEth, false);
+        host.purchase{value: cost}(0, 0, boxOrder, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(host.boxWriteCount(), position + 1, "one purchase, one entry");
     }
 
@@ -256,7 +256,7 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
         uint256 over = (uint256(1) << 24) | ((maxSize + 1) << 32);
         vm.prank(alice);
         vm.expectRevert();
-        host.purchase{value: (maxSize + 1) * 1 gwei}(alice, 0, over, bytes32(0), MintPaymentKind.DirectEth, false);
+        host.purchase{value: (maxSize + 1) * 1 gwei}(0, 0, over, bytes32(0), MintPaymentKind.DirectEth, false);
     }
 
     /// @notice An exact-gwei custom is charged exactly, banks exactly in pending ETH, and a 100,000 ETH
@@ -408,7 +408,7 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
         buffer = host.writeBuffer();
         position = host.boxWriteCount();
         vm.prank(who);
-        host.buyPresaleBox{value: amount}(who, amount);
+        host.buyPresaleBox{value: amount}(0, amount);
     }
 
     /// @notice The DGNRS tier freezes from the purchase's starting sold amount at every boundary.
@@ -446,7 +446,7 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
         uint256 count = host.boxWriteCount();
         vm.prank(alice);
         vm.expectRevert();
-        host.buyPresaleBox{value: 0.02 ether}(alice, 0.02 ether); // 0.01 credit left
+        host.buyPresaleBox{value: 0.02 ether}(0, 0.02 ether); // 0.01 credit left
         assertEq(host.boxWriteCount(), count, "nothing appended");
         assertEq(host.presaleCredit(_id(alice)), 0.01 ether);
     }
@@ -462,7 +462,7 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
         vm.recordLogs();
         vm.prank(alice);
         host.buyLootboxAndPresaleBox{value: cost + 0.03 ether}(
-            alice, 0, order, bytes32(0), MintPaymentKind.DirectEth, 0.03 ether
+            0, 0, order, bytes32(0), MintPaymentKind.DirectEth, 0.03 ether
         );
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(host.boxWriteCount(), p + 1, "one entry");
@@ -744,7 +744,7 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
         uint256 cost = _cost(order);
         vm.prank(alice);
         host.buyLootboxAndPresaleBox{value: cost + 0.01 ether}(
-            alice, 0, order, bytes32(0), MintPaymentKind.DirectEth, 0.01 ether
+            0, 0, order, bytes32(0), MintPaymentKind.DirectEth, 0.01 ether
         );
         host.sealAndPublish(WORD);
         vm.mockCallRevert(
@@ -810,9 +810,9 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
         _buy(bob, BoxOrderLib.boSmalls(1));
         uint48 w = host.writeBuffer();
         vm.prank(alice);
-        host.placeDegeneretteBet{value: 0.01 ether}(alice, 0, 0.01 ether, 1, 1);
+        host.placeDegeneretteBet{value: 0.01 ether}(0, 0, 0.01 ether, 1, 1);
         vm.prank(bob);
-        host.placeDegeneretteBet{value: 0.01 ether}(bob, 0, 0.01 ether, 1, 2);
+        host.placeDegeneretteBet{value: 0.01 ether}(0, 0, 0.01 ether, 1, 2);
         assertEq(host.boxWriteCount(), 2);
         assertEq(host.betWriteCount(), 2);
         assertTrue(host.degeneretteBetInfo(w, 2) != 0);
@@ -837,7 +837,7 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
         uint256 before = (slot >> (GameSlotsFoil.WRITE_OFFSET * 8)) & type(uint32).max;
         (,,,, uint256 priceWei) = host.purchaseInfo();
         vm.prank(alice);
-        host.purchase{value: priceWei * 20}(alice, 400, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        host.purchase{value: priceWei * 20}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, true);
         slot = uint256(vm.load(address(game), bytes32(GameSlotsFoil.SLOT)));
         assertEq((slot >> (GameSlotsFoil.WRITE_OFFSET * 8)) & type(uint32).max, before + 1);
     }

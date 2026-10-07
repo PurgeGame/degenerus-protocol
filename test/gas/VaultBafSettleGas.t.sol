@@ -12,7 +12,7 @@ import {VaultBafRig} from "../repro/VaultBafSettlement.t.sol";
 
 /// @title VaultBafSettleGas — cold cost of the vault settlement the x0 seal runs.
 ///
-/// @notice The seal settles the vault through `depositCoinflip(VAULT, 0)`: one claim walk over
+/// @notice The seal settles the vault through `depositCoinflip(1, 0)`: one claim walk over
 ///         the days since its last settlement, at most COIN_CLAIM_DAYS (365) per call. Its gas is
 ///         the BAF_VAULT_SETTLE reserve that every seal-capable purchase leg keeps in its tail on
 ///         an x0 purchase day.
@@ -104,7 +104,7 @@ abstract contract VaultSettleCallGas is DeployProtocol {
     /// @dev The first call of the test: every slot the walk touches is cold.
     function test_SettleCallCold() public {
         vm.prank(address(game));
-        coinflip.depositCoinflip(ContractAddresses.VAULT, 0);
+        coinflip.depositCoinflip(1, 0);
         uint256 used = vm.lastCallGas().gasTotalUsed;
         emit log_named_uint("vault_settle_call_days", _gap());
         emit log_named_uint("vault_settle_call_gas", used);
@@ -169,11 +169,11 @@ abstract contract VaultSealChunkGas is VaultBafRig {
         if (_slow()) {
             _runFullDay();
             vm.prank(POKER);
-            coinflip.depositCoinflip(VAULT, 0);
+            coinflip.depositCoinflip(1, 0);
         }
         if (_rebuy()) {
             vm.prank(VAULT);
-            coinflip.setCoinflipAutoRebuy(address(0), true, 7 ether);
+            coinflip.setCoinflipAutoRebuy(0, true, 7 ether);
         }
         uint24 pokedAt = _lastClaim(VAULT);
         _driveToEve(9);
@@ -185,7 +185,7 @@ abstract contract VaultSealChunkGas is VaultBafRig {
         for (uint256 pokes; !_slow() && _presettle() && _lastClaim(VAULT) + 1 < latchDay; ++pokes) {
             require(pokes < 4, "harness: the control never settled");
             vm.prank(POKER);
-            coinflip.depositCoinflip(VAULT, 0);
+            coinflip.depositCoinflip(1, 0);
         }
         // The latch day up to its request, then the native daily cycle.
         simTime += 1 days + 1;
@@ -218,7 +218,7 @@ abstract contract VaultSealChunkGas is VaultBafRig {
             vm.etch(address(coinflip), original);
             if (_presettle()) {
                 vm.prank(POKER);
-                coinflip.depositCoinflip(VAULT, 0);
+                coinflip.depositCoinflip(1, 0);
             }
         }
         emit log_named_uint("vault_days_unsettled", latchDay - _lastClaim(VAULT));

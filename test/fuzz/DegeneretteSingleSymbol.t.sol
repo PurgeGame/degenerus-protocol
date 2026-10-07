@@ -45,6 +45,8 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         bob = makeAddr("single_symbol_bob");
         vm.deal(alice, 100 ether);
         vm.deal(bob, 100 ether);
+        _giveWalletId(alice);
+        _giveWalletId(bob);
         vm.deal(address(game), 10_000 ether);
         RecyclingState.seedWriteBuffer(address(game), 1);
         vm.store(address(game), bytes32(GameSlots.PRIZE_POOLS_PACKED), bytes32(uint256(10_000 ether) << 128));
@@ -57,7 +59,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         }
         vm.prank(who);
         game.placeDegeneretteBet{value: currency == 0 ? uint256(stake) * spins : 0}(
-            address(0), currency, stake, spins, symbol
+            0, currency, stake, spins, symbol
         );
         id = DQ.lastBetId(vm, address(game), 1);
     }
@@ -142,12 +144,13 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         address gifter = address(0xC0FFEE);
         vm.deal(gifter, 100 ether);
         vm.prank(alice);
-        game.setOperatorApproval(bob, true);
+        game.setOperatorApproval(0, bob, true);
         vm.prank(address(game));
         wwxrp.mintPrize(alice, 123);
         vm.prank(address(game));
         coin.mintForGame(alice, 456);
-        bytes32 boonSlot = bytes32(uint256(keccak256(abi.encode(alice, uint256(50)))) + 1);
+        uint32 aliceId = game.walletIdOf(alice);
+        bytes32 boonSlot = bytes32(uint256(keccak256(abi.encode(uint256(aliceId), uint256(50)))) + 1);
         uint256 lane = (uint256(game.currentDayView()) << 3) | 3;
         vm.store(address(game), boonSlot, bytes32((lane << 184) | (lane << 208)));
         uint8[3] memory currencies = [uint8(2), 3, 255];
@@ -157,7 +160,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
                 bytes32 beforeState = _rejectionState(callers[route], boonSlot);
                 vm.expectRevert(bytes4(keccak256("UnsupportedCurrency()")));
                 vm.prank(callers[route]);
-                game.placeDegeneretteBet{value: 0.01 ether}(alice, currencies[c], 1 ether, 1, 7);
+                game.placeDegeneretteBet{value: 0.01 ether}(aliceId, currencies[c], 1 ether, 1, 7);
                 assertEq(_rejectionState(callers[route], boonSlot), beforeState,
                     "unsupported bet mutated funding, bet queue, pool or boon state");
             }
@@ -178,10 +181,10 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
     function testInvalidSymbolRejectedAndNewBetJoinsUnrevealedWriteCohort() public {
         vm.expectRevert(bytes4(keccak256("InvalidBet()")));
         vm.prank(alice);
-        game.placeDegeneretteBet{value: 0.005 ether}(address(0), 0, 0.005 ether, 1, 32);
+        game.placeDegeneretteBet{value: 0.005 ether}(0, 0, 0.005 ether, 1, 32);
         _land(2);
         vm.prank(alice);
-        game.placeDegeneretteBet{value: 0.005 ether}(address(0), 0, 0.005 ether, 1, 0);
+        game.placeDegeneretteBet{value: 0.005 ether}(0, 0, 0.005 ether, 1, 0);
         assertEq(DQ.lastBetId(vm, address(game), 2), 1, "new bet binds the write cohort");
         assertEq(DQ.lastBetId(vm, address(game), 1), 0, "no bet joined the revealed cohort");
         assertEq(RecyclingState.word(address(game), 1), 2, "read entropy survives the new commitment");
@@ -192,12 +195,13 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         address gifter = makeAddr("dice_gifter");
         vm.deal(gifter, 100 ether);
         vm.prank(alice);
-        game.setOperatorApproval(bob, true);
+        game.setOperatorApproval(0, bob, true);
         vm.prank(address(game));
         coin.mintForGame(alice, 1000);
         vm.prank(address(game));
         coin.mintForGame(gifter, 1000);
-        bytes32 boonSlot = bytes32(uint256(keccak256(abi.encode(alice, uint256(50)))) + 1);
+        uint32 aliceId = game.walletIdOf(alice);
+        bytes32 boonSlot = bytes32(uint256(keccak256(abi.encode(uint256(aliceId), uint256(50)))) + 1);
         address[3] memory callers = [alice, bob, gifter];
         for (uint256 route; route < callers.length; ++route) {
             for (uint8 currency; currency < 2; ++currency) {
@@ -207,7 +211,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
                 for (uint8 symbol = 24; symbol < 32; ++symbol) {
                     vm.expectRevert(bytes4(keccak256("InvalidBet()")));
                     vm.prank(callers[route]);
-                    game.placeDegeneretteBet{value: currency == 0 ? stake : 0}(alice, currency, stake, 1, symbol);
+                    game.placeDegeneretteBet{value: currency == 0 ? stake : 0}(aliceId, currency, stake, 1, symbol);
                     assertEq(_rejectionState(callers[route], boonSlot), beforeState);
                     assertEq(coin.balanceOf(callers[route]), beforeFlip);
                     assertEq(game.getDailyHeroWager(game.currentDayView(), 3, symbol & 7), 0);

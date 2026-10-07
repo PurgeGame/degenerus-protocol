@@ -136,7 +136,7 @@ contract SolvencyActionHandler is Test {
         uint256 cost = WHALE_PASS_PRICE * qty;
         if (cost > currentActor.balance) return;
         vm.prank(currentActor);
-        try game.purchaseWhalePass{value: cost}(currentActor, qty, bytes32(0)) {
+        try game.purchaseWhalePass{value: cost}(0, qty, bytes32(0)) {
             ghost_passBuys++;
         } catch {}
     }
@@ -152,7 +152,7 @@ contract SolvencyActionHandler is Test {
         if (game.gameOver()) return;
         if (LAZY_PASS_PRICE > currentActor.balance) return;
         vm.prank(currentActor);
-        try game.purchaseLazyPass{value: LAZY_PASS_PRICE}(currentActor, bytes32(0)) {
+        try game.purchaseLazyPass{value: LAZY_PASS_PRICE}(0, bytes32(0)) {
             ghost_passBuys++;
         } catch {}
     }
@@ -169,7 +169,7 @@ contract SolvencyActionHandler is Test {
         symbolId = bound(symbolId, 0, 31);
         if (DEITY_PASS_BASE > currentActor.balance) return;
         vm.prank(currentActor);
-        try game.purchaseDeityPass{value: DEITY_PASS_BASE}(currentActor, uint8(symbolId), bytes32(0)) {
+        try game.purchaseDeityPass{value: DEITY_PASS_BASE}(0, uint8(symbolId), bytes32(0)) {
             ghost_passBuys++;
         } catch {}
     }
@@ -197,7 +197,7 @@ contract SolvencyActionHandler is Test {
             uint256 boxAmount = bound(boxSeed, PRESALE_BOX_MIN, credit);
             if (boxAmount <= currentActor.balance) {
                 vm.prank(currentActor);
-                try game.buyPresaleBox{value: boxAmount}(currentActor, boxAmount) {
+                try game.buyPresaleBox{value: boxAmount}(0, boxAmount) {
                     ghost_presaleBuys++;
                 } catch {}
             }
@@ -211,7 +211,7 @@ contract SolvencyActionHandler is Test {
         uint256 ethSent = priceWei + lootBoxAmount; // one ticket of fresh ETH + the lootbox spend
         if (ethSent > currentActor.balance) return;
         vm.prank(currentActor);
-        try game.purchase{value: ethSent}(currentActor, 400, BoxOrderLib.boCustomFloor(lootBoxAmount), bytes32(0), MintPaymentKind.DirectEth, false) {
+        try game.purchase{value: ethSent}(0, 400, BoxOrderLib.boCustomFloor(lootBoxAmount), bytes32(0), MintPaymentKind.DirectEth, false) {
             ghost_presaleBuys++;
         } catch {}
     }
@@ -227,8 +227,9 @@ contract SolvencyActionHandler is Test {
         calls_fundAfking++;
         uint256 amt = bound(amtSeed, 0.01 ether, 100 ether);
         if (amt > currentActor.balance) return;
+        uint32 actorId = game.walletIdOf(currentActor);
         vm.prank(currentActor);
-        try game.depositAfkingFunding{value: amt}(currentActor) {
+        try game.depositAfkingFunding{value: amt}(actorId) {
             ghost_afkingDeposited += amt;
         } catch {}
     }
@@ -256,8 +257,9 @@ contract SolvencyActionHandler is Test {
         token.approve(address(game), type(uint256).max);
 
         uint256 beforeBalance = token.balanceOf(address(game));
+        uint256 seat = _heldSeat(currentActor);
         vm.prank(currentActor);
-        try game.subscribe(currentActor, false, true, 1, address(0)) {
+        try game.subscribe(0, false, true, 1, 0, seat) {
             uint256 afterBalance = token.balanceOf(address(game));
             if (afterBalance > beforeBalance) {
                 ghost_stethBuys++;
@@ -286,7 +288,7 @@ contract SolvencyActionHandler is Test {
         uint256 fresh = bound(freshSeed, 0, cost);
         if (fresh > currentActor.balance) return;
         vm.prank(currentActor);
-        try game.purchase{value: fresh}(currentActor, 0, 0, bytes32(0), MintPaymentKind.Combined, true) {
+        try game.purchase{value: fresh}(0, 0, 0, bytes32(0), MintPaymentKind.Combined, true) {
             ghost_foilBuys++;
         } catch {}
     }
@@ -301,7 +303,7 @@ contract SolvencyActionHandler is Test {
     function claim(uint256 actorSeed) external useActor(actorSeed) {
         calls_claim++;
         vm.prank(currentActor);
-        try game.claimWinnings(currentActor) {
+        try game.claimWinnings(0) {
             ghost_claims++;
         } catch {}
     }
@@ -321,7 +323,7 @@ contract SolvencyActionHandler is Test {
         (, , , , uint256 priceWei) = game.purchaseInfo();
         if (priceWei != 0 && priceWei <= currentActor.balance) {
             vm.prank(currentActor);
-            try game.purchase{value: priceWei}(currentActor, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+            try game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         }
 
         for (uint256 i; i < 3; i++) {
@@ -347,5 +349,17 @@ contract SolvencyActionHandler is Test {
         uint256 packed = uint256(vm.load(address(game), slot));
         packed |= (uint256(1) << DEITY_SHIFT);
         vm.store(address(game), slot, bytes32(packed));
+    }
+
+    /// @dev The lowest seat serial `holder` holds (0 when none): a new run burns the seat it names.
+    function _heldSeat(address holder) internal view returns (uint256) {
+        AFKingSubscriptionToken seats = AFKingSubscriptionToken(ContractAddresses.AFKING_SUB_TOKEN);
+        uint256 next = seats.nextSerial();
+        for (uint256 t = 1; t < next; ++t) {
+            try seats.ownerOf(t) returns (address o) {
+                if (o == holder) return t;
+            } catch {}
+        }
+        return 0;
     }
 }

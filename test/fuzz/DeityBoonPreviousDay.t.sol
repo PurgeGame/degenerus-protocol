@@ -27,6 +27,8 @@ contract DeityBoonPreviousDayTest is DeployProtocol {
     uint256 private constant TODAY_WORD = 0xBEEF;
     bytes32 private constant ISSUED = keccak256("DeityBoonIssued(address,address,uint24,uint8,uint8)");
     DeityBoonViewerTreeHarness private viewer;
+    uint32 private deityId;
+    uint32 private recipientId;
 
     function setUp() public {
         _deployProtocol();
@@ -37,6 +39,8 @@ contract DeityBoonPreviousDayTest is DeployProtocol {
         _warp(TODAY);
         _seed(TODAY - 1, YESTERDAY_WORD, false);
         _seed(TODAY, TODAY_WORD, false);
+        deityId = game.walletIdOf(DEITY);
+        recipientId = game.walletIdOf(RECIPIENT);
     }
 
     function _warp(uint24 day) private {
@@ -58,9 +62,10 @@ contract DeityBoonPreviousDayTest is DeployProtocol {
     }
 
     function _issue(address recipient, uint8 slot, uint24 day, uint8 expectedType) private {
+        uint32 recipientIdOf = game.walletIdOf(recipient);
         vm.recordLogs();
         vm.prank(DEITY);
-        game.issueDeityBoon(DEITY, recipient, slot);
+        game.issueDeityBoon(deityId, recipientIdOf, slot);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 issued;
         for (uint256 i; i < logs.length; ++i) {
@@ -152,7 +157,7 @@ contract DeityBoonPreviousDayTest is DeployProtocol {
         for (uint8 i; i < 3; ++i) assertEq(slots[i], 0);
         vm.expectRevert(DegenerusGameBoonModule.RngNotReady.selector);
         vm.prank(DEITY);
-        game.issueDeityBoon(DEITY, RECIPIENT, 0);
+        game.issueDeityBoon(deityId, recipientId, 0);
     }
 
     function test_FirstDayHasNoPreviousSeed() public {
@@ -163,7 +168,7 @@ contract DeityBoonPreviousDayTest is DeployProtocol {
         assertEq(day, 1);
         vm.expectRevert(DegenerusGameBoonModule.RngNotReady.selector);
         vm.prank(DEITY);
-        game.issueDeityBoon(DEITY, RECIPIENT, 0);
+        game.issueDeityBoon(deityId, recipientId, 0);
         (uint8[3] memory tomorrow, uint24 tomorrowDay) = viewer.deityBoonSlotsTomorrow(address(game), DEITY);
         assertEq(tomorrowDay, 2);
         for (uint8 i; i < 3; ++i) assertEq(tomorrow[i], _expected(TODAY_WORD, 2, i));
@@ -171,12 +176,13 @@ contract DeityBoonPreviousDayTest is DeployProtocol {
 
     function test_SlotAndRecipientDailyLimitsStillApply() public {
         _issue(RECIPIENT, 0, TODAY, _expected(YESTERDAY_WORD, TODAY, 0));
+        uint32 otherId = game.walletIdOf(address(0xB002));
         vm.expectRevert(DegenerusGameBoonModule.SlotAlreadyUsed.selector);
         vm.prank(DEITY);
-        game.issueDeityBoon(DEITY, address(0xB002), 0);
+        game.issueDeityBoon(deityId, otherId, 0);
         vm.expectRevert(DegenerusGameBoonModule.RecipientAlreadyBoonedToday.selector);
         vm.prank(DEITY);
-        game.issueDeityBoon(DEITY, RECIPIENT, 1);
+        game.issueDeityBoon(deityId, recipientId, 1);
     }
 
     function test_LifetimeLimitStillAppliesAcrossSeedDays() public {
@@ -190,6 +196,6 @@ contract DeityBoonPreviousDayTest is DeployProtocol {
         _seed(TODAY + 9, TODAY_WORD, false);
         vm.expectRevert(DegenerusGameBoonModule.RecipientBoonCapReached.selector);
         vm.prank(DEITY);
-        game.issueDeityBoon(DEITY, RECIPIENT, 0);
+        game.issueDeityBoon(deityId, recipientId, 0);
     }
 }

@@ -29,6 +29,19 @@ contract AfkingFrameHost is AfkingStethHost {
 ///         of an earlier day delivering to a sub re-framed on a later day must not drop covered
 ///         below start (uint24 underflow on every later streak read / finalize).
 contract AfkingStreakFrameNoRegress is DeployProtocol {
+
+    mapping(address => uint32) private _aidCache;
+
+    /// @dev Wallet ID of `a`, registering it when it holds none. Call before any `vm.prank`.
+    function _aid(address a) internal returns (uint32 id) {
+        id = _aidCache[a];
+        if (id == 0) {
+            id = game.walletIdOf(a);
+            if (id == 0) id = _giveWalletId(a);
+            _aidCache[a] = id;
+        }
+    }
+
     AfkingFrameHost internal host;
     address internal constant PLAYER = address(0xA11CE);
     address internal constant OP = address(0x0BEA7);
@@ -69,12 +82,13 @@ contract AfkingStreakFrameNoRegress is DeployProtocol {
 
         // Approved operator cancels then re-subscribes the VAULT with no game-side funding.
         address owner = ContractAddresses.CREATOR;
+        uint32 vaultId = _aid(address(vault));
         vm.prank(owner);
         vault.gameSetOperatorApproval(OP, true);
         vm.prank(OP);
-        game.subscribe(address(vault), false, true, 0, address(0));
+        game.subscribe(vaultId, false, true, 0, 0, 0);
         vm.prank(OP);
-        game.subscribe(address(vault), false, true, 1, address(0));
+        game.subscribe(vaultId, false, true, 1, 0, 0); // exempt: no seat burned
 
         DegenerusGameStorage.Sub memory s = _sub(address(vault));
         assertEq(s.afkCoveredThroughDay, dayD1, "new run covered framed on D+1");
@@ -83,7 +97,7 @@ contract AfkingStreakFrameNoRegress is DeployProtocol {
 
         // Vault becomes funded before the lagging day-D walk reaches it.
         vm.deal(address(this), 10 ether);
-        game.depositAfkingFunding{value: 5 ether}(address(vault));
+        game.depositAfkingFunding{value: 5 ether}(_aid(address(vault)));
         assertEq(host.resetDay(), dayD, "pass still pinned to D");
 
         _work(); // day-D walk delivers to VAULT with processDay = D
@@ -103,7 +117,7 @@ contract AfkingStreakFrameNoRegress is DeployProtocol {
 
         // A later cancel (finalize reads covered - start) succeeds.
         vm.prank(OP);
-        game.subscribe(address(vault), false, true, 0, address(0));
+        game.subscribe(vaultId, false, true, 0, 0, 0);
         assertEq(_sub(address(vault)).dailyQuantity, 0, "cancelled");
     }
 

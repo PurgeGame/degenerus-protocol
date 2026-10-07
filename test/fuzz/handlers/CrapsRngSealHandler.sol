@@ -1059,9 +1059,13 @@ contract CrapsRngSealHandler is Test {
         uint256 n = 1 + (seed % 3);
         uint256[] memory reqs = new uint256[](n);
         uint256[] memory before = new uint256[](n);
+        address[] memory tos = new address[](n);
         for (uint256 i; i < n; i++) {
             address to = actors[(seed + i) % actors.length];
-            reqs[i] = uint256(uint160(to)) | (4 << 160) | (uint256(countEach) << 200);
+            uint32 toId = game.walletIdOf(to);
+            if (toId == 0) return;
+            tos[i] = to;
+            reqs[i] = uint256(toId) | (4 << 160) | (uint256(countEach) << 200);
             (before[i],) = craps.passCreditsOf(to);
         }
         uint256 laneBefore = coin.crapsCompAllowance();
@@ -1070,7 +1074,7 @@ contract CrapsRngSealHandler is Test {
         try vault.crapsComp(reqs) {
             uint256 banked;
             for (uint256 i; i < n; i++) {
-                (uint256 now_,) = craps.passCreditsOf(address(uint160(reqs[i])));
+                (uint256 now_,) = craps.passCreditsOf(tos[i]);
                 if (_distinct(reqs)) banked += now_ - before[i];
             }
             uint256 spent = laneBefore - coin.crapsCompAllowance();
@@ -1086,14 +1090,14 @@ contract CrapsRngSealHandler is Test {
             // Within the lane, distinct recipients with room must be served.
             if (
                 _distinct(reqs) && uint256(countEach) * n * value <= laneBefore
-                    && _allHaveRoom(reqs, countEach)
+                    && _allHaveRoom(tos, countEach)
             ) ghost_compGrantsRefused = type(uint256).max;
         }
     }
 
-    function _allHaveRoom(uint256[] memory r, uint8 countEach) internal view returns (bool) {
+    function _allHaveRoom(address[] memory r, uint8 countEach) internal view returns (bool) {
         for (uint256 i; i < r.length; i++) {
-            (uint256 have,) = craps.passCreditsOf(address(uint160(r[i])));
+            (uint256 have,) = craps.passCreditsOf(r[i]);
             if (have + countEach > type(uint32).max) return false;
         }
         return true;
@@ -1102,7 +1106,7 @@ contract CrapsRngSealHandler is Test {
     function _distinct(uint256[] memory r) internal pure returns (bool) {
         for (uint256 i; i < r.length; i++) {
             for (uint256 j = i + 1; j < r.length; j++) {
-                if (address(uint160(r[i])) == address(uint160(r[j]))) return false;
+                if (uint32(r[i]) == uint32(r[j])) return false;
             }
         }
         return true;
@@ -1310,7 +1314,7 @@ contract CrapsRngSealHandler is Test {
         (,,,, uint256 priceWei) = game.purchaseInfo();
         if (priceWei == 0 || priceWei > currentActor.balance) return;
         vm.prank(currentActor);
-        try game.purchase{value: priceWei}(currentActor, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {}
+        try game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {}
             catch {}
     }
 

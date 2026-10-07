@@ -40,6 +40,19 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///   key) where a half-isolation proof is needed. Seeded-fuzz deterministic (foundry seed 0xdeadbeef).
 ///   Test-only: ZERO contracts/*.sol mutation.
 contract V61AfpayWaterfall is DeployProtocol {
+
+    mapping(address => uint32) private _aidCache;
+
+    /// @dev Wallet ID of `a`, registering it when it holds none. Call before any `vm.prank`.
+    function _aid(address a) internal returns (uint32 id) {
+        id = _aidCache[a];
+        if (id == 0) {
+            id = game.walletIdOf(a);
+            if (id == 0) id = _giveWalletId(a);
+            _aidCache[a] = id;
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Game-resident storage slots (378-01 recalibration key)
     // -------------------------------------------------------------------------
@@ -211,7 +224,7 @@ contract V61AfpayWaterfall is DeployProtocol {
         vm.expectEmit(true, false, false, true, address(game));
         emit AfkingSpent(buyer, shortfall);
         vm.prank(buyer);
-        game.purchase{value: ethSent}(buyer, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: ethSent}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
 
         assertEq(game.claimableWinningsOf(buyer), claimableBefore, "DirectEth: claimable byte-UNCHANGED (skipped)");
         assertEq(afkingBefore - game.afkingFundingOf(buyer), shortfall, "DirectEth: afking debited by exactly the shortfall");
@@ -240,7 +253,7 @@ contract V61AfpayWaterfall is DeployProtocol {
         vm.expectEmit(true, false, false, true, address(game));
         emit AfkingSpent(buyer, expAfkingUsed);
         vm.prank(buyer);
-        game.purchase{value: 0}(buyer, 400, 0, bytes32(0), MintPaymentKind.Claimable, false);
+        game.purchase{value: 0}(0, 400, 0, bytes32(0), MintPaymentKind.Claimable, false);
 
         assertEq(game.claimableWinningsOf(buyer), 1, "Claimable: claimable drawn to EXACTLY the 1-wei sentinel");
         assertEq(afkingBefore - game.afkingFundingOf(buyer), expAfkingUsed, "Claimable: afking covers the remainder exactly");
@@ -270,7 +283,7 @@ contract V61AfpayWaterfall is DeployProtocol {
         vm.expectEmit(true, false, false, true, address(game));
         emit AfkingSpent(buyer, expAfkingUsed);
         vm.prank(buyer);
-        game.purchase{value: ethSent}(buyer, 400, 0, bytes32(0), MintPaymentKind.Combined, false);
+        game.purchase{value: ethSent}(0, 400, 0, bytes32(0), MintPaymentKind.Combined, false);
 
         assertEq(game.claimableWinningsOf(buyer), 1, "Combined: claimable drawn to EXACTLY the sentinel after msg.value");
         assertEq(afkingBefore - game.afkingFundingOf(buyer), expAfkingUsed, "Combined: afking covers the final remainder");
@@ -289,7 +302,7 @@ contract V61AfpayWaterfall is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(buyer);
-        game.purchase{value: cost}(buyer, 400, 0, bytes32(0), MintPaymentKind.Combined, false);
+        game.purchase{value: cost}(0, 400, 0, bytes32(0), MintPaymentKind.Combined, false);
 
         _assertOnlyAfkingDrawEvent(buyer, 0);
         assertEq(game.claimableWinningsOf(buyer), 7 ether, "full ETH skips claimable");
@@ -316,7 +329,7 @@ contract V61AfpayWaterfall is DeployProtocol {
 
             vm.recordLogs();
             vm.prank(buyer);
-            game.purchase{value: ethSent}(buyer, 400, 0, bytes32(0), kind, false);
+            game.purchase{value: ethSent}(0, 400, 0, bytes32(0), kind, false);
 
             _assertOnlyAfkingDrawEvent(buyer, expectedDraw);
             assertEq(game.claimableWinningsOf(buyer), claimableSeed, "0/1 wei is never spendable");
@@ -338,7 +351,7 @@ contract V61AfpayWaterfall is DeployProtocol {
 
         vm.expectRevert(bytes4(keccak256("E()")));
         vm.prank(buyer);
-        game.purchase{value: cost}(buyer, 400, 0, bytes32(0), MintPaymentKind.Internal, false);
+        game.purchase{value: cost}(0, 400, 0, bytes32(0), MintPaymentKind.Internal, false);
 
         assertEq(game.claimableWinningsOf(buyer), 7 ether);
         assertEq(game.afkingFundingOf(buyer), 5 ether);
@@ -362,7 +375,7 @@ contract V61AfpayWaterfall is DeployProtocol {
         qty = 4_000_000; // 10,000 tickets ⇒ cost = 100 ether ≫ ~2 ether usable
         vm.prank(buyer);
         vm.expectRevert();
-        game.purchase{value: 0}(buyer, qty, 0, bytes32(0), MintPaymentKind.Claimable, false);
+        game.purchase{value: 0}(0, qty, 0, bytes32(0), MintPaymentKind.Claimable, false);
     }
 
     /// @notice AFPAY-03: a DirectEth LOOTBOX shortfall is now covered by afking — the pre-v61 DirectEth→revert
@@ -383,7 +396,7 @@ contract V61AfpayWaterfall is DeployProtocol {
         // The DirectEth lootbox shortfall draws afking (AFPAY-03), so AfkingSpent fires; the box queues.
         vm.recordLogs();
         vm.prank(buyer);
-        game.purchase{value: ethSent}(buyer, 0, BoxOrderLib.boCustomFloor(boxAmount), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: ethSent}(0, 0, BoxOrderLib.boCustomFloor(boxAmount), bytes32(0), MintPaymentKind.DirectEth, false);
 
         assertTrue(_sawAfkingSpent(buyer, shortfall), "AFPAY-03: DirectEth lootbox shortfall drew afking + emitted AfkingSpent");
         assertEq(game.claimableWinningsOf(buyer), claimableBefore, "AFPAY-03 DirectEth: claimable byte-UNCHANGED");
@@ -565,13 +578,13 @@ contract V61AfpayWaterfall is DeployProtocol {
     }
 
     function _subscribeLootbox(address who, uint8 q) internal {
-        _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (NoCoin without it)
+        uint256 seat = _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (a new run burns one seat)
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, address(0));
+        game.subscribe(0, false, false, q, 0, seat);
     }
 
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
-        game.depositAfkingFunding{value: amount}(who);
+        game.depositAfkingFunding{value: amount}(_aid(who));
     }
 }

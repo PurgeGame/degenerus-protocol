@@ -46,7 +46,7 @@ describe("JackpotAffiliateBonus", function () {
 
   async function buyFullTickets(game, buyer, n, totalEth, affiliateCode) {
     return game.connect(buyer).purchase(
-      ZERO_ADDRESS,
+      0,
       BigInt(n) * 400n,
       0n,
       affiliateCode || ZERO_BYTES32,
@@ -81,7 +81,7 @@ describe("JackpotAffiliateBonus", function () {
       try {
         await game
           .connect(buyer)
-          .purchaseWhalePass(buyer.address, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
+          .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
       } catch {}
       await buyFullTickets(game, buyer, 500, 5);
     }

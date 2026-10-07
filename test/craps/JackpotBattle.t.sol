@@ -461,7 +461,7 @@ contract JackpotBattleTest is CrapsPins {
         _lock(200_000);
         vm.prank(address(0x123)); vm.expectRevert(); table.enterBonusBattle(5, 0, 1);
         vm.prank(alice); vm.expectRevert(); table.amendSlip(id, 1);
-        vm.prank(bob); vm.expectRevert(); table.upgradeDayWindows(day, 0x20);
+        vm.prank(bob); vm.expectRevert(); table.upgradeDayWindows(0, day, 0x20);
         _start(831, 1, alice); _finish();
     }
 

@@ -112,7 +112,7 @@ contract WhaleBulkBuyBonusTest is DeployProtocol {
         uint256 unit = passLevel <= 4 ? WHALE_EARLY_PRICE : WHALE_STANDARD_PRICE;
         vm.deal(who, unit * q);
         vm.prank(who);
-        game.purchaseWhalePass{value: unit * q}(who, q, bytes32(0));
+        game.purchaseWhalePass{value: unit * q}(0, q, bytes32(0));
     }
 
     /// @dev Walk passLevel..passLevel+100, assert each level's owed against paid + bulk and
@@ -232,7 +232,7 @@ contract WhaleBulkBuyBonusTest is DeployProtocol {
         vm.expectEmit(true, false, false, true, address(game));
         emit LootBoxBuy(who, 0, 0, price / 10);
         vm.prank(who);
-        game.purchaseWhalePass{value: price}(who, 5, bytes32(0));
+        game.purchaseWhalePass{value: price}(0, 5, bytes32(0));
 
         assertEq(game.afkingFundingOf(who), 0, "exact paid price, no excess");
         uint256 packed = game.mintPackedFor(who);

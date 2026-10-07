@@ -310,7 +310,7 @@ contract CrapsFlowHandler {
         if (nB < rate) return;
         uint32 want = uint32(1 + (countSeed % (nB / rate)));
         vm.prank(who);
-        try craps.convertNormalToHigh(want) {
+        try craps.convertNormalToHigh(0, want) {
             (uint256 nA, uint256 hA) = craps.passCreditsOf(who);
             if (nB - nA != rate * uint256(want) || hA - hB != uint256(want)) ++ghost_conversionRateBreaks;
             ++ghost_conversions;
@@ -327,7 +327,7 @@ contract CrapsFlowHandler {
         if (craps.daySeatNumberOf(d, who) == 0) return;
         if (mask == 0) mask = 1;
         vm.prank(who);
-        try craps.upgradeDayWindows(d, mask & 0x3F) {} catch {}
+        try craps.upgradeDayWindows(0, d, mask & 0x3F) {} catch {}
     }
 
     /// @dev Open a custom battle as the authorized creator, seat one entrant, close it onto the

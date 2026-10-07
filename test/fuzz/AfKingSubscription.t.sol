@@ -45,9 +45,29 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 /// @dev Builds on the 351-01-repaired DeployProtocol fixture (GameAfkingModule live; the two SUB-09
 ///      self-subscribes VAULT + SDGNRS already present). Test subscribers are driven through the public
 ///      game.subscribe() API. Credential model: the AFKing Subscription Token (sub <=> coin) — subscribe requires
-///      balanceOf >= 1 (granted via DeployProtocol._grantSeat) and the process pass never re-checks;
+///      a seat burned at subscribe (granted via DeployProtocol._grantSeat) and the process pass never re-checks;
 ///      the pass/horizon crossing machinery is deleted. Test-only: no contracts/*.sol mutated.
 contract AfKingSubscription is DeployProtocol {
+
+
+    mapping(address => uint32) private _aidCache;
+
+    /// @dev operatorApprovals[id][op] read from storage.
+    function _approved(uint32 id, address op) internal view returns (bool) {
+        bytes32 inner = keccak256(abi.encode(uint256(id), GameSlots.OPERATOR_APPROVALS));
+        return uint256(vm.load(address(game), keccak256(abi.encode(op, inner)))) != 0;
+    }
+
+    /// @dev Wallet ID of `a`, registering it when it holds none. Call before any `vm.prank`.
+    function _aid(address a) internal returns (uint32 id) {
+        id = _aidCache[a];
+        if (id == 0) {
+            id = game.walletIdOf(a);
+            if (id == 0) id = _giveWalletId(a);
+            _aidCache[a] = id;
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`).
     // -------------------------------------------------------------------------
@@ -76,9 +96,8 @@ contract AfKingSubscription is DeployProtocol {
 
     // =========================================================================
     // Task 3a — Coin credential: no process-pass re-check, no crossing machinery
-    // (supersedes AFSUB-02/AFSUB-03: the pass horizon + refresh/evict crossing
-    // branch is DELETED — the AFKing Subscription Token is the sole credential, enforced only
-    // at subscribe (NoCoin) and by the coin's seat lock (SeatInUse on an active sub's last-coin transfer))
+    // (the pass horizon + refresh/evict crossing branch does not exist — a seat is the only
+    // credential, burned once when a new run starts)
     // =========================================================================
 
     /// @notice A coin-holding, PASSLESS subscriber is processed across the STAGE with
@@ -116,11 +135,11 @@ contract AfKingSubscription is DeployProtocol {
         // coin-holding subscriber is first-class. AFSUB-01 (no FLIP charge at subscribe)
         // is the property under test; the coin gate charges nothing either.
         address nopass = makeAddr("subscribe_nopass");
-        _grantSeat(nopass);
+        uint256 seat = _grantSeat(nopass);
         _fundPool(nopass, 1 ether); // grounds the NEW-run cover-buy (D-12); the deposit is ETH, not FLIP
         uint256 nopassBefore = coin.balanceOf(nopass); // == 0
         vm.prank(nopass);
-        game.subscribe(address(0), false, true, 1, address(0)); // MUST NOT revert; charges no FLIP
+        game.subscribe(0, false, true, 1, 0, seat); // MUST NOT revert; charges no FLIP
         assertEq(coin.balanceOf(nopass), nopassBefore, "AFSUB-01: no FLIP burned at subscribe (no pass)");
         assertGt(_dailyQtyOf(nopass), 0, "passless coin-holder subscribed");
     }
@@ -193,21 +212,23 @@ contract AfKingSubscription is DeployProtocol {
         // subscribes a coin-holding M.
         address s = makeAddr("auth_s");
         address m = makeAddr("auth_m");
-        _grantSeat(m);
+        uint256 seat = _grantSeat(m);
+        uint32 sId = _aid(s);
+        _aid(m);
 
         // REFUSED: M has NOT been approved by S -> the non-zero non-self source reverts NotApproved.
         vm.prank(m);
         vm.expectRevert(abi.encodeWithSignature("NotApproved()"));
-        game.subscribe(address(0), false, true, 1, s);
+        game.subscribe(0, false, true, 1, sId, seat);
 
-        // S approves M on the game; now the SAME subscribe is honored (source stored).
+        // S approves M's key on the game; now the SAME subscribe is honored (source stored).
         vm.prank(s);
-        game.setOperatorApproval(m, true);
+        game.setOperatorApproval(0, m, true);
         // Fund S's bucket BEFORE the honored subscribe so M's NEW-run cover-buy (drawn from the resolved
         // source S) is grounded (D-12); the OPEN-E approval gate is the property under test.
         _fundPool(s, 1 ether);
         vm.prank(m);
-        game.subscribe(address(0), false, true, 1, s);
+        game.subscribe(0, false, true, 1, sId, seat);
 
         assertEq(_fundingSourceOf(m), s, "approved source honored (stored as S)");
     }
@@ -224,22 +245,24 @@ contract AfKingSubscription is DeployProtocol {
         // unchanged.
         address s = makeAddr("revoke_s");
         address m = makeAddr("revoke_m");
-        _grantSeat(m);
+        uint256 seat = _grantSeat(m);
+        uint32 sId = _aid(s);
+        _aid(m);
         vm.prank(s);
-        game.setOperatorApproval(m, true);
+        game.setOperatorApproval(0, m, true);
         // Fund S's bucket BEFORE subscribe so M's NEW-run cover-buy (drawn from the resolved source S) is
         // grounded (D-12); the trust-the-sub revoke semantics are the property under test.
         _fundPool(s, 1 ether); // S funds the per-day ETH draw + grounds the subscribe cover-buy
         vm.prank(m);
-        game.subscribe(address(0), false, true, 1, s); // source = S, no FLIP charge (AFSUB-01)
+        game.subscribe(0, false, true, 1, sId, seat); // source = S, no FLIP charge (AFSUB-01)
 
         assertEq(_fundingSourceOf(m), s, "M's sub funded by S");
         assertGt(_subscriberIndexOf(m), 0, "M's sub in the set");
 
         // S REVOKES M's approval AFTER the sub is active.
         vm.prank(s);
-        game.setOperatorApproval(m, false);
-        assertFalse(game.isOperatorApproved(s, m), "S has revoked M");
+        game.setOperatorApproval(0, m, false);
+        assertFalse(_approved(sId, m), "S has revoked M");
 
         // The active sub is NOT terminated by the revoke — the source is fixed at subscribe (no-escalation,
         // no re-check). M stays in the set, fundingSource still S.
@@ -284,8 +307,9 @@ contract AfKingSubscription is DeployProtocol {
 
     /// @dev Subscribe `who` in LOOTBOX mode (so the box STAGE materializes a stamp), dailyQuantity q.
     function _subscribeLootboxMode(address who, uint8 q) internal {
+        uint256 seat = _grantSeat(who);
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, address(0)); // self, lootbox mode, no reinvest, self-funded
+        game.subscribe(0, false, false, q, 0, seat); // self, lootbox mode, no reinvest, self-funded
     }
 
     /// @dev A fully-healthy buying sub (lootbox mode, seated with an AFKing Subscription Token, funded).
@@ -299,7 +323,7 @@ contract AfKingSubscription is DeployProtocol {
     function _fundPool(address who, uint256 amount) internal {
         _giveWalletId(who);
         vm.deal(address(this), amount);
-        game.depositAfkingFunding{value: amount}(who);
+        game.depositAfkingFunding{value: amount}(_aid(who));
     }
 
     // ---- Sub field reads (game-resident _subOf slot 52 + verified packed offsets) ----

@@ -77,11 +77,11 @@ contract CrapsDayUpgradeTest is CrapsPins {
 
         uint256 baseDelta = _deltaOf(day, 3, 10);
         vm.prank(alice);
-        uint256 burned = craps.upgradeDayWindows(day, uint8(1 << 3));
+        uint256 burned = craps.upgradeDayWindows(0, day, uint8(1 << 3));
         assertEq(burned, baseDelta * 105 / 100, "cash upgrade missed the premium");
         assertEq(flip.burned(alice), dayCost + burned, "reported and actual burn differ");
         vm.prank(bob);
-        assertEq(craps.upgradeDayWindows(day, uint8(1 << 3)), baseDelta);
+        assertEq(craps.upgradeDayWindows(0, day, uint8(1 << 3)), baseDelta);
         assertEq(craps.daySeatHighMaskOf(day, alice), craps.daySeatHighMaskOf(day, bob));
         assertEq(craps.dayHighTicketsOf(day, 3), 2, "premium bought extra high entries");
     }
@@ -171,7 +171,7 @@ contract CrapsDayUpgradeTest is CrapsPins {
 
         uint256 before = flip.burned(alice);
         vm.prank(alice);
-        uint256 burned = craps.upgradeDayWindows(day, uint8(1 << 3));
+        uint256 burned = craps.upgradeDayWindows(0, day, uint8(1 << 3));
 
         assertEq(burned, want, "the delta is not the missing H - 1 copies");
         assertEq(flip.burned(alice) - before, burned, "the burn does not match the report");
@@ -191,7 +191,7 @@ contract CrapsDayUpgradeTest is CrapsPins {
         uint256 want = _deltaOf(day, 2, 100);
 
         vm.prank(alice);
-        uint256 burned = craps.upgradeDayWindows(day, uint8(1 << 2));
+        uint256 burned = craps.upgradeDayWindows(0, day, uint8(1 << 2));
         assertEq(burned, want, "the tail day did not price at 99 missing copies");
         assertEq(craps.dayHighTicketsOf(day, 2), 1, "the tail day's counter did not move");
 
@@ -216,7 +216,7 @@ contract CrapsDayUpgradeTest is CrapsPins {
         vm.expectEmit(address(craps));
         emit CrapsDayWindowsUpgraded(_idFor(alice), day, uint8((1 << 1) | (1 << 4) | (1 << 5)), want);
         vm.prank(alice);
-        uint256 burned = craps.upgradeDayWindows(day, uint8((1 << 1) | (1 << 4) | (1 << 5)));
+        uint256 burned = craps.upgradeDayWindows(0, day, uint8((1 << 1) | (1 << 4) | (1 << 5)));
         assertEq(burned, want, "three windows did not charge their three deltas");
         assertEq(craps.daySeatHighMaskOf(day, alice), (1 << 1) | (1 << 4) | (1 << 5));
     }
@@ -227,16 +227,16 @@ contract CrapsDayUpgradeTest is CrapsPins {
         uint24 day = _openDay(10);
         _buyNormalDay(alice);
         vm.prank(alice);
-        craps.upgradeDayWindows(day, uint8(1 << 2));
+        craps.upgradeDayWindows(0, day, uint8(1 << 2));
 
         vm.prank(alice);
         vm.expectRevert(CrapsBattleStorage.NothingToUpgrade.selector);
-        craps.upgradeDayWindows(day, uint8(1 << 2));
+        craps.upgradeDayWindows(0, day, uint8(1 << 2));
 
         // Mixed: the old bit rides along free, only the new one is charged and counted.
         uint256 want = _deltaOf(day, 5, 10);
         vm.prank(alice);
-        uint256 burned = craps.upgradeDayWindows(day, uint8((1 << 2) | (1 << 5)));
+        uint256 burned = craps.upgradeDayWindows(0, day, uint8((1 << 2) | (1 << 5)));
         assertEq(burned, want, "an already-high bit was charged again");
         assertEq(craps.dayHighTicketsOf(day, 2), 1, "an already-high bit was counted again");
         assertEq(craps.dayHighTicketsOf(day, 5), 1, "the fresh bit was not counted");
@@ -249,11 +249,11 @@ contract CrapsDayUpgradeTest is CrapsPins {
 
         vm.prank(alice);
         vm.expectRevert(CrapsBattleStorage.NothingToUpgrade.selector);
-        craps.upgradeDayWindows(day, 0);
+        craps.upgradeDayWindows(0, day, 0);
 
         vm.prank(alice);
         vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);
-        craps.upgradeDayWindows(day, 0x80);
+        craps.upgradeDayWindows(0, day, 0x80);
     }
 
     // ── The doors that stay shut ────────────────────────────────────────────
@@ -271,7 +271,7 @@ contract CrapsDayUpgradeTest is CrapsPins {
         uint256 before = flip.burned(alice);
         vm.prank(alice);
         vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);
-        craps.upgradeDayWindows(day, uint8((1 << 1) | (1 << 3)));
+        craps.upgradeDayWindows(0, day, uint8((1 << 1) | (1 << 3)));
 
         assertEq(flip.burned(alice), before, "a reverted batch still burned");
         assertEq(craps.dayHighTicketsOf(day, 3), 0, "a reverted batch still counted its good bit");
@@ -279,7 +279,7 @@ contract CrapsDayUpgradeTest is CrapsPins {
 
         // The still-open windows alone are fine.
         vm.prank(alice);
-        craps.upgradeDayWindows(day, uint8(1 << 3));
+        craps.upgradeDayWindows(0, day, uint8(1 << 3));
         assertEq(craps.daySeatHighMaskOf(day, alice), 1 << 3);
     }
 
@@ -292,7 +292,7 @@ contract CrapsDayUpgradeTest is CrapsPins {
 
         vm.prank(alice);
         vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);
-        craps.upgradeDayWindows(day, uint8(1 << 1));
+        craps.upgradeDayWindows(0, day, uint8(1 << 1));
     }
 
     /// @dev No ticket, no upgrade — and no way to reach anyone else's. The seat lookup is keyed
@@ -303,7 +303,7 @@ contract CrapsDayUpgradeTest is CrapsPins {
 
         vm.prank(bob);
         vm.expectRevert(CrapsBattleStorage.NoSuchBet.selector);
-        craps.upgradeDayWindows(day, uint8(1 << 3));
+        craps.upgradeDayWindows(0, day, uint8(1 << 3));
         assertEq(craps.daySeatHighMaskOf(day, alice), 0, "a stranger's call moved the ticket");
     }
 
@@ -317,7 +317,7 @@ contract CrapsDayUpgradeTest is CrapsPins {
 
         vm.prank(alice);
         vm.expectRevert(LootboxCraps.RngNotReady.selector);
-        craps.upgradeDayWindows(target, uint8(1 << 3));
+        craps.upgradeDayWindows(0, target, uint8(1 << 3));
 
         vm.warp(vm.getBlockTimestamp() + 1 days);
         _setDailyWord(target, _wordFor(10));
@@ -326,7 +326,7 @@ contract CrapsDayUpgradeTest is CrapsPins {
 
         uint256 want = _deltaOf(target, 3, 10);
         vm.prank(alice);
-        assertEq(craps.upgradeDayWindows(target, uint8(1 << 3)), want, "the open day did not price the upgrade");
+        assertEq(craps.upgradeDayWindows(0, target, uint8(1 << 3)), want, "the open day did not price the upgrade");
     }
 
     /// @dev A banked pass is not a ticket: credits alone hold no seat to upgrade.
@@ -337,7 +337,7 @@ contract CrapsDayUpgradeTest is CrapsPins {
 
         vm.prank(alice);
         vm.expectRevert(CrapsBattleStorage.NoSuchBet.selector);
-        craps.upgradeDayWindows(day, uint8(1 << 1));
+        craps.upgradeDayWindows(0, day, uint8(1 << 1));
     }
 
     /// @dev Upgrading is not a quest: the streak was credited when the day was taken, once.
@@ -348,7 +348,7 @@ contract CrapsDayUpgradeTest is CrapsPins {
         uint256 amount = quests.streakAwarded(alice);
 
         vm.prank(alice);
-        craps.upgradeDayWindows(day, uint8((1 << 1) | (1 << 2)));
+        craps.upgradeDayWindows(0, day, uint8((1 << 1) | (1 << 2)));
         assertEq(quests.streakCalls(alice), calls, "an upgrade rang the quest ledger");
         assertEq(quests.streakAwarded(alice), amount, "an upgrade moved the streak");
     }
@@ -369,7 +369,7 @@ contract CrapsDayUpgradeTest is CrapsPins {
         }
         vm.prank(alice);
         vm.expectRevert(CrapsBattleStorage.NothingToUpgrade.selector);
-        craps.upgradeDayWindows(day, 0x3F);
+        craps.upgradeDayWindows(0, day, 0x3F);
     }
 
     /// @dev A HIGH future reservation carries the whole-day shape too, priced only when its day
@@ -406,7 +406,7 @@ contract CrapsDayUpgradeTest is CrapsPins {
         // ARM A: a normal ticket bought in period zero, upgraded at period 1 alone.
         _buyNormalDay(alice);
         vm.prank(alice);
-        craps.upgradeDayWindows(day, uint8(1 << 1));
+        craps.upgradeDayWindows(0, day, uint8(1 << 1));
         vm.warp(dayStart + 7 hours);
         _armAndSettle(day, 1, word);
         uint256 paidA = coinflip.staked(alice);
@@ -435,7 +435,7 @@ contract CrapsDayUpgradeTest is CrapsPins {
         uint24 day = _openDay(10);
         _buyNormalDay(alice);
         vm.prank(alice);
-        craps.upgradeDayWindows(day, uint8(1 << 1));
+        craps.upgradeDayWindows(0, day, uint8(1 << 1));
         uint256 betId = _dayBetId(day, alice);
 
         // Past period 2's close (12h03m).
@@ -455,7 +455,7 @@ contract CrapsDayUpgradeTest is CrapsPins {
         uint24 day = _openDay(10);
         _buyNormalDay(alice);
         vm.prank(alice);
-        craps.upgradeDayWindows(day, uint8(1 << 1));
+        craps.upgradeDayWindows(0, day, uint8(1 << 1));
         uint256 betId = _dayBetId(day, alice);
 
         vm.warp(vm.getBlockTimestamp() + 7 hours);
@@ -476,7 +476,7 @@ contract CrapsDayUpgradeTest is CrapsPins {
         uint24 day = _openDay(10);
         _buyNormalDay(alice);
         vm.prank(alice);
-        craps.upgradeDayWindows(day, uint8(1 << 1));
+        craps.upgradeDayWindows(0, day, uint8(1 << 1));
         uint256 betId = _dayBetId(day, alice);
 
         vm.warp(vm.getBlockTimestamp() + 7 hours);
@@ -504,7 +504,7 @@ contract CrapsDayUpgradeTest is CrapsPins {
         uint24 day = _openDay(10);
         _buyNormalDay(alice);
         vm.prank(alice);
-        craps.upgradeDayWindows(day, uint8(1 << 1));
+        craps.upgradeDayWindows(0, day, uint8(1 << 1));
         Craps.Bets memory blank;
         vm.prank(dave);
         craps.enterBonusBattle(1, blank, 10);

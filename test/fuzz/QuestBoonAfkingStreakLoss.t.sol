@@ -36,6 +36,19 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///      quest streak / shield are read from `questPlayerState` (DegenerusQuests slot 1) packed fields.
 ///      Test-only: ZERO contracts/*.sol mutation in this file.
 contract QuestBoonAfkingStreakLossTest is DeployProtocol {
+
+    mapping(address => uint32) private _aidCache;
+
+    /// @dev Wallet ID of `a`, registering it when it holds none. Call before any `vm.prank`.
+    function _aid(address a) internal returns (uint32 id) {
+        id = _aidCache[a];
+        if (id == 0) {
+            id = game.walletIdOf(a);
+            if (id == 0) id = _giveWalletId(a);
+            _aidCache[a] = id;
+        }
+    }
+
     // -------------------------------------------------------------------------
     // questPlayerState (DegenerusQuests slot 1) packed-field byte offsets
     // -------------------------------------------------------------------------
@@ -138,7 +151,7 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
         uint256 earnedExpected = _liveAfkingStreakOf(p);
         assertGe(earnedExpected, subBaseAfter, "non-vacuity: the earned streak rides the (bonus-inclusive) sub base");
         vm.prank(p);
-        game.subscribe(address(0), false, false, 0, address(0)); // explicit cancel -> finalizeAfking
+        game.subscribe(0, false, false, 0, 0, 0); // explicit cancel -> finalizeAfking
 
         // finalizeAfking writes the earned streak into the manual `state.streak` (slot off9). Read it DIRECTLY
         // (not via effectiveBaseStreakAndAfking, which would return the stale start-of-day baseStreak snapshot
@@ -286,13 +299,13 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
     }
 
     function _subscribeLootbox(address who, uint8 q) internal {
-        _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (NoCoin without it)
+        uint256 seat = _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (a new run burns one seat)
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, address(0)); // self, lootbox mode, no reinvest
+        game.subscribe(0, false, false, q, 0, seat); // self, lootbox mode, no reinvest
     }
 
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
-        game.depositAfkingFunding{value: amount}(who);
+        game.depositAfkingFunding{value: amount}(_aid(who));
     }
 }

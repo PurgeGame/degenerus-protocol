@@ -157,8 +157,8 @@ contract CrapsWalletIdsTest is CrapsPins {
         assertEq(w & MID_MASK, 0, "bet word bits 32..159 are zero");
     }
 
-    function _code(uint256 kind, address to, bool high, uint256 arg, uint256 count) internal pure returns (uint256) {
-        return uint256(uint160(to)) | (kind << 160) | (high ? (uint256(1) << 168) : 0) | (arg << 176) | (count << 200);
+    function _code(uint256 kind, address to, bool high, uint256 arg, uint256 count) internal view returns (uint256) {
+        return uint256(game.walletIdOf(to)) | (kind << 160) | (high ? (uint256(1) << 168) : 0) | (arg << 176) | (count << 200);
     }
 
     function _customSlot(bool multiEntry) internal returns (uint64 slot) {
@@ -248,7 +248,7 @@ contract CrapsWalletIdsTest is CrapsPins {
 
         vm.prank(stranger);
         vm.expectRevert(CrapsBattleStorage.NoWalletId.selector);
-        c.setPreferredBoard(BOARD);
+        c.setPreferredBoard(0, BOARD);
 
         vm.prank(stranger);
         vm.expectRevert(CrapsBattleStorage.NoWalletId.selector);
@@ -260,11 +260,11 @@ contract CrapsWalletIdsTest is CrapsPins {
 
         vm.prank(stranger);
         vm.expectRevert(CrapsBattleStorage.NoWalletId.selector);
-        c.convertNormalToHigh(1);
+        c.convertNormalToHigh(0, 1);
 
         vm.prank(stranger);
         vm.expectRevert(CrapsBattleStorage.NoWalletId.selector);
-        c.upgradeReservedDay(day + 1);
+        c.upgradeReservedDay(0, day + 1);
 
         assertEq(game.walletIdOf(stranger), 0, "no ID was allocated");
         assertEq(c.addressWord(stranger), 0, "no address word was written");
@@ -276,7 +276,7 @@ contract CrapsWalletIdsTest is CrapsPins {
         _open();
         vm.prank(stranger);
         vm.expectRevert(CrapsBattleStorage.NoSuchBet.selector);
-        c.upgradeDayWindows(day, 1);
+        c.upgradeDayWindows(0, day, 1);
         assertEq(game.walletIdOf(stranger), 0, "the failed upgrade left no wallet ID");
     }
 
@@ -285,7 +285,7 @@ contract CrapsWalletIdsTest is CrapsPins {
         assertEq(c.addressWord(alice), 0);
         vm.expectCall(address(game), abi.encodeCall(MockGame.registerWallet, (alice, false)), 1);
         vm.prank(alice);
-        c.setPreferredBoard(BOARD);
+        c.setPreferredBoard(0, BOARD);
         uint256 a = c.addressWord(alice);
         assertEq(uint32(a >> ID_SHIFT), id, "cache written");
         assertTrue(a & INIT != 0, "address word initialized");
@@ -328,14 +328,14 @@ contract CrapsWalletIdsTest is CrapsPins {
         vm.stopPrank();
         vm.expectCall(address(game), abi.encodeCall(MockGame.registerWallet, (alice, false)), 2);
         vm.prank(alice);
-        c.convertNormalToHigh(1);
+        c.convertNormalToHigh(0, 1);
         uint256 w = c.idWord(id);
         assertEq(_normal(w), 0, "21 normals debited from the ID word");
         assertEq(_high(w), 1, "one high credited to the ID word");
         assertEq(c.addressWord(alice), 0, "convertNormalToHigh wrote no address word");
 
         vm.prank(alice);
-        c.upgradeReservedDay(reserved);
+        c.upgradeReservedDay(0, reserved);
         w = c.idWord(id);
         assertEq(_high(w), 0, "the high pass was debited from the ID word");
         assertEq(_normal(w), 1, "the normal pass was banked back into the ID word");
@@ -393,11 +393,12 @@ contract CrapsWalletIdsTest is CrapsPins {
 
     // ── 5. vaultComp ─────────────────────────────────────────────────────────
 
-    function test_vaultCompRefusesARecipientWithoutAWalletId() public {
+    function test_vaultCompRefusesAnUnallocatedRecipientId() public {
         _open();
+        uint256 code = _code(4, stranger, false, 0, 2);
         vm.prank(ContractAddresses.VAULT);
-        vm.expectRevert(CrapsBattleStorage.NoWalletId.selector);
-        c.vaultComp(_code(4, stranger, false, 0, 2));
+        vm.expectRevert(abi.encodeWithSignature("E()"));
+        c.vaultComp(code);
         assertEq(game.walletIdOf(stranger), 0);
     }
 
@@ -435,9 +436,10 @@ contract CrapsWalletIdsTest is CrapsPins {
         _open();
         uint32 id = _register(alice);
         vm.prank(alice);
-        c.setPreferredBoard(BOARD);
+        c.setPreferredBoard(0, BOARD);
+        uint256 code = _code(0, alice, false, 1, 0);
         vm.prank(ContractAddresses.VAULT);
-        c.vaultComp(_code(0, alice, false, 1, 0));
+        c.vaultComp(code);
         uint256 betId = (uint256(_daySlot(day) + 2) << 64) | 1;
         _assertOwnerWord(betId, id);
         assertEq(c.betOf(betId).chips, BOARD, "the comp seat plays the saved board");
@@ -464,7 +466,7 @@ contract CrapsWalletIdsTest is CrapsPins {
         vm.prank(ContractAddresses.GAME);
         c.creditPasses(id, 5, 1);
         vm.prank(alice);
-        c.setPreferredBoard(BOARD);
+        c.setPreferredBoard(0, BOARD);
         uint256 w = c.idWord(id);
         assertEq(_normal(w), 5, "a board save keeps the normal lane");
         assertEq(_high(w), 1, "a board save keeps the high lane");
@@ -480,7 +482,7 @@ contract CrapsWalletIdsTest is CrapsPins {
         assertEq(_high(w), 0);
         assertEq(_normal(w), 7);
         vm.prank(alice);
-        c.setPreferredBoard(BOARD_B);
+        c.setPreferredBoard(0, BOARD_B);
         w = c.idWord(id);
         assertEq(_normal(w), 7, "a board change keeps the passes");
         assertEq(_boardOf(w), BOARD_B);
@@ -512,7 +514,7 @@ contract CrapsWalletIdsTest is CrapsPins {
 
     function test_openBonusDaySeatsTheBodiesByIdOnTheirIdWordPasses() public {
         vm.prank(ContractAddresses.VAULT);
-        c.setPreferredBoard(BOARD);
+        c.setPreferredBoard(0, BOARD);
         assertEq(_cachedId(ContractAddresses.VAULT), 1, "the Vault's address word caches Game ID 1");
         assertEq(_boardOf(c.idWord(1)), BOARD, "the Vault's board sits in ID word 1");
         uint256 house = _normal(c.idWord(2));
@@ -969,7 +971,7 @@ contract CrapsWalletIdsTest is CrapsPins {
             }
         } else if (action == 3) {
             vm.prank(who);
-            try c.setPreferredBoard(BOARD_B) {} catch { ok = false; }
+            try c.setPreferredBoard(0, BOARD_B) {} catch { ok = false; }
         } else if (action == 4) {
             uint32 id = game.walletIdOf(who);
             if (id == 0) return true;

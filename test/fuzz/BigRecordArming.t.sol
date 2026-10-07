@@ -117,15 +117,16 @@ contract BigRecordArmingTest is DeployProtocol {
         vm.prank(address(game));
         coin.mintForGame(player, 10_000);
         vm.prank(player);
-        game.placeDegeneretteBet(address(0), CURRENCY_FLIP, 1_000, 1, 3);
+        game.placeDegeneretteBet(0, CURRENCY_FLIP, 1_000, 1, 3);
         assertEq(coinflip.biggestSpinEver(), 0, "FLIP bets stay off the record");
     }
 
     /// @notice A gifted bet arms normally — the ETH is real and the record belongs to
     ///         the bet owner.
     function testGiftedBetArms() public {
+        uint32 playerId = _giveWalletId(player);
         vm.prank(rival);
-        game.placeDegeneretteBet{value: 2 ether}(player, CURRENCY_ETH, 2 ether, 1, 3);
+        game.placeDegeneretteBet{value: 2 ether}(playerId, CURRENCY_ETH, 2 ether, 1, 3);
         assertEq(coinflip.biggestSpinEver(), 2 ether, "gifted bets arm the record");
     }
 
@@ -375,14 +376,14 @@ contract BigRecordArmingTest is DeployProtocol {
 
     function _placeEth(address who, uint128 perSpin, uint8 spins) internal {
         vm.prank(who);
-        game.placeDegeneretteBet{value: uint256(perSpin) * spins}(address(0), CURRENCY_ETH, perSpin, spins, 3);
+        game.placeDegeneretteBet{value: uint256(perSpin) * spins}(0, CURRENCY_ETH, perSpin, spins, 3);
     }
 
     function _buyBox(address who, uint256 amount) internal {
         if (who.balance < amount) vm.deal(who, amount + 1 ether);
         vm.prank(who);
         game.purchase{value: amount}(
-            who,
+            0,
             0,
             BoxOrderLib.boCustomFloor(amount),
             bytes32(0),
@@ -397,7 +398,7 @@ contract BigRecordArmingTest is DeployProtocol {
         uint256 cost = tickets * TICKET_PRICE;
         vm.prank(who);
         game.purchase{value: cost}(
-            who,
+            0,
             qty,
             0,
             bytes32(0),

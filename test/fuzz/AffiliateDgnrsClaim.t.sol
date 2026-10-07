@@ -52,7 +52,7 @@ contract AffiliateDgnrsClaim is DeployProtocol {
 
     function _claimDgnrs(address player) internal {
         vm.prank(player);
-        game.claimAffiliateDgnrs(address(0));
+        game.claimAffiliateDgnrs(uint32(0));
     }
 
     /// @dev Purchase with a unique buyer using an affiliate code.
@@ -61,7 +61,7 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         vm.deal(buyer, 5 ether);
         vm.prank(buyer);
         game.purchase{value: 1.01 ether}(
-            buyer, 400, BoxOrderLib.boCustomFloor(1 ether), code, MintPaymentKind.DirectEth, false
+            0, 400, BoxOrderLib.boCustomFloor(1 ether), code, MintPaymentKind.DirectEth, false
         );
     }
 

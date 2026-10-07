@@ -121,20 +121,22 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     // -------------------------------------------------------------------------
 
     /// @notice Claim a level's color-completion bingo: all 8 colors of one symbol.
-    /// @dev Permissionless: the reward settles to `player` (the slot owner the 8-color check
-    ///      verifies), never the caller, so an uninvited claim only ever harvests inward.
-    ///      Each player may claim at most once per level, regardless of which qualifying
-    ///      symbol they use. A level's bingo remains claimable until L+2 takes over its
-    ///      parity ticket buffer; starting the next level alone does not expire it.
-    /// @param player The bingo owner to claim for (address(0) = msg.sender).
+    /// @dev Permissionless: the reward settles to account `id` (the slot owner the 8-color
+    ///      check verifies), never the caller, so an uninvited claim only ever harvests inward;
+    ///      the DGNRS leg goes to the account's payee. Each account may claim at most once per
+    ///      level, regardless of which qualifying symbol it uses. A level's bingo remains
+    ///      claimable until L+2 takes over its parity ticket buffer; starting the next level
+    ///      alone does not expire it.
+    /// @param id The bingo owner to claim for (0 = caller, which must hold an ID; otherwise allocated).
     /// @param lvl The level to claim on (uint24 — the internal storage key width;
     ///        the ABI decoder fail-closes on an oversized value, no truncation).
     /// @custom:reverts BingoExpired If a later same-parity level has taken over the ticket buffer.
     /// @param symbol Symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7).
     /// @param slots Per-color positions in lvlTraitEntry[lvl][traitId] the owner occupies.
-    function claimBingo(address player, uint24 lvl, uint8 symbol, uint32[8] calldata slots) external {
+    function claimBingo(uint32 id, uint24 lvl, uint8 symbol, uint32[8] calldata slots) external {
         // Permissionless: a settled claim only ever credits the slot owner, never the caller.
-        if (player == address(0)) player = msg.sender;
+        // Bucket lanes hold wallet IDs; a caller with no ID owns no slot.
+        (uint32 playerId, address player, address payee) = _creditAccount(id);
         // ---- Validation (gameOver hard cutoff + range gates) ----
         // No level upper-bound guard: the 8-color ownership check below is the gate —
         // an unmaterialized bucket is empty and fails it, while a bucket the sweep has
@@ -145,8 +147,6 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         if (gameOver) revert GameOver();
         if (_ticketLevelRetired(lvl)) revert BingoExpired();
         if (symbol >= 32) revert InvalidSymbol();
-        // Bucket lanes hold wallet IDs; an unregistered address owns no slot.
-        uint32 playerId = _requireWalletId(player);
         if (_bingoClaimed(lvl, playerId)) revert AlreadyClaimed();
 
         uint8 quadrant = symbol >> 3; // bits 7-6 of the trait byte
@@ -182,7 +182,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         uint256 poolBal = dgnrs.poolBalance(IsDGNRS.Pool.Reward);
         uint256 dgnrsPaid = dgnrs.transferFromPool(
             IsDGNRS.Pool.Reward,
-            player,
+            payee,
             (poolBal * BINGO_DGNRS_BPS) / 10_000
         );
 
@@ -210,10 +210,13 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     ///      transition time all scores for currLevel are frozen and immutable.
     /// @dev Permissionless: the reward is deterministic (frozen score / fixed pot, no timing
     ///      edge) and credits the affiliate, so any caller may settle any affiliate's claim.
-    /// @param player Affiliate address to claim for (address(0) = msg.sender).
-    function claimAffiliateDgnrs(address player) external {
+    ///      The DGNRS leg goes to the account's payee; the FLIP bonus credits the account by ID.
+    /// @param id Affiliate account to claim for (0 = caller; otherwise allocated).
+    function claimAffiliateDgnrs(uint32 id) external {
         // Permissionless: a settled claim only ever credits the affiliate, never the caller.
-        if (player == address(0)) player = msg.sender;
+        address player = msg.sender;
+        address payee = msg.sender;
+        if (id != 0) (player, payee) = _accountKeys(id);
 
         uint24 currLevel = level;
         if (currLevel == 0) revert NotStarted();
@@ -241,7 +244,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         _markAffiliateDgnrsClaimed(currLevel, playerId);
         uint256 paid = dgnrs.transferFromPool(
             IsDGNRS.Pool.Affiliate,
-            player,
+            payee,
             reward
         );
         if (paid == 0) revert NothingToClaim();

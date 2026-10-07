@@ -41,6 +41,19 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///      withdrawn via `withdrawAfkingFunding` under CEI). RE-DERIVED every pinned slot via
 ///      `forge inspect storage DegenerusGame`. Test-only: ZERO `contracts/*.sol` mutation.
 contract KeeperNonBrick is DeployProtocol {
+
+    mapping(address => uint32) private _aidCache;
+
+    /// @dev Wallet ID of `a`, registering it when it holds none. Call before any `vm.prank`.
+    function _aid(address a) internal returns (uint32 id) {
+        id = _aidCache[a];
+        if (id == 0) {
+            id = game.walletIdOf(a);
+            if (id == 0) id = _giveWalletId(a);
+            _aidCache[a] = id;
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Storage slot constants (DegenerusGame; RE-DERIVED via `solc --storage-layout` on the working
     // tree after the V62 lootbox repack — the folded lootboxEth word + removed lootboxEthBase/Flip/
@@ -217,22 +230,24 @@ contract KeeperNonBrick is DeployProtocol {
         for (uint256 i; i < n; i++) {
             address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
             subs[i] = who;
-            _grantSeat(who);
+            _aid(who);
+            uint256 seat = _grantSeat(who);
             vm.prank(who);
-            game.subscribe(address(0), false, false, 1, address(0)); // self, lootbox mode, qty 1
+            game.subscribe(0, false, false, 1, 0, seat); // self, lootbox mode, qty 1
             _fundPool(who, poolEach);
         }
     }
 
     function _subscribeLootbox(address who, uint8 q) internal {
+        uint256 seat = _grantSeat(who);
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, address(0)); // self, lootbox mode, no reinvest
+        game.subscribe(0, false, false, q, 0, seat); // self, lootbox mode, no reinvest
     }
 
     function _fundPool(address who, uint256 amount) internal {
         _giveWalletId(who);
         vm.deal(address(this), amount);
-        game.depositAfkingFunding{value: amount}(who);
+        game.depositAfkingFunding{value: amount}(_aid(who));
     }
 
     function _grantDeityPass(address who) internal {
@@ -379,7 +394,7 @@ contract ReentrantAfkingWithdrawer {
         reentryAmount = amount;
         bubble = true;
         reentered = false;
-        g.withdrawAfkingFunding(amount); // reverts when the re-entry bubbles
+        g.withdrawAfkingFunding(0, amount); // reverts when the re-entry bubbles
     }
 
     /// @dev Swallowing variant: the inner re-entrant withdraw's revert IS caught, so the outer withdraw
@@ -388,7 +403,7 @@ contract ReentrantAfkingWithdrawer {
         reentryAmount = amount;
         bubble = false;
         reentered = false;
-        g.withdrawAfkingFunding(amount);
+        g.withdrawAfkingFunding(0, amount);
     }
 
     receive() external payable {
@@ -397,14 +412,14 @@ contract ReentrantAfkingWithdrawer {
             // Re-enter before the outer frame finishes. Under CEI the funding is already zeroed, so this
             // reverts E().
             if (bubble) {
-                g.withdrawAfkingFunding(reentryAmount); // bubble the revert -> outer .call fails
+                g.withdrawAfkingFunding(0, reentryAmount); // bubble the revert -> outer .call fails
             } else {
-                try g.withdrawAfkingFunding(reentryAmount) {} catch {} // swallow -> outer completes once
+                try g.withdrawAfkingFunding(0, reentryAmount) {} catch {} // swallow -> outer completes once
             }
         }
     }
 }
 
 interface GameWithdrawLike {
-    function withdrawAfkingFunding(uint256 amount) external;
+    function withdrawAfkingFunding(uint32 id, uint256 amount) external;
 }

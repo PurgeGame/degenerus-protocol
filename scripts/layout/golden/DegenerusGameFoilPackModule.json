@@ -405,7 +405,7 @@
     "label": "operatorApprovals",
     "offset": 0,
     "slot": 19,
-    "typeLabel": "mapping(address => mapping(address => bool))"
+    "typeLabel": "mapping(uint32 => mapping(address => bool))"
   },
   {
     "bytes": "32",

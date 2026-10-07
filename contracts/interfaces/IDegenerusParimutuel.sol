@@ -27,8 +27,21 @@ pragma solidity 0.8.34;
 /// @title IDegenerusParimutuel
 /// @author Burnie Degenerus
 /// @notice The game's view of the parimutuel market: the seal it pushes and the in-order
-///         settlement stage it cranks.
+///         settlement stage it cranks, plus the player bet door.
 interface IDegenerusParimutuel {
+    /// @notice Bet the fixed FLIP stake on round's OVER or UNDER side for account `id`.
+    /// @dev Authorized: `id == 0` is the caller, whose ID rides Quests `marketBetGates(caller, ...)`
+    ///      (no Game resolution call). A nonzero `id` needs Game
+    ///      `resolveAccount(id, msg.sender).authorized` (the account's key, a smurf's owner, or an
+    ///      approved operator); the gates and the growth-bet reward read the account key. The
+    ///      stake burns from the account's PAYEE (`burnCoin(payee, STAKE)`); the bet, the
+    ///      settlement credit (`creditFlipBatch` by ID) and the quest reward are the account's.
+    /// @param id Account placing the bet (0 = caller).
+    /// @param over True for OVER, false for UNDER.
+    /// @custom:reverts NotApproved If the caller may not act for `id`.
+    /// @custom:reverts E (Game) If `id` is unallocated.
+    function placeBet(uint32 id, bool over) external;
+
     /// @notice Record the settled side of a growth round.
     /// @dev Called by GAME at the level transition that banks the successor ratchet entry —
     ///      the moment round `round`'s three terms are all final. Must run after every

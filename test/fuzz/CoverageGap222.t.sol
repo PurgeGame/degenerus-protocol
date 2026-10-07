@@ -30,6 +30,8 @@ contract CoverageGap222 is DeployProtocol {
         vm.deal(buyer, 10_000 ether);
         vm.deal(buyer2, 10_000 ether);
         vm.deal(address(game), 2_000 ether);
+        // Non-paying self doors (id 0) require the caller to hold a wallet ID.
+        _giveWalletId(buyer);
     }
 
     // ====================================================================
@@ -56,7 +58,7 @@ contract CoverageGap222 is DeployProtocol {
         uint32 ticketsBefore = game.entriesOwedView(targetLvl, buyer);
         vm.prank(buyer);
         try game.purchase{value: cost}(
-            buyer,
+            0,
             qty,
             0,
             bytes32(0),
@@ -88,10 +90,9 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool ok, ) = address(game).call(
             abi.encodeWithSignature(
-                "redeemFlip(address,uint256,uint256)",
-                buyer,
-                100,
-                0
+                "redeemFlip(uint32,uint256)",
+                uint32(0),
+                uint256(100)
             )
         );
         // redeemFlip may revert early if buyer has no FLIP balance;
@@ -103,21 +104,20 @@ contract CoverageGap222 is DeployProtocol {
     }
 
     /// @notice Exercise the setOperatorApproval path and observe effect.
-    /// @dev Closes gaps: setOperatorApproval (write) + isOperatorApproved (read).
-    ///      D-14 conditional branch: operator != msg.sender guard + state write.
+    /// @dev Closes gaps: setOperatorApproval (write) + resolveAccount (read).
+    ///      The approval is stored per account ID; `resolveAccount(id, operator)` reports it.
     function test_gap_setOperatorApproval_observable() public {
         address operator = makeAddr("operator");
+        uint32 id = game.walletIdOf(buyer);
         vm.prank(buyer);
-        try game.setOperatorApproval(operator, true) {
-            bool approved = game.isOperatorApproved(buyer, operator);
-            assertTrue(approved, "operator approved");
-        } catch {}
+        game.setOperatorApproval(0, operator, true);
+        (, , bool approved) = game.resolveAccount(id, operator);
+        assertTrue(approved, "operator approved");
 
         vm.prank(buyer);
-        try game.setOperatorApproval(operator, false) {
-            bool approvedAfter = game.isOperatorApproved(buyer, operator);
-            assertFalse(approvedAfter, "operator revoked");
-        } catch {}
+        game.setOperatorApproval(0, operator, false);
+        (, , bool approvedAfter) = game.resolveAccount(id, operator);
+        assertFalse(approvedAfter, "operator revoked");
     }
 
     /// @notice Exercise claimWinnings when nothing to claim — expect revert or no-op.
@@ -126,7 +126,7 @@ contract CoverageGap222 is DeployProtocol {
     function test_gap_claimWinnings_zeroBalance() public {
         vm.prank(buyer);
         (bool ok, ) = address(game).call(
-            abi.encodeWithSignature("claimWinnings(address)", buyer)
+            abi.encodeWithSignature("claimWinnings(uint32)", uint32(0))
         );
         // Either reverts (no winnings) or succeeds silently; selector reachable.
         ok;
@@ -178,7 +178,7 @@ contract CoverageGap222 is DeployProtocol {
     function test_gap_claimAffiliateDgnrs_zeroBalance() public {
         vm.prank(buyer);
         (bool ok, ) = address(game).call(
-            abi.encodeWithSignature("claimAffiliateDgnrs(address)", buyer)
+            abi.encodeWithSignature("claimAffiliateDgnrs(uint32)", uint32(0))
         );
         // With zero affiliate balance the guard rejects the claim.
         assertFalse(ok, "claimAffiliateDgnrs rejected zero-balance caller");
@@ -255,12 +255,12 @@ contract CoverageGap222 is DeployProtocol {
 
     /// @notice Exercise issueDeityBoon (onlyGame-gated).
     function test_gap_issueDeityBoon_guard() public {
-        address deity = makeAddr("deity");
-        address recipient = makeAddr("boon_recipient");
+        uint32 deity = _giveWalletId(makeAddr("deity"));
+        uint32 recipient = _giveWalletId(makeAddr("boon_recipient"));
         vm.prank(buyer);
         (bool ok, ) = address(game).call(
             abi.encodeWithSignature(
-                "issueDeityBoon(address,address,uint8)",
+                "issueDeityBoon(uint32,uint32,uint8)",
                 deity,
                 recipient,
                 uint8(0)
@@ -288,7 +288,7 @@ contract CoverageGap222 is DeployProtocol {
     function test_gap_claimWhalePass_noWhale() public {
         vm.prank(buyer);
         (bool ok, ) = address(game).call(
-            abi.encodeWithSignature("claimWhalePass(address)", buyer)
+            abi.encodeWithSignature("claimWhalePass(uint32)", uint32(0))
         );
         // No-whale caller: nothing pending, so the claim reverts (E) rather than no-op'ing.
         assertFalse(ok, "claimWhalePass reverts for no-whale caller (nothing to claim)");
@@ -366,8 +366,8 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o4, ) = address(coin).call(
             abi.encodeWithSignature(
-                "decimatorBurn(address,uint256,uint32)",
-                buyer,
+                "decimatorBurn(uint32,uint256,uint32)",
+                uint32(0),
                 uint256(1),
                 uint32(0)
             )
@@ -396,16 +396,16 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o1, ) = address(coinflip).call(
             abi.encodeWithSignature(
-                "depositCoinflip(address,uint256)",
-                buyer,
+                "depositCoinflip(uint32,uint256)",
+                uint32(0),
                 uint256(1)
             )
         );
         vm.prank(buyer);
         (bool o2, ) = address(coinflip).call(
             abi.encodeWithSignature(
-                "claimCoinflips(address,uint256)",
-                buyer,
+                "claimCoinflips(uint32,uint256)",
+                uint32(0),
                 uint256(1)
             )
         );
@@ -466,8 +466,8 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o1, ) = address(coinflip).call(
             abi.encodeWithSignature(
-                "setCoinflipAutoRebuy(address,bool,uint256)",
-                buyer,
+                "setCoinflipAutoRebuy(uint32,bool,uint256)",
+                uint32(0),
                 true,
                 uint256(1 ether)
             )
@@ -475,8 +475,8 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o2, ) = address(coinflip).call(
             abi.encodeWithSignature(
-                "setCoinflipAutoRebuyTakeProfit(address,uint256)",
-                buyer,
+                "setCoinflipAutoRebuyTakeProfit(uint32,uint256)",
+                uint32(0),
                 uint256(1 ether)
             )
         );
@@ -911,8 +911,8 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o2, ) = address(sdgnrs).call(
             abi.encodeWithSignature(
-                "claimRedemption(address,uint32)",
-                buyer,
+                "claimRedemption(uint32,uint32)",
+                uint32(0),
                 uint24(0)
             )
         );
@@ -1500,8 +1500,8 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o1, ) = address(game).call{value: 1 ether}(
             abi.encodeWithSignature(
-                "placeDegeneretteBet(address,uint8,uint128,uint8,uint8)",
-                buyer,
+                "placeDegeneretteBet(uint32,uint8,uint128,uint8,uint8)",
+                uint32(0),
                 uint8(0),
                 uint128(1),
                 uint8(1),
@@ -1542,8 +1542,8 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o1, ) = address(game).call{value: 1 ether}(
             abi.encodeWithSignature(
-                "purchaseWhalePass(address,uint256,bytes32)",
-                buyer,
+                "purchaseWhalePass(uint32,uint256,bytes32)",
+                uint32(0),
                 uint256(1),
                 bytes32(0)
             )
@@ -1551,16 +1551,16 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o2, ) = address(game).call{value: 1 ether}(
             abi.encodeWithSignature(
-                "purchaseLazyPass(address,bytes32)",
-                buyer,
+                "purchaseLazyPass(uint32,bytes32)",
+                uint32(0),
                 bytes32(0)
             )
         );
         vm.prank(buyer);
         (bool o3, ) = address(game).call{value: 1 ether}(
             abi.encodeWithSignature(
-                "purchaseDeityPass(address,uint8,bytes32)",
-                buyer,
+                "purchaseDeityPass(uint32,uint8,bytes32)",
+                uint32(0),
                 uint8(0),
                 bytes32(0)
             )

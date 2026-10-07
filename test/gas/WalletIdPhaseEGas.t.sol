@@ -100,7 +100,7 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
     function _ticket(address buyer, bytes32 code) private {
         uint256 price = _price();
         vm.prank(buyer);
-        game.purchase{value: price}(buyer, 400, 0, code, MintPaymentKind.DirectEth, false);
+        game.purchase{value: price}(0, 400, 0, code, MintPaymentKind.DirectEth, false);
     }
 
     function _default(address owner) private pure returns (bytes32) { return bytes32(uint256(uint160(owner))); }
@@ -200,37 +200,37 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
     function test_Gas_CoinflipDepositNewWallet() public {
         _flip(FRESH);
         vm.prank(FRESH);
-        coinflip.depositCoinflip(address(0), 1000);
+        coinflip.depositCoinflip(0, 1000);
         _report("coinflip_deposit_new_wallet");
     }
 
     function test_Gas_CoinflipDepositRegisteredUncached() public {
         _flip(REG);
         vm.prank(REG);
-        coinflip.depositCoinflip(address(0), 1000);
+        coinflip.depositCoinflip(0, 1000);
         _report("coinflip_deposit_registered_uncached");
     }
 
     function test_Gas_CoinflipDepositRepeat() public {
         _flip(REG);
         vm.prank(REG);
-        coinflip.depositCoinflip(address(0), 1000);
+        coinflip.depositCoinflip(0, 1000);
         vm.prank(REG);
-        coinflip.depositCoinflip(address(0), 1000);
+        coinflip.depositCoinflip(0, 1000);
         _report("coinflip_deposit_repeat");
     }
 
     function test_Gas_CoinflipClaimUncached() public {
         vm.prank(REG);
-        coinflip.claimCoinflips(address(0), 1);
+        coinflip.claimCoinflips(0, 1);
         _report("coinflip_claim_uncached");
     }
 
     function test_Gas_CoinflipClaimRepeat() public {
         vm.prank(REG);
-        coinflip.claimCoinflips(address(0), 1);
+        coinflip.claimCoinflips(0, 1);
         vm.prank(REG);
-        coinflip.claimCoinflips(address(0), 1);
+        coinflip.claimCoinflips(0, 1);
         _report("coinflip_claim_repeat");
     }
 
@@ -369,7 +369,7 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
 
     function _bet(address p, bool over) private {
         vm.prank(p);
-        parimutuel.placeBet(p, over);
+        parimutuel.placeBet(0, over);
     }
 
     function test_Gas_PariFirstBettorFreshWords() public {
@@ -418,16 +418,16 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
     function test_Gas_WwxrpDailyFirstNewWallet() public {
         _wwxrp(FRESH);
         vm.prank(FRESH);
-        wwxrp.enter(100);
+        wwxrp.enter(0, 100);
         _report("wwxrp_daily_first_new_wallet");
     }
 
     function test_Gas_WwxrpDailyRepeat() public {
         _wwxrp(REG);
         vm.prank(REG);
-        wwxrp.enter(100);
+        wwxrp.enter(0, 100);
         vm.prank(REG);
-        wwxrp.enter(100);
+        wwxrp.enter(0, 100);
         _report("wwxrp_daily_repeat");
     }
 
@@ -441,7 +441,7 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
         _level99();
         _wwxrp(REG);
         vm.prank(REG);
-        wwxrp.enter(100);
+        wwxrp.enter(0, 100);
         _report("wwxrp_incinerator_first");
     }
 
@@ -449,9 +449,9 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
         _level99();
         _wwxrp(REG);
         vm.prank(REG);
-        wwxrp.enter(100);
+        wwxrp.enter(0, 100);
         vm.prank(REG);
-        wwxrp.enter(100);
+        wwxrp.enter(0, 100);
         _report("wwxrp_incinerator_repeat");
     }
 }

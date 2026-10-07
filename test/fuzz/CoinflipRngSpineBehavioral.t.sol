@@ -198,7 +198,7 @@ contract CoinflipRngSpineBehavioral is DeployProtocol {
         vm.deal(player, 100 ether);
         vm.prank(player);
         game.purchase{value: 10 ether}(
-            player,
+            0,
             400,
             0,
             bytes32(0),

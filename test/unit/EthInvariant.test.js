@@ -67,7 +67,7 @@ describe("EthInvariant (ACCT-01, ACCT-08)", function () {
     // Cost: (priceWei * ticketQuantity) / 400 = 0.01 ETH * 400 / 400 = 0.01 ETH
     const priceWei = await game.mintPrice(); // 0.01 ETH
     await game.connect(alice).purchase(
-      ZERO_ADDRESS, // buyer = msg.sender
+      0, // buyer = msg.sender
       400n,         // 4 scaled tickets = 1 full ticket
       0n,           // no lootbox
       ZERO_BYTES32, // no affiliate
@@ -127,7 +127,7 @@ describe("EthInvariant (ACCT-01, ACCT-08)", function () {
     // Purchase tickets first to ensure some ETH is in the pools
     const priceWei = await game.mintPrice();
     await game.connect(alice).purchase(
-      ZERO_ADDRESS,
+      0,
       400n,
       0n,
       ZERO_BYTES32,
@@ -139,7 +139,7 @@ describe("EthInvariant (ACCT-01, ACCT-08)", function () {
     const aliceClaimable = await game.claimableWinningsOf(alice.address);
     if (aliceClaimable > 1n) {
       // Alice has winnings — claim them
-      await game.connect(alice).claimWinnings(alice.address);
+      await game.connect(alice)["claimWinnings(uint32)"](0);
     }
 
     // The solvency invariant holds after claimWinnings.
@@ -160,7 +160,7 @@ describe("EthInvariant (ACCT-01, ACCT-08)", function () {
     // Purchase to put ETH into the game contract
     const priceWei = await game.mintPrice();
     await game.connect(alice).purchase(
-      ZERO_ADDRESS,
+      0,
       400n,
       0n,
       ZERO_BYTES32,
@@ -200,7 +200,7 @@ describe("EthInvariant (ACCT-01, ACCT-08)", function () {
     // Purchase some tickets first to fund the pools
     const priceWei = await game.mintPrice();
     await game.connect(alice).purchase(
-      ZERO_ADDRESS,
+      0,
       400n,
       0n,
       ZERO_BYTES32,

@@ -50,12 +50,6 @@ const RING_INNER_INV = '<circle r="28" fill="#111"/>';
 
 const PIP_STYLE = "<style>#ico circle{fill:#111}</style>";
 
-// Verbatim from AFKingSubscriptionToken._lockGlyph().
-const LOCK_GLYPH =
-  '<circle cx="36" cy="36" r="11" fill="#111" stroke="#fff" stroke-width="1.5"/>' +
-  '<path d="M31.5 35 v-3.5 a4.5 4.5 0 0 1 9 0 V35" fill="none" stroke="#fff" stroke-width="2.2"/>' +
-  '<rect x="29.5" y="34.5" width="13" height="9" rx="1.8" fill="#fff"/>';
-
 /** Decode the base64 JSON tokenURI and the base64 SVG inside it. */
 function decode(uri) {
   const jsonB64 = uri.replace("data:application/json;base64,", "");
@@ -267,18 +261,13 @@ describe("Gold Dice 6 badge inversion", function () {
       expectStandard(decode(await seat.tokenURI(b)).svg);
     });
 
-    it("the lock glyph is unchanged and coexists with the inverted badge", async function () {
+    it("the inverted badge carries no lock glyph", async function () {
       const { seat, gameSigner, alice } = await seatFixture();
       const id = await mintSeat(seat, gameSigner, alice, DICE6, GOLD_RGB);
       const svg = decode(await seat.tokenURI(id)).svg;
 
-      // An unsubscribed holder's seat is not locked; the badge still inverts.
       expectInverted(svg);
-      // Whichever lock state this seat is in, the glyph text itself is verbatim
-      // when present and the badge treatment does not depend on it.
-      if (svg.includes('cx="36"')) {
-        expect(svg).to.include(LOCK_GLYPH, "lock glyph byte-identical");
-      }
+      expect(svg).to.not.include('cx="36"');
     });
 
     it("external renderer owns the output; empty and reverting fall back", async function () {

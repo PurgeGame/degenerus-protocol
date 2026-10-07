@@ -75,7 +75,7 @@ abstract contract GrowthFoilFixture is DeployProtocol {
     }
 
     function _bet(uint24 round, bool over) internal {
-        _open(round); vm.prank(PLAYER); parimutuel.placeBet(PLAYER, over);
+        _open(round); vm.prank(PLAYER); parimutuel.placeBet(0, over);
     }
 
     function _begin() internal { vm.recordLogs(); vm.startStateDiffRecording(); }
@@ -155,16 +155,16 @@ abstract contract GrowthFoilFixture is DeployProtocol {
 
 contract GrowthFoilHotPathGasTest is GrowthFoilFixture {
     function test_Gas_GrowthFirst() public {
-        _open(64); _begin(); vm.prank(PLAYER); parimutuel.placeBet(PLAYER, true); _end("growth_first", 64);
+        _open(64); _begin(); vm.prank(PLAYER); parimutuel.placeBet(0, true); _end("growth_first", 64);
     }
     function test_Gas_GrowthRepeat() public {
-        _bet(64, true); _open(65); _begin(); vm.prank(PLAYER); parimutuel.placeBet(PLAYER, false); _end("growth_repeat", 65);
+        _bet(64, true); _open(65); _begin(); vm.prank(PLAYER); parimutuel.placeBet(0, false); _end("growth_repeat", 65);
     }
     function test_Gas_GrowthBoundary() public {
-        _bet(63, true); _open(64); _begin(); vm.prank(PLAYER); parimutuel.placeBet(PLAYER, false); _end("growth_boundary", 64);
+        _bet(63, true); _open(64); _begin(); vm.prank(PLAYER); parimutuel.placeBet(0, false); _end("growth_boundary", 64);
     }
     function test_Gas_GrowthEligible() public {
-        _mintData(ELIGIBLE); _open(24); _begin(); vm.prank(PLAYER); parimutuel.placeBet(PLAYER, true); _end("growth_eligible", 24);
+        _mintData(ELIGIBLE); _open(24); _begin(); vm.prank(PLAYER); parimutuel.placeBet(0, true); _end("growth_eligible", 24);
     }
     function test_Gas_FoilQuest() public { _begin(); _foil(0.5 ether); _end("foil_quest", 0); }
     function test_Gas_FoilQuestRepeat() public { _foil(0.5 ether); _begin(); _foil(0.5 ether); _end("foil_quest_repeat", 0); }
@@ -177,7 +177,7 @@ contract GrowthFoilHotPathGasTest is GrowthFoilFixture {
     }
     function test_Gas_FoilPurchase() public {
         _begin(); vm.prank(PLAYER);
-        game.purchase{value: 0.5 ether}(PLAYER, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        game.purchase{value: 0.5 ether}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
         _end("foil_purchase", 0);
     }
 }

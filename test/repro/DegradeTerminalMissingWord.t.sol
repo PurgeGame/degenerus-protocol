@@ -152,7 +152,7 @@ contract DegradeTerminalMissingWordTest is DeployProtocol {
 
         uint256[] memory refs = new uint256[](1);
         refs[0] = uint256(5) << 64; // HOLDER's first ticket of trait 5
-        game.claimDeadVrf(HOLDER, refs);
+        game.claimDeadVrf(game.walletIdOf(HOLDER), refs);
         uint256 perTrait = (pot * created * 100) / total / 256;
         assertEq(game.claimableWinningsOf(HOLDER), perTrait / 4, "one of trait 5's four equal shares");
     }

@@ -45,7 +45,7 @@ function parseInventory(receipt, iface) {
 async function drainFixture() {
   const fixture = await loadFixture(deployFullProtocol);
   const { game, deployer, mockVRF, alice } = fixture;
-  await game.connect(alice).purchase(hre.ethers.ZeroAddress, 800_000n, 0n, ZERO_BYTES32, 0, false, { value: eth(30) });
+  await game.connect(alice).purchase(0, 800_000n, 0n, ZERO_BYTES32, 0, false, { value: eth(30) });
   await advanceToNextDay();
   const beforeRequest = await getLastVRFRequestId(mockVRF);
   let request = beforeRequest;

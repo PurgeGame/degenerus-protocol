@@ -231,9 +231,8 @@ abstract contract DeployProtocol is Test {
 
         // v55.0: the standalone AfKing contract was DISSOLVED — its subscriber state + logic are
         // game-resident (GameAfkingModule, deployed at N+11 above). VAULT/SDGNRS self-subscribe via
-        // the game-resident path: DegenerusVault.sol calls gamePlayer.subscribe(address(this), …,
-        // address(0)) (SUB-09) and sDGNRS.sol calls game.subscribe(address(this), …,
-        // address(0)) (SUB-09 self-subscribe; OPEN-E default-self) — both hit live GameAfkingModule
+        // the game-resident path: DegenerusVault.sol and sDGNRS.sol call subscribe(0, …, 0, 0)
+        // (self, self-funded, no seat: both are exempt) — both hit live GameAfkingModule
         // code because GAME + the afking module are already deployed.
 
         // Vault constructor calls COIN.vaultMintAllowance() + game.subscribe(...) (SUB-09)
@@ -257,11 +256,10 @@ abstract contract DeployProtocol is Test {
         // delegatecalls reference it, and it has no ctor args / no deploy-time deps.
         foilModule = new DegenerusGameFoilPackModule(); // N+25 = nonce 30
 
-        // AFKing seat coin — appended after everything it references (VAULT /
-        // SDGNRS receive the 999/1 sale tranche in its constructor; GAME is its
-        // minter + seat-lock view consumer). VAULT/SDGNRS self-subscribed above through
-        // the coin gate's identity carve, which exists precisely because the coin
-        // deploys after them.
+        // AFKing seat token — appended after everything it references (its constructor mints
+        // the two construction seats to SDGNRS and VAULT; GAME is its free-tranche minter and
+        // seat burner). VAULT/SDGNRS self-subscribed above as the exempt subscriptions, which
+        // never call the token, precisely because it deploys after them.
         afkingSubToken = new AFKingSubscriptionToken();                  // N+26 = nonce 31
 
         // Growth-bet parimutuel — appended, so it shifts no earlier nonce. No ctor args
@@ -295,18 +293,31 @@ abstract contract DeployProtocol is Test {
         if (initializeDeities) game.initProtocolDeity();
     }
 
-    /// @dev Give `player` an AFKing seat (the sole afking credential — subscribe reverts
-    ///      NoCoin without one) by driving the real game-side mint: seats are pushed on
-    ///      pass acquisition, so this pranks the GAME into the token's gated mint exactly
-    ///      as `_grantSeatCoin` does, and also sets the game-side latch so the production
-    ///      path would not mint a second one. Idempotent: skips holders (returns 0 then).
+    /// @dev A seat `player` holds, for a new subscription to burn (subscribe's `seatId`). A holder
+    ///      gets back one of its existing serials; a non-holder receives one through the real
+    ///      game-side mint (seats are pushed on pass acquisition, so this pranks the GAME into the
+    ///      token's gated mint exactly as `_grantSeatCoin` does, and also sets the game-side latch
+    ///      so the production path would not mint a second one). Compute it BEFORE a `vm.prank`:
+    ///      the token reads here would consume the prank.
     function _grantSeat(address player) internal returns (uint256 tokenId) {
         if (afkingSubToken.balanceOf(player) == 0) {
             _markSeatEligible(player);
             vm.prank(ContractAddresses.GAME);
             afkingSubToken.mintSeatFor(player);
-            tokenId = uint256(afkingSubToken.nextSerial()) - 1;
+            return uint256(afkingSubToken.nextSerial()) - 1;
         }
+        return _seatOf(player);
+    }
+
+    /// @dev The lowest serial `player` holds (0 when it holds none). Test-only linear scan.
+    function _seatOf(address player) internal view returns (uint256) {
+        uint256 next = afkingSubToken.nextSerial();
+        for (uint256 t = 1; t < next; ++t) {
+            try afkingSubToken.ownerOf(t) returns (address o) {
+                if (o == player) return t;
+            } catch {}
+        }
+        return 0;
     }
 
     /// @dev Pin sDGNRS's once-per-level automatic whale purchase shut for fixtures that

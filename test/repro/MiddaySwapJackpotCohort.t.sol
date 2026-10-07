@@ -677,7 +677,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             _buyTickets();
             vm.prank(buyer);
             game.purchase{value: 2 ether}(
-                buyer,
+                0,
                 0,
                 BoxOrderLib.boCustom(2 ether),
                 bytes32(0),
@@ -794,7 +794,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         if (rngLocked_) return;
         vm.prank(buyer);
         game.purchase{value: (priceWei * 4000) / 400}(
-            buyer,
+            0,
             4000,
             0,
             bytes32(0),
@@ -810,7 +810,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         (, , , , uint256 priceWei) = game.purchaseInfo();
         vm.prank(buyer);
         game.purchase{value: (priceWei * 4000) / 400}(
-            buyer,
+            0,
             4000,
             0,
             bytes32(0),
@@ -830,7 +830,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         _settleReadsWithoutRequest();
         vm.prank(buyer);
         game.purchase{value: 2 ether}(
-            buyer,
+            0,
             0,
             BoxOrderLib.boCustom(2 ether),
             bytes32(0),

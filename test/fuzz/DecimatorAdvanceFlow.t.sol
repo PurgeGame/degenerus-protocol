@@ -60,11 +60,11 @@ contract DecimatorAdvanceFlowTest is DeployProtocol {
         vm.etch(address(game), code);
         vm.deal(address(game), 600 ether);
         vm.prank(address(0xA100));
-        crapsBattle.setPreferredBoard(3);
+        crapsBattle.setPreferredBoard(0, 3);
         for (uint160 i = 1; i <= 40; ++i) {
             address player = address(0xD000 + i);
             vm.prank(address(game)); coin.mintForGame(player, 2000);
-            vm.prank(player); coin.decimatorBurn(address(0), 2000, 0);
+            vm.prank(player); coin.decimatorBurn(0, 2000, 0);
         }
         assertFalse(game.rngLocked());
         assertEq(lens.decBattleRoundOf(address(game), 5).phase, 0);

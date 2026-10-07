@@ -471,7 +471,7 @@ describe("Governance & Gating (Phase 43)", function () {
       expect(await game.bountyEligible(alice.address)).to.equal(true);
       const { priceWei } = await game.purchaseInfo();
       await game.connect(alice).purchase(
-        alice.address, 400, 0, ZERO_BYTES32, MintPaymentKind.DirectEth, false, { value: priceWei }
+        0, 400, 0, ZERO_BYTES32, MintPaymentKind.DirectEth, false, { value: priceWei }
       );
       expect(await game.bountyEligible(alice.address)).to.equal(true);
     });

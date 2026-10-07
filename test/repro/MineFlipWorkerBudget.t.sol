@@ -66,7 +66,7 @@ contract MineFlipHumanBudgetTest is DeployProtocol {
     }
     function _queueWideBox() private {
         vm.prank(BUYER);
-        game.purchase{value: 1 ether}(BUYER, 0, BoxOrderLib.boCustoms(100, 0.01 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: 1 ether}(0, 0, BoxOrderLib.boCustoms(100, 0.01 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         host.publishRead();
         assertEq(BoxOrderLib.boCount(host.order()), 100);
         assertEq(BoxOrderLib.boId(host.order()), game.walletIdOf(BUYER));
@@ -97,7 +97,7 @@ contract MineFlipHumanBudgetTest is DeployProtocol {
     }
     function test_BetReservesWholeSlipBeforeMutation() public {
         vm.prank(BUYER);
-        game.placeDegeneretteBet{value: 0.125 ether}(BUYER, 0, uint128(0.005 ether), 25, 9);
+        game.placeDegeneretteBet{value: 0.125 ether}(0, 0, uint128(0.005 ether), 25, 9);
         host.publishRead();
         uint256 beforeBet = host.bet();
         MineFlipGas.Result memory result = host.workBet(500_000);

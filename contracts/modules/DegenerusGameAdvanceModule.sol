@@ -796,8 +796,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
                 coinflip.armBafDraw(day + 1);
                 // Today's result is applied: settling the vault's flips here gives its score
                 // every win this bracket counts. The BAF day's own flip settles after
-                // tomorrow's request and scores the next bracket, as for any player.
-                coinflip.depositCoinflip(ContractAddresses.VAULT, 0);
+                // tomorrow's request and scores the next bracket, as for any player. The
+                // Game is not authorized for the vault's account, so this is a zero-amount
+                // gift: it only settles the vault's own claims.
+                coinflip.depositCoinflip(VAULT_WALLET_ID, 0);
             }
             if (bafLevel_ && day - psd <= 1) {
                 jackpotFlags = JACKPOT_TURBO;

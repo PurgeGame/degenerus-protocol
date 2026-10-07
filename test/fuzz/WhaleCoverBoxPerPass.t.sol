@@ -33,7 +33,7 @@ contract WhaleCoverBoxPerPass is DeployProtocol {
         uint48 wb = RecyclingState.writeBuffer(address(game));
         uint256 before = RecyclingState.boxCount(address(game), wb);
         vm.prank(who);
-        game.purchaseWhalePass{value: price}(who, q, bytes32(0));
+        game.purchaseWhalePass{value: price}(0, q, bytes32(0));
         assertEq(RecyclingState.boxCount(address(game), wb), before + 1, "a pass purchase appends one entry");
     }
 
@@ -61,7 +61,7 @@ contract WhaleCoverBoxPerPass is DeployProtocol {
         address who = makeAddr("lazy");
         vm.deal(who, 1 ether);
         vm.prank(who);
-        game.purchaseLazyPass{value: 0.24 ether}(who, bytes32(0));
+        game.purchaseLazyPass{value: 0.24 ether}(0, bytes32(0));
         uint256 word = _lastEntry(who);
         assertEq(word.boCustomCount(), 1, "one box for one pass");
         assertEq(word.boSizeWei(), 0.024 ether, "10% of the lazy pass");

@@ -152,7 +152,7 @@ describe("WhaleBoonDeityLapse", function () {
     // Alice needs deity status to issue boons.
     await game
       .connect(alice)
-      .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+      .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
     const slot = await findWhaleTenSlot(game, alice, deployer, mockVRF, 9000, 200);
     const currentDay = await game.currentDayView();
@@ -166,7 +166,7 @@ describe("WhaleBoonDeityLapse", function () {
     expect(before.deityWhaleDay).to.equal(0n, "seeded lane must be lootbox-rolled (deityWhaleDay 0)");
 
     // Before the fix this would be a silent no-op: newTier(1) <= existingTier(3).
-    await game.connect(alice).issueDeityBoon(alice.address, bob.address, slot);
+    await game.connect(alice).issueDeityBoon(await game.walletIdOf(alice.address), await giveWalletId(game, bob.address), slot);
 
     const after_ = await readWhaleLane(game, bob.address);
     expect(after_.tier).to.equal(1n, "dead lane must accept the fresh (lower) deity gift, tier 1");
@@ -179,7 +179,7 @@ describe("WhaleBoonDeityLapse", function () {
 
     await game
       .connect(alice)
-      .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+      .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
     const slot = await findWhaleTenSlot(game, alice, deployer, mockVRF, 9500, 200);
     const currentDay = await game.currentDayView();
@@ -190,7 +190,7 @@ describe("WhaleBoonDeityLapse", function () {
     const before = await readWhaleLane(game, bob.address);
     expect(before.tier).to.equal(3n, "seeded tier must start at 3");
 
-    await game.connect(alice).issueDeityBoon(alice.address, bob.address, slot);
+    await game.connect(alice).issueDeityBoon(await game.walletIdOf(alice.address), await giveWalletId(game, bob.address), slot);
 
     const after_ = await readWhaleLane(game, bob.address);
     expect(after_.tier).to.equal(3n, "live tier-3 lane must reject the lower (tier 1) gift");

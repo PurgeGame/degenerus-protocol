@@ -70,7 +70,7 @@ contract GameHandler is Test {
 
         vm.prank(currentActor);
         try game.purchase{value: totalCost}(
-            currentActor,
+            0,
             qty,
             BoxOrderLib.boCustomFloor(lootboxAmt),
             bytes32(0),
@@ -107,7 +107,7 @@ contract GameHandler is Test {
         uint256 balBefore = currentActor.balance;
 
         vm.prank(currentActor);
-        try game.claimWinnings(currentActor) {
+        try game.claimWinnings(0) {
             uint256 balAfter = currentActor.balance;
             if (balAfter > balBefore) {
                 ghost_totalClaimed += balAfter - balBefore;

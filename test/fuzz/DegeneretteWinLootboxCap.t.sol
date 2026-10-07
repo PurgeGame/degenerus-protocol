@@ -214,7 +214,7 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
 
     function _place(uint8 spins, uint16 score) private {
         vm.prank(player);
-        game.placeDegeneretteBet{value: uint256(spins) * 10 ether}(address(0), 0, 10 ether, spins, SYMBOL);
+        game.placeDegeneretteBet{value: uint256(spins) * 10 ether}(0, 0, 10 ether, spins, SYMBOL);
         uint64 id = DQ.lastBetId(vm, address(game), INDEX);
         probe.seedBetScore(INDEX, id - 1, score);
     }
@@ -309,7 +309,7 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
 
     function _gasSweepWithStake(string memory name, uint8 spins, uint16 score, uint256 used, uint128 stake) private {
         vm.prank(player);
-        game.placeDegeneretteBet{value: uint256(spins) * stake}(address(0), 0, stake, spins, SYMBOL);
+        game.placeDegeneretteBet{value: uint256(spins) * stake}(0, 0, stake, spins, SYMBOL);
         probe.seedBetScore(INDEX, 0, score);
         probe.seedAllowance(player, 1, used);
         _land();
@@ -347,7 +347,7 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
     function testGas_Placement() public {
         vm.prank(player);
         uint256 beforeGas = gasleft();
-        game.placeDegeneretteBet{value: 10 ether}(address(0), 0, 10 ether, 1, SYMBOL);
+        game.placeDegeneretteBet{value: 10 ether}(0, 0, 10 ether, 1, SYMBOL);
         emit log_named_uint("cap_placement", beforeGas - gasleft());
     }
 

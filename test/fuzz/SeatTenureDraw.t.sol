@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {Vm} from "forge-std/Test.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title SeatTenureDraw — integration tests for the daily seat-tenure drawing:
 ///        one uniform draw over the afking ring at each day-seal (_unlockRng),
@@ -12,6 +13,19 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///        winner is fully deterministic from the sealed day's word, so each
 ///        day's SubDrawWon (or its dud absence) is asserted exactly.
 contract SeatTenureDraw is DeployProtocol {
+
+    mapping(address => uint32) private _aidCache;
+
+    /// @dev Wallet ID of `a`, registering it when it holds none. Call before any `vm.prank`.
+    function _aid(address a) internal returns (uint32 id) {
+        id = _aidCache[a];
+        if (id == 0) {
+            id = game.walletIdOf(a);
+            if (id == 0) id = _giveWalletId(a);
+            _aidCache[a] = id;
+        }
+    }
+
     event SubDrawWon(
         address indexed winner,
         uint24 day,
@@ -33,14 +47,14 @@ contract SeatTenureDraw is DeployProtocol {
     function _fundPool(address who, uint256 amount) internal {
         _giveWalletId(who);
         vm.deal(address(this), amount);
-        game.depositAfkingFunding{value: amount}(who);
+        game.depositAfkingFunding{value: amount}(_aid(who));
     }
 
     function _seatAndSubscribe(address who, uint8 qty) internal {
-        _grantSeat(who);
+        uint256 seat = _grantSeat(who);
         _fundPool(who, 5 ether);
         vm.prank(who);
-        game.subscribe(address(0), false, false, qty, address(0));
+        game.subscribe(0, false, false, qty, 0, seat);
     }
 
     /// @dev Complete a full day: advance -> VRF fulfill -> drain to unlock.
@@ -85,8 +99,14 @@ contract SeatTenureDraw is DeployProtocol {
         }
     }
 
+    /// @dev (active, dailyQuantity, afkingStartDay, afkCoveredThroughDay) from the Sub word.
+    function _subInfo(address who) internal view returns (bool, uint8, uint24, uint24) {
+        uint256 w = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF))));
+        return (uint8(w) != 0, uint8(w), uint24(w >> 128), uint24(w >> 104));
+    }
+
     function _spanOf(address who) internal view returns (uint24) {
-        (, , uint24 startDay, uint24 covered) = game.subInfo(who);
+        (, , uint24 startDay, uint24 covered) = _subInfo(who);
         if (startDay == 0 || covered <= startDay) return 0;
         return covered - startDay;
     }
@@ -100,7 +120,7 @@ contract SeatTenureDraw is DeployProtocol {
     ///      the poke (delivery writes covered unconditionally) and no pending
     ///      box exists.
     function _pokeTenure(address who, uint24 spanDays) internal {
-        (, uint8 qty, uint24 startDay, uint24 covered) = game.subInfo(who);
+        (, uint8 qty, uint24 startDay, uint24 covered) = _subInfo(who);
         require(startDay != 0, "poke: no live run");
         uint24 newCovered = startDay + spanDays;
         for (uint256 base = 0; base < 160; base++) {
@@ -119,7 +139,7 @@ contract SeatTenureDraw is DeployProtocol {
                     (uint256(newCovered) << 80) |
                     (uint256(newCovered) << 56);
                 vm.store(address(game), slot, bytes32(word));
-                (, , , uint24 checkCovered) = game.subInfo(who);
+                (, , , uint24 checkCovered) = _subInfo(who);
                 require(checkCovered == newCovered, "poke: Sub slot mismatch");
                 return;
             }
@@ -138,7 +158,7 @@ contract SeatTenureDraw is DeployProtocol {
     function testDrawDeterministicSelectionAndPrize() public {
         address p = makeAddr("tenure_p");
         _seatAndSubscribe(p, 1);
-        assertEq(game.subscriberCount(), 3, "ring = vault + sdgnrs + player");
+        assertEq(game.subscriberSetLength(), 3, "ring = vault + sdgnrs + player");
 
         bool playerWinChecked;
         for (uint256 d = 1; d <= 8; d++) {
@@ -210,7 +230,7 @@ contract SeatTenureDraw is DeployProtocol {
     ///         excluded, so every draw lands on sDGNRS — a dud until its span
     ///         accrues, never a vault payout.
     function testProtocolOnlyRingNeverPaysVault() public {
-        assertEq(game.subscriberCount(), 2, "fixture: protocol subs only");
+        assertEq(game.subscriberSetLength(), 2, "fixture: protocol subs only");
         for (uint256 d = 1; d <= 4; d++) {
             vm.recordLogs();
             _completeDay(uint256(keccak256(abi.encode("proto-day", d))) | 1);

@@ -3,6 +3,7 @@ import { expect } from "chai";
 import hre from "hardhat";
 import {
   deployFullProtocol,
+  giveWalletId,
   restoreAddresses,
 } from "../helpers/deployFixture.js";
 import {
@@ -125,37 +126,45 @@ describe("DegenerusGame", function () {
   describe("setOperatorApproval", function () {
     it("approves an operator and emits OperatorApproval event", async function () {
       const { game, alice, bob } = await loadFixture(deployFullProtocol);
-      const tx = await game.connect(alice).setOperatorApproval(bob.address, true);
+      const aliceId = await giveWalletId(game, alice.address);
+      const tx = await game.connect(alice).setOperatorApproval(0, bob.address, true);
       const ev = await getEvent(tx, game, "OperatorApproval");
-      expect(ev.args.owner).to.equal(alice.address);
+      expect(ev.args.id).to.equal(aliceId);
       expect(ev.args.operator).to.equal(bob.address);
       expect(ev.args.approved).to.be.true;
-      expect(await game.isOperatorApproved(alice.address, bob.address)).to.be.true;
     });
 
     it("revokes an operator", async function () {
       const { game, alice, bob } = await loadFixture(deployFullProtocol);
-      await game.connect(alice).setOperatorApproval(bob.address, true);
-      await game.connect(alice).setOperatorApproval(bob.address, false);
-      expect(await game.isOperatorApproved(alice.address, bob.address)).to.be.false;
+      const aliceId = await giveWalletId(game, alice.address);
+      await giveWalletId(game, bob.address);
+      await game.connect(alice).setOperatorApproval(0, bob.address, true);
+      await game.connect(alice).setOperatorApproval(0, bob.address, false);
+      const price = await game.mintPrice();
+      await expect(
+        game.connect(bob).purchase(aliceId, 400n, 0n, ZERO_BYTES32, MintPaymentKind.DirectEth, false, { value: price })
+      ).to.be.revertedWithCustomError(game, "NotApproved");
     });
 
     it("reverts when operator is zero address", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
+      await giveWalletId(game, alice.address);
       await expect(
-        game.connect(alice).setOperatorApproval(ZERO_ADDRESS, true)
+        game.connect(alice).setOperatorApproval(0, ZERO_ADDRESS, true)
       ).to.be.reverted;
     });
 
     it("operator can act on behalf of owner after approval", async function () {
       const { game, alice, bob } = await loadFixture(deployFullProtocol);
       // Alice approves Bob to act for her
-      await game.connect(alice).setOperatorApproval(bob.address, true);
+      const aliceId = await giveWalletId(game, alice.address);
+      await giveWalletId(game, bob.address);
+      await game.connect(alice).setOperatorApproval(0, bob.address, true);
       // Bob purchases tickets for Alice (a valid operator action via _resolvePlayer)
       const price = await game.mintPrice();
       await expect(
         game.connect(bob).purchase(
-          alice.address, 400n, 0n, ZERO_BYTES32, MintPaymentKind.DirectEth, false,
+          aliceId, 400n, 0n, ZERO_BYTES32, MintPaymentKind.DirectEth, false,
           { value: price }
         )
       ).to.not.be.reverted;
@@ -164,10 +173,12 @@ describe("DegenerusGame", function () {
     it("unapproved caller cannot act for another player", async function () {
       const { game, alice, bob } = await loadFixture(deployFullProtocol);
       // Bob is NOT approved for Alice — _resolvePlayer reverts NotApproved
+      const aliceId = await giveWalletId(game, alice.address);
+      await giveWalletId(game, bob.address);
       const price = await game.mintPrice();
       await expect(
         game.connect(bob).purchase(
-          alice.address, 400n, 0n, ZERO_BYTES32, MintPaymentKind.DirectEth, false,
+          aliceId, 400n, 0n, ZERO_BYTES32, MintPaymentKind.DirectEth, false,
           { value: price }
         )
       ).to.be.reverted;
@@ -185,7 +196,7 @@ describe("DegenerusGame", function () {
       // 400 = 4 tickets
       await expect(
         game.connect(alice).purchase(
-          ZERO_ADDRESS,    // buyer = msg.sender
+          0,    // buyer = msg.sender
           400n,            // 4 tickets (scaled by 100)
           0n,              // no lootbox
           ZERO_BYTES32,    // no affiliate
@@ -199,7 +210,7 @@ describe("DegenerusGame", function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await expect(
         game.connect(alice).purchase(
-          ZERO_ADDRESS,
+          0,
           400n,
           0n,
           ZERO_BYTES32,
@@ -213,7 +224,7 @@ describe("DegenerusGame", function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await expect(
         game.connect(alice).purchase(
-          ZERO_ADDRESS,
+          0,
           99n, // 0.002475 ETH at 0.01 mintPrice
           0n,
           ZERO_BYTES32,
@@ -226,7 +237,7 @@ describe("DegenerusGame", function () {
     it("redeemFlip reverts when ticket buy-in is below 0.0025 ETH minimum", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        game.connect(alice).redeemFlip(ZERO_ADDRESS, 99n)
+        game.connect(alice).redeemFlip(0, 99n)
       ).to.be.reverted;
     });
 
@@ -234,7 +245,7 @@ describe("DegenerusGame", function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await expect(
         game.connect(alice).purchase(
-          ZERO_ADDRESS,
+          0,
           0n,
           boCustom(eth("0.01")), // lootbox amount
           ZERO_BYTES32,
@@ -246,12 +257,14 @@ describe("DegenerusGame", function () {
 
     it("allows purchasing tickets for another address when approved", async function () {
       const { game, alice, bob } = await loadFixture(deployFullProtocol);
-      await game.connect(bob).setOperatorApproval(alice.address, true);
+      const bobId = await giveWalletId(game, bob.address);
+      await giveWalletId(game, alice.address);
+      await game.connect(bob).setOperatorApproval(0, alice.address, true);
       const price = await game.mintPrice();
       // alice buys for bob using alice as buyer
       await expect(
         game.connect(alice).purchase(
-          bob.address,
+          bobId,
           400n,
           0n,
           ZERO_BYTES32,
@@ -263,10 +276,12 @@ describe("DegenerusGame", function () {
 
     it("reverts when buying for another address without approval", async function () {
       const { game, alice, bob } = await loadFixture(deployFullProtocol);
+      const bobId = await giveWalletId(game, bob.address);
+      await giveWalletId(game, alice.address);
       const price = await game.mintPrice();
       await expect(
         game.connect(alice).purchase(
-          bob.address,
+          bobId,
           400n,
           0n,
           ZERO_BYTES32,
@@ -280,7 +295,7 @@ describe("DegenerusGame", function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       // Zero ticketQuantity skips the purchase path entirely (no tickets purchased).
       await expect(
-        game.connect(alice).redeemFlip(ZERO_ADDRESS, 0n)
+        game.connect(alice).redeemFlip(0, 0n)
       ).to.not.be.reverted;
     });
 
@@ -301,7 +316,7 @@ describe("DegenerusGame", function () {
 
       await expect(
         game.connect(alice).purchase(
-          ZERO_ADDRESS,
+          0,
           0n,
           boCustom(mintPrice),
           ZERO_BYTES32,
@@ -364,7 +379,7 @@ describe("DegenerusGame", function () {
       // Alice has 0 claimable winnings
       expect(await game.claimableWinningsOf(alice.address)).to.equal(0n);
       await expect(
-        game.connect(alice).claimWinnings(ZERO_ADDRESS)
+        game.connect(alice)["claimWinnings(uint32)"](0)
       ).to.be.reverted;
     });
 
@@ -516,7 +531,7 @@ describe("DegenerusGame", function () {
     it("reverts at level 0 (needs level > 1)", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        game.connect(alice)["claimAffiliateDgnrs(address)"](ZERO_ADDRESS)
+        game.connect(alice)["claimAffiliateDgnrs(uint32)"](0)
       ).to.be.reverted;
     });
   });

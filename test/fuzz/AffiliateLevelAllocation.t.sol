@@ -60,7 +60,7 @@ contract AffiliateLevelAllocation is DeployProtocol {
         uint256 total = affiliate.totalAffiliateScore(1);
         uint256 beforeClaim = sdgnrs.balanceOf(bob);
         vm.prank(bob);
-        game.claimAffiliateDgnrs(address(0));
+        game.claimAffiliateDgnrs(uint32(0));
         assertEq(sdgnrs.balanceOf(bob) - beforeClaim, allocation * bobScore / total, "score share of the pot");
         assertEq(sdgnrs.poolBalance(sDGNRS.Pool.Affiliate), poolAfter - allocation * bobScore / total,
             "only the claim moves the pot's tokens");
@@ -79,7 +79,7 @@ contract AffiliateLevelAllocation is DeployProtocol {
         address who = address(uint160(0xA11C0000 + buyerNonce++));
         vm.deal(who, 5 ether);
         vm.prank(who);
-        game.purchase{value: 1.01 ether}(who, 400, BoxOrderLib.boCustomFloor(1 ether), code, MintPaymentKind.DirectEth, false);
+        game.purchase{value: 1.01 ether}(0, 400, BoxOrderLib.boCustomFloor(1 ether), code, MintPaymentKind.DirectEth, false);
     }
 
     /// @dev Drive the real game to level 1 and read the transition's affiliate events. The
@@ -130,7 +130,7 @@ contract AffiliateLevelAllocation is DeployProtocol {
         uint256 cost = (priceWei * qty) / 400;
         if (cost == 0) return;
         vm.prank(buyer);
-        try game.purchase{value: cost}(buyer, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+        try game.purchase{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
     }
 
     function _fulfillVrfIfPending() private {

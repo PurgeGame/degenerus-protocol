@@ -53,7 +53,7 @@ contract LootboxBudgetResume is DeployProtocol {
         (, , , , uint256 priceWei) = game.purchaseInfo();
         if (priceWei != 0 && priceWei <= actor.balance) {
             vm.prank(actor);
-            try game.purchase{value: priceWei}(actor, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+            try game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         }
         for (uint256 i; i < 10 && !game.rngLocked(); i++) {
             vm.warp(block.timestamp + 1 days);
@@ -117,7 +117,7 @@ contract LootboxBudgetResume is DeployProtocol {
             address who = makeAddr(string.concat(label, vm.toString(k)));
             vm.deal(who, 10 ether);
             vm.prank(who);
-            game.purchase{value: 2 * priceWei + 1 ether}(who, 400, BoxOrderLib.boOrder(2, 0, 0, 0, 0), bytes32(0), MintPaymentKind.DirectEth, false);
+            game.purchase{value: 2 * priceWei + 1 ether}(0, 400, BoxOrderLib.boOrder(2, 0, 0, 0, 0), bytes32(0), MintPaymentKind.DirectEth, false);
             assertEq(RecyclingState.boxCount(address(game), N), k + 1, "fixture: one entry per purchase");
             entries[k] = RecyclingState.boxEntry(address(game), N, k);
             assertEq(BoxOrderLib.boId(entries[k]), game.walletIdOf(who), "fixture: the entry holds the buyer's ID");

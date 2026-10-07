@@ -1357,33 +1357,37 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         return ((table >> (byteIndex * 8)) & 0xFF) * 0.01 ether;
     }
 
-    /// @notice Issue a deity boon to a recipient
-    /// @dev Deity can issue up to 3 boons per day, one per recipient per day.
-    ///      A deity can issue at most DEITY_RECIPIENT_BOON_CAP boons to any one
-    ///      recipient over the game's lifetime. The menu uses the preceding day's
-    ///      finalized RNG, so it can be previewed one game day before issuance.
-    /// @param deity The deity pass holder issuing the boon
-    /// @param recipient The player receiving the boon
+    /// @notice Issue a deity boon from deity account `deityId` to account `recipientId`.
+    /// @dev Raw msg.data target of Game.issueDeityBoon. Deity can issue up to 3 boons per day,
+    ///      one per recipient per day. A deity can issue at most DEITY_RECIPIENT_BOON_CAP boons
+    ///      to any one recipient over the game's lifetime. The menu uses the preceding day's
+    ///      finalized RNG, so it can be previewed one game day before issuance. The deity side is
+    ///      authorized under the account rule; the recipient is a third party that must already
+    ///      hold an ID. Self boons are compared by ID (a deity may boon its owner or the owner's
+    ///      other smurfs).
+    /// @param deityId The deity account issuing the boon (0 = caller)
+    /// @param recipientId The account receiving the boon (nonzero, allocated)
     /// @param slot The slot index (0-2) to use
-    /// @custom:reverts ZeroAddress When deity or recipient is zero address
-    /// @custom:reverts SelfBoon When deity tries to issue boon to themselves
+    /// @custom:reverts NotApproved When the caller may not act for `deityId`
+    /// @custom:reverts E When `deityId` or `recipientId` is unallocated, or `recipientId == 0`
+    /// @custom:reverts SelfBoon When the deity account issues a boon to itself
     /// @custom:reverts InvalidSlot When slot is >= 3
     /// @custom:reverts Unauthorized When deity does not own a deity pass
     /// @custom:reverts RngNotReady When the preceding day has no finalized RNG word
     /// @custom:reverts RecipientAlreadyBoonedToday When recipient already received a boon today
     /// @custom:reverts RecipientBoonCapReached When this deity has hit the lifetime boon cap for the recipient
     /// @custom:reverts SlotAlreadyUsed When slot was already used today
-    function issueDeityBoon(address deity, address recipient, uint8 slot) external {
+    function issueDeityBoon(uint32 deityId, uint32 recipientId, uint8 slot) external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        (address deity, ) = _resolveAccount(deityId);
         if (deity == ContractAddresses.VAULT || deity == ContractAddresses.SDGNRS) revert Unauthorized();
-        if (deity == address(0) || recipient == address(0)) revert ZeroAddress();
-        if (deity == recipient) revert SelfBoon();
+        // A boon is a gift: the recipient must already hold a wallet ID.
+        address recipient = _walletAddress(recipientId);
         if (slot >= DEITY_DAILY_BOON_COUNT) revert InvalidSlot();
         uint256 deityWord = mintPacked_[deity];
         if (deityWord >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 == 0) revert Unauthorized();
-        uint32 deityId = uint32(deityWord >> BitPackingLib.WALLET_ID_SHIFT);
-        // A boon is a gift: the recipient must already hold a wallet ID.
-        uint32 recipientId = _requireWalletId(recipient);
+        deityId = uint32(deityWord >> BitPackingLib.WALLET_ID_SHIFT);
+        if (deityId == recipientId) revert SelfBoon();
 
         uint24 day = _simulatedDayIndex();
         uint256 rngWord = _recordedDailyWord(day - 1);

@@ -58,7 +58,7 @@ contract PhaseESlotCountsTest is DeployProtocol {
         assertEq(game.walletIdOf(p), 0, "fresh depositor");
 
         vm.prank(p);
-        coinflip.depositCoinflip(p, 1_000);
+        coinflip.depositCoinflip(0, 1_000);
         uint32 id = game.walletIdOf(p);
         assertGt(id, 3, "the deposit registered the depositor");
 
@@ -69,7 +69,7 @@ contract PhaseESlotCountsTest is DeployProtocol {
         assertEq(_load(address(coinflip), bytes32(uint256(base) + 2)), 0, "no third slot");
 
         vm.prank(p);
-        coinflip.setCoinflipAutoRebuy(p, true, 777_000);
+        coinflip.setCoinflipAutoRebuy(0, true, 777_000);
         a = _load(address(coinflip), base);
         uint256 b = _load(address(coinflip), _next(base));
         assertEq(uint32(a >> 184), id, "the ID survives a settings write");
@@ -127,9 +127,9 @@ contract PhaseESlotCountsTest is DeployProtocol {
         wwxrp.mintPrize(q, 10_000);
         vm.stopPrank();
         vm.prank(p);
-        wwxrp.enter(1_000);
+        wwxrp.enter(0, 1_000);
         vm.prank(q);
-        wwxrp.enter(2_000);
+        wwxrp.enter(0, 2_000);
         (, uint32 count) = wwxrp.incineratorInfo(100);
         assertEq(count, 2, "two incinerator entries");
 
@@ -149,7 +149,7 @@ contract PhaseESlotCountsTest is DeployProtocol {
         uint32 id = _giveWalletId(p);
         uint32 chips = 1 | (1 << 9);
         vm.prank(p);
-        crapsBattle.setPreferredBoard(chips);
+        crapsBattle.setPreferredBoard(0, chips);
         vm.prank(address(game));
         crapsBattle.creditPasses(id, 3, 2);
 

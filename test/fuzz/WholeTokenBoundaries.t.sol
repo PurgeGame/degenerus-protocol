@@ -41,12 +41,12 @@ contract WholeTokenBoundaries is DeployProtocol {
             coin.mintForGame(player, charge - 1);
             vm.expectRevert(FLIP.Insufficient.selector);
             vm.prank(player);
-            game.redeemFlip(player, quantity);
+            game.redeemFlip(0, quantity);
             assertEq(coin.balanceOf(player), charge - 1, "failed purchase burned funds");
             vm.prank(address(game));
             coin.mintForGame(player, 1);
             vm.prank(player);
-            game.redeemFlip(player, quantity);
+            game.redeemFlip(0, quantity);
             assertEq(coin.balanceOf(player), 0, "purchase did not charge the ceiling");
             assertEq(game.entriesOwedView(1, player), quantity / 100);
         }
@@ -99,12 +99,12 @@ contract WholeTokenBoundaries is DeployProtocol {
         vm.prank(address(game));
         wwxrp.mintPrize(player, 25);
         vm.prank(player);
-        wwxrp.enter(25);
+        wwxrp.enter(0, 25);
         // The first burn leaves a nonzero raw score but zero total token supply.
         vm.prank(address(game));
         wwxrp.mintPrize(player, type(uint256).max);
         vm.prank(player);
-        wwxrp.enter(type(uint256).max);
+        wwxrp.enter(0, type(uint256).max);
         uint24 day = game.currentDayView();
         uint8 bucket = wwxrp.bucketOf(day, game.walletIdOf(player));
         (uint256 raw, uint256 total, uint32 count) = wwxrp.bucketInfo(day, bucket);
@@ -115,7 +115,7 @@ contract WholeTokenBoundaries is DeployProtocol {
         vm.prank(address(game));
         wwxrp.mintPrize(player, 25);
         vm.prank(player);
-        wwxrp.enter(25);
+        wwxrp.enter(0, 25);
         (, uint256 endpoint) = wwxrp.entryAt(day, bucket, 2);
         assertEq(endpoint, type(uint96).max, "post-cap interval has zero width");
     }

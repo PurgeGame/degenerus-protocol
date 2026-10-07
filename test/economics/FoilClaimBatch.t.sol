@@ -56,12 +56,14 @@ contract FoilClaimBatch is DeployProtocol {
     error StaleBatch();
 
     struct Tuple {
-        address player;
+        uint32 id;
         uint24 day;
         uint8 ticketIndex;
     }
 
     address[FOIL_BUYERS] private _fb;
+    uint32[FOIL_BUYERS] private _fid;
+    uint32 private _packlessId;
     uint24 private _buyDay;
     uint24 private _endDay;
 
@@ -118,13 +120,15 @@ contract FoilClaimBatch is DeployProtocol {
             _fb[i] = makeAddr(string(abi.encodePacked("foil", vm.toString(i))));
             vm.deal(_fb[i], 1_000 ether);
             vm.prank(_fb[i]);
-            try game.purchase{value: foilCost}(_fb[i], 0, 0, bytes32(0), MintPaymentKind.DirectEth, true) {} catch {}
+            try game.purchase{value: foilCost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true) {} catch {}
+            _fid[i] = game.walletIdOf(_fb[i]);
         }
         for (uint256 i = 0; i < TICKET_BUYERS; i++) {
             address tb = makeAddr(string(abi.encodePacked("tkt", vm.toString(i))));
             vm.deal(tb, 1_000 ether);
             vm.prank(tb);
-            try game.purchase{value: foilCost}(tb, ticketQty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+            try game.purchase{value: foilCost}(0, ticketQty, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+            if (i == 0) _packlessId = game.walletIdOf(tb);
         }
 
         _buyDay = game.currentDayView();
@@ -135,7 +139,7 @@ contract FoilClaimBatch is DeployProtocol {
             if (!game.jackpotPhase()) {
                 uint256 pw = PriceLookupLib.priceForLevel(game.level() + 1);
                 vm.prank(whale);
-                try game.purchase{value: 50 * pw}(whale, 50 * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+                try game.purchase{value: 50 * pw}(0, 50 * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
             }
             _completeDay(_seed(nPurchaseDays, d));
             _endDay = game.currentDayView();
@@ -171,8 +175,8 @@ contract FoilClaimBatch is DeployProtocol {
             for (uint24 day = _buyDay; day <= _endDay && n < want; day++) {
                 if (game.rngWordForDay(day) == 0) continue;
                 for (uint8 ti = 0; ti < 4 && n < want; ti++) {
-                    try game.claimFoilMatch(_fb[i], day, ti) {
-                        buf[n++] = Tuple(_fb[i], day, ti);
+                    try game.claimFoilMatch(_fid[i], day, ti) {
+                        buf[n++] = Tuple(_fid[i], day, ti);
                     } catch {}
                 }
             }
@@ -186,21 +190,21 @@ contract FoilClaimBatch is DeployProtocol {
     function _explode(Tuple[] memory t)
         internal
         pure
-        returns (address[] memory p, uint24[] memory d, uint8[] memory ti)
+        returns (uint32[] memory p, uint24[] memory d, uint8[] memory ti)
     {
-        p = new address[](t.length);
+        p = new uint32[](t.length);
         d = new uint24[](t.length);
         ti = new uint8[](t.length);
         for (uint256 i = 0; i < t.length; i++) {
-            p[i] = t[i].player;
+            p[i] = t[i].id;
             d[i] = t[i].day;
             ti[i] = t[i].ticketIndex;
         }
     }
 
     /// @dev A tuple that can never settle: ticketIndex is out of the 0-3 domain.
-    function _deadTuple(address player) internal pure returns (Tuple memory) {
-        return Tuple(player, 1, 9);
+    function _deadTuple(uint32 id) internal pure returns (Tuple memory) {
+        return Tuple(id, 1, 9);
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -209,7 +213,7 @@ contract FoilClaimBatch is DeployProtocol {
 
     /// @notice Array-length disagreement rejects before any claim is attempted.
     function test_lengthMismatch_reverts() public {
-        address[] memory p = new address[](2);
+        uint32[] memory p = new uint32[](2);
         uint24[] memory d = new uint24[](1);
         uint8[] memory ti = new uint8[](2);
         vm.expectRevert(LengthMismatch.selector);
@@ -223,11 +227,11 @@ contract FoilClaimBatch is DeployProtocol {
         require(good.length == 2, "scenario produced no claimable tuples");
 
         Tuple[] memory batch = new Tuple[](3);
-        batch[0] = _deadTuple(_fb[0]); // dead opener
+        batch[0] = _deadTuple(_fid[0]); // dead opener
         batch[1] = good[0];
         batch[2] = good[1];
 
-        (address[] memory p, uint24[] memory d, uint8[] memory ti) = _explode(batch);
+        (uint32[] memory p, uint24[] memory d, uint8[] memory ti) = _explode(batch);
         vm.expectRevert(StaleBatch.selector);
         game.claimFoilMatchMany(p, d, ti);
     }
@@ -238,7 +242,7 @@ contract FoilClaimBatch is DeployProtocol {
         Tuple[] memory good = _findClaimable(3);
         require(good.length >= 2, "scenario produced too few claimable tuples");
 
-        (address[] memory p, uint24[] memory d, uint8[] memory ti) = _explode(good);
+        (uint32[] memory p, uint24[] memory d, uint8[] memory ti) = _explode(good);
 
         // First sender settles the list.
         game.claimFoilMatchMany(p, d, ti);
@@ -256,17 +260,17 @@ contract FoilClaimBatch is DeployProtocol {
 
         Tuple[] memory batch = new Tuple[](3);
         batch[0] = good[0];
-        batch[1] = _deadTuple(_fb[0]); // dead in the middle
+        batch[1] = _deadTuple(_fid[0]); // dead in the middle
         batch[2] = good[1];
 
-        (address[] memory p, uint24[] memory d, uint8[] memory ti) = _explode(batch);
+        (uint32[] memory p, uint24[] memory d, uint8[] memory ti) = _explode(batch);
         game.claimFoilMatchMany(p, d, ti); // must not revert
 
         // Both good tuples are consumed: re-claiming either now fails.
         vm.expectRevert();
-        game.claimFoilMatch(good[0].player, good[0].day, good[0].ticketIndex);
+        game.claimFoilMatch(good[0].id, good[0].day, good[0].ticketIndex);
         vm.expectRevert();
-        game.claimFoilMatch(good[1].player, good[1].day, good[1].ticketIndex);
+        game.claimFoilMatch(good[1].id, good[1].day, good[1].ticketIndex);
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -306,7 +310,7 @@ contract FoilClaimBatch is DeployProtocol {
         faces[8] = 80_000;
         for (uint256 i; i < t.length; ++i) {
             vm.recordLogs();
-            game.claimFoilMatch(t[i].player, t[i].day, t[i].ticketIndex);
+            game.claimFoilMatch(t[i].id, t[i].day, t[i].ticketIndex);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             bool seen;
             for (uint256 k; k < logs.length; ++k) {
@@ -361,7 +365,7 @@ contract FoilClaimBatch is DeployProtocol {
         (, , , , uint256 priceWei) = game.purchaseInfo();
         lvl = game.jackpotPhase() ? game.level() : game.level() + 1;
         vm.prank(p);
-        game.purchase{value: 10 * priceWei}(p, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        game.purchase{value: 10 * priceWei}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
         bytes32 inner = keccak256(abi.encode(uint256(lvl & 3), FOIL_RECORD_SLOT));
         uint256 rec = uint256(vm.load(address(game), keccak256(abi.encode(p, inner))));
         multBps = uint16(rec >> 24);
@@ -471,7 +475,7 @@ contract FoilClaimBatch is DeployProtocol {
         assertFalse(game.rngLocked(), "daily lock released before the face-table claim");
         uint256 passesBefore = game.whalePassClaimAmount(player);
         vm.recordLogs();
-        game.claimFoilMatch(player, day, 0);
+        game.claimFoilMatch(game.walletIdOf(player), day, 0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         bool seen;
@@ -591,7 +595,7 @@ contract FoilClaimBatch is DeployProtocol {
     function _claimPrimarySpin(uint8 expectedTier) private returns (bytes32 digest, uint256 gross, uint256 ethPaid) {
         uint256 beforePasses = game.whalePassClaimAmount(_fb[0]);
         vm.recordLogs();
-        game.claimFoilMatch(_fb[0], _endDay, 3);
+        game.claimFoilMatch(_fid[0], _endDay, 3);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool matchSeen;
         bool spinSeen;
@@ -641,7 +645,7 @@ contract FoilClaimBatch is DeployProtocol {
                 (bytes32 delayed,,) = _claimPrimarySpin(tier);
                 assertEq(delayed, prompt, "currency/spin/gross/ETH unchanged with identical pools");
                 vm.expectRevert(bytes4(NO_MATCH));
-                game.claimFoilMatch(_fb[0], _endDay, 3);
+                game.claimFoilMatch(_fid[0], _endDay, 3);
                 vm.revertToState(snapshot);
             }
         }
@@ -683,7 +687,7 @@ contract FoilClaimBatch is DeployProtocol {
         uint256 seeded = _drawWord();
         _setDrawWord(seeded & ~SEEDED);
         vm.expectRevert(bytes4(NO_MATCH));
-        game.claimFoilMatch(_fb[0], _endDay, 3);
+        game.claimFoilMatch(_fid[0], _endDay, 3);
         _setDrawWord(seeded);
         _deferMatch(1, 0);
         _claimPrimarySpin(8);
@@ -691,10 +695,10 @@ contract FoilClaimBatch is DeployProtocol {
 
     function test_expiry_batchClaimsOnFollowingDayAndReplay() public {
         _deferMatch(1, 0);
-        address[] memory players = new address[](2);
+        uint32[] memory players = new uint32[](2);
         uint24[] memory days_ = new uint24[](2);
         uint8[] memory tickets = new uint8[](2);
-        for (uint256 i; i < 2; ++i) { players[i] = _fb[i]; days_[i] = _endDay; tickets[i] = 3; }
+        for (uint256 i; i < 2; ++i) { players[i] = _fid[i]; days_[i] = _endDay; tickets[i] = 3; }
         game.claimFoilMatchMany(players, days_, tickets);
         for (uint256 i; i < 2; ++i) {
             vm.expectRevert(bytes4(NO_MATCH));
@@ -709,32 +713,32 @@ contract FoilClaimBatch is DeployProtocol {
         _deferMatch(2, 0);
         assertEq(_drawWord(), draw, "expiry does not depend on slot replacement");
         vm.expectRevert(bytes4(NO_MATCH));
-        game.claimFoilMatch(_fb[0], _endDay, 3);
+        game.claimFoilMatch(_fid[0], _endDay, 3);
 
-        address[] memory players = new address[](1);
+        uint32[] memory players = new uint32[](1);
         uint24[] memory days_ = new uint24[](1);
         uint8[] memory tickets = new uint8[](1);
-        players[0] = _fb[0]; days_[0] = _endDay; tickets[0] = 3;
+        players[0] = _fid[0]; days_[0] = _endDay; tickets[0] = 3;
         vm.expectRevert(StaleBatch.selector);
         game.claimFoilMatchMany(players, days_, tickets);
     }
 
     function test_reuse_drawAndClaimBanksRollOverWithoutReplayingPriorWins() public {
         uint256 draw = _drawWord();
-        game.claimFoilMatch(_fb[0], _endDay, 3);
+        game.claimFoilMatch(_fid[0], _endDay, 3);
         for (uint24 delta = 1; delta <= 2; ++delta) {
             _deferMatch(1, 0);
             uint24 day = _endDay + delta;
             uint256 current = (draw & ~(uint256(type(uint24).max) << 217)) | (uint256(day) << 217);
             vm.store(address(game), keccak256(abi.encode(uint256(day & 1), FOIL_DRAW_SLOT)), bytes32(current));
-            game.claimFoilMatch(_fb[0], day, 3);
+            game.claimFoilMatch(_fid[0], day, 3);
             vm.expectRevert(bytes4(NO_MATCH));
-            game.claimFoilMatch(_fb[0], day, 3);
+            game.claimFoilMatch(_fid[0], day, 3);
         }
         vm.expectRevert(bytes4(NO_MATCH));
-        game.claimFoilMatch(_fb[0], _endDay, 3);
+        game.claimFoilMatch(_fid[0], _endDay, 3);
         vm.expectRevert(bytes4(NO_MATCH));
-        game.claimFoilMatch(_fb[0], _endDay + 1, 3);
+        game.claimFoilMatch(_fid[0], _endDay + 1, 3);
         uint256 markers = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(_fb[0])), GameSlots.FOIL_MATCH_CLAIMED))));
         assertEq(uint24(markers >> (uint256((_endDay + 2) & 1) * 32)), _endDay + 2);
         assertEq(uint24(markers >> (uint256((_endDay + 1) & 1) * 32)), _endDay + 1);
@@ -749,10 +753,10 @@ contract FoilClaimBatch is DeployProtocol {
         for (uint256 i; i < 4; ++i) lines |= uint256(uint32(draw)) << (56 + i * 32);
         pack = (pack & ~(uint256(type(uint128).max) << 56)) | lines;
         vm.store(address(game), slot, bytes32(pack));
-        for (uint256 i; i < 4; ++i) game.claimFoilMatch(_fb[0], _endDay, i);
+        for (uint256 i; i < 4; ++i) game.claimFoilMatch(_fid[0], _endDay, i);
         for (uint256 i; i < 4; ++i) {
             vm.expectRevert(bytes4(NO_MATCH));
-            game.claimFoilMatch(_fb[0], _endDay, i);
+            game.claimFoilMatch(_fid[0], _endDay, i);
         }
     }
 
@@ -760,7 +764,7 @@ contract FoilClaimBatch is DeployProtocol {
         uint256 draw = _drawWord();
         _setDrawWord((draw & ~(uint256(type(uint24).max) << 217)) | (uint256(_endDay + 2) << 217));
         vm.expectRevert(bytes4(NO_MATCH));
-        game.claimFoilMatch(_fb[0], _endDay, 3);
+        game.claimFoilMatch(_fid[0], _endDay, 3);
         _setDrawWord(draw);
 
         uint24 lvl = uint24(draw >> 64);
@@ -768,7 +772,7 @@ contract FoilClaimBatch is DeployProtocol {
         uint256 pack = uint256(vm.load(address(game), slot));
         vm.store(address(game), slot, bytes32((pack & ~(uint256(type(uint24).max) << 208)) | (uint256(lvl + 4) << 208)));
         vm.expectRevert(bytes4(NO_MATCH));
-        game.claimFoilMatch(_fb[0], _endDay, 3);
+        game.claimFoilMatch(_fid[0], _endDay, 3);
         vm.store(address(game), slot, bytes32(pack));
         _claimPrimarySpin(8);
     }
@@ -792,7 +796,7 @@ contract FoilClaimBatch is DeployProtocol {
             uint256 beforeGameBalance = address(game).balance;
             vm.expectRevert(bytes4(keccak256("FoilRecordBusy()")));
             vm.prank(_fb[0]);
-            game.purchase{value: cost}(_fb[0], 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+            game.purchase{value: cost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
             assertEq(_fb[0].balance, beforeBalance, "rejected buy keeps buyer funds");
             assertEq(address(game).balance, beforeGameBalance, "rejected buy keeps game funds");
             assertEq(uint256(vm.load(address(game), slot)), oldRecord, "live pack metadata and all lines survive");
@@ -800,7 +804,7 @@ contract FoilClaimBatch is DeployProtocol {
         }
 
         vm.prank(_fb[0]);
-        game.purchase{value: cost}(_fb[0], 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        game.purchase{value: cost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
         uint256 replacement = uint256(vm.load(address(game), slot));
         assertEq(uint24(replacement >> 208), nextLevel, "same physical slot carries new exact level");
         assertEq(uint128(replacement >> 56), 0, "old four lines cleared");
@@ -813,7 +817,7 @@ contract FoilClaimBatch is DeployProtocol {
         assertTrue(lens.foilRecordOf(address(game), nextLevel, _fb[0]).present, "new logical record remains");
         vm.expectRevert(bytes4(keccak256("FoilAlreadyBought()")));
         vm.prank(_fb[0]);
-        game.purchase{value: cost}(_fb[0], 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        game.purchase{value: cost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
     }
 
     function test_reuse_realPurchaseCannotReplaceUndrainedPack() public {
@@ -832,34 +836,34 @@ contract FoilClaimBatch is DeployProtocol {
         uint256 cost = 10 * PriceLookupLib.priceForLevel(nextLevel);
         vm.expectRevert(bytes4(keccak256("FoilRecordBusy()")));
         vm.prank(_fb[0]);
-        game.purchase{value: cost}(_fb[0], 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        game.purchase{value: cost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
         assertEq(_fb[0].balance, beforeBalance);
         assertEq(address(game).balance, beforeGameBalance);
         assertEq(uint256(vm.load(address(game), slot)), pending, "paid undrained pack survives");
     }
 
     function test_persistentSeed_domainEligibilityAndTerminalGuards() public {
-        vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(_fb[0], 0, 3);
-        vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(_fb[0], uint256(_endDay) + (1 << 24), 3);
+        vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(_fid[0], 0, 3);
+        vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(_fid[0], uint256(_endDay) + (1 << 24), 3);
         uint256 futureDay = game.currentDayView() + 1;
-        vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(_fb[0], futureDay, 3);
-        vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(_fb[0], _endDay, 4);
-        vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(makeAddr("no-pack"), _endDay, 3);
+        vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(_fid[0], futureDay, 3);
+        vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(_fid[0], _endDay, 4);
+        vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(_packlessId, _endDay, 3);
         uint256 draw = _drawWord();
         _setDrawWord(0);
-        vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(_fb[0], _endDay, 3);
+        vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(_fid[0], _endDay, 3);
         _setDrawWord(draw);
         uint24 lvl = uint24(draw >> 64);
         bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(_fb[0])), keccak256(abi.encode(uint256(lvl & 3), FOIL_RECORD_SLOT))));
         uint256 pack = uint256(vm.load(address(game), slot));
         vm.store(address(game), slot, bytes32(pack & ~(uint256(1) << 255)));
-        vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(_fb[0], _endDay, 3);
+        vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(_fid[0], _endDay, 3);
         vm.store(address(game), slot, bytes32((pack & ~uint256(type(uint24).max)) | uint256(_endDay + 1)));
-        vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(_fb[0], _endDay, 3);
+        vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(_fid[0], _endDay, 3);
         vm.store(address(game), slot, bytes32(pack));
         vm.warp(vm.getBlockTimestamp() + 40 days);
         assertTrue(game.livenessTriggered());
         vm.expectRevert(bytes4(keccak256("GameOver()")));
-        game.claimFoilMatch(_fb[0], _endDay, 3);
+        game.claimFoilMatch(_fid[0], _endDay, 3);
     }
 }

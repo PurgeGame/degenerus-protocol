@@ -64,7 +64,7 @@ contract WalletIdEntropyDegeneretteTest is DeployProtocol {
         coin.mintForGame(player, uint256(FLIP_PER_SPIN) * SPINS + 1);
         vm.recordLogs();
         vm.prank(player);
-        game.placeDegeneretteBet(address(0), CURRENCY_FLIP, FLIP_PER_SPIN, SPINS, HERO);
+        game.placeDegeneretteBet(0, CURRENCY_FLIP, FLIP_PER_SPIN, SPINS, HERO);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] == keccak256("DegeneretteBetPlaced(address,uint32,uint64,uint256)")) {

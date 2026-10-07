@@ -43,7 +43,7 @@ describe("PriceEscalation", function () {
     return game
       .connect(buyer)
       .purchase(
-        ZERO_ADDRESS,
+        0,
         BigInt(n) * 400n,
         0n,
         ZERO_BYTES32,
@@ -131,7 +131,7 @@ describe("PriceEscalation", function () {
 
       const tx = await game
         .connect(alice)
-        .purchaseLazyPass(alice.address, hre.ethers.ZeroHash, { value: eth(0.24) });
+        .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: eth(0.24) });
       expect((await tx.wait()).status).to.equal(1);
     });
 
@@ -141,7 +141,7 @@ describe("PriceEscalation", function () {
       await expect(
         game
           .connect(alice)
-          .purchaseLazyPass(alice.address, hre.ethers.ZeroHash, { value: eth(0.23) })
+          .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: eth(0.23) })
       ).to.be.reverted;
     });
   });
@@ -198,7 +198,7 @@ describe("PriceEscalation", function () {
 
       const tx = await game
         .connect(alice)
-        .purchaseWhalePass(alice.address, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
+        .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
       expect((await tx.wait()).status).to.equal(1);
     });
 
@@ -207,7 +207,7 @@ describe("PriceEscalation", function () {
 
       const tx = await game
         .connect(alice)
-        .purchaseWhalePass(alice.address, 2, hre.ethers.ZeroHash, { value: eth(4.8) });
+        .purchaseWhalePass(0, 2, hre.ethers.ZeroHash, { value: eth(4.8) });
       expect((await tx.wait()).status).to.equal(1);
     });
 
@@ -216,7 +216,7 @@ describe("PriceEscalation", function () {
 
       const tx = await game
         .connect(alice)
-        .purchaseWhalePass(alice.address, 10, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseWhalePass(0, 10, hre.ethers.ZeroHash, { value: eth(24) });
       expect((await tx.wait()).status).to.equal(1);
     });
   });
@@ -231,7 +231,7 @@ describe("PriceEscalation", function () {
 
       const tx = await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
       expect((await tx.wait()).status).to.equal(1);
     });
 
@@ -242,17 +242,17 @@ describe("PriceEscalation", function () {
 
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
       await game
         .connect(bob)
-        .purchaseDeityPass(bob.address, 1, hre.ethers.ZeroHash, { value: eth(25) });
+        .purchaseDeityPass(0, 1, hre.ethers.ZeroHash, { value: eth(25) });
       await game
         .connect(carol)
-        .purchaseDeityPass(carol.address, 2, hre.ethers.ZeroHash, { value: eth(27) });
+        .purchaseDeityPass(0, 2, hre.ethers.ZeroHash, { value: eth(27) });
 
       const tx = await game
         .connect(dan)
-        .purchaseDeityPass(dan.address, 3, hre.ethers.ZeroHash, { value: eth(30) });
+        .purchaseDeityPass(0, 3, hre.ethers.ZeroHash, { value: eth(30) });
       expect((await tx.wait()).status).to.equal(1);
     });
 
@@ -262,7 +262,7 @@ describe("PriceEscalation", function () {
       await expect(
         game
           .connect(alice)
-          .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(23) })
+          .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(23) })
       ).to.be.reverted;
     });
   });
@@ -278,7 +278,7 @@ describe("PriceEscalation", function () {
       // qty=100 → costWei = (0.01 * 100) / 400 = 0.0025 ETH
       const tx = await game
         .connect(alice)
-        .purchase(ZERO_ADDRESS, 100n, 0n, ZERO_BYTES32, MintPaymentKind.DirectEth,false,  {
+        .purchase(0, 100n, 0n, ZERO_BYTES32, MintPaymentKind.DirectEth,false,  {
           value: eth(0.0025),
         });
       expect((await tx.wait()).status).to.equal(1);
@@ -289,7 +289,7 @@ describe("PriceEscalation", function () {
 
       const tx = await game
         .connect(alice)
-        .purchase(ZERO_ADDRESS, 200n, 0n, ZERO_BYTES32, MintPaymentKind.DirectEth,false,  {
+        .purchase(0, 200n, 0n, ZERO_BYTES32, MintPaymentKind.DirectEth,false,  {
           value: eth(0.005),
         });
       expect((await tx.wait()).status).to.equal(1);
@@ -302,7 +302,7 @@ describe("PriceEscalation", function () {
       await expect(
         game
           .connect(alice)
-          .purchase(ZERO_ADDRESS, 0n, 0n, ZERO_BYTES32, MintPaymentKind.DirectEth,false,  {
+          .purchase(0, 0n, 0n, ZERO_BYTES32, MintPaymentKind.DirectEth,false,  {
             value: 0n,
           })
       ).to.be.reverted;

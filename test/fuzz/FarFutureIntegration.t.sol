@@ -199,7 +199,7 @@ contract FarFutureIntegrationTest is DeployProtocol {
 
         vm.prank(who);
         try game.purchase{value: cost}(
-            who,
+            0,
             qty,
             0,
             bytes32(0),

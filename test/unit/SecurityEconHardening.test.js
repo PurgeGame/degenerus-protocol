@@ -57,7 +57,7 @@ async function triggerGameOverAtLevel0(game, caller, mockVRF) {
  */
 async function buyFullTickets(game, buyer, n, totalEth) {
   return game.connect(buyer).purchase(
-    ZERO_ADDRESS,
+    0,
     BigInt(n) * 400n,
     0n,
     ZERO_BYTES32,
@@ -97,7 +97,7 @@ describe("SecurityEconHardening", function () {
       await expect(
         game
           .connect(alice)
-          .purchaseWhalePass(alice.address, 1, hre.ethers.ZeroHash, { value: eth(2.4) })
+          .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) })
       ).to.be.reverted;
     });
   });
@@ -118,7 +118,7 @@ describe("SecurityEconHardening", function () {
       await expect(
         game
           .connect(alice)
-          .purchaseLazyPass(alice.address, hre.ethers.ZeroHash, { value: eth(0.24) })
+          .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: eth(0.24) })
       ).to.be.reverted;
     });
   });
@@ -139,7 +139,7 @@ describe("SecurityEconHardening", function () {
       await expect(
         game
           .connect(alice)
-          .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) })
+          .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) })
       ).to.be.reverted;
     });
   });
@@ -206,7 +206,7 @@ describe("SecurityEconHardening", function () {
       // Purchase deity pass (symbol 0, base price 24 ETH)
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
       // After purchase, the buyer holds exactly one deity pass NFT (the
       // HAS_DEITY_PASS gate blocks a second; deityPassPricePaid records the price).
@@ -222,10 +222,10 @@ describe("SecurityEconHardening", function () {
       // Alice and Bob buy deity passes
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
       await game
         .connect(bob)
-        .purchaseDeityPass(bob.address, 1, hre.ethers.ZeroHash, { value: eth(25) });
+        .purchaseDeityPass(0, 1, hre.ethers.ZeroHash, { value: eth(25) });
 
       // Check pass counts via the DeityPass NFT balanceOf
       expect(
@@ -281,7 +281,7 @@ describe("SecurityEconHardening", function () {
       // Buy a deity pass
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
       const claimBefore = await game.claimableWinningsOf(alice.address);
 
@@ -310,7 +310,7 @@ describe("SecurityEconHardening", function () {
 
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
       const claimBefore = await game.claimableWinningsOf(alice.address);
 
@@ -331,13 +331,13 @@ describe("SecurityEconHardening", function () {
       // Buy passes in order: alice(0), bob(1), carol(2)
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
       await game
         .connect(bob)
-        .purchaseDeityPass(bob.address, 1, hre.ethers.ZeroHash, { value: eth(25) });
+        .purchaseDeityPass(0, 1, hre.ethers.ZeroHash, { value: eth(25) });
       await game
         .connect(carol)
-        .purchaseDeityPass(carol.address, 2, hre.ethers.ZeroHash, { value: eth(27) });
+        .purchaseDeityPass(0, 2, hre.ethers.ZeroHash, { value: eth(27) });
 
       const aliceBefore = await game.claimableWinningsOf(alice.address);
       const bobBefore = await game.claimableWinningsOf(bob.address);
@@ -368,7 +368,7 @@ describe("SecurityEconHardening", function () {
 
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
       await advanceTime(DEPLOY_IDLE_TIMEOUT_DAYS * DAY + DAY);
       await triggerGameOverAtLevel0(game, deployer, mockVRF);
@@ -398,7 +398,7 @@ describe("SecurityEconHardening", function () {
 
       // First, make a normal ETH purchase to give alice some activity
       await game.connect(alice).purchase(
-        ZERO_ADDRESS,
+        0,
         400n,
         0n,
         ZERO_BYTES32,
@@ -412,7 +412,7 @@ describe("SecurityEconHardening", function () {
       // Past the liveness cutoff, redeemFlip reverts (the liveness gate fires
       // before any purchase work). The call must revert regardless.
       await expect(
-        game.connect(alice).redeemFlip(ZERO_ADDRESS, 400n)
+        game.connect(alice).redeemFlip(0, 400n)
       ).to.be.reverted;
     });
   });
@@ -459,7 +459,7 @@ describe("SecurityEconHardening", function () {
       // The simplest way: buy a deity pass, trigger gameOver refund.
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
       await advanceTime(DEPLOY_IDLE_TIMEOUT_DAYS * DAY + DAY);
       await triggerGameOverAtLevel0(game, deployer, mockVRF);
@@ -469,7 +469,7 @@ describe("SecurityEconHardening", function () {
       expect(claimBefore).to.be.gte(eth(20));
 
       // Claim winnings
-      await game.connect(alice).claimWinnings(ZERO_ADDRESS);
+      await game.connect(alice)["claimWinnings(uint32)"](0);
 
       // After claim, 1 wei sentinel should remain
       const claimAfter = await game.claimableWinningsOf(alice.address);
@@ -482,18 +482,18 @@ describe("SecurityEconHardening", function () {
 
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
       await advanceTime(DEPLOY_IDLE_TIMEOUT_DAYS * DAY + DAY);
       await triggerGameOverAtLevel0(game, deployer, mockVRF);
 
       // First claim succeeds
-      await game.connect(alice).claimWinnings(ZERO_ADDRESS);
+      await game.connect(alice)["claimWinnings(uint32)"](0);
       expect(await game.claimableWinningsOf(alice.address)).to.equal(1n);
 
       // Second claim should revert (only 1 wei = sentinel, nothing to claim)
       await expect(
-        game.connect(alice).claimWinnings(ZERO_ADDRESS)
+        game.connect(alice)["claimWinnings(uint32)"](0)
       ).to.be.reverted;
     });
 
@@ -504,20 +504,20 @@ describe("SecurityEconHardening", function () {
       // Give alice some claimable by buying deity pass and triggering gameOver
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
       await advanceTime(DEPLOY_IDLE_TIMEOUT_DAYS * DAY + DAY);
       await triggerGameOverAtLevel0(game, deployer, mockVRF);
 
       // Claim to leave just 1 wei sentinel
-      await game.connect(alice).claimWinnings(ZERO_ADDRESS);
+      await game.connect(alice)["claimWinnings(uint32)"](0);
       expect(await game.claimableWinningsOf(alice.address)).to.equal(1n);
 
       // Attempting to purchase with Claimable mode should revert
       // since balance is only 1 wei (sentinel)
       await expect(
         game.connect(alice).purchase(
-          ZERO_ADDRESS,
+          0,
           400n,
           0n,
           ZERO_BYTES32,
@@ -731,17 +731,17 @@ describe("SecurityEconHardening", function () {
       const reverts = await Promise.all([
         game
           .connect(alice)
-          .purchaseWhalePass(alice.address, 1, hre.ethers.ZeroHash, { value: eth(2.4) })
+          .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) })
           .then(() => false)
           .catch(() => true),
         game
           .connect(bob)
-          .purchaseLazyPass(bob.address, hre.ethers.ZeroHash, { value: eth(0.24) })
+          .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: eth(0.24) })
           .then(() => false)
           .catch(() => true),
         game
           .connect(carol)
-          .purchaseDeityPass(carol.address, 4, hre.ethers.ZeroHash, { value: eth(24) })
+          .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) })
           .then(() => false)
           .catch(() => true),
       ]);
@@ -760,7 +760,7 @@ describe("SecurityEconHardening", function () {
 
       await expect(
         game.connect(alice).purchase(
-          ZERO_ADDRESS,
+          0,
           400n,
           0n,
           ZERO_BYTES32,
@@ -778,7 +778,7 @@ describe("SecurityEconHardening", function () {
 
       await game
         .connect(alice)
-        .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) });
+        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
 
       await expect(
         deityPass.connect(alice).transferFrom(alice.address, bob.address, 0)
@@ -794,7 +794,7 @@ describe("SecurityEconHardening", function () {
       await expect(
         game
           .connect(alice)
-          .purchaseWhalePass(alice.address, 1, hre.ethers.ZeroHash, { value: eth(2.4) })
+          .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) })
       ).to.not.be.reverted;
     });
 
@@ -805,7 +805,7 @@ describe("SecurityEconHardening", function () {
       await expect(
         game
           .connect(alice)
-          .purchaseLazyPass(alice.address, hre.ethers.ZeroHash, { value: eth(0.24) })
+          .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: eth(0.24) })
       ).to.not.be.reverted;
     });
 
@@ -816,7 +816,7 @@ describe("SecurityEconHardening", function () {
       await expect(
         game
           .connect(alice)
-          .purchaseDeityPass(alice.address, 4, hre.ethers.ZeroHash, { value: eth(24) })
+          .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) })
       ).to.not.be.reverted;
     });
 

@@ -32,11 +32,11 @@ contract AutoRebuyArmFrozen is DeployProtocol {
 
         // Caught up: arming is open. One position stays armed into the stall.
         vm.prank(player);
-        coinflip.setCoinflipAutoRebuy(address(0), true, 0);
+        coinflip.setCoinflipAutoRebuy(0, true, 0);
         vm.prank(player);
-        coinflip.setCoinflipAutoRebuy(address(0), false, 0);
+        coinflip.setCoinflipAutoRebuy(0, false, 0);
         vm.prank(armed);
-        coinflip.setCoinflipAutoRebuy(address(0), true, 0);
+        coinflip.setCoinflipAutoRebuy(0, true, 0);
 
         _t += 1 days;
         vm.warp(_t);
@@ -48,16 +48,16 @@ contract AutoRebuyArmFrozen is DeployProtocol {
         // Stalled with the word outstanding: arming frozen, and the armed position frozen.
         vm.prank(player);
         vm.expectRevert(RngLocked.selector);
-        coinflip.setCoinflipAutoRebuy(address(0), true, 0);
+        coinflip.setCoinflipAutoRebuy(0, true, 0);
         vm.prank(armed);
         vm.expectRevert(RngLocked.selector);
-        coinflip.setCoinflipAutoRebuy(address(0), false, 0);
+        coinflip.setCoinflipAutoRebuy(0, false, 0);
 
         // Word delivered but not yet applied: still frozen (results are readable now).
         mockVRF.fulfillRandomWords(reqR, WORD_LATE);
         vm.prank(player);
         vm.expectRevert(RngLocked.selector);
-        coinflip.setCoinflipAutoRebuy(address(0), true, 0);
+        coinflip.setCoinflipAutoRebuy(0, true, 0);
 
         // R seals on its late word. Once R's read cohort drains, the same crank chain issues
         // W's fresh daily request under the lock: there is no unlocked window between them.
@@ -67,18 +67,18 @@ contract AutoRebuyArmFrozen is DeployProtocol {
         // stay frozen.
         vm.prank(player);
         vm.expectRevert(RngLocked.selector);
-        coinflip.setCoinflipAutoRebuy(address(0), true, 0);
+        coinflip.setCoinflipAutoRebuy(0, true, 0);
         vm.prank(armed);
         vm.expectRevert(RngLocked.selector);
-        coinflip.setCoinflipAutoRebuy(address(0), false, 0);
+        coinflip.setCoinflipAutoRebuy(0, false, 0);
         mockVRF.fulfillRandomWords(fresh, WORD_FRESH);
         game.mineFlip(); // backfill: every day through W resolved, lock still held
         // Nothing unresolved remains, so arming is open even under the lock: a known run can
         // only be claimed plainly, never compounded.
         vm.prank(player);
-        coinflip.setCoinflipAutoRebuy(address(0), true, 0);
+        coinflip.setCoinflipAutoRebuy(0, true, 0);
         vm.prank(armed);
-        coinflip.setCoinflipAutoRebuy(address(0), false, 0);
+        coinflip.setCoinflipAutoRebuy(0, false, 0);
 
         _advanceUntilUnlocked();
         assertEq(_dailyIdx(), W, "sealed W");

@@ -449,7 +449,7 @@ contract RedemptionEndingPendingTest is RedemptionCloseTools {
         _mockEnding(false);
         vm.prank(playerA);
         vm.expectRevert(NOT_GAME_OVER);
-        sdgnrs.claimRedemption(playerA, burnDay);
+        sdgnrs.claimRedemption(0, burnDay);
         (uint128 still,) = sdgnrs.pendingRedemptions(game.walletIdOf(playerA), burnDay);
         assertEq(still, owed, "nothing settled while pending");
 
@@ -458,7 +458,7 @@ contract RedemptionEndingPendingTest is RedemptionCloseTools {
         uint256 eth0 = playerA.balance;
         uint256 st0 = mockStETH.balanceOf(playerA);
         vm.prank(playerA);
-        sdgnrs.claimRedemption(playerA, burnDay);
+        sdgnrs.claimRedemption(0, burnDay);
         uint256 got = (playerA.balance - eth0) + (mockStETH.balanceOf(playerA) - st0);
         assertApproxEqAbs(got, expected, 2, "terminal after game over: the whole flat-roll value paid direct");
         (uint128 cleared,) = sdgnrs.pendingRedemptions(game.walletIdOf(playerA), burnDay);

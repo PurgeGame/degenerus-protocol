@@ -219,17 +219,15 @@ contract Coinflip {
     error OnlyCraps();
     /// @notice Thrown when a take-profit or off action targets a player without auto-rebuy enabled.
     error AutoRebuyNotEnabled();
-    /// @notice Thrown when a strict enable call targets a player who already has auto-rebuy on.
+    /// @notice Thrown when an enable call targets an account that already has auto-rebuy on.
     error AutoRebuyAlreadyEnabled();
     /// @notice Thrown when a take-profit threshold does not fit its stored uint128 value.
     error TakeProfitTooLarge();
     /// @notice Thrown when an auto-rebuy action is attempted while today's flip is frozen for RNG.
     error RngLocked();
-    /// @notice Thrown when the caller acts on behalf of a player without that player's
-    ///         operator approval.
+    /// @notice Thrown when the caller may not act for the account: it is neither the account's
+    ///         key, a smurf's owner, nor an approved operator.
     error NotApproved();
-    /// @notice Thrown when a gift deposit names a recipient that holds no wallet ID.
-    error NoWalletId();
 
     /*+======================================================================+
       |                         STORAGE VARIABLES                            |
@@ -481,53 +479,48 @@ contract Coinflip {
       |                    CORE COINFLIP FUNCTIONS                           |
       +======================================================================+*/
 
-    /// @notice Deposit FLIP into the daily coinflip system.
-    /// @dev The stake and its winnings belong to `player`; quest progress goes to whoever funds
-    ///      the deposit, and any quest reward it completes joins the player's stake. The player
-    ///      or an approved operator funds it from the player's settled winnings first and their
-    ///      wallet FLIP for the remainder; any other caller funds the whole stake from their own
-    ///      FLIP — a permissionless gift (the caller pays, the player gets the stake) that never
-    ///      touches the player's winnings. The recycling bonus pays on the winnings leg only.
+    /// @notice Deposit FLIP into the daily coinflip system for account `id`.
+    /// @dev The stake and its winnings belong to the account. An authorized caller (`id == 0`,
+    ///      the account's key, a smurf's owner or an approved operator) acts as the account: the
+    ///      deposit spends the account's settled winnings first and burns the account's payee's
+    ///      wallet FLIP for the remainder, and the quest progress is the account's. Any other
+    ///      caller makes a permissionless gift: it funds the whole stake from its own FLIP, earns
+    ///      the quest itself, and never touches the account's winnings. Any completed quest's
+    ///      reward joins the account's stake. The recycling bonus pays on the winnings leg only.
+    ///      Only the account's own hand (the caller is the payee: a self deposit or a smurf's
+    ///      owner) makes a direct deposit, which can set the flip record, enter the BAF draw and
+    ///      spend the account's coinflip boon.
     ///      The principal is floored to whole FLIP before funding; the remainder stays with the
     ///      funder. Reverts StakeAboveDailyCap if the stake, with its bonuses, would exceed
     ///      STAKE_LANE_MAX whole FLIP on the target day.
-    ///      The stake is keyed by the player's wallet ID. A self or operator deposit pays and
-    ///      registers the player on first contact; a gift's recipient pays nothing and must
-    ///      already hold an ID, while the paying funder registers for its quest.
-    /// @param player The stake owner — i.e. the player (address(0) or msg.sender for self-deposit).
+    ///      The stake is keyed by wallet ID. A paid self deposit registers the caller on first
+    ///      contact; a nonzero `id` is allocated (Game `resolveAccount` reverts otherwise), and a
+    ///      gift's paying funder registers for its quest.
+    /// @param id The account receiving the stake (0 = caller).
     /// @param amount Amount of FLIP to deposit (min 100 FLIP, or 0 to settle pending claims);
     ///        floored to whole FLIP.
-    function depositCoinflip(address player, uint256 amount) external {
-        if (player == address(0)) player = msg.sender;
-        address funder;
-        if (player == msg.sender || degenerusGame.isOperatorApproved(player, msg.sender)) {
-            // The player or an approved operator funds the deposit from the player's FLIP.
-            funder = player;
-        } else {
-            // Permissionless gift: the caller's FLIP funds the player's coinflip stake.
-            funder = msg.sender;
-        }
-        _depositCoinflip(player, funder, amount, player == msg.sender);
+    function depositCoinflip(uint32 id, uint256 amount) external {
+        (address key, address payee, bool authorized) = _resolve(id);
+        _depositCoinflip(key, payee, id, amount, !authorized);
     }
 
-    /// @dev Internal deposit for daily coinflip mode. The stake and its winnings belong to
-    ///      `player`; quest progress is `funder`'s, with any completed quest's reward folded into
-    ///      the player's stake. The FLIP principal is funded claimable-first when funder == player
-    ///      (a self/approved deposit) and burned from `funder`'s wallet for whatever the settled
-    ///      winnings did not cover. A permissionless gift (funder == the caller) is wallet-only.
+    /// @dev Internal deposit for daily coinflip mode. The stake and its winnings belong to the
+    ///      account (`key`, wallet `id`, 0 = look it up). An authorized deposit is funded
+    ///      claimable-first and burns `payee`'s wallet FLIP for whatever the settled winnings did
+    ///      not cover; a gift burns the caller's FLIP for the whole principal. Any loss
+    ///      consolation of the claim walk mints to `payee`.
     function _depositCoinflip(
-        address player,
-        address funder,
+        address key,
+        address payee,
+        uint32 id,
         uint256 amount,
-        bool directDeposit
+        bool gift
     ) private {
-        PlayerCoinflipState storage state = playerState[player];
+        PlayerCoinflipState storage state = playerState[key];
         if (amount != 0 && amount < MIN) revert AmountLTMin();
-        bool gift = funder != player;
-        // A paid self or operator deposit allocates; a gift recipient or a zero-amount settle
-        // only looks up. A zero ID then means nothing to settle, or a gift with no recipient.
-        uint32 id = _walletId(player, state, amount != 0 && !gift);
-        if (id == 0 && amount != 0) revert NoWalletId();
+        // A paid self deposit allocates (nonzero or Game `E`); a resolved account is already
+        // allocated. Only a zero-amount self settle can leave the ID zero: nothing to settle.
+        id = _walletId(key, state, id, amount != 0);
         // Stake lanes hold whole FLIP: fund, burn, score and record the floored principal
         // only, so the funder keeps the fraction the lane could not take.
         // Deposits flow through every RNG lock. A deposit on day N stakes day
@@ -539,7 +532,7 @@ contract Coinflip {
         // (claim-time routing off the promoted level) — state the pending draw
         // never reads.
 
-        uint256 mintable = _claimCoinflipsInternal(player, id, state, false);
+        uint256 mintable = _claimCoinflipsInternal(payee, id, state, false);
         uint128 storedBefore = state.claimableStored;
         uint128 storedAfter = storedBefore;
         if (mintable != 0) {
@@ -551,9 +544,8 @@ contract Coinflip {
         // burn it again. Supply-neutral: claimableStored is UNMINTED (mintForGame fires only when
         // FLIP is claimed out) and a day stake is off-supply too — a normal deposit burns its
         // principal to create one — so moving between the two mints and burns nothing. Gated on
-        // funder == player (self or operator-approved): a
-        // permissionless gift funds the whole stake from the caller's own FLIP and can never
-        // push a non-consenting player's winnings onto a flip.
+        // an authorized caller: a permissionless gift funds the whole stake from the caller's own
+        // FLIP and can never push a non-consenting account's winnings onto a flip.
         uint256 fromClaimable;
         if (!gift) {
             fromClaimable = amount <= storedAfter ? amount : storedAfter;
@@ -569,10 +561,10 @@ contract Coinflip {
         // claimableStored / lastClaim / carry are finalized here — nothing below mutates them
         // (burnForCoinflip and handleFlip never reach a claimable writer, _addDailyFlip writes
         // only per-day stake). One emit covers both exits.
-        _emitClaimState(player);
+        _emitClaimState(key);
 
         if (amount == 0) {
-            emit CoinflipDeposit(player, 0);
+            emit CoinflipDeposit(key, 0);
             return;
         }
 
@@ -582,21 +574,24 @@ contract Coinflip {
         unchecked {
             fromWallet = amount - fromClaimable;
         }
+        // An authorized deposit burns the payee's wallet FLIP; a gift burns the caller's.
+        address funder = gift ? msg.sender : payee;
         if (fromWallet != 0) flip.burnForCoinflip(funder, fromWallet);
 
         // Quests can layer on bonus flip credit when the quest is active/completed. Quest
-        // progress is credited to the funder (the spender earns the quest); the resulting
-        // bonus flows into the player's stake below. A gift's funder pays, so it registers
-        // (`gift` is the allocate flag: true on this branch).
-        uint32 funderId = gift ? _walletId(funder, playerState[funder], gift) : id;
+        // progress is the account's for an authorized deposit and the funder's for a gift; the
+        // resulting bonus flows into the account's stake below. A gift's funder pays, so it
+        // registers.
+        address quester = gift ? msg.sender : key;
+        uint32 questId = gift ? _walletId(quester, playerState[quester], 0, true) : id;
         (
             uint256 reward,
             uint8 questType,
             uint32 streak,
             bool completed
-        ) = questModule.handleFlip(funderId, amount);
+        ) = questModule.handleFlip(questId, amount);
         uint256 questReward = _questApplyReward(
-            funder,
+            quester,
             reward,
             questType,
             streak,
@@ -611,27 +606,30 @@ contract Coinflip {
             // player's carry earns its own bonus where it rolls, in _claimCoinflipsInternal.
             creditedFlip += _recyclingBonus(fromClaimable);
         }
-        // Direct deposits can set the flip record and enter the BAF weighted
-        // draw; indirect deposits cannot. Every manual route reverts past the daily cap.
-        _addDailyFlip(id, creditedFlip, directDeposit ? amount : 0, true);
-        emit CoinflipDeposit(player, amount);
+        // Direct deposits (the caller is the payee) can set the flip record and enter the BAF
+        // weighted draw; operator deposits and gifts cannot. Every manual route reverts past the
+        // daily cap.
+        _addDailyFlip(id, creditedFlip, payee == msg.sender ? amount : 0, true);
+        emit CoinflipDeposit(key, amount);
     }
 
     /*+======================================================================+
       |                    CLAIM FUNCTIONS                                   |
       +======================================================================+*/
 
-    /// @notice Claim coinflip winnings (exact amount).
+    /// @notice Claim account `id`'s coinflip winnings (exact amount).
     /// @dev Processes resolved days and claims from claimableStored (accumulated from
     ///      settlements, take-profit, and mode changes). Auto-rebuy carry is never exposed.
-    /// @param player The player to claim for (address(0) for msg.sender, else operator-approved).
+    ///      The FLIP mints to the account's payee.
+    /// @param id The account to claim for (0 = caller, else the caller must be authorized).
     /// @param amount Maximum FLIP to claim (actual may be less if insufficient claimable).
     /// @return claimed Actual amount of FLIP minted and claimed.
     function claimCoinflips(
-        address player,
+        uint32 id,
         uint256 amount
     ) external returns (uint256 claimed) {
-        return _claimCoinflipsAmount(_resolvePlayer(player), amount, true);
+        (address key, address payee) = _account(id);
+        return _claimCoinflipsAmount(key, payee, id, amount, true);
     }
 
     /// @notice Claim coinflip winnings via FLIP to cover token transfers/burns.
@@ -644,7 +642,7 @@ contract Coinflip {
         address player,
         uint256 amount
     ) external onlyFLIP returns (uint256 claimed) {
-        return _claimCoinflipsAmount(player, amount, true);
+        return _claimCoinflipsAmount(player, player, 0, amount, true);
     }
 
     /// @notice Get the result of a coinflip day.
@@ -665,7 +663,7 @@ contract Coinflip {
         address player,
         uint256 amount
     ) external onlyFLIP returns (uint256 consumed) {
-        return _claimCoinflipsAmount(player, amount, false);
+        return _claimCoinflipsAmount(player, player, 0, amount, false);
     }
 
     /// @notice Consume `amount` of `player`'s coinflip-resident backing for salvage or auto-decimator (FLIP only).
@@ -682,7 +680,7 @@ contract Coinflip {
         address player,
         uint256 amount
     ) external onlyFLIP returns (uint256 consumed) {
-        consumed = _claimCoinflipsAmount(player, amount, false);
+        consumed = _claimCoinflipsAmount(player, player, 0, amount, false);
         uint256 remainder = amount - consumed;
         if (remainder == 0) return consumed;
         PlayerCoinflipState storage state = playerState[player];
@@ -724,19 +722,23 @@ contract Coinflip {
         emit CoinflipClaimState(player, s.claimableStored, s.autoRebuyCarry, s.lastClaim);
     }
 
-    /// @dev Internal claim exact amount. A wallet with no ID has no stake and claims nothing.
+    /// @dev Internal claim exact amount for the account keyed `key` (wallet `id`, 0 = look it
+    ///      up); FLIP and any loss consolation mint to `payee`. A wallet with no ID has no stake
+    ///      and claims nothing.
     function _claimCoinflipsAmount(
-        address player,
+        address key,
+        address payee,
+        uint32 id,
         uint256 amount,
         bool mintTokens
     ) private returns (uint256 claimed) {
-        PlayerCoinflipState storage state = playerState[player];
-        uint256 mintable = _claimCoinflipsInternal(player, _walletId(player, state, false), state, false);
+        PlayerCoinflipState storage state = playerState[key];
+        uint256 mintable = _claimCoinflipsInternal(payee, _walletId(key, state, id, false), state, false);
         uint128 storedBefore = state.claimableStored;
         uint256 stored = storedBefore + mintable;
         if (stored == 0) {
             // _claimCoinflipsInternal may still have advanced lastClaim / settled carry.
-            _emitClaimState(player);
+            _emitClaimState(key);
             return 0;
         }
 
@@ -751,26 +753,28 @@ contract Coinflip {
 
         if (toClaim != 0) {
             if (mintTokens) {
-                flip.mintForGame(player, toClaim);
+                flip.mintForGame(payee, toClaim);
             }
             claimed = toClaim;
         }
-        _emitClaimState(player);
+        _emitClaimState(key);
     }
 
-    /// @dev `player`'s wallet ID from its coinflip state, filling the write-once cache from the
-    ///      Game on a miss: `allocate` (a paying action) registers a new wallet, otherwise the
-    ///      lookup returns the existing ID or zero.
+    /// @dev The wallet ID of the account keyed `key`, from its coinflip state. A miss fills the
+    ///      write-once cache from `id`, the account's ID that Game `resolveAccount` resolved, or
+    ///      for a self action (`id == 0`) from the Game: `allocate` (a paying action) registers a
+    ///      new wallet, otherwise the lookup returns the existing ID or zero.
     function _walletId(
-        address player,
+        address key,
         PlayerCoinflipState storage state,
+        uint32 id,
         bool allocate
-    ) private returns (uint32 id) {
-        id = state.id;
-        if (id == 0) {
-            id = degenerusGame.registerWallet(player, allocate);
-            if (id != 0) state.id = id;
-        }
+    ) private returns (uint32) {
+        uint32 cached = state.id;
+        if (cached != 0) return cached;
+        if (id == 0) id = degenerusGame.registerWallet(key, allocate);
+        if (id != 0) state.id = id;
+        return id;
     }
 
     /// @dev `player`'s wallet ID for a view: the cached ID, else the Game's (0 = none).
@@ -780,9 +784,9 @@ contract Coinflip {
     }
 
     /// @dev Process daily coinflip claims and calculate winnings. `id` keys the stake lanes;
-    ///      `player` is the address the loss consolation mints to.
+    ///      `payee` is the address the loss consolation mints to.
     function _claimCoinflipsInternal(
-        address player,
+        address payee,
         uint32 id,
         PlayerCoinflipState storage state,
         bool deepAutoRebuy
@@ -992,7 +996,7 @@ contract Coinflip {
         }
 
         if (lossCount != 0) {
-            wwxrp.mintPrize(player, lossCount * COINFLIP_LOSS_WWXRP_REWARD);
+            wwxrp.mintPrize(payee, lossCount * COINFLIP_LOSS_WWXRP_REWARD);
         }
 
         return mintable;
@@ -1059,7 +1063,7 @@ contract Coinflip {
         // boosts, record claims, or credits, so free stake carries no draw
         // weight. Ordinary days pay one warm read: bafDrawDay shares the packed
         // slot the deposit's claim walk already loaded. Credit paths (quests,
-        // gifts via funder!=player, operators, sDGNRS backing) skip even that —
+        // gifts, operator deposits, sDGNRS backing) skip even that —
         // their recordAmount is zero and the compare short-circuits.
         if (recordAmount != 0 && targetDay == bafDrawDay) {
             _appendBafDrawEntry(targetDay, id, recordAmount);
@@ -1378,71 +1382,64 @@ contract Coinflip {
         return flipsClaimableDay < GameTimeLib.currentDayIndex();
     }
 
-    /// @notice Configure auto-rebuy mode for coinflips.
-    /// @param player The player to configure (address(0) for msg.sender).
+    /// @notice Configure auto-rebuy mode for account `id`'s coinflips.
+    /// @dev Any FLIP the mode change surfaces mints to the account's payee.
+    /// @param id The account to configure (0 = caller, else the caller must be authorized).
     /// @param enabled True to enable auto-rebuy, false to disable and cash out carry.
     /// @param takeProfit Threshold up to uint128 max: every whole multiple in a win is banked, the remainder rolls (0 = roll all). Ignored when disabling.
     function setCoinflipAutoRebuy(
-        address player,
+        uint32 id,
         bool enabled,
         uint256 takeProfit
     ) external {
-        bool fromGame = msg.sender == ContractAddresses.GAME;
-        if (fromGame) {
-            if (player == address(0)) player = msg.sender;
-        } else {
-            player = _resolvePlayer(player);
-        }
-        _setCoinflipAutoRebuy(player, enabled, takeProfit, !fromGame);
+        (address key, address payee) = _account(id);
+        _setCoinflipAutoRebuy(key, payee, id, enabled, takeProfit);
     }
 
-    /// @notice Set auto-rebuy take profit.
-    /// @param player The player to configure (address(0) for msg.sender, else operator-approved).
+    /// @notice Set account `id`'s auto-rebuy take profit.
+    /// @dev Any settled winnings the update surfaces mint to the account's payee.
+    /// @param id The account to configure (0 = caller, else the caller must be authorized).
     /// @param takeProfit New take-profit threshold, at most uint128 max (0 = roll all winnings).
     function setCoinflipAutoRebuyTakeProfit(
-        address player,
+        uint32 id,
         uint256 takeProfit
     ) external {
-        _setCoinflipAutoRebuyTakeProfit(_resolvePlayer(player), takeProfit);
+        (address key, address payee) = _account(id);
+        _setCoinflipAutoRebuyTakeProfit(key, payee, id, takeProfit);
     }
 
     /// @dev Internal auto-rebuy configuration.
     ///      A position already on auto-rebuy is frozen while a day is unresolved: it holds a
     ///      carry that the pending word prices, so toggling off would extract it before a known
-    ///      loss and re-setting the stop would bank a known win whole. Arming stays open while
-    ///      only today is unresolved (a known result can only roll into an unknown day) but is
-    ///      frozen once two or more days are unresolved: after a stall every such day's result
-    ///      derives from one delivered word, and arming then would compound a stake through a
-    ///      run of results that are already readable.
+    ///      loss. Arming stays open while only today is unresolved (a known result can only roll
+    ///      into an unknown day) but is frozen once two or more days are unresolved: after a stall
+    ///      every such day's result derives from one delivered word, and arming then would
+    ///      compound a stake through a run of results that are already readable.
     function _setCoinflipAutoRebuy(
-        address player,
+        address key,
+        address payee,
+        uint32 id,
         bool enabled,
-        uint256 takeProfit,
-        bool strict
+        uint256 takeProfit
     ) private {
-        PlayerCoinflipState storage state = playerState[player];
+        PlayerCoinflipState storage state = playerState[key];
         uint256 mintable;
         if (_flipFrozen() && (state.autoRebuyEnabled || flipsClaimableDay + 1 < GameTimeLib.currentDayIndex())) {
             revert RngLocked();
         }
-        uint32 id = _walletId(player, state, false);
+        id = _walletId(key, state, id, false);
 
         if (enabled) {
             if (takeProfit > type(uint128).max) revert TakeProfitTooLarge();
-            mintable = _claimCoinflipsInternal(player, id, state, false);
-            if (state.autoRebuyEnabled) {
-                if (strict) revert AutoRebuyAlreadyEnabled();
-                state.autoRebuyStop = uint128(takeProfit);
-                emit CoinflipAutoRebuyStopSet(player, takeProfit);
-            } else {
-                state.autoRebuyStop = uint128(takeProfit);
-                state.autoRebuyEnabled = true;
-                state.autoRebuyStartDay = state.lastClaim;
-                emit CoinflipAutoRebuyStopSet(player, takeProfit);
-                emit CoinflipAutoRebuyToggled(player, true);
-            }
+            if (state.autoRebuyEnabled) revert AutoRebuyAlreadyEnabled();
+            mintable = _claimCoinflipsInternal(payee, id, state, false);
+            state.autoRebuyStop = uint128(takeProfit);
+            state.autoRebuyEnabled = true;
+            state.autoRebuyStartDay = state.lastClaim;
+            emit CoinflipAutoRebuyStopSet(key, takeProfit);
+            emit CoinflipAutoRebuyToggled(key, true);
         } else {
-            mintable = _claimCoinflipsInternal(player, id, state, true);
+            mintable = _claimCoinflipsInternal(payee, id, state, true);
             uint256 carry = state.autoRebuyCarry;
             if (carry != 0) {
                 mintable += carry;
@@ -1450,13 +1447,13 @@ contract Coinflip {
             }
             state.autoRebuyEnabled = false;
             state.autoRebuyStartDay = 0;
-            emit CoinflipAutoRebuyToggled(player, false);
+            emit CoinflipAutoRebuyToggled(key, false);
         }
 
         if (mintable != 0) {
-            flip.mintForGame(player, mintable);
+            flip.mintForGame(payee, mintable);
         }
-        _emitClaimState(player);
+        _emitClaimState(key);
     }
 
     /// @dev Internal auto-rebuy take profit configuration.
@@ -1464,22 +1461,24 @@ contract Coinflip {
     ///      between the banked chunk and the rolling carry, so a known win could be banked whole.
     ///      The enablement check leads, so only a position actually on auto-rebuy meets the freeze.
     function _setCoinflipAutoRebuyTakeProfit(
-        address player,
+        address key,
+        address payee,
+        uint32 id,
         uint256 takeProfit
     ) private {
-        PlayerCoinflipState storage state = playerState[player];
+        PlayerCoinflipState storage state = playerState[key];
         if (!state.autoRebuyEnabled) revert AutoRebuyNotEnabled();
         if (_flipFrozen()) revert RngLocked();
         if (takeProfit > type(uint128).max) revert TakeProfitTooLarge();
 
-        uint256 mintable = _claimCoinflipsInternal(player, _walletId(player, state, false), state, false);
+        uint256 mintable = _claimCoinflipsInternal(payee, _walletId(key, state, id, false), state, false);
         state.autoRebuyStop = uint128(takeProfit);
-        emit CoinflipAutoRebuyStopSet(player, takeProfit);
+        emit CoinflipAutoRebuyStopSet(key, takeProfit);
 
         if (mintable != 0) {
-            flip.mintForGame(player, mintable);
+            flip.mintForGame(payee, mintable);
         }
-        _emitClaimState(player);
+        _emitClaimState(key);
     }
 
     /// @notice Claim up to `amount` of the auto-rebuy carry as minted FLIP while
@@ -1493,19 +1492,20 @@ contract Coinflip {
     ///      already be on-chain before the resolution walk applies it. Take-profit
     ///      chunks surfaced by the settle bank into claimableStored (claimCoinflips
     ///      territory); this function pays out of the carry only.
-    /// @param player The player to claim for (address(0) for msg.sender, else operator-approved).
+    ///      The FLIP mints to the account's payee.
+    /// @param id The account to claim for (0 = caller, else the caller must be authorized).
     /// @param amount Maximum carry to claim.
     /// @return claimed Actual amount of FLIP minted from the carry.
     function claimCoinflipCarry(
-        address player,
+        uint32 id,
         uint256 amount
     ) external returns (uint256 claimed) {
-        player = _resolvePlayer(player);
-        PlayerCoinflipState storage state = playerState[player];
+        (address key, address payee) = _account(id);
+        PlayerCoinflipState storage state = playerState[key];
         if (!state.autoRebuyEnabled) revert AutoRebuyNotEnabled();
         if (_flipFrozen()) revert RngLocked();
 
-        uint256 mintable = _claimCoinflipsInternal(player, _walletId(player, state, false), state, false);
+        uint256 mintable = _claimCoinflipsInternal(payee, _walletId(key, state, id, false), state, false);
         if (mintable != 0) {
             state.claimableStored = uint128(
                 uint256(state.claimableStored) + mintable
@@ -1518,9 +1518,9 @@ contract Coinflip {
             unchecked {
                 state.autoRebuyCarry = uint128(carry - claimed);
             }
-            flip.mintForGame(player, claimed);
+            flip.mintForGame(payee, claimed);
         }
-        _emitClaimState(player);
+        _emitClaimState(key);
     }
 
     /*+======================================================================+
@@ -1744,7 +1744,7 @@ contract Coinflip {
 
         // Consume the settled genesis seed reserve first (no token mint — removes a
         // future mint of `removed`).
-        removed = _claimCoinflipsAmount(s, base, false);
+        removed = _claimCoinflipsAmount(s, s, SDGNRS_WALLET_ID, base, false);
         uint256 remainder = base - removed;
         if (remainder == 0) return removed;
 
@@ -2089,14 +2089,18 @@ contract Coinflip {
         return uint24(bracket);
     }
 
-    /// @dev Resolve player address (address(0) -> msg.sender, else validate approval).
-    function _resolvePlayer(address player) private view returns (address resolved) {
-        if (player == address(0)) return msg.sender;
-        if (player != msg.sender) {
-            if (!degenerusGame.isOperatorApproved(player, msg.sender)) {
-                revert NotApproved();
-            }
-        }
-        return player;
+    /// @dev Account `id` for the caller: `id == 0` is the caller itself (key and payee, no Game
+    ///      call); any other ID resolves through Game `resolveAccount` (reverts `E` when unallocated).
+    function _resolve(uint32 id) private view returns (address key, address payee, bool authorized) {
+        if (id == 0) return (msg.sender, msg.sender, true);
+        return degenerusGame.resolveAccount(id, msg.sender);
+    }
+
+    /// @dev Account `id` for an authorized action: reverts NotApproved unless the caller is the
+    ///      account's key, a smurf's owner or an approved operator.
+    function _account(uint32 id) private view returns (address key, address payee) {
+        bool authorized;
+        (key, payee, authorized) = _resolve(id);
+        if (!authorized) revert NotApproved();
     }
 }

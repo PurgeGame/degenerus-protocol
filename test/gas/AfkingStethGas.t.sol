@@ -30,7 +30,6 @@ contract AfkingStethGasHost is SubscriberNativeGasHost {
         sub.subStreakLatch = 300;
         sub.pendingFlip = 1_000;
         sub.affiliateBase = 1_000;
-        mintPacked_[player] |= uint256(1) << BitPackingLib.SEAT_ENCUMBERED_SHIFT;
     }
 
     function creditSource(address source, uint256 prepaid, bool sentinel) external {
@@ -79,7 +78,7 @@ contract AfkingStethGasTest is DeployProtocol {
     function _authorize(address player, address source, bool finite) private {
         if (source != player) {
             vm.prank(source);
-            game.setOperatorApproval(player, true);
+            game.setOperatorApproval(0, player, true);
         }
         vm.prank(source);
         mockStETH.approve(address(game), finite ? 100 ether : type(uint256).max);
@@ -198,7 +197,7 @@ contract AfkingStethGasTest is DeployProtocol {
         AdversarialAfkingSteth faulty = _failedFixture(true);
         uint256 initial = vm.snapshotState();
         vm.prank(FUNDER);
-        game.setOperatorApproval(PLAYER, false);
+        game.setOperatorApproval(0, PLAYER, false);
         MineFlipGas.Result memory baselineResult;
         uint256 baseline;
         (baselineResult, baseline) = host.measuredSubWork{gas: WORK_GAS}(WORK_GAS);

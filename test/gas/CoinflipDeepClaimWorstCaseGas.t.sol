@@ -199,7 +199,7 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
         // Disabling auto-rebuy runs the deep settle of every resolved day at once.
         vm.prank(target);
         uint256 g0 = gasleft();
-        coinflip.setCoinflipAutoRebuy{gas: REVIEW_GAS_CAP - DEEP_INTRINSIC}(address(0), false, 0);
+        coinflip.setCoinflipAutoRebuy{gas: REVIEW_GAS_CAP - DEEP_INTRINSIC}(0, false, 0);
         gasUsed = g0 - gasleft();
 
         // Correctness anchor: exactly 1459 wins were settled and minted (day 1460 lost).
@@ -267,7 +267,7 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
     function _measureRegular(address target) private returns (uint256 gasUsed) {
         vm.prank(target);
         uint256 g0 = gasleft();
-        coinflip.claimCoinflips{gas: REVIEW_GAS_CAP - REGULAR_INTRINSIC}(address(0), type(uint256).max);
+        coinflip.claimCoinflips{gas: REVIEW_GAS_CAP - REGULAR_INTRINSIC}(0, type(uint256).max);
         gasUsed = g0 - gasleft();
 
         // The complete 365-day window contains one loss and exactly 364 wins.

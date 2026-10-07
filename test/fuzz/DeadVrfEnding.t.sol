@@ -247,39 +247,43 @@ contract DeadVrfEndingTest is DeployProtocol {
         refs[0] = _ref(0, 3, 0);
         refs[1] = _ref(0, 3, 1);
         refs[2] = _ref(0, 3, 2);
-        game.claimDeadVrf(alice, refs);
+        game.claimDeadVrf(game.walletIdOf(alice), refs);
         assertEq(game.claimableWinningsOf(alice), 3 * (perTrait / 4), "alice: 3 of trait 3's four tickets");
 
         uint256[] memory one = new uint256[](1);
         one[0] = _ref(0, 3, 3);
+        uint32 aliceId = game.walletIdOf(alice);
         vm.expectRevert();
-        game.claimDeadVrf(alice, one); // bob's ticket, not alice's
-        game.claimDeadVrf(bob, one);
+        game.claimDeadVrf(aliceId, one); // bob's ticket, not alice's
+        game.claimDeadVrf(game.walletIdOf(bob), one);
         assertEq(game.claimableWinningsOf(bob), perTrait / 4, "bob: 1 of trait 3's four tickets");
+        uint32 bobId = game.walletIdOf(bob);
         vm.expectRevert();
-        game.claimDeadVrf(bob, one); // already claimed
+        game.claimDeadVrf(bobId, one); // already claimed
 
         uint256[] memory two = new uint256[](2);
         two[0] = _ref(0, 200, 0);
         two[1] = _ref(0, 200, 1);
-        game.claimDeadVrf(carol, two);
+        game.claimDeadVrf(game.walletIdOf(carol), two);
         assertEq(game.claimableWinningsOf(carol), 2 * (perTrait / 2), "carol: a whole trait's share");
 
         one[0] = _ref(1, TLVL | (uint24(1) << 23), davePos);
-        game.claimDeadVrf(dave, one);
+        game.claimDeadVrf(game.walletIdOf(dave), one);
         assertEq(game.claimableWinningsOf(dave), (pot * 450) / total, "dave: the average for 4.5 entries");
+        uint32 daveId = game.walletIdOf(dave);
         vm.expectRevert();
-        game.claimDeadVrf(dave, one); // owed zeroed
+        game.claimDeadVrf(daveId, one); // owed zeroed
 
         one[0] = _ref(1, TLVL, erinPos);
-        game.claimDeadVrf(erin, one);
+        game.claimDeadVrf(game.walletIdOf(erin), one);
         assertEq(game.claimableWinningsOf(erin), (pot * 200) / total, "erin: the average for 2 entries");
 
         one[0] = _ref(2, foilDay & 1, foilIdx);
-        game.claimDeadVrf(frank, one);
+        game.claimDeadVrf(game.walletIdOf(frank), one);
         assertEq(game.claimableWinningsOf(frank), (pot * 1600) / total, "frank: the average for a foil pack");
+        uint32 frankId = game.walletIdOf(frank);
         vm.expectRevert();
-        game.claimDeadVrf(frank, one); // pack word zeroed
+        game.claimDeadVrf(frankId, one); // pack word zeroed
 
         uint256 paid = game.claimableWinningsOf(alice) + game.claimableWinningsOf(bob)
             + game.claimableWinningsOf(carol) + game.claimableWinningsOf(dave)
@@ -301,25 +305,27 @@ contract DeadVrfEndingTest is DeployProtocol {
         (uint256 pot, uint256 total,, uint256 uncreated,,) = _state();
         assertEq(uncreated, 1500);
         assertEq(total, 1500);
+        uint32 erinId = game.walletIdOf(erin);
+        uint32 daveId = game.walletIdOf(dave);
         uint256[] memory refs = new uint256[](1);
         refs[0] = _ref(1, TLVL | (uint24(1) << 23), id);
-        vm.expectRevert(); game.claimDeadVrf(erin, refs);
+        vm.expectRevert(); game.claimDeadVrf(erinId, refs);
         refs[0] = _ref(1, TLVL + 1, id);
-        vm.expectRevert(); game.claimDeadVrf(dave, refs);
+        vm.expectRevert(); game.claimDeadVrf(daveId, refs);
         uint256[] memory duplicate = new uint256[](2);
         duplicate[0] = _ref(1, TLVL, id);
         duplicate[1] = duplicate[0];
-        vm.expectRevert(); game.claimDeadVrf(dave, duplicate);
+        vm.expectRevert(); game.claimDeadVrf(daveId, duplicate);
         assertEq(game.claimableWinningsOf(dave), 0, "duplicate batch rolls back atomically");
         uint24[3] memory keys = [TLVL | (uint24(1) << 23), TLVL, TLVL | (uint24(1) << 22)];
         uint256[3] memory weights = [uint256(300), 500, 700];
         uint256 paid;
         for (uint256 i; i < 3; ++i) {
             refs[0] = _ref(1, keys[i], id);
-            game.claimDeadVrf(dave, refs);
+            game.claimDeadVrf(daveId, refs);
             paid += pot * weights[i] / total;
             assertEq(game.claimableWinningsOf(dave), paid);
-            vm.expectRevert(); game.claimDeadVrf(dave, refs);
+            vm.expectRevert(); game.claimDeadVrf(daveId, refs);
         }
         (,,,,,uint256 left) = _state();
         assertEq(left, 0);
@@ -357,8 +363,9 @@ contract DeadVrfEndingTest is DeployProtocol {
         game.mineFlip(); // final sweep
         uint256[] memory one = new uint256[](1);
         one[0] = _ref(1, TLVL | (uint24(1) << 23), davePos);
+        uint32 daveId = game.walletIdOf(dave);
         vm.expectRevert();
-        game.claimDeadVrf(dave, one);
+        game.claimDeadVrf(daveId, one);
     }
 
     /// @dev Both endings resolve an unrolled closed batch at the terminal 100% rate.
@@ -503,7 +510,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         vm.deal(buyer, 2 ether);
         vm.prank(buyer);
         game.purchase{value: 1 ether}(
-            buyer, 0, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
+            0, 0, BoxOrderLib.boCustom(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         assertFalse(game.livenessTriggered(), "small box buy did not meet the pool target");
         _mineMiddayRequest(buyer);
@@ -545,7 +552,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         address buyer = makeAddr("stall-buyer");
         vm.deal(buyer, 10 ether);
         vm.prank(buyer);
-        game.purchase{value: 2 ether}(buyer, 0, BoxOrderLib.boCustom(2 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: 2 ether}(0, 0, BoxOrderLib.boCustom(2 ether), bytes32(0), MintPaymentKind.DirectEth, false);
 
         MockVRFCoordinator fresh = new MockVRFCoordinator();
         uint256 sub = fresh.createSubscription();
@@ -620,7 +627,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         vm.deal(donor, 1 ether);
         vm.prank(donor);
         game.purchase{value: 0.5 ether}(
-            donor, 0, BoxOrderLib.boCustom(0.5 ether), bytes32(0), MintPaymentKind.DirectEth, false
+            0, 0, BoxOrderLib.boCustom(0.5 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         assertFalse(game.advanceDue(), "a creditless caller has no mid-day request below the threshold");
         mockFeed.setUpdatedAt(block.timestamp); // the credit charge prices off a fresh feed

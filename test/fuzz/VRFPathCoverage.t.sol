@@ -159,7 +159,7 @@ contract VRFPathCoverage is DeployProtocol {
         vm.deal(player, 100 ether);
         vm.prank(player);
         game.purchase{value: lootboxAmount + 0.01 ether}(
-            player, 400, BoxOrderLib.boCustomFloor(lootboxAmount), bytes32(0), MintPaymentKind.DirectEth, false
+            0, 400, BoxOrderLib.boCustomFloor(lootboxAmount), bytes32(0), MintPaymentKind.DirectEth, false
         );
     }
 

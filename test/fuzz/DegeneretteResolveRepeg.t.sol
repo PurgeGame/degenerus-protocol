@@ -168,7 +168,7 @@ contract DegeneretteResolveRepeg is DeployProtocol {
     {
         uint256 ethValue = currency == CURRENCY_ETH ? uint256(perTicket) * spins : 0;
         vm.prank(player);
-        game.placeDegeneretteBet{value: ethValue}(address(0), currency, perTicket, spins, uint8(ticket & 7));
+        game.placeDegeneretteBet{value: ethValue}(0, currency, perTicket, spins, uint8(ticket & 7));
         betId = DQ.lastBetId(vm, address(game), 1);
     }
 

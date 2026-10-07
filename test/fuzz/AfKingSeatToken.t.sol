@@ -1,49 +1,25 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
-import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {SeatFixture} from "./SeatConsumption.t.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {AFKingSubscriptionToken} from "../../contracts/AFKingSubscriptionToken.sol";
-import {GameAfkingModule} from "../../contracts/modules/GameAfkingModule.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
+import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
-/// @title AfKingSeatToken — integration tests for the AFKing seat ERC721
-///        (sub <=> seat): the pass-purchase seat latch (whale
-///        module -> mintPacked_ bit 154, read back through mintPackedFor),
-///        immediate buyer minting, the subscribe coin gate, the seat lock
-///        (an encumbered holder's last-seat transfer reverts SeatInUse until
-///        manual unsub; an eviction forfeits the seat to the vault via
-///        reclaimSeat), and the subscriberCount/subInfo views. Real
-///        protocol deploy — the token sits at the predicted AFKING_SUB_TOKEN
-///        address; SDGNRS holds serial 1 from construction and the vault
-///        holds a 999-seat claim-rights allowance, never tokens.
-contract AfKingSeatToken is DeployProtocol {
-    error RngLocked();
-    error NotVaultOwner();
-
-    uint256 private _lastFulfilledReqId;
-
+/// @title AfKingSeatToken — integration tests for the AFKing seat ERC721 on a real deploy:
+///        the pass-purchase seat latch (whale module -> mintPacked_ SEAT_CLAIMED, read back
+///        through mintPackedFor; per account, a smurf's seat minted to its owner), immediate
+///        buyer minting, the subscribe seat burn, the vault mint and restyle surface, the
+///        cancel tombstone and its reclaim, and the RNG freeze window. The token sits at the
+///        predicted AFKING_SUB_TOKEN address; SDGNRS holds serial 1 and the vault serial 2.
+contract AfKingSeatToken is SeatFixture {
     function setUp() public {
-        _deployProtocol();
-        vm.warp(vm.getBlockTimestamp() + 1 days);
+        _setUpSeats();
     }
 
-    // ──────────────────────────────────────────────────────────────────────
-    // Helpers
-    // ──────────────────────────────────────────────────────────────────────
-
-    function _fundPool(address who, uint256 amount) internal {
-        vm.deal(address(this), amount);
-        game.depositAfkingFunding{value: amount}(who);
-    }
-
-    /// @dev Grant seat + fund + subscribe (self, lootbox mode, qty 1).
-    ///      Returns the seat's serial (0 if `who` already held one).
-    function _seatAndSubscribe(address who) internal returns (uint256 tokenId) {
-        tokenId = _grantSeat(who);
-        _fundPool(who, 1 ether);
-        vm.prank(who);
-        game.subscribe(address(0), false, false, 1, address(0));
+    function _isEligible(address who) internal view returns (bool) {
+        return (game.mintPackedFor(who) >> BitPackingLib.SEAT_CLAIMED_SHIFT) & 1 == 1;
     }
 
     /// @dev Enter the RNG freeze window: fresh day + advance requests VRF.
@@ -58,72 +34,55 @@ contract AfKingSeatToken is DeployProtocol {
         assertGt(mockVRF.lastRequestId(), beforeRequest, "fresh request opened");
     }
 
-    /// @dev Complete a full day: advance -> VRF fulfill -> drain to unlock.
-    function _completeDay(uint256 vrfWord) internal {
-        _finishReadConsumers();
-        vm.warp(vm.getBlockTimestamp() + 1 days);
-        game.mineFlip();
-        uint256 reqId = mockVRF.lastRequestId();
-        if (reqId != _lastFulfilledReqId && reqId > 0) {
-            mockVRF.fulfillRandomWords(reqId, vrfWord);
-            _lastFulfilledReqId = reqId;
-        }
-        for (uint256 i = 0; i < 50; i++) {
-            if (!game.rngLocked()) break;
-            game.mineFlip();
-        }
-        _finishReadConsumers();
-    }
-
-    function _isActive(address who) internal view returns (bool active) {
-        (active, , , ) = game.subInfo(who);
-    }
-
-    function _isEligible(address who) internal view returns (bool) {
-        return (game.mintPackedFor(who) >> BitPackingLib.SEAT_CLAIMED_SHIFT) & 1 == 1;
-    }
-
     // ──────────────────────────────────────────────────────────────────────
-    // Deploy seeding & the coin gate
+    // Deploy seeding & the seat burn
     // ──────────────────────────────────────────────────────────────────────
 
-    function testConstructionSeatsAndVaultAllowance() public view {
+    function testConstructionSeats() public view {
         assertEq(afkingSubToken.totalSupply(), 2, "the two protocol seats at deploy");
         assertEq(afkingSubToken.ownerOf(1), address(sdgnrs), "serial 1 -> SDGNRS");
         assertEq(afkingSubToken.ownerOf(2), address(vault), "serial 2 -> VAULT");
         assertEq(afkingSubToken.balanceOf(address(sdgnrs)), 1, "sdgnrs seat");
         assertEq(afkingSubToken.balanceOf(address(vault)), 1, "vault seat");
-        assertEq(afkingSubToken.vaultGranted(), 0, "no vault-tranche seats minted at deploy");
+        assertEq(afkingSubToken.nextSerial(), 3, "no seat minted past the construction pair");
+        assertEq(afkingSubToken.freeClaims(), 0, "free tranche untouched at deploy");
+        assertTrue(_isEligible(address(sdgnrs)) && _isEligible(address(vault)), "construction seats latched");
     }
 
     function testProtocolSelfSubsActiveViaIdentityCarve() public view {
-        // Both self-subscribed at construction, BEFORE the token existed in
-        // the deploy order — the subscribe gate's identity carve covers them;
-        // the token's constructor then seats both for real (serials 1 and 2).
-        assertTrue(_isActive(address(vault)), "vault self-sub active");
-        assertTrue(_isActive(address(sdgnrs)), "sdgnrs self-sub active");
-        assertEq(game.subscriberCount(), 2, "exactly the two protocol subs");
+        // Both self-subscribed at construction, BEFORE the token existed in the
+        // deploy order — the exemption covers them and burns nothing; the token's
+        // constructor then seats both for real (serials 1 and 2).
+        assertTrue(_active(address(vault)), "vault self-sub active");
+        assertTrue(_active(address(sdgnrs)), "sdgnrs self-sub active");
+        assertEq(game.subscriberSetLength(), 2, "exactly the two protocol subs");
     }
 
-    function testSubscribeWithoutSeatRevertsNoCoin() public {
+    /// @notice A new run must name a seat its payee holds: naming none (serial 0) reverts.
+    function testSubscribeWithoutSeatRevertsInvalidToken() public {
         address player = makeAddr("seatless");
-        _fundPool(player, 1 ether);
+        vm.deal(player, 1 ether);
         vm.prank(player);
-        vm.expectRevert(GameAfkingModule.NoCoin.selector);
-        game.subscribe(address(0), false, false, 1, address(0));
+        vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
+        game.subscribe{value: SUB_FUND}(0, false, false, 1, 0, 0);
+        assertEq(game.subscriberSetLength(), 2, "nothing entered the set");
     }
 
     function testSubscribeWithSeatSucceeds() public {
         address player = makeAddr("seated");
-        _seatAndSubscribe(player);
+        uint256 seat = _giveSeat(player);
+        _subscribe(player, 0, seat);
 
-        (bool active, uint8 qty, uint24 startDay, uint24 coveredDay) = game
-            .subInfo(player);
-        assertTrue(active, "sub active");
-        assertEq(qty, 1, "daily quantity stored");
+        uint32 id = game.walletIdOf(player);
+        uint256 w = _subWord(id);
+        assertTrue(_active(player), "sub active");
+        assertEq(uint8(w), 1, "daily quantity stored");
+        uint24 startDay = uint24(w >> 128);
+        uint24 coveredDay = uint24(w >> 104);
         assertGt(startDay, 0, "activation day stamped");
         assertGe(coveredDay, startDay, "funded-through >= activation day");
-        assertEq(game.subscriberCount(), 3, "ring grew by one");
+        assertEq(game.subscriberSetLength(), 3, "set grew by one");
+        assertEq(afkingSubToken.balanceOf(player), 0, "the seat was burned");
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -134,20 +93,20 @@ contract AfKingSeatToken is DeployProtocol {
         address buyer = makeAddr("lazy-buyer");
         assertFalse(_isEligible(buyer), "fresh address unlatched");
 
-        vm.deal(buyer, 0.24 ether);
+        vm.deal(buyer, 1 ether);
         vm.prank(buyer);
-        game.purchaseLazyPass{value: 0.24 ether}(buyer, bytes32(0));
-        assertTrue(_isEligible(buyer), "pass purchase latches bit 154");
+        game.purchaseLazyPass{value: 0.24 ether}(0, bytes32(0));
+        assertTrue(_isEligible(buyer), "pass purchase latches SEAT_CLAIMED");
         // The seat ARRIVES with the pass -- no separate claim step.
         assertEq(afkingSubToken.balanceOf(buyer), 1, "pass purchase mints the seat");
         assertEq(afkingSubToken.freeClaims(), 1, "free-tranche accounting");
 
-        // Serials are monotonic with no burn path, so the freshest one is the buyer's.
+        // No burn has happened yet, so the freshest serial is the buyer's.
         uint256 id = uint256(afkingSubToken.nextSerial()) - 1;
         assertEq(afkingSubToken.ownerOf(id), buyer, "buyer owns the minted seat");
 
         // Default art is deterministic in (recipient, serial) -- no entropy is read.
-        uint256 seed = uint256(keccak256(abi.encode(buyer, uint16(id))));
+        uint256 seed = uint256(keccak256(abi.encode(buyer, uint32(id))));
         (uint8 s, uint24 bg, uint24 tr) = afkingSubToken.seatTraits(id);
         assertEq(s, uint8(seed & 31), "default symbol is seeded, not chosen");
         assertEq(bg, uint24((seed >> 8) & 0xFFFFFF), "default background is seeded");
@@ -175,27 +134,26 @@ contract AfKingSeatToken is DeployProtocol {
         vm.expectRevert(AFKingSubscriptionToken.NotAuthorized.selector);
         afkingSubToken.setSeatTraits(id, 1, 1, 1);
 
-        // The full credential path: pass -> seat -> subscribed.
-        _fundPool(buyer, 1 ether);
-        vm.prank(buyer);
-        game.subscribe(address(0), false, false, 1, address(0));
-        assertTrue(_isActive(buyer), "seat is the sole afking credential");
+        // The full credential path: pass -> seat -> subscribed, burning that seat.
+        _subscribe(buyer, 0, id);
+        assertTrue(_active(buyer), "the pass seat started the run");
+        assertEq(afkingSubToken.balanceOf(buyer), 0, "and was burned by it");
     }
 
     function testWhalePassLatchesEligibilityOncePerLifetime() public {
         address buyer = makeAddr("whale-buyer");
         vm.deal(buyer, 3 ether);
         vm.prank(buyer);
-        game.purchaseWhalePass{value: 2.4 ether}(buyer, 1, bytes32(0));
+        game.purchaseWhalePass{value: 2.4 ether}(0, 1, bytes32(0));
         assertTrue(_isEligible(buyer), "whale purchase latches too");
         assertEq(afkingSubToken.balanceOf(buyer), 1, "whale purchase mints the seat");
 
         // A second pass purchase (deity — a different trigger site) re-runs the
-        // already-set latch but can never mint a second free seat: one per address,
+        // already-set latch but can never mint a second free seat: one per account,
         // lifetime, across every trigger. The repeat path pays only the bit test.
         vm.deal(buyer, 24 ether);
         vm.prank(buyer);
-        game.purchaseDeityPass{value: 24 ether}(buyer, 5, bytes32(0));
+        game.purchaseDeityPass{value: 24 ether}(0, 5, bytes32(0));
         assertEq(afkingSubToken.balanceOf(buyer), 1, "still exactly one seat");
         // The deity purchase also confers a pass on the buyer's AFFILIATE, which defaults
         // to the VAULT when unreferred. A conferred pass is not a purchase, so it mints no
@@ -213,7 +171,7 @@ contract AfKingSeatToken is DeployProtocol {
         vm.deal(buyer, 24 ether);
 
         vm.prank(buyer);
-        game.purchaseDeityPass{value: 24 ether}(buyer, 7, bytes32(0));
+        game.purchaseDeityPass{value: 24 ether}(0, 7, bytes32(0));
 
         assertEq(afkingSubToken.balanceOf(buyer), 1, "deity buyer receives a seat");
         assertEq(
@@ -228,23 +186,60 @@ contract AfKingSeatToken is DeployProtocol {
         );
     }
 
+    /// @notice M13: the latch is per account. A smurf's pass mints its seat to the owner (the
+    ///         payee) and latches SEAT_CLAIMED on the smurf's word; the owner's own first pass
+    ///         still mints the owner a second free seat.
+    function testSmurfPassSeatGoesToTheOwnerWithAPerAccountLatch() public {
+        address owner = makeAddr("smurf-pass-owner");
+        vm.deal(owner, 10 ether);
+        // The owner registers through a plain ticket purchase (no pass, no seat).
+        vm.prank(owner);
+        game.purchase{value: 0.01 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        assertEq(afkingSubToken.balanceOf(owner), 0);
+        (uint32 smurfId, address smurfKey) = _createSmurf(owner);
+
+        vm.prank(owner);
+        game.purchaseLazyPass{value: 0.24 ether}(smurfId, bytes32(0));
+        assertEq(afkingSubToken.balanceOf(owner), 1, "the smurf's seat mints to the owner");
+        assertEq(afkingSubToken.balanceOf(smurfKey), 0, "never to the smurf key");
+        assertTrue(_isEligible(smurfKey), "latch on the smurf's word");
+        assertFalse(_isEligible(owner), "owner's own latch untouched");
+        assertEq(afkingSubToken.freeClaims(), 1);
+
+        vm.prank(owner);
+        game.purchaseLazyPass{value: 0.24 ether}(0, bytes32(0));
+        assertEq(afkingSubToken.balanceOf(owner), 2, "owner's own pass mints a second free seat");
+        assertTrue(_isEligible(owner), "owner latched now");
+        assertEq(afkingSubToken.freeClaims(), 2);
+    }
+
     // ──────────────────────────────────────────────────────────────────────
-    // Vault grant surface
+    // Vault mint surface
     // ──────────────────────────────────────────────────────────────────────
 
     function testVaultMintLockedUntilFreeTrancheFills() public {
-        // Token-side: only the vault may mint from its tranche, and that stays locked
-        // while the free tranche is open (0 of 1,000 minted here), so paid seats can
-        // never crowd out free ones.
+        // Token-side: only the vault may mint, and that stays locked while the free tranche
+        // is open (0 of 1,000 minted here), so paid seats can never crowd out free ones.
         vm.prank(address(vault));
         vm.expectRevert(AFKingSubscriptionToken.FreeTrancheOpen.selector);
         afkingSubToken.vaultMintSeats(makeAddr("grantee"), 1);
+        // Through the vault the token's error bubbles.
+        vm.prank(ContractAddresses.CREATOR);
+        vm.expectRevert(AFKingSubscriptionToken.FreeTrancheOpen.selector);
+        vault.afkingSeatMint(makeAddr("grantee"), 1);
     }
 
     function testVaultSeatMintIsOwnerGated() public {
         vm.prank(makeAddr("rando"));
         vm.expectRevert(NotVaultOwner.selector);
         vault.afkingSeatMint(makeAddr("grantee"), 1);
+    }
+
+    function testVaultSeatTransferIsOwnerGated() public {
+        vm.prank(makeAddr("rando"));
+        vm.expectRevert(NotVaultOwner.selector);
+        vault.afkingSeatTransfer(2, makeAddr("nope"));
+        assertEq(afkingSubToken.ownerOf(2), address(vault));
     }
 
     function testVaultSeatRestyleIsOwnerGated() public {
@@ -275,185 +270,85 @@ contract AfKingSeatToken is DeployProtocol {
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // Seat lock: last-seat transfers blocked while subscribed
+    // Cancel tombstone and reclaim; re-subscribe
     // ──────────────────────────────────────────────────────────────────────
 
-    function testLastSeatTransferBlockedWhileSubbed() public {
-        address player = makeAddr("seller");
-        address buyer = makeAddr("buyer");
-        uint256 id = _seatAndSubscribe(player);
-        assertTrue(_isActive(player), "precondition: active");
+    /// @notice A cancel burns nothing and leaves a tombstone in the set; the next process pass
+    ///         reclaims it.
+    function testCancelTombstoneThenPassReclaims() public {
+        address player = makeAddr("canceller");
+        uint256 seat = _giveSeat(player);
+        _subscribe(player, 0, seat);
+        uint256 live = afkingSubToken.totalSupply();
 
         vm.prank(player);
-        vm.expectRevert(AFKingSubscriptionToken.SeatInUse.selector);
-        afkingSubToken.transferFrom(player, buyer, id);
-        assertTrue(_isActive(player), "sub untouched by the blocked transfer");
-        assertEq(afkingSubToken.balanceOf(player), 1, "seat stays put");
+        game.subscribe(0, false, false, 0, 0, 0);
+        assertFalse(_active(player), "cancel tombstone reads inactive");
+        assertEq(afkingSubToken.totalSupply(), live, "a cancel burns nothing");
+
+        // The inert set slot lingers until the next process pass reclaims it.
+        assertEq(game.subscriberSetLength(), 3, "tombstone still in the set");
+        _driveUntilOut(game.walletIdOf(player));
+        assertEq(game.subscriberSetLength(), 2, "tombstone reclaimed by the pass");
     }
 
-    function testCancelThenSellReleasesSeat() public {
-        address player = makeAddr("seller2");
-        address buyer = makeAddr("buyer2");
-        uint256 id = _seatAndSubscribe(player);
-
-        // Manual unsub: the cancel tombstone reads inactive immediately, so the
-        // seat is sellable in the very next tx (before any reclaim).
-        vm.prank(player);
-        game.subscribe(address(0), false, false, 0, address(0));
-        assertFalse(_isActive(player), "cancel tombstone reads inactive");
-
-        vm.prank(player);
-        afkingSubToken.transferFrom(player, buyer, id);
-        assertEq(afkingSubToken.ownerOf(id), buyer, "seat sold after manual unsub");
-
-        // The inert ring slot lingers until the next process pass reclaims it.
-        assertEq(game.subscriberCount(), 3, "tombstone still in ring");
-        _completeDay(uint256(keccak256("reclaim-day")));
-        assertEq(game.subscriberCount(), 2, "tombstone reclaimed by the drain");
-    }
-
-    function testPartialTransferAllowedWhileSubbed() public {
-        address player = makeAddr("twoseats");
-        address donor = makeAddr("seat-donor");
-        address buyer = makeAddr("buyer3");
-        _seatAndSubscribe(player);
-
-        // Second seat arrives on the market: an unsubscribed holder sells theirs.
-        uint256 donorId = _grantSeat(donor);
-        vm.prank(donor);
-        afkingSubToken.transferFrom(donor, player, donorId);
-        assertEq(afkingSubToken.balanceOf(player), 2);
-
-        vm.prank(player);
-        afkingSubToken.transferFrom(player, buyer, donorId);
-        assertTrue(_isActive(player), "sub survives while >= 1 seat held");
-    }
-
-    function testReSubscribeAfterSeatRoundTrip() public {
+    /// @notice A re-subscribe after a cancel is a new run: it needs another seat (the first
+    ///         was burned) and burns it.
+    function testReSubscribeAfterCancelBurnsAnotherSeat() public {
         address player = makeAddr("returner");
-        address parkAddr = makeAddr("park");
-        uint256 id = _seatAndSubscribe(player);
-
+        uint256 first = _giveSeat(player);
+        _subscribe(player, 0, first);
         vm.prank(player);
-        game.subscribe(address(0), false, false, 0, address(0)); // manual unsub first
+        game.subscribe(0, false, false, 0, 0, 0);
+
+        // The burned seat is gone for good.
+        vm.deal(player, 1 ether);
         vm.prank(player);
-        afkingSubToken.transferFrom(player, parkAddr, id); // now the seat can leave
+        vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
+        game.subscribe{value: SUB_FUND}(0, false, false, 1, 0, first);
 
-        vm.prank(parkAddr);
-        afkingSubToken.transferFrom(parkAddr, player, id); // seat comes back
-        _fundPool(player, 1 ether);
-        vm.prank(player);
-        game.subscribe(address(0), false, false, 1, address(0));
-        assertTrue(_isActive(player), "re-subscribe works with the seat back");
-    }
-
-    // ──────────────────────────────────────────────────────────────────────
-    // Eviction forfeit: trapped seat, blocked re-subscribe, vault reclaim
-    // ──────────────────────────────────────────────────────────────────────
-
-    /// @dev Drive `who` into the funding-kill: drain their afking funding and
-    ///      complete days until the STAGE evicts (the no-orphan guard can
-    ///      defer the kill a cycle while a stamped box awaits its open).
-    function _evict(address who, string memory seedTag) internal {
-        for (uint256 i; i < 5 && _isActive(who); i++) {
-            uint256 rem = game.afkingFundingOf(who);
-            if (rem > 0) {
-                vm.prank(who);
-                game.withdrawAfkingFunding(rem);
-            }
-            _completeDay(uint256(keccak256(abi.encode(seedTag, i))) | 1);
-        }
-        assertFalse(_isActive(who), "fixture: the funding-kill evicted the sub");
-    }
-
-    /// @notice End-to-end forfeit: an evicted sub's last seat is trapped
-    ///         (SeatInUse), a fresh re-subscribe reverts SeatForfeited, anyone
-    ///         collects the forfeit to the vault, the vault owner disposes of
-    ///         the repossession, and the settled evictee re-enters with a
-    ///         fresh seat.
-    function testEvictionForfeitEndToEnd() public {
-        address p = makeAddr("evictee");
-        address flipper = makeAddr("repo-buyer");
-        uint256 id = _seatAndSubscribe(p);
-
-        _evict(p, "evict-e2e");
-
-        // Trapped: the evicted holder cannot move the seat...
-        vm.prank(p);
-        vm.expectRevert(AFKingSubscriptionToken.SeatInUse.selector);
-        afkingSubToken.transferFrom(p, flipper, id);
-        // ...and cannot re-subscribe past the forfeit.
-        _fundPool(p, 1 ether);
-        vm.prank(p);
-        vm.expectRevert(GameAfkingModule.SeatForfeited.selector);
-        game.subscribe(address(0), false, false, 1, address(0));
-
-        // Permissionless collection to the vault.
-        afkingSubToken.reclaimSeat(id);
-        assertEq(afkingSubToken.ownerOf(id), address(vault), "seat repossessed");
-        assertEq(afkingSubToken.balanceOf(p), 0);
-
-        // A second collection has nothing to take.
-        vm.expectRevert(AFKingSubscriptionToken.NotEvicted.selector);
-        afkingSubToken.reclaimSeat(id);
-
-        // Vault-owner disposal (CREATOR holds the DGVE majority); the rando
-        // arm proves the gate.
-        vm.prank(makeAddr("rando"));
-        vm.expectRevert(NotVaultOwner.selector);
-        vault.afkingSeatTransfer(id, flipper);
-        vm.prank(ContractAddresses.CREATOR);
-        vault.afkingSeatTransfer(id, flipper);
-        assertEq(afkingSubToken.ownerOf(id), flipper, "vault re-sold the seat");
-
-        // Settled: with a seat back in hand the evictee subscribes again.
-        vm.prank(flipper);
-        afkingSubToken.transferFrom(flipper, p, id);
-        vm.prank(p);
-        game.subscribe(address(0), false, false, 1, address(0));
-        assertTrue(_isActive(p), "forfeit settled -> re-subscribe works");
-    }
-
-    /// @notice The vault cannot dispose of its LAST seat: the construction
-    ///         seat's permanent self-subscription keeps the seat lock binding
-    ///         on the vault as `from`.
-    function testVaultCannotDisposeConstructionSeat() public {
-        // Serial 2 is the vault's only seat at deploy.
-        vm.prank(ContractAddresses.CREATOR);
-        vm.expectRevert(AFKingSubscriptionToken.SeatInUse.selector);
-        vault.afkingSeatTransfer(2, makeAddr("nope"));
+        // A seat bought on the market starts the new run.
+        address seller = makeAddr("seat-seller");
+        uint256 second = _giveSeat(seller);
+        vm.prank(seller);
+        afkingSubToken.transferFrom(seller, player, second);
+        _subscribe(player, 0, second);
+        assertTrue(_active(player), "re-subscribe works with another seat");
+        assertEq(afkingSubToken.balanceOf(player), 0, "and burned it");
     }
 
     // ──────────────────────────────────────────────────────────────────────
     // RNG freeze window
     // ──────────────────────────────────────────────────────────────────────
 
-    function testSeatFullyFrozenDuringRngLock() public {
+    /// @notice Inside the freeze window the subscriber set is frozen (a cancel reverts
+    ///         RngLocked) while seats move freely: the token never reads the Game.
+    function testSetFrozenButSeatsMoveDuringRngLock() public {
         address player = makeAddr("locked-seller");
         address buyer = makeAddr("locked-buyer");
-        uint256 id = _seatAndSubscribe(player);
+        uint256 seat = _giveSeat(player);
+        uint256 spare = _giveSeat(player);
+        _subscribe(player, 0, seat);
 
         _enterRngLock();
-        // The seat lock binds (still subscribed)...
-        vm.prank(player);
-        vm.expectRevert(AFKingSubscriptionToken.SeatInUse.selector);
-        afkingSubToken.transferFrom(player, buyer, id);
-        // ...and the escape hatch (manual cancel) is itself lock-gated, so the
-        // subscriber set — and the seat — stay frozen across [request -> unlock].
         vm.prank(player);
         vm.expectRevert(RngLocked.selector);
-        game.subscribe(address(0), false, false, 0, address(0));
-        assertTrue(_isActive(player), "sub untouched across the freeze window");
+        game.subscribe(0, false, false, 0, 0, 0);
+        assertTrue(_active(player), "sub untouched across the freeze window");
+
+        vm.prank(player);
+        afkingSubToken.transferFrom(player, buyer, spare);
+        assertEq(afkingSubToken.ownerOf(spare), buyer, "an active subscriber's last seat moves");
     }
 
     function testNonSubHolderTransfersFreelyDuringRngLock() public {
         address holder = makeAddr("plain-holder");
         address buyer = makeAddr("plain-buyer");
-        uint256 id = _grantSeat(holder); // holds a seat, never subscribed
+        uint256 id = _giveSeat(holder); // holds a seat, never subscribed
 
         _enterRngLock();
         vm.prank(holder);
-        afkingSubToken.transferFrom(holder, buyer, id); // subInfo.active false — never blocked
+        afkingSubToken.transferFrom(holder, buyer, id);
         assertEq(afkingSubToken.balanceOf(buyer), 1, "plain transfer unblocked");
     }
 
@@ -463,9 +358,7 @@ contract AfKingSeatToken is DeployProtocol {
 
     function testTokenURIRendersAgainstRealIcons() public {
         address buyer = makeAddr("art-buyer");
-        vm.prank(ContractAddresses.GAME);
-        afkingSubToken.mintSeatFor(buyer);
-        uint256 id = uint256(afkingSubToken.nextSerial()) - 1;
+        uint256 id = _giveSeat(buyer);
         vm.prank(buyer);
         afkingSubToken.setSeatTraits(id, 7, 0x1e1e2e, 0xffd700);
 

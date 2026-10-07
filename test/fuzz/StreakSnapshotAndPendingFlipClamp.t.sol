@@ -24,6 +24,25 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///   (uint16, slot 1 off9) directly, the same dormant value `beginAfking` snapshots; day anchors are left so
 ///   the decay branch stays inert. Test-only: ZERO contracts/*.sol mutation.
 contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
+
+    mapping(address => uint32) private _aidCache;
+
+    /// @dev Wallet ID of `a`, registering it when it holds none. Call before any `vm.prank`.
+    function _aid(address a) internal returns (uint32 id) {
+        id = _aidCache[a];
+        if (id == 0) {
+            id = game.walletIdOf(a);
+            if (id == 0) id = _giveWalletId(a);
+            _aidCache[a] = id;
+        }
+    }
+
+    /// @dev Wallet IDs of `a`, registering any that hold none.
+    function _aids(address[] memory a) internal returns (uint32[] memory ids) {
+        ids = new uint32[](a.length);
+        for (uint256 i; i < a.length; ++i) ids[i] = _aid(a[i]);
+    }
+
     // -------------------------------------------------------------------------
     // questPlayerState (DegenerusQuests slot 1) field offsets within the packed slot
     // -------------------------------------------------------------------------
@@ -176,7 +195,7 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
         // decay guard keeps the earned streak, and the earned streak rides the carried-in snapshot. The manual
         // state.streak is handed back EXACTLY the earned value — no floor-hack restore, no uint8 truncation.
         vm.prank(who);
-        game.subscribe(address(0), false, false, 0, address(0)); // explicit cancel -> finalizeAfking
+        game.subscribe(0, false, false, 0, 0, 0); // explicit cancel -> finalizeAfking
         assertEq(
             _manualStreakOf(who),
             earned,
@@ -250,7 +269,7 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
         assertEq(_pendingFlip24Of(p), PENDINGFLIP_CEILING, "non-vacuity: pendingFlip pinned at the ceiling");
 
         uint256 stakeBefore = coinflip.coinflipAmount(p);
-        game.claimAfkingFlip(_singleton(p)); // _settlePendingFlip: reads owed as uint256, zeroes the field, credits
+        game.claimAfkingFlip(_aids(_singleton(p))); // _settlePendingFlip: reads owed as uint256, zeroes the field, credits
         uint256 stakeAfter = coinflip.coinflipAmount(p);
 
         assertEq(stakeAfter - stakeBefore, PENDINGFLIP_CEILING * 1 ether, "settle credits exactly the clamped 16,777,215 whole FLIP (x 1e18)");
@@ -383,14 +402,14 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
     }
 
     function _subscribeLootbox(address who, uint8 q) internal {
-        _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (NoCoin without it)
+        uint256 seat = _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (a new run burns one seat)
         vm.prank(who);
-        game.subscribe(address(0), false, false, q, address(0)); // self, lootbox mode, no reinvest
+        game.subscribe(0, false, false, q, 0, seat); // self, lootbox mode, no reinvest
     }
 
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
-        game.depositAfkingFunding{value: amount}(who);
+        game.depositAfkingFunding{value: amount}(_aid(who));
     }
 
     function _singleton(address a) internal pure returns (address[] memory arr) {

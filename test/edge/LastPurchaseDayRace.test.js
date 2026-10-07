@@ -47,7 +47,7 @@ const BOOTSTRAP_PRIZE_POOL = eth(50);
 
 async function buyFullTickets(game, buyer, n, totalEth) {
   return game.connect(buyer).purchase(
-    ZERO_ADDRESS,
+    0,
     BigInt(n) * 400n,
     0n,
     ZERO_BYTES32,
@@ -61,7 +61,7 @@ async function heavyPurchases(game, buyers) {
     try {
       await game
         .connect(buyer)
-        .purchaseWhalePass(buyer.address, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
+        .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
     } catch {}
     await buyFullTickets(game, buyer, 500, 5);
   }

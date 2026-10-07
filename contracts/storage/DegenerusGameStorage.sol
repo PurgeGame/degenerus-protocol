@@ -337,6 +337,8 @@ abstract contract DegenerusGameStorage {
     error AlreadySwept();
     /// @notice Thrown when array-length arguments disagree.
     error LengthMismatch();
+    /// @notice Thrown when the caller may not act for the requested account.
+    error NotApproved();
 
     // =========================================================================
     // SLOT 0: Timing, FSM, Counters, Flags, Buffer, Freeze
@@ -1518,7 +1520,20 @@ abstract contract DegenerusGameStorage {
     /// @notice Emitted exactly once per wallet ID, when the wallet is registered.
     event WalletRegistered(uint32 indexed id, address indexed owner);
 
-    /// @dev The only writer of a wallet's identity. Returns the existing ID or allocates the
+    /// @notice Emitted once per smurf account, beside its WalletRegistered.
+    /// @param ownerId The owning wallet's ID (the smurf's payee).
+    /// @param smurfId The smurf account's wallet ID.
+    event SmurfCreated(uint32 indexed ownerId, uint32 indexed smurfId);
+
+    /// @dev Domain tag of the smurf key derivation.
+    bytes32 internal constant SMURF_KEY_TAG = keccak256("degenerus.smurf");
+
+    /// @dev Account key of smurf `id` owned by `owner`: a hash address nobody holds a key for.
+    function _smurfKey(address owner, uint32 id) internal pure returns (address) {
+        return address(uint160(uint256(keccak256(abi.encode(SMURF_KEY_TAG, owner, id)))));
+    }
+
+    /// @dev With createSmurf, the only writer of a wallet's identity. Returns the existing ID or allocates the
     ///      next table position, publishing both directions (the table element and mintPacked_
     ///      bits 224..255) in the same call, together with the mint word as it now stands.
     ///      Callers register before anything else in the transaction loads `owner`'s mint word.
@@ -1588,10 +1603,75 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Payout recipient for a wallet-table element: its own key, or for a smurf account the
     ///      owner's key. Every ETH/stETH/token payout edge that holds an ID resolves through here.
+    ///      Never reverts: createSmurf is the only writer of the owner lane, and it points the
+    ///      lane at an allocated ordinary wallet.
     function _payee(uint256 element) internal view returns (address) {
         uint256 owner = (element >> 160) & 0xffffffff;
         if (owner != 0) element = _walletElement(uint32(owner));
         return address(uint160(element));
+    }
+
+    /// @dev Payout recipient for account `key` from its own mint word: the key itself unless the
+    ///      word carries the smurf flag, else the owner's key (one table read, smurfs only).
+    function _payeeOfWord(address key, uint256 packed) internal view returns (address) {
+        if ((packed >> BitPackingLib.SMURF_FLAG_SHIFT) & 1 == 0) return key;
+        return _payee(_walletElement(uint32(packed >> BitPackingLib.WALLET_ID_SHIFT)));
+    }
+
+    /// @dev Payout recipient for account `key`, read from its mint word.
+    function _payeeOf(address key) internal view returns (address) {
+        return _payeeOfWord(key, mintPacked_[key]);
+    }
+
+    /// @dev Revert `E` unless `id` is an allocated, nonzero wallet ID.
+    function _requireAllocated(uint32 id) internal view {
+        if (id == 0 || id >= wallets.length) revert E();
+    }
+
+    /// @dev Key and payee of the allocated account `id` (reverts `E` otherwise).
+    function _accountKeys(uint32 id) internal view returns (address key, address payee) {
+        _requireAllocated(id);
+        uint256 element = _walletElement(id);
+        key = address(uint160(element));
+        payee = _payee(element);
+    }
+
+    /// @dev Resolve the allocated account `id` for `caller`: its key, its payee and whether
+    ///      `caller` may act for it — the key itself, a smurf's owner, or an operator approved for
+    ///      `id`. A smurf's owner proves itself by the key derivation (one hash, no owner-element
+    ///      read: the owner is then the payee); any other caller reads the payee. Reverts `E`
+    ///      for `id == 0` or an unallocated `id`.
+    function _account(uint32 id, address caller)
+        internal
+        view
+        returns (address key, address payee, bool authorized)
+    {
+        _requireAllocated(id);
+        uint256 element = _walletElement(id);
+        key = address(uint160(element));
+        if ((element >> 160) & 0xffffffff != 0 && _smurfKey(caller, id) == key) {
+            return (key, caller, true);
+        }
+        payee = _payee(element);
+        authorized = payee == caller || operatorApprovals[id][caller];
+    }
+
+    /// @dev The account an authorized entry point acts for: the caller for `id == 0`, else the
+    ///      allocated account `id`, which the caller must be authorized for (see `_account`).
+    function _resolveAccount(uint32 id) internal view returns (address key, address payee) {
+        if (id == 0) return (msg.sender, msg.sender);
+        bool authorized;
+        (key, payee, authorized) = _account(id, msg.sender);
+        if (!authorized) revert NotApproved();
+    }
+
+    /// @dev The account a permissionless door credits: the caller (which must hold an ID) for
+    ///      `id == 0`, else the allocated account `id`. No authorization: the door only pays the
+    ///      account (value to its payee).
+    function _creditAccount(uint32 id) internal view returns (uint32 accountId, address key, address payee) {
+        if (id == 0) return (_requireWalletId(msg.sender), msg.sender, msg.sender);
+        (key, payee) = _accountKeys(id);
+        accountId = id;
     }
 
     // =========================================================================
@@ -2586,8 +2666,8 @@ abstract contract DegenerusGameStorage {
     // Operator Approvals
     // =========================================================================
 
-    /// @dev owner => operator => approved (game-wide delegated control).
-    mapping(address => mapping(address => bool)) internal operatorApprovals;
+    /// @dev account wallet ID => operator => approved (game-wide delegated control).
+    mapping(uint32 => mapping(address => bool)) internal operatorApprovals;
 
     // =========================================================================
     // Affiliate DGNRS Claims
@@ -2784,10 +2864,6 @@ abstract contract DegenerusGameStorage {
     ///         the same word on PassActivated, and curse writes carry their absolute
     ///         field on CurseChanged. Cache-only affiliate refreshes are unlogged;
     ///         indexers should derive current affiliate points or call the score view.
-    ///         Another exception is the SEAT_ENCUMBERED bit, set on subscribe
-    ///         and cleared on cancel (both beside SubscriptionUpdated) and cleared by
-    ///         clearSeatEncumbrance (beside the token's SeatReclaimed). A folder
-    ///         tracking that bit reads those; the next mint-lane log re-syncs it.
     /// @param player The player whose mintPacked_ record was written.
     /// @param packedAfter The full mintPacked_ word after the write (BitPackingLib layout).
     event MintRecorded(address indexed player, uint256 packedAfter);
@@ -4099,9 +4175,10 @@ abstract contract DegenerusGameStorage {
     uint256[] internal _subscribers;
 
     /// @dev The two uint16 cursors + the uint24 afking reset-day pack into ONE slot
-    ///      (16 + 16 + 24 = 56 bits). The cursors index `_subscribers` (the active set
-    ///      is capped at 2005 — GameAfkingModule.SUBSCRIBER_CAP, well within uint16) and
-    ///      are drained in chunks across advanceGame / router calls.
+    ///      (16 + 16 + 24 = 56 bits). The cursors index `_subscribers` (every entry but the
+    ///      two exempt protocol subscriptions burned an AFKing seat, and live seats plus set
+    ///      entries never exceed the token's 2,000 cap, so the set stays well within uint16)
+    ///      and are drained in chunks across advanceGame / router calls.
     /// @dev Process-STAGE cursor: the pre-RNG stamp pass position.
     uint16 internal _subCursor;
 
@@ -4144,8 +4221,7 @@ abstract contract DegenerusGameStorage {
     ///      one add per STAGE chunk — and the box open the ONLY per-box decrement). The open worker
     ///      early-outs on zero, making a drained-ring "any work?" check O(1) instead of a full
     ///      ring scan; a full scan that finds no openable stamp clears the count. Packs into the
-    ///      cursor slot (warm for both writers); uint16 covers the 2005-subscriber cap
-    ///      (GameAfkingModule.SUBSCRIBER_CAP).
+    ///      cursor slot (warm for both writers); uint16 covers the seat-bounded subscriber set.
     uint16 internal _pendingBoxCount;
 
     /// @dev Box purchase queue per physical RNG buffer (keys 0/1): one complete entry word per

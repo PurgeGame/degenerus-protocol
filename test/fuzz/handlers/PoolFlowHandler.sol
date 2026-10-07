@@ -101,7 +101,7 @@ contract PoolFlowHandler is Test {
         if (sent > currentActor.balance) return;
 
         vm.prank(currentActor);
-        try game.purchase{value: sent}(currentActor, qty, BoxOrderLib.boCustomFloor(boxAmt), bytes32(0), MintPaymentKind.DirectEth, false) {
+        try game.purchase{value: sent}(0, qty, BoxOrderLib.boCustomFloor(boxAmt), bytes32(0), MintPaymentKind.DirectEth, false) {
             success_buy++;
             ghost_realInflow += sent; // real ETH that crossed into the contract
         } catch {}
@@ -125,7 +125,7 @@ contract PoolFlowHandler is Test {
         uint256 gate = (priceWei * 400) / 400; // one whole ticket to satisfy the daily purchase gate
         if (gate != 0 && gate <= currentActor.balance) {
             vm.prank(currentActor);
-            try game.purchase{value: gate}(currentActor, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {
+            try game.purchase{value: gate}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {
                 ghost_realInflow += gate;
             } catch {}
         }
@@ -160,7 +160,7 @@ contract PoolFlowHandler is Test {
         calls_claim++;
         uint256 balBefore = currentActor.balance;
         vm.prank(currentActor);
-        try game.claimWinnings(currentActor) {
+        try game.claimWinnings(0) {
             success_claim++;
             if (currentActor.balance > balBefore) {
                 ghost_realOutflow += currentActor.balance - balBefore;

@@ -206,7 +206,7 @@ contract JackpotVariablePricingTest is CrapsPins {
             if (price != 6000) { assertTrue(vm.revertToState(root)); root = vm.snapshotState(); }
             flip.setCompLane(1_000_000);
             vm.warp(start - 1 days);
-            uint256 reservation = uint160(BOB) | (uint256(5) << 160) | (uint256(day) << 176)
+            uint256 reservation = uint256(_idFor(BOB)) | (uint256(5) << 160) | (uint256(day) << 176)
                 | (uint256(1) << 200) | (uint256(5) << 208);
             vm.prank(ContractAddresses.VAULT);
             assertEq(table.vaultComp(reservation), 8000, "unworded reservation uses the mean");
@@ -215,8 +215,9 @@ contract JackpotVariablePricingTest is CrapsPins {
             game.setMintHistory(ALICE, 0);
             vm.prank(ALICE); table.enterBonusBattle(5, 0, 1);
             assertEq(flip.burned(ALICE), price * 105 / 100);
+            uint256 compCode = uint256(_idFor(compPlayer)) | (uint256(5) << 176);
             vm.prank(ContractAddresses.VAULT);
-            assertEq(table.vaultComp(uint160(compPlayer) | (uint256(5) << 176)), price);
+            assertEq(table.vaultComp(compCode), price);
             assertEq(flip.compLane(), 1_000_000 - 8000 - price);
             assertEq(flip.burned(BOB), 0);
             assertEq(flip.burned(compPlayer), 0);

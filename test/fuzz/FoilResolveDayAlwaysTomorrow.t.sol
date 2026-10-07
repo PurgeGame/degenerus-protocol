@@ -100,7 +100,7 @@ contract FoilGenerationFreshRequest is DeployProtocol {
     function _buy(address buyer) private {
         vm.deal(buyer, 100 ether);
         vm.prank(buyer);
-        game.purchase{value: 50 ether}(buyer, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        game.purchase{value: 50 ether}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
     }
 
     function _assertQueuedForFreshRng(address buyer, uint24) private view {

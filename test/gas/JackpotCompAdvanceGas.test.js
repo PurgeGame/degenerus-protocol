@@ -154,7 +154,7 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
   }
   const recordedPool = ethers.parseEther(prevPoolEth);
   await setSlot(gameAddr, mapSlot(0n, poolRoot), recordedPool);
-  await (await game.connect(alice).purchase(ethers.ZeroAddress, 200n, 0n, ethers.ZeroHash, 0, false, {
+  await (await game.connect(alice).purchase(0, 200n, 0n, ethers.ZeroHash, 0, false, {
     value: ethers.parseEther("2"),
   })).wait();
   await advanceToNextDay();

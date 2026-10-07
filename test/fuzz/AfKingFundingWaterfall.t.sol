@@ -52,6 +52,19 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///      the deleted standalone-contract source-grep -> repointed to GameAfkingModule.sol. RE-DERIVED
 ///      every pinned slot via `forge inspect storage DegenerusGame`. Test-only: no contracts/*.sol mutated.
 contract AfKingFundingWaterfall is DeployProtocol {
+
+    mapping(address => uint32) private _aidCache;
+
+    /// @dev Wallet ID of `a`, registering it when it holds none. Call before any `vm.prank`.
+    function _aid(address a) internal returns (uint32 id) {
+        id = _aidCache[a];
+        if (id == 0) {
+            id = game.walletIdOf(a);
+            if (id == 0) id = _giveWalletId(a);
+            _aidCache[a] = id;
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`).
     // -------------------------------------------------------------------------
@@ -145,10 +158,13 @@ contract AfKingFundingWaterfall is DeployProtocol {
     function _approvedSourceSub(string memory sLabel, string memory mLabel) internal returns (address s, address m) {
         s = makeAddr(sLabel);
         m = makeAddr(mLabel);
+        uint32 sId = _aid(s);
+        _aid(m);
+        uint256 seat = _grantSeat(m);
         vm.prank(s);
-        game.setOperatorApproval(m, true); // S approves M -> fundingSource = S honored at subscribe
+        game.setOperatorApproval(0, m, true); // S approves M's key -> fundingSource = S honored at subscribe
         vm.prank(m);
-        game.subscribe(address(0), false, true, 1, s); // ticket mode, qty 1, source = S
+        game.subscribe(0, false, true, 1, sId, seat); // ticket mode, qty 1, source = S
     }
 
     /// @dev Per-day cost for qty `q` = mintPrice * q. Ticket mode.
@@ -161,8 +177,10 @@ contract AfKingFundingWaterfall is DeployProtocol {
     function _subscribeHealthy(string memory prefix, bool drainFirst) internal returns (address who) {
         who = makeAddr(string(abi.encodePacked(prefix, "p")));
         _grantDeityPass(who);
+        _aid(who);
+        uint256 seat = _grantSeat(who);
         vm.prank(who);
-        game.subscribe(address(0), drainFirst, true, 1, address(0)); // self, drainFirst, ticket mode, qty 1
+        game.subscribe(0, drainFirst, true, 1, 0, seat); // self, drainFirst, ticket mode, qty 1
     }
 
     /// @dev Prep an existing SUB-09 sub (VAULT/SDGNRS) to REACH the funding waterfall: re-subscribe it in
@@ -171,7 +189,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
     ///      left empty by the caller.
     function _prepExemptSub(address who) internal {
         vm.prank(who);
-        game.subscribe(address(0), /*drainFirst*/ true, /*useTickets*/ true, 1, address(0));
+        game.subscribe(0, /*drainFirst*/ true, /*useTickets*/ true, 1, 0, 0); // exempt: no seat burned
         _setClaimable(who, 1); // sentinel -> DirectEth
     }
 
@@ -179,7 +197,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
     function _fundPool(address who, uint256 amount) internal {
         if (amount == 0) return;
         vm.deal(address(this), amount);
-        game.depositAfkingFunding{value: amount}(who);
+        game.depositAfkingFunding{value: amount}(_aid(who));
     }
 
     /// @dev Force `who`'s claimableWinnings to `amount` (RE-DERIVED slot 7) AND credit `claimablePool`

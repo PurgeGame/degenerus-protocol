@@ -78,7 +78,7 @@ describe("LivenessMidJackpot", function () {
 
   async function buyFullTickets(game, buyer, n, totalEth) {
     return game.connect(buyer).purchase(
-      ZERO_ADDRESS,
+      0,
       BigInt(n) * 400n,
       0n,
       ZERO_BYTES32,
@@ -140,7 +140,7 @@ describe("LivenessMidJackpot", function () {
       try {
         await game
           .connect(buyer)
-          .purchaseWhalePass(buyer.address, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
+          .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
       } catch {
         /* may not be available for some buyers */
       }

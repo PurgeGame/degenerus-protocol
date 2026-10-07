@@ -120,7 +120,7 @@ contract C1BoxAutoOpen is DeployProtocol {
         (, , , , uint256 priceWei) = game.purchaseInfo();
         if (priceWei != 0 && priceWei <= actor.balance) {
             vm.prank(actor);
-            try game.purchase{value: priceWei}(actor, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+            try game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         }
         for (uint256 i; i < 10 && !game.rngLocked(); i++) {
             vm.warp(block.timestamp + 1 days);
@@ -175,7 +175,7 @@ contract C1BoxAutoOpen is DeployProtocol {
         uint256 lootboxDeposit = 1.2 ether;
         vm.prank(actor);
         game.purchase{value: lootboxDeposit + 1 ether}(
-            actor, 400, BoxOrderLib.boCustom(lootboxDeposit), bytes32(0), MintPaymentKind.DirectEth, false
+            0, 400, BoxOrderLib.boCustom(lootboxDeposit), bytes32(0), MintPaymentKind.DirectEth, false
         );
         assertEq(_entryCount(N), position + 1, "fixture: the purchase appended one entry to buffer N");
         base = _base(N, position);

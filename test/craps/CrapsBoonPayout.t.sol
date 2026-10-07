@@ -423,7 +423,7 @@ contract CrapsBoonPayoutTest is CrapsPins {
     function test_upgradingDayWindowsPreservesTheMask() public {
         (uint24 day, uint256 betId) = _dayTicketWithBoon(MASK_10);
         vm.prank(alice);
-        craps.upgradeDayWindows(day, uint8(1 << 2));
+        craps.upgradeDayWindows(0, day, uint8(1 << 2));
         assertEq(craps.boonMaskOf(betId), MASK_10, "an upgrade dropped the boon");
     }
 

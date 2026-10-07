@@ -2,45 +2,21 @@
 pragma solidity ^0.8.26;
 
 import "forge-std/Test.sol";
+import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {AFKingSubscriptionToken} from "../../contracts/AFKingSubscriptionToken.sol";
 
-/// @dev Stand-in for the game's surface, etched at the compile-time GAME
-///      address. The seat lock reads subInfo's `active` plus the
-///      SEAT_ENCUMBERED bit (155) out of mintPackedFor; the free-claim path
-///      reads the SEAT_CLAIMED eligibility bit (154); reclaimSeat settles a
-///      forfeit through clearSeatEncumbrance.
+/// @dev Stand-in for the game's surface, etched at the compile-time GAME address. The token
+///      reads only the subscriber-set length, for the capped vault mint.
 contract MockSeatGame {
-    mapping(address => bool) public activeOf;
-    mapping(address => bool) public eligibleOf;
-    mapping(address => bool) public encumberedOf;
+    uint256 public setLen;
 
-    function setActive(address who, bool a) external {
-        activeOf[who] = a;
+    function setSetLength(uint256 n) external {
+        setLen = n;
     }
 
-    function setEligible(address who, bool e) external {
-        eligibleOf[who] = e;
-    }
-
-    function setEncumbered(address who, bool e) external {
-        encumberedOf[who] = e;
-    }
-
-    function clearSeatEncumbrance(address holder) external {
-        encumberedOf[holder] = false;
-    }
-
-    function subInfo(
-        address player
-    ) external view returns (bool, uint8, uint24, uint24) {
-        return (activeOf[player], 0, 0, 0);
-    }
-
-    function mintPackedFor(address player) external view returns (uint256) {
-        uint256 word = eligibleOf[player] ? (uint256(1) << 154) : 0;
-        if (encumberedOf[player]) word |= uint256(1) << 155;
-        return word;
+    function subscriberSetLength() external view returns (uint256) {
+        return setLen;
     }
 }
 
@@ -68,29 +44,43 @@ contract MockIcons32 {
     }
 }
 
-/// @dev External renderer double for the override/fallback tests.
+/// @dev External renderer double for the override/fallback tests. In echo mode it returns its
+///      seven arguments joined by '|', so a test can read back exactly what the token passed.
 contract MockSeatRenderer {
     string public out;
     bool public shouldRevert;
+    bool public echo;
 
     function set(string calldata o, bool r) external {
         out = o;
         shouldRevert = r;
     }
 
+    function setEcho(bool e) external {
+        echo = e;
+    }
+
     function render(
-        uint256,
-        uint8,
-        uint24,
-        uint24,
-        string calldata,
-        string calldata,
-        bool,
-        bool,
-        string calldata,
-        string calldata
+        uint256 tokenId,
+        uint8 symbolId,
+        uint24 bgRgb,
+        uint24 trimRgb,
+        string calldata symbolName,
+        string calldata iconPath,
+        bool isCrypto
     ) external view returns (string memory) {
         if (shouldRevert) revert("renderer down");
+        if (echo) {
+            return string.concat(
+                Strings.toString(tokenId), "|",
+                Strings.toString(symbolId), "|",
+                Strings.toString(bgRgb), "|",
+                Strings.toString(trimRgb), "|",
+                symbolName, "|",
+                iconPath, "|",
+                isCrypto ? "crypto" : "plain"
+            );
+        }
         return out;
     }
 }
@@ -121,10 +111,9 @@ contract BadReceiver {
 contract NonReceiver {}
 
 /// @title AFKingSubscriptionToken — standalone ERC721 unit tests (no protocol deploy; the
-///        game / vault / icons are mocks etched at their compile-time
-///        addresses). The 2,000-serial seat collection: construction seats,
-///        free-tranche claims with free 24-bit RGB color picks, vault
-///        claim-rights grants, the seat lock, and the on-chain art surface.
+///        game / vault / icons are mocks etched at their compile-time addresses). The seat
+///        collection: construction seats, the free tranche, the capped vault mint, the
+///        Game-only burn (`consumeSeat`), plain ERC721 transfers and the on-chain art surface.
 contract AFKingSubscriptionTokenTest is Test {
     AFKingSubscriptionToken internal coin;
     MockSeatGame internal game;
@@ -137,6 +126,12 @@ contract AFKingSubscriptionTokenTest is Test {
 
     uint24 internal constant DEFAULT_BG = 0xd9d9d9;
     uint24 internal constant DEFAULT_TRIM = 0x3f1a82;
+
+    string internal constant DESCRIPTION =
+        '"description":"AFKing seat. Starting an afking-mode subscription burns one seat."';
+
+    event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
+    event VaultSeatsMinted(address indexed to, uint256 amount);
 
     address internal alice;
     address internal bob;
@@ -153,6 +148,8 @@ contract AFKingSubscriptionTokenTest is Test {
         bob = makeAddr("bob");
         admin = makeAddr("admin");
         mvault.setOwner(admin, true);
+        // The two exempt protocol subscriptions are in the set from construction.
+        game.setSetLength(2);
         // In-test `new` deployments must not land on the compile-time
         // protocol addresses (CREATE(this, 5..31)) — the GAME/VAULT/ICONS
         // etches above sit inside that range and CREATE reverts on a
@@ -180,13 +177,36 @@ contract AFKingSubscriptionTokenTest is Test {
         id = uint256(coin.nextSerial()) - 1;
     }
 
-    /// @dev Exhaust the free tranche: 1,000 pushed mints to distinct fresh addresses.
+    /// @dev Exhaust the free tranche: pushed mints to distinct fresh addresses.
     function _exhaustFreeTranche() internal {
         uint256 remaining = 1000 - coin.freeClaims();
         for (uint256 i; i < remaining; i++) {
-            _mintSeat(makeAddr(string(abi.encodePacked("filler", i))));
+            _mintSeat(address(uint160(0xF111_0000 + i)));
         }
         assertEq(coin.freeClaims(), 1000, "free tranche exhausted");
+    }
+
+    /// @dev Write `freeClaims` (slot 5, bytes 24..25: renderer 0..19 | nextSerial 20..23 |
+    ///      freeClaims 24..25 | liveSeats 26..27, from the compiled layout), leaving the rest.
+    function _setFreeClaims(uint16 v) internal {
+        uint256 w = uint256(vm.load(address(coin), bytes32(uint256(5))));
+        w = (w & ~(uint256(0xFFFF) << 192)) | (uint256(v) << 192);
+        vm.store(address(coin), bytes32(uint256(5)), bytes32(w));
+        assertEq(coin.freeClaims(), v, "slot 5 freeClaims lane");
+    }
+
+    /// @dev The Game burning `id` from `holder`.
+    function _burn(address holder, uint256 id) internal {
+        vm.prank(GAME);
+        coin.consumeSeat(holder, id);
+    }
+
+    /// @dev The deterministic default traits of serial `id` minted to `to`.
+    function _seeded(address to, uint256 id) internal pure returns (uint8 s, uint24 bg, uint24 tr) {
+        uint256 seed = uint256(keccak256(abi.encode(to, uint32(id))));
+        s = uint8(seed & 31);
+        bg = uint24((seed >> 8) & 0xFFFFFF);
+        tr = uint24((seed >> 32) & 0xFFFFFF);
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -197,12 +217,13 @@ contract AFKingSubscriptionTokenTest is Test {
         assertEq(coin.name(), "AFKing Subscription Token");
         assertEq(coin.symbol(), "AFK");
         assertEq(coin.FREE_TRANCHE(), 1000);
-        assertEq(coin.VAULT_TRANCHE(), 998);
-        assertEq(coin.MAX_SERIAL(), 2000);
+        assertEq(coin.SEAT_CAP(), 2000);
     }
 
     function testConstructionMintsProtocolSeats() public view {
         assertEq(coin.totalSupply(), 2, "the two protocol seats at deploy");
+        assertEq(coin.nextSerial(), 3, "serials 1 and 2 taken");
+        assertEq(coin.freeClaims(), 0, "construction seats are not free-tranche seats");
         assertEq(coin.ownerOf(1), SDGNRS, "serial 1 -> SDGNRS");
         assertEq(coin.ownerOf(2), VAULT, "serial 2 -> VAULT");
         assertEq(coin.balanceOf(SDGNRS), 1, "sdgnrs holds its seat");
@@ -236,7 +257,7 @@ contract AFKingSubscriptionTokenTest is Test {
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // Free-tranche claims
+    // Free-tranche mints
     // ──────────────────────────────────────────────────────────────────────
 
     function testPushMintUsesDefaultArtThenRestyles() public {
@@ -245,13 +266,14 @@ contract AFKingSubscriptionTokenTest is Test {
         assertEq(coin.ownerOf(id), alice);
         assertEq(coin.balanceOf(alice), 1);
         assertEq(coin.freeClaims(), 1);
+        assertEq(coin.totalSupply(), 3, "live count includes the new seat");
 
         // Default art is deterministic in (recipient, serial) -- no entropy is read.
-        uint256 seed = uint256(keccak256(abi.encode(alice, uint16(id))));
+        (uint8 es, uint24 ebg, uint24 etr) = _seeded(alice, id);
         (uint8 s, uint24 bg, uint24 tr) = coin.seatTraits(id);
-        assertEq(s, uint8(seed & 31), "seeded default symbol");
-        assertEq(bg, uint24((seed >> 8) & 0xFFFFFF), "seeded default background");
-        assertEq(tr, uint24((seed >> 32) & 0xFFFFFF), "seeded default trim");
+        assertEq(s, es, "seeded default symbol");
+        assertEq(bg, ebg, "seeded default background");
+        assertEq(tr, etr, "seeded default trim");
 
         vm.prank(alice);
         coin.setSeatTraits(id, 17, 0xff8800, 0x00ff88);
@@ -265,6 +287,15 @@ contract AFKingSubscriptionTokenTest is Test {
         vm.prank(alice);
         vm.expectRevert(AFKingSubscriptionToken.OnlyGame.selector);
         coin.mintSeatFor(alice);
+    }
+
+    /// @notice A zero recipient is a silent no-op: no serial, no tranche slot, no revert.
+    function testMintSeatForZeroAddressIsNoOp() public {
+        vm.prank(GAME);
+        coin.mintSeatFor(address(0));
+        assertEq(coin.nextSerial(), 3, "no serial consumed");
+        assertEq(coin.freeClaims(), 0, "no tranche slot consumed");
+        assertEq(coin.totalSupply(), 2, "no seat minted");
     }
 
     function testRestyleOnlyOwner() public {
@@ -340,11 +371,12 @@ contract AFKingSubscriptionTokenTest is Test {
         coin.mintSeatFor(alice);
         assertEq(coin.balanceOf(alice), 0, "no seat past the tranche");
         assertEq(coin.totalSupply(), 1002, "and no serial consumed");
-        assertEq(coin.freeClaims(), 1000, "tranche counter unmoved");
+        assertEq(coin.nextSerial(), 1003, "next serial unmoved");
+        assertEq(coin.freeClaims(), 1000, "tranche counter stops at 1,000");
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // Vault claim-rights grants
+    // Capped vault mint
     // ──────────────────────────────────────────────────────────────────────
 
     function testVaultGrantOnlyVault() public {
@@ -359,6 +391,22 @@ contract AFKingSubscriptionTokenTest is Test {
         coin.vaultMintSeats(alice, 1);
     }
 
+    /// @notice One free seat short of the tranche, a vault mint with ample capacity is refused;
+    ///         the 1,000th free mint opens it.
+    function testVaultMintRefusedAt999ThenOpensAtTheThousandth() public {
+        for (uint256 i; i < 999; i++) _mintSeat(address(uint160(0xF111_0000 + i)));
+        assertEq(coin.freeClaims(), 999);
+        vm.prank(VAULT);
+        vm.expectRevert(AFKingSubscriptionToken.FreeTrancheOpen.selector);
+        coin.vaultMintSeats(alice, 1);
+
+        _mintSeat(bob);
+        assertEq(coin.freeClaims(), 1000);
+        vm.prank(VAULT);
+        coin.vaultMintSeats(alice, 1);
+        assertEq(coin.balanceOf(alice), 1, "vault mint opens after the 1,000th free seat");
+    }
+
     function testVaultGrantZeroAddressReverts() public {
         _exhaustFreeTranche();
         vm.prank(VAULT);
@@ -368,14 +416,21 @@ contract AFKingSubscriptionTokenTest is Test {
 
     function testVaultGrantedClaimUsesOwnTraits() public {
         _exhaustFreeTranche();
+        vm.expectEmit(true, false, false, true, address(coin));
+        emit VaultSeatsMinted(bob, 2);
         vm.prank(VAULT);
         coin.vaultMintSeats(bob, 2);
-        assertEq(coin.vaultGranted(), 2, "tranche counter moves with the mint");
         assertEq(coin.balanceOf(bob), 2, "seats land immediately, no claim step");
+        assertEq(coin.freeClaims(), 1000, "a vault mint is not a free-tranche seat");
 
         // Default art, restylable by the recipient like any other seat.
         uint256 id = uint256(coin.nextSerial()) - 1;
         assertEq(coin.ownerOf(id), bob);
+        (uint8 es, uint24 ebg, uint24 etr) = _seeded(bob, id);
+        (uint8 s1, uint24 bg1, uint24 tr1) = coin.seatTraits(id);
+        assertEq(s1, es);
+        assertEq(bg1, ebg);
+        assertEq(tr1, etr);
         vm.prank(bob);
         coin.setSeatTraits(id, 31, 0xdeadbe, 0xc0ffee);
         (uint8 s2, uint24 bg, uint24 tr) = coin.seatTraits(id);
@@ -396,16 +451,219 @@ contract AFKingSubscriptionTokenTest is Test {
         assertTrue(freeId != mintedId);
     }
 
+    /// @notice The cap: live seats + amount + the game's set length may reach 2,000 and not
+    ///         pass it. Sum 1,999 -> minting 1 lands on 2,000; one more is refused.
     function testVaultGrantCapAndFullSupply() public {
         _exhaustFreeTranche();
+        game.setSetLength(3);
+        // L = 1002, S = 3: 995 more seats leave the sum at 2,000 - 1 = 1,999 after 994.
         vm.startPrank(VAULT);
-        coin.vaultMintSeats(bob, 998);
-        vm.expectRevert(AFKingSubscriptionToken.GrantExceedsTranche.selector);
+        coin.vaultMintSeats(bob, 994);
+        assertEq(coin.totalSupply() + game.subscriberSetLength(), 1999, "sum at 1,999");
+        vm.expectRevert(AFKingSubscriptionToken.SeatCapReached.selector);
+        coin.vaultMintSeats(bob, 2);
+        coin.vaultMintSeats(bob, 1);
+        assertEq(coin.totalSupply() + game.subscriberSetLength(), 2000, "sum lands on the cap");
+        vm.expectRevert(AFKingSubscriptionToken.SeatCapReached.selector);
         coin.vaultMintSeats(bob, 1);
         vm.stopPrank();
 
-        assertEq(coin.totalSupply(), 2000, "2 + 1000 + 998 = every serial out");
-        assertEq(coin.balanceOf(bob), 998);
+        assertEq(coin.totalSupply(), 1997, "2 + 1000 + 995");
+        assertEq(coin.balanceOf(bob), 995);
+    }
+
+    /// @notice One call reaching exactly 2,000 succeeds; one that would land on 2,001 reverts.
+    ///         The tranche is closed by writing `freeClaims` (slot 5) so the live count varies.
+    /// forge-config: default.fuzz.runs = 256
+    function testFuzzVaultMintCapBoundary(uint256 setLen, uint256 n, uint256 extraLive) public {
+        extraLive = bound(extraLive, 0, 40);
+        for (uint256 i; i < extraLive; i++) _mintSeat(address(uint160(0xF222_0000 + i)));
+        _setFreeClaims(1000);
+        setLen = bound(setLen, 1850, 2000 - coin.totalSupply());
+        game.setSetLength(setLen);
+        uint256 room = 2000 - coin.totalSupply() - setLen;
+        n = bound(n, 1, room + 3);
+        vm.prank(VAULT);
+        if (n > room) {
+            vm.expectRevert(AFKingSubscriptionToken.SeatCapReached.selector);
+            coin.vaultMintSeats(bob, n);
+            assertEq(coin.balanceOf(bob), 0, "nothing minted past the cap");
+        } else {
+            coin.vaultMintSeats(bob, n);
+            assertEq(coin.balanceOf(bob), n);
+            assertLe(coin.totalSupply() + setLen, 2000, "never past the cap");
+        }
+    }
+
+    /// @notice The cap check is checked arithmetic: an absurd amount panics, mints nothing.
+    function testVaultMintAbsurdAmountPanics() public {
+        _exhaustFreeTranche();
+        vm.prank(VAULT);
+        vm.expectRevert(stdError.arithmeticError);
+        coin.vaultMintSeats(bob, type(uint256).max);
+    }
+
+    /// @notice A set length alone at the cap blocks every vault mint, whatever the live count.
+    function testVaultMintBlockedWhenSetFillsTheCap() public {
+        _exhaustFreeTranche();
+        game.setSetLength(2000 - coin.totalSupply());
+        vm.prank(VAULT);
+        vm.expectRevert(AFKingSubscriptionToken.SeatCapReached.selector);
+        coin.vaultMintSeats(bob, 1);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // consumeSeat (the Game-only burn)
+    // ──────────────────────────────────────────────────────────────────────
+
+    function testConsumeSeatOnlyGame() public {
+        uint256 id = _mintSeat(alice);
+        vm.prank(alice);
+        vm.expectRevert(AFKingSubscriptionToken.OnlyGame.selector);
+        coin.consumeSeat(alice, id);
+        vm.prank(VAULT);
+        vm.expectRevert(AFKingSubscriptionToken.OnlyGame.selector);
+        coin.consumeSeat(alice, id);
+        assertEq(coin.ownerOf(id), alice, "seat untouched");
+    }
+
+    function testConsumeSeatBurns() public {
+        uint256 id = _mintSeat(alice);
+        _mintSeat(alice);
+        uint32 next = coin.nextSerial();
+        uint16 free = coin.freeClaims();
+
+        vm.expectEmit(true, true, true, true, address(coin));
+        emit Transfer(alice, address(0), id);
+        _burn(alice, id);
+
+        assertEq(coin.balanceOf(alice), 1, "balance - 1");
+        assertEq(coin.totalSupply(), 3, "live count - 1");
+        assertEq(coin.nextSerial(), next, "nextSerial unchanged");
+        assertEq(coin.freeClaims(), free, "freeClaims unchanged");
+        vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
+        coin.ownerOf(id);
+    }
+
+    /// @notice The holder must hold the serial: another holder's seat, a never-minted serial,
+    ///         a burned serial and serial 0 all revert InvalidToken.
+    function testConsumeSeatWrongHolderReverts() public {
+        uint256 a = _mintSeat(alice);
+        uint256 b = _mintSeat(bob);
+
+        vm.startPrank(GAME);
+        vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
+        coin.consumeSeat(alice, b);
+        vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
+        coin.consumeSeat(alice, 999);
+        vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
+        coin.consumeSeat(alice, 0);
+        coin.consumeSeat(alice, a);
+        vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
+        coin.consumeSeat(alice, a);
+        vm.stopPrank();
+
+        assertEq(coin.ownerOf(b), bob, "bob's seat untouched");
+        assertEq(coin.totalSupply(), 3, "exactly one burn landed");
+    }
+
+    /// @notice After the burn every surface treats the serial as nonexistent.
+    function testBurnedSeatIsDeadEverywhere() public {
+        uint256 id = _claim(alice, 9, 0xff8800, 0x123abc);
+        _burn(alice, id);
+
+        vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
+        coin.ownerOf(id);
+        vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
+        coin.getApproved(id);
+        vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
+        coin.seatTraits(id);
+        vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
+        coin.tokenURI(id);
+
+        vm.startPrank(alice);
+        vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
+        coin.transferFrom(alice, bob, id);
+        vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
+        coin.safeTransferFrom(alice, bob, id);
+        vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
+        coin.approve(bob, id);
+        vm.expectRevert(AFKingSubscriptionToken.NotAuthorized.selector);
+        coin.setSeatTraits(id, 1, 1, 1);
+        vm.stopPrank();
+    }
+
+    /// @notice A per-token approval and an operator approval set before the burn move nothing.
+    function testApprovalSetBeforeBurnIsUnusable() public {
+        uint256 id = _mintSeat(alice);
+        vm.startPrank(alice);
+        coin.approve(bob, id);
+        coin.setApprovalForAll(admin, true);
+        vm.stopPrank();
+        _burn(alice, id);
+
+        vm.prank(bob);
+        vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
+        coin.transferFrom(alice, bob, id);
+        vm.prank(admin);
+        vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
+        coin.transferFrom(alice, admin, id);
+        vm.prank(bob);
+        vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
+        coin.approve(bob, id);
+    }
+
+    /// @notice Serials are never reused, and the next serial renders its own seeded art even
+    ///         when it shares a trait word with a burned, fully restyled serial.
+    function testNextMintAfterBurnGetsFreshSerialAndOwnArt() public {
+        uint256 a = _mintSeat(alice); // 3 (word 0)
+        uint256 b = _mintSeat(alice); // 4 (word 1, lane 0)
+        assertEq(b >> 2, 1, "serial 4 opens trait word 1");
+        vm.prank(alice);
+        coin.setSeatTraits(b, 31, 0xFFFFFF, 0xFFFFFF);
+        _burn(alice, b);
+        _burn(alice, a);
+
+        uint256 c = _mintSeat(bob);
+        assertEq(c, 5, "fresh serial, no reuse of 3 or 4");
+        assertEq(c >> 2, b >> 2, "shares the burned serial's trait word");
+        (uint8 es, uint24 ebg, uint24 etr) = _seeded(bob, c);
+        (uint8 s, uint24 bg, uint24 tr) = coin.seatTraits(c);
+        assertEq(s, es, "own seeded symbol");
+        assertEq(bg, ebg, "own seeded background");
+        assertEq(tr, etr, "own seeded trim");
+        vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
+        coin.ownerOf(b);
+    }
+
+    /// @notice The burn makes no external call (no Game or vault callback).
+    function testConsumeSeatMakesNoExternalCall() public {
+        uint256 id = _mintSeat(alice);
+        vm.expectCall(GAME, "", 0);
+        vm.expectCall(VAULT, "", 0);
+        vm.expectCall(ICONS, "", 0);
+        _burn(alice, id);
+    }
+
+    /// @notice totalSupply is minted minus burned across any interleaving.
+    function testFuzzTotalSupplyIsLiveCount(uint8 mints, uint256 burnMask) public {
+        mints = uint8(bound(mints, 1, 40));
+        uint256 first = coin.nextSerial();
+        for (uint256 i; i < mints; i++) _mintSeat(i % 2 == 0 ? alice : bob);
+        uint256 burned;
+        for (uint256 i; i < mints; i++) {
+            if ((burnMask >> i) & 1 == 1) {
+                _burn(i % 2 == 0 ? alice : bob, first + i);
+                burned++;
+            }
+        }
+        assertEq(coin.totalSupply(), 2 + uint256(mints) - burned, "live = minted - burned");
+        assertEq(coin.totalSupply(), uint256(coin.nextSerial()) - 1 - burned, "live = serials - burned");
+        assertEq(
+            coin.balanceOf(alice) + coin.balanceOf(bob) + coin.balanceOf(SDGNRS) + coin.balanceOf(VAULT),
+            coin.totalSupply(),
+            "balances sum to the live count"
+        );
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -504,10 +762,6 @@ contract AFKingSubscriptionTokenTest is Test {
         coin.safeTransferFrom(alice, rcv, id);
     }
 
-    // ──────────────────────────────────────────────────────────────────────
-    // Seat lock
-    // ──────────────────────────────────────────────────────────────────────
-
     function testLastSeatTransferAllowedWithoutSub() public {
         uint256 id = _claim(alice, 1, 1, 1);
         vm.prank(alice);
@@ -515,207 +769,41 @@ contract AFKingSubscriptionTokenTest is Test {
         assertEq(coin.balanceOf(alice), 0, "plain holder never blocked");
     }
 
-    function testLastSeatTransferBlockedWhileActive() public {
+    function testSelfTransferKeepsTheSeat() public {
         uint256 id = _claim(alice, 1, 1, 1);
-        game.setActive(alice, true);
-        vm.prank(alice);
-        vm.expectRevert(AFKingSubscriptionToken.SeatInUse.selector);
-        coin.transferFrom(alice, bob, id);
-        assertEq(coin.ownerOf(id), alice, "seat stays put");
-    }
-
-    function testSeatLockBindsApprovedSpenderToo() public {
-        uint256 id = _claim(alice, 1, 1, 1);
-        game.setActive(alice, true);
-        vm.prank(alice);
-        coin.approve(bob, id);
-        vm.prank(bob);
-        vm.expectRevert(AFKingSubscriptionToken.SeatInUse.selector);
-        coin.transferFrom(alice, bob, id);
-    }
-
-    function testSeatLockBindsSafeTransferToo() public {
-        uint256 id = _claim(alice, 1, 1, 1);
-        game.setActive(alice, true);
-        vm.prank(alice);
-        vm.expectRevert(AFKingSubscriptionToken.SeatInUse.selector);
-        coin.safeTransferFrom(alice, bob, id);
-    }
-
-    function testPartialTransferAllowedWhileActive() public {
-        uint256 first = _claim(alice, 1, 1, 1);
-        _exhaustFreeTranche();
-        vm.prank(VAULT);
-        coin.vaultMintSeats(alice, 1);
-        game.setActive(alice, true);
-
-        vm.prank(alice);
-        coin.transferFrom(alice, bob, first);
-        assertEq(coin.balanceOf(alice), 1, "kept a seat -> not a crossing");
-        assertEq(coin.ownerOf(first), bob);
-    }
-
-    function testSelfTransferAllowedWhileActive() public {
-        uint256 id = _claim(alice, 1, 1, 1);
-        game.setActive(alice, true);
         vm.prank(alice);
         coin.transferFrom(alice, alice, id);
-        assertEq(coin.ownerOf(id), alice, "self-transfer nets to nonzero");
+        assertEq(coin.ownerOf(id), alice, "self-transfer nets to the same holder");
+        assertEq(coin.balanceOf(alice), 1, "balance unchanged");
     }
 
-    function testUnsubReleasesLastSeatTransfer() public {
-        uint256 id = _claim(alice, 1, 1, 1);
-        game.setActive(alice, true);
-        vm.prank(alice);
-        vm.expectRevert(AFKingSubscriptionToken.SeatInUse.selector);
-        coin.transferFrom(alice, bob, id);
-
-        game.setActive(alice, false);
-        vm.prank(alice);
-        coin.transferFrom(alice, bob, id);
-        assertEq(coin.ownerOf(id), bob, "released after unsub");
+    /// @notice Transfers are plain ERC721: none of the three forms calls the Game.
+    function testTransfersReadNothingFromGame() public {
+        uint256 a = _mintSeat(alice);
+        uint256 b = _mintSeat(alice);
+        uint256 c = _mintSeat(alice);
+        vm.expectCall(GAME, "", 0);
+        vm.startPrank(alice);
+        coin.transferFrom(alice, bob, a);
+        coin.safeTransferFrom(alice, bob, b);
+        coin.safeTransferFrom(alice, bob, c, "data");
+        vm.stopPrank();
+        assertEq(coin.balanceOf(bob), 3);
+        assertEq(coin.balanceOf(alice), 0, "the last seat leaves too");
     }
 
-    function testClaimNeverBlockedBySeatLock() public {
-        // An active sub claiming another seat only RAISES its balance —
-        // claims can never cross a holder to zero.
-        game.setActive(alice, true);
-        uint256 id = _claim(alice, 1, 1, 1);
-        assertEq(coin.ownerOf(id), alice);
-    }
-
-    // ──────────────────────────────────────────────────────────────────────
-    // Eviction forfeit (reclaimSeat)
-    // ──────────────────────────────────────────────────────────────────────
-
-    /// @dev The forfeit state: SEAT_ENCUMBERED set with no active sub.
-    function _evict(address who) internal {
-        game.setActive(who, false);
-        game.setEncumbered(who, true);
-    }
-
-    function testEvictedLastSeatTransferBlocked() public {
-        uint256 id = _claim(alice, 1, 1, 1);
-        _evict(alice);
-        vm.prank(alice);
-        vm.expectRevert(AFKingSubscriptionToken.SeatInUse.selector);
-        coin.transferFrom(alice, bob, id);
-        assertEq(coin.ownerOf(id), alice, "forfeited seat is trapped");
-    }
-
-    function testEvictedExtraSeatStillTransfers() public {
-        uint256 first = _claim(alice, 1, 1, 1);
-        _exhaustFreeTranche();
-        vm.prank(VAULT);
-        coin.vaultMintSeats(alice, 1);
-        uint256 second = uint256(coin.nextSerial()) - 1;
-        _evict(alice);
-
-        // Only the LAST seat is trapped — exactly one seat is forfeit.
-        vm.prank(alice);
-        coin.transferFrom(alice, bob, first);
-        assertEq(coin.ownerOf(first), bob, "surplus seat leaves freely");
-        vm.prank(alice);
-        vm.expectRevert(AFKingSubscriptionToken.SeatInUse.selector);
-        coin.transferFrom(alice, bob, second);
-    }
-
-    function testReclaimSeatSeizesToVaultAndSettles() public {
-        uint256 id = _claim(alice, 1, 1, 1);
-        _evict(alice);
-
-        // Permissionless: any caller may collect the forfeit — to the VAULT only.
-        vm.expectEmit(true, true, true, true, address(coin));
-        emit AFKingSubscriptionToken.Transfer(alice, VAULT, id);
-        vm.expectEmit(true, true, true, true, address(coin));
-        emit AFKingSubscriptionToken.SeatReclaimed(alice, id);
-        vm.prank(bob);
-        coin.reclaimSeat(id);
-
-        assertEq(coin.ownerOf(id), VAULT, "seat repossessed to the vault");
-        assertEq(coin.balanceOf(alice), 0);
-        assertEq(coin.balanceOf(VAULT), 2, "construction seat + repossession");
-        assertFalse(game.encumberedOf(alice), "forfeit settled game-side");
-        // The vault is a clean holder: the repossession reads Transferable again.
-        assertTrue(
-            _contains(_decodeJson(coin.tokenURI(id)), "Transferable"),
-            "vault-held repossession -> normal metadata"
-        );
-    }
-
-    function testReclaimSeatRevertsUnlessForfeitState() public {
-        uint256 id = _claim(alice, 1, 1, 1);
-        // Clean holder: nothing forfeit.
-        vm.expectRevert(AFKingSubscriptionToken.NotEvicted.selector);
-        coin.reclaimSeat(id);
-        // Active sub (encumbered but not evicted): nothing forfeit.
-        game.setActive(alice, true);
-        game.setEncumbered(alice, true);
-        vm.expectRevert(AFKingSubscriptionToken.NotEvicted.selector);
-        coin.reclaimSeat(id);
-        // Unminted serial.
-        vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
-        coin.reclaimSeat(1999);
-    }
-
-    function testReclaimSettlesRemainingSeatsAndStops() public {
-        uint256 first = _claim(alice, 1, 1, 1);
-        _exhaustFreeTranche();
-        vm.prank(VAULT);
-        coin.vaultMintSeats(alice, 1);
-        uint256 second = uint256(coin.nextSerial()) - 1;
-        _evict(alice);
-
-        vm.prank(bob);
-        coin.reclaimSeat(second);
-        // The clear ends the forfeit: no second seizure, and the remaining
-        // seat transfers freely again.
-        vm.expectRevert(AFKingSubscriptionToken.NotEvicted.selector);
-        coin.reclaimSeat(first);
-        vm.prank(alice);
-        coin.transferFrom(alice, bob, first);
-        assertEq(coin.ownerOf(first), bob, "remaining seat freed by the settle");
-    }
-
-    /// @dev Evicted metadata: Status flips to the forfeit flag, the art is the
-    ///      WWXRP mark (no badge rings), and an external renderer is bypassed.
-    function testTokenURIEvictedArtAndStatus() public {
-        uint256 id = _claim(alice, 9, 0xff8800, 0x123abc);
-        string memory normalJson = _decodeJson(coin.tokenURI(id));
-
-        _evict(alice);
-        string memory evictedUri = coin.tokenURI(id);
-        string memory evictedJson = _decodeJson(evictedUri);
-        assertTrue(
-            _contains(evictedJson, "Evicted - reclaimable"),
-            "forfeit status flag"
-        );
-        assertTrue(
-            keccak256(bytes(evictedJson)) != keccak256(bytes(normalJson)),
-            "evicted art differs"
-        );
-        string memory svg = _decodeSvg(evictedJson);
-        assertTrue(_contains(svg, "WWXRP"), "WWXRP wordmark in the art");
-        assertFalse(_contains(svg, "<circle r="), "no badge rings");
-
-        // Evicted seats always internal-render: an external renderer is ignored.
-        MockSeatRenderer r = new MockSeatRenderer();
-        vm.prank(admin);
-        coin.setRenderer(address(r));
-        r.set("<svg>external</svg>", false);
-        assertEq(
-            coin.tokenURI(id),
-            evictedUri,
-            "external renderer bypassed while evicted"
-        );
-
-        // Settling the forfeit restores the badge art.
-        vm.prank(bob);
-        coin.reclaimSeat(id);
-        assertTrue(
-            _contains(_decodeJson(coin.tokenURI(id)), "Transferable"),
-            "reclaimed seat renders normally"
-        );
+    /// @notice With the Game's code replaced by INVALID, every transfer form still succeeds.
+    function testTransfersSurviveABrokenGame() public {
+        uint256 a = _mintSeat(alice);
+        uint256 b = _mintSeat(alice);
+        uint256 snap = vm.snapshotState();
+        vm.etch(GAME, hex"fe");
+        vm.startPrank(alice);
+        coin.transferFrom(alice, bob, a);
+        coin.safeTransferFrom(alice, bob, b);
+        vm.stopPrank();
+        assertEq(coin.balanceOf(bob), 2, "transfers never touch the Game");
+        vm.revertToState(snap);
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -754,36 +842,23 @@ contract AFKingSubscriptionTokenTest is Test {
         assertTrue(_contains(json, "#123abc"), "trim hex in metadata");
     }
 
-    /// @dev LIVE lock state in metadata: Locked while the holder is an
-    ///      active sub with only this seat, back to Transferable when the
-    ///      sub ends or a second seat arrives.
-    function testTokenURIShowsSeatLockState() public {
+    /// @notice The metadata carries the seat description and exactly the Symbol / Background /
+    ///         Trim attributes; no lock state.
+    function testTokenURINoStatusAttributeAndNewDescription() public {
         uint256 id = _claim(alice, 9, 0xff8800, 0x123abc);
+        string memory json = _decodeJson(coin.tokenURI(id));
+        assertTrue(_contains(json, DESCRIPTION), "seat description");
         assertTrue(
-            _contains(_decodeJson(coin.tokenURI(id)), "Transferable"),
-            "unsubbed holder -> Transferable"
+            _contains(
+                json,
+                '"attributes":[{"trait_type":"Symbol","value":"MockSymbol"},{"trait_type":"Background","value":"#ff8800"},{"trait_type":"Trim","value":"#123abc"}]'
+            ),
+            "exactly three attributes"
         );
-
-        game.setActive(alice, true);
-        assertTrue(
-            _contains(_decodeJson(coin.tokenURI(id)), "Locked - seat in use"),
-            "active sub + last seat -> Locked"
-        );
-
-        // A second seat releases this one (no crossing to zero possible).
-        _exhaustFreeTranche();
-        vm.prank(VAULT);
-        coin.vaultMintSeats(alice, 1);
-        assertTrue(
-            _contains(_decodeJson(coin.tokenURI(id)), "Transferable"),
-            "multi-seat holder -> Transferable"
-        );
-
-        game.setActive(alice, false);
-        assertTrue(
-            _contains(_decodeJson(coin.tokenURI(id)), "Transferable"),
-            "unsub releases"
-        );
+        assertFalse(_contains(json, "Status"), "no Status attribute");
+        assertFalse(_contains(json, "Locked"), "no lock state");
+        assertFalse(_contains(json, "Transferable"), "no lock state");
+        assertTrue(_startsWith(json, '{"name":"AFK Sub #3 - MockSymbol"'), "name");
     }
 
     function testTokenURIExternalRendererOverrideAndFallback() public {
@@ -800,6 +875,7 @@ contract AFKingSubscriptionTokenTest is Test {
             keccak256(bytes(overridden)) != keccak256(bytes(internalUri)),
             "external render overrides"
         );
+        assertEq(_decodeSvg(_decodeJson(overridden)), "<svg>external</svg>", "external SVG embedded");
 
         // A reverting renderer falls back to the internal render.
         r.set("", true);
@@ -816,6 +892,40 @@ contract AFKingSubscriptionTokenTest is Test {
             internalUri,
             "empty renderer -> internal fallback"
         );
+
+        // Unsetting the renderer restores the internal render.
+        vm.prank(admin);
+        coin.setRenderer(address(0));
+        assertEq(coin.tokenURI(id), internalUri, "renderer unset -> internal");
+    }
+
+    /// @notice The renderer receives the seven-argument tuple (tokenId, symbolId, bgRgb,
+    ///         trimRgb, symbolName, iconPath, isCrypto).
+    function testExternalRendererReceivesSevenArguments() public {
+        uint256 id = _claim(alice, 5, 0x0a0b0c, 0x0d0e0f);
+        MockSeatRenderer r = new MockSeatRenderer();
+        r.setEcho(true);
+        vm.prank(admin);
+        coin.setRenderer(address(r));
+        string memory svg = _decodeSvg(_decodeJson(coin.tokenURI(id)));
+        assertEq(
+            svg,
+            string.concat(
+                Strings.toString(id),
+                "|5|",
+                Strings.toString(uint256(0x0a0b0c)),
+                "|",
+                Strings.toString(uint256(0x0d0e0f)),
+                "|MockSymbol|<path d='M0 0h512v512H0z'/>|crypto"
+            ),
+            "seven arguments, symbol 5 is a crypto symbol"
+        );
+
+        vm.prank(alice);
+        coin.setSeatTraits(id, 12, 0x0a0b0c, 0x0d0e0f);
+        svg = _decodeSvg(_decodeJson(coin.tokenURI(id)));
+        assertTrue(_contains(svg, "|12|"), "restyled symbol passed");
+        assertTrue(_contains(svg, "|plain"), "symbol 12 is not a crypto symbol");
     }
 
     /// @dev Base64-decode the data URI's JSON payload.

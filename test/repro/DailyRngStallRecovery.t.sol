@@ -78,7 +78,7 @@ contract DailyRngStallRecovery is DeployProtocol {
         if (rngLocked_) return;
         vm.prank(buyer);
         game.purchase{value: (priceWei * 4000) / 400}(
-            buyer,
+            0,
             4000,
             0,
             bytes32(0),

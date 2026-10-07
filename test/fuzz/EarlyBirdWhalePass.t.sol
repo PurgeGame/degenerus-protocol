@@ -40,6 +40,7 @@ contract EarlyBirdWhaleHarness is DegenerusGameJackpotModule, BucketSeed {
     function packed() external view returns (uint256) { return dailyTicketBudgetsPacked; }
     function pools() external view returns (uint128, uint128) { return _getPrizePools(); }
     function liability() external view returns (uint256) { return claimablePool; }
+    function idOf(address who) external view returns (uint32) { return _walletIdOf(who); }
     function passes(address who) external view returns (uint256) { return _halfPassesOf(who); }
     function unlock() external { rngLockedFlag = false; }
     function creditPasses(address who, uint256 halves) external { _addHalfPasses(_seedWallet(who), halves); }
@@ -434,22 +435,23 @@ contract EarlyBirdWhalePassTest is Test {
         Awards memory a = _draw(word, 100);
         uint256 own = h.passes(a.winner);
         h.creditPasses(a.winner, 2);
+        uint32 wid = h.idOf(a.winner);
         bytes memory original = address(h).code;
         bytes memory whaleCode = address(new DegenerusGameWhaleModule()).code;
         vm.etch(address(h), whaleCode);
         vm.expectRevert(bytes4(keccak256("RngLocked()")));
-        DegenerusGameWhaleModule(payable(address(h))).claimWhalePass(a.winner);
+        DegenerusGameWhaleModule(payable(address(h))).claimWhalePass(wid);
         vm.etch(address(h), original);
         assertEq(h.passes(a.winner), own + 2, "blocked claim retains all awards");
         h.unlock();
         vm.etch(address(h), whaleCode);
         vm.warp(132 days);
         vm.expectRevert(bytes4(keccak256("GameOver()")));
-        DegenerusGameWhaleModule(payable(address(h))).claimWhalePass(a.winner);
+        DegenerusGameWhaleModule(payable(address(h))).claimWhalePass(wid);
         vm.warp(101 days);
-        DegenerusGameWhaleModule(payable(address(h))).claimWhalePass(a.winner);
+        DegenerusGameWhaleModule(payable(address(h))).claimWhalePass(wid);
         vm.expectRevert();
-        DegenerusGameWhaleModule(payable(address(h))).claimWhalePass(a.winner);
+        DegenerusGameWhaleModule(payable(address(h))).claimWhalePass(wid);
         vm.etch(address(h), original);
         assertEq(h.passes(a.winner), 0);
         // Each half-pass unit grants one entry at each of 100 levels. Existing

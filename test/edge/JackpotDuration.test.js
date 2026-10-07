@@ -54,7 +54,7 @@ describe("JackpotDuration", function () {
   /** Buy N full tickets. 1 full ticket = qty 400 = costs priceWei. */
   async function buyFullTickets(game, buyer, n, totalEth) {
     return game.connect(buyer).purchase(
-      ZERO_ADDRESS,
+      0,
       BigInt(n) * 400n,
       0n,
       ZERO_BYTES32,
@@ -123,7 +123,7 @@ describe("JackpotDuration", function () {
       try {
         await game
           .connect(buyer)
-          .purchaseWhalePass(buyer.address, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
+          .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
       } catch {
         // May fail for some buyers
       }

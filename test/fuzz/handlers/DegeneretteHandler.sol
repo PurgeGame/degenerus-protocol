@@ -98,7 +98,7 @@ contract DegeneretteHandler is Test {
         uint48 index = _ensureLootboxIndexOpen();
 
         vm.prank(currentActor);
-        try game.placeDegeneretteBet{value: totalBet}(currentActor, 0, amountPerSpin, ticketCount, symbol) {
+        try game.placeDegeneretteBet{value: totalBet}(0, 0, amountPerSpin, ticketCount, symbol) {
             ghost_totalEthWagered += totalBet;
             ghost_betsPlaced++;
             uint64 len = knownQueueLen[index];
@@ -180,7 +180,7 @@ contract DegeneretteHandler is Test {
 
         vm.prank(currentActor);
         try game.purchase{value: cost}(
-            currentActor,
+            0,
             400, // 1 full ticket
             0,
             bytes32(0),

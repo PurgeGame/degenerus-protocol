@@ -40,7 +40,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     uint256 internal constant _AWARD_STANDING = 100;
     uint256 internal constant _SYBIL_SCORE_FLOOR = 12;
     uint256 internal constant _MAX_MIN_SCORE = 0xFFF;
-    function entryPrice(address player, uint256 base) external view returns (uint256) { return _entryPrice(player, base); }
+    function entryPrice(address player, uint256 base) external view returns (uint256) { return _newcomer(player) ? base + base / 20 : base; }
 
     /// @dev The wallet ID the table keys `player` by: the address word's cached ID, else the
     ///      Game's (0 when the address has none, which reads as empty state everywhere).
@@ -143,32 +143,58 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     }
 
     function enterBattle(uint64 slot, Craps.Bets calldata chips, uint16 multiple) external returns (uint256) {
-        return enterBattle(slot, _pack(chips), multiple);
+        return enterBattle(0, slot, _pack(chips), multiple);
     }
 
     function enterBonusBattle(uint256 period, Craps.Bets calldata chips, uint16 multiple)
         external
         returns (uint256)
     {
-        return enterBonusBattle(period, _pack(chips), multiple);
+        return enterBonusBattle(0, period, _pack(chips), multiple);
     }
 
     function enterBonusDay(Craps.Bets calldata chips, uint16 multiple) external returns (uint256) {
-        return enterBonusDay(_pack(chips), multiple);
+        return enterBonusDay(0, _pack(chips), multiple);
     }
 
     function amendSlip(uint256 betId, Craps.Bets calldata chips) external {
-        amendSlip(betId, _pack(chips));
+        amendSlip(0, betId, _pack(chips));
+    }
+
+    /// @dev Self-path overloads (account 0 = the caller) with the packed-board arity the suite has
+    ///      always called; the account-taking doors are the production ABI.
+    function enterBattle(uint64 slot, uint32 chips, uint16 multiple) external returns (uint256) {
+        return enterBattle(0, slot, chips, multiple);
+    }
+
+    function enterBonusBattle(uint256 period, uint32 chips, uint16 multiple) external returns (uint256) {
+        return enterBonusBattle(0, period, chips, multiple);
+    }
+
+    function enterBonusDay(uint32 chips, uint16 multiple) external returns (uint256) {
+        return enterBonusDay(0, chips, multiple);
+    }
+
+    function amendSlip(uint256 betId, uint32 chips) external {
+        amendSlip(0, betId, chips);
+    }
+
+    function applyCrapsPasses(uint24 startDay, uint8 count, bool high, uint32 chips) external {
+        applyCrapsPasses(0, startDay, count, high, chips);
+    }
+
+    function buyFutureCrapsDays(uint24 startDay, uint8 count, bool high, uint32 chips) external {
+        buyFutureCrapsDays(0, startDay, count, high, chips);
     }
 
     /// @dev The three-argument applicators the suite has always called — blank-board overloads of
     ///      the packed-board doors, the same shape as the entry overloads above.
     function applyCrapsPasses(uint24 startDay, uint8 count, bool high) external {
-        applyCrapsPasses(startDay, count, high, 0);
+        applyCrapsPasses(0, startDay, count, high, 0);
     }
 
     function buyFutureCrapsDays(uint24 startDay, uint8 count, bool high) external {
-        buyFutureCrapsDays(startDay, count, high, 0);
+        buyFutureCrapsDays(0, startDay, count, high, 0);
     }
 
     function rngCohortComplete(uint48 index) external view returns (bool) {

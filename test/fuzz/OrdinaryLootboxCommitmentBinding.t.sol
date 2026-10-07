@@ -161,12 +161,12 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
     function _spawnAfkingSubscribers(uint256 n) private {
         for (uint256 i; i < n; ++i) {
             address sub = address(uint160(0x5AB000 + i));
-            _grantSeat(sub);
-            _giveWalletId(sub); // a third-party deposit needs the beneficiary's wallet ID
+            uint256 seat = _grantSeat(sub);
+            uint32 subId = _giveWalletId(sub); // a third-party deposit needs the beneficiary's wallet ID
             vm.deal(address(this), 10 ether);
-            game.depositAfkingFunding{value: 10 ether}(sub);
+            game.depositAfkingFunding{value: 10 ether}(subId);
             vm.prank(sub);
-            game.subscribe(address(0), false, false, 1, address(0));
+            game.subscribe(0, false, false, 1, 0, seat);
         }
     }
 
@@ -227,7 +227,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
     function _buy(address owner, uint256 count, uint256 size) private {
         vm.prank(owner);
         game.purchase{value: 0.01 ether + count * size}(
-            owner, 400, BoxOrderLib.boCustoms(count, size), bytes32(0), MintPaymentKind.DirectEth, false
+            0, 400, BoxOrderLib.boCustoms(count, size), bytes32(0), MintPaymentKind.DirectEth, false
         );
     }
 
@@ -268,10 +268,10 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         _buy(ALICE, 1, 0.25 ether);
         _buy(BOB, 1, 0.25 ether);
         vm.prank(ALICE);
-        game.placeDegeneretteBet{value: 0.01 ether}(ALICE, 0, 0.01 ether, 1, 17);
+        game.placeDegeneretteBet{value: 0.01 ether}(0, 0, 0.01 ether, 1, 17);
         if (game.rngLocked()) vm.expectRevert(bytes4(keccak256("BetLocked()")));
         vm.prank(BOB);
-        crapsBattle.setPreferredBoard(uint32(1 << 9));
+        crapsBattle.setPreferredBoard(0, uint32(1 << 9));
         assertEq(RecyclingState.boxCount(address(game), index ^ 1), next + 2, "two next-index entries really appended");
         assertEq(BoxOrderLib.boId(_entry(index ^ 1, next)), game.walletIdOf(ALICE), "next-index Alice entry");
         assertEq(BoxOrderLib.boId(_entry(index ^ 1, next + 1)), game.walletIdOf(BOB), "next-index Bob entry");

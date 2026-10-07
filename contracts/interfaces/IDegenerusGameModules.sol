@@ -101,10 +101,12 @@ interface IDegenerusGameGameOverModule {
         bytes32 newKeyHash
     ) external;
 
-    /// @notice Claim deterministic-ending shares for `player`'s terminal-level tickets.
-    /// @param player Owner of every referenced holding.
+    /// @notice Claim deterministic-ending shares for account `id`'s terminal-level tickets.
+    /// @dev Raw msg.data target of Game.claimDeadVrf (identical selector). Permissionless;
+    ///      credits the account by ID.
+    /// @param id Owner of every referenced holding (0 = caller; otherwise allocated, else E).
     /// @param refs Holdings to claim (see DegenerusGameGameOverModule.claimDeadVrf).
-    function claimDeadVrf(address player, uint256[] calldata refs) external;
+    function claimDeadVrf(uint32 id, uint256[] calldata refs) external;
 }
 
 /// @title IDegenerusGameJackpotModule
@@ -226,9 +228,11 @@ interface IDegenerusGameWhaleModule {
         bytes32 affiliateCode
     ) external payable;
 
-    /// @notice Claim deferred whale pass rewards for a player.
-    /// @param player Player address to claim for.
-    function claimWhalePass(address player) external;
+    /// @notice Claim deferred whale pass rewards for account `id`.
+    /// @dev Raw msg.data target of Game.claimWhalePass (identical selector). Permissionless;
+    ///      moves no value.
+    /// @param id Account to claim for (0 = caller; otherwise allocated, else E).
+    function claimWhalePass(uint32 id) external;
 
     /// @notice Awards early-bird or quadrant passes to one fresh recipient.
     /// @dev Nested delegatecall from JackpotModule against frozen GAME inventory: one
@@ -273,8 +277,18 @@ interface IDegenerusGameMintModule {
             uint256 flipTokens
         );
 
-
-
+    /// @notice Body of Game.createSmurf (raw msg.data target, identical selector; see
+    ///         IDegenerusGame for the full contract). Owner = msg.sender (must hold an ID).
+    /// @dev Resolves and locks the owner's referral from `affiliateCode` as a purchase does,
+    ///      registers the smurf (`wallets.push(key | ownerId << 160)`, mint word = ID | smurf
+    ///      flag, `WalletRegistered` + `SmurfCreated`), calls Affiliate `copyReferral(owner,
+    ///      key)`, then buys one whole ticket for the smurf paid by the owner (payer ID threaded
+    ///      through the payment path; fresh-ETH overpay to the owner's AFKing balance).
+    /// @param affiliateCode Referral code applied to the owner if its referral is unset.
+    /// @param payKind How the owner funds the ticket.
+    /// @return smurfId The new account's wallet ID.
+    function createSmurf(bytes32 affiliateCode, MintPaymentKind payKind)
+        external payable returns (uint32 smurfId);
 
     /// @notice Processes a ticket and lootbox purchase
     /// @param buyer Address of the buyer
@@ -291,59 +305,65 @@ interface IDegenerusGameMintModule {
     ) external payable;
 
     /// @notice Explicit-ethValue ticket-buy entry: the fresh-ETH portion is the `ethValue`
-    ///         param rather than msg.value. Sole caller: the facade's foil purchase, funding
-    ///         the ticket/lootbox leg with carved fresh ETH while the buyer's msg.value is in
-    ///         flight (ignored — only ethValue is spent). payable so the carried value does
-    ///         not revert the delegatecall.
+    ///         param rather than msg.value. Callers: the foil purchase, funding the
+    ///         ticket/lootbox leg with carved fresh ETH while the buyer's msg.value is in
+    ///         flight (ignored — only ethValue is spent), and createSmurf's ticket. payable so
+    ///         the carried value does not revert the delegatecall.
+    /// @param payerId Ledger the claimable/AFKing legs debit: 0 = the buyer's own, else a
+    ///        smurf's owner on its creation ticket.
     function purchaseWith(
         address buyer,
         uint256 entryQuantityScaled,
         uint256 boxOrder,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
-        uint256 ethValue
+        uint256 ethValue,
+        uint32 payerId
     ) external payable;
 
-    /// @notice Processes a FLIP purchase of tickets
-    /// @param buyer Address of the buyer
+    /// @notice Processes a FLIP purchase of tickets. Raw msg.data target of Game.redeemFlip.
+    /// @param id Account receiving the tickets (0 = caller; account rule); FLIP from its payee
     /// @param entryQuantityScaled Ticket quantity in scaled entry units (400 = one whole ticket; 2 decimals, x100)
     function redeemFlip(
-        address buyer,
+        uint32 id,
         uint256 entryQuantityScaled
     ) external;
 
     /// @notice Sells far-future ticket entries to sDGNRS for current-level tickets + cash (-EV).
-    /// @param player Resolved seller / recipient
+    ///         Raw msg.data target of Game.sellFarFutureEntries.
+    /// @param id Seller account (0 = caller; account rule)
     /// @param levels Target levels to sell from
     /// @param quantities Entries to sell at each level (4 entries = 1 whole ticket)
     /// @param queueIndices Caller-supplied ticketQueue positions (verified; for swap-pop on sell-out)
     function sellFarFutureEntries(
-        address player,
+        uint32 id,
         uint32[] calldata levels,
         uint256[] calldata quantities,
         uint256[] calldata queueIndices
     ) external;
 
-    /// @notice Buys a credit-gated coin-presale box (msg.value, then claimable + afking shortfall)
-    /// @param buyer Player receiving the box
+    /// @notice Buys a credit-gated coin-presale box (msg.value, then claimable + afking shortfall).
+    ///         Raw msg.data target of Game.buyPresaleBox.
+    /// @param id Account receiving the box (0 = caller; account rule)
     /// @param boxAmount Requested box ETH (>= 0.01 ETH, pre-clamp)
-    function buyPresaleBox(address buyer, uint256 boxAmount) external;
+    function buyPresaleBox(uint32 id, uint256 boxAmount) external payable;
 
-    /// @notice Buys a mint leg AND a presale box in one tx sharing one RNG index
-    /// @param buyer Player receiving both legs
+    /// @notice Buys a mint leg AND a presale box in one tx sharing one RNG index. Raw msg.data
+    ///         target of Game.buyLootboxAndPresaleBox.
+    /// @param id Account receiving both legs (0 = caller; account rule)
     /// @param entryQuantityScaled Tickets to buy
     /// @param boxOrder Packed box order (0 to skip): [small:8][med:8][large:8][customCount:8][customSize:56 gwei].
     /// @param affiliateCode Affiliate code for the mint leg
     /// @param payKind Payment method for the mint leg
     /// @param boxAmount Requested presale-box ETH (funded by the mint leg's leftover fresh ETH, then claimable, then afking)
     function buyLootboxAndPresaleBox(
-        address buyer,
+        uint32 id,
         uint256 entryQuantityScaled,
         uint256 boxOrder,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
         uint256 boxAmount
-    ) external;
+    ) external payable;
 }
 
 /// @title IDegenerusGameLootboxModule
@@ -509,8 +529,9 @@ interface IDegenerusGameBoonModule {
         uint256 seed
     ) external payable;
 
-    /// @notice Issues a deity boon from a deity to a recipient
-    function issueDeityBoon(address deity, address recipient, uint8 slot) external;
+    /// @notice Issues a deity boon from deity account `deityId` (0 = caller; account rule) to the
+    ///         existing account `recipientId`. Raw msg.data target of Game.issueDeityBoon.
+    function issueDeityBoon(uint32 deityId, uint32 recipientId, uint8 slot) external;
 
 
     /// @notice Automatically award both protocol owners' three closed daily draws. Advance-only delegate target.
@@ -559,13 +580,16 @@ interface IDegenerusGameBoonModule {
 interface IDegenerusGameDegeneretteModule {
     function runDegeneretteWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
     /// @notice Places single-symbol bets
-    /// @param player The player address (use zero address for msg.sender)
+    /// @dev Raw msg.data target of Game.placeDegeneretteBet (identical selector). Gift door: an
+    ///      authorized caller funds from the account (FLIP from its payee, quest to the account);
+    ///      any other caller funds the bet itself as a gift to the existing account `id`.
+    /// @param id The betting account (0 = caller; otherwise allocated, else E)
     /// @param currency Currency type (0=ETH, 1=FLIP; all other values unsupported)
     /// @param amountPerSpin Bet amount per ticket
     /// @param spinCount Number of spins (1..25 ETH, 1..15 FLIP). Each spin resolves independently.
     /// @param symbol Chosen hero symbol (0..23: Crypto, Zodiac, Cards); quadrant = symbol >> 3.
     function placeDegeneretteBet(
-        address player,
+        uint32 id,
         uint8 currency,
         uint128 amountPerSpin,
         uint8 spinCount,
@@ -632,18 +656,20 @@ interface IDegenerusGameDegeneretteModule {
 interface IDegenerusGameBingoModule {
     /// @notice Claim color-completion bingo: all 8 colors of one symbol on a level.
     /// @dev Each player may claim one bingo reward per level.
-    /// @param player Bingo owner to claim for (address(0) = msg.sender); permissionless.
+    ///      Raw msg.data target of Game.claimBingo (identical selector); DGNRS to the payee.
+    /// @param id Bingo owner to claim for (0 = caller; otherwise allocated, else E); permissionless.
     /// @param level The level to claim on (uint24 storage-key width).
     /// @param symbol Symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7).
     /// @param slots Per-color positions in lvlTraitEntry[level][traitId] the owner occupies.
-    function claimBingo(address player, uint24 level, uint8 symbol, uint32[8] calldata slots) external;
+    function claimBingo(uint32 id, uint24 level, uint8 symbol, uint32[8] calldata slots) external;
 
     /// @notice Claim DGNRS affiliate rewards for the current level. The Game retains a
     ///         thin delegatecall dispatch stub that targets this selector; the body must
     ///         run in the Game's context for the onlyGame / onlyFlipCreditors external
     ///         calls, which is what that stub provides.
-    /// @param player Affiliate address to claim for (address(0) = msg.sender).
-    function claimAffiliateDgnrs(address player) external;
+    ///      Permissionless; DGNRS to the account's payee, FLIP bonus by ID.
+    /// @param id Affiliate account to claim for (0 = caller; otherwise allocated, else E).
+    function claimAffiliateDgnrs(uint32 id) external;
 }
 
 /// @title IGameAfkingModule
@@ -664,25 +690,28 @@ interface IGameAfkingModule {
     function runHumanBoxWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
 
     /// @notice The SINGLE subscription entrypoint: create / replace (dailyQuantity >= 1)
-    ///         or cancel (dailyQuantity == 0, tombstone) for `player`
-    ///         (self when 0/msg.sender).
-    /// @dev rngLock guard on all of create / replace / cancel; self-consent OR
-    ///      operator-approval (third-party path); funding-source operator-approval
-    ///      gate; AFKing Subscription Token balance gate (>= 1 coin, the sole afking credential);
-    ///      seat-forfeit gate (a fresh subscribe reverts SeatForfeited after an
-    ///      eviction until the forfeited seat is reclaimed to the vault).
+    ///         or cancel (dailyQuantity == 0, tombstone) for account `id` (0 = caller).
+    /// @dev Raw msg.data target of Game.subscribe (identical selector; see IDegenerusGame).
+    ///      rngLock guard on all of create / replace / cancel; account-rule authorization;
+    ///      funding-source consent by ID (the same main wallet as the subscriber, or an operator
+    ///      approval of the subscriber's key on the source's ID); a new run burns seat
+    ///      `seatId` of the subscriber's payee through AFKING_SUB_TOKEN.consumeSeat before the
+    ///      run is written (changes, cancels and the exempt VAULT/SDGNRS subs burn nothing).
     function subscribe(
-        address player,
+        uint32 id,
         bool drainGameCreditFirst,
         bool useTickets,
         uint8 dailyQuantity,
-        address fundingSource
+        uint32 fundingSourceId,
+        uint256 seatId
     ) external payable;
 
-    /// @notice Permissionless FLIP claim — pays each sub its accrued pendingFlip (the
+    /// @notice Permissionless FLIP claim — pays each account its accrued pendingFlip (the
     ///         per-delivered-day slot-0 quest reward + ticket buyer-bonus) in one creditFlip
-    ///         and zeroes it; always credits the sub, never the caller. Off the solvency path.
-    function claimAfkingFlip(address[] calldata subs) external;
+    ///         and zeroes it; always credits the account, never the caller. Off the solvency path.
+    /// @dev Raw msg.data target of Game.claimAfkingFlip. `ids[i] == 0` is the caller; an ID with
+    ///      nothing accrued (unallocated included) settles nothing and does not revert.
+    function claimAfkingFlip(uint32[] calldata ids) external;
 
     /// @notice Affiliate-only atomic read-and-zero of a sub's accrued affiliateBase (the
     ///         running flat-7% affiliate balance, whole FLIP). Read and zero happen
@@ -695,16 +724,14 @@ interface IGameAfkingModule {
     /// @notice Cashout-curse SET hook, delegatecalled from the Game's claimWinnings.
     function maybeCurse(address player) external;
 
-    /// @notice Permissionless paid cure: clear `target`'s cashout/smite curse for 100 FLIP.
-    function decurse(address target) external;
+    /// @notice Permissionless paid cure: clear account `id`'s cashout/smite curse for 100 FLIP
+    ///         burned from the caller's own wallet (0 = caller; otherwise allocated, else E).
+    function decurse(uint32 id) external;
 
-    /// @notice Deity-gated smite: add a saturating curse stack to `smitee` for 200 FLIP.
-    function smite(uint256 deityId, address smitee) external;
-
-    /// @notice AFKING_SUB_TOKEN-only: clear `holder`'s SEAT_ENCUMBERED latch — the
-    ///         settle step of the coin's reclaimSeat after it seizes an evicted
-    ///         holder's forfeited seat to the vault.
-    function clearSeatEncumbrance(address holder) external;
+    /// @notice Deity-gated smite: add a saturating curse stack to account `smiteeId` for 200 FLIP
+    ///         burned from the caller, who must own pass `deityId` (0 = caller; otherwise
+    ///         allocated, else E).
+    function smite(uint256 deityId, uint32 smiteeId) external;
 }
 
 /// @title IDegenerusGameFoilPackModule
@@ -735,11 +762,12 @@ interface IDegenerusGameFoilPackModule {
     ///      once, so anyone may resolve any player's claim. Reverts if the tuple is not
     ///      a claimable win. Claims are valid on the draw day and the following day,
     ///      and close when terminal settlement triggers.
-    /// @param player Pack owner the win credits to.
+    ///      Raw msg.data target of Game.claimFoilMatch; WWXRP box-spin prizes go to the payee.
+    /// @param id Pack owner the win credits to (0 = caller; otherwise allocated, else E).
     /// @param day The draw day to claim against.
     /// @param ticketIndex Which of the pack's four tickets to claim (0-3).
     function claimFoilMatch(
-        address player,
+        uint32 id,
         uint256 day,
         uint256 ticketIndex
     ) external;
@@ -751,9 +779,10 @@ interface IDegenerusGameFoilPackModule {
     ///      pack's lines are re-derived from the sealed word its buy froze
     ///      against, so nothing about the gold is stored. The win credits to `player`,
     ///      never the caller, and a pack pays at most once.
-    /// @param player Pack owner the win credits to.
+    ///      Raw msg.data target of Game.claimGoldenTicket; payouts go to the payee.
+    /// @param id Pack owner the win credits to (0 = caller; otherwise allocated, else E).
     /// @param lvl The pack's cycle level.
-    function claimGoldenTicket(address player, uint24 lvl) external;
+    function claimGoldenTicket(uint32 id, uint24 lvl) external;
 
     /// @notice Permissionlessly resolve a batch of foil match claims.
     /// @dev Non-claimable tuples past index 0 are skipped (not reverted); each settled
@@ -762,11 +791,12 @@ interface IDegenerusGameFoilPackModule {
     ///      whole call (StaleBatch), marking an already-swept list. The three arrays are
     ///      parallel. Claims are valid on the draw day and the following day, and close
     ///      when terminal settlement triggers.
-    /// @param players Pack owners the wins credit to.
+    ///      Raw msg.data target of Game.claimFoilMatchMany; `ids[i] == 0` is the caller.
+    /// @param ids Pack owners the wins credit to.
     /// @param drawDays Draw days to claim against.
     /// @param ticketIndexes Which pack ticket (0-3) per claim.
     function claimFoilMatchMany(
-        address[] calldata players,
+        uint32[] calldata ids,
         uint24[] calldata drawDays,
         uint8[] calldata ticketIndexes
     ) external;

@@ -33,90 +33,96 @@ import {IVaultCoin} from "./interfaces/IVaultCoin.sol";
 interface IDegenerusGamePlayerActions {
     /// @notice Crank the unified keeper router (advance + box opens), paying any earned bounty.
     function mineFlip() external;
-    /// @notice Start or extend a daily afking subscription for `player` (self when 0/msg.sender).
-    /// @dev The afking subscription surface is GAME-resident. The vault self-subscribes
-    ///      (player == address(this) == msg.sender) so the GAME's self-consent path passes
-    ///      with no operator approval.
+    /// @notice Start or extend a daily afking subscription for account `id` (0 = caller).
+    /// @dev The afking subscription surface is GAME-resident. The vault self-subscribes with
+    ///      `id == 0` and `fundingSourceId == 0`. VAULT's subscription is exempt from the seat
+    ///      burn, so `seatId` is ignored (pass 0).
     function subscribe(
-        address player,
+        uint32 id,
         bool drainGameCreditFirst,
         bool useTickets,
         uint8 dailyQuantity,
-        address fundingSource
+        uint32 fundingSourceId,
+        uint256 seatId
     ) external payable;
-    /// @notice Purchase tickets and/or lootboxes. The trailing `foil` flag adds a foil pack
-    ///         leg; the vault always passes false (it buys tickets/lootboxes only).
+    /// @notice Purchase tickets and/or lootboxes for account `id` (0 = caller). The trailing
+    ///         `foil` flag adds a foil pack leg; the vault always passes false.
     function purchase(
-        address buyer,
+        uint32 id,
         uint256 entryQuantityScaled,
         uint256 boxOrder,
         bytes32 affiliateCode,
         MintPaymentKind payKind,
         bool foil
     ) external payable;
-    /// @notice Claim accumulated ETH winnings for a player.
-    function claimWinnings(address player) external;
+    /// @notice Claim account `id`'s accumulated ETH winnings (0 = caller); pays the payee.
+    function claimWinnings(uint32 id) external;
     /// @notice Claim winnings preferring stETH over ETH.
     function claimWinningsStethFirst() external;
-    /// @notice Place single-symbol bets on degenerette.
+    /// @notice Place single-symbol bets on degenerette for account `id` (0 = caller).
     function placeDegeneretteBet(
-        address player,
+        uint32 id,
         uint8 currency,
         uint128 amountPerSpin,
         uint8 spinCount,
         uint8 symbol
     ) external payable;
-    /// @notice Set operator approval for a player.
-    function setOperatorApproval(address operator, bool approved) external;
+    /// @notice Approve or revoke `operator` for account `id` (0 = the caller's own ID).
+    function setOperatorApproval(uint32 id, address operator, bool approved) external;
     /// @notice View claimable ETH winnings for a player.
     function claimableWinningsOf(address player) external view returns (uint256);
-    /// @notice Purchase tickets using FLIP.
-    function redeemFlip(address buyer, uint256 entryQuantityScaled) external;
+    /// @notice Purchase tickets using FLIP for account `id` (0 = caller; FLIP from its payee).
+    function redeemFlip(uint32 id, uint256 entryQuantityScaled) external;
     /// @notice Sell far-future ticket entries for current-level tickets + cash; the counterparty resolves to sDGNRS, or to the vault as buyer-of-last-resort when sDGNRS cannot fund the swap.
+    ///         `id` is the selling account (0 = caller).
     function sellFarFutureEntries(
-        address player,
+        uint32 id,
         uint32[] calldata levels,
         uint256[] calldata quantities,
         uint256[] calldata queueIndices
     ) external;
-    /// @notice Fund a player's prepaid afking ETH bucket.
-    function depositAfkingFunding(address player) external payable;
-    /// @notice Withdraw the caller's prepaid afking ETH (sends to the caller).
-    function withdrawAfkingFunding(uint256 amount) external;
+    /// @notice Fund account `id`'s prepaid afking ETH bucket (nonzero, allocated; the vault
+    ///         passes its constant wallet ID 1).
+    function depositAfkingFunding(uint32 id) external payable;
+    /// @notice Withdraw account `id`'s prepaid afking ETH (0 = caller); pays the payee.
+    function withdrawAfkingFunding(uint32 id, uint256 amount) external;
     /// @notice A player's prepaid afking ETH balance.
     function afkingFundingOf(address player) external view returns (uint256);
 }
 
 /// @notice Interface for coinflip player actions used by DegenerusVault.
 interface ICoinflipPlayerActions {
-    /// @notice Deposit FLIP into daily coinflip system.
-    function depositCoinflip(address player, uint256 amount) external;
-    /// @notice Claim coinflip winnings (exact amount).
-    function claimCoinflips(address player, uint256 amount) external returns (uint256 claimed);
+    /// @notice Deposit FLIP into daily coinflip system for account `id` (0 = caller).
+    function depositCoinflip(uint32 id, uint256 amount) external;
+    /// @notice Claim account `id`'s coinflip winnings (exact amount; 0 = caller).
+    function claimCoinflips(uint32 id, uint256 amount) external returns (uint256 claimed);
     /// @notice Preview claimable coinflip winnings for a player.
     function previewClaimCoinflips(address player) external view returns (uint256 mintable);
-    /// @notice Configure auto-rebuy mode for coinflips.
-    function setCoinflipAutoRebuy(address player, bool enabled, uint256 takeProfit) external;
-    /// @notice Set auto-rebuy take-profit threshold for coinflips.
-    function setCoinflipAutoRebuyTakeProfit(address player, uint256 takeProfit) external;
+    /// @notice Configure auto-rebuy mode for account `id`'s coinflips (0 = caller).
+    function setCoinflipAutoRebuy(uint32 id, bool enabled, uint256 takeProfit) external;
+    /// @notice Set auto-rebuy take-profit threshold for account `id` (0 = caller).
+    function setCoinflipAutoRebuyTakeProfit(uint32 id, uint256 takeProfit) external;
 }
 
 /// @notice Interface for FLIP decimator burn used by DegenerusVault.
 interface ICoinPlayerActions {
-    /// @notice Burn FLIP for decimator jackpot eligibility.
-    function decimatorBurn(address player, uint256 amount, uint32 chips) external;
+    /// @notice Burn FLIP for account `id`'s decimator entry (0 = caller; FLIP from its payee).
+    function decimatorBurn(uint32 id, uint256 amount, uint32 chips) external;
 }
 
 /// @dev The craps table's player surface. The vault is seated automatically at every bonus
 ///      window it can pay for. Its owner can save the shared preferred board, join a custom battle
 ///      or re-spread chips on existing slips. Comping somebody else goes through the comp door below.
 interface ICrapsPlayerActions {
-    /// @notice Save the vault's board for automatic seats, comps and jackpot battles.
-    function setPreferredBoard(uint32 chips) external;
-    /// @notice Join a custom craps battle, as implemented by CrapsBattle.
-    function enterBattle(uint64 slot, uint32 chips, uint16 multiple) external returns (uint256);
-    /// @notice Re-spread the chips on a slip the vault already owns, as implemented by CrapsBattle.
-    function amendSlip(uint256 betId, uint32 chips) external;
+    /// @notice Save account `id`'s board for automatic seats, comps and jackpot battles
+    ///         (0 = caller; the vault passes 0).
+    function setPreferredBoard(uint32 id, uint32 chips) external;
+    /// @notice Join a custom craps battle for account `id` (0 = caller), as implemented by
+    ///         CrapsBattle.
+    function enterBattle(uint32 id, uint64 slot, uint32 chips, uint16 multiple) external returns (uint256);
+    /// @notice Re-spread the chips on a slip account `id` owns (0 = caller), as implemented by
+    ///         CrapsBattle.
+    function amendSlip(uint32 id, uint256 betId, uint32 chips) external;
 }
 
 /// @dev The craps table's comp door: one of today's windows, today's whole day, a run of future
@@ -125,6 +131,9 @@ interface ICrapsPlayerActions {
 ///      from the vault; other donation callers pay from their own FLIP.
 interface ICrapsComps {
     /// @notice Charges a comp to the vault's FLIP comp lane, as implemented by CrapsBattle.
+    /// @dev `code` bits 0..31 name the recipient account by wallet ID (nonzero, allocated; bits
+    ///      32..159 zero); every other field keeps its position (kind 160..167, high 168,
+    ///      arg 176..199, count 200..207, kind-5 period 208..215).
     function vaultComp(uint256 code) external returns (uint256 charged);
     /// @notice Add to an open battle's prize pool, charging the vault's comp lane.
     function donate(bool custom, uint256 index, uint24 granules) external returns (uint256 charged);
@@ -148,8 +157,9 @@ interface IERC721Sweep {
 interface IsDGNRSBurn {
     /// @notice Burn sDGNRS to claim proportional backing assets.
     function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut);
-    /// @notice Claim a resolved gambling-burn redemption for `player` in batch `batchId` after game over.
-    function claimRedemption(address player, uint32 batchId) external;
+    /// @notice Claim account `id`'s resolved gambling-burn redemption in batch `batchId`
+    ///         (0 = caller; the vault passes 0).
+    function claimRedemption(uint32 id, uint32 batchId) external;
 }
 
 /// @notice Interface for WWXRP vault-minting used by DegenerusVault.
@@ -158,13 +168,13 @@ interface IWWXRPMint {
     function vaultMintTo(address to, uint256 amount) external;
 }
 
-/// @notice Interface for the AFKing seat token's vault-held claim-rights
-///         allowance (998 seats; grants locked until the free tranche fills)
-///         and vault-held seats (the construction seat plus eviction-forfeit
-///         repossessions sent in by reclaimSeat).
+/// @notice Interface for the AFKing seat token's capped vault mint and the vault-held
+///         construction seat.
 interface IAFKingSubscriptionToken {
-    /// @notice Mint seats from the vault's allowance straight to a recipient
-    ///         (default art; the recipient may restyle it afterwards).
+    /// @notice Mint `amount` seats straight to `to` (default art; the recipient may restyle).
+    /// @dev VAULT only. Refused until the 1,000-seat free tranche is gone (FreeTrancheOpen), then
+    ///      allowed while `liveSeats + amount + game.subscriberSetLength() <= 2,000`
+    ///      (SeatCapReached), where `liveSeats` is minted minus burned by subscriptions.
     function vaultMintSeats(address to, uint256 amount) external;
 
     /// @notice ERC721 transfer of a vault-held seat (the vault is the owner,
@@ -475,10 +485,10 @@ contract DegenerusVault {
 
     /// @notice Emitted once per craps comp the vault owner grants
     /// @param operator Vault owner who granted it
-    /// @param to Who was comped
+    /// @param toId Wallet ID of the account comped
     /// @param kind What was comped, as the table's `vaultComp` kind
     /// @param charged whole FLIP the comp lane paid for it
-    event CrapsCompGranted(address indexed operator, address indexed to, uint8 kind, uint256 charged);
+    event CrapsCompGranted(address indexed operator, uint32 indexed toId, uint8 kind, uint256 charged);
 
     /// @notice Comp budget was donated to a joinable custom battle or daily window.
     /// @param operator Vault owner or comp delegate who funded the pool.
@@ -504,6 +514,9 @@ contract DegenerusVault {
     uint8 public constant decimals = 18;
     /// @dev Supply minted when all shares are burned (1 trillion, keeps token alive)
     uint256 private constant REFILL_SUPPLY = 1_000_000_000_000 * 1e18;
+    /// @dev The vault's Game wallet ID, reserved at Game construction; named where the Game
+    ///      takes a third-party recipient ID (zero there is refused, not "self").
+    uint32 private constant VAULT_WALLET_ID = 1;
 
     // ---------------------------------------------------------------------
     // SHARE CLASS TOKENS (Immutable)
@@ -526,7 +539,7 @@ contract DegenerusVault {
     IVaultCoin internal constant flipToken = IVaultCoin(ContractAddresses.COIN);
     /// @dev WWXRP token contract for vault minting
     IWWXRPMint internal constant wwxrpToken = IWWXRPMint(ContractAddresses.WWXRP);
-    /// @dev AFKing seat token: the vault holds a 998-seat claim-rights allowance
+    /// @dev AFKing seat token: capped vault mints and the vault-held seats
     IAFKingSubscriptionToken internal constant afkingSubToken =
         IAFKingSubscriptionToken(ContractAddresses.AFKING_SUB_TOKEN);
     /// @dev stETH (Lido) token contract
@@ -584,16 +597,12 @@ contract DegenerusVault {
         flipShare = new DegenerusVaultShare("Degenerus Vault Flip", "DGVF", "dgvf.degenerus.eth");
         ethShare = new DegenerusVaultShare("Degenerus Vault Eth", "DGVE", "dgve.degenerus.eth");
 
-        // Protocol-owned self-subscription: claimable-first daily lootbox
-        // buy of flat quantity 1, no FLIP rebuy. Self-consent —
-        // the vault IS the player (player == msg.sender). The afking module
-        // exempts the pinned VAULT address from its seat-token and purchase
-        // gates, so this subscribe lands before the seat token is deployed; the
+        // Protocol-owned self-subscription: claimable-first daily lootbox buy of flat
+        // quantity 1, self-funded (id 0 = the vault itself). The afking module exempts
+        // the pinned VAULT address from the seat burn and the purchase gate, so this
+        // subscribe lands before the seat token is deployed and names no seat; the
         // token's constructor then mints the vault its construction seat.
-        // The afking surface is GAME-resident; self-subscribe directly against
-        // the GAME (subscriber == msg.sender ⇒ the GAME's self-consent path, no
-        // operator approval needed).
-        gamePlayer.subscribe(address(this), true, false, 1, address(0));
+        gamePlayer.subscribe(0, true, false, 1, 0, 0);
 
 
 
@@ -627,16 +636,16 @@ contract DegenerusVault {
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     /// @custom:reverts Insufficient If total value exceeds vault balance
     function gameDepositAfkingFunding(uint256 ethValue) external payable onlyVaultOwner {
-        gamePlayer.depositAfkingFunding{value: _combinedValue(ethValue)}(address(this));
+        gamePlayer.depositAfkingFunding{value: _combinedValue(ethValue)}(VAULT_WALLET_ID);
     }
 
     /// @notice Recover the vault's prepaid afking ETH back into vault reserves.
-    /// @dev game.withdrawAfkingFunding sends to the caller (this vault), so the ETH lands in
-    ///      the vault's own receive(). A zero balance is a no-op. Available until the 30-day
-    ///      final sweep, which pays the vault its afking balance along with its claimable.
+    /// @dev game.withdrawAfkingFunding pays the vault's payee (the vault itself), so the ETH
+    ///      lands in the vault's own receive(). A zero balance is a no-op. Available until the
+    ///      30-day final sweep, which pays the vault its afking balance along with its claimable.
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function recoverAfkingFunding() external onlyVaultOwner {
-        gamePlayer.withdrawAfkingFunding(gamePlayer.afkingFundingOf(address(this)));
+        gamePlayer.withdrawAfkingFunding(0, gamePlayer.afkingFundingOf(address(this)));
     }
 
     // ---------------------------------------------------------------------
@@ -669,7 +678,7 @@ contract DegenerusVault {
     ) external payable onlyVaultOwner {
         uint256 totalValue = _combinedValue(ethValue);
         gamePlayer.purchase{value: totalValue}(
-            address(this), entryQuantityScaled, boxOrder, affiliateCode, payKind, false
+            0, entryQuantityScaled, boxOrder, affiliateCode, payKind, false
         );
     }
 
@@ -679,7 +688,7 @@ contract DegenerusVault {
     /// @custom:reverts Insufficient If entryQuantityScaled is zero
     function gamePurchaseTicketsFlip(uint256 entryQuantityScaled) external onlyVaultOwner {
         if (entryQuantityScaled == 0) revert Insufficient();
-        gamePlayer.redeemFlip(address(this), entryQuantityScaled);
+        gamePlayer.redeemFlip(0, entryQuantityScaled);
     }
 
     /// @notice Claim winnings for the vault (preferring stETH)
@@ -713,7 +722,7 @@ contract DegenerusVault {
             value = _combinedValue(ethValue);
         }
         gamePlayer.placeDegeneretteBet{value: value}(
-            address(this), currency, amountPerSpin, spinCount, symbol
+            0, currency, amountPerSpin, spinCount, symbol
         );
     }
 
@@ -725,7 +734,7 @@ contract DegenerusVault {
         uint256[] calldata quantities,
         uint256[] calldata queueIndices
     ) external onlyVaultOwner {
-        gamePlayer.sellFarFutureEntries(address(this), levels, quantities, queueIndices);
+        gamePlayer.sellFarFutureEntries(0, levels, quantities, queueIndices);
     }
 
     /// @notice Enable/disable the salvage-buyer fallback and set the protected ETH reserve floor.
@@ -753,12 +762,13 @@ contract DegenerusVault {
         return (_salvageBuyEnabled, _salvageVaultFloorWei);
     }
 
-    /// @notice Approve or revoke an operator for the vault's game actions
+    /// @notice Approve or revoke an operator for the vault's account (wallet ID 1) across
+    ///         every contract that honors Game operator approvals
     /// @param operator Address to approve or revoke
     /// @param approved Whether to approve or revoke
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function gameSetOperatorApproval(address operator, bool approved) external onlyVaultOwner {
-        gamePlayer.setOperatorApproval(operator, approved);
+        gamePlayer.setOperatorApproval(0, operator, approved);
     }
 
     /// @notice Save the vault's shared craps board for future automatic seats, comps and jackpot battles.
@@ -767,7 +777,7 @@ contract DegenerusVault {
     ///      seats keep their board; use `crapsAmendSlip` to change an open slip.
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function crapsSetPreferredBoard(uint32 chips) external onlyVaultOwner {
-        ICrapsPlayerActions(ContractAddresses.CRAPS).setPreferredBoard(chips);
+        ICrapsPlayerActions(ContractAddresses.CRAPS).setPreferredBoard(0, chips);
     }
 
     /// @notice Join a custom craps battle for the vault, placing zero through seven chips by
@@ -784,7 +794,7 @@ contract DegenerusVault {
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     /// @return betId The slip: `(slot << 64) | seat`.
     function crapsEnterBattle(uint64 slot, uint32 chips, uint16 multiple) external onlyVaultOwner returns (uint256 betId) {
-        return ICrapsPlayerActions(ContractAddresses.CRAPS).enterBattle(slot, chips, multiple);
+        return ICrapsPlayerActions(ContractAddresses.CRAPS).enterBattle(0, slot, chips, multiple);
     }
 
     /// @notice Re-spread zero through seven chips on one of the vault's craps slips — the bonus
@@ -795,7 +805,7 @@ contract DegenerusVault {
     /// @param chips Where up to seven chips go instead.
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function crapsAmendSlip(uint256 betId, uint32 chips) external onlyVaultOwner {
-        ICrapsPlayerActions(ContractAddresses.CRAPS).amendSlip(betId, chips);
+        ICrapsPlayerActions(ContractAddresses.CRAPS).amendSlip(0, betId, chips);
     }
 
     /// @notice Comp craps to whoever the vault likes — a seat, a day, future days, an upgrade or
@@ -805,13 +815,14 @@ contract DegenerusVault {
     /// @dev ALL OR NOTHING: any item the table refuses — a shut window, an occupied day, a bad
     ///      lane, a lane that cannot cover it — takes the whole batch down with it.
     /// @param codes One comp each, packed as the table's `vaultComp` reads it:
-    ///              bits 0..159 the player; bits 160..167 the kind (0 window · 1 day · 2 future
-    ///              days · 3 upgrade · 4 passes · 5 a window on days ahead); bit 168 high; bits
-    ///              176..199 the period, first day or ticket day; bits 200..207 the count, or the
-    ///              upgrade's period mask; bits 208..215 the period for kind 5.
+    ///              bits 0..31 the recipient's wallet ID; bits 32..159 zero; bits 160..167 the
+    ///              kind (0 window · 1 day · 2 future days · 3 upgrade · 4 passes · 5 a window on
+    ///              days ahead); bit 168 high; bits 176..199 the period, first day or ticket day;
+    ///              bits 200..207 the count, or the upgrade's period mask; bits 208..215 the
+    ///              period for kind 5.
     /// @custom:reverts NotVaultOwner If caller neither holds >50.1% of DGVE nor an allowance
     /// @custom:reverts Insufficient If the batch is empty, or exceeds the caller's allowance
-    /// @custom:reverts ZeroAddress If any code names the zero address
+    /// @custom:reverts ZeroAddress If any code names wallet ID 0
     function crapsComp(uint256[] calldata codes) external {
         (bool owner, uint256 allowance) = _crapsCompBudget();
         uint256 n = codes.length;
@@ -819,11 +830,11 @@ contract DegenerusVault {
         uint256 total;
         for (uint256 i; i < n; ++i) {
             uint256 code = codes[i];
-            address to = address(uint160(code));
-            if (to == address(0)) revert ZeroAddress();
+            uint32 toId = uint32(code);
+            if (toId == 0) revert ZeroAddress();
             uint256 charged = ICrapsComps(ContractAddresses.CRAPS).vaultComp(code);
             total += charged;
-            emit CrapsCompGranted(msg.sender, to, uint8(code >> 160), charged);
+            emit CrapsCompGranted(msg.sender, toId, uint8(code >> 160), charged);
         }
         _spendCrapsCompBudget(owner, allowance, total);
     }
@@ -875,7 +886,7 @@ contract DegenerusVault {
     /// @param amount Amount of coins to deposit
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function coinDepositCoinflip(uint256 amount) external onlyVaultOwner {
-        coinflipPlayer.depositCoinflip(address(this), amount);
+        coinflipPlayer.depositCoinflip(0, amount);
     }
 
     /// @notice Claim coinflip winnings for the vault
@@ -883,7 +894,7 @@ contract DegenerusVault {
     /// @return claimed Actual amount claimed
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function coinClaimCoinflips(uint256 amount) external onlyVaultOwner returns (uint256 claimed) {
-        return coinflipPlayer.claimCoinflips(address(this), amount);
+        return coinflipPlayer.claimCoinflips(0, amount);
     }
 
     /// @notice Burn coins in the decimator for the vault
@@ -891,7 +902,7 @@ contract DegenerusVault {
     /// @param chips The vault entry's board: zero to seven named chips, as a normal battle takes them
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function coinDecimatorBurn(uint256 amount, uint32 chips) external onlyVaultOwner {
-        flipPlayer.decimatorBurn(address(this), amount, chips);
+        flipPlayer.decimatorBurn(0, amount, chips);
     }
 
     /// @notice Configure coinflip auto-rebuy for the vault
@@ -899,14 +910,14 @@ contract DegenerusVault {
     /// @param takeProfit Amount to take profit
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function coinSetAutoRebuy(bool enabled, uint256 takeProfit) external onlyVaultOwner {
-        coinflipPlayer.setCoinflipAutoRebuy(address(this), enabled, takeProfit);
+        coinflipPlayer.setCoinflipAutoRebuy(0, enabled, takeProfit);
     }
 
     /// @notice Set coinflip auto-rebuy take profit for the vault
     /// @param takeProfit Amount to take profit
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function coinSetAutoRebuyTakeProfit(uint256 takeProfit) external onlyVaultOwner {
-        coinflipPlayer.setCoinflipAutoRebuyTakeProfit(address(this), takeProfit);
+        coinflipPlayer.setCoinflipAutoRebuyTakeProfit(0, takeProfit);
     }
 
     /// @notice Mint any amount of WWXRP for free to a recipient
@@ -918,27 +929,27 @@ contract DegenerusVault {
         wwxrpToken.vaultMintTo(to, amount);
     }
 
-    /// @notice Mint AFKing seats from the vault's 998-seat tranche straight to a
-    ///         recipient. Seats carry deterministic default art the recipient can restyle,
-    ///         so no claim step stands between the sale and the seat.
-    /// @dev The token enforces the sale lock (mints revert until all 1,000 free-tranche
-    ///      seats are gone) and the 998 lifetime cap.
+    /// @notice Mint AFKing seats straight to a recipient. Seats carry deterministic default
+    ///         art the recipient can restyle, so no claim step stands between the sale and the
+    ///         seat.
+    /// @dev The token refuses mints until all 1,000 free-tranche seats are gone, then allows
+    ///      them while live seats + `amount` + the game's subscriber-set length stay within
+    ///      2,000. Every subscription start burns a seat and every subscription the game
+    ///      removes from its set frees one unit, so churn reopens room to sell.
     /// @param to Seat recipient
     /// @param amount Seats to mint
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
+    /// @custom:reverts FreeTrancheOpen (token) While fewer than 1,000 free seats are out
+    /// @custom:reverts SeatCapReached (token) When the mint would pass the 2,000 cap
+    /// @custom:reverts ZeroAddress (token) When `to` is the zero address
     function afkingSeatMint(address to, uint256 amount) external onlyVaultOwner {
         if (amount == 0) return;
         afkingSubToken.vaultMintSeats(to, amount);
     }
 
-    /// @notice Transfer a vault-held AFKing seat out — the disposal path for
-    ///         eviction-forfeit repossessions sent in by the token's
-    ///         reclaimSeat.
-    /// @dev The token's seat lock still binds the vault as `from`: a transfer
-    ///      emptying the vault's balance reverts SeatInUse token-side (the
-    ///      vault is a permanently active subscriber), so the vault always
-    ///      retains at least one seat. The lock is serial-agnostic: any seat,
-    ///      including the construction serial, may leave while another stays.
+    /// @notice Transfer a vault-held AFKing seat out, including the construction seat
+    ///         (serial 2): the vault's own subscription is exempt from the seat burn and needs
+    ///         no seat.
     /// @param tokenId Vault-held seat serial to transfer
     /// @param to Recipient of the seat
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
@@ -946,8 +957,8 @@ contract DegenerusVault {
         afkingSubToken.transferFrom(address(this), to, tokenId);
     }
 
-    /// @notice Restyle a vault-held AFKing seat — the construction seat (serial 2) and any
-    ///         eviction-forfeit repossession — or the SDGNRS construction seat (serial 1),
+    /// @notice Restyle a vault-held AFKing seat — the construction seat (serial 2) or any seat
+    ///         the vault holds — or the SDGNRS construction seat (serial 1),
     ///         which the token authorizes the vault to restyle because SDGNRS has no admin
     ///         surface of its own and its art would otherwise be frozen forever. Seat art is
     ///         cosmetic and mutable by design, and the token authorizes restyles by direct
@@ -986,7 +997,7 @@ contract DegenerusVault {
     /// @param batchId Redemption batch whose claim to settle.
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function sdgnrsClaimRedemption(uint32 batchId) external onlyVaultOwner {
-        sdgnrsToken.claimRedemption(address(this), batchId);
+        sdgnrsToken.claimRedemption(0, batchId);
     }
 
     /// @notice Sweep a foreign ERC20 out of the vault.
@@ -1023,10 +1034,8 @@ contract DegenerusVault {
     ///      have no exit — the other NFT-out path, afkingSeatTransfer, is hardwired to the
     ///      AFKing seat token.
     ///      No exclusion list, because nothing here needs one: the vault reads no NFT
-    ///      ownership or balance for accounting; the AFKing seat lock lives in the token, so a
-    ///      transfer emptying this contract's seat balance still reverts SeatInUse and the
-    ///      vault always keeps at least one seat; and deity passes are soulbound, so they
-    ///      revert on their own.
+    ///      ownership or balance for accounting; its own subscription needs no seat; and
+    ///      deity passes are soulbound, so they revert on their own.
     ///      Plain transferFrom, not safeTransferFrom: the caller picks `to`, and the receiver
     ///      hook would only add a failure mode on contract recipients.
     /// @param token NFT contract to sweep from.
@@ -1078,7 +1087,7 @@ contract DegenerusVault {
                 // FLIP._mint, which intercepts VAULT-destined mints into the allowance. That
                 // allowance is exactly what vaultMintTo below spends, so the claim funds the
                 // whole redemption rather than a separate transferable leg.
-                coinflipPlayer.claimCoinflips(address(this), flipOut);
+                coinflipPlayer.claimCoinflips(0, flipOut);
             }
 
             // Any over-mint attempt reverts inside vaultMintTo against the live allowance.
@@ -1112,14 +1121,14 @@ contract DegenerusVault {
         // so the withdrawal is capped at what is left.
         if (claimValue > combined) {
             if (claimable != 0) {
-                gamePlayer.claimWinnings(address(this));
+                gamePlayer.claimWinnings(0);
                 ethBal = address(this).balance;
                 stBal = _stethBalance();
             }
             if (claimValue > ethBal + stBal) {
                 uint256 shortfall = claimValue - ethBal - stBal;
                 uint256 afking = gamePlayer.afkingFundingOf(address(this));
-                gamePlayer.withdrawAfkingFunding(shortfall < afking ? shortfall : afking);
+                gamePlayer.withdrawAfkingFunding(0, shortfall < afking ? shortfall : afking);
                 ethBal = address(this).balance;
                 stBal = _stethBalance(); // the withdrawal falls back to stETH when the game's ETH is short
             }
