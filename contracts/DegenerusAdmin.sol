@@ -472,13 +472,13 @@ contract DegenerusAdmin {
     }
 
     function _governanceId(address wallet) private view returns (uint32) {
-        return IDegenerusGame(ContractAddresses.GAME).walletIdOf(wallet);
+        return IDegenerusGame(ContractAddresses.GAME).walletIdentityOf(wallet);
     }
 
     /// @dev No account selector: voting weight and identity both belong to the caller.
     ///      Past free admission the caller must first register through a qualifying paid Game door.
     function _registerGovernanceCaller() private returns (uint32) {
-        return IDegenerusGame(ContractAddresses.GAME).registerWallet(msg.sender, true);
+        return IDegenerusGame(ContractAddresses.GAME).registerWalletIdentity(msg.sender);
     }
 
     /// @notice Tracks each address's current active proposal ID (0 = none).

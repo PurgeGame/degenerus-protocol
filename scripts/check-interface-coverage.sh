@@ -26,6 +26,7 @@ NC=$'\033[0m'
 # Interface -> implementation mapping.
 # Skipped (external protocols): IStETH (Lido), IVRFCoordinator (Chainlink).
 MAPPINGS=(
+  "contracts/interfaces/ILiquidation.sol:ILiquidationDeity|contracts/DegenerusDeityPass.sol:DegenerusDeityPass"
   "contracts/interfaces/ICoinflip.sol:ICoinflip|contracts/Coinflip.sol:Coinflip"
   "contracts/interfaces/IDegenerusAffiliate.sol:IDegenerusAffiliate|contracts/DegenerusAffiliate.sol:DegenerusAffiliate"
   "contracts/interfaces/IDegenerusCoin.sol:IDegenerusCoin|contracts/FLIP.sol:FLIP"

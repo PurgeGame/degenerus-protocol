@@ -262,6 +262,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         if (funderId == 0) funderId = _requireWalletId(msg.sender);
         _requireAllocated(funderId);
         _requireAllocated(subscriberId);
+        if (_isAcquired(funderId) || _isAcquired(subscriberId)) revert NotApproved();
         if (_payee(_walletElement(funderId)) != msg.sender) revert NotApproved();
         afkingFundingApprovals[funderId][subscriberId] = approved;
         emit AfkingFundingApproval(funderId, subscriberId, approved);
@@ -338,6 +339,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // The account rule: the caller for id 0, else an account the caller may act for.
         uint32 subId = _resolveAccountId(id);
         if (dailyQuantity != 0) subId = _registerCallerAccount(subId, msg.value);
+        if (_isAcquired(subId)) revert NotApproved();
 
         // An external funding source (an ID other than 0 and the subscriber's own) must be
         // allocated and must consent: the same main wallet as the subscriber (equal payees)
@@ -1126,6 +1128,18 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         _setStreakBase(sub, 0);
     }
 
+    function _cancelAcquiredSubscription(uint32 id) private {
+        Sub storage sub = _subOf[id];
+        if (sub.setPosition == 0 || sub.dailyQuantity == 0) return;
+        // Same forfeiture as an expired run: claim pending accrual before liquidation.
+        _finalizeAfking(id, sub, _simulatedDayIndex());
+        // Leave its paid box stamp reachable by the ordinary open worker.
+        sub.dailyQuantity = 0;
+        emit SubscriptionUpdated(id, 0, (sub.flags & FLAG_DRAIN_FIRST) != 0,
+            (sub.flags & FLAG_USE_TICKETS) != 0,
+            (sub.flags & FLAG_EXTERNAL_FUNDING) != 0 ? _fundingSourceOf[id] : 0);
+    }
+
     /// @dev Settle a sub's accrued `pendingFlip` (the per-delivered-day slot-0 quest
     ///      reward + the ticket buyer-bonus): zero it FIRST (CEI — before the external
     ///      credit, so a re-entrant claim finds 0), grant the presale-box credit while
@@ -1300,6 +1314,10 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 continue;
             }
 
+            // Acquisition takes effect for every child before any further debit. Paid stamps
+            // were handled by the no-orphan guard above; unclaimed run accrual may forfeit.
+            if (sub.dailyQuantity != 0 && _isAcquired(id)) _cancelAcquiredSubscription(id);
+
             // (0) Cancel-tombstone reclaim.
             // An externally-cancelled sub (subscribe(_, 0)) is an in-set
             // `dailyQuantity == 0` tombstone: it relocated no one on cancel, so it cannot
@@ -1354,6 +1372,12 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             uint32 srcWord = (sub.flags & FLAG_EXTERNAL_FUNDING) != 0
                 ? _fundingSourceOf[id]
                 : element;
+            if (srcWord != id && _isAcquired(srcWord)) {
+                _cancelAcquiredSubscription(id);
+                // Reclaim the tombstone at the same cursor on the next bounded iteration.
+                unchecked { ++processed; }
+                continue;
+            }
             uint256 srcFunding = _afkingOf(srcWord);
 
             // Funding resolution (cost + ethValue slice). The slice builder computes

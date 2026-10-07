@@ -24,6 +24,14 @@ import {IDegenerusGameFoilPackModule} from "../interfaces/IDegenerusGameModules.
 ///      of that partition. The miner dispatcher owns
 ///      admission/publication and must not replace the word before this work ends.
 contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
+    /// @notice Stable identity for wallet-bound governance and address-derived referral codes.
+    function registerWalletIdentity(address owner) external returns (uint32 id) {
+        if (msg.sender != ContractAddresses.ADMIN && msg.sender != ContractAddresses.GNRUS
+            && msg.sender != ContractAddresses.AFFILIATE) revert E();
+        id = uint32(walletIds[owner] >> 32);
+        if (id == 0) (id, ) = _registerWallet(owner, 0);
+    }
+
     /// @notice The one wallet-ID hook for protocol contracts with their own player entry points.
     /// @dev With `allocate = false`, return the ordinary wallet's existing ID or zero.
     ///      Allocation carries no spend here, so it is available only through the free-ID

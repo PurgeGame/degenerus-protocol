@@ -289,7 +289,7 @@ contract CoinflipCarryClaim is DeployProtocol {
     /// five are externally reachable. This drives every one of them while day 4 sits unapplied
     /// with a live carry on it, and asserts the carry is byte-identical at the end.
     ///
-    ///   consumeFlipForSalvage      -> only via FLIP.burnCoinForSalvage, whose sole entry
+    ///   consumeFlipBacking      -> only via FLIP.burnCoinForSalvage, whose sole entry
     ///                                 (sellFarFutureEntries) reverts under the game's RNG lock.
     ///                                 That lock is up from the VRF request until _unlockRng,
     ///                                 which runs after the payouts that apply the day — so it

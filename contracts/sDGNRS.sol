@@ -66,8 +66,9 @@ interface IDegenerusGamePlayer {
     function livenessTriggered() external view returns (bool);
     /// @notice Get player's activity score and permanent Game wallet ID (0 = none).
     function playerActivityScore(address player) external view returns (uint256 scorePoints, uint32 walletId);
-    /// @notice `player`'s permanent Game wallet ID (0 = none; never allocates).
+    /// @notice `player`'s current default Game account (0 = none; never allocates).
     function walletIdOf(address player) external view returns (uint32);
+    function acquiredBuyer(uint32 id) external view returns (uint32 buyer);
     /// @notice Resolve a redemption lootbox (sDGNRS forwards ETH as msg.value; GAME pulls any stETH remainder).
     function resolveRedemptionLootbox(
         uint32 playerId, uint256 amount, uint256 rngWord, uint16 activityScore, uint32 batchId
@@ -604,7 +605,8 @@ contract sDGNRS {
     }
 
     /// @notice Settle account `id`'s parked claim on its batch's word. The account's key, a smurf's
-    ///         owner or an approved operator only (`id == 0` is the caller).
+    ///         owner or an approved operator (`id == 0` is the caller); acquired accounts also
+    ///         allow permissionless triggering with payment fixed to their recorded buyer.
     /// @dev The word, roll and synthetic flip are fixed, but the lootbox half resolves at the
     ///      level live at claim time. Terminal claims take the usual direct terminal shape, paid
     ///      to the account's payee; the word is then unused.
@@ -679,8 +681,8 @@ contract sDGNRS {
     /// @dev Flat roll for a settling batch the ending resolves (terminal word or deterministic).
     uint16 private constant ENDING_ROLL = 100;
 
-    /// @dev Minimum gambling-burn amount (1 whole sDGNRS = 1e12 raw).
-    uint256 private constant MIN_BURN_AMOUNT = 1e12;
+    /// @dev Minimum live redemption value at admission; no fixed token-count floor.
+    uint256 public constant MIN_REDEMPTION_VALUE = 0.01 ether;
 
     /// @dev Domain for a batch's synthetic flip; batch id and word key each draw.
     bytes32 private constant SYNTH_FLIP_TAG = keccak256("sdgnrs.redemption.synthetic-flip");
@@ -975,6 +977,18 @@ contract sDGNRS {
     //                          BURN (Public)
     // =====================================================================
 
+    /// @notice Forfeit the seller's entire native sDGNRS balance as part of account liquidation.
+    /// @dev Game authenticates the seller. No payout, reserve, queue entry or ID link is created.
+    ///      Already submitted redemptions are unaffected; wrapped DGNRS is not burned.
+    function burnForLiquidation(address seller) external onlyGame {
+        uint256 amount = balanceOf[seller];
+        if (amount == 0) return;
+        balanceOf[seller] = 0;
+        _totalSupply = uint128(uint256(_totalSupply) - amount);
+        emit Transfer(seller, address(0), amount);
+        emit Burn(seller, amount, 0, 0, 0);
+    }
+
     /// @notice Burn sDGNRS to claim proportional share of backing assets
     /// @dev Post-gameOver: deterministic payout. During game: the tokens burn now and join the open
     ///      redemption batch. The next live VRF request closes and prices it; the miner settles
@@ -1056,6 +1070,9 @@ contract sDGNRS {
     ///      drop ETH + stETH below the redemption reserve, so custody keeps covering every later
     ///      claim. stETH goes first and the untrusted ETH call last; callers write state before.
     function _payGameOverValue(address to, uint256 value) private returns (uint256 ethOut, uint256 stethOut) {
+        // An acquired account's claim becomes free backing when its escrow is released.
+        // Keep it in place; this contract's ETH receiver accepts only Game deposits.
+        if (to == address(this)) return (0, 0);
         uint256 ethBal = address(this).balance;
         uint256 stethBal = steth.balanceOf(address(this));
         if ((value > ethBal || value + _pendingRedemptionEthValue > ethBal + stethBal) && _claimableWinnings() != 0) {
@@ -1090,7 +1107,8 @@ contract sDGNRS {
     /// @dev In a live game mineFlip settles every redemption in batch order, so this is the
     ///      post-gameover door only, and it deletes the claim under the account's wallet ID. Only
     ///      the account's key, a smurf's owner or an operator approved for the account on the GAME
-    ///      may call (`id == 0` is the caller), since the payout is pushed straight to the
+    ///      may call (`id == 0` is the caller); acquired-account claims are permissionless.
+    ///      The payout is pushed straight to the
     ///      account's payee (ETH, with stETH covering any ETH shortfall) rather than credited to
     ///      the Game — a game-claimable credit would forfeit in the post-gameover sweep.
     ///      - A closed batch must carry a roll (resolved live, or at a flat 100 by the ending): the rolled amount pays 100% direct, with no lootbox leg
@@ -1297,7 +1315,7 @@ contract sDGNRS {
     function _submitGamblingClaimFrom(address beneficiary, address burnFrom, uint256 amount) private {
         uint256 bal = balanceOf[burnFrom];
         if (amount == 0 || amount > bal) revert Insufficient();
-        if (amount < MIN_BURN_AMOUNT) revert BurnTooSmall();
+        if (_gameOverValue(amount) < MIN_REDEMPTION_VALUE) revert BurnTooSmall();
 
         uint32 id = _openBatch;
         RedemptionBatch storage batch = redemptionBatches[id];
@@ -1345,7 +1363,10 @@ contract sDGNRS {
         }
         bool authorized;
         (, payee, authorized) = game.resolveAccount(id, msg.sender);
-        if (!authorized) revert Unauthorized();
+        if (!authorized) {
+            uint32 buyer = game.acquiredBuyer(id);
+            if (buyer == 0) revert Unauthorized();
+        }
         walletId = id;
     }
 
@@ -1361,7 +1382,8 @@ contract sDGNRS {
     ///      contract's ETH + stETH custody up to every outstanding reserve, so the backing is
     ///      already in this contract's balance.
     function _payEth(address player, uint256 amount) private {
-        if (amount == 0) return;
+        // Acquired-account self-payouts release the reserve without moving custody.
+        if (amount == 0 || player == address(this)) return;
         uint256 ethBal = address(this).balance;
 
         if (amount <= ethBal) {

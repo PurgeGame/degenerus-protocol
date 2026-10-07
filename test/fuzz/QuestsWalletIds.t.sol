@@ -293,10 +293,10 @@ contract QuestsWalletIdsTest is DeployProtocol {
     function test_HandleDecimatorFromSdgnrsAutoBurnUsesProtocolId() public {
         vm.mockCall(
             address(coinflip),
-            abi.encodeWithSelector(coinflip.previewSalvageFlipBacking.selector, ContractAddresses.SDGNRS),
+            abi.encodeWithSelector(coinflip.previewFlipBacking.selector, ContractAddresses.SDGNRS),
             abi.encode(uint256(5_000))
         );
-        vm.mockCall(address(coinflip), abi.encodeWithSelector(coinflip.consumeFlipForSalvage.selector), abi.encode(uint256(5_000)));
+        vm.mockCall(address(coinflip), abi.encodeWithSelector(coinflip.consumeFlipBacking.selector), abi.encode(uint256(5_000)));
         vm.mockCall(address(game), abi.encodeWithSelector(game.recordDecBurn.selector), abi.encode(uint64(1)));
         // sDGNRS's daily state already synced at deploy; the level-quest leg writes its record.
         _setLevelQuest(QT_DECIMATOR);

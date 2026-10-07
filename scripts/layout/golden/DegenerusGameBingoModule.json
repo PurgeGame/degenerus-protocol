@@ -1013,7 +1013,7 @@
     "label": "walletIds",
     "offset": 0,
     "slot": 77,
-    "typeLabel": "mapping(address => uint32)"
+    "typeLabel": "mapping(address => uint64)"
   },
   {
     "bytes": "32",

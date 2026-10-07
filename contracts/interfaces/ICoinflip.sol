@@ -44,6 +44,7 @@ uint8 constant RECORD_KIND_DICE_RUN = 4;
 uint8 constant RECORD_KINDS = 5;
 
 interface ICoinflip {
+    function claimAcquiredCoinflips(uint32 id) external returns (uint256);
     /// @notice Emitted whenever a player's coinflip claim-state changes (claimable + carry + claim
     ///         cursor), so off-chain consumers can reconstruct valuation from logs without an eth_call.
     /// @param player The player whose claim-state changed.
@@ -304,7 +305,7 @@ interface ICoinflip {
       +======================================================================+*/
 
     function previewClaimCoinflipsById(uint32 id) external view returns (uint256);
-    function previewSalvageFlipBackingById(uint32 id) external view returns (uint256);
+    function previewFlipBackingById(uint32 id) external view returns (uint256);
     function coinflipAmountById(uint32 id) external view returns (uint256);
     function coinflipAutoRebuyInfoById(uint32 id) external view returns (bool, uint256, uint256, uint24);
 

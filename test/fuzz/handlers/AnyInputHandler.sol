@@ -275,12 +275,8 @@ contract AnyInputHandler is Test {
         _call(6, address(game), 0, abi.encodeWithSignature("redeemFlip(uint32,uint256)", _id(bSeed), qty));
     }
 
-    function g_sellFarFuture(uint256 a, uint256 pSeed, uint32[] calldata levels, uint256[] calldata qtys, uint256[] calldata idxs)
-        external
-        act(a)
-    {
-        _call(7, address(game), 0, abi.encodeWithSignature(
-            "sellFarFutureEntries(uint32,uint32[],uint256[],uint256[])", _id(pSeed), levels, qtys, idxs));
+    function g_liquidateAccount(uint256 a, uint256 pSeed, uint256 minEthOut) external act(a) {
+        _call(7, address(game), 0, abi.encodeWithSignature("liquidateAccount(uint32,uint256)", _id(pSeed), minEthOut));
     }
 
     function g_buyLootboxAndPresaleBox(
@@ -748,29 +744,8 @@ contract AnyInputHandler is Test {
         return ok && r.length >= 32 ? uint16(abi.decode(r, (uint256))) : 1;
     }
 
-    function gd_sellFarFuture(uint256 a, uint256 lSeed, uint256 qSeed) external act(a) {
-        uint24 active = game.level() + 1;
-        for (uint256 off; off < 99; ++off) {
-            uint24 lvl = active + 2 + uint24((lSeed % 99 + off) % 99);
-            uint256 owned = game.entriesOwedView(lvl, currentActor);
-            if (owned < 4) continue;
-            uint24 key = lvl | uint24(1 << 22);
-            uint256 len = TicketQueueStorage.length(address(game), key);
-            for (uint256 j; j < len; ++j) {
-                if (TicketQueueStorage.ownerAt(address(game), key, lvl, j) != currentActor) continue;
-                uint32[] memory levels = new uint32[](1);
-                uint256[] memory qtys = new uint256[](1);
-                uint256[] memory idxs = new uint256[](1);
-                levels[0] = lvl;
-                qtys[0] = 4 * (1 + qSeed % (owned / 4));
-                idxs[0] = j;
-                _call(84, address(game), 0, abi.encodeWithSignature(
-                    "sellFarFutureEntries(uint32,uint32[],uint256[],uint256[])", uint32(0), levels, qtys, idxs));
-                return;
-            }
-        }
-        _lastId = 84;
-        ++calls[84];
+    function gd_liquidateAccount(uint256 a, uint256, uint256) external act(a) {
+        _call(84, address(game), 0, abi.encodeWithSignature("liquidateAccount(uint32,uint256)", uint32(0), uint256(0)));
     }
 
     function gd_issueDeityBoon(uint256 a, uint256 rSeed, uint8 slot) external act(a) {
@@ -994,7 +969,7 @@ contract AnyInputHandler is Test {
     function _initNames() internal {
         string[N_ACTIONS] memory n = [
             string("cf_depositCoinflip"), "cf_claimCoinflips", "cf_claimCoinflipCarry", "cf_setCoinflipAutoRebuy",
-            "cf_setCoinflipAutoRebuyTakeProfit", "g_purchase", "g_redeemFlip", "g_sellFarFutureEntries",
+            "cf_setCoinflipAutoRebuyTakeProfit", "g_purchase", "g_redeemFlip", "g_liquidateAccount",
             "g_buyLootboxAndPresaleBox", "g_claimBingo", "g_claimDeadVrf", "g_claimFoilMatch",
             "g_claimFoilMatchMany", "g_claimGoldenTicket", "g_claimAffiliateDgnrs(addr)", "g_claimAffiliateDgnrs(addr[])",
             "g_claimWhalePass", "g_claimAfkingFlip", "g_withdrawAfkingFunding", "g_depositAfkingFunding",
@@ -1014,7 +989,7 @@ contract AnyInputHandler is Test {
             "st_safeTransferFrom", "st_approve", "st_setApprovalForAll", "unused_75",
             "st_setSeatTraits", "prog_buy", "prog_bigBuy", "prog_mineFlip",
             "prog_fulfillVrf", "prog_warp", "prog_driveDay", "prog_topUp",
-            "gd_sellFarFutureEntries", "gd_issueDeityBoon", "gd_placeDegeneretteBet", "gd_enterBonusBattle",
+            "gd_liquidateAccount", "gd_issueDeityBoon", "gd_placeDegeneretteBet", "gd_enterBonusBattle",
             "gd_enterBonusDay", "gd_createBattle", "gd_enterBattle", "gd_amendSlip",
             "gd_reverseFlip", "gd_transferOwnSeat", "gd_claimFoilMatch", "gd_smite",
             "gd_sdgnrsBurn", "gd_burnWrapped", "gd_referPlayer", "gd_closeBattle",

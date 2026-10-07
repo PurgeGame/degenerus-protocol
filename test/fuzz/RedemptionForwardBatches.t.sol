@@ -213,16 +213,15 @@ contract RedemptionForwardBatchesTest is RedemptionFixture {
         ethHeld = uint96(bound(ethHeld, 0, 1_000_000 ether));
         stethHeld = uint96(bound(stethHeld, 0, 1_000_000 ether));
         gameClaimable = bound(gameClaimable, 0, 1_000_000 ether);
-        vm.deal(address(sdgnrs), ethHeld);
-        _giveSteth(stethHeld);
-
-        // No admission cap: any holding may burn, including the last raw token unit.
+        // Admit against the initial backing, then vary backing before close.
         uint256 supply = sdgnrs.totalSupply();
         uint256 maxAmount = sdgnrs.balanceOf(alice);
-        vm.assume(maxAmount >= 1e12);
-        uint256 amount = bound(amountSeed, 1e12, maxAmount);
+        vm.assume(maxAmount >= _minimumLiveBurn());
+        uint256 amount = bound(amountSeed, _minimumLiveBurn(), maxAmount);
         _burn(alice, amount);
         assertEq(sdgnrs.totalSupply(), supply - amount, "the burn leaves supply at once");
+        vm.deal(address(sdgnrs), ethHeld);
+        _giveSteth(stethHeld);
 
         (uint32 id,) = _state();
         uint256 custody = address(sdgnrs).balance + mockStETH.balanceOf(address(sdgnrs));

@@ -73,14 +73,7 @@ interface IDegenerusGamePlayerActions {
     function claimableWinningsOf(address player) external view returns (uint256);
     /// @notice Purchase tickets using FLIP for account `id` (0 = caller; FLIP from its payee).
     function redeemFlip(uint32 id, uint256 entryQuantityScaled) external;
-    /// @notice Sell far-future ticket entries for current-level tickets + cash; the counterparty resolves to sDGNRS, or to the vault as buyer-of-last-resort when sDGNRS cannot fund the swap.
-    ///         `id` is the selling account (0 = caller).
-    function sellFarFutureEntries(
-        uint32 id,
-        uint32[] calldata levels,
-        uint256[] calldata quantities,
-        uint256[] calldata queueIndices
-    ) external;
+
     /// @notice Fund account `id`'s prepaid afking ETH bucket (nonzero, allocated; the vault
     ///         passes its constant wallet ID 1).
     function depositAfkingFunding(uint32 id) external payable;
@@ -548,14 +541,14 @@ contract DegenerusVault {
     IsDGNRSBurn internal constant sdgnrsToken = IsDGNRSBurn(ContractAddresses.SDGNRS);
 
     // ---------------------------------------------------------------------
-    // SALVAGE-BUYER FALLBACK CONFIG (owner-settable; packed into one slot)
+    // LIQUIDATION-BUYER FALLBACK CONFIG (owner-settable; packed into one slot)
     // ---------------------------------------------------------------------
-    /// @dev True when the vault buys far-future salvage tickets that sDGNRS cannot fund. Owner-gated.
-    bool private _salvageBuyEnabled;
-    /// @dev ETH (wei) reserve the vault keeps untouched when acting as salvage buyer-of-last-resort.
+    /// @dev True when the vault buys liquidated accounts that sDGNRS cannot fund. Owner-gated.
+    bool private _liquidationBuyEnabled;
+    /// @dev ETH (wei) reserve the vault keeps untouched when acting as liquidation buyer-of-last-resort.
     ///      The game buys for the vault only while its game-side ETH (claimable + prepaid afking) >=
     ///      totalBudget + this floor.
-    uint96 private _salvageVaultFloorWei;
+    uint96 private _liquidationVaultFloorWei;
 
     /// @notice whole FLIP of craps comps an address other than the vault owner may still assign
     ///         through `crapsComp` or `crapsCompDonate`. Set by the owner and charged at the
@@ -629,7 +622,7 @@ contract DegenerusVault {
     }
 
     /// @notice Stage vault ETH as the vault's prepaid afking funding in the game.
-    /// @dev Funds the afking leg of the vault's own daily auto-buy and its salvage-buyer
+    /// @dev Funds the afking leg of the vault's own daily auto-buy and its liquidation-buyer
     ///      fallback. The staged ETH stays part of DGVE's reserve (see _ethReservesView) and
     ///      burnEth draws on it when the vault's own balance and claimable winnings fall short.
     /// @param ethValue Additional ETH from vault balance to stage (on top of msg.value)
@@ -726,40 +719,31 @@ contract DegenerusVault {
         );
     }
 
-    /// @notice Salvage the vault's far-future ticket entries for current tickets + cash — vault owner. Counterparty resolves to sDGNRS or, on fallback, to the vault itself.
-    /// @dev The >50.1% DGVE holder can trim VAULT's far inventory (entry counts in whole-ticket
-    ///      multiples of 4). VAULT self-calls (no operator).
-    function gameSellFarFutureEntries(
-        uint32[] calldata levels,
-        uint256[] calldata quantities,
-        uint256[] calldata queueIndices
-    ) external onlyVaultOwner {
-        gamePlayer.sellFarFutureEntries(0, levels, quantities, queueIndices);
-    }
 
-    /// @notice Enable/disable the salvage-buyer fallback and set the protected ETH reserve floor.
-    /// @dev When enabled, the game routes a far-future salvage swap to the vault as buyer when sDGNRS
+
+    /// @notice Enable/disable the liquidation-buyer fallback and set the protected ETH reserve floor.
+    /// @dev When enabled, the game routes an account liquidation to the vault as buyer when sDGNRS
     ///      cannot fund it, spending the vault's game-side ETH — claimable first, then prepaid afking
-    ///      (staged from reserves via gameDepositAfkingFunding) — down to `floorWei`, plus
-    ///      vault-owned FLIP, and parking the bought far-future tickets in the vault. This commits
-    ///      DGVE/DGVF backing as buyer-of-last-resort at the same -EV quote sDGNRS pays, so it is
+    ///      (staged from reserves via gameDepositAfkingFunding) — down to `floorWei`. The vault
+    ///      owns the purchased account family and receives its later proceeds. This commits
+    ///      DGVE backing at the same quote sDGNRS pays, so it is
     ///      vault-owner gated.
-    /// @param enabled Whether the vault acts as salvage buyer-of-last-resort.
+    /// @param enabled Whether the vault acts as liquidation buyer-of-last-resort.
     /// @param floorWei ETH (wei) reserve kept untouched; the vault buys only while its claimable + afking
     ///        covers totalBudget + floorWei.
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE.
     /// @custom:reverts Insufficient If floorWei exceeds the uint96 reserve-floor width.
-    function setSalvageBuyFallback(bool enabled, uint256 floorWei) external onlyVaultOwner {
+    function setLiquidationBuyFallback(bool enabled, uint256 floorWei) external onlyVaultOwner {
         if (floorWei > type(uint96).max) revert Insufficient();
-        _salvageBuyEnabled = enabled;
-        _salvageVaultFloorWei = uint96(floorWei);
+        _liquidationBuyEnabled = enabled;
+        _liquidationVaultFloorWei = uint96(floorWei);
     }
 
-    /// @notice The salvage-buyer fallback config the game reads when sDGNRS cannot fund a salvage swap.
-    /// @return enabled Whether the vault buys far-future salvage tickets as last resort.
+    /// @notice The liquidation-buyer fallback config the game reads when sDGNRS cannot fund a liquidation.
+    /// @return enabled Whether the vault buys liquidated accounts as last resort.
     /// @return floorWei ETH (wei) reserve the vault keeps untouched as buyer.
-    function salvageBuyConfig() external view returns (bool enabled, uint256 floorWei) {
-        return (_salvageBuyEnabled, _salvageVaultFloorWei);
+    function liquidationBuyConfig() external view returns (bool enabled, uint256 floorWei) {
+        return (_liquidationBuyEnabled, _liquidationVaultFloorWei);
     }
 
     /// @notice Approve or revoke an operator for the vault's account (wallet ID 1) across

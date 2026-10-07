@@ -351,7 +351,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         vm.startPrank(COIN);
         assertEq(coinflip.claimCoinflipsFromFlip(q, 100), 0);
         assertEq(coinflip.consumeCoinflipsForBurn(q, 100), 0);
-        assertEq(coinflip.consumeFlipForSalvage(q, 100), 0);
+        assertEq(coinflip.consumeFlipBacking(q, 100), 0);
         vm.stopPrank();
         (, bytes32[] memory writes) = vm.accesses(address(coinflip));
         assertEq(writes.length, 0, "unregistered claims write no account state");
@@ -361,7 +361,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         assertFalse(enabled);
         assertEq(startDay, 0);
         assertEq(coinflip.previewClaimCoinflips(q), 0);
-        assertEq(coinflip.previewSalvageFlipBacking(q), 0);
+        assertEq(coinflip.previewFlipBacking(q), 0);
         assertEq(coinflip.coinflipAmount(q), 0);
         (uint256 n,,) = _registrations(vm.getRecordedLogs());
         assertEq(n, 0, "no registration");

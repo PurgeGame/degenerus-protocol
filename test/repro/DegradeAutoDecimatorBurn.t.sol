@@ -26,12 +26,12 @@ contract DegradeAutoDecimatorBurnTest is DeployProtocol {
     function _mockLegs(uint256 previewed, uint256 consumed) private {
         vm.mockCall(
             address(coinflip),
-            abi.encodeWithSelector(Coinflip.previewSalvageFlipBacking.selector, HOUSE),
+            abi.encodeWithSelector(Coinflip.previewFlipBacking.selector, HOUSE),
             abi.encode(previewed)
         );
         vm.mockCall(
             address(coinflip),
-            abi.encodeWithSelector(Coinflip.consumeFlipForSalvage.selector, HOUSE, previewed),
+            abi.encodeWithSelector(Coinflip.consumeFlipBacking.selector, HOUSE, previewed),
             abi.encode(consumed)
         );
     }

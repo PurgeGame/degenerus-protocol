@@ -291,7 +291,8 @@ contract DegenerusAffiliate {
     function affiliateCode(bytes32 code) external view returns (address owner, uint32 ownerId, uint8 kickback) {
         if (uint256(code) <= type(uint160).max) {
             owner = address(uint160(uint256(code)));
-            return (owner, game.walletIdOf(owner), 0);
+            ownerId = game.walletIdentityOf(owner);
+            return (ownerId == 0 ? owner : WalletTableLib.ownerOf(ownerId), ownerId, 0);
         }
         if (uint256(code) >> 32 == ACCOUNT_CODE_TAG >> 32) {
             ownerId = uint32(uint256(code));
@@ -800,7 +801,7 @@ contract DegenerusAffiliate {
         uint256 c = uint256(code);
         if (c <= type(uint160).max) {
             if (c <= uint256(REF_CODE_LOCKED)) return (0, 0);
-            uint32 id = game.registerWallet(address(uint160(c)), true);
+            uint32 id = game.registerWalletIdentity(address(uint160(c)));
             if (id == senderId) return (0, 0);
             return (id, bytes32(DEFAULT_ID_TAG | id));
         }

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
+import {IStETH} from "../interfaces/IStETH.sol";
 
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
@@ -29,6 +30,47 @@ import {ContractAddresses} from "../ContractAddresses.sol";
 
 /// @dev Shared payout helpers for jackpot-related modules.
 abstract contract DegenerusGamePayoutUtils is DegenerusGameStorage {
+    IStETH internal constant payoutSteth = IStETH(ContractAddresses.STETH_TOKEN);
+    function _transferSteth(address to, uint256 amount) internal {
+        if (amount == 0) return;
+        if (to == ContractAddresses.SDGNRS) {
+            if (!payoutSteth.approve(ContractAddresses.SDGNRS, amount)) revert TransferFailed();
+            dgnrs.depositSteth(amount);
+            return;
+        }
+        if (!payoutSteth.transfer(to, amount)) revert TransferFailed();
+    }
+
+    function _payoutWithStethFallback(address to, uint256 amount) internal {
+        if (amount == 0) return;
+
+        // ETH is preferred for player claims, but the untrusted ETH .call MUST run LAST (CEI):
+        // _claimWinningsInternal has already debited claimablePool by the full payout, so sending
+        // ETH while the stETH remainder is still held would let a reentrant distributeYieldSurplus
+        // read that in-flight stETH as unreserved backing and over-distribute it. Mirrors the
+        // stETH-before-ETH ordering of _payoutWithEthFallback and the sDGNRS _payEth path.
+        uint256 ethBal = address(this).balance;
+        uint256 ethSend = amount <= ethBal ? amount : ethBal;
+        uint256 remaining = amount - ethSend;
+
+        // Move the stETH leg out first (a stETH transfer hands no control to `to`); any stETH
+        // shortfall is folded into the single ETH .call below.
+        if (remaining != 0) {
+            uint256 stBal = payoutSteth.balanceOf(address(this));
+            uint256 stSend = remaining <= stBal ? remaining : stBal;
+            _transferSteth(to, stSend);
+            ethSend += remaining - stSend;
+        }
+
+        // Untrusted ETH .call LAST — all ledger debits and the stETH transfer have completed.
+        // An insufficient self-balance fails the value transfer itself (callee never runs),
+        // so the !ok revert below covers the shortfall case.
+        if (ethSend != 0) {
+            (bool ok, ) = payable(to).call{value: ethSend}("");
+            if (!ok) revert TransferFailed();
+        }
+    }
+
     /// @dev Route coin-presale-box ETH proceeds: 80% to the vault, 20% to sDGNRS,
     ///      both as claimable credits, while bumping claimablePool by the full
     ///      boxEth to reserve the credits.

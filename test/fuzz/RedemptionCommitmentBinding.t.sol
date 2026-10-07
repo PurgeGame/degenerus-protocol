@@ -81,12 +81,13 @@ contract RedemptionCommitmentBindingTest is RedemptionFixture {
         // These mutations happen after the request fixed the price. They cannot change
         // that batch's base, score or word; new burns belong to the next request.
         mockStETH.mint(address(sdgnrs), 100 ether);
-        _burn(alice, 1e12);
-        assertEq(_claimTokens(alice, id + 1), 1e12);
+        uint256 nextAmount = _minimumLiveBurn();
+        _burn(alice, nextAmount);
+        assertEq(_claimTokens(alice, id + 1), nextAmount);
         (,,uint96 unchanged,,,) = sdgnrs.redemptionBatches(id);
         assertEq(unchanged, base);
         assertEq(_settle(id, 7_000_000, word), full, "later backing and burns cannot rewrite committed awards");
-        assertEq(_claimTokens(alice, id + 1), 1e12, "next batch was not consumed by the known word");
+        assertEq(_claimTokens(alice, id + 1), nextAmount, "next batch was not consumed by the known word");
     }
     function test_NormalOddWordCommitment() public { _compare(7419, false); }
     function test_NormalEvenWordCommitment() public { _compare(7076, false); }

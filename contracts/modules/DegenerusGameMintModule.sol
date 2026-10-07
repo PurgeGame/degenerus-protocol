@@ -39,6 +39,8 @@ import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
 
+import {LiquidationQuote, ILiquidationDeity} from "../interfaces/ILiquidation.sol";
+
 /**
  * @title DegenerusGameMintModule
  * @author Burnie Degenerus
@@ -493,229 +495,105 @@ contract DegenerusGameMintModule is
         }
     }
 
-    /// @notice Emitted on a far-future salvage swap (sellFarFutureEntries).
-    /// @dev `buyer` is the counterparty that funded the swap and received the far-future tickets:
-    ///      sDGNRS normally, or the vault on the owner-enabled fallback when sDGNRS cannot fund it.
-    ///      cashWei subdivides into ethCashWei (relabeled claimable) + flipTokens (buyer-owned FLIP
-    ///      burned, paid to the player as flip credit). value(flipTokens) + ethCashWei == cashWei.
-    event FarFutureSwap(
-        uint32 indexed player,
-        uint32 indexed buyer,
-        uint256 lineCount,
-        uint256 totalBudgetWei,
-        uint256 ticketWei,
-        uint256 ethCashWei,
-        uint256 flipTokens
-    );
-
-    /// @notice Quote a far-future salvage swap WITHOUT executing (the UI offer; -EV by design).
-    /// @dev Read-only twin of sellFarFutureEntries: shares the exact valuation (curve + daily
-    ///      per-player jitter + ETH/FLIP split) the executing path uses, so the displayed offer
-    ///      matches what would be paid. Resolves the same buyer the executing path would (sDGNRS, or
-    ///      the vault on the owner-enabled fallback) so the ETH/FLIP breakdown reflects the actual
-    ///      counterparty's FLIP inventory. Reverts on an ineligible distance or a zero /
-    ///      non-whole-ticket quantity (entry counts in multiples of 4); does
-    ///      NOT check ownership (a quote for the given bundle). The jitter is keyed by the wallet
-    ///      ID; an address with no ID quotes on ID 0 and holds nothing to sell. When the resolved buyer holds no FLIP
-    ///      (or the seed targets zero) the whole cash leg is paid in ETH; conserved as ethCashWei +
-    ///      value(flipTokens).
-    /// @return totalFaceWei Sum of priceForLevel(L) * n / 4 over all lines (per-entry face; bundle face).
-    /// @return totalBudget Total ETH the buyer would pay (the -EV offer).
-    /// @return ticketWei Portion delivered as current-level tickets.
-    /// @return ethCashWei Cash portion delivered as withdrawable ETH claimable.
-    /// @return flipTokens Cash portion delivered as FLIP (burned from the buyer, paid as flip credit).
-    function previewSellFarFutureEntries(
-        address player,
-        uint32[] calldata levels,
-        uint256[] calldata quantities
-    )
-        external
-        view
-        returns (
-            uint256 totalFaceWei,
-            uint256 totalBudget,
-            uint256 ticketWei,
-            uint256 ethCashWei,
-            uint256 flipTokens
-        )
-    {
-        uint24 cl = _activeTicketLevel();
-        uint256 oneTicketWei = PriceLookupLib.priceForLevel(cl);
-        uint256 seed = _farFutureSeed(_walletIdOf(player));
-        uint256 cashWei;
-        (totalFaceWei, totalBudget, ticketWei, cashWei) = _quoteFarFutureSwap(
-            levels,
-            quantities,
-            cl,
-            oneTicketWei,
-            seed
-        );
-        // Display the split for the buyer the executing path would resolve; fall back to sDGNRS as the
-        // nominal counterparty when neither can fund (the preview still shows the -EV offer).
-        address buyer = _resolveSalvageBuyer(totalBudget);
-        if (buyer == address(0)) buyer = ContractAddresses.SDGNRS;
-        (ethCashWei, flipTokens) = _quoteFarFutureFlipSplit(
-            cashWei,
-            oneTicketWei,
-            seed,
-            buyer
-        );
+    function withdrawAfkingFunding(uint32 id, uint256 amount) external {
+        if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert AlreadySwept();
+        if (amount == 0) return;
+        uint32 wid = _resolveAccountId(id);
+        address payee = wid == 0 ? msg.sender : _payee(_walletElement(wid));
+        // One packed load: the guard reads the afking high half and the debit writes it back.
+        uint256 packed = balancesPacked[wid];
+        if (amount > (packed >> 128)) revert Insolvent();
+        // Guard proved amount <= high half, so `amount << 128` subtracts only from the afking
+        // half (no borrow into claimable) — byte-identical to _debitAfking's checked store.
+        balancesPacked[wid] = packed - (amount << 128);
+        claimablePool -= uint128(amount); // tandem release (checked math)
+        emit AfkingWithdrew(wid, amount);
+        // ETH first, stETH for any shortfall — the same backing claims draw on, so a game holding
+        // most of its reserve as stETH can still pay a prepaid afking balance back.
+        _payoutWithStethFallback(payee, amount);
     }
 
-    /// @notice Sell far-future ticket entries (current-level tickets + cash; -EV exit) to sDGNRS, or to
-    ///         the vault on the owner-enabled fallback when sDGNRS cannot fund the swap.
-    /// @dev Raw msg.data target of DegenerusGame.sellFarFutureEntries; resolves seller account `id`
-    ///      under the account rule. Mass-sells far-future ticket ENTRIES (4 entries = 1 whole ticket;
-    ///      2 <= d = L - currentLevel <= 100) for ONE aggregated current-level mint (a normal recycled
-    ///      Claimable mint) + a cash
-    ///      residual. The counterparty is resolved by _resolveSalvageBuyer: sDGNRS first (funded from
-    ///      claimableWinnings[SDGNRS] above a >=1 ETH floor), else the vault if its owner enabled the
-    ///      fallback and it can fund above its owner-set reserve floor; the offer price is identical
-    ///      either way. No pendingRedemptionEthValue term, no daily cap. Valuation + daily jitter are
-    ///      shared with the preview via _quoteFarFutureSwap. The fully-liquidated seller is swap-popped
-    ///      from ticketQueue (membership <=> packed != 0 maintained; far-future jackpot samplers unchanged).
-    /// @custom:reverts E On bad input/distance/holdings, too-small budget, no buyer able to fund (sDGNRS
-    ///                   below its >=1 ETH floor and no vault fallback), gameOver/liveness, or a stale
-    ///                   queue index.
-    /// @custom:reverts RngLocked While the RNG window is locked (freeze invariant).
-    function sellFarFutureEntries(
-        uint32 id,
-        uint32[] calldata levels,
-        uint256[] calldata quantities,
-        uint256[] calldata queueIndices
-    ) external {
-        uint32 sellerId = _resolveAccountId(id);
+    event AccountLiquidated(uint32 indexed accountId, address indexed seller, uint32 indexed buyerId,
+        uint256 price);
+    event AcquiredAccountHarvested(uint32 indexed accountId, uint32 indexed buyerId, uint256 ethValue);
+    event AfkingWithdrew(uint32 indexed player, uint256 amount);
+
+    function previewLiquidateAccount(uint32 id) external view returns (LiquidationQuote memory q) {
+        if (id == 0) id = _walletIdOf(msg.sender);
+        _requireAllocated(id);
+        q.accountId = id;
+        (q.faceValue, q.quoteBudget, q.ticketValue, q.price) = _quoteLiquidation(id);
+        if (q.price != 0) q.buyerId = _resolveLiquidationBuyer(q.price);
+        q.nativeLiquidity = address(this).balance >= q.price;
+        q.eligible = id > GNRUS_WALLET_ID && !_isAcquired(id)
+            && !_liquidationDeity(_payee(_walletElement(id))) && !rngLockedFlag && !gameOver && !_livenessTriggered()
+            && q.price != 0;
+    }
+
+    function _liquidationDeity(address seller) private view returns (bool) {
+        return ILiquidationDeity(ContractAddresses.DEITY_PASS).balanceOf(seller) != 0;
+    }
+
+    /// @notice Sell one account and, for a main account, its entire family. Only the owner.
+    function liquidateAccount(uint32 id, uint256 minEthOut) external {
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        if (id == 0) id = _walletIdOf(msg.sender);
+        _requireAllocated(id);
+        uint256 element = _walletElement(id);
+        address seller = _payee(element);
+        if (seller != msg.sender) revert NotApproved();
+        if (id <= GNRUS_WALLET_ID || _isAcquired(id) || _liquidationDeity(seller)) revert E();
         if (rngLockedFlag) revert RngLocked();
-        if (gameOver) revert E();
-        if (_livenessTriggered()) revert E();
-        uint256 len = levels.length;
-        if (
-            len == 0 ||
-            len > 32 ||
-            quantities.length != len ||
-            queueIndices.length != len
-        ) revert E();
+        if (gameOver || _livenessTriggered()) revert E();
+        (, , , uint256 price) = _quoteLiquidation(id);
+        if (price == 0 || price < minEthOut) revert E();
+        uint32 buyer = _resolveLiquidationBuyer(price);
+        if (buyer == 0) revert Insolvent();
 
-        uint24 cl = _activeTicketLevel();
-        uint256 oneTicketWei = PriceLookupLib.priceForLevel(cl);
-
-        uint256 seed = _farFutureSeed(sellerId);
-        (
-            ,
-            uint256 totalBudget,
-            uint256 ticketWei,
-            uint256 cashWei
-        ) = _quoteFarFutureSwap(levels, quantities, cl, oneTicketWei, seed);
-        if (totalBudget < oneTicketWei / 4) revert E(); // too small to deliver even 1 entry
-
-        // Resolve the counterparty fail-closed: sDGNRS funds from its OWN claimable above a >=1 ETH
-        // floor; if it cannot and the vault owner enabled the fallback, the vault buys above its
-        // owner-set reserve floor; otherwise address(0) -> revert. The gambling-burn redemption desk is
-        // protected STRUCTURALLY (reservations are backed sDGNRS-side at submit: the ETH leg moves
-        // the ETH out of claimable, the custody leg pins sDGNRS's own holdings), so NO
-        // pendingRedemptionEthValue term is needed; NO daily cap. The full budget is gated against the
-        // buyer's claimable even though only the ETH part leaves claimable below (the FLIP part is paid
-        // from the buyer's FLIP) — a strictly more conservative funding check.
-        address buyer = _resolveSalvageBuyer(totalBudget);
-        if (buyer == address(0)) revert E();
-
-        // Split the cash leg: pay an ETH part (claimable relabel) + a FLIP part burned from the buyer's
-        // FLIP, with an ETH fallback when the buyer holds no FLIP. The split conserves the cash-leg
-        // value (ethCashWei + value(flipTokens) == cashWei), so the offer is unchanged.
-        (uint256 ethCashWei, uint256 flipTokens) = _quoteFarFutureFlipSplit(
-            cashWei,
-            oneTicketWei,
-            seed,
-            buyer
-        );
-
-        // Debit the seller's far entries (quantities[i] IS the entry count, 4 per whole ticket; swap-pop on
-        // full sell-out) and credit the buyer the same entries. Distances were validated by
-        // _quoteFarFutureSwap; sequential processing handles duplicate levels (a later same-level line reads
-        // the decremented balance and reverts if it over-sells; only the line that zeroes the packed slot pops).
-        uint32 buyerId = buyer == ContractAddresses.VAULT ? VAULT_WALLET_ID : SDGNRS_WALLET_ID;
-        for (uint256 i; i < len; ) {
-            uint24 L = uint24(levels[i]);
-            uint32 entries = uint32(quantities[i]);
-            _removeFarFutureEntries(sellerId, L, entries, queueIndices[i]);
-            _queueEntries(buyerId, L, entries, false);
-            unchecked {
-                ++i;
-            }
-        }
-
-        // Relabel only the ETH portion (ticket leg + ETH cash) buyer -> player as claimable; the buyer
-        // funds from its claimable (and, for the vault, its prepaid afking) — both claimablePool-backed,
-        // so the move is total-preserving (claimablePool unchanged). The FLIP part never touches
-        // claimable. Solvency-positive: ethRelabel <= totalBudget.
-        uint256 ethRelabel = ticketWei + ethCashWei;
-        _debitSalvageEth(buyerId, ethRelabel);
-        _creditClaimableLogged(sellerId, ethRelabel);
-        // FLIP part: drain the buyer's FLIP (held first, then claimable coinflip stake, then the
-        // auto-rebuy carry — the full salvage waterfall, symmetric with the redemption desk) and pay the
-        // player as flip credit, not a token transfer. flipTokens <= the buyer's spendable (quote cap),
-        // so the burn always covers.
-        if (flipTokens != 0) {
-            coin.burnCoinForSalvage(buyer, flipTokens);
-            coinflip.creditFlip(sellerId, flipTokens);
-        }
-
-        // Ticket leg = NORMAL recycled mint of `ticketWei` of current-level tickets from the player's
-        // claimable (routes 90% next / 10% future + queues current tickets). Leftover (~ethCashWei) is
-        // the player's withdrawable cash. qty in purchase units (4 * QTY_SCALE = 400 = one whole ticket).
-        uint256 qty = (ticketWei * 4 * QTY_SCALE) / oneTicketWei;
-        _purchaseFor(sellerId, qty, 0, bytes32(0), MintPaymentKind.Claimable);
-
-        emit FarFutureSwap(sellerId, buyerId, len, totalBudget, ticketWei, ethCashWei, flipTokens);
+        if (address(this).balance < price) revert Insolvent();
+        dgnrs.burnForLiquidation(seller);
+        if (uint32(element >> 160) == 0) walletIds[seller] &= uint64(type(uint32).max) << 32;
+        // A nonzero seller key beside a buyer ID identifies an acquired root. Keep half passes.
+        uint256 slot = _walletSlot(id);
+        uint256 acquired = (element & (type(uint256).max << 192)) | (uint256(buyer) << 160) | uint160(seller);
+        assembly ("memory-safe") { sstore(slot, acquired) }
+        _debitLiquidationEth(buyer, price);
+        claimablePool -= uint128(price);
+        emit AccountLiquidated(id, seller, buyer, price);
+        (bool paid, ) = seller.call{value: price}("");
+        if (!paid) revert E();
     }
 
-    /// @dev Debit `amount` of a salvage buyer's game-side ETH and book it where solvency stays intact.
-    ///      sDGNRS funds purely from its claimable. The vault funds from claimable FIRST, then its prepaid
-    ///      afking half (both are claimablePool-backed, so the buyer->seller move is total-preserving and
-    ///      leaves claimablePool unchanged). The caller guarantees the resolved buyer covers `amount`.
-    function _debitSalvageEth(uint32 buyerId, uint256 amount) private {
-        if (buyerId == VAULT_WALLET_ID) {
-            uint256 fromClaimable = _claimableOf(buyerId);
-            if (fromClaimable >= amount) {
-                _debitClaimable(buyerId, amount);
-                if (amount != 0) emit ClaimableSpent(buyerId, amount, fromClaimable - amount, MintPaymentKind.Internal, amount);
-            } else {
-                _debitClaimableAndAfking(buyerId, fromClaimable, amount - fromClaimable);
-                if (fromClaimable != 0) emit ClaimableSpent(buyerId, fromClaimable, 0, MintPaymentKind.Internal, fromClaimable);
-                uint256 afkingPart = amount - fromClaimable;
-                if (afkingPart != 0) emit AfkingSpent(buyerId, afkingPart);
-            }
-        } else {
-            _debitClaimable(buyerId, amount);
-            if (amount != 0) emit ClaimableSpent(buyerId, amount, _claimableOf(buyerId), MintPaymentKind.Internal, amount);
-        }
+    /// @dev sDGNRS pays from claimable; Vault uses claimable then its own prepaid reserve.
+    function _debitLiquidationEth(uint32 buyer, uint256 amount) private {
+        uint256 available = _claimableOf(buyer);
+        uint256 fromClaim = amount < available ? amount : available;
+        if (buyer != VAULT_WALLET_ID) fromClaim = amount;
+        _debitClaimableAndAfking(buyer, fromClaim, amount - fromClaim);
+        if (fromClaim != 0) emit ClaimableSpent(buyer, fromClaim, available - fromClaim, MintPaymentKind.Internal, amount);
+        if (amount > fromClaim) emit AfkingSpent(buyer, amount - fromClaim);
     }
 
-    /// @dev Debit `entries` (owed is in entries, 4 per whole ticket) of the player's far-future tickets
-    ///      at level L. On full sell-out (packed == 0) verify the caller-supplied queue index and O(1)
-    ///      swap-pop the seller out of ticketQueue[_ticketQueueStorageKey(ffk)], MAINTAINING `membership <=> packed != 0`
-    ///      (so the far-future jackpot samplers need no change and gain no hot-path read). Partial sells
-    ///      and sells that leave `rem` do not pop.
-    function _removeFarFutureEntries(
-        uint32 ownerPos,
-        uint24 L,
-        uint32 entries,
-        uint256 idx
-    ) internal {
-        uint24 ffk = _tqFarFutureKey(L);
-        uint80 packed = ownerPos == 0 ? 0 : _entryPacked(ffk, ownerPos);
-        uint32 owed = uint32(packed >> 8);
-        if (owed < entries) revert E(); // ownership / over-sell guard
-        uint8 rem = uint8(packed);
-        uint32 newOwed = owed - entries;
-        if (newOwed == 0 && rem == 0) {
-            uint256[] storage q = ticketQueue[_ticketQueueStorageKey(ffk)];
-            if (idx >= _ticketQueueLength(ffk) || _tqPositionAt(q, idx) != ownerPos) revert E();
-            _tqSwapPop(q, idx);
-            _setEntryOwed(ffk, ownerPos, 0);
-        } else {
-            _setEntryOwed(ffk, ownerPos, (packed & OWNER_IDX_MASK) | (uint80(newOwed) << 8) | uint80(rem));
+    /// @notice Bounded, permissionless collection. Pays the recorded buyer and never the caller.
+    function harvestAcquiredAccounts(uint32 buyer, uint32[] calldata ids) external returns (uint256 collected) {
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        if ((buyer != VAULT_WALLET_ID && buyer != SDGNRS_WALLET_ID) || ids.length > 32) revert E();
+        if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert E();
+        for (uint256 i; i < ids.length; ++i) {
+            uint32 id = ids[i];
+            _requireAllocated(id);
+            if (_acquiredBuyer(id) != buyer) revert NotApproved();
+            uint256 packed = balancesPacked[id];
+            uint256 claimable = uint128(packed);
+            uint256 amount = claimable > 1 ? claimable - 1 : 0;
+            uint256 prepaid = packed >> 128;
+            if (amount + prepaid == 0) continue;
+            balancesPacked[id] = packed - amount - (prepaid << 128);
+            collected += amount + prepaid;
+            emit AcquiredAccountHarvested(id, buyer, amount + prepaid);
         }
+        _creditClaimableLogged(buyer, collected);
+        // Internal liability consolidation, so claimablePool does not change.
     }
 
     /// @dev Single-tx callers: the fresh-ETH portion is `msg.value`. Read here (a private fn)
@@ -871,7 +749,7 @@ contract DegenerusGameMintModule is
         // carry a buy over the bar, and the floor is sound because the mark is only
         // ever written by a buy that cleared it. A revert anywhere below unwinds the
         // arm with the rest of the purchase, so a failed buy never arms. Every ticket
-        // path through this body arms — manual buys and the far-future salvage swap's
+        // path through this body arms — manual buys and recycled purchases'
         // recycled ticket leg alike (a qualifying conversion is a real current-level
         // ticket mint and may hold the record). Coin-paid buys stay off the record
         // structurally: they route through FLIP redemption, never this body.

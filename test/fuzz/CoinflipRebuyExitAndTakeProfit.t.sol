@@ -404,7 +404,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
         _resolveDay(4, false); // wipes the rolled carry once settled
 
         assertEq(
-            coinflip.previewSalvageFlipBacking(player),
+            coinflip.previewFlipBacking(player),
             0,
             "G: preview must already reflect the day-4 wipe"
         );
@@ -417,7 +417,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
         // Settling changes nothing — which is the whole point.
         vm.prank(player);
         coinflip.claimCoinflipCarry(0, 0);
-        assertEq(coinflip.previewSalvageFlipBacking(player), 0, "G: settle agrees");
+        assertEq(coinflip.previewFlipBacking(player), 0, "G: settle agrees");
     }
 
     /// The general invariant, fuzzed over take-profit and the win/loss pattern: whatever
@@ -435,7 +435,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
         _resolveDay(4, win4);
         _resolveDay(5, win5);
 
-        uint256 previewSalvage = coinflip.previewSalvageFlipBacking(player);
+        uint256 previewSalvage = coinflip.previewFlipBacking(player);
         uint256 previewClaim = coinflip.previewClaimCoinflips(player);
 
         // Walk the days for real without extracting anything.
@@ -493,7 +493,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
         _resolveDay(3, true);
         bytes32 stateBefore = _rebuyConfigHash();
         uint256 balanceBefore = coin.balanceOf(player);
-        uint256 backingBefore = coinflip.previewSalvageFlipBacking(player);
+        uint256 backingBefore = coinflip.previewFlipBacking(player);
         assertGt(backingBefore, 0, "fixture must hold an actual unsettled winning balance");
 
         address[2] memory callers = [player, operator];
@@ -503,7 +503,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
             coinflip.setCoinflipAutoRebuyTakeProfit(playerId, invalid);
             assertEq(_rebuyConfigHash(), stateBefore);
             assertEq(coin.balanceOf(player), balanceBefore, "invalid input must not settle or mint");
-            assertEq(coinflip.previewSalvageFlipBacking(player), backingBefore);
+            assertEq(coinflip.previewFlipBacking(player), backingBefore);
         }
     }
 

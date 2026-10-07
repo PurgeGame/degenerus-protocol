@@ -33,21 +33,16 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 interface IDegenerusVaultOwner {
     /// @notice DegenerusVault's majority-DGVE-holder check for `account`.
     function isVaultOwner(address account) external view returns (bool);
-    /// @notice Vault-owner salvage-buyer fallback config: whether the vault buys far-future tickets
-    ///         when sDGNRS cannot fund the swap, and the ETH (wei) reserve it keeps untouched.
-    function salvageBuyConfig() external view returns (bool enabled, uint256 floorWei);
+    /// @notice Whether the vault buys liquidated accounts when sDGNRS cannot fund the price,
+    ///         and the ETH (wei) reserve it keeps untouched.
+    function liquidationBuyConfig() external view returns (bool enabled, uint256 floorWei);
 }
 
 /// @dev Shared mint streak and activity score utilities. Contains _playerActivityScore
 ///      (5-component scoring: mint streak, mint count, quest streak, affiliate bonus, deity/whale pass)
 ///      and mint streak helpers (credits on completed 1x price ETH quest).
 abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
-    /// @notice Thrown when a far-future salvage swap's target level lies less than 2 or more
-    ///         than 100 levels from the current level.
-    error InvalidDistance();
-    /// @notice Thrown when a quantity argument is zero or out of range: here, a far-future
-    ///         salvage entry count that is not a multiple of 4 or exceeds a uint32; in
-    ///         DegenerusGameWhaleModule, a whale-pass count of zero or above 100.
+    /// @notice Thrown for an invalid whale-pass quantity.
     error InvalidQuantity();
 
     /// @dev Jackpots processed per level before the phase ends. Mirrors the per-module copies;
@@ -61,33 +56,25 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     ///        0 means cured).
     event CurseChanged(uint32 indexed player, uint8 newCurseCount);
 
-    /// @dev Resolve the salvage-swap counterparty for a budget, fail-closed. sDGNRS first when its OWN
-    ///      claimable covers totalBudget above a >=1 ETH floor; else the vault when its owner has enabled
-    ///      the salvage-buy fallback AND its game-side ETH (claimable + prepaid afking, both backed by
-    ///      claimablePool) covers totalBudget above the owner-set reserve floor; else address(0) (no buyer
-    ///      can fund). The vault owner stages reserve ETH into the afking half via depositAfkingFunding.
-    ///      Shared by the executing path and the preview so the displayed counterparty matches the one
-    ///      charged. The vault config is a freeze-safe owner storage read (never a VRF-window value); the
-    ///      executing swap reverts under rngLockedFlag at its entrypoint, and the view preview may run in
-    ///      the lock because it writes nothing.
-    /// @param totalBudget The -EV ETH budget the buyer must fund above its floor.
-    /// @return buyer The counterparty (sDGNRS, the vault, or address(0) if none can fund).
-    function _resolveSalvageBuyer(uint256 totalBudget) internal view returns (address buyer) {
+    /// @dev Price-funded buyer selection. sDGNRS retains 1 ETH of claimable; the enabled
+    ///      Vault retains its configured floor across claimable plus prepaid AFKing.
+    ///      Both balances are claimablePool-backed; zero means neither buyer can fund.
+    function _resolveLiquidationBuyer(uint256 totalBudget) internal view returns (uint32 buyer) {
         if (_claimableOf(SDGNRS_WALLET_ID) >= totalBudget + 1 ether) {
-            return ContractAddresses.SDGNRS;
+            return SDGNRS_WALLET_ID;
         }
         (bool enabled, uint256 vaultFloorWei) = IDegenerusVaultOwner(
             ContractAddresses.VAULT
-        ).salvageBuyConfig();
+        ).liquidationBuyConfig();
         if (
             enabled &&
             _claimableOf(VAULT_WALLET_ID) +
                 _afkingOf(VAULT_WALLET_ID) >=
             totalBudget + vaultFloorWei
         ) {
-            return ContractAddresses.VAULT;
+            return VAULT_WALLET_ID;
         }
-        return address(0);
+        return 0;
     }
 
     /// @dev Mask for clearing last-completed + streak fields in one pass.
@@ -150,7 +137,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     // =========================================================================
 
 
-    /// @dev Far-future salvage discount curve (bps of face): flat 15% for d2..d6, then two lines,
+    /// @dev Legacy far-future discount curve (bps of face): flat 15% for d2..d6, then two lines,
     ///      15% @ d6 -> 10% @ d20 -> 5% @ d100. Caller guarantees 2 <= d <= 100. Integer
     ///      truncation is sub-bps, acceptable.
     function _farFutureFractionBps(uint256 d) internal pure returns (uint256) {
@@ -159,119 +146,37 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         return 1000 - ((d - 20) * 500) / 80; // 10% -> 5%
     }
 
-    /// @dev Shared far-future salvage QUOTE (read-only valuation) used by BOTH the executing
-    ///      entrypoint (MintModule.sellFarFutureEntries) and the preview view
-    ///      (DegenerusGame.previewSellFarFutureEntries), so the offer shown can never drift from the
-    ///      offer executed. quantities[i] is an ENTRY count in whole-ticket multiples (4 entries =
-    ///      1 whole ticket); each line's face is priceForLevel(L) * n / 4 (per-entry price) with the
-    ///      two-line fractionBps(d) curve + the daily per-player jitter seeded from the SETTLED
-    ///      prior-day VRF word (freeze-safe). Reverts on an ineligible distance or a zero /
-    ///      non-whole-ticket quantity; does NOT check ownership (the executing path checks
-    ///      holdings at debit). The split clamps the ticket leg to <= totalBudget so the preview is safe for
-    ///      a too-small bundle (the executing path separately requires totalBudget >= one current entry).
-    /// @param levels Target far-future levels for each swap line (parallel to quantities).
-    /// @param quantities Entry quantities per line (n; must be nonzero, a multiple of 4, and
-    ///        <= uint32 max).
-    /// @param cl The active ticket level (caller-computed, shared with the split).
-    /// @param oneTicketWei priceForLevel(cl), the whole-ticket price (caller-computed; one entry = /4).
-    /// @param seed The per-player daily salvage seed (_farFutureSeed — one computation
-    ///        site keeps preview/exec parity by construction).
-    /// @return totalFaceWei Sum of priceForLevel(L) * n / 4 over all lines (per-entry face).
-    /// @return totalBudget Sum of jittered, distance-scaled budgets (ETH sDGNRS would pay).
-    /// @return ticketWei Current-level ticket leg (jittered share, floored at 1 entry).
-    /// @return cashWei Withdrawable cash residual (totalBudget - ticketWei).
-    function _quoteFarFutureSwap(
-        uint32[] calldata levels,
-        uint256[] calldata quantities,
-        uint24 cl,
-        uint256 oneTicketWei,
-        uint256 seed
-    )
-        internal
-        view
-        returns (
-            uint256 totalFaceWei,
-            uint256 totalBudget,
-            uint256 ticketWei,
-            uint256 cashWei
-        )
+
+
+
+
+    /// @dev Whole-account quote. Queue tags distinguish current lanes from old ring cycles;
+    ///      the account's entries remain in their original queues after ownership changes.
+    function _quoteLiquidation(uint32 id) internal view
+        returns (uint256 face, uint256 budget, uint256 ticketValue, uint256 price)
     {
-        uint256 jitterMult = 7000 + (seed % 4001); // fraction multiplier [70%, 110%]
-        uint256 ticketShareBps = 4000 + ((seed >> 128) % 4001); // ticket share [40%,80%] (cash [20%,60%])
-
-        uint256 len = levels.length;
-        for (uint256 i; i < len; ) {
-            uint24 L = uint24(levels[i]);
-            uint256 d = uint256(L) - uint256(cl); // reverts if L < cl
-            if (d < 2 || d > 100) revert InvalidDistance();
-            uint256 n = quantities[i];
-            // Whole-ticket granularity: every far-future producer queues 4-entry chunks,
-            // so 4-aligned balances stay 4-aligned and a partial sale can never strand a
-            // fragment on either side of the swap.
-            if (n == 0 || n % 4 != 0 || n > type(uint32).max) revert InvalidQuantity();
-            // n is an ENTRY count; per-entry face = whole-ticket price / 4 (coupled with the entry-granular
-            // debit in MintModule.sellFarFutureEntries — changing only the debit would mis-value 4x).
-            uint256 faceWei = (PriceLookupLib.priceForLevel(L) * n) / 4;
-            totalFaceWei += faceWei;
-            totalBudget +=
-                (faceWei * _farFutureFractionBps(d) * jitterMult) /
-                (10_000 * 10_000);
-            unchecked {
-                ++i;
-            }
+        uint24 cl = _activeTicketLevel();
+        uint256 seed = _farFutureSeed(id);
+        uint256 jitter = 7000 + seed % 4001;
+        for (uint256 distance = 2; distance <= 100; ++distance) {
+            uint256 target = uint256(cl) + distance;
+            if (target > type(uint24).max) break;
+            uint256 lane = _farFutureLane(uint24(target), id);
+            if (lane & 0x80000000 == 0) continue;
+            uint256 entries = (lane & 0x3fffffff) & ~uint256(3);
+            if (entries == 0) continue;
+            uint256 value = PriceLookupLib.priceForLevel(uint24(target)) * entries / 4;
+            face += value;
+            budget += value * _farFutureFractionBps(distance) * jitter / 100_000_000;
         }
-
-        ticketWei = (totalBudget * ticketShareBps) / 10_000;
-        uint256 oneEntryWei = oneTicketWei / 4; // ticket leg floors at one entry (4 entries = 1 whole ticket)
-        if (ticketWei < oneEntryWei) ticketWei = oneEntryWei;
-        if (ticketWei > totalBudget) ticketWei = totalBudget; // preview-safety clamp (too-small bundle)
-        cashWei = totalBudget - ticketWei;
+        ticketValue = budget * (4000 + ((seed >> 128) % 4001)) / 10_000;
+        uint256 oneEntry = PriceLookupLib.priceForLevel(cl) / 4;
+        if (ticketValue < oneEntry) ticketValue = oneEntry;
+        if (ticketValue > budget) ticketValue = budget;
+        price = budget - ticketValue + ticketValue / 4;
     }
 
-    /// @dev Splits the cash leg of a salvage swap into an ETH part and a FLIP part, sharing the
-    ///      SAME settled prior-day seed as _quoteFarFutureSwap (no new VRF). A third bit-slice of the
-    ///      seed picks an ETH-denominated target in [0, cashWei]; the FLIP part is capped at the
-    ///      FLIP the buyer actually owns (burnable held + claimable coinflip stake + auto-rebuy
-    ///      carry), with the shortfall and the zero-available case falling back to ETH. The value of
-    ///      the cash leg is conserved: ethCashWei + (value of flipTokens) == cashWei, so the offer
-    ///      stays <= the no-arb ceiling regardless of the split. Both the preview and the executing
-    ///      path call this, so the displayed ETH/FLIP breakdown matches what is paid.
-    /// @param cashWei The cash residual being split (totalBudget - ticketWei).
-    /// @param priceWei priceForLevel(active ticket level) (caller-computed).
-    /// @param seed The per-player daily salvage seed (same word as _quoteFarFutureSwap).
-    /// @param buyer The counterparty funding the swap (sDGNRS, or the vault on the owner-enabled fallback).
-    /// @return ethCashWei ETH part relabeled to the player (cashWei - the FLIP part's ETH value).
-    /// @return flipTokens FLIP base units the buyer's FLIP is burned for and the player is
-    ///         credited with (burn + flip credit in MintModule, not a token transfer).
-    function _quoteFarFutureFlipSplit(
-        uint256 cashWei,
-        uint256 priceWei,
-        uint256 seed,
-        address buyer
-    ) internal view returns (uint256 ethCashWei, uint256 flipTokens) {
-        if (cashWei == 0) return (0, 0);
-
-        // Third reduction of the seed (>> 64), decorrelated from the jitter (seed % 4001)
-        // and ticket-share (seed >> 128) reductions: an ETH target in [0, cashWei].
-        uint256 targetEth = ((seed >> 64) % (cashWei + 1));
-        if (targetEth == 0) return (cashWei, 0);
-
-        if (priceWei == 0) return (cashWei, 0);
-
-        // Cap the FLIP part at buyer-owned FLIP (burnable held + claimable coinflip stake +
-        // auto-rebuy carry), valued at the current ticket price. The uncovered remainder is paid as ETH.
-        uint256 ownedFlip = coin.balanceOfSpendableForSalvage(buyer);
-        uint256 targetFlip = (targetEth * PRICE_COIN_UNIT) / priceWei;
-        flipTokens = targetFlip <= ownedFlip ? targetFlip : ownedFlip;
-        // ETH value of the FLIP actually payable (re-derived from tokens so conservation is exact).
-        uint256 flipEth = (flipTokens * priceWei) / PRICE_COIN_UNIT;
-        if (flipEth > cashWei) flipEth = cashWei; // defensive; rounding can never exceed cashWei
-        ethCashWei = cashWei - flipEth;
-    }
-
-    /// @dev Per-player daily salvage seed: the seller's wallet ID hashed with the SETTLED
-    ///      prior-day VRF word (freeze-safe). Single computation site shared by the swap quote
-    ///      and the FLIP split so preview and execution always derive the same offer.
+    /// @dev Daily ID-seeded liquidation offer, shared by preview and execution.
     function _farFutureSeed(uint32 playerId) internal view returns (uint256) {
         return uint256(
             keccak256(abi.encode(uint256(playerId), _recordedDailyWord(_simulatedDayIndex() - 1)))

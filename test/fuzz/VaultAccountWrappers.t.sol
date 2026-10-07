@@ -115,20 +115,7 @@ contract VaultAccountWrappersTest is SeatFixture {
         vault.gameDegeneretteBet(1, 5e18, 3, 7, 0);
     }
 
-    function test_gameSellFarFutureEntriesActsAsSelf() public {
-        uint32[] memory levels = new uint32[](2);
-        levels[0] = 12;
-        levels[1] = 40;
-        uint256[] memory qty = new uint256[](2);
-        qty[0] = 4;
-        qty[1] = 8;
-        uint256[] memory idx = new uint256[](2);
-        idx[0] = 3;
-        idx[1] = 9;
-        _expectOnce(address(game), abi.encodeCall(IDegenerusGame.sellFarFutureEntries, (uint32(0), levels, qty, idx)), "");
-        vm.prank(owner);
-        vault.gameSellFarFutureEntries(levels, qty, idx);
-    }
+
 
     /// @notice The vault's own approval lands on wallet ID 1 and emits the ID.
     function test_gameSetOperatorApprovalWritesIdOne() public {

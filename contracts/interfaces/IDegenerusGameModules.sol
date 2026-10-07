@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {LiquidationQuote} from "./ILiquidation.sol";
+
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
  *
@@ -262,21 +264,11 @@ interface IDegenerusGameWhaleModule {
 /// @title IDegenerusGameMintModule
 /// @notice Interface for minting operations and purchase processing
 interface IDegenerusGameMintModule {
-    /// @notice Quote a far-future salvage swap WITHOUT executing (read-only -EV offer).
-    function previewSellFarFutureEntries(
-        address player,
-        uint32[] calldata levels,
-        uint256[] calldata quantities
-    )
-        external
-        view
-        returns (
-            uint256 totalFaceWei,
-            uint256 totalBudget,
-            uint256 ticketWei,
-            uint256 ethCashWei,
-            uint256 flipTokens
-        );
+    function liquidateAccount(uint32 id, uint256 minEthOut) external;
+    function previewLiquidateAccount(uint32 id) external returns (LiquidationQuote memory);
+    function harvestAcquiredAccounts(uint32 buyer, uint32[] calldata ids) external returns (uint256);
+
+
 
     /// @notice Body of Game.createSmurf (raw msg.data target, identical selector; see
     ///         IDegenerusGame for the full contract). Owner = msg.sender (must hold an ID).
@@ -330,18 +322,7 @@ interface IDegenerusGameMintModule {
         uint256 entryQuantityScaled
     ) external;
 
-    /// @notice Sells far-future ticket entries to sDGNRS for current-level tickets + cash (-EV).
-    ///         Raw msg.data target of Game.sellFarFutureEntries.
-    /// @param id Seller account (0 = caller; account rule)
-    /// @param levels Target levels to sell from
-    /// @param quantities Entries to sell at each level (4 entries = 1 whole ticket)
-    /// @param queueIndices Caller-supplied ticketQueue positions (verified; for swap-pop on sell-out)
-    function sellFarFutureEntries(
-        uint32 id,
-        uint32[] calldata levels,
-        uint256[] calldata quantities,
-        uint256[] calldata queueIndices
-    ) external;
+
 
     /// @notice Buys a credit-gated coin-presale box (msg.value, then claimable + afking shortfall).
     ///         Raw msg.data target of Game.buyPresaleBox.

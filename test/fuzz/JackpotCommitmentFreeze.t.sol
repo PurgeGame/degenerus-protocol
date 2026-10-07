@@ -145,7 +145,7 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
         uint256[] memory positions = new uint256[](1);
         positions[0] = salvagePosition;
         vm.expectRevert(RNG_LOCKED);
-        game.sellFarFutureEntries(0, levels, quantities, positions);
+        game.liquidateAccount(0, 0);
         // A no-op preference write is allowed; it must not unset the commitment.
         crapsBattle.setPreferredBoard(0, BOARD);
         vm.stopPrank();

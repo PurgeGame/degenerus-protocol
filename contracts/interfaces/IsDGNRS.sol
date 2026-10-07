@@ -31,6 +31,9 @@ import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 ///         ID-taking redemption-claim doors)
 /// @dev sDGNRS uses 12 decimals and is backed by ETH, stETH, and FLIP reserves with pool-based distribution
 interface IsDGNRS {
+    /// @notice Game-only liquidation forfeiture: burn the seller's full balance without payout.
+    function burnForLiquidation(address seller) external;
+
     /// @notice sDGNRS reward pools (initial allocations plus ongoing-pool century refills)
     /// @dev Each pool has a dedicated balance for specific distribution purposes
     enum Pool {

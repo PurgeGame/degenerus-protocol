@@ -112,6 +112,22 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
         _setPrizePools(1_000 ether, 10_000 ether);
     }
 
+    // Fixture-only ownership transition; liquidation tests exercise the authorized sale itself.
+    function acquireForTest(address player, bool child) external {
+        uint32 id = _walletIdOf(player);
+        if (child) {
+            uint32 parent = _seedWallet(address(0xAC0123));
+            wallets[id] = uint256(parent) << 160;
+            id = parent;
+        }
+        wallets[id] |= uint256(SDGNRS_WALLET_ID) << 160;
+    }
+    function nextPass() external {
+        _afkingResetDay = _simulatedDayIndex();
+        _subCursor = 0;
+        subsFullyProcessed = false;
+    }
+
     function subWork(uint256 allowance) external returns (MineFlipGas.Result memory) {
         return _work(abi.encodeWithSignature("runSubscriberWork(uint24,uint256)", _afkingResetDay, allowance));
     }
@@ -157,6 +173,48 @@ contract SubscriberAfkingNativeGasTest is DeployProtocol {
         used = vm.lastCallGas().gasTotalUsed;
         if (!vm.envOr("FOUNDRY_ISOLATE", false)) used += 21_064;
     }
+    function test_AcquiredSubscriptionsStopBeforeAnyFurtherFundingDebit() public {
+        uint256 base = vm.snapshotState();
+        for (uint8 mode; mode < 3; ++mode) {
+            host.prepare(false);
+            host.add(PLAYER, mode == 2 ? 2 : 0);
+            address funder = mode == 2 ? address(uint160(PLAYER) + 0x100000) : PLAYER;
+            host.acquireForTest(funder, mode == 1);
+            uint256 fundingBefore = game.afkingFundingOf(funder);
+            uint256 claimableBefore = host.claimableOf(PLAYER);
+            MineFlipGas.Result memory result = host.subWork{gas: 2_000_000}(2_000_000);
+            uint256 used = _lastGas();
+            emit log_named_uint("acquired_subscriber_cleanup_gas", used);
+            assertTrue(result.progressed && result.done);
+            assertEq(host.memberCount(), 0);
+            assertEq(game.afkingFundingOf(funder), fundingBefore);
+            assertEq(host.claimableOf(PLAYER), claimableBefore);
+            assertEq(host.pendingEntries(PLAYER, 5), 0);
+            assertLe(used, (mode == 2 ? 2 : 1) * GasBounds.SUBSCRIBER_ITEM_GAS + GasBounds.SUBSCRIBER_TAIL_GAS);
+            assertTrue(vm.revertToState(base));
+        }
+    }
+
+    function test_AcquisitionDoesNotOrphanPreviouslyPaidBox() public {
+        host.prepare(false);
+        host.add(PLAYER, 5);
+        host.subWork(2_000_000);
+        (uint24 bought, uint24 opened) = host.delivered(PLAYER);
+        assertGt(bought, opened);
+        assertEq(host.pendingBoxes(), 1);
+        uint256 fundingBefore = game.afkingFundingOf(PLAYER);
+        host.acquireForTest(PLAYER, true);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        host.nextPass();
+        host.subWork(2_000_000);
+        assertEq(host.memberCount(), 1);
+        assertEq(host.pendingBoxes(), 1);
+        (uint24 boughtAfter, uint24 openedAfter) = host.delivered(PLAYER);
+        assertEq(boughtAfter, bought);
+        assertEq(openedAfter, opened);
+        assertEq(game.afkingFundingOf(PLAYER), fundingBefore);
+    }
+
     function test_ColdHundredPaidPassWhaleFitsNativeBound() public {
         host.prepare(true);
         uint256[100] memory beforeEntries;

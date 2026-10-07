@@ -103,7 +103,7 @@ VALUE-IN	claimablePool	creditRedemptionDirect	modules/DegenerusGameLootboxModule
 VALUE-IN	claimablePool	distributeYieldSurplus	modules/DegenerusGameJackpotModule.sol	WRITE	aggregate for the three sink credits (23% x3)
 DRAIN-ZERO	claimablePool	_handleFinalSweep	modules/DegenerusGameGameOverModule.sol	WRITE	30-day final sweep: sinks paid their claimable, residual forfeited three-way, claims closed (GO_SWEPT)
 VALUE-OUT	claimablePool	_closeRedemptionBatch	modules/DegenerusGameRngUtils.sol	WRITE	Request close transfers the custody shortfall as ETH then stETH, paired with the same claimable debit; close caps pull at available claimable. RedemptionStethFallback verifies both ledgers and receipt.
-VALUE-OUT	claimablePool	withdrawAfkingFunding	DegenerusGame.sol	WRITE	prepaid afking returned to funder; per-player afking half debited in tandem
+VALUE-OUT	claimablePool	withdrawAfkingFunding	modules/DegenerusGameMintModule.sol	WRITE	prepaid afking returned to funder; per-player afking half debited in tandem
 DECL	currentPrizePool	<file-scope>	storage/DegenerusGameStorage.sol	DECL	counted-term state variable declaration
 POOL-TO-POOL	currentPrizePool	_consolidatePoolsAndRewardJackpots	modules/DegenerusGameAdvanceModule.sol	WRITE	consolidation: next merges into current, x00 keep-roll moves future->current
 MUTATOR-DEF	currentPrizePool	_setCurrentPrizePool	storage/DegenerusGameStorage.sol	WRITE	the raw write inside the canonical setter
@@ -137,4 +137,5 @@ PAIRED-CREDIT	_creditClaimableLogged	_queueWhalePassClaimCore	modules/DegenerusG
 PAIRED-CREDIT	_creditClaimableLogged	claimDeadVrf	modules/DegenerusGameGameOverModule.sol	READ	deterministic-ending share credited to the holding's owner ID; paired with its own claimablePool increment
 VALUE-IN	_creditClaimableLogged	creditRedemptionDirect	modules/DegenerusGameLootboxModule.sol	READ	direct redemption half arrives (msg.value + stETH pull) and credits the player ID, tandem with the claimablePool += on the next line
 VALUE-IN	_creditClaimableLogged	distributeYieldSurplus	modules/DegenerusGameJackpotModule.sol	READ	recognized stETH yield surplus: runs only when balance+stETH exceeds the full obligation set; three sink credits (vault, sDGNRS, GNRUS IDs)
-PAIRED-CREDIT	_creditClaimableLogged	sellFarFutureEntries	modules/DegenerusGameMintModule.sol	READ	buyer-funded relabel credited to the seller ID; claimablePool unchanged
+PAIRED-CREDIT	_creditClaimableLogged	harvestAcquiredAccounts	modules/DegenerusGameMintModule.sol	READ	Internal transfer from acquired accounts to their recorded buyer; matching source debits, claimablePool unchanged
+VALUE-OUT	claimablePool	liquidateAccount	modules/DegenerusGameMintModule.sol	WRITE	Buyer price debited before matching native ETH payout; seller balances stay with sold ID; whole sale atomic

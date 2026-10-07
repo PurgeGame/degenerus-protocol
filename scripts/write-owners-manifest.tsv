@@ -204,6 +204,7 @@ OWNER	foilReadCount	modules/DegenerusGameFoilPackModule.sol	_runFoilWork zeroes 
 OWNER	foilWriteCount	modules/DegenerusGameFoilPackModule.sol	_buyFoilPack appends a pack at the write count and increments it in the cursor slot the write key already loaded; _swapFoilSlot (RngUtils) swaps the two counts with the cohorts.
 HELPER	deityPassIds	storage/DegenerusGameStorage.sol	_appendDeityId appends a packed uint32 ID and increments its logical count; helper called by deity registration.
 INIT	wallets	storage/DegenerusGameStorage.sol	Storage constructor reserves ID zero by setting the wallet-table length to one; later registration appends normally.
+HELPER	walletIds	storage/DegenerusGameStorage.sol	_registerWallet assigns a default gameplay ID and initializes or preserves the permanent governance/affiliate identity in the high lane.
+OWNER	walletIds	modules/DegenerusGameMintModule.sol	liquidateAccount clears only the seller's default gameplay ID on a main-account sale, retaining permanent identity.
+OWNER	afkingFundingApprovals	modules/GameAfkingModule.sol	setAfkingFundingApproval writes funder-owner consent; acquired accounts cannot grant it and inherited acquisition invalidates existing consent at reads.
 OWNER	lootboxRngPacked	DegenerusGame.sol	setCrapsRngPending is CRAPS-only and changes only pending parity bits 250/251, preserving committed entropy/session fields.
-HELPER	walletIds	storage/DegenerusGameStorage.sol	_registerWallet publishes an ordinary owner to its newly allocated permanent ID; subaccounts have no forward address entry.
-OWNER	afkingFundingApprovals	modules/GameAfkingModule.sol	Owner-authorized setAfkingFundingApproval grants or revokes consent between allocated account IDs; operators cannot grant consent.

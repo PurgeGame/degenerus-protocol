@@ -110,6 +110,7 @@ import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 
 /// @dev Minimal Game surface consumed by the daily draw and generic WWXRP boon hook.
 interface IDrawGame {
+    function acquiredBuyer(uint32 id) external view returns (uint32 buyerId);
     /// @notice DegenerusGame's recorded VRF word for `day` (0 if none recorded yet).
     function rngWordForDay(uint24 day) external view returns (uint256);
 
@@ -648,6 +649,17 @@ contract WWXRP {
             (, payee, authorized) = game.resolveAccount(id, msg.sender);
             if (!authorized) revert NotApproved();
         }
+        return _withdrawPrize(id, payee, amount);
+    }
+
+    /// @notice Permissionless acquired-account collection; no caller fee or recipient override.
+    function withdrawAcquired(uint32 id) external returns (uint256) {
+        uint32 buyer = game.acquiredBuyer(id);
+        if (buyer == 0) revert NotApproved();
+        return _withdrawPrize(id, buyer == 1 ? ContractAddresses.VAULT : ContractAddresses.SDGNRS, 0);
+    }
+
+    function _withdrawPrize(uint32 id, address payee, uint256 amount) private returns (uint256 withdrawn) {
         uint256 balance = claimable[id];
         withdrawn = amount == 0 || amount > balance ? balance : amount;
         uint256 room = type(uint256).max - totalSupply;

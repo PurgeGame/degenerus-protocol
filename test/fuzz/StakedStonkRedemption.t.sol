@@ -16,7 +16,7 @@ contract StakedStonkRedemptionTest is RedemptionFixture {
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }
     function testFuzz_BurnRecordsTokensAndAggregates(uint128 seed) public {
-        uint256 n = bound(seed, 1e12, sdgnrs.totalSupply() / 2000);
+        uint256 n = bound(seed, _minimumLiveBurn(), sdgnrs.totalSupply() / 2000);
         uint32 id = _openBatchId();
         uint256 supply = sdgnrs.totalSupply();
         _burn(alice, n); _burn(alice, n);

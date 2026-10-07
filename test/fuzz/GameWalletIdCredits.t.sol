@@ -490,47 +490,7 @@ contract GameWalletIdCredits is DeployProtocol {
         assertEq(_lane(id), 4_321, "stake lane moved");
     }
 
-    function test_SalvageFlipLegCreditsSellerId() public {
-        (address seller, uint32 sellerId) = _wallet("salvage_seller");
-        uint24 day = game.currentDayView();
-        RecyclingState.seedDailyWord(address(game), uint24(day - 1), uint256(keccak256("salvage_jitter")));
-        uint24 L = game.level() + 7;
-        uint256 idx = TicketQueueStorage.seed(address(game), ext.x_ffKey(L), L, seller, uint80(100) * 4 << 8);
-        // sDGNRS funds the swap from claimable and pays the cash leg's FLIP part from its settled
-        // coinflip bank (Coinflip playerState slot 2, claimableStored in the low 128 bits).
-        _seedClaimable(ContractAddresses.SDGNRS, 50 ether);
-        bytes32 bank = keccak256(abi.encode(uint32(2), uint256(2)));
-        uint256 slotA = uint256(vm.load(address(coinflip), bank));
-        vm.store(address(coinflip), bank, bytes32((slotA & ~uint256(type(uint128).max)) | 100_000_000));
 
-        uint32[] memory levels = new uint32[](1);
-        uint256[] memory qtys = new uint256[](1);
-        uint256[] memory idxs = new uint256[](1);
-        levels[0] = L;
-        qtys[0] = 400;
-        idxs[0] = idx;
-        (,,,, uint256 flipTokens) = game.previewSellFarFutureEntries(seller, levels, qtys);
-        assertGt(flipTokens, 0, "fixture: the cash leg carries FLIP");
-        uint256 before = _lane(sellerId);
-
-        vm.recordLogs();
-        vm.prank(seller);
-        game.sellFarFutureEntries(0, levels, qtys, idxs);
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-
-        // The swap's FLIP leg is the first credit; the recycled ticket leg that follows may add
-        // its own buyer credit, also by the seller ID.
-        uint256 first;
-        for (uint256 i; i < logs.length && first == 0; ++i) {
-            if (logs[i].emitter == address(coinflip) && logs[i].topics[0] == STAKE_UPDATED) {
-                assertEq(uint32(uint256(logs[i].topics[1])), sellerId, "first credit keyed by the seller ID");
-                (first,) = abi.decode(logs[i].data, (uint256, uint256));
-            }
-        }
-        assertEq(first, flipTokens, "FLIP part credited by the seller ID");
-        (uint256 credited,) = _credits(logs, sellerId);
-        assertEq(_lane(sellerId) - before, credited, "stake lane moved by every seller credit");
-    }
 
     function test_PurchasePairCreditsBuyerAndAffiliateWinnerIds() public {
         (address buyer, uint32 buyerId) = _wallet("pair_buyer");

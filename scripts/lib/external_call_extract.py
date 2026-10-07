@@ -56,6 +56,7 @@ DEFAULT_SCOPE = [
     "modules/DegenerusGameJackpotModule.sol",
     "modules/DegenerusGameMintModule.sol",
     "modules/DegenerusGameMintStreakUtils.sol",
+    "modules/DegenerusGamePayoutUtils.sol",
     "modules/DegenerusGameGameOverModule.sol",
     "modules/GameAfkingModule.sol",
     "modules/DegenerusGameLootboxModule.sol",

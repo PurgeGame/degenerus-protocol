@@ -62,10 +62,10 @@ interface ICoinflip {
     function claimCoinflipsFromFlip(address player, uint256 amount) external returns (uint256 claimed);
     /// @notice Consume coinflip winnings via FLIP for burns (no mint).
     function consumeCoinflipsForBurn(address player, uint256 amount) external returns (uint256 consumed);
-    /// @notice Consume coinflip-resident backing (claimable -> carry) for salvage or auto-decimator.
-    function consumeFlipForSalvage(address player, uint256 amount) external returns (uint256 consumed);
+    /// @notice Consume coinflip-resident backing (claimable -> carry) for the automatic Decimator.
+    function consumeFlipBacking(address player, uint256 amount) external returns (uint256 consumed);
     /// @notice Preview claimable + auto-rebuy carry coinflip backing (view).
-    function previewSalvageFlipBacking(address player) external view returns (uint256);
+    function previewFlipBacking(address player) external view returns (uint256);
     /// @notice Route de-circulated FLIP into sDGNRS's redemption backing (claimable).
     function creditSdgnrsBacking(uint256 amount) external;
 }
@@ -103,7 +103,7 @@ contract FLIP {
     /// @param amount The amount added to vault mint allowance (0 decimals).
     event VaultEscrowRecorded(address indexed sender, uint256 amount);
     /// @notice Emitted when the vault spends from its mint allowance (may or may not mint tokens).
-    /// @param spender The account tied to the allowance decrease: VAULT when any burn routed at the vault (burnCoin, burnCoinForCraps, burnCoinForSalvage) spends the virtual allowance through _burn's VAULT branch, or the FLIP contract (address(this)) when minted out via vaultMintTo.
+    /// @param spender The account tied to the allowance decrease: VAULT when any burn routed at the vault (burnCoin, burnCoinForCraps) spends the virtual allowance through _burn's VAULT branch, or the FLIP contract (address(this)) when minted out via vaultMintTo.
     /// @param amount The amount consumed from allowance (0 decimals).
     event VaultAllowanceSpent(address indexed spender, uint256 amount);
 
@@ -283,25 +283,7 @@ contract FLIP {
         }
     }
 
-    /// @notice FLIP a player can spend into a salvage swap: burnable held + claimable + auto-rebuy carry.
-    /// @dev The carry-inclusive twin of balanceOfWithClaimable, used by the far-future salvage quote so
-    ///      its FLIP-leg cap matches exactly what burnCoinForSalvage can destroy (symmetry with the
-    ///      redemption desk, which already taps the carry). The two salvage operators are sDGNRS and the
-    ///      vault. The "held" leg is vault-only: ContractAddresses.VAULT's virtual vaultAllowance (the
-    ///      only held slice _burn can spend for the vault — a stray balanceOf[VAULT] transfer is not
-    ///      burnable here). sDGNRS holds no wallet balance, so it funds entirely from the coinflip
-    ///      backing. previewSalvageFlipBacking adds the claimable + carry, which Coinflip drains in
-    ///      consumeFlipForSalvage.
-    /// @param player The address to read.
-    /// @return spendable Total FLIP the player can fund a salvage FLIP leg with right now.
-    function balanceOfSpendableForSalvage(address player) external view returns (uint256 spendable) {
-        if (player == ContractAddresses.VAULT) {
-            spendable = uint256(_supply.vaultAllowance);
-        }
-        unchecked {
-            spendable += coinflip.previewSalvageFlipBacking(player);
-        }
-    }
+
 
     /// @notice Total circulating supply (excludes ContractAddresses.VAULT allowance).
     function totalSupply() external view returns (uint256) {
@@ -567,7 +549,7 @@ contract FLIP {
       +======================================================================+*/
 
     /// @dev Restricts access to the game contract.
-    ///      Used for salvage burns and the automatic sDGNRS decimator entry, which reach carry.
+    ///      Used for the automatic sDGNRS Decimator entry, which reaches carry.
     modifier onlyGame() {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
         _;
@@ -576,7 +558,7 @@ contract FLIP {
     /// @dev Restricts access to GAME, PARIMUTUEL or CRAPS. Used for: burnCoin.
     ///      PARIMUTUEL burns exactly one fixed stake, and only from the payee of an account whose
     ///      caller it authorized, so the widening reaches no non-consenting balance.
-    ///      Carry-consuming salvage and automatic sDGNRS decimator burns keep plain onlyGame;
+    ///      Carry-consuming automatic sDGNRS Decimator burns keep plain onlyGame;
     ///      ordinary table bets consume only held FLIP and settled claimables.
     ///      Rejection reuses the shared `OnlyGame()` generic, so a trace names OnlyGame() even
     ///      though PARIMUTUEL is equally admitted.
@@ -735,38 +717,7 @@ contract FLIP {
         emit CrapsCompsAccrued(amount, lane);
     }
 
-    /// @notice Burn `amount` of `target`'s FLIP for a far-future salvage swap, draining all sources.
-    /// @dev Access: GAME only. The salvage twin of burnCoin: where burnCoin stops at held + settled
-    ///      claimable, this also reaches the auto-rebuy carry (held -> claimable -> carry), matching the
-    ///      redemption desk so the salvage FLIP leg can tap the carry where sDGNRS (and a rebuy-armed
-    ///      vault) park their backing in steady state. The two salvage operators are sDGNRS and the vault.
-    ///      The held leg is vault-only: the virtual vaultAllowance (via _burn's VAULT branch). sDGNRS
-    ///      holds no wallet balance, so it funds entirely from Coinflip.consumeFlipForSalvage (claimable
-    ///      then carry). Caller caps `amount` at balanceOfSpendableForSalvage(target), so the drain
-    ///      always covers; fail-closed otherwise.
-    /// @param target The buyer whose FLIP backs the swap (sDGNRS or the vault).
-    /// @param amount The FLIP (whole tokens) to destroy.
-    function burnCoinForSalvage(address target, uint256 amount) external onlyGame {
-        if (amount == 0) return;
-        uint256 remainder = amount;
-        if (target == ContractAddresses.VAULT) {
-            uint256 held = uint256(_supply.vaultAllowance);
-            uint256 fromHeld = amount <= held ? amount : held;
-            if (fromHeld != 0) {
-                _burn(target, fromHeld);
-                remainder = amount - fromHeld;
-            }
-        }
-        if (remainder == 0) return;
-        // No freeze read here, though this is the one FLIP leg that reaches the auto-rebuy carry.
-        // The sole entry, sellFarFutureEntries, already reverts under the game's RNG lock, and
-        // that lock is up whenever a word is knowable but unapplied: it is raised at the request
-        // and cleared only by _unlockRng, which runs after the payouts that apply it. The window
-        // the lock leaves open is the day boundary before the request, where the pending word
-        // does not exist yet and there is nothing to salvage against.
-        uint256 consumed = coinflip.consumeFlipForSalvage(target, remainder);
-        if (remainder > consumed) revert Insufficient();
-    }
+
 
     /*+======================================================================+
       |                          DECIMATOR                                   |
@@ -788,10 +739,10 @@ contract FLIP {
     function autoDecimatorBurn(uint24 lvl, uint256 cap) external onlyGame returns (uint256 amount) {
         address player = ContractAddresses.SDGNRS;
         if (cap < DECIMATOR_MIN) return 0;
-        uint256 backing = coinflip.previewSalvageFlipBacking(player);
+        uint256 backing = coinflip.previewFlipBacking(player);
         if (backing < DECIMATOR_MIN) return 0;
         amount = backing < cap ? backing : cap;
-        amount = coinflip.consumeFlipForSalvage(player, amount);
+        amount = coinflip.consumeFlipBacking(player, amount);
         // Below the entry minimum the consumed backing is retired without an entry: the
         // battle takes no entry it would refuse, and the advance that called continues.
         if (amount < DECIMATOR_MIN) return 0;

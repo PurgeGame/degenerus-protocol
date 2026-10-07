@@ -138,14 +138,14 @@ contract AnyInputSafety is DeployProtocol {
 
         // ---------------- process day 1 so dailies, words and the craps day exist ----------------
         _driveDay(1);
-        // The salvage desk: sDGNRS buys far-future entries only from its own claimable (empty this
+        // Account liquidation: sDGNRS buys only from its own claimable (empty this
         // early), so the vault owner enables the vault fallback and an actor funds the vault's
         // prepaid afking (permissionless depositAfkingFunding). Both are ordinary flows.
         uint32 vaultId = game.walletIdOf(address(vault));
         vm.prank(actors[5]);
         game.depositAfkingFunding{value: 20 ether}(vaultId);
         vm.prank(ContractAddresses.CREATOR);
-        vault.setSalvageBuyFallback(true, 0);
+        vault.setLiquidationBuyFallback(true, 0);
         _bystanderClaimable();
         // Two actors run coinflip auto-rebuy, so the carry / take-profit doors have a live subject.
         for (uint256 i = 1; i < 4; i += 2) {
@@ -410,31 +410,11 @@ contract AnyInputSafety is DeployProtocol {
     /// @dev Claimable winnings through a normal flow: the bystander sells a slice of its whale pass's
     ///      far-future entries to the sDGNRS desk, which pays the seller in claimable.
     function _bystanderClaimable() internal {
-        uint24 cl = game.level() + 1;
-        for (uint24 lvl = cl + 2; lvl < cl + 12; ++lvl) {
-            uint32[] memory levels = new uint32[](1);
-            uint256[] memory qtys = new uint256[](1);
-            uint256[] memory idxs = new uint256[](1);
-            levels[0] = lvl;
-            qtys[0] = 4;
-            uint24 key = lvl | uint24(1 << 22);
-            uint256 len = TicketQueueStorage.length(address(game), key);
-            bool found;
-            for (uint256 j; j < len; ++j) {
-                if (TicketQueueStorage.ownerAt(address(game), key, lvl, j) == BYSTANDER) {
-                    idxs[0] = j;
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) continue;
-            vm.prank(BYSTANDER);
-            try game.sellFarFutureEntries(0, levels, qtys, idxs) {
-                console.log("fixture: bystander sold far-future entries at level", uint256(lvl));
-                return;
-            } catch {}
-        }
-        console.log("fixture: far-future sale unavailable; sDGNRS claimable", game.claimableWinningsOf(address(sdgnrs)));
+        // Seed a deterministic protocol award through the real payable accounting door.
+        // Liquidation now pays ETH out and no longer creates a seller claimable balance.
+        vm.deal(address(sdgnrs), address(sdgnrs).balance + 0.1 ether);
+        vm.prank(address(sdgnrs));
+        game.creditRedemptionDirect{value: 0.1 ether}(game.walletIdOf(BYSTANDER), 0.1 ether);
     }
 
     function _buildTracked() internal {
@@ -479,7 +459,7 @@ contract AnyInputSafety is DeployProtocol {
         s[i++] = AnyInputHandler.cf_setTakeProfit.selector;
         s[i++] = AnyInputHandler.g_purchase.selector;
         s[i++] = AnyInputHandler.g_redeemFlip.selector;
-        s[i++] = AnyInputHandler.g_sellFarFuture.selector;
+        s[i++] = AnyInputHandler.g_liquidateAccount.selector;
         s[i++] = AnyInputHandler.g_buyLootboxAndPresaleBox.selector;
         s[i++] = AnyInputHandler.g_claimBingo.selector;
         s[i++] = AnyInputHandler.g_claimDeadVrf.selector;
@@ -554,7 +534,7 @@ contract AnyInputSafety is DeployProtocol {
         for (uint256 w; w < 2; ++w) s[i++] = AnyInputHandler.prog_warp.selector;
         for (uint256 w; w < 4; ++w) s[i++] = AnyInputHandler.prog_driveDay.selector;
         for (uint256 w; w < 2; ++w) s[i++] = AnyInputHandler.prog_topUp.selector;
-        s[i++] = AnyInputHandler.gd_sellFarFuture.selector;
+        s[i++] = AnyInputHandler.gd_liquidateAccount.selector;
         s[i++] = AnyInputHandler.gd_issueDeityBoon.selector;
         s[i++] = AnyInputHandler.gd_placeDegenerette.selector;
         s[i++] = AnyInputHandler.gd_enterBonusBattle.selector;

@@ -154,8 +154,8 @@ contract CoinflipSeedWindowTest is DeployProtocol {
         v[n++] = coinflip.coinflipAmount(SDGNRS);
         v[n++] = coinflip.previewClaimCoinflips(VAULT);
         v[n++] = coinflip.previewClaimCoinflips(SDGNRS);
-        v[n++] = coinflip.previewSalvageFlipBacking(VAULT);
-        v[n++] = coinflip.previewSalvageFlipBacking(SDGNRS);
+        v[n++] = coinflip.previewFlipBacking(VAULT);
+        v[n++] = coinflip.previewFlipBacking(SDGNRS);
         v[n++] = uint256(vm.load(address(coinflip), _stateSlot(VAULT)));
         v[n++] = uint256(vm.load(address(coinflip), bytes32(uint256(_stateSlot(VAULT)) + 1)));
         v[n++] = uint256(vm.load(address(coinflip), _stateSlot(SDGNRS)));
@@ -245,9 +245,9 @@ contract CoinflipSeedWindowTest is DeployProtocol {
                 coinflip.withdrawRedeemedFlip(backing / 4);
             }
             if (d == 17 || d == 52) {
-                uint256 salvage = coinflip.previewSalvageFlipBacking(VAULT);
+                uint256 salvage = coinflip.previewFlipBacking(VAULT);
                 vm.prank(COIN);
-                coinflip.consumeFlipForSalvage(VAULT, salvage / 3);
+                coinflip.consumeFlipBacking(VAULT, salvage / 3);
             }
             if (d == 40) {
                 vm.prank(VAULT);
@@ -431,7 +431,7 @@ contract CoinflipSeedWindowTest is DeployProtocol {
 
         assertEq(coinflip.previewClaimCoinflips(VAULT), expected, "vault preview includes every seeded win");
         assertEq(coinflip.previewClaimCoinflips(SDGNRS), expected, "sDGNRS preview includes every seeded win");
-        assertEq(coinflip.previewSalvageFlipBacking(SDGNRS), expected, "salvage backing includes the seed");
+        assertEq(coinflip.previewFlipBacking(SDGNRS), expected, "salvage backing includes the seed");
         assertEq(coinflip.previewClaimCoinflips(alice), 0, "no seed for anyone else");
 
         vm.prank(SDGNRS);

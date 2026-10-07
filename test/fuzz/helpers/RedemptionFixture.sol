@@ -120,6 +120,12 @@ abstract contract RedemptionFixture is DeployProtocol {
         sdgnrs.burn(amount);
     }
 
+    function _minimumLiveBurn() internal view returns (uint256) {
+        uint256 money = _money();
+        uint256 numerator = sdgnrs.MIN_REDEMPTION_VALUE() * (sdgnrs.totalSupply() + _escrow());
+        return (numerator + money - 1) / money;
+    }
+
     /// @dev ETH plus stETH a holder receives from `run`, measured around the call.
     function _received(address who) internal view returns (uint256) {
         return who.balance + mockStETH.balanceOf(who);

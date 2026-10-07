@@ -8,7 +8,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 contract RedemptionEdgeCasesTest is RedemptionFixture {
 
     function testFuzz_MinimumBurn(uint256 seed) public {
-        uint256 amount = bound(seed, 1, 1e12 - 1);
+        uint256 amount = bound(seed, 1, _minimumLiveBurn() - 1);
         vm.expectRevert(sDGNRS.BurnTooSmall.selector);
         vm.prank(alice); sdgnrs.burn(amount);
     }
@@ -21,8 +21,9 @@ contract RedemptionEdgeCasesTest is RedemptionFixture {
         uint256 n = sdgnrs.totalSupply() * 16 / 1000;
         _burn(alice, n);
         _resolveLive(100); assertTrue(_work(9_000_000));
-        _burn(alice, 1e12);
-        assertEq(_claimTokens(alice, _openBatchId()), 1e12);
+        uint256 next = _minimumLiveBurn();
+        _burn(alice, next);
+        assertEq(_claimTokens(alice, _openBatchId()), next);
     }
     function test_UncappedBurnsAccumulateAcrossDays() public {
         uint256 n = sdgnrs.totalSupply() * 8 / 1000;
@@ -41,10 +42,11 @@ contract RedemptionEdgeCasesTest is RedemptionFixture {
         vm.prank(address(game));
         sdgnrs.transferFromPool(sDGNRS.Pool.Lootbox, alice, supply / 5);
         _burn(alice, supply / 2);
-        _burn(bob, 1e12);
+        uint256 extra = _minimumLiveBurn();
+        _burn(bob, extra);
         (uint32 id,) = _state();
         (uint104 burned,,,,,) = sdgnrs.redemptionBatches(id);
-        assertEq(burned, supply / 2 + 1e12);
+        assertEq(burned, supply / 2 + extra);
     }
     function test_CloseEmptyOrWhilePriorBatchSettlesIsNoOp() public {
         uint32 id = _openBatchId();
@@ -74,11 +76,11 @@ contract RedemptionEdgeCasesTest is RedemptionFixture {
         vm.warp(vm.getBlockTimestamp() + 31 days);
         assertTrue(game.livenessTriggered());
         vm.expectRevert(sDGNRS.BurnsBlockedDuringLiveness.selector);
-        vm.prank(alice); sdgnrs.burn(1e12);
+        vm.prank(alice); sdgnrs.burn(1e18);
     }
     function test_ZeroValueClaimStillClearsItsTokens() public {
+        _burn(alice, 1e18);
         vm.deal(address(sdgnrs), 0);
-        _burn(alice, 1e12);
         uint32 id = _resolveLive(21);
         assertTrue(_work(9_000_000));
         assertEq(_claimTokens(alice, id), 0);
@@ -97,9 +99,9 @@ contract RedemptionEdgeCasesTest is RedemptionFixture {
     function test_ActivityScoreFrozenOnFirstBurn() public {
         vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScore.selector, alice), abi.encode(uint256(100), game.walletIdOf(alice)));
         uint32 id = _openBatchId();
-        _burn(alice, 1e12);
+        _burn(alice, 1e18);
         vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScore.selector, alice), abi.encode(uint256(200), game.walletIdOf(alice)));
-        _burn(alice, 1e12);
+        _burn(alice, 1e18);
         (,uint16 score) = sdgnrs.pendingRedemptions(game.walletIdOf(alice), id);
         assertEq(score, 101);
     }

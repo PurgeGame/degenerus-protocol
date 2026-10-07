@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {LiquidationQuote} from "./ILiquidation.sol";
+
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 
 /*
@@ -31,7 +33,7 @@ enum MintPaymentKind {
     DirectEth,   // Fresh ETH first; prepaid afking covers a shortfall; claimable never drawn
     Claimable,   // No fresh ETH; claimable (to its 1-wei sentinel), then prepaid afking
     Combined,    // Fresh ETH first, then claimable, then prepaid afking
-    Internal     // Protocol-internal debit (shortfall, salvage, redemption, game-over sweep)
+    Internal     // Protocol-internal debit (shortfall, liquidation, redemption, game-over sweep)
 }
 
 /// @title IDegenerusGame
@@ -56,16 +58,23 @@ enum MintPaymentKind {
 ///      - Third-party recipients (deity-boon recipient, AFKing deposit beneficiary, AFKing
 ///        funding source) are IDs that must already exist: 0 or an unallocated ID reverts `E`.
 interface IDegenerusGame {
+    function liquidateAccount(uint32 id, uint256 minEthOut) external;
+    function previewLiquidateAccount(uint32 id) external returns (LiquidationQuote memory);
+    function harvestAcquiredAccounts(uint32 buyer, uint32[] calldata ids) external returns (uint256);
+
     /// @notice Wallet-ID hook for trusted protocol contracts: existing ID, or with `allocate` a new
     ///         one subject to paid admission. Non-allocating calls return zero for unregistered wallets.
     function registerWallet(address owner, bool allocate) external returns (uint32 id);
-    /// @notice A wallet's permanent ID, or zero if unregistered.
+    function registerWalletIdentity(address owner) external returns (uint32 id);
+    function walletIdentityOf(address owner) external view returns (uint32);
+    function acquiredBuyer(uint32 id) external view returns (uint32 buyerId);
+    /// @notice A wallet's current gameplay ID, or zero before registration/after liquidation.
     function walletIdOf(address player) external view returns (uint32);
 
     /// @notice Resolve an allocated account's payee and caller authorization.
     /// @dev Ordinary accounts return their address as `key`; subaccounts return zero.
     ///      Subaccounts store an owner ID, resolved to an ordinary wallet for payouts.
-    ///      Authorization is `payee == caller || operatorApprovals[id][caller]`.
+    ///      Authorization is the current payee, or an operator approval on an unsold account.
     ///      Authorization failure returns false; zero or unallocated IDs revert E.
     function resolveAccount(uint32 id, address caller)
         external view returns (address key, address payee, bool authorized);
@@ -559,21 +568,7 @@ interface IDegenerusGame {
         uint256 entryQuantityScaled
     ) external;
 
-    /// @notice Sell far-future ticket entries of account `id` for current-level tickets + cash.
-    /// @dev Authorized (account rule). Every value leg credits the account by ID (claimable ETH,
-    ///      FLIP credit) and the current-level tickets are the account's.
-    /// @param id Account owning the far entries (0 = caller).
-    /// @param levels Target levels to sell from (each 2 <= level - currentLevel <= 100).
-    /// @param quantities Entries to sell per level, in whole-ticket multiples of 4.
-    /// @param queueIndices Caller-supplied ticketQueue position of the account at each level.
-    /// @custom:reverts NotApproved If the caller may not act for `id`.
-    /// @custom:reverts E If `id` is unallocated.
-    function sellFarFutureEntries(
-        uint32 id,
-        uint32[] calldata levels,
-        uint256[] calldata quantities,
-        uint256[] calldata queueIndices
-    ) external;
+
 
     /// @notice Claim color-completion bingo: all 8 colors of one symbol on a level.
     /// @dev One reward per player per level, claimable until the next level starts; dispatches
@@ -819,29 +814,7 @@ interface IDegenerusGame {
     /// @param ids Affiliate accounts to settle; empty = the caller only.
     function claimAffiliateDgnrs(uint32[] calldata ids) external;
 
-    /// @notice Quote a far-future salvage swap WITHOUT executing (read-only in effect;
-    ///         declared non-view because the Game dispatches it via delegatecall).
-    /// @param player Ticket holder being quoted.
-    /// @param levels Far-future levels to quote.
-    /// @param quantities Entry quantities per level (4 entries = 1 whole ticket; parallel to `levels`).
-    /// @return totalFaceWei Total face value of the quoted entries.
-    /// @return totalBudget Salvage budget available against the quote.
-    /// @return ticketWei Current-level ticket leg of the offer.
-    /// @return ethCashWei ETH leg of the offer.
-    /// @return flipTokens FLIP leg of the offer.
-    function previewSellFarFutureEntries(
-        address player,
-        uint32[] calldata levels,
-        uint256[] calldata quantities
-    )
-        external
-        returns (
-            uint256 totalFaceWei,
-            uint256 totalBudget,
-            uint256 ticketWei,
-            uint256 ethCashWei,
-            uint256 flipTokens
-        );
+
 
     /// @notice Credit the direct half of an sDGNRS redemption claim to the claimant's claimable winnings.
     /// @param id Claimant wallet ID credited.

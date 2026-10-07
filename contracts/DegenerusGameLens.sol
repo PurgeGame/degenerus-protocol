@@ -253,7 +253,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         return uint256(IDegenerusGameLensSource(game).extsload(slot));
     }
 
-    /// @dev Wallet ID from the player's mint word; zero before registration.
+    /// @dev Current default gameplay ID from the registry's low 32 bits.
     function _walletId(address game, address player) private view returns (uint32) {
         uint256 base;
         assembly { base := walletIds.slot }
@@ -269,6 +269,8 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         uint256 table = uint256(keccak256(abi.encode(base)));
         uint256 element = _sload(game, bytes32(table + id));
         uint32 ownerId = uint32(element >> 160);
+        if (ownerId != 0) element = _sload(game, bytes32(table + ownerId));
+        ownerId = uint32(element >> 160);
         if (ownerId != 0) element = _sload(game, bytes32(table + ownerId));
         return address(uint160(element));
     }
@@ -731,7 +733,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         return _walletAddress(game, id);
     }
 
-    /// @notice Account identity and raw mint word. Subaccounts have a zero wallet and an ordinary owner ID.
+    /// @notice Raw account metadata and mint word. An acquired root retains the seller wallet and names its buyer ID; use walletOfId for the current payee.
     function accountInfo(address game, uint32 id) external view returns (address wallet, uint32 ownerId, uint256 mintWord, uint64 halfPasses) {
         uint256 tableRoot;
         uint256 mintRoot;

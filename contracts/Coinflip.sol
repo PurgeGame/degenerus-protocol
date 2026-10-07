@@ -661,17 +661,16 @@ contract Coinflip {
         return _claimCoinflipsAmount(player, player, 0, amount, false);
     }
 
-    /// @notice Consume `amount` of `player`'s coinflip-resident backing for salvage or auto-decimator (FLIP only).
+    /// @notice Consume `amount` of `player`'s coinflip-resident backing for auto-decimator (FLIP only).
     /// @dev Settle-then-drain waterfall matching the redemption desk's withdrawRedeemedFlip: settled
     ///      claimable FIRST (no mint — removes a future mint of the consumed slice), then the rolling
     ///      auto-rebuy carry. For the vault FLIP first drains the virtual allowance (its held leg);
     ///      sDGNRS has no wallet leg, so this covers its entire backing (claimable + carry). Reaching
-    ///      the carry is freeze-safe because salvage rejects the RNG lock and the automatic
-    ///      sDGNRS decimator entry requires today's flip to be settled before calling here.
+    ///      the carry is freeze-safe because the automatic sDGNRS decimator entry requires today's flip to be settled before calling here.
     /// @param player The backing owner (sDGNRS or the vault).
     /// @param amount Maximum FLIP (whole tokens) to consume from claimable + carry.
     /// @return consumed Actual amount removed (claimable consumed + carry decremented).
-    function consumeFlipForSalvage(
+    function consumeFlipBacking(
         address player,
         uint256 amount
     ) external onlyFLIP returns (uint256 consumed) {
@@ -1383,6 +1382,27 @@ contract Coinflip {
         _setCoinflipAutoRebuy(key, payee, id, enabled, takeProfit);
     }
 
+    /// @notice Collect an acquired account's FLIP to its buyer. Caller receives nothing.
+    /// @dev Ordinary bounded settlement, including losses through collection time. Once caught
+    ///      up and unfrozen, bank the remaining carry and turn rebuy off. A longer backlog can
+    ///      be collected again; no historical result or pending-day stake is skipped.
+    function claimAcquiredCoinflips(uint32 id) external returns (uint256 claimed) {
+        uint32 buyer = degenerusGame.acquiredBuyer(id);
+        if (buyer == 0) revert NotApproved();
+        PlayerCoinflipState storage state = playerState[id];
+        claimed = uint256(state.claimableStored) + _claimCoinflipsInternal(id, state, true);
+        if (state.autoRebuyEnabled && state.lastClaim >= flipsClaimableDay && !_flipFrozen()) {
+            claimed += state.autoRebuyCarry;
+            state.autoRebuyCarry = 0;
+            state.autoRebuyEnabled = false;
+            state.autoRebuyStartDay = 0;
+            emit CoinflipAutoRebuyToggled(id, false);
+        }
+        state.claimableStored = 0;
+        if (claimed != 0) flip.mintForGame(buyer == VAULT_WALLET_ID ? ContractAddresses.VAULT : ContractAddresses.SDGNRS, claimed);
+        _emitClaimState(id);
+    }
+
     /// @notice Set account `id`'s auto-rebuy take profit.
     /// @dev Any settled winnings the update surfaces mint to the account's payee.
     /// @param id The account to configure (0 = caller, else the caller must be authorized).
@@ -1594,16 +1614,16 @@ contract Coinflip {
 
         // Keep sDGNRS's flip cursor current (BAF is skipped for sDGNRS, so both paths
         // stay off the rngLocked guard). sDGNRS never mints FLIP to a wallet balance:
-        // its FLIP stays uncirculated as coinflip backing and is read by redemptions /
-        // salvage as claimableStored + carry. During the seed window each settled win
+        // its FLIP stays uncirculated as coinflip backing and is read by redemptions and
+        // auto-decimator as claimableStored + carry. During the seed window each settled win
         // folds into claimableStored — the genesis seed reserve burns drain first;
         // once auto-rebuy is armed, winnings (including incoming credits staked via
         // creditSdgnrsBacking) settle into the rolling carry (structurally zero
         // return under 0-take-profit rebuy). FLIP leaves sDGNRS's position solely
-        // through a redemption/salvage consume leg or the opening-day decimator burn.
+        // through a redemption consume leg or the opening-day decimator burn.
         //
         // The seed reserve does not drip onto the active flip. It remains available to
-        // redemptions, salvage, and the capped opening-day decimator entry; only new flip
+        // redemptions and the capped opening-day decimator entry; only new flip
         // credits and existing carry ride the daily result after auto-rebuy is armed.
         PlayerCoinflipState storage sdgnrsState = playerState[SDGNRS_WALLET_ID];
         if (sdgnrsAutoRebuyArmed) {
@@ -1704,9 +1724,8 @@ contract Coinflip {
     ///         seed reserve burns drain first).
     function redeemableFlipBacking() external returns (uint256 backing) {
         if (msg.sender != ContractAddresses.SDGNRS) revert OnlysDGNRS();
-        address s = ContractAddresses.SDGNRS;
         PlayerCoinflipState storage state = playerState[SDGNRS_WALLET_ID];
-        uint256 mintable = _claimCoinflipsInternal( SDGNRS_WALLET_ID, state, false);
+        uint256 mintable = _claimCoinflipsInternal(SDGNRS_WALLET_ID, state, false);
         if (mintable != 0) {
             state.claimableStored = uint128(uint256(state.claimableStored) + mintable);
         }
@@ -1765,17 +1784,15 @@ contract Coinflip {
         return daily + state.claimableStored;
     }
 
-    /// @notice Preview `player`'s salvage-spendable coinflip backing: claimable + auto-rebuy carry (view).
-    /// @dev The carry-inclusive read the salvage quote caps against, mirroring
-    ///      redeemableFlipBacking's components but as a pure VIEW (no settle) so the preview
-    ///      and execution offer stay re-derivable. Both legs come from the same replay, so
+    /// @notice Preview `player`'s coinflip backing: claimable + auto-rebuy carry (view).
+    /// @dev Mirrors redeemableFlipBacking's components as a pure view without settlement. Both legs come from the same replay, so
     ///      the carry reported is the one the settle LEAVES — a pending losing day has
-    ///      already wiped it here, exactly as consumeFlipForSalvage will.
-    function previewSalvageFlipBacking(address player) external view returns (uint256) {
-        return previewSalvageFlipBackingById(_viewWalletId(player));
+    ///      already wiped it here, exactly as consumeFlipBacking will.
+    function previewFlipBacking(address player) external view returns (uint256) {
+        return previewFlipBackingById(_viewWalletId(player));
     }
 
-    function previewSalvageFlipBackingById(uint32 id) public view returns (uint256) {
+    function previewFlipBackingById(uint32 id) public view returns (uint256) {
         PlayerCoinflipState storage state = playerState[id];
         (uint256 daily, uint256 carry) = _viewClaimableCoin(state, id);
         return daily + state.claimableStored + carry;

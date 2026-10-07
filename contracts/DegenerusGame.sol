@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
+import {DegenerusGamePayoutUtils} from "./modules/DegenerusGamePayoutUtils.sol";
+
+import {LiquidationQuote} from "./interfaces/ILiquidation.sol";
 
 import {MineFlipGas} from "./libraries/MineFlipGas.sol";
 
@@ -110,7 +113,7 @@ interface IDegenerusVaultOwnerGame {
  *      decimator, degenerette, foilpack, gameover, jackpot, lootbox, mint, whale).
  * @custom:security-contact burnie@degener.us
  */
-contract DegenerusGame is DegenerusGameMintStreakUtils {
+contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils {
     /*+======================================================================+
       |                              ERRORS                                  |
       +======================================================================+
@@ -416,7 +419,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     }
 
     function afkingFundingApproved(uint32 funderId, uint32 subscriberId) external view returns (bool) {
-        return afkingFundingApprovals[funderId][subscriberId];
+        return !_isAcquired(funderId) && !_isAcquired(subscriberId) && afkingFundingApprovals[funderId][subscriberId];
     }
 
     function subscriberSetLength() external view returns (uint256) {
@@ -441,6 +444,39 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         (bool ok, bytes memory data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
         id = abi.decode(data, (uint32));
+    }
+
+    function registerWalletIdentity(address) external returns (uint32 id) {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall(msg.data);
+        if (!ok) _revertDelegate(data);
+        id = abi.decode(data, (uint32));
+    }
+
+    /// @notice Wallet-bound identity; does not change when its gameplay account is sold.
+    function walletIdentityOf(address owner) external view returns (uint32) {
+        return uint32(walletIds[owner] >> 32);
+    }
+
+    /// @notice Sell an account as-is; withdraw balances first to keep them.
+    function liquidateAccount(uint32, uint256) external {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data);
+        if (!ok) _revertDelegate(data);
+    }
+
+    function previewLiquidateAccount(uint32) external returns (LiquidationQuote memory) {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data);
+        if (!ok) _revertDelegate(data);
+        assembly ("memory-safe") { return(add(data, 32), mload(data)) }
+    }
+
+    function harvestAcquiredAccounts(uint32, uint32[] calldata) external returns (uint256) {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data);
+        if (!ok) _revertDelegate(data);
+        assembly ("memory-safe") { return(add(data, 32), mload(data)) }
+    }
+
+    function acquiredBuyer(uint32 id) external view returns (uint32 buyerId) {
+        return _acquiredBuyer(id);
     }
 
     /// @notice Deity-gated smite: add a curse stack to account `smiteeId` for 200 FLIP.
@@ -1194,21 +1230,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
     ///      (mid-game, after cancel, post-gameOver). The claimablePool debit stays checked math.
     /// @param amount ETH amount (wei) to withdraw from the account's afkingFunding bucket.
     function withdrawAfkingFunding(uint32 id, uint256 amount) external {
-        if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert AlreadySwept();
-        if (amount == 0) return;
-        uint32 wid = _resolveAccountId(id);
-        address payee = wid == 0 ? msg.sender : _payee(_walletElement(wid));
-        // One packed load: the guard reads the afking high half and the debit writes it back.
-        uint256 packed = balancesPacked[wid];
-        if (amount > (packed >> 128)) revert Insolvent();
-        // Guard proved amount <= high half, so `amount << 128` subtracts only from the afking
-        // half (no borrow into claimable) — byte-identical to _debitAfking's checked store.
-        balancesPacked[wid] = packed - (amount << 128);
-        claimablePool -= uint128(amount); // tandem release (checked math)
-        emit AfkingWithdrew(wid, amount);
-        // ETH first, stETH for any shortfall — the same backing claims draw on, so a game holding
-        // most of its reserve as stETH can still pay a prepaid afking balance back.
-        _payoutWithStethFallback(payee, amount);
+        (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data);
+        if (!ok) _revertDelegate(data);
     }
 
     /// @notice The canonical per-player prepaid afking ETH balance.
@@ -1352,64 +1375,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Sell far-future ticket entries to sDGNRS for current-level tickets + cash (-EV exit).
-    /// @dev Delegatecalls the mint module, which resolves the seller account and holds the
-    ///      far-future salvage logic (kept off this contract for EIP-170 headroom). Quote without
-    ///      executing via previewSellFarFutureEntries. Signature: sellFarFutureEntries(uint32 id,
-    ///      uint32[] levels, uint256[] quantities, uint256[] queueIndices) — the account owning
-    ///      the far entries (0 = caller; any other requires authorization), the target levels
-    ///      (each 2 <= level - currentLevel <= 100), the entries per level in whole-ticket
-    ///      multiples of 4, and the account's ticketQueue position at each level. The calldata
-    ///      forwards as-is.
-    function sellFarFutureEntries(
-        uint32,
-        uint32[] calldata,
-        uint256[] calldata,
-        uint256[] calldata
-    ) external {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
-    }
 
-    /// @notice Quote a far-future salvage swap WITHOUT executing (the UI offer; -EV by design).
-    /// @dev Read-only; shares the exact valuation (curve + daily per-player jitter + ETH/FLIP
-    ///      split) the executing path uses, so the displayed offer matches what would be paid.
-    ///      Reverts on an ineligible distance or a zero / non-whole-ticket quantity (quantities are
-    ///      entry counts in multiples of 4); does NOT check ownership (a quote
-    ///      for the given bundle). For a bundle too small to fund one current entry,
-    ///      ticketWei == totalBudget and the cash legs are 0 (the executing path reverts on that).
-    ///      The cash leg splits into ETH + FLIP: when sDGNRS holds no FLIP (or the seed targets
-    ///      zero) the whole cash leg is paid in ETH; conserved as ethCashWei + value(flipTokens).
-    /// @return totalFaceWei Sum of priceForLevel(L) * n / 4 over all lines (per-entry face; bundle face).
-    /// @return totalBudget Total ETH sDGNRS would pay (the -EV offer).
-    /// @return ticketWei Portion delivered as current-level tickets.
-    /// @return ethCashWei Cash portion delivered as withdrawable ETH claimable.
-    /// @return flipTokens Cash portion delivered as FLIP (transferred from sDGNRS).
-    /// @dev Signature: previewSellFarFutureEntries(address player, uint32[] levels,
-    ///      uint256[] quantities). The signature matches the module function exactly (identical
-    ///      selector), so the calldata forwards as-is — re-encoding the arrays here would cost
-    ///      contract-size headroom for no behavior change.
-    function previewSellFarFutureEntries(
-        address,
-        uint32[] calldata,
-        uint256[] calldata
-    )
-        external
-        returns (
-            uint256 totalFaceWei,
-            uint256 totalBudget,
-            uint256 ticketWei,
-            uint256 ethCashWei,
-            uint256 flipTokens
-        )
-    {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_MINT_MODULE
-            .delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
-        // The trusted Mint worker returns the identical five-word ABI result.
-        assembly ("memory-safe") { return(add(data, 32), mload(data)) }
-    }
+
+
 
     /*+===============================================================================================+
       |                    JACKPOT PAYOUT FUNCTIONS                                                   |
@@ -1651,50 +1619,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils {
       |  Implements fallback logic when one asset is insufficient.           |
       +======================================================================+*/
 
-    function _transferSteth(address to, uint256 amount) private {
-        if (amount == 0) return;
-        if (to == ContractAddresses.SDGNRS) {
-            if (!steth.approve(ContractAddresses.SDGNRS, amount)) revert TransferFailed();
-            dgnrs.depositSteth(amount);
-            return;
-        }
-        if (!steth.transfer(to, amount)) revert TransferFailed();
-    }
 
-    /// @dev Send ETH first, then stETH for remainder.
-    ///      Used for player claim payouts (ETH preferred).
-    ///      Includes retry logic if stETH is short but ETH arrives.
-    /// @param to Recipient address.
-    /// @param amount Total wei to send.
-    function _payoutWithStethFallback(address to, uint256 amount) private {
-        if (amount == 0) return;
-
-        // ETH is preferred for player claims, but the untrusted ETH .call MUST run LAST (CEI):
-        // _claimWinningsInternal has already debited claimablePool by the full payout, so sending
-        // ETH while the stETH remainder is still held would let a reentrant distributeYieldSurplus
-        // read that in-flight stETH as unreserved backing and over-distribute it. Mirrors the
-        // stETH-before-ETH ordering of _payoutWithEthFallback and the sDGNRS _payEth path.
-        uint256 ethBal = address(this).balance;
-        uint256 ethSend = amount <= ethBal ? amount : ethBal;
-        uint256 remaining = amount - ethSend;
-
-        // Move the stETH leg out first (a stETH transfer hands no control to `to`); any stETH
-        // shortfall is folded into the single ETH .call below.
-        if (remaining != 0) {
-            uint256 stBal = steth.balanceOf(address(this));
-            uint256 stSend = remaining <= stBal ? remaining : stBal;
-            _transferSteth(to, stSend);
-            ethSend += remaining - stSend;
-        }
-
-        // Untrusted ETH .call LAST — all ledger debits and the stETH transfer have completed.
-        // An insufficient self-balance fails the value transfer itself (callee never runs),
-        // so the !ok revert below covers the shortfall case.
-        if (ethSend != 0) {
-            (bool ok, ) = payable(to).call{value: ethSend}("");
-            if (!ok) revert TransferFailed();
-        }
-    }
 
     /// @dev Send stETH first, then ETH for remainder. Reached only from
     ///      claimWinningsStethFirst, which is VAULT-gated — sDGNRS and players claim

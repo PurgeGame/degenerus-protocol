@@ -105,10 +105,10 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         }
         genesisBackingSnapshot = vm.snapshotState();
         // Most cases start without a seed reserve; the mixed-source case restores it.
-        uint256 banked = coinflip.previewSalvageFlipBacking(HOUSE);
+        uint256 banked = coinflip.previewFlipBacking(HOUSE);
         vm.prank(HOUSE);
         coinflip.withdrawRedeemedFlip(banked);
-        assertEq(coinflip.previewSalvageFlipBacking(HOUSE), 0);
+        assertEq(coinflip.previewFlipBacking(HOUSE), 0);
     }
 
     function _warp(uint24 day) private {
@@ -227,10 +227,10 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         _fund(400_000);
         _prepare(21, 4, 3, true);
         harness.applyOpeningWord(21);
-        uint256 backing = coinflip.previewSalvageFlipBacking(HOUSE);
+        uint256 backing = coinflip.previewFlipBacking(HOUSE);
         (uint256 weight,) = harness.entry(5);
         harness.applyOpeningWord(21);
-        assertEq(coinflip.previewSalvageFlipBacking(HOUSE), backing);
+        assertEq(coinflip.previewFlipBacking(HOUSE), backing);
         (uint256 afterWeight,) = harness.entry(5);
         assertEq(afterWeight, weight);
 
@@ -299,7 +299,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         for (uint256 i; i < 20 && game.rngWordForDay(22) == 0; ++i) game.mineFlip();
         assertGt(game.rngWordForDay(22), 0, "day 22 word applied");
         assertTrue(game.decWindow());
-        assertGt(coinflip.previewSalvageFlipBacking(HOUSE), CAP);
+        assertGt(coinflip.previewFlipBacking(HOUSE), CAP);
         (uint256 weight,) = harness.entry(5);
         assertEq(weight, 0);
     }
@@ -310,7 +310,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         harness.applyOpeningWord(21);
         (uint256 weight,) = harness.entry(5);
         assertEq(weight, 0);
-        assertGt(coinflip.previewSalvageFlipBacking(HOUSE), CAP);
+        assertGt(coinflip.previewFlipBacking(HOUSE), CAP);
         assertGt(crapsBattle.daySeatNumberOf(21, HOUSE), 0);
     }
 
@@ -326,20 +326,20 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         _fund(400_000);
         _prepare(21, 3, 3, false);
         harness.applyOpeningWord(21);
-        assertGt(coinflip.previewSalvageFlipBacking(HOUSE), CAP);
+        assertGt(coinflip.previewFlipBacking(HOUSE), CAP);
         _prepare(22, 4, 2, true);
         vm.recordLogs();
         harness.applyOpeningWord(22);
         (, uint256 count) = _burned(vm.getRecordedLogs());
         assertEq(count, 0, "advance settles the loss before attempting entry");
-        assertEq(coinflip.previewSalvageFlipBacking(HOUSE), 0, "loss applied before sizing entry");
+        assertEq(coinflip.previewFlipBacking(HOUSE), 0, "loss applied before sizing entry");
         (uint256 weight,) = harness.entry(5);
         assertEq(weight, 0);
     }
 
     function test_ConsumesClaimablesBeforeCarry() public {
         assertTrue(vm.revertToState(genesisBackingSnapshot));
-        uint256 reserve = coinflip.previewSalvageFlipBacking(HOUSE);
+        uint256 reserve = coinflip.previewFlipBacking(HOUSE);
         vm.prank(HOUSE);
         coinflip.withdrawRedeemedFlip(reserve - 2000);
         _fund(400_000);
@@ -363,12 +363,12 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         _prepare(21, 4, 3, true);
         vm.prank(address(game));
         coinflip.processCoinflipPayouts(0, 3, 21);
-        uint256 backing = coinflip.previewSalvageFlipBacking(HOUSE);
+        uint256 backing = coinflip.previewFlipBacking(HOUSE);
         vm.prank(HOUSE);
         coinflip.withdrawRedeemedFlip(backing - bankroll);
         uint256 expected = bankroll < 2000 ? 0 : bankroll < CAP ? bankroll : CAP;
         assertEq(_autoBurn(), expected);
-        assertEq(coinflip.previewSalvageFlipBacking(HOUSE), bankroll - expected);
+        assertEq(coinflip.previewFlipBacking(HOUSE), bankroll - expected);
     }
 
     function test_MinimumEntryCompletesDecimatorQuest() public {
@@ -376,7 +376,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         _prepare(21, 4, 3, true);
         vm.prank(address(game));
         coinflip.processCoinflipPayouts(0, 3, 21);
-        uint256 backing = coinflip.previewSalvageFlipBacking(HOUSE);
+        uint256 backing = coinflip.previewFlipBacking(HOUSE);
         vm.prank(HOUSE);
         coinflip.withdrawRedeemedFlip(backing - 2000);
         vm.prank(address(game));
@@ -412,11 +412,11 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         _prepare(21, 4, 3, true);
         vm.prank(address(game));
         coinflip.processCoinflipPayouts(0, 3, 21);
-        uint256 beforeBacking = coinflip.previewSalvageFlipBacking(HOUSE);
-        vm.expectCall(address(coinflip), abi.encodeWithSignature("consumeFlipForSalvage(address,uint256)"), 0);
+        uint256 beforeBacking = coinflip.previewFlipBacking(HOUSE);
+        vm.expectCall(address(coinflip), abi.encodeWithSignature("consumeFlipBacking(address,uint256)"), 0);
         vm.prank(address(game));
         assertEq(coin.autoDecimatorBurn(5, 1600), 0);
-        assertEq(coinflip.previewSalvageFlipBacking(HOUSE), beforeBacking);
+        assertEq(coinflip.previewFlipBacking(HOUSE), beforeBacking);
     }
 
     function test_ManualMinimumIncludesEveryTopup() public {

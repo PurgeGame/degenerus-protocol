@@ -768,7 +768,8 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Wallet table: an ordinary account stores its payout address [0:160). A subaccount
     ///      stores zero there and its ordinary owner's ID [160:192). Whale half-pass count
-    ///      occupies [192:256). Element zero is unassigned; IDs are permanent. walletIds
+    ///      occupies [192:256). Acquired roots retain the seller key and store buyer ID in
+    ///      the owner lane; children keep their parent. Element zero is unassigned. walletIds
     ///      supplies the forward lookup for ordinary wallets only.
     uint256[] internal wallets;
 
@@ -1573,7 +1574,8 @@ abstract contract DegenerusGameStorage {
     ///      external hook); it is read only when a new wallet would be admitted at or above
     ///      PAID_ADMISSION_WALLETS registered wallets.
     function _registerWallet(address owner, uint256 quotedSpend) internal returns (uint32 id, uint256 word) {
-        id = walletIds[owner];
+        uint64 registry = walletIds[owner];
+        id = uint32(registry);
         if (id != 0) return (id, mintPacked_[id]);
         if (owner == address(0)) revert E();
         uint256 position = wallets.length;
@@ -1581,19 +1583,20 @@ abstract contract DegenerusGameStorage {
         if (position > type(uint32).max) revert E();
         id = uint32(position);
         wallets.push(uint160(owner));
-        walletIds[owner] = id;
+        uint32 identity = uint32(registry >> 32);
+        walletIds[owner] = (uint64(identity == 0 ? id : identity) << 32) | id;
         // A new account has no mint history; registration does not write a statistics word.
         word = 0;
         emit WalletRegistered(id, owner);
     }
 
-    /// @dev Permanent address-to-ID boundary lookup; zero before registration.
+    /// @dev Current default gameplay account; zero before registration or after its sale.
     function _walletIdOf(address owner) internal view returns (uint32) {
-        return walletIds[owner];
+        return uint32(walletIds[owner]);
     }
 
     function _requireWalletId(address owner) internal view returns (uint32 id) {
-        id = walletIds[owner];
+        id = uint32(walletIds[owner]);
         if (id == 0) revert E();
     }
 
@@ -1623,10 +1626,12 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Payout recipient for a wallet-table element: its own key, or for a smurf account the
     ///      owner's key. Every ETH/stETH/token payout edge that holds an ID resolves through here.
-    ///      Never reverts: createSmurf is the only writer of the owner lane, and it points the
-    ///      lane at an allocated ordinary wallet.
+    ///      At most two links: child -> acquired main -> reserved protocol buyer.
+    ///      Only creation and liquidation write owner lanes; protocol roots cannot be sold.
     function _payee(uint256 element) internal view returns (address) {
         uint256 owner = (element >> 160) & 0xffffffff;
+        if (owner != 0) element = _walletElement(uint32(owner));
+        owner = uint32(element >> 160);
         if (owner != 0) element = _walletElement(uint32(owner));
         return address(uint160(element));
     }
@@ -1656,7 +1661,7 @@ abstract contract DegenerusGameStorage {
         uint256 element = _walletElement(id);
         key = address(uint160(element));
         payee = _payee(element);
-        authorized = payee == caller || operatorApprovals[id][caller];
+        authorized = payee == caller || (_acquiredRoot(id, element) == 0 && operatorApprovals[id][caller]);
     }
 
     /// @dev Resolve the self shorthand without allocating, or authorize an explicit account.
@@ -4850,16 +4855,41 @@ abstract contract DegenerusGameStorage {
     error AfkingStethPullFailed();
     /// @dev Forward identity lookup for address-boundary authorization and ERC20 integration.
     ///      Mint statistics are stored separately by ID; only ordinary-wallet registration writes this.
-    mapping(address => uint32) internal walletIds;
+    // Low 32 bits: current gameplay account. High 32: immutable wallet identity.
+    mapping(address => uint64) internal walletIds;
     /// @dev Explicit account-to-account funding consent, independent of external operator rights.
     mapping(uint32 => mapping(uint32 => bool)) internal afkingFundingApprovals;
 
+    /// @dev Ordinary main: address only; child: parent only; acquired root: seller + buyer.
+    ///      Children can have only one ordinary parent, so one parent read is sufficient.
+    function _acquiredRoot(uint32 id, uint256 element) internal view returns (uint32) {
+        uint32 parent = uint32(element >> 160);
+        if (parent == 0) return 0;
+        if (uint160(element) != 0) return id;
+        return uint32(_walletElement(parent) >> 160) == 0 ? 0 : parent;
+    }
+
+    function _isAcquired(uint32 id) internal view returns (bool) {
+        return _acquiredRoot(id, _walletElement(id)) != 0;
+    }
+
+    function _acquiredBuyer(uint32 id) internal view returns (uint32) {
+        uint256 element = _walletElement(id);
+        uint32 root = _acquiredRoot(id, element);
+        if (root == 0) return 0;
+        if (root != id) element = _walletElement(root);
+        return uint32(element >> 160);
+    }
+
     function _ownerWalletId(uint32 id) internal view returns (uint32) {
         uint32 ownerId = uint32(_walletElement(id) >> 160);
-        return ownerId == 0 ? id : ownerId;
+        if (ownerId == 0) return id;
+        uint32 parent = uint32(_walletElement(ownerId) >> 160);
+        return parent == 0 ? ownerId : parent;
     }
 
     function _afkingFundingAllowed(uint32 subscriberId, uint32 funderId) internal view returns (bool) {
+        if (_isAcquired(subscriberId) || _isAcquired(funderId)) return false;
         return subscriberId == funderId || afkingFundingApprovals[funderId][subscriberId]
             || _ownerWalletId(subscriberId) == _ownerWalletId(funderId);
     }
