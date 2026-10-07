@@ -77,6 +77,7 @@ contract SdgnrsReserveUnderpullDoS is RedemptionCloseTools {
         // 1. X's gambling burn on day D records a positive-base pending redemption.
         uint32 dayD = _openBatch();
         _primeCurrentDayRng();
+        _giveWalletId(playerX);
         vm.prank(playerX);
         sdgnrs.burn(BURN);
         _closeFunded();
@@ -108,6 +109,7 @@ contract SdgnrsReserveUnderpullDoS is RedemptionCloseTools {
 
         // 5. Y's post-gameOver deterministic burn — the drain. totalValueOwed <= E, so pre-fix the
         //    ETH-leg-short pull does NOT fire and the payout is taken from the reserved ETH.
+        _giveWalletId(playerY);
         vm.prank(playerY);
         sdgnrs.burn(BURN);
 

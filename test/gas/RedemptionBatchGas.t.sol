@@ -30,9 +30,10 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         } else vm.deal(address(sdgnrs), amount);
         _coolSettlementState();
         uint256 word = uint256(keccak256(abi.encode(seed))) | 2;
+        uint32 aliceId = game.walletIdOf(alice);
         uint256 before = gasleft();
         vm.prank(address(sdgnrs));
-        game.resolveRedemptionLootbox{value: stethOnly ? 0 : amount}(alice, game.walletIdOf(alice), amount, word, 3000, 1);
+        game.resolveRedemptionLootbox{value: stethOnly ? 0 : amount}(alice, aliceId, amount, word, 3000, 1);
         uint256 used = before - gasleft() + 21_000;
         assertLe(used, GasBounds.HUMAN_ENTRY_GAS + 20 * GasBounds.HUMAN_BOX_GAS);
     }

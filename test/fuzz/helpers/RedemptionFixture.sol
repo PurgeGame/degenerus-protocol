@@ -115,6 +115,7 @@ abstract contract RedemptionFixture is DeployProtocol {
     }
 
     function _burn(address player, uint256 amount) internal {
+        if (game.walletIdOf(player) == 0) _giveWalletId(player);
         vm.prank(player);
         sdgnrs.burn(amount);
     }

@@ -11,6 +11,7 @@ contract RedemptionAccounting is RedemptionFixture {
         handler = new RedemptionHandler(sdgnrs, game, mockVRF, coin, 4);
         handler.setCoinflip(address(coinflip));
         handler.setStethMock(address(mockStETH));
+        for (uint256 i; i < handler.getActorCount(); ++i) _giveWalletId(handler.getActor(i));
         bytes4[] memory selectors = new bytes4[](7);
         selectors[0] = RedemptionHandler.action_burn.selector;
         selectors[1] = RedemptionHandler.action_advanceDay.selector;

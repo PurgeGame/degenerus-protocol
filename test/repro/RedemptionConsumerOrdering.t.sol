@@ -24,6 +24,7 @@ contract RedemptionConsumerOrderingTest is RedemptionCloseTools {
         address[3] memory owners = [ALICE, BOB, CAROL];
         for (uint256 i; i < owners.length; ++i) {
             dgnrs.unwrapTo(owners[i], 2_000_000_000 ether);
+            _giveWalletId(owners[i]);
             vm.prank(owners[i]);
             sdgnrs.burn(1_000_000_000 ether);
         }

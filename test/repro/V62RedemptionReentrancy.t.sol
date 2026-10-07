@@ -167,6 +167,7 @@ contract V62RedemptionReentrancy is RedemptionCloseTools {
         // Land day D's daily RNG so the gambling-burn admission gate (rngWordForDay(D) != 0) admits
         // this burn; under the gate the pool resolves on the NEXT day's draw (window-(b)).
         _primeCurrentDayRng();
+        _giveWalletId(address(attacker));
         attacker.outerBurn(BURN_AMOUNT);
 
         _closeFunded();
@@ -252,6 +253,7 @@ contract V62RedemptionReentrancy is RedemptionCloseTools {
         // ---- 1. Outer gambling burn + resolve at the MAX roll, exactly as in Layer 1. ----
         uint32 dayD = _openBatch();
         _primeCurrentDayRng();
+        _giveWalletId(address(attacker));
         attacker.outerBurn(BURN_AMOUNT);
 
         _closeFunded();
