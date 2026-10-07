@@ -45,7 +45,7 @@ contract QueueHost is DegenerusGame {
 
     function activeLevel() external view returns (uint24) { return _activeTicketLevel(); }
 
-    function walletOf(uint32 id) external view returns (address) { return _walletKey(id); }
+    function walletOf(uint32 id) external view returns (address) { return address(uint160(_walletElement(id))); }
 
     function evUsed(uint32 id, uint24 lvl) external view returns (uint256) { return _lootboxEvUsedFor(id, lvl); }
 

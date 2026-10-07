@@ -1,0 +1,6 @@
+{
+  "path": "/home/zak/.cache/purgegame-tmp/unused-resolution-probe",
+  "base_snapshot": "id-packing-final-extra",
+  "instrumentation": "fifo-assertions.patch",
+  "test_imports": "// SPDX-License-Identifier: AGPL-3.0-only\npragma solidity 0.8.34;\nimport \"../test/craps/RngCohortRecycling.t.sol\";\nimport \"../test/craps/CrapsGlobalWorkOrder.t.sol\";\nimport \"../test/craps/CrapsStorageReuse.t.sol\";\n"
+}

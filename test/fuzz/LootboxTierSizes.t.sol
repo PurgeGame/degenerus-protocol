@@ -18,7 +18,7 @@ contract RateViewer is DegenerusGame {
         returns (uint256 level, uint256 evBps, uint256 boostBps, uint256 adjBps, bool distress)
     {
         uint256 w = _boxEntryAt(buffer, position);
-        level = (w >> LB_LEVEL_SHIFT) & LB_LEVEL_MASK;
+        level = (w >> LB_LEVEL_SHIFT) & type(uint24).max;
         evBps = _lootboxEvMultiplierFromScore((w >> LB_SCORE_SHIFT) & LB_SCORE_MASK);
         boostBps = (w >> LB_BOOST_SHIFT) & LB_BPS_MASK;
         adjBps = (w >> LB_EV_SHIFT) & LB_BPS_MASK;

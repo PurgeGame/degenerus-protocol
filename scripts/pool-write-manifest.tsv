@@ -64,7 +64,7 @@ MUTATOR-DEF	_setPendingPools	_setPendingPools	storage/DegenerusGameStorage.sol	R
 VALUE-IN	_setPendingPools	_buyFoilPack	modules/DegenerusGameFoilPackModule.sol	READ	foil premium lands in pending pools during freeze (75/25 split; fresh ETH + relabel mix) (private _buyFoilPack, reached only through purchaseWithFoil; the pack leg of the additive purchase)
 VALUE-IN	_setPendingPools	purchaseDeityPass	modules/DegenerusGameWhaleModule.sol	READ	pass purchase revenue -> pending pools during freeze
 VALUE-IN	_setPendingPools	purchaseLazyPass	modules/DegenerusGameWhaleModule.sol	READ	pass purchase revenue -> pending pools during freeze
-POOL-TO-POOL	_setPendingPools	resolveEthSpinFromBox	modules/DegenerusGameDegeneretteModule.sol	READ	box ETH-spin flush (same shape as sweepDegeneretteBets)
+POOL-TO-POOL	_setPendingPools	resolveEthSpinFromBox	modules/DegenerusGameDegeneretteModule.sol	READ	box ETH-spin flush (same shape as runDegeneretteWork)
 VALUE-IN	_setPendingPools	resolveRedemptionLootbox	modules/DegenerusGameLootboxModule.sol	READ	redemption value arrives (msg.value + stETH pull) -> pending future during freeze
 MUTATOR-DEF	_setPrizePools	_addFuturePrizePool	modules/DegenerusGameJackpotModule.sol	READ	helper body delegates to the packed-slot setter
 MUTATOR-DEF	_setPrizePools	_addNextPrizePool	modules/DegenerusGameJackpotModule.sol	READ	helper body delegates to the packed-slot setter

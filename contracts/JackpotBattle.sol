@@ -126,21 +126,13 @@ contract JackpotBattle is CrapsBattleStorage {
         if (index > 1) revert BadJackpotField();
         if (allowance == 0) return result;
         MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
-        if (_rngPending[index] == 0) { result.done = true; return result; }
-        if (_readCrapsStage() != 6 || _wordAt(index) == 0) return result;
         uint64[] storage slots = _rngSlots[index];
         uint64 pos = _rngSlotCursor[index];
+        if (pos == slots.length) { result.done = true; return result; }
+        if (_readCrapsStage() != 6 || _wordAt(index) == 0) return result;
         for (uint256 steps; pos < slots.length && steps < _KEEP_MAX_HOPS; ++steps) {
             if (!MineFlipGas.canRun(meter, _MAINTENANCE_GAS_MAX, _WORK_TAIL_GAS)) break;
             uint64 slot = slots[pos];
-            // Boards retain their logical keys. A completed slot may still be in
-            // the FIFO, but its pending count was already released at settlement.
-            uint256 board = _battles[_rngBattleKey(slot)];
-            if (uint32(board >> _BG_RESOLVED_SHIFT) == uint32(board)) {
-                ++pos;
-                result.progressed = true;
-                continue;
-            }
             if (_scheduledExpired(slot)) {
                 _completeRngSlot(slot, index);
                 ++pos;
@@ -149,7 +141,6 @@ contract JackpotBattle is CrapsBattleStorage {
                 continue;
             }
             if (!MineFlipGas.canRun(meter, _SEAT_GAS_MAX, _SETTLE_TAIL_GAS + _CREDIT_GAS_MAX + _WORK_TAIL_GAS)) break;
-            if (_rngSlotCursor[index] != pos) _rngSlotCursor[index] = pos;
             uint256 childAllowance = _resolverAllowance(MineFlipGas.remaining(meter));
             MineFlipGas.Result memory child = IReadCohortLifecycle(address(this)).resolveRngSlot(slot, childAllowance);
             result.progressed = result.progressed || child.progressed;
@@ -158,8 +149,8 @@ contract JackpotBattle is CrapsBattleStorage {
             // One field per batch preserves the established finalization boundary.
             break;
         }
-        if (_rngSlotCursor[index] != pos) _rngSlotCursor[index] = pos;
-        result.done = _rngPending[index] == 0;
+        // Final-seat settlement and expiry advance the stored head atomically.
+        result.done = pos == slots.length;
         MineFlipGas.finish(meter);
     }
 
@@ -175,23 +166,25 @@ contract JackpotBattle is CrapsBattleStorage {
         if (msg.sender != address(this)) revert OnlyTableSelf();
         if (uint32(_battles[key]) == 0) return;
         if (index > 1) revert BadJackpotField();
-        uint48 physical = index;
-        if (_rngPending[physical] == 0) {
-            uint64[] storage slots = _rngSlots[physical];
+        uint64[] storage slots = _rngSlots[index];
+        bool empty = _rngSlotCursor[index] == slots.length;
+        if (empty) {
             assembly ("memory-safe") { sstore(slots.slot, 0) }
-            _rngSlotCursor[physical] = 0;
+            _rngSlotCursor[index] = 0;
         }
-        _rngSlots[physical].push(slot);
-        if (_rngPending[physical]++ == 0) {
+        slots.push(slot);
+        if (empty) {
             IGameCrapsPending(ContractAddresses.GAME).setCrapsRngPending(index, true);
         }
     }
 
     function _completeRngSlot(uint64 slot, uint48 index) private {
-        if (index > 1) revert BadJackpotField();
-        uint64 pos = _rngSlotCursor[index];
-        if (pos < _rngSlots[index].length && _rngSlots[index][pos] == slot) _rngSlotCursor[index] = pos + 1;
-        if (--_rngPending[index] == 0) {
+        // Only the read FIFO's head can finish: either its final seat calls us
+        // through finalizeBattle, or the read worker retires an expired field.
+        // Commit before notifying Game so the callback observes a drained FIFO.
+        uint64 next = _rngSlotCursor[index] + 1;
+        _rngSlotCursor[index] = next;
+        if (next == _rngSlots[index].length) {
             IGameCrapsPending(ContractAddresses.GAME).setCrapsRngPending(index, false);
         }
         if (slot >= _CUSTOM_SLOT_BASE) {
@@ -971,7 +964,7 @@ contract JackpotBattle is CrapsBattleStorage {
         // Before the first session, maintenance creates the commitments that request seals.
         // A live read cohort, locked day or earlier consumer always blocks admission work.
         if (stage != 7 && !(stage == 0 && !IGameCraps(_GAME).rngLocked()
-            && _rngPending[read] == 0 && _wordAt(read) == 0)) return result;
+            && _rngSlotCursor[read] == _rngSlots[read].length && _wordAt(read) == 0)) return result;
         uint64 cur = _keeperSlot;
         uint24 today = _currentDayIndex();
         if (_scheduledExpired(cur)) {

@@ -1,0 +1,32 @@
+Interface coverage check
+========================
+
+OK   ILiquidationDeity                             -> DegenerusDeityPass        (1 fns covered)
+OK   ICoinflip                                     -> Coinflip                  (29 fns covered)
+OK   IDegenerusAffiliate                           -> DegenerusAffiliate        (15 fns covered)
+OK   IDegenerusCoin                                -> FLIP                      (5 fns covered)
+OK   IDegenerusGame                                -> DegenerusGame             (92 fns covered)
+OK   IDegenerusJackpots                            -> DegenerusJackpots         (9 fns covered)
+OK   IDegenerusParimutuel                          -> DegenerusParimutuel       (4 fns covered)
+OK   IDegenerusQuests                              -> DegenerusQuests           (20 fns covered)
+OK   IJackpotBattle                                -> CrapsBattle+JackpotBattle (7 fns covered)
+OK   IsDGNRS                                       -> sDGNRS                    (19 fns covered)
+OK   IVaultCoin                                    -> FLIP                      (4 fns covered)
+OK   IDegenerusGameAdvanceModule                   -> DegenerusGameAdvanceModule (6 fns covered)
+OK   IDegenerusGameMinerModule                     -> DegenerusGameMinerModule  (3 fns covered)
+OK   IDegenerusGameRngModule                       -> DegenerusGameRngModule    (4 fns covered)
+OK   IDegenerusGameTicketModule                    -> DegenerusGameTicketModule (3 fns covered)
+OK   IDegenerusGameJackpotDrawModule               -> DegenerusGameJackpotDrawModule (3 fns covered)
+OK   IDegenerusGameGameOverModule                  -> DegenerusGameGameOverModule (4 fns covered)
+OK   IDegenerusGameJackpotModule                   -> DegenerusGameJackpotModule (11 fns covered)
+OK   IDegenerusGameDecimatorModule                 -> DegenerusGameDecimatorModule (4 fns covered)
+OK   IDegenerusGameWhaleModule                     -> DegenerusGameWhaleModule  (7 fns covered)
+OK   IDegenerusGameMintModule                      -> DegenerusGameMintModule   (9 fns covered)
+OK   IDegenerusGameLootboxModule                   -> DegenerusGameLootboxModule (9 fns covered)
+OK   IDegenerusGameBoonModule                      -> DegenerusGameBoonModule   (9 fns covered)
+OK   IDegenerusGameDegeneretteModule               -> DegenerusGameDegeneretteModule (5 fns covered)
+OK   IDegenerusGameBingoModule                     -> DegenerusGameBingoModule  (2 fns covered)
+OK   IGameAfkingModule                             -> GameAfkingModule          (11 fns covered)
+OK   IDegenerusGameFoilPackModule                  -> DegenerusGameFoilPackModule (6 fns covered)
+
+PASS all interface functions have matching implementations

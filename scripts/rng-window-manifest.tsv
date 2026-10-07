@@ -175,8 +175,6 @@ ACCESSOR	lootboxRngPacked	_dailyHeroWagerWord	storage/DegenerusGameStorage.sol	R
 ACCESSOR	dailyFoilDraw	_foilDrawWord	storage/DegenerusGameStorage.sol	READ	Authenticates the exact logical day in the parity slot; no wall-age gate so stalled advance consumers retain their board.
 CONSUMER-SEALED	_currentRngWord	_lootboxWord	storage/DegenerusGameStorage.sol	READ	Current read identity and ready bit gate the shared payload decoder.
 ACCESSOR	_lootboxWord	_lootboxWord	storage/DegenerusGameStorage.sol	READ	packed ready bit plus activeIndex-1 authenticates current read payload
-ACCESSOR	lootboxRngPacked	_lrAdd	storage/DegenerusGameStorage.sol	READ
-ACCESSOR	lootboxRngPacked	_lrAdd	storage/DegenerusGameStorage.sol	WRITE
 ACCESSOR	lootboxRngPacked	_lrRead	storage/DegenerusGameStorage.sol	READ
 ACCESSOR	lootboxRngPacked	_lrWrite	storage/DegenerusGameStorage.sol	WRITE
 GATE	_currentRngWord	_nextMinerAction	storage/DegenerusGameStorage.sol	READ

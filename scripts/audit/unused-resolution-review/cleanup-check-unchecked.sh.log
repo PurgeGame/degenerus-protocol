@@ -1,0 +1,3 @@
+manifest classes: SCALE-BOUNDED=4, WRAP-INTENDED=6, NO-OVERFLOW-OP=66, BOUNDED=36
+live blocks: 112   manifest rows: 112
+PASS every unchecked block is registered with its bound

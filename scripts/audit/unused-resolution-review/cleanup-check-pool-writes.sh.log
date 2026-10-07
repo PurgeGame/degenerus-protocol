@@ -1,0 +1,9 @@
+SOLV pool-write drift gate
+==========================
+scanning: contracts
+manifest: scripts/pool-write-manifest.tsv
+
+manifest classes: DRAIN-ZERO=5, MUTATOR-DEF=17, POOL-TO-POOL=40, PRE-COUNTED=2, VALUE-OUT=4, DECL=5, VALUE-IN=21, PAIRED-CREDIT=10
+live scoped accesses: 104   manifest rows: 104
+
+PASS every counted-term mutation is registered and classified

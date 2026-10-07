@@ -13,7 +13,7 @@ import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 contract CrapsReuseHarness is CrapsViews {
     function rawBet(uint256 id) external view returns (uint256) { return _bets[_betStorageKey(id)]; }
     function physicalKey(uint256 id) external pure returns (uint256) { return _betStorageKey(id); }
-    function pending(uint48 index) external view returns (uint256) { return _rngPending[index]; }
+    function pending(uint48 index) external view returns (uint256) { return _rngSlots[index].length - _rngSlotCursor[index]; }
     function put(uint256 id, uint256 word) external {
         uint256 slot = id >> 64;
         require(slot & 7 == 0, "day fixture");
@@ -174,14 +174,20 @@ contract CrapsStorageReuseTest is CrapsPins {
         assertEq(table.betWordOf(_id(day + 64, 1)), newWord);
     }
 
-    function test_ExpirationSkipsAlreadyCompletedLaterQueueSlot() public {
+    function test_ProductionCallerCannotSkipHeadBeforeExpiry() public {
         uint24 day = _today() + 1;
         _buy(alice, day, 1); _open(day);
         (uint64 slot, uint48 index) = _arm(day);
         vm.warp(block.timestamp + 6 hours); table.armWindow(slot + 1);
         _setWord(index, WORD + 1); game.setRngConsumerStage(6);
-        vm.prank(address(table)); table.resolveRngSlot(slot + 1, 9_000_000);
+        vm.expectRevert(abi.encodeWithSignature("OnlyGame()"));
+        vm.prank(alice); table.resolveRngSlot(slot + 1, 9_000_000);
+        assertEq(table.pending(index), 2);
+        vm.prank(ContractAddresses.GAME);
+        JackpotBattle(address(table)).runCrapsReadWork(index, 9_000_000);
         assertEq(table.pending(index), 1);
+        assertGt(table.bonusCursorOf(slot), 0);
+        assertEq(table.bonusCursorOf(slot + 1), 0);
         uint256 paid = coinflip.totalCredited();
         _warp(day + 34); _buy(bob, day + 64, 1);
         vm.prank(ContractAddresses.GAME);

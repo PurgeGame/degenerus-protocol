@@ -1,0 +1,1853 @@
+Warning: This is a nightly build of Foundry. It is recommended to use the latest stable version. To mute this warning set `FOUNDRY_DISABLE_NIGHTLY_WARNING` in your environment.
+
+Compiling 2 files with Solc 0.8.34
+Solc 0.8.34 finished in 13.44s
+Compiler run successful with warnings:
+Warning (2519): This declaration shadows an existing declaration.
+  --> contracts/libraries/MineFlipGas.sol:59:9:
+   |
+59 |         uint256 available = gasleft();
+   |         ^^^^^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> contracts/libraries/MineFlipGas.sol:29:5:
+   |
+29 |     function available() internal view returns (uint256) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/craps/CrapsGlobalWorkOrder.t.sol:112:14:
+    |
+112 |             (bool ok,) = address(table).call{gas: limits[i]}(abi.encodeCall(cohort.runCrapsReadWork, (index, limits[i])));
+    |              ^^^^^^^
+Note: The shadowed declaration is here:
+   --> test/craps/CrapsGlobalWorkOrder.t.sol:122:10:
+    |
+122 |         (bool ok,) = address(table).call{gas: 300_000}(abi.encodeCall(cohort.runCrapsReadWork, (index, 300_000)));
+    |          ^^^^^^^
+
+Warning (8760): This declaration has the same name as another declaration.
+  --> test/craps/CrapsHottestShooter.t.sol:12:71:
+   |
+12 |     function prime(uint64 slot, uint32 own, uint32 day, uint32 drawn, uint256 heat, uint256 lane) external {
+   |                                                                       ^^^^^^^^^^^^
+Note: The other declaration is here:
+  --> test/craps/CrapsHottestShooter.t.sol:23:5:
+   |
+23 |     function heat(uint64 slot) external view returns (uint256) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+    --> contracts/storage/DegenerusGameStorage.sol:3445:43:
+     |
+3445 |     function _lootboxEvUsedFor(uint32 id, uint24 level)
+     |                                           ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> contracts/storage/DegenerusGameStorage.sol:378:5:
+    |
+378 |     uint24 public level = 0;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+    --> contracts/storage/DegenerusGameStorage.sol:3461:9:
+     |
+3461 |         uint24 level,
+     |         ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> contracts/storage/DegenerusGameStorage.sol:378:5:
+    |
+378 |     uint24 public level = 0;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+    --> contracts/storage/DegenerusGameStorage.sol:3620:41:
+     |
+3620 |     function _centuryUsedFor(uint32 id, uint256 level) internal view returns (uint256) {
+     |                                         ^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> contracts/storage/DegenerusGameStorage.sol:378:5:
+    |
+378 |     uint24 public level = 0;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+    --> contracts/storage/DegenerusGameStorage.sol:3626:44:
+     |
+3626 |     function _setCenturyUsedFor(uint32 id, uint256 level, uint256 used) internal {
+     |                                            ^^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> contracts/storage/DegenerusGameStorage.sol:378:5:
+    |
+378 |     uint24 public level = 0;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/storage/DegenerusGameStorage.sol:1233:22:
+     |
+1233 |             packed = uint80(id) << OWNER_IDX_SHIFT;
+     |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/storage/DegenerusGameStorage.sol:1302:22:
+     |
+1302 |             packed = uint80(id) << OWNER_IDX_SHIFT;
+     |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/storage/DegenerusGameStorage.sol:1369:25:
+     |
+1369 |         uint80 idBits = uint80(id) << OWNER_IDX_SHIFT;
+     |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint80) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
+    --> contracts/storage/DegenerusGameStorage.sol:1805:25:
+     |
+1805 |                 return (uint80(id) << OWNER_IDX_SHIFT) | uint80((lane & 0x3fffffff) << 8)
+     |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5740): Unreachable code.
+   --> test/craps/CrapsSlip.t.sol:474:13:
+    |
+474 |             vm.revertToStateAndDelete(trialSnapshot);
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:765:9:
+    |
+765 |         uint32 played,
+    |         ^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:766:9:
+    |
+766 |         uint8 bankMult,
+    |         ^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:767:9:
+    |
+767 |         uint16 goalMult,
+    |         ^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:768:9:
+    |
+768 |         uint24 stakeUnits,
+    |         ^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:769:9:
+    |
+769 |         uint40 closeTime,
+    |         ^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:770:9:
+    |
+770 |         bool multiEntry,
+    |         ^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:771:9:
+    |
+771 |         uint16 highRollerMult
+    |         ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:772:25:
+    |
+772 |     ) external returns (uint64 slot) {
+    |                         ^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:836:31:
+    |
+836 |     function setBattleCreator(address account, bool allowed) external {
+    |                               ^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> contracts/CrapsBattle.sol:836:48:
+    |
+836 |     function setBattleCreator(address account, bool allowed) external {
+    |                                                ^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/CrapsBattle.sol:1231:34:
+     |
+1231 |     function convertNormalToHigh(uint32 id, uint32 highCount) external { _delegateJackpot(); }
+     |                                  ^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/CrapsBattle.sol:1231:45:
+     |
+1231 |     function convertNormalToHigh(uint32 id, uint32 highCount) external { _delegateJackpot(); }
+     |                                             ^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/CrapsBattle.sol:1252:33:
+     |
+1252 |     function upgradeReservedDay(uint32 id, uint24 day) external { _delegateJackpot(); }
+     |                                 ^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+    --> contracts/CrapsBattle.sol:1252:44:
+     |
+1252 |     function upgradeReservedDay(uint32 id, uint24 day) external { _delegateJackpot(); }
+     |                                            ^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> test/craps/CrapsPins.sol:474:99:
+    |
+474 |     function _openBattle(CrapsViews c, uint32 played, uint8 bankMult, uint16 goalMult, uint24 su, uint16 bar)
+    |                                                                                                   ^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> test/craps/CrapsBattle.t.sol:73:71:
+   |
+73 |     function compositeOf(bool goal, uint256 primary, uint256 wonFlip, uint256 standing)
+   |                                                                       ^^^^^^^^^^^^^^^^
+
+Warning (2072): Unused local variable.
+    --> test/craps/CrapsBattle.t.sol:1758:9:
+     |
+1758 |         uint256 held = uint256(0);
+     |         ^^^^^^^^^^^^
+
+Warning (2072): Unused local variable.
+   --> test/craps/CrapsGlobalWorkOrder.t.sol:122:10:
+    |
+122 |         (bool ok,) = address(table).call{gas: 300_000}(abi.encodeCall(cohort.runCrapsReadWork, (index, 300_000)));
+    |          ^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> test/craps/CrapsHighWater.t.sol:112:59:
+    |
+112 |     function goalScore(uint256 peakFlip, uint256 endFlip, uint256 standing) external pure returns (uint256) {
+    |                                                           ^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> test/craps/CrapsProgressive.t.sol:49:59:
+   |
+49 |     function goalScore(uint256 peakFlip, uint256 endFlip, uint256 standing) external pure returns (uint256) {
+   |                                                           ^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> test/craps/CrapsProgressive.t.sol:60:56:
+   |
+60 |     function bustScore(uint256 hands, uint256 endFlip, uint256 standing) external pure returns (uint256) {
+   |                                                        ^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> test/craps/CrapsProgressive.t.sol:129:72:
+    |
+129 |     function rawComposite(bool goal, uint256 primary, uint256 wonFlip, uint256 standing)
+    |                                                                        ^^^^^^^^^^^^^^^^
+
+Warning (2072): Unused local variable.
+   --> test/craps/CrapsResolveBudget.t.sol:255:10:
+    |
+255 |         (bool ok,) = address(craps).call{gas: 60_000}(
+    |          ^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> test/craps/CrapsSystemEcon.t.sol:276:60:
+    |
+276 |     function _settleAndSplit(Ledger memory L, uint64 slot, uint24 day, uint256 period) internal {
+    |                                                            ^^^^^^^^^^
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> contracts/CrapsBattle.sol:944:5:
+    |
+944 |     function _settlementOf(uint256 betId, uint256 header, Window memory w, uint256 word)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+    --> contracts/CrapsBattle.sol:1028:5:
+     |
+1028 |     function _windowTermsOn(uint24 day, uint256 period, uint256 word) internal view returns (Window memory w) {
+     |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+    --> contracts/JackpotBattle.sol:1079:5:
+     |
+1079 |     function _windowTermsOn(uint24 day, uint256 period, uint256 word) internal view returns (Window memory w) {
+     |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+    --> test/craps/CrapsBattle.t.sol:1943:5:
+     |
+1943 |     function _closeOf(uint256 period) internal view returns (uint256) {
+     |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+  --> test/craps/CrapsPreferredBoard.t.sol:47:5:
+   |
+47 |     function _events() private returns (uint256 n) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/craps/CrapsProgressive.t.sol:911:5:
+    |
+911 |     function test_anEnormousHighPointSaturatesRatherThanWrapping() public {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+
+Ran 7 tests for test/craps/CrapsHottestShooter.t.sol:CrapsHottestShooterTest
+[PASS] test_battleWinnerCanAlsoBeHottest() (gas: 281097)
+[PASS] test_customBattleKeepsItsWholePot() (gas: 219259)
+[PASS] test_dayAndAwardedSeatsUseDenseRotationOrdinals() (gas: 496449)
+[PASS] test_externalCallerCannotInvokePayout() (gas: 15853)
+[PASS] test_protocolPassSplitsConserveBothRecipientsShares() (gas: 473287)
+[PASS] test_tenPercentGoesToHottestAndHighLaneIsUntouched() (gas: 403268)
+[PASS] test_zeroPotDoesNotCreateCredit() (gas: 181323)
+Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 1.80ms (621.20µs CPU time)
+
+Ran 4 tests for test/craps/CrapsMutationPins.t.sol:CrapsMutationPins
+[PASS] test_customBattleHighLaneOfTwoIsAHighSeat() (gas: 506907)
+[PASS] test_customSlotBaseIsNoBattle() (gas: 15956)
+[PASS] test_eighthCustomBattleAmendsUnderTheCustomClose() (gas: 684616)
+[PASS] test_gapSlotBetweenDaysIsNoBattle() (gas: 45126)
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 2.56ms (819.71µs CPU time)
+
+Ran 10 tests for test/craps/CrapsPasses.t.sol:CrapsAwardSplitTest
+[PASS] test_aFullOrPartialLaneOnlyBanksWhatFits() (gas: 103067)
+[PASS] test_fractionalRemaindersStayLiquid() (gas: 238542)
+[PASS] test_theDenominationCliffIsStrict() (gas: 238624)
+[PASS] test_theSmallestAwardBanksOneNormal() (gas: 129309)
+[PASS] test_theSplitIsDeterministicAcrossWords() (gas: 155994)
+[PASS] test_theSplitLogsCreditThenSplitAndNothingElse() (gas: 62253)
+[PASS] test_theThirtyHighCap() (gas: 238784)
+[PASS] test_theWorkedHighPassExample() (gas: 49637)
+[PASS] test_twoAwardsToOneWinnerSplitIndependently() (gas: 72933)
+[PASS] test_underOneUnitSplitsNothing() (gas: 37215)
+Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 2.64ms (1.09ms CPU time)
+
+Ran 3 tests for test/craps/CrapsJackpotBattleAwards.t.sol:CrapsJackpotBattleAwardsTest
+[PASS] test_GasQualifiedBattleAwards() (gas: 156985)
+Logs:
+  BATTLE_RIU_AWARD_GAS_MOCK_COINFLIP: 154679
+
+[PASS] test_RiuPassAwardPreservesPreferredBoardAndSentinel() (gas: 175738)
+[PASS] test_ThresholdsAndPassSplitConserveThePool() (gas: 971142)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 4.67ms (841.65µs CPU time)
+
+Ran 3 tests for test/craps/CrapsAliasedSlot.t.sol:CrapsAliasedSlotTest
+[PASS] test_aliasedSlotIsNotAWindow() (gas: 1416726)
+[PASS] test_customBattleSlotUnaffected() (gas: 467337)
+[PASS] test_settledWindowPaysOnce() (gas: 1842824)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 5.16ms (3.10ms CPU time)
+
+Ran 5 tests for test/craps/CrapsHighRoller.t.sol:CrapsHighRollerGasTest
+[PASS] test_gas_anOrdinarySeatPaysNothingForTheLane() (gas: 887742)
+Logs:
+  ordinary entry, no lane offered : 189228
+  ordinary entry, lane offered    : 189506
+
+[PASS] test_gas_theFinishingBatchPaysBothPots() (gas: 1123689)
+Logs:
+  finishing batch, both pots      : 177108
+
+[PASS] test_gas_theFirstAndLaterHighEntry() (gas: 1052858)
+Logs:
+  ordinary entry                  : 189228
+  first high entry                : 211768
+  later high entry                : 137973
+
+[PASS] test_storage_aBatchWithNoHighSeatOnlyAsksWhetherALaneExists() (gas: 1214994)
+[PASS] test_storage_theLaneIsOneWordPerBattleAndOnePerDay() (gas: 1172725)
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 6.78ms (4.18ms CPU time)
+
+Ran 5 tests for test/craps/CrapsLapsedDayArm.t.sol:CrapsLapsedDayArmTest
+[PASS] test_lapsedWindowAheadOpenerRefundsToTheCompLane() (gas: 778860)
+[PASS] test_lapsedWindowRefundsResumeAcrossCalls() (gas: 19505952)
+[PASS] test_openedDayWindowStillArms() (gas: 1217309)
+[PASS] test_unopenedDayWindowCannotArm() (gas: 969364)
+[PASS] test_unopenedDayWindowCannotArmBeforeSweep() (gas: 906817)
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 15.17ms (12.96ms CPU time)
+
+Ran 19 tests for test/craps/CrapsDayUpgrade.t.sol:CrapsDayUpgradeTest
+[PASS] test_aBankedPassCannotBeUpgraded() (gas: 444279)
+[PASS] test_aFutureReservationWaitsForItsDayToOpen() (gas: 663874)
+[PASS] test_aHighFutureReservationSetsAllSevenPeriods() (gas: 661464)
+[PASS] test_aHundredTimesDayChargesAndPaysNinetyNineMoreCopies() (gas: 1398824)
+[PASS] test_aMaskNamingAClockClosedWindowRevertsAtomically() (gas: 773875)
+[PASS] test_aMultiPeriodMaskChargesTheExactSum() (gas: 791774)
+[PASS] test_aRepeatCannotChargeOrCountTwice() (gas: 782070)
+[PASS] test_aWholeDayHighTicketIsHighInAllSevenPeriods() (gas: 751471)
+[PASS] test_anArmedWindowCannotBeUpgraded() (gas: 843433)
+[PASS] test_anEmptyOrOverwideMaskReverts() (gas: 732043)
+[PASS] test_anUpgradeAwardsNoQuestStreak() (gas: 748643)
+[PASS] test_anUpgradeChargesExactlyTheMissingCopies() (gas: 777680)
+[PASS] test_anUpgradedSeatAloneRidesItsExtraBounties() (gas: 1353567)
+[PASS] test_anUpgradedSeatContestsTheLaneWithADirectHighEntry() (gas: 1761732)
+[PASS] test_anUpgradedWindowSettlesExactlyAsANativeHighSeat() (gas: 2078129)
+[PASS] test_newcomerPaysPremiumOnTheDayAndCashUpgradeOnly() (gas: 993397)
+[PASS] test_onlyTheTicketsOwnHolderCanUpgradeIt() (gas: 744973)
+[PASS] test_theOtherWindowsStayOrdinary() (gas: 1492916)
+[PASS] test_theUpgradedWindowPaysTheMultipleAndAddsNoMainHead() (gas: 1426441)
+Suite result: ok. 19 passed; 0 failed; 0 skipped; finished in 19.53ms (17.41ms CPU time)
+
+Ran 10 tests for test/craps/LootboxCraps.t.sol:LootboxCrapsTest
+[PASS] test_AllRawRecyclingFixtureRootsAndPackedBitsMatchProduction() (gas: 265026)
+[PASS] test_cannotResolveBeforeTheWordLands() (gas: 44129)
+[PASS] test_everyPlayerAtAnIndexGetsTheSameShooter() (gas: 164237)
+[PASS] test_indexDecodeIgnoresTheRestOfThePackedSlot() (gas: 46570)
+[PASS] test_lootboxRngSlotsMatchTheAuditedStorageLayout() (gas: 265157)
+[PASS] test_seedIsTheIndexAloneAndDomainSeparatedFromTheWord() (gas: 79013)
+[PASS] test_sessionsAtOneIndexShareTheirShooters() (gas: 310213)
+[PASS] test_shippedPathReadsThroughThePinnedGame() (gas: 244546)
+[PASS] test_theShooterDoesNotDependOnWhatWasBet() (gas: 113999)
+[PASS] test_wordLookupMatchesSolidityMappingSlot() (gas: 69335)
+Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 3.36ms (2.02ms CPU time)
+
+Ran 5 tests for test/craps/CrapsHighWater.t.sol:CrapsCustomBoundaryTest
+[PASS] test_aCustomFieldTouchesNoDayBookNoJackpotAndNoRecord() (gas: 1079843)
+[PASS] test_aScheduledFieldStillBooksItsBankrollsToTheDayItPlayed() (gas: 1416537)
+[PASS] test_customFiveAndTwentyXTargetsTakeTheBareEngine() (gas: 1493496)
+[PASS] test_theRecordIsArmedOncePerFieldAndOnlyAboveTheFloor() (gas: 631032)
+[PASS] test_theScoreboardIsOrderIndependentUnderEveryPartition() (gas: 3065603)
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 25.93ms (23.21ms CPU time)
+
+Ran 8 tests for test/craps/RngCohortRecycling.t.sol:CustomCohortRecyclingTest
+[PASS] test_CustomArmRegistersHashedFieldAndKeeperFinishesIt() (gas: 678466)
+[PASS] test_CustomCloseHorizonBoundsFundedCapacityOccupancy() (gas: 658829)
+[PASS] test_FailedSettlementPreservesFieldCapacityAndGameFlag() (gas: 740894)
+[PASS] test_FifthFundedFieldRejectedBeforeBurnAndCompleteFieldReleasesCapacity() (gas: 1152957)
+[PASS] test_GameMirrorClearsOnlyAfterEveryFieldAtIndexSettles() (gas: 862404)
+[PASS] test_MoreThan64RepeatEntriesAllowedAndPartialSettlementKeepsGateClosed() (gas: 3708907)
+[PASS] test_SpentBattleCannotDischargeNewPendingFieldWhenItsBufferIsReused() (gas: 1145374)
+[PASS] test_TerminalRequestKillsUnfinishedCrapsWithoutUsingTerminalEntropy() (gas: 649194)
+Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 17.24ms (15.41ms CPU time)
+
+Ran 10 tests for test/craps/CrapsStorageReuse.t.sol:CrapsStorageReuseTest
+[PASS] testFuzz_TagPreservesMoneyFlagsAndRejectsForgedDay(uint24,uint32,uint256) (runs: 1000, μ: 64643, ~: 64656)
+[PASS] test_DayThirtyStillPaysIdenticallyAndDayThirtyOneExpires() (gas: 1741232)
+[PASS] test_ExpiredJackpotCannotAppendOverNewSeatsOrPayReserve() (gas: 984019)
+[PASS] test_ExpiredLapsedDayCannotRefundTheNewReservation() (gas: 618838)
+[PASS] test_ExpiredReadCohortCannotPayReusedBetsAndDrainsOnce() (gas: 1050018)
+[PASS] test_PartialSettlementThenExpirationCannotPayAgain() (gas: 1186775)
+[PASS] test_ProductionCallerCannotSkipHeadBeforeExpiry() (gas: 1491601)
+[PASS] test_ReusedBetAndMembershipRejectOldIdsAndUnwrittenTail() (gas: 477465)
+[PASS] test_ThirtyDayBookingLimitIsAtomicForBothPurchaseAndPasses() (gas: 710150)
+[PASS] test_ThreeLanesShareWordAndAmendPreservesBothNeighbors() (gas: 108996)
+Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 62.59ms (61.50ms CPU time)
+
+Ran 45 tests for test/craps/CrapsPasses.t.sol:CrapsPassesTest
+[PASS] testFuzz_theGamesPassDoorsNeverRevert(uint32,uint32,uint32,uint32,uint8,bool,bool) (runs: 1000, μ: 136446, ~: 141629)
+[PASS] test_aBoughtDayPlaysEvenWhenPeriodZeroIsMissed() (gas: 635515)
+[PASS] test_aBoughtRunNamesItsBoardToo() (gas: 318489)
+[PASS] test_aConversionCannotReachACommittedReservation() (gas: 161765)
+[PASS] test_aConversionEmitsExactlyOneCanonicalLog() (gas: 62734)
+[PASS] test_aConversionTouchesNoOutsideLedger() (gas: 71461)
+[PASS] test_aFullHighLaneRevertsWithoutDebitingNormals() (gas: 57721)
+[PASS] test_aFullLaneSaturatesRatherThanReverting() (gas: 134063)
+[PASS] test_aFutureDayIsSeatedTheMomentItIsBought() (gas: 655892)
+[PASS] test_aFutureReservationsBoardAmendsUntilItsOwnOpenerCloses() (gas: 222006)
+[PASS] test_aHighCreditUpgradesANormalReservation() (gas: 225858)
+[PASS] test_aHighReservationRunsTheTargetDaysOwnMultiple() (gas: 661333)
+[PASS] test_aMixedBatchSeatsTheHighPassFirst() (gas: 134570)
+[PASS] test_aRejectedRangeBurnsNothing() (gas: 467530)
+[PASS] test_aReservationBlocksThePaidWholeDayEntry() (gas: 644083)
+[PASS] test_aReservationNamesOneBoardForTheWholeRun() (gas: 241029)
+[PASS] test_aReservedBoardAllowsUpToSevenLegalChips() (gas: 464601)
+[PASS] test_aReservedBoardStillAmendsDayByDay() (gas: 258440)
+[PASS] test_aRunMustBeStrictlyFutureAndUnworded() (gas: 223484)
+[PASS] test_aSeatedDayCannotBeTakenTwice() (gas: 331242)
+[PASS] test_aShortBalanceConvertsNothingNotPart() (gas: 57499)
+[PASS] test_aShortBalanceReservesNothing() (gas: 136036)
+[PASS] test_aWordedTomorrowIsNotReservable() (gas: 86963)
+[PASS] test_aZeroConversionReverts() (gas: 51160)
+[PASS] test_anOccupiedTomorrowBanksTheWholeAward() (gas: 136662)
+[PASS] test_creditPassesBanksExactlyWhatItLogs() (gas: 80202)
+[PASS] test_creditPassesBanksOnlyTheCapacityASaturatedLaneHad() (gas: 64988)
+[PASS] test_creditsCommitToAConsecutiveRun() (gas: 445810)
+[PASS] test_deliveredSeatsTakeDenseNumbersAndOneTicketADay() (gas: 180293)
+[PASS] test_deliverySeatsTomorrowAndBanksTheRest() (gas: 130234)
+[PASS] test_fortyTwoNormalsConvertToTwoHighs() (gas: 58981)
+[PASS] test_fundingLeavesNoMarkOnTheDay() (gas: 358616)
+[PASS] test_futureDaysBurnTheFixedPriceOnce() (gas: 465403)
+[PASS] test_oneTakenDayVoidsTheWholeRun() (gas: 367304)
+[PASS] test_onlyTheGameMayDeliverPasses() (gas: 113355)
+[PASS] test_theHighPriceIsItsOwnConstant() (gas: 311569)
+[PASS] test_theTwoLanesDoNotSubstituteForEachOther() (gas: 290647)
+[PASS] test_theVaultCannotReachTheBareCreditLane() (gas: 19270)
+[PASS] test_twentyNormalsCannotBuyAHigh() (gas: 57477)
+[PASS] test_twentyOneNormalsConvertToOneHigh() (gas: 58574)
+[PASS] test_twoPlayersMayReserveTheSameDay() (gas: 428558)
+[PASS] test_upgradeOfAHighReservationReverts() (gas: 142035)
+[PASS] test_upgradeOfTodayReverts() (gas: 52481)
+[PASS] test_upgradeWithoutAHighCreditReverts() (gas: 147709)
+[PASS] test_upgradeWithoutAReservationReverts() (gas: 59367)
+Suite result: ok. 45 passed; 0 failed; 0 skipped; finished in 101.57ms (102.68ms CPU time)
+
+Ran 11 tests for test/craps/CrapsBoonPayout.t.sol:CrapsBoonPayoutTest
+[PASS] test_aDayTicketIsBoostedInEveryWindowItPlays() (gas: 28574449)
+[PASS] test_aFutureRunMarksOnlyItsFirstReservedDay() (gas: 472262)
+[PASS] test_aHighSeatTakesItsBonusOffTheScaledPaymentAndTheCeilingBitesThere() (gas: 4213036)
+[PASS] test_aRevertedPurchaseLeavesNoSeatAndNoSpentBoon() (gas: 219792)
+[PASS] test_anInvalidStoredMaskPaysNothingAtSettlement() (gas: 771761)
+[PASS] test_anUnboonedEntryLeavesTheSliceClear() (gas: 368635)
+[PASS] test_redemptionAndDeliveryCarryNoBoon() (gas: 285663)
+[PASS] test_theBoonLiftsPaidByExactlyItsBonusAndNeverTouchesWon() (gas: 4421989)
+[PASS] test_theMaskRoundTripsThroughStorageAtItsOwnSlice() (gas: 798032)
+[PASS] test_thePreviewQuotesExactlyWhatSettlementPays() (gas: 3725891)
+[PASS] test_upgradingDayWindowsPreservesTheMask() (gas: 6214829)
+Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 118.92ms (133.90ms CPU time)
+
+Ran 22 tests for test/craps/CrapsAccounts.t.sol:CrapsAccountsTest
+[PASS] testFuzz_accountDoorsAndCompsNeverStoreOwnerZero(uint8,uint8,uint8,uint32,uint8) (runs: 1000, μ: 124129, ~: 71483)
+[PASS] test_amendSlipByAccount() (gas: 600283)
+[PASS] test_amendSlipOwnershipIsTheAccounts() (gas: 180750)
+[PASS] test_applyCrapsPassesByAccount() (gas: 596342)
+[PASS] test_buyFutureCrapsDaysByAccount() (gas: 1007931)
+[PASS] test_convertNormalToHighByAccount() (gas: 359634)
+[PASS] test_createBattleThroughTheStub() (gas: 152984)
+[PASS] test_donateStillBurnsTheCaller() (gas: 85203)
+[PASS] test_enterBattleByAccount() (gas: 888643)
+[PASS] test_enterBonusBattleByAccount() (gas: 968213)
+[PASS] test_enterBonusDayByAccount() (gas: 1252132)
+[PASS] test_newcomerRateFollowsTheAccountKey() (gas: 834055)
+[PASS] test_newcomerUpgradeBurnFollowsTheAccountKey() (gas: 561674)
+[PASS] test_passDoorsBySmurfIdMoveOnlyThatIdAndWriteNoAddressWord() (gas: 265662)
+[PASS] test_setPreferredBoardByAccount() (gas: 322594)
+[PASS] test_stubSelectorsMatchTheJackpotBattleBodies() (gas: 580)
+[PASS] test_upgradeDayWindowsByAccount() (gas: 880444)
+[PASS] test_upgradeReservedDayByAccount() (gas: 574398)
+[PASS] test_vaultCompRecipientIsTheLowThirtyTwoBits() (gas: 154635)
+[PASS] test_vaultCompRevertsForAZeroOrUnallocatedRecipient() (gas: 29425)
+[PASS] test_vaultCompSeatsAndBanksOnTheRecipientIdAndChargesTheLaneForItsKey() (gas: 785255)
+[PASS] test_vaultCompUpgradesAnExistingSeatForTheRecipientKey() (gas: 235020)
+Suite result: ok. 22 passed; 0 failed; 0 skipped; finished in 127.98ms (122.95ms CPU time)
+
+Ran 9 tests for test/craps/CrapsNewcomer.t.sol:CrapsNewcomerTest
+[PASS] testFuzz_recentLevelComparisonDoesNotWrap(uint24,uint24) (runs: 1000, μ: 54982, ~: 56371)
+[PASS] test_activityScoreDoesNotQualifyANewcomer() (gas: 51587)
+[PASS] test_compedEntitlementHasNoNewcomerSurcharge() (gas: 214709)
+[PASS] test_deityAndCreditedPassQualifyImmediately() (gas: 65377)
+[PASS] test_emptyRecordNeverQualifiesAtStartup() (gas: 48771)
+[PASS] test_futureNormalAndHighPurchasesPayFivePercent() (gas: 460403)
+[PASS] test_levelIsNotReadForEstablishedDeityOrUnmintedAccounts() (gas: 48738)
+[PASS] test_recentMintAndLifetimeBoundaries() (gas: 103548)
+[PASS] test_singleEntryStoresNoScoreAndAmendmentDoesNotReadIt() (gas: 387220)
+Suite result: ok. 9 passed; 0 failed; 0 skipped; finished in 138.84ms (136.27ms CPU time)
+
+Ran 8 tests for test/craps/CrapsGas.t.sol:CrapsGasTest
+[PASS] test_batchSettleMarginalCost() (gas: 3763836)
+Logs:
+  one bet settled alone: 176035
+  field of 20, total: 1821602
+  field of 20, per bet: 91080
+  gas per additional settled seat: 86608
+  saved per bet by the field: 84955
+
+[PASS] test_battleFlowGas() (gas: 972308)
+Logs:
+  field_cold_storage_reads: 40
+  field_cold_storage_writes: 11
+  field_estimated_transaction_state_allowance: 126400
+  createBattle              : 70483
+  enterBattle, first seat   : 356972
+  enterBattle, later seat   : 18612
+  closeBattle               : 164239
+  settle, field of 2        : 306907
+
+[PASS] test_battleFlowGas_WarmSingleTransaction() (gas: 882207)
+Logs:
+  createBattle              : 70483
+  enterBattle, first seat   : 356972
+  enterBattle, later seat   : 18612
+  closeBattle               : 164239
+  settle, field of 2        : 273707
+
+[PASS] test_engineRollCeilingUpperBound() (gas: 6431961)
+Logs:
+  SEAT engine 1,111-roll upper bound (cold, normalized): 797660
+    rolls of that run: 1117
+  SEAT cold worst estimate (engine ceiling + one-seat field rail): 1037660
+
+[PASS] test_engineWorstCaseIsSettleable() (gas: 894115)
+Logs:
+  engine worst-case run gas: 404625
+  engine worst-case run gas, scheduled: 399740
+    shooters                          : 60
+    rolls                             : 603
+
+[PASS] test_marginalShooterCost() (gas: 30315614)
+Logs:
+  board: full board (all 10 legs)
+    gas per marginal shooter : 5830
+    mean rolls per shooter   : 838
+    gas per roll             : 695
+  board: pass line only
+    gas per marginal shooter : 5238
+    mean rolls per shooter   : 884
+    gas per roll             : 592
+  board: place six only
+    gas per marginal shooter : 4726
+    mean rolls per shooter   : 831
+    gas per roll             : 568
+
+[PASS] test_maxLegalSlipSettles() (gas: 749168)
+Logs:
+  max-legal slip settle gas: 186856
+
+[PASS] test_productionRuntimeFitsEip170() (gas: 5006386)
+Logs:
+  CrapsBattle runtime bytes: 24332
+
+Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 183.02ms (181.70ms CPU time)
+
+Ran 7 tests for test/craps/CrapsGlobalWorkOrder.t.sol:CrapsGlobalWorkOrderTest
+[PASS] test_EarlierCategoriesBlockReadSettlement() (gas: 346522)
+[PASS] test_FundedGasLimitsHaveIdenticalReceiptsAndLowGasLeavesSafeCheckpoint() (gas: 844494)
+[PASS] test_OnlyGameCanSupplyWorkerAllowance() (gas: 27744)
+[PASS] test_ProtocolAllowanceReservesEntireAtomicSeat() (gas: 208487)
+[PASS] test_ReadWorkSettlesCommittedFieldsInOrder() (gas: 287156)
+[PASS] test_WarmnessAndChunkBoundariesPreserveFinalResults() (gas: 71671282)
+[PASS] test_ZeroWorkerAllowanceLeavesSettlementAndLifecycleUntouched() (gas: 67611)
+Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 182.60ms (180.81ms CPU time)
+
+Ran 19 tests for test/craps/CrapsPreferredBoard.t.sol:CrapsPreferredBoardTest
+[PASS] testFuzz_BatchedRawReadsPreserveOrderAndFullWords(bytes32,bytes32) (runs: 1000, μ: 39546, ~: 39546)
+[PASS] testFuzz_CodecAndReservedBits(uint256,uint64,uint256) (runs: 1000, μ: 41970, ~: 41785)
+[PASS] test_AutoSaveBatchExplicitZeroAndLockedSkip() (gas: 814540)
+[PASS] test_BoardAndPassesShareOneIdWord() (gas: 65661)
+[PASS] test_CompKindsSnapshotAndUpgradeRetainsBoard() (gas: 877600)
+[PASS] test_CreditsConversionSpendingAndCapsPreservePreference() (gas: 290675)
+[PASS] test_DeliverySnapshotsAndNeverInitializes() (gas: 242435)
+[PASS] test_EqualPaidBoardHasNoPreferenceWriteEventOrLockRead() (gas: 389202)
+[PASS] test_FirstAutomaticZeroInitializesAndLockedPassesUseExplicitBoard() (gas: 454343)
+[PASS] test_FreeDoorFillsExistingIdWithoutAllocating() (gas: 133348)
+[PASS] test_FreeDoorWithoutGameIdReverts() (gas: 34834)
+[PASS] test_GasAutomaticSaveStates() (gas: 1847137)
+Logs:
+  unchanged: 259602
+  first zero: 284003
+  first named: 284465
+  changed: 267364
+  cleared: 266903
+  locked skipped: 262798
+
+[PASS] test_InvalidBoardsCannotInitialize() (gas: 40876)
+[PASS] test_LockBlocksFirstChangeClearButAllowsEqualAndRead() (gas: 106010)
+[PASS] test_PaidDoorAllocatesOnFirstChange() (gas: 722674)
+[PASS] test_PaidWindowAndCustomSaveExplicitBoard() (gas: 800394)
+[PASS] test_ProtocolSeatingUsesVaultPreferenceWithoutSpendingPreferenceBits() (gas: 480222)
+[PASS] test_SlotSentinelOwnershipAndNoop() (gas: 91639)
+[PASS] test_WholeDayPaidCompUpgradeAndWindowAhead() (gas: 1145701)
+Suite result: ok. 19 passed; 0 failed; 0 skipped; finished in 226.23ms (227.47ms CPU time)
+
+Ran 24 tests for test/craps/CrapsWalletIds.t.sol:CrapsWalletIdsTest
+[PASS] testFuzz_noStoredBetOrSlipEchoHasOwnerZero(uint256) (runs: 192, μ: 1621858, ~: 1610000)
+[PASS] test_aContestedScheduledFieldPaysEveryLaneById() (gas: 2741115)
+[PASS] test_aDayTicketBlocksAWindowSeatTheSameDay() (gas: 751331)
+[PASS] test_aDeliveryOntoATakenDayBanksInstead() (gas: 378033)
+[PASS] test_aSingleEntryBattleSeatsAWalletIdOnce() (gas: 476477)
+[PASS] test_aSoleHighRiderRidesHomeOnItsOwnIdCredit() (gas: 1982399)
+[PASS] test_appendStoresTheIdWithAnAwardUnitAndSkipsZeroIds() (gas: 907788)
+[PASS] test_boardSavesAndPassMovesPreserveEachOthersLanes() (gas: 228931)
+[PASS] test_constructorSeedsTwentyNormalPassesAtIdsTwoAndOne() (gas: 11971)
+[PASS] test_convertAndUpgradeReservedDayLeaveTheAddressWordUntouched() (gas: 226127)
+[PASS] test_f6CounterexampleWithARevertedMultiDayComp() (gas: 2080176)
+[PASS] test_firstContactRegistersBeforeTheBurnOnEveryPayingDoor() (gas: 1754825)
+[PASS] test_goldenPaidEntrySaltIsTheWalletId() (gas: 1269870)
+[PASS] test_highRollerReserveNominatesByIdNeverIdTwoAndCreditsTheId() (gas: 5858761)
+[PASS] test_lapsedDayRefundsLandInEachSeatsIdWord() (gas: 1225359)
+[PASS] test_nonPayingDoorsRevertNoWalletIdForAnUnregisteredWallet() (gas: 737355)
+[PASS] test_openBonusDaySeatsTheBodiesByIdOnTheirIdWordPasses() (gas: 405530)
+[PASS] test_passCreditsAndDeliveriesBankInTheIdWordAlone() (gas: 200873)
+[PASS] test_progressiveAndDiceRunRecordPayTheWinnerIdAndBankItsPasses() (gas: 985714)
+[PASS] test_theUnfundedHouseStillSeatsIdTwo() (gas: 388602)
+[PASS] test_upgradeDayWindowsByAFirstContactUnwindsItsRegistration() (gas: 449113)
+[PASS] test_vaultCompHonoursTheRecipientsSavedBoard() (gas: 641474)
+[PASS] test_vaultCompRefusesAnUnallocatedRecipientId() (gas: 367984)
+[PASS] test_vaultCompSeatsAnUncachedRecipientByIdOnBoardZero() (gas: 1278919)
+Suite result: ok. 24 passed; 0 failed; 0 skipped; finished in 224.92ms (241.45ms CPU time)
+
+Ran 3 tests for test/craps/EngineGas.t.sol:EngineGasTest
+[PASS] test_engineCostPerRoll() (gas: 6031116)
+Logs:
+  board: seven legs, 5 rounds deep
+    mean gas per settle : 41850
+    mean rolls          : 57
+    mean hands          : 7
+    gas per ROLL        : 731
+  board: pass line only, 5 rounds deep
+    mean gas per settle : 45993
+    mean rolls          : 71
+    mean hands          : 8
+    gas per ROLL        : 643
+  board: seven legs, 10 rounds deep
+    mean gas per settle : 60060
+    mean rolls          : 85
+    mean hands          : 10
+    gas per ROLL        : 703
+
+[PASS] test_theCostOfALiveLeg() (gas: 5410613)
+Logs:
+  board: pass + 1 place (2 legs)
+    mean gas per settle : 44375
+    mean rolls          : 67
+    mean hands          : 8
+    gas per ROLL        : 661
+  board: pass + place + hard (3 legs)
+    mean gas per settle : 41903
+    mean rolls          : 57
+    mean hands          : 7
+    gas per ROLL        : 732
+  board: pass + 5 place + hard (7 legs)
+    mean gas per settle : 46125
+    mean rolls          : 62
+    mean hands          : 7
+    gas per ROLL        : 736
+
+[PASS] test_whereTheGasGoesPerRoll() (gas: 951388)
+Logs:
+  bare loop, per iteration    : 61
+  dice derivation, per roll   : 116
+  + roll-log byte, per roll   : 54
+
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 274.27ms (55.31ms CPU time)
+
+Ran 4 tests for test/craps/CrapsPricing.t.sol:CrapsPricingTest
+[PASS] test_exactHighExpectationAndRetailMargins() (gas: 41009)
+[PASS] test_exactMatchingBookendEntryExpectation() (gas: 1684962)
+[PASS] test_exactRoutineEntryExpectation() (gas: 54948299)
+[PASS] test_jackpotAddedFloorsAndAwardCount() (gas: 637)
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 323.74ms (322.18ms CPU time)
+
+Ran 29 tests for test/craps/CrapsCompBudget.t.sol:CrapsCompBudgetTest
+[PASS] test_aCompCannotSeatTheSameAddressTwice() (gas: 685584)
+[PASS] test_aCompCarriesNoBoon() (gas: 582776)
+[PASS] test_aCompDonationPaysTheSameWinnerExactlyWhatWasAdded() (gas: 1223114)
+[PASS] test_aCompedDayIsThePaidDay() (gas: 888341)
+[PASS] test_aCompedHighSeatCountsInTheHighLane() (gas: 617200)
+[PASS] test_aCompedSeatStartsBlankAndCanBeRespread() (gas: 629950)
+[PASS] test_aCompedUpgradeChargesTheMissingCopies() (gas: 932848)
+[PASS] test_aCompedWindowSeatIsThePaidSeatWithAnotherOwner() (gas: 794059)
+[PASS] test_aCustomBattleWithNoBountyAndNoHighLaneStillEarns() (gas: 698514)
+[PASS] test_aDayTicketCountsInEveryWindowItSitsIn() (gas: 1455269)
+[PASS] test_aFinishedWindowFeedsTwoPercentOfEveryBankrollItRan() (gas: 1503227)
+[PASS] test_aLaneThatCannotCoverItRefusesTheWholeSeat() (gas: 671485)
+[PASS] test_aPlayerDonationStillBurnsWalletFlip() (gas: 468994)
+[PASS] test_aRefusedCompDonationCannotMoveSeedOrBudget() (gas: 422793)
+[PASS] test_aReservedSeatPlaysItsWindowAndNumbersTheFieldFromIt() (gas: 1751698)
+[PASS] test_aReservedWindowIsRefusedWhereItCannotSit() (gas: 609181)
+[PASS] test_aVaultCanDonateToADailyWindowWithoutFeedingBackTheDonation() (gas: 1447927)
+[PASS] test_aVaultDonationChargesOnlyTheCompLane() (gas: 458930)
+[PASS] test_aWindowAheadIsPricedAtItsClassesExpectedSeat() (gas: 561472)
+[PASS] test_anUpgradedDayWindowEarnsAsAHighSeatThereOnly() (gas: 2150084)
+[PASS] test_compDonationsRespectBothTheCloseTimeAndArmedLatch() (gas: 845339)
+[PASS] test_compedFutureDaysAreThePaidReservation() (gas: 1017751)
+[PASS] test_compedPassesBankAndChargeOnlyWhatBanked() (gas: 287621)
+[PASS] test_donationsDoNotEarn() (gas: 1414324)
+[PASS] test_onlyTheVaultMayComp() (gas: 428313)
+[PASS] test_theCreditIsTheSameHoweverTheSettlementIsChunked() (gas: 2159808)
+[PASS] test_theExpectedSeatMatchesThePresetTable() (gas: 88478267)
+[PASS] test_theGameCanNoLongerComp() (gas: 221082)
+[PASS] test_theOutcomeDoesNotChangeTheCredit() (gas: 2127521)
+Suite result: ok. 29 passed; 0 failed; 0 skipped; finished in 329.26ms (329.65ms CPU time)
+
+Ran 11 tests for test/craps/CrapsHighWater.t.sol:CrapsHighWaterTest
+[PASS] test_aLatchedRunMayEndBelowItsOwnHighPoint() (gas: 6478615)
+[PASS] test_equalityAtTheReservePlaysAndOneWeiBelowItStops() (gas: 52195)
+[PASS] test_noSurvivalCoinIsTakenAfterTheGoal() (gas: 50999)
+[PASS] test_theAbsoluteRollCeilingIsTheBudgetPlusOneWholeHand() (gas: 25710)
+[PASS] test_theAllBustComparatorIsUnchangedAndIgnoresAPeak() (gas: 53211)
+[PASS] test_theEscalatorDoublesEveryThreeShootersThenEveryShooterToUint32Max() (gas: 7960149)
+[PASS] test_theOracleAgrees() (gas: 39394318)
+[PASS] test_theRollBudgetStopsARunBothSidesOfTheGoal() (gas: 104188)
+[PASS] test_theRunPlaysOnPastTheShooterThatWonIt() (gas: 11297007)
+[PASS] test_theScheduledComparatorRanksPeakThenEnding() (gas: 42072)
+[PASS] test_theShooterCapBustsBeforeTheGoalAndStopsAtItAfter() (gas: 5201023)
+Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 569.18ms (226.18ms CPU time)
+
+Ran 10 tests for test/craps/CrapsResolveBudget.t.sol:CrapsResolveBudgetTest
+[PASS] test_LastSeatAndFullCreditFlushFitPerChunkCeiling() (gas: 10151)
+[PASS] test_ProtocolAllowanceMustFitOneSeatAndPublicLegacyBudgetIsIgnored() (gas: 10061574)
+[PASS] test_aFieldThatPaysNobodyStillStopsOnItsBudget() (gas: 8770539)
+[PASS] test_actionTotalsAreIdenticalHoweverTheChunksFell() (gas: 22832613)
+[PASS] test_anUnderfundedCallerRevertsWholeAndStrandsNothing() (gas: 10507685)
+[PASS] test_everyChunkingReachesTheIdenticalResult() (gas: 43295905)
+[PASS] test_moreBudgetIsNeverFewerSeats() (gas: 57155035)
+[PASS] test_previewMatchesPaymentAcrossEveryChunkBoundary() (gas: 14818682)
+[PASS] test_theCursorTracksResolvedSeatsAndNeverOvershootsThem() (gas: 10529891)
+[PASS] test_theSeatCeilingBoundsOneCallWhateverTheBudgetIs() (gas: 10653325)
+Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 1.07s (202.90ms CPU time)
+
+Ran 5 tests for test/craps/CrapsHotDuration.t.sol:CrapsHotDurationTest
+[PASS] testFuzz_singleHandMatchesProfitFormula(bytes32,bool,uint8) (runs: 1000, μ: 44195, ~: 40865)
+[PASS] test_boundedHandsMatchIndependentPerRollOracle() (gas: 40266942)
+[PASS] test_noBonusThroughRoll12EvenOnYourShooterTurn() (gas: 7857177)
+[PASS] test_scriptedDarkWinOn12Versus13ExcludesPrincipal() (gas: 88814)
+[PASS] test_scriptedPointMadeOn12DoesNotResetAndDeadHardwayStaysDead() (gas: 56875)
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 1.21s (390.51ms CPU time)
+
+Ran 22 tests for test/craps/CrapsHighRoller.t.sol:CrapsHighRollerTest
+[PASS] test_aCreatorFixesTheMultipleOrDisablesTheLane() (gas: 154500)
+[PASS] test_aDayWithNoWordHasNoLane() (gas: 22420)
+[PASS] test_aDisabledLaneTakesOrdinarySeatsOnly() (gas: 534788)
+[PASS] test_aFieldWithNoHighRollerHasNoLane() (gas: 962603)
+[PASS] test_aHighDayTicketPaysTheMultipleOnTheWholeDay() (gas: 1153097)
+[PASS] test_aHighRollerBurnsTheWholeSeatOverAgain() (gas: 606656)
+[PASS] test_aSoleHighRollerOnABustGetsNothingBack() (gas: 1135161)
+[PASS] test_aSoleHighRollerRidesItsExtraBountiesOnItsOwnRun() (gas: 8165587)
+[PASS] test_aStaleTenIsRefusedAgainstAHundredField() (gas: 209351)
+[PASS] test_entryIsOneCopyOrTheFieldsMultipleAndNothingBetween() (gas: 1023228)
+[PASS] test_everyWindowOfADayRunsTheSameMultipleAndItNeverRerolls() (gas: 460343)
+[PASS] test_highActionSplitsFourPointEightAndSevenPointTwo() (gas: 232803)
+[PASS] test_oneBountyPerSeatStaysInTheMainPotAndTheRestIsTheLanes() (gas: 1402637)
+[PASS] test_ordinaryActionNeverFeedsTheLane() (gas: 189297)
+[PASS] test_theBoostLandsOnARoundFigure() (gas: 2147312)
+[PASS] test_theDailyDrawIsTenOrAHundredAtElevenInNinety() (gas: 8296109)
+[PASS] test_theHouseAndVaultAreNeverHighRollers() (gas: 507514)
+[PASS] test_theLaneDoesNotPayBeforeTheFieldIsFinal() (gas: 1027312)
+[PASS] test_theLanesBoostIsAWholeNumberOfGranules() (gas: 1901779)
+[PASS] test_theMainBaseNeverSubsidisesTheLane() (gas: 35538)
+[PASS] test_theMultipleDoesNotBuyRankInEitherField() (gas: 15941307)
+[PASS] test_twoHighRollersRaceForEveryExtraBountyInTheLane() (gas: 1194196)
+Suite result: ok. 22 passed; 0 failed; 0 skipped; finished in 1.36s (139.47ms CPU time)
+
+Ran 3 tests for test/craps/CrapsEconomics.t.sol:CrapsEconomicsTest
+[PASS] test_aFairBoardCarriesNoEdgeAndIsStillANetBurn() (gas: 144565116)
+Logs:
+  fair: burned    : 1600000
+  fair: raw won   : 1270863
+  fair: deleted   : 230600
+  fair: minted    : 1040200
+  fair: raw residual: 329137
+
+[PASS] test_theRoundingIsEvNeutralInAggregate() (gas: 119359198)
+Logs:
+  goal returns    : 2536438
+  expected credit : 2536700
+  realised credit : 2536700
+
+[PASS] test_theTableIsANetBurn() (gas: 269422667)
+Logs:
+  burned          : 2400000
+  raw won         : 1884060
+  actually minted : 1502000
+  units wagered   : 0
+  net burn (signed): 898000
+
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 4.85s (1.21s CPU time)
+
+Ran 50 tests for test/craps/CrapsProgressive.t.sol:CrapsProgressiveTest
+[PASS] testFuzz_everyRungIsAFlooredShareAndConservesThePool(uint96,uint8) (runs: 1000, μ: 171383, ~: 166359)
+[PASS] testFuzz_theAwardNeverOverdrawsAndTheBooksClose(uint96,uint32,uint8) (runs: 1000, μ: 157331, ~: 168418)
+[PASS] test_aColdDayRaisesFiftyThousandAndSplitsItInHalf() (gas: 37086)
+[PASS] test_aContestedLanesBoostSplitsAndThePrincipalPaysWhole() (gas: 1742230)
+[PASS] test_aCustomBattleNeitherFundsNorDrawsOnThePool() (gas: 812608)
+[PASS] test_aCustomBattleSplitsNothing() (gas: 860796)
+[PASS] test_aCustomSlotOnTheEventsRemainderIsStillOutside() (gas: 48491)
+[PASS] test_aDayFundsTheProgressiveExactlyOnce() (gas: 718043)
+[PASS] test_aHighLaneVictoryAloneCannotClaimTheProgressive() (gas: 2105356)
+[PASS] test_aHugeProgressiveAwardCapsAtThirtyHighs() (gas: 198780)
+[PASS] test_aPreOpenQuoteAdvertisesTheLadderHalf() (gas: 726802)
+[PASS] test_aProgressiveAwardDebitsGrossAndPaysLiquidPlusPasses() (gas: 220795)
+[PASS] test_aPumpedMainBoostSplitsAndTheBountiesStayLiquid() (gas: 1998815)
+[PASS] test_aShortGoalAndAHighBustBothPayNothing() (gas: 96991)
+[PASS] test_aSoleRidersProtocolRideSplitsAndTheBountyRideStaysWhole() (gas: 5046093)
+[PASS] test_aTinyPoolPaysZeroWithoutAnExternalCall(uint96) (runs: 1000, μ: 174275, ~: 181333)
+[PASS] test_allFourBaseRungsAreTheirPublishedShares() (gas: 260989)
+[PASS] test_anEmptyPoolIsSafeAndRefundable() (gas: 385972)
+[PASS] test_anEnormousHighPointSaturatesRatherThanWrapping() (gas: 17584)
+[PASS] test_comparatorRanksPeakThenEndingAndIgnoresActivity() (gas: 35743)
+[PASS] test_eachCutoffIsInclusiveAndOneFlipBelowItIsNot() (gas: 280708)
+[PASS] test_everyHighPointRoundTripsBesideItsSeat() (gas: 579120)
+[PASS] test_everyScheduledPresetIsFiveDeepAtFiveX() (gas: 70636096)
+[PASS] test_fullStandingCreatesNoRetentionAnywhere() (gas: 196749)
+[PASS] test_mainAwardsHaveNoActivityForfeiture() (gas: 6785207)
+[PASS] test_noProgressiveMoneyEverFeedsTheActionBooks() (gas: 1433774)
+[PASS] test_progressivePaysTheFullShareAtEveryActivityScore() (gas: 329922)
+[PASS] test_rareOverridesCommonAndNeverPaysBoth() (gas: 204868)
+[PASS] test_scorelessContestedHighWinnerReceivesFullBonus() (gas: 1853121)
+[PASS] test_scorelessSoleHighRiderReceivesFullBonusCapital() (gas: 1818109)
+[PASS] test_scorelessWinnerReceivesPassAwardsOnAPumpedDay() (gas: 9651911)
+[PASS] test_sequentialAwardsUseTheReducedLiveBalance() (gas: 308793)
+[PASS] test_settlementOrderChangesNeitherRecipientNorAmount() (gas: 2477621)
+[PASS] test_splitBatchesAndRepeatedResolutionPayOnce() (gas: 1723578)
+[PASS] test_theAwardLogReconstructsTheWholeTransaction() (gas: 172365)
+[PASS] test_theCompositeDecodesToTheFigureItHolds() (gas: 194389)
+[PASS] test_theEndingBankrollIsPaidAndTheHighPointIsNot() (gas: 3343097)
+[PASS] test_theFundingLogAndTheDayOpenedLogAgree() (gas: 387779)
+[PASS] test_theHighPointMovesWithTheLeaderAndOnlyWithIt() (gas: 174712)
+[PASS] test_theHigherGoalWinsAndEveryBustLosesToIt() (gas: 170190)
+[PASS] test_theJackpotSlotLogsTheRungItApplies() (gas: 188463)
+[PASS] test_theLogsReconstructThePoolFromGenesis() (gas: 3962800)
+[PASS] test_thePoolIsReducedBeforeTheExternalCredit() (gas: 347792)
+[PASS] test_theProgressiveNeitherChoosesTheWinnerNorScalesWithTheMultiple() (gas: 299789)
+[PASS] test_theRunPreviewStillMatchesThePaymentExactly() (gas: 1767671)
+[PASS] test_theScheduledFormatCarriesThePublishedCutoffs() (gas: 17014)
+[PASS] test_theScoreboardHoldsTheWinnersOwnEngineHighPoint() (gas: 2375196)
+[PASS] test_theSplitConservesTheRawAllocationIncludingTheOddWei(uint256) (runs: 1000, μ: 9874, ~: 9722)
+[PASS] test_theTwelvePercentRateAndTheHighLaneAreUnchanged() (gas: 793635)
+[PASS] test_whatTheProgressiveCosts() (gas: 1743736)
+Logs:
+  openBonusDay, pool slot COLD : 343493
+  openBonusDay, pool slot warm : 303545
+  settleSlot, whole field      : 343018
+    entrants                   : 4
+    per entrant                : 85754
+  a paying rare award          : 69025
+  a non-qualifying test        : 12999
+
+Suite result: ok. 50 passed; 0 failed; 0 skipped; finished in 5.57s (5.89s CPU time)
+
+Ran 10 tests for test/craps/JackpotVariablePricing.t.sol:JackpotVariablePricingTest
+[PASS] testFuzz_TargetIsFixedAtLockFromUnscaledBaseline(uint96,uint8) (runs: 1000, μ: 606621, ~: 606898)
+[PASS] test_All48OutcomesConserveCapitalAndKeepHighFeesSeparate() (gas: 1526987305)
+[PASS] test_AllPricesChargeLiveCompsAndNewcomersButKeepBlindReservationsAtMean() (gas: 3866568)
+[PASS] test_DetachedRoundUsesNeutralPriceAndNoPaidReservations() (gas: 686930)
+[PASS] test_ExactDecoderOddsMeanAndBothPresetCopies() (gas: 4763025)
+[PASS] test_LockClosesAllControlsBeforeEitherHiddenResult() (gas: 1022746)
+[PASS] test_MegaTailPreservesCapsAndRemainderAtMaximumAwards() (gas: 1523424559)
+[PASS] test_MinimumBankrollRunsEveryLegalPickedCount() (gas: 1499197052)
+[PASS] test_RetiredWordAndRetriesPreservePackedFieldsAndBothResults() (gas: 1258502)
+[PASS] test_UnopenedPriceIsNotAnActualEightThousandQuote() (gas: 43472)
+Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 6.41s (7.55s CPU time)
+
+Ran 27 tests for test/craps/CrapsSlip.t.sol:CrapsSlipTest
+[PASS] testFuzz_darkBoardsMatchTheIndependentOracle(uint256,uint8) (runs: 1000, μ: 901618, ~: 880138)
+[PASS] testFuzz_theBankrollIsTheWholeExposure(uint256,uint32,uint8) (runs: 1000, μ: 687381, ~: 684255)
+[PASS] test_aDarkOnlyBoardMatchesTheIndependentOracle() (gas: 10977860)
+[PASS] test_aGoalIsPaidAndABustIsDeleted() (gas: 131205157)
+[PASS] test_aSlipLearnsItsTableOnlyWhenItsBattleShuts() (gas: 615284)
+[PASS] test_anyoneMaySettleButOnlyTheOwnerIsPaid() (gas: 6144734)
+[PASS] test_awardsLandOnRoundFigures() (gas: 19833360)
+[PASS] test_battleTermsAreVettedAtTheDoorThatFixesThem() (gas: 537924)
+[PASS] test_cannotSettleBeforeTheTableRolls() (gas: 592470)
+[PASS] test_escalatorCompoundsExactlyByTheLinearityRule() (gas: 3738856)
+[PASS] test_howAFieldIsSplitCannotChangeWhatItPays() (gas: 1308337)
+[PASS] test_oneTableIsOneShooterButEveryPlayerTheirOwnBoard() (gas: 878826)
+[PASS] test_placeBurnsExactlyTheBankroll() (gas: 450393)
+[PASS] test_placementEventCarriesTheChips() (gas: 754629)
+[PASS] test_previewIsExactlyWhatSettlementPays() (gas: 6738303)
+[PASS] test_rejectsBattlesUnderTheTableFloor() (gas: 151837)
+[PASS] test_secondChanceIsAFairDoubleOrBust() (gas: 86048476)
+Logs:
+  second-chance survives: 81
+  second-chance busts   : 86
+
+[PASS] test_settlesOnceAndOnlyOnce() (gas: 684184)
+[PASS] test_sideOnlySettlementMatchesFullResolver() (gas: 10725214)
+[PASS] test_slipRollBudgetStopsBetweenShooters() (gas: 91706)
+[PASS] test_slipSettlesLikeItPreviews() (gas: 1033215)
+[PASS] test_slipSharesTheTablesShooters() (gas: 446700)
+[PASS] test_slipStopsHonestlyAndConservesTheBankroll() (gas: 6667203)
+[PASS] test_theExitRoundSaltStopsAShortRunSpoilingALongOne() (gas: 24893503)
+[PASS] test_theOwnerSaltDecorrelatesTheFieldsSecondChances() (gas: 2928040)
+[PASS] test_theOwnerSaltLeavesTheSharedShooterAlone() (gas: 587986)
+[PASS] test_theRunIsReplayableFromTheWordAlone() (gas: 1007933)
+Suite result: ok. 27 passed; 0 failed; 0 skipped; finished in 6.18s (5.52s CPU time)
+
+Ran 35 tests for test/craps/JackpotBattle.t.sol:JackpotBattleTest
+[PASS] testFuzz_HighPoolConservesAndCompsOnlyExpectedFeeLoss(bool,uint8,uint8,uint8,uint96,uint256) (runs: 1000, μ: 1690983, ~: 1678382)
+[PASS] testFuzz_JackpotRunStopsInsideItsRollCeiling(uint256,bool,bool) (runs: 1000, μ: 405630, ~: 407960)
+[PASS] testFuzz_OrdinaryAndCustomRunsUseSharedRollCeiling(uint256,uint8,bool,bool) (runs: 64, μ: 402161, ~: 404175)
+[PASS] testFuzz_PoolSplitNeverOverallocates(uint96,uint16,uint8,uint256) (runs: 1000, μ: 1733517, ~: 1690275)
+[PASS] test_AddedCannotIncreaseHighExtraCapital() (gas: 1652963)
+[PASS] test_AppendRejectsMoreThanOneCheckpoint() (gas: 302620)
+[PASS] test_AwardCountIgnoresPaidVolumeAndPoolRoll() (gas: 663180)
+[PASS] test_AwardOnlyFieldBooksNothing() (gas: 1297105)
+[PASS] test_AwardTargetRetainsSafetyCap() (gas: 254878)
+[PASS] test_AwardedEntryThrowsTheFieldDiceUnderItsOwnKey() (gas: 147342)
+[PASS] test_BadDrawsAreSkippedAndResumeKeepsFrozenDraw() (gas: 1024996)
+[PASS] test_ContestedHighPotPaysItsRolledFeesEvenWhenAllBust() (gas: 1530733)
+[PASS] test_DayPriceUsesNewPresetsAndDrawnJackpotFee() (gas: 524177)
+[PASS] test_DifferentBudgetsProduceSameWinnerAndPayments() (gas: 8332100)
+[PASS] test_DrawnFeeVariableStakeAndExactPoolConservation() (gas: 3242885)
+[PASS] test_EarlyFloorAwardsOnePerTenThousandAdded() (gas: 521717)
+[PASS] test_EmptyAwardFieldStillClosesPaidBattle() (gas: 931160)
+[PASS] test_HighCompBudgetUsesPreRollEVAndOnlyAccruesOnce() (gas: 4725356)
+[PASS] test_HighCopiesAndRepeatedAwardsCountAsUnits() (gas: 1387549)
+[PASS] test_HighDayTicketUsesTheSameFeeOnlyAllocation() (gas: 3486628)
+[PASS] test_HighExtraReceivesNoMultipliedProtocolBoon() (gas: 1197712)
+[PASS] test_HighUpgradeCannotDiluteTheMainSeatAllocation() (gas: 2496654)
+[PASS] test_LapseSweepLeavesADetachedBattleToSettle() (gas: 3671491)
+[PASS] test_LargeAwardFieldCollectsBeforeAnyPaidSettlement() (gas: 5921909)
+[PASS] test_LateAndNextDayProcessingDoesNotChangeFrozenTerms() (gas: 1700923)
+[PASS] test_LockPreventsEntryUpgradeAmendmentAndPreferenceChange() (gas: 1529038)
+[PASS] test_NewHighDrawAgreesWithJackpotPaidUnits() (gas: 1188818)
+[PASS] test_NoEntrantsCompletesWithoutDivisionOrPayout() (gas: 358165)
+[PASS] test_OnlyGameCanLockOrSupplyField() (gas: 35609)
+[PASS] test_OnlyPaidFeesAreBookedAsActionAndComped() (gas: 3254920)
+[PASS] test_PaidOwnThenDayThenAwarded_OneWalkFinalizesOnce() (gas: 1475080)
+[PASS] test_RetryCannotReplaceAllocationOrField() (gas: 1101378)
+[PASS] test_RunDailyBattleWorkUsesParentAllowanceAndFinishesLockedDailyField() (gas: 1439455)
+[PASS] test_SixDeadlinesAndUnusedSlot() (gas: 43547)
+[PASS] test_SoleHighBountyRidesAndItsWholeExtraFeeEarnsLossComps() (gas: 966600)
+Suite result: ok. 35 passed; 0 failed; 0 skipped; finished in 6.40s (11.18s CPU time)
+
+Ran 24 tests for test/craps/CrapsShooterBoost.t.sol:CrapsShooterBoostTest
+[PASS] testFuzz_theFirstLapNamesEverySeatOnce(uint16,bytes32) (runs: 1000, μ: 467161, ~: 318032)
+[PASS] test_aBoostedSettlementPreviewsExactlyWhatItPays() (gas: 2018020)
+[PASS] test_aCustomBattleIsNeverBoosted() (gas: 5839460)
+[PASS] test_aDarkWinBoostsOnlyItsThreeQuartersProfit() (gas: 4641964)
+[PASS] test_aHighSeatScalesOneBoostedRunAndDrawsOneSchedule() (gas: 1175186)
+[PASS] test_aLoneSeatShootsFirstAndOnlyOnce() (gas: 1508)
+[PASS] test_aRollCapRefundIsNotProfit() (gas: 1135023)
+[PASS] test_aScheduledWindowAppliesEveryTicketsOwnSchedule() (gas: 3153210)
+[PASS] test_emittedValueNeverBooksAsAction() (gas: 1674113)
+[PASS] test_everySeatSettlesAtItsOwnTurnOffOneSharedStart() (gas: 6513366)
+[PASS] test_flooringAfterTheEscalatorWouldPayDifferently() (gas: 2018286)
+[PASS] test_hotActivationIsSharedAndDiceDoNotMove() (gas: 2317434)
+[PASS] test_hotAndOwnShooterUseOnlyLateProfitAndOneFloor() (gas: 9782024)
+[PASS] test_integerRoundingNeverCreatesAnExtraComponent() (gas: 2751726)
+[PASS] test_lightSideWinningsAreProfitToTheLastWei() (gas: 4473308)
+[PASS] test_longestSharedHandPaysItsShooterAfterTheirOwnBust() (gas: 3160770)
+[PASS] test_theBoostIsFlooredOncePerBaseHandBeforeScaling() (gas: 14783469)
+[PASS] test_theBoostMayCrossAGoalOrBuyAnotherRound() (gas: 19612828)
+[PASS] test_theBoostedEngineMatchesTheOracleOnEveryBoardShape() (gas: 17772992)
+[PASS] test_theFixedGoalNeverAddsAllocationWeighting() (gas: 40587442)
+[PASS] test_theRotationMatchesTheOracleOnEveryTurnAndOverlap() (gas: 74217958)
+[PASS] test_theScatteredBoardNeverReclassifiesABlankTicket() (gas: 1950200)
+[PASS] test_theScheduleCarriesTheExactPlacedChipTerms() (gas: 34887)
+[PASS] test_theSurvivalDoublingIsNeverBoosted() (gas: 51155)
+Suite result: ok. 24 passed; 0 failed; 0 skipped; finished in 6.41s (2.00s CPU time)
+
+Ran 80 tests for test/craps/CrapsBattle.t.sol:CrapsBattleTest
+[PASS] test_aBlankTicketLetsTheDicePlaceAllTenChips() (gas: 1616601)
+[PASS] test_aBoardStopsMovingWhenTheFieldStopsForming() (gas: 781609)
+[PASS] test_aBusierWeekBuysABiggerBonus() (gas: 828904)
+[PASS] test_aBustIsDeletedAndReachesNobody() (gas: 1516583)
+[PASS] test_aColdDayOpensOnExactlyTheBaseSubsidy() (gas: 516581)
+[PASS] test_aCustomBattleChoosesWhetherOneAddressMayTakeSeveralSeats() (gas: 664143)
+[PASS] test_aCustomBattleDoesNotRationItsDonation() (gas: 1161232)
+[PASS] test_aDaysBudgetIsTheBaseSubsidyPlusTwelvePercentOfAction() (gas: 652746)
+[PASS] test_aDeadLevelScoreGoesToTheCoin() (gas: 105294)
+[PASS] test_aDonationOntoAWindowNobodyJoinsIsForfeited() (gas: 794010)
+[PASS] test_aDonationReachesAScorelessWinnerWhole() (gas: 1468953)
+[PASS] test_aForgottenWindowIsStillShuttableDaysLater() (gas: 1536009)
+[PASS] test_aFriendlyBattleRunsTheOrdinaryLaneAndAwardsNothing() (gas: 1027255)
+[PASS] test_aFriendlyBattleStaysZeroPotDespiteBusts() (gas: 1165310)
+[PASS] test_aHalfResolvedFieldPaysNobody() (gas: 896108)
+[PASS] test_aHighDayTicketCreditsFiveStreak() (gas: 1052065)
+[PASS] test_aHighPassSeatsTheHouseInTheHighLane() (gas: 566720)
+[PASS] test_aMaxDontPassCountDoesNotCorruptItsNeighbours() (gas: 461970)
+[PASS] test_aMultipliedSeatBuysCopiesOfTheRun() (gas: 987574)
+[PASS] test_aRoundMustFitTheResolversLeg() (gas: 85931)
+[PASS] test_aScorelessEntryPaysExactlyASeat() (gas: 468626)
+[PASS] test_aSoloBattleStillPaysItsWinner() (gas: 721538)
+[PASS] test_aStarvedHouseIsCompedAndTheVaultIsNot() (gas: 560432)
+[PASS] test_aStarvedHouseWithAPassStillSits() (gas: 871863)
+[PASS] test_aTicketMayNotPlayBothSidesOfTheLine() (gas: 983504)
+[PASS] test_aWindowPutsUpItsOwnSizesShareOfItsDay() (gas: 1084092)
+[PASS] test_aWindowSeatBarsTheWholeDayLane() (gas: 780355)
+[PASS] test_aWindowShutsOntoTheLiveIndexAndTheNextRequestMovesTheCursor() (gas: 806936)
+[PASS] test_aWindowTakesEveryPlacedCountFromZeroThroughSeven() (gas: 3085299)
+[PASS] test_aWindowTakesOneSeatPerPlayer() (gas: 1164153)
+[PASS] test_aWindowsClaimPaysTheRationedBoost() (gas: 1955659)
+[PASS] test_aZeroChipTicketCanStillNameItsBoard() (gas: 757600)
+[PASS] test_amendKeepsTheBattleSeat() (gas: 883132)
+[PASS] test_amendReshapesTheChipsOnly() (gas: 1016199)
+[PASS] test_anAmendmentRewritesAllTenCounts() (gas: 490524)
+[PASS] test_anyDifferingTermSplitsTheBattle() (gas: 1521640)
+[PASS] test_anyoneMayDonateOntoAWindow() (gas: 1830522)
+[PASS] test_battleVerdictMatchesIndependentRules() (gas: 34455709)
+[PASS] test_bonusTierMixMatchesTheAdvertisedOdds() (gas: 196228097)
+[PASS] test_burnTakesBankrollPlusBattleStakeOnce() (gas: 439686)
+[PASS] test_customAndScheduledEntriesIgnoreActivityScore() (gas: 1268125)
+[PASS] test_deploymentBanksBothBodiesTheirSeedPasses() (gas: 556332)
+[PASS] test_donationIsBoundedAndNeedsAnOpenWindow() (gas: 496052)
+[PASS] test_everyBonusWindowAdmitsAnybody() (gas: 904161)
+[PASS] test_everyPlacedCountSharesOneCustomBattleAndScattersToTen() (gas: 2770756)
+[PASS] test_everyWindowShutsOnItsPublishedClockTime() (gas: 51381)
+[PASS] test_identicalEntriesUseTheTableWordToBreakTheTie() (gas: 1176739)
+[PASS] test_matchingSlipsShareOneBattleAcrossBoards() (gas: 728200)
+[PASS] test_oneCallSettlesAWholeFieldAndPaysIt() (gas: 1299145)
+[PASS] test_oneEventStreamCarriesTheWholeField() (gas: 1129390)
+[PASS] test_openingTheDayCostsWhatTheAdvanceChainCanAfford() (gas: 355135)
+Logs:
+  openBonusDay gas: 352078
+
+[PASS] test_openingTheDaySeatsTheHouseAndTheVaultEverywhere() (gas: 1072021)
+[PASS] test_tenLegChipsRoundTrip() (gas: 610010)
+[PASS] test_theBoostIsDrawnWhenTheTableWordLands() (gas: 2324264)
+[PASS] test_theBoostIsPickedByTheSettlingWordAndJoinsTheContestedPot() (gas: 1681850)
+[PASS] test_theBoostLadderAveragesTheBaseExactly() (gas: 15334)
+[PASS] test_theBudgetIgnoresHowTheDiceRan() (gas: 65199)
+[PASS] test_theDayLaneAndTheWindowShareOneShooter() (gas: 757999)
+[PASS] test_theDayLaneClosesOnceTheDayIsPartSpent() (gas: 788414)
+[PASS] test_theDayLaneSpendsPassesBeforeFlip() (gas: 1274053)
+[PASS] test_theDayOpensOnceAndEveryWindowShutsOnce() (gas: 860502)
+[PASS] test_theDayWaitsForItsWord() (gas: 419791)
+[PASS] test_theEntryMultipleDoesNotBuyRankInTheBattle() (gas: 15931307)
+[PASS] test_theEventShutsIntoTheRunUpAndBindsTheNextDraw() (gas: 722368)
+[PASS] test_theEventsLeadClearsTheGamesPreResetBlackout() (gas: 27493)
+[PASS] test_theFoldIsOrderInvariantOnDistinctScores() (gas: 252437)
+[PASS] test_theHouseAndVaultSeatsKeyTheWindowTheySatIn() (gas: 1083064)
+[PASS] test_theScatterReachesEveryLegAndAlwaysPlacesTen() (gas: 11209210)
+[PASS] test_theShapeRuleAllowsUpToSevenChips() (gas: 711460)
+[PASS] test_theThrownChipsAreDrawnAtSettlementPerPlayer() (gas: 1856666)
+[PASS] test_theTopRungIsReachedAndTheLadderStillAveragesTheShare() (gas: 97830051)
+Logs:
+  best of 4,000 draws        : 500000
+  mean of 4,000 draws        : 4649
+  top-rung hits in 4,000     : 14
+
+[PASS] test_theTwoLanesAreRatedTheSameAndNeverShareAWei() (gas: 582868)
+[PASS] test_theVaultPlaysItsPreferredBoard() (gas: 629489)
+[PASS] test_theVaultUsesItsPreferenceForPrepaidAndAutomaticSeats() (gas: 937099)
+[PASS] test_theVaultsPreferredBoardIsChangeableAndRestorable() (gas: 889744)
+[PASS] test_theVaultsPreferredBoardUsesTheSharedValidationAndLock() (gas: 127547)
+[PASS] test_theWholeDayTicketCreditsAQuestStreak() (gas: 1004670)
+[PASS] test_theWholeDaysScheduleIsKnownUpFront() (gas: 536481)
+[PASS] test_threeChipsIsTheCapOnEveryNamedLeg() (gas: 784426)
+[PASS] test_tournamentFormatIsChipsBaseFiveDeepAtFiveX() (gas: 21809933)
+Suite result: ok. 80 passed; 0 failed; 0 skipped; finished in 6.41s (1.24s CPU time)
+
+Ran 11 tests for test/craps/CrapsHighReserve.t.sol:CrapsHighReserveTest
+[PASS] testFuzz_chunkingAndRetriesCannotChangeTheDraw(uint256,uint8,bool) (runs: 1000, μ: 2676297, ~: 2598320)
+[PASS] test_consumedHighPassQualifiesWithoutAnotherPayment() (gas: 1136010)
+[PASS] test_emptyEventsAccumulateWithoutAnAttempt() (gas: 1564662)
+[PASS] test_fivePercentIsFundedOnceBeforeTheMultiplierAndAwardsUseGrossAdded() (gas: 2090612)
+[PASS] test_lateEntryUpgradeAndDirectHookCannotChangeEligibility() (gas: 1054532)
+[PASS] test_missAndEmptyDayCarryIntoTheNextWinner() (gas: 2520980)
+[PASS] test_newcomerPaysItsPremiumAndCanWinTheEntireReserve() (gas: 925199)
+[PASS] test_paidFieldLargerThanOneBatchIsBoundedAndPaysOnce() (gas: 54771254)
+[PASS] test_sdgnrsAndNormalOrAwardedSeatsCannotTriggerTheReserve() (gas: 1350938)
+[PASS] test_upgradesAndCompedHighEntriesQualifyAtTheirAcceptedTerms() (gas: 1483293)
+[PASS] test_vaultCanTriggerAndWinAloneEvenWhenSdgnrsIsHighToo() (gas: 1371514)
+Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 6.41s (6.45s CPU time)
+
+Ran 3 tests for test/craps/CrapsEngineParity.t.sol:CrapsEngineParity
+[PASS] testFuzz_CompactHeaderPreservesEveryOutcome(uint32,uint256,uint8,bool,bool) (runs: 1000, μ: 3859675, ~: 3850488)
+[PASS] testFuzz_directAndRankedRunsUseSharedRollCeiling(bytes32,bool) (runs: 64, μ: 2613280, ~: 2610446)
+[PASS] test_sharedBudgetMatchesInlineReferenceAndLegacyPrefix() (gas: 63701180)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 10.38s (10.81s CPU time)
+
+Ran 33 tests for test/craps/Craps.t.sol:CrapsTest
+[PASS] testFuzz_handAlwaysTerminates(uint256) (runs: 1000, μ: 22575, ~: 21322)
+[PASS] testFuzz_lossIsBoundedByTheStake(uint256,uint24) (runs: 1000, μ: 34830, ~: 32060)
+[PASS] testFuzz_publishedDiceAreTheSettledHand(uint256) (runs: 1000, μ: 56024, ~: 49030)
+[PASS] test_aMixedPassAndDontPassBoardResolvesBothSides() (gas: 270784)
+[PASS] test_aWinningDontPassReturnsStakePlusThreeQuarters() (gas: 76114)
+[PASS] test_comeOutElevenWinsPass() (gas: 74734)
+[PASS] test_comeOutSevenAndElevenKillDontPassWithoutEndingTheShooter() (gas: 110820)
+[PASS] test_comeOutSevenIsNotASevenOut() (gas: 78592)
+[PASS] test_comeOutTwelveBarsAndLeavesDontPassLive() (gas: 81682)
+[PASS] test_diceAreUniform() (gas: 666048702)
+[PASS] test_dontPassWinsOnComeOutTwoAndThree() (gas: 114022)
+[PASS] test_everyComeOutCrapsNumberLosesPass() (gas: 161849)
+[PASS] test_hardEightIsOffOnTheComeOutAndSurvivesItsSeven() (gas: 77909)
+[PASS] test_hardEightPaysNineToOneAndDiesOnTheEasyWay() (gas: 85932)
+[PASS] test_hardFourPaysSevenToOneAndDiesOnTheEasyWay() (gas: 85049)
+[PASS] test_hardwaysLiveAndDieIndependently() (gas: 79078)
+[PASS] test_houseEdgeConverges() (gas: 4280335960)
+Logs:
+  pass      : -26975 ppm  target -27888  tol +/-12393
+  place 4   : 1390 ppm  target 0  tol +/-15507
+  place 5   : -2425 ppm  target 0  tol +/-14156
+  place 6   : -26778 ppm  target -27778  tol +/-12885
+  place 8   : -26475 ppm  target -27778  tol +/-12885
+  place 9   : -1592 ppm  target 0  tol +/-14156
+  place 10  : -1680 ppm  target 0  tol +/-15507
+  hard 4    : -132350 ppm  target -125000  tol +/-23534
+  hard 8    : -100540 ppm  target -100000  tol +/-26666
+  dont pass : -138046 ppm  target -137273  tol +/-8205
+
+[PASS] test_oneRollCanPayThreeLegs() (gas: 82052)
+[PASS] test_payoutsFloorAtWeiPrecision() (gas: 81212)
+[PASS] test_placeIsOffOnTheComeOut() (gas: 72136)
+[PASS] test_placePayoutTable() (gas: 107323)
+[PASS] test_placeSixPaysEveryHitThenDiesOnTheSeven() (gas: 80338)
+[PASS] test_placeSurvivesAComeOutSeven() (gas: 82753)
+[PASS] test_pointMadeWinsPassAndSevenOutEndsHand() (gas: 81227)
+[PASS] test_pointsMadeCountsDistinctPointsOnly() (gas: 88442)
+[PASS] test_sessionAndSimulateAgree() (gas: 2242140)
+[PASS] test_sessionChargeIsStakeTimesHands() (gas: 1769455)
+[PASS] test_sessionHandsMatchSingleHandReplay() (gas: 1215917)
+[PASS] test_sessionRejectsOutOfRangeHandCounts() (gas: 27439)
+[PASS] test_sevenBeforeThePointWinsDontPassOnEveryPoint() (gas: 309539)
+[PASS] test_theDarkSideAloneTakesTheSideMachine() (gas: 107809)
+[PASS] test_thePointMadeLosesDontPassOnEveryPoint() (gas: 350161)
+[PASS] test_truncationRefundsOnlyAnUndecidedDontPass() (gas: 7523169)
+Suite result: ok. 33 passed; 0 failed; 0 skipped; finished in 10.38s (9.91s CPU time)
+
+Ran 11 tests for test/craps/CrapsScheduledCursor.t.sol:CrapsScheduledCursorTest
+[PASS] testFuzz_OpenedTermsSurviveDailyWordRetirement(uint256) (runs: 1000, μ: 523317, ~: 523329)
+[PASS] test_MinerMaintenancePendingTracksOnlyActionableHead() (gas: 946055)
+[PASS] test_aLapsedDaysReservationsComeBackAsCredits() (gas: 3475080)
+[PASS] test_aPartialFieldResumesTheSameSlotAcrossMidnight() (gas: 7999806)
+[PASS] test_aPartialSweepReportsProgressSoItsRefundsSurvive() (gas: 18293334)
+[PASS] test_anExternallySettledWindowIsCrossedWithoutASecondPayout() (gas: 1649134)
+[PASS] test_oneWindowsLifeUnderTheCursor() (gas: 2155541)
+[PASS] test_theCursorCrossesTheSeparatorAndArmsTheClosedOpener() (gas: 512788)
+[PASS] test_theCursorIsBornAtGenesisPlusOne() (gas: 8602264)
+[PASS] test_theCursorNeverSweepsToday() (gas: 2769804)
+[PASS] test_theWinningsComponentSaturatesRatherThanWrapping() (gas: 26851)
+Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 10.38s (10.42s CPU time)
+
+Ran 22 tests for test/craps/CrapsSystemEcon.t.sol:CrapsSystemEconTest
+[PASS] test_A1_coldTableBothBodiesCashFunded() (gas: 5033495476)
+Logs:
+
+  A1  cold table: house + vault, cash funded, blank boards
+    days / fields        : 800004800
+    action FLIP/day      : 26279
+    high action FLIP/day : 130
+    BURNED FLIP/day      : 36012
+    CREDITED FLIP/day    : 134247
+    NET BURN FLIP/day    : -98235
+    -- run credit /day   : 69935
+    -- pot credit /day   : 64312
+    ---- of which bounty : 23892
+    ---- of which BOOST  : 40419
+    -- lane credit /day  : 0
+    ---- of which stake  : 0
+    -- rider (in run)/day: 131
+    budget quoted /day   : 26562
+    ENGINE EDGE      bps : 0
+    body action /day     : 21927
+    house run credit /day: 37972
+    player action /day   : 4352
+    PLAYER-ONLY EDGE bps : 10000
+    budget rate      bps : 10107
+    net burn / burn  bps : 0
+    net burn / action bps: 0
+    liquid FLIP minted   : 0
+    house ROI        bps : 36531
+    vault ROI        bps : 19923
+    players ROI      bps : 0
+    house pot share  bps : 5634
+    vault pot share  bps : 4365
+
+[PASS] test_A3_coldTableBodiesStarved() (gas: 3984893950)
+Logs:
+
+  A3  cold table: both bodies' burn REFUSED (comp path)
+    days / fields        : 800004800
+    action FLIP/day      : 13254
+    high action FLIP/day : 0
+    BURNED FLIP/day      : 0
+    CREDITED FLIP/day    : 110323
+    NET BURN FLIP/day    : -110323
+    -- run credit /day   : 40539
+    -- pot credit /day   : 69784
+    ---- of which bounty : 12039
+    ---- of which BOOST  : 57744
+    -- lane credit /day  : 0
+    ---- of which stake  : 0
+    -- rider (in run)/day: 0
+    budget quoted /day   : 25791
+    ENGINE EDGE      bps : 0
+    body action /day     : 21372
+    house run credit /day: 37892
+    budget rate      bps : 19459
+    net burn / burn  bps : 0
+    net burn / action bps: 0
+    liquid FLIP minted   : 0
+    house ROI        bps : -1000000
+    vault ROI        bps : -1000000
+    players ROI      bps : 0
+    house pot share  bps : 9754
+    vault pot share  bps : 245
+
+[PASS] test_A4_coldTableDarkVault() (gas: 5003348504)
+Logs:
+
+  A4  cold table: house blank, vault DON'T PASS
+    days / fields        : 800004800
+    action FLIP/day      : 26345
+    high action FLIP/day : 0
+    BURNED FLIP/day      : 41235
+    CREDITED FLIP/day    : 124851
+    NET BURN FLIP/day    : -83615
+    -- run credit /day   : 52513
+    -- pot credit /day   : 72337
+    ---- of which bounty : 23838
+    ---- of which BOOST  : 48498
+    -- lane credit /day  : 0
+    ---- of which stake  : 0
+    -- rider (in run)/day: 0
+    budget quoted /day   : 26572
+    ENGINE EDGE      bps : 0
+    body action /day     : 21963
+    house run credit /day: 30244
+    player action /day   : 4381
+    PLAYER-ONLY EDGE bps : 10000
+    budget rate      bps : 10085
+    net burn / burn  bps : 0
+    net burn / action bps: 0
+    liquid FLIP minted   : 0
+    house ROI        bps : 22258
+    vault ROI        bps : 18373
+    players ROI      bps : 0
+    house pot share  bps : 4832
+    vault pot share  bps : 5167
+
+[PASS] test_B1_oneEstablishedPlayer() (gas: 6200215821)
+Logs:
+
+  B1  thin: 1 fair-core player, FULL standing, + 2 bodies
+    days / fields        : 800004800
+    action FLIP/day      : 38786
+    high action FLIP/day : 0
+    BURNED FLIP/day      : 62348
+    CREDITED FLIP/day    : 175788
+    NET BURN FLIP/day    : -113439
+    -- run credit /day   : 89826
+    -- pot credit /day   : 85961
+    ---- of which bounty : 35374
+    ---- of which BOOST  : 50587
+    -- lane credit /day  : 0
+    ---- of which stake  : 0
+    -- rider (in run)/day: 0
+    budget quoted /day   : 27314
+    ENGINE EDGE      bps : 0
+    body action /day     : 21626
+    house run credit /day: 39859
+    player action /day   : 17159
+    PLAYER-ONLY EDGE bps : 0
+    budget rate      bps : 7042
+    net burn / burn  bps : 0
+    net burn / action bps: 0
+    liquid FLIP minted   : 0
+    house ROI        bps : 29168
+    vault ROI        bps : 16081
+    players ROI      bps : 11796
+    house pot share  bps : 3638
+    vault pot share  bps : 2817
+
+[PASS] test_B2_oneScoreZeroPlayer() (gas: 6202947549)
+Logs:
+
+  B2  thin: 1 fair-core player, ZERO standing, + 2 bodies
+    days / fields        : 800004800
+    action FLIP/day      : 38381
+    high action FLIP/day : 0
+    BURNED FLIP/day      : 61063
+    CREDITED FLIP/day    : 235787
+    NET BURN FLIP/day    : -174723
+    -- run credit /day   : 151423
+    -- pot credit /day   : 84363
+    ---- of which bounty : 35126
+    ---- of which BOOST  : 49236
+    -- lane credit /day  : 0
+    ---- of which stake  : 0
+    -- rider (in run)/day: 0
+    budget quoted /day   : 27288
+    ENGINE EDGE      bps : 0
+    body action /day     : 21350
+    house run credit /day: 67818
+    player action /day   : 17031
+    PLAYER-ONLY EDGE bps : 0
+    budget rate      bps : 7109
+    net burn / burn  bps : 0
+    net burn / action bps: 0
+    liquid FLIP minted   : 0
+    house ROI        bps : 41782
+    vault ROI        bps : 25343
+    players ROI      bps : 20983
+    house pot share  bps : 3404
+    vault pot share  bps : 2959
+
+[PASS] test_B3_threeEstablishedPlayers() (gas: 2944261603)
+Logs:
+
+  B3  thin: 3 fair-core players + 2 bodies
+    days / fields        : 400002400
+    action FLIP/day      : 62674
+    high action FLIP/day : 0
+    BURNED FLIP/day      : 112016
+    CREDITED FLIP/day    : 208523
+    NET BURN FLIP/day    : -96507
+    -- run credit /day   : 109751
+    -- pot credit /day   : 98771
+    ---- of which bounty : 57387
+    ---- of which BOOST  : 41384
+    -- lane credit /day  : 0
+    ---- of which stake  : 0
+    -- rider (in run)/day: 0
+    budget quoted /day   : 28725
+    ENGINE EDGE      bps : 0
+    body action /day     : 20800
+    house run credit /day: 23459
+    player action /day   : 41873
+    PLAYER-ONLY EDGE bps : 0
+    budget rate      bps : 4583
+    net burn / burn  bps : 0
+    net burn / action bps: 0
+    liquid FLIP minted   : 0
+    house ROI        bps : 14667
+    vault ROI        bps : 13068
+    players ROI      bps : 5687
+    house pot share  bps : 2761
+    vault pot share  bps : 2441
+
+[PASS] test_C1_thirtyBlank() (gas: 3536807034)
+Logs:
+
+  C1  healthy: 30 BLANK players + 2 bodies
+    days / fields        : 120000720
+    action FLIP/day      : 433075
+    high action FLIP/day : 0
+    BURNED FLIP/day      : 812770
+    CREDITED FLIP/day    : 818450
+    NET BURN FLIP/day    : -5680
+    -- run credit /day   : 470297
+    -- pot credit /day   : 348152
+    ---- of which bounty : 389484
+    ---- of which BOOST  : 0
+    -- lane credit /day  : 0
+    ---- of which stake  : 0
+    -- rider (in run)/day: 0
+    budget quoted /day   : 50132
+    ENGINE EDGE      bps : 0
+    body action /day     : 22690
+    house run credit /day: 10314
+    player action /day   : 410385
+    PLAYER-ONLY EDGE bps : 0
+    budget rate      bps : 1157
+    net burn / burn  bps : 0
+    net burn / action bps: 0
+    liquid FLIP minted   : 0
+    house ROI        bps : -7
+    vault ROI        bps : 1177
+    players ROI      bps : 42
+    house pot share  bps : 306
+    vault pot share  bps : 228
+
+[PASS] test_C2_thirtyFairCore() (gas: 3396496082)
+Logs:
+
+  C2  healthy: 30 FAIR-CORE players + 2 bodies
+    days / fields        : 120000720
+    action FLIP/day      : 441331
+    high action FLIP/day : 902
+    BURNED FLIP/day      : 819240
+    CREDITED FLIP/day    : 865897
+    NET BURN FLIP/day    : -46657
+    -- run credit /day   : 478445
+    -- pot credit /day   : 387451
+    ---- of which bounty : 388742
+    ---- of which BOOST  : 0
+    -- lane credit /day  : 0
+    ---- of which stake  : 0
+    -- rider (in run)/day: 721
+    budget quoted /day   : 50555
+    ENGINE EDGE      bps : 0
+    body action /day     : 23035
+    house run credit /day: 13203
+    player action /day   : 418296
+    PLAYER-ONLY EDGE bps : 0
+    budget rate      bps : 1145
+    net burn / burn  bps : 0
+    net burn / action bps: 0
+    liquid FLIP minted   : 0
+    house ROI        bps : 10912
+    vault ROI        bps : 7641
+    players ROI      bps : 92
+    house pot share  bps : 817
+    vault pot share  bps : 588
+
+[PASS] test_C3_thirtySpread() (gas: 3428218487)
+Logs:
+
+  C3  healthy: 30 FAIR-SPREAD players + 2 bodies
+    days / fields        : 120000720
+    action FLIP/day      : 438874
+    high action FLIP/day : 0
+    BURNED FLIP/day      : 830632
+    CREDITED FLIP/day    : 758042
+    NET BURN FLIP/day    : 72589
+    -- run credit /day   : 436066
+    -- pot credit /day   : 321976
+    ---- of which bounty : 402592
+    ---- of which BOOST  : 0
+    -- lane credit /day  : 0
+    ---- of which stake  : 0
+    -- rider (in run)/day: 0
+    budget quoted /day   : 50483
+    ENGINE EDGE      bps : 63
+    body action /day     : 23135
+    house run credit /day: 13513
+    player action /day   : 415739
+    PLAYER-ONLY EDGE bps : 177
+    budget rate      bps : 1150
+    net burn / burn  bps : 873
+    net burn / action bps: 1653
+    liquid FLIP minted   : 0
+    house ROI        bps : 12221
+    vault ROI        bps : 7768
+    players ROI      bps : -1447
+    house pot share  bps : 998
+    vault pot share  bps : 729
+
+[PASS] test_C4_thirtyPass() (gas: 3457045421)
+Logs:
+
+  C4  healthy: 30 PASS-LINE players + 2 bodies
+    days / fields        : 120000720
+    action FLIP/day      : 412360
+    high action FLIP/day : 0
+    BURNED FLIP/day      : 783221
+    CREDITED FLIP/day    : 848290
+    NET BURN FLIP/day    : -65068
+    -- run credit /day   : 470545
+    -- pot credit /day   : 377744
+    ---- of which bounty : 380812
+    ---- of which BOOST  : 0
+    -- lane credit /day  : 0
+    ---- of which stake  : 0
+    -- rider (in run)/day: 0
+    budget quoted /day   : 49039
+    ENGINE EDGE      bps : 0
+    body action /day     : 21570
+    house run credit /day: 14567
+    player action /day   : 390790
+    PLAYER-ONLY EDGE bps : 0
+    budget rate      bps : 1189
+    net burn / burn  bps : 0
+    net burn / action bps: 0
+    liquid FLIP minted   : 0
+    house ROI        bps : 9228
+    vault ROI        bps : 36816
+    players ROI      bps : -371
+    house pot share  bps : 595
+    vault pot share  bps : 2002
+
+[PASS] test_C5_thirtyDontPass() (gas: 3500395249)
+Logs:
+
+  C5  healthy: 30 DON'T-PASS players + 2 bodies
+    days / fields        : 120000720
+    action FLIP/day      : 436275
+    high action FLIP/day : 0
+    BURNED FLIP/day      : 822858
+    CREDITED FLIP/day    : 707976
+    NET BURN FLIP/day    : 114881
+    -- run credit /day   : 358181
+    -- pot credit /day   : 349795
+    ---- of which bounty : 396684
+    ---- of which BOOST  : 0
+    -- lane credit /day  : 0
+    ---- of which stake  : 0
+    -- rider (in run)/day: 0
+    budget quoted /day   : 50291
+    ENGINE EDGE      bps : 1790
+    body action /day     : 23065
+    house run credit /day: 15478
+    player action /day   : 413210
+    PLAYER-ONLY EDGE bps : 2024
+    budget rate      bps : 1152
+    net burn / burn  bps : 1396
+    net burn / action bps: 2633
+    liquid FLIP minted   : 0
+    house ROI        bps : 8945
+    vault ROI        bps : 15827
+    players ROI      bps : -2141
+    house pot share  bps : 663
+    vault pot share  bps : 1214
+
+[PASS] test_C6_thirtyHardways() (gas: 3345028603)
+Logs:
+
+  C6  healthy: 30 HARDWAY players + 2 bodies
+    days / fields        : 120000720
+    action FLIP/day      : 406596
+    high action FLIP/day : 0
+    BURNED FLIP/day      : 769782
+    CREDITED FLIP/day    : 784057
+    NET BURN FLIP/day    : -14275
+    -- run credit /day   : 433799
+    -- pot credit /day   : 350257
+    ---- of which bounty : 374897
+    ---- of which BOOST  : 0
+    -- lane credit /day  : 0
+    ---- of which stake  : 0
+    -- rider (in run)/day: 0
+    budget quoted /day   : 48527
+    ENGINE EDGE      bps : 0
+    body action /day     : 21275
+    house run credit /day: 20327
+    player action /day   : 385321
+    PLAYER-ONLY EDGE bps : 0
+    budget rate      bps : 1193
+    net burn / burn  bps : 0
+    net burn / action bps: 0
+    liquid FLIP minted   : 0
+    house ROI        bps : 46266
+    vault ROI        bps : 25502
+    players ROI      bps : -1635
+    house pot share  bps : 2466
+    vault pot share  bps : 1474
+
+[PASS] test_C7_thirtyMixed() (gas: 3544033848)
+Logs:
+
+  C7  healthy: 30 MIXED-LIGHT players + 2 bodies
+    days / fields        : 120000720
+    action FLIP/day      : 438037
+    high action FLIP/day : 11990
+    BURNED FLIP/day      : 797636
+    CREDITED FLIP/day    : 847415
+    NET BURN FLIP/day    : -49779
+    -- run credit /day   : 481346
+    -- pot credit /day   : 366069
+    ---- of which bounty : 388758
+    ---- of which BOOST  : 0
+    -- lane credit /day  : 0
+    ---- of which stake  : 0
+    -- rider (in run)/day: 20499
+    budget quoted /day   : 50074
+    ENGINE EDGE      bps : 0
+    body action /day     : 22360
+    house run credit /day: 13167
+    player action /day   : 415677
+    PLAYER-ONLY EDGE bps : 462
+    budget rate      bps : 1143
+    net burn / burn  bps : 0
+    net burn / action bps: 0
+    liquid FLIP minted   : 0
+    house ROI        bps : 17487
+    vault ROI        bps : 49265
+    players ROI      bps : -1186
+    house pot share  bps : 1161
+    vault pot share  bps : 1461
+
+[PASS] test_D1_darkVaultAgainstAFullField() (gas: 3429537552)
+Logs:
+
+  D1  30 fair-core players, house blank, vault DON'T PASS
+    days / fields        : 120000720
+    action FLIP/day      : 427268
+    high action FLIP/day : 2491
+    BURNED FLIP/day      : 806174
+    CREDITED FLIP/day    : 774670
+    NET BURN FLIP/day    : 31503
+    -- run credit /day   : 454466
+    -- pot credit /day   : 320204
+    ---- of which bounty : 393215
+    ---- of which BOOST  : 0
+    -- lane credit /day  : 0
+    ---- of which stake  : 0
+    -- rider (in run)/day: 0
+    budget quoted /day   : 49649
+    ENGINE EDGE      bps : 0
+    body action /day     : 22440
+    house run credit /day: 20993
+    player action /day   : 404828
+    PLAYER-ONLY EDGE bps : 0
+    budget rate      bps : 1162
+    net burn / burn  bps : 390
+    net burn / action bps: 737
+    liquid FLIP minted   : 0
+    house ROI        bps : 24557
+    vault ROI        bps : 6890
+    players ROI      bps : -1221
+    house pot share  bps : 1469
+    vault pot share  bps : 785
+
+[PASS] test_E1_oneHighRoller() (gas: 2343605805)
+Logs:
+
+  E1  20 fair-core + 2 bodies + ONE high roller (sole rider)
+    days / fields        : 120000720
+    action FLIP/day      : 685364
+    high action FLIP/day : 387209
+    BURNED FLIP/day      : 1131309
+    CREDITED FLIP/day    : 1830479
+    NET BURN FLIP/day    : -699170
+    -- run credit /day   : 1529430
+    -- pot credit /day   : 301049
+    ---- of which bounty : 456629
+    ---- of which BOOST  : 0
+    -- lane credit /day  : 0
+    ---- of which stake  : 0
+    -- rider (in run)/day: 557248
+    budget quoted /day   : 51247
+    ENGINE EDGE      bps : 0
+    body action /day     : 22830
+    house run credit /day: 12704
+    player action /day   : 662534
+    PLAYER-ONLY EDGE bps : 0
+    budget rate      bps : 747
+    net burn / burn  bps : 0
+    net burn / action bps: 0
+    liquid FLIP minted   : 0
+    house ROI        bps : 5399
+    vault ROI        bps : 14419
+    players ROI      bps : 6052
+    house pot share  bps : 691
+    vault pot share  bps : 866
+
+[PASS] test_E2_twoHighRollers() (gas: 2495563107)
+Logs:
+
+  E2  20 fair-core + 2 bodies + TWO high rollers (contested)
+    days / fields        : 120000720
+    action FLIP/day      : 741794
+    high action FLIP/day : 445316
+    BURNED FLIP/day      : 1557743
+    CREDITED FLIP/day    : 1341026
+    NET BURN FLIP/day    : 216717
+    -- run credit /day   : 553348
+    -- pot credit /day   : 287442
+    ---- of which bounty : 599130
+    ---- of which BOOST  : 0
+    -- lane credit /day  : 500235
+    ---- of which stake  : 227655
+    -- rider (in run)/day: 0
+    budget quoted /day   : 52608
+    ENGINE EDGE      bps : 2540
+    body action /day     : 22735
+    house run credit /day: 11505
+    player action /day   : 719059
+    PLAYER-ONLY EDGE bps : 2666
+    budget rate      bps : 709
+    net burn / burn  bps : 1391
+    net burn / action bps: 2921
+    liquid FLIP minted   : 0
+    house ROI        bps : 8386
+    vault ROI        bps : 6248
+    players ROI      bps : -1624
+    house pot share  bps : 907
+    vault pot share  bps : 633
+
+[PASS] test_E3_fiveHighRollers() (gas: 2888884666)
+Logs:
+
+  E3  20 fair-core + 2 bodies + FIVE high rollers
+    days / fields        : 120000720
+    action FLIP/day      : 1565913
+    high action FLIP/day : 1278883
+    BURNED FLIP/day      : 3451114
+    CREDITED FLIP/day    : 3056020
+    NET BURN FLIP/day    : 395093
+    -- run credit /day   : 1697056
+    -- pot credit /day   : 308036
+    ---- of which bounty : 1226936
+    ---- of which BOOST  : 0
+    -- lane credit /day  : 1050927
+    ---- of which stake  : 671850
+    -- rider (in run)/day: 0
+    budget quoted /day   : 71791
+    ENGINE EDGE      bps : 0
+    body action /day     : 22090
+    house run credit /day: 15498
+    player action /day   : 1543823
+    PLAYER-ONLY EDGE bps : 0
+    budget rate      bps : 458
+    net burn / burn  bps : 1144
+    net burn / action bps: 2523
+    liquid FLIP minted   : 0
+    house ROI        bps : 15592
+    vault ROI        bps : 11794
+    players ROI      bps : -1303
+    house pot share  bps : 997
+    vault pot share  bps : 731
+
+[PASS] test_F1_netBurnIsEngineRetentionMinusHouseMoney() (gas: 359824466)
+Logs:
+  prepaid principal: 1001600
+  net burn        : 15469823
+  engine retention: 5813054
+  house money paid: -9656769
+  identity residue: 0
+
+[PASS] test_F2_theBaseSubsidySetsABreakEvenTicketCount() (gas: 87029)
+Logs:
+  base subsidy FLIP/day             : 50000
+  linear rate bps of action         : 1200
+  residual burn FLIP/ticket at 16%  : 624
+    tickets                        : 0
+      action FLIP                  : 0
+      engine take at 16% FLIP      : 0
+      allocation 50k + 12% FLIP    : 50000
+      NET (positive = issuance)    : 50000
+    tickets                        : 2
+      action FLIP                  : 31200
+      engine take at 16% FLIP      : 4992
+      allocation 50k + 12% FLIP    : 53744
+      NET (positive = issuance)    : 48752
+    tickets                        : 16
+      action FLIP                  : 249600
+      engine take at 16% FLIP      : 39936
+      allocation 50k + 12% FLIP    : 79952
+      NET (positive = issuance)    : 40016
+    tickets                        : 40
+      action FLIP                  : 624000
+      engine take at 16% FLIP      : 99840
+      allocation 50k + 12% FLIP    : 124880
+      NET (positive = issuance)    : 25040
+    tickets                        : 41
+      action FLIP                  : 639600
+      engine take at 16% FLIP      : 102336
+      allocation 50k + 12% FLIP    : 126752
+      NET (positive = issuance)    : 24416
+
+[PASS] test_F3_theTableNeverMintsLiquidFlip() (gas: 585657005)
+Logs:
+
+  F3  mixed field, every lane live
+    days / fields        : 60000360
+    action FLIP/day      : 602270
+    high action FLIP/day : 447452
+    BURNED FLIP/day      : 1313933
+    CREDITED FLIP/day    : 1407807
+    NET BURN FLIP/day    : -93873
+    -- run credit /day   : 636069
+    -- pot credit /day   : 285269
+    ---- of which bounty : 504579
+    ---- of which BOOST  : 0
+    -- lane credit /day  : 486468
+    ---- of which stake  : 226650
+    -- rider (in run)/day: 0
+    budget quoted /day   : 43399
+    ENGINE EDGE      bps : 0
+    body action /day     : 21550
+    house run credit /day: 11813
+    player action /day   : 580720
+    PLAYER-ONLY EDGE bps : 0
+    budget rate      bps : 720
+    net burn / burn  bps : 0
+    net burn / action bps: 0
+    liquid FLIP minted   : 0
+    house ROI        bps : 19797
+    vault ROI        bps : 2859
+    players ROI      bps : 489
+    house pot share  bps : 980
+    vault pot share  bps : 459
+
+[PASS] test_G1_theSpreadAcrossIndependentWordStreams() (gas: 15001026216)
+Logs:
+  G1  same 30-seat fair-core field, 10 independent word streams, 30 days each
+    replicate engine edge bps: 2357
+    replicate net burn/day  : 135114
+    replicate engine edge bps: -275
+    replicate net burn/day  : 33793
+    replicate engine edge bps: 33
+    replicate net burn/day  : -84337
+    replicate engine edge bps: -10294
+    replicate net burn/day  : -392724
+    replicate engine edge bps: 2575
+    replicate net burn/day  : 38707
+    replicate engine edge bps: 728
+    replicate net burn/day  : -22599
+    replicate engine edge bps: -3513
+    replicate net burn/day  : -75133
+    replicate engine edge bps: -650
+    replicate net burn/day  : -48066
+    replicate engine edge bps: 1306
+    replicate net burn/day  : 120002
+    replicate engine edge bps: -1337
+    replicate net burn/day  : 28281
+    MEAN engine edge bps    : -907
+    MIN  engine edge bps    : -10294
+    MAX  engine edge bps    : 2575
+    MIN  net burn FLIP/day  : -392724
+    MAX  net burn FLIP/day  : 135114
+
+[PASS] test_H0_everyWindowUsesTheFixedFormat() (gas: 64928485)
+Logs:
+  windows seen: 1000
+  goal 5x    : 1000
+  other goals: 0
+  depth 5    : 1000
+  other depth: 0
+
+Suite result: ok. 22 passed; 0 failed; 0 skipped; finished in 10.34s (86.25s CPU time)
+
+Ran 39 test suites in 10.40s (96.71s CPU time): 627 tests passed, 0 failed, 0 skipped (627 total tests)

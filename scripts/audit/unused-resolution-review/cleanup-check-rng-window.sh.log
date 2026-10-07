@@ -1,0 +1,9 @@
+RNG-window consumer drift gate
+==============================
+scanning: contracts
+manifest: scripts/rng-window-manifest.tsv
+
+manifest classes: PURE-DERIVE=2, CURSOR=5, ACCESSOR=33, DECL=7, PRODUCER=15, EXEMPT-ADVANCE=30, GATE=23, CONSUMER-SEALED=22
+live accesses: 137   manifest rows: 137
+
+PASS every VRF-word access is registered; runtime freeze net enumerates the FROZEN_SET

@@ -43,7 +43,7 @@ GATE = {
 }
 CURSOR = {"_recordLootboxEntry", "_recordAfkingCoverBox", "_purchaseForWithCached"}
 ACCESSOR = {
-    "rngWordForDay", "isRngFulfilled", "_lrRead", "_lrAdd", "_lrWrite", "_decActiveWordOf",
+    "rngWordForDay", "isRngFulfilled", "_lrRead", "_lrWrite", "_decActiveWordOf",
     "_currentRngWord", "_recordedDailyWord", "_retainedDailyWord", "_nudgeCount",
 }
 

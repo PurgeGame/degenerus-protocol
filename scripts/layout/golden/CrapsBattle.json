@@ -190,13 +190,5 @@
     "offset": 0,
     "slot": 23,
     "typeLabel": "uint64[2]"
-  },
-  {
-    "bytes": "32",
-    "encoding": "inplace",
-    "label": "_rngPending",
-    "offset": 0,
-    "slot": 24,
-    "typeLabel": "uint64[2]"
   }
 ]

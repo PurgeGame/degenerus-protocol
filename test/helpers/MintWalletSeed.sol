@@ -10,6 +10,11 @@ import {DegenerusGameMintModule} from "../../contracts/modules/DegenerusGameMint
 ///         register wallets the way production does (`_registerWallet`) and to read queue,
 ///         bucket and whale-pass state by address. Bucket and queue lanes hold wallet IDs.
 abstract contract MintWalletSeed is DegenerusGameMintModule {
+    /// @dev Test-only account-key decoder for stored wallet IDs.
+    function _walletKey(uint32 id) internal view returns (address) {
+        return address(uint160(_walletElement(id)));
+    }
+
     /// @dev Register `owner` through the production allocator (idempotent; paid admission
     ///      bypassed) and return its wallet ID.
     function _seedWallet(address owner) internal returns (uint32 id) {

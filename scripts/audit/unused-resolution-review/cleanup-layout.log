@@ -1,0 +1,2 @@
+delegatecall shared-slot consistency (modules vs Game): OK
+STORAGE LAYOUT ORACLE: all goldens match ✓

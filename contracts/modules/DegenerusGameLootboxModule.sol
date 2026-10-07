@@ -87,9 +87,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @notice Thrown when msg.value exceeds the declared lootbox or credit amount.
     error MsgValueExceedsAmount();
 
-    /// @notice RNG word has not been set for the requested lootbox index
-    error RngNotReady();
-
     // =========================================================================
     // Events
     // =========================================================================
@@ -1169,7 +1166,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(activityScore));
         uint256 scaledAmount = _applyEvMultiplierWithCap(id, currentLevel, amount, evMultiplierBps, ceiling);
 
-        // allowEthSpin=false: this is the recirc entry, called inside sweepDegeneretteBets' deferred
+        // allowEthSpin=false: this is the recirc entry, called inside runDegeneretteWork's deferred
         // ETH-pool flush window — an ETH-spin RMW here would be clobbered by that flush. Roll
         // 19 awards tickets instead. Every box itemizes its contents, so this path emits the
         // `LootBoxOpened` summary unconditionally (gated only by the spin suppression downstream).
@@ -1619,7 +1616,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      Degenerette module; their sub-seeds are hash2-tagged off `seed` (no primary-
     ///      chunk bits consumed). The ETH-spin only fires on directly-opened boxes
     ///      (`allowEthSpin`); on recirc boxes roll 19 awards tickets instead, which keeps
-    ///      every box resolved inside a bet resolution (the sweep's `sweepDegeneretteBets`, the
+    ///      every box resolved inside a bet resolution (the sweep's `runDegeneretteWork`, the
     ///      ETH-pool memory-accumulator context) free of an ETH-pool
     ///      read-modify-write.
     /// @param id Wallet ID receiving the reward
@@ -1631,7 +1628,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param activityScore Frozen whole-point activity score threaded from the box commitment;
     ///        scales the spin ROI / EV exactly as a regular bet's snapshot does.
     /// @param allowEthSpin When false (recirc boxes), roll 19 awards tickets instead of an
-    ///        ETH spin — no ETH-pool RMW can race a deferred `sweepDegeneretteBets` pool flush.
+    ///        ETH spin — no ETH-pool RMW can race a deferred `runDegeneretteWork` pool flush.
     /// @param currentLevel Open level (`level + 1`), the FLIP legs' price basis.
     /// @param acc Running reward accumulator: caches the DGNRS pool read (priced net of DGNRS
     ///        already pending), is flushed/invalidated around an ETH spin, and receives the

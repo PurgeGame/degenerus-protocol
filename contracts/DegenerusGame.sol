@@ -1714,7 +1714,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
         }
     }
 
-    /// @notice Current allowed automatic read-consumer category; shared by manual calls.
+    /// @notice Current allowed read-consumer category for the ordered miner chain.
     function rngConsumerStage() external view returns (uint8) {
         return _rngConsumerStage();
     }

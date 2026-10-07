@@ -1,0 +1,187 @@
+[
+  {
+    "contract": "DegenerusGame",
+    "runtime_bytes": 24532,
+    "remaining_bytes": 44
+  },
+  {
+    "contract": "DegenerusGameWhaleModule",
+    "runtime_bytes": 24504,
+    "remaining_bytes": 72
+  },
+  {
+    "contract": "CrapsBattle",
+    "runtime_bytes": 24332,
+    "remaining_bytes": 244
+  },
+  {
+    "contract": "DegenerusGameJackpotModule",
+    "runtime_bytes": 23525,
+    "remaining_bytes": 1051
+  },
+  {
+    "contract": "Coinflip",
+    "runtime_bytes": 23195,
+    "remaining_bytes": 1381
+  },
+  {
+    "contract": "GameAfkingModule",
+    "runtime_bytes": 22918,
+    "remaining_bytes": 1658
+  },
+  {
+    "contract": "JackpotBattle",
+    "runtime_bytes": 22662,
+    "remaining_bytes": 1914
+  },
+  {
+    "contract": "DegenerusQuests",
+    "runtime_bytes": 21753,
+    "remaining_bytes": 2823
+  },
+  {
+    "contract": "DegenerusGameMintModule",
+    "runtime_bytes": 21408,
+    "remaining_bytes": 3168
+  },
+  {
+    "contract": "DegenerusGameDegeneretteModule",
+    "runtime_bytes": 21405,
+    "remaining_bytes": 3171
+  },
+  {
+    "contract": "DegenerusGameTicketModule",
+    "runtime_bytes": 20660,
+    "remaining_bytes": 3916
+  },
+  {
+    "contract": "DegenerusGameAdvanceModule",
+    "runtime_bytes": 20488,
+    "remaining_bytes": 4088
+  },
+  {
+    "contract": "DegenerusGameFoilPackModule",
+    "runtime_bytes": 19288,
+    "remaining_bytes": 5288
+  },
+  {
+    "contract": "sDGNRS",
+    "runtime_bytes": 19233,
+    "remaining_bytes": 5343
+  },
+  {
+    "contract": "DegenerusGameLootboxModule",
+    "runtime_bytes": 17971,
+    "remaining_bytes": 6605
+  },
+  {
+    "contract": "DegenerusGameGameOverModule",
+    "runtime_bytes": 17284,
+    "remaining_bytes": 7292
+  },
+  {
+    "contract": "DegenerusGameBoonModule",
+    "runtime_bytes": 15701,
+    "remaining_bytes": 8875
+  },
+  {
+    "contract": "DegenerusAdmin",
+    "runtime_bytes": 13804,
+    "remaining_bytes": 10772
+  },
+  {
+    "contract": "DegenerusGameDecimatorModule",
+    "runtime_bytes": 13162,
+    "remaining_bytes": 11414
+  },
+  {
+    "contract": "WWXRP",
+    "runtime_bytes": 12541,
+    "remaining_bytes": 12035
+  },
+  {
+    "contract": "DegenerusGameJackpotDrawModule",
+    "runtime_bytes": 11807,
+    "remaining_bytes": 12769
+  },
+  {
+    "contract": "DegenerusVault",
+    "runtime_bytes": 11537,
+    "remaining_bytes": 13039
+  },
+  {
+    "contract": "DegenerusGameMinerModule",
+    "runtime_bytes": 11314,
+    "remaining_bytes": 13262
+  },
+  {
+    "contract": "DegenerusDeityPass",
+    "runtime_bytes": 11211,
+    "remaining_bytes": 13365
+  },
+  {
+    "contract": "AFKingSubscriptionToken",
+    "runtime_bytes": 10654,
+    "remaining_bytes": 13922
+  },
+  {
+    "contract": "DegenerusAffiliate",
+    "runtime_bytes": 9741,
+    "remaining_bytes": 14835
+  },
+  {
+    "contract": "DegenerusRecordBounty",
+    "runtime_bytes": 9392,
+    "remaining_bytes": 15184
+  },
+  {
+    "contract": "CrapsEngine",
+    "runtime_bytes": 9210,
+    "remaining_bytes": 15366
+  },
+  {
+    "contract": "FLIP",
+    "runtime_bytes": 8592,
+    "remaining_bytes": 15984
+  },
+  {
+    "contract": "DegenerusGameRngModule",
+    "runtime_bytes": 8169,
+    "remaining_bytes": 16407
+  },
+  {
+    "contract": "GNRUS",
+    "runtime_bytes": 7763,
+    "remaining_bytes": 16813
+  },
+  {
+    "contract": "DegenerusJackpots",
+    "runtime_bytes": 5665,
+    "remaining_bytes": 18911
+  },
+  {
+    "contract": "DegenerusParimutuel",
+    "runtime_bytes": 4915,
+    "remaining_bytes": 19661
+  },
+  {
+    "contract": "DGNRS",
+    "runtime_bytes": 4850,
+    "remaining_bytes": 19726
+  },
+  {
+    "contract": "DegenerusGameBingoModule",
+    "runtime_bytes": 3468,
+    "remaining_bytes": 21108
+  },
+  {
+    "contract": "DegenerusVaultShare",
+    "runtime_bytes": 1972,
+    "remaining_bytes": 22604
+  },
+  {
+    "contract": "Icons32Data",
+    "runtime_bytes": 1784,
+    "remaining_bytes": 22792
+  }
+]

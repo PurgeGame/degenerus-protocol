@@ -103,9 +103,12 @@ contract BoostHarness is CrapsViews {
         uint256 placed;
         (, placed) = _packChips(uint32(packed));
         board = _boardFrom(packed, chipFlip);
+        uint256 identity = header >> 72 == 0
+            ? uint32(header)
+            : uint160(uint256(keccak256(abi.encode(word, JACKPOT_AWARDED_TAG, betId))));
         _scatterInto(
             board,
-            uint256(keccak256(abi.encode(word, SCATTER_TAG, address(uint160(header))))),
+            uint256(keccak256(abi.encode(word, SCATTER_TAG, identity))),
             chipFlip,
             _BONUS_CHIPS - placed
         );

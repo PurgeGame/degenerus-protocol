@@ -1620,7 +1620,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         uint256 initialCursor = cursor;
         if (cursor >= len) cursor = 0;
         uint256 word = _lootboxWord(_rngReadBuffer());
-        if (word == 0) return result;
         uint24 sealedDay = dailyIdx;
         uint256 scanned;
         while (scanned < len) {
@@ -1679,7 +1678,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         if (_rngConsumerStage() != 3) return result;
         uint48 idx = _rngReadBuffer();
         uint256 indexWord = _lootboxWord(idx);
-        if (indexWord == 0) return result;
         uint256 cur = boxCursor;
         uint256 qlen = boxReadCount;
         uint24 currentLevel = level + 1;

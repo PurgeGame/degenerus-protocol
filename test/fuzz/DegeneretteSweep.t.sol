@@ -281,7 +281,7 @@ contract DegeneretteSweep is DeployProtocol {
     // =========================================================================
 
     /// @notice The sweep resolves every bet in a fuzzed-word mixed queue in one unbounded mineFlip
-    ///         call, strictly in queue order, zeroing each bet and completing the index's
+    ///         call, strictly in queue order, retiring each bet and completing the index's
     ///         frontier. (Sweep resolution is now the only entry point, so there is no second
     ///         independent path left to cross-check payouts against; this asserts the sweep's
     ///         own resolution shape directly instead.)
@@ -296,7 +296,7 @@ contract DegeneretteSweep is DeployProtocol {
 
         assertEq(swept.length, 12, "six resolved bets, id+payout pairs");
         for (uint256 i; i < 6; ++i) assertEq(swept[i * 2], i + 1, "resolved in queue order");
-        for (uint64 id = 1; id <= 6; ++id) assertEq(game.degeneretteBetInfo(IDX, id), 0, "bet zeroed");
+        for (uint64 id = 1; id <= 6; ++id) assertEq(game.degeneretteBetInfo(IDX, id), 0, "bet retired");
         assertTrue(game.boxIndexComplete(IDX), "frontier passed the index");
     }
 
@@ -428,7 +428,7 @@ contract DegeneretteSweep is DeployProtocol {
             }
         }
         assertEq(resolved, 6, "resolves once the freeze lifts");
-        for (uint64 id = 1; id <= 6; ++id) assertEq(game.degeneretteBetInfo(IDX, id), 0, "bet zeroed");
+        for (uint64 id = 1; id <= 6; ++id) assertEq(game.degeneretteBetInfo(IDX, id), 0, "bet retired");
     }
 
     function _poolFrozen() private view returns (bool) {
@@ -539,25 +539,30 @@ contract DegeneretteSweep is DeployProtocol {
         assertGt(bounty, 0, "the measured excess earns the bounty");
     }
 
-    /// @notice A Degenerette walk that resolves nothing still reports the slots it stepped past
-    ///         (here ten zeroed bet lanes) as progress, so mineFlip commits the walk and finishes
-    ///         the cohort instead of refusing the call as workless.
-    function testSweepThatOpensNothingStillProgresses() public {
-        for (uint256 i; i < 10; ++i) _place(alice, FLIP, 100, 1);
-        _landWord(IDX, uint256(keccak256("hole_word")));
-        // Holes ahead of the cursor: zero the five words holding ten queued bets, leaving the cursor
-        // where it stands, to reach the walk's zeroed-bet skip.
+    /// @notice Reusing a buffer for a shorter queue retires the retained tail by count.
+    function testDenseQueueReusesBufferWithoutReadingStaleTail() public {
         uint256 base = uint256(keccak256(abi.encode(keccak256(abi.encode(uint256(IDX), QUEUE_SLOT)))));
-        for (uint256 i; i < 5; ++i) vm.store(address(game), bytes32(base + i), bytes32(0));
-        for (uint64 id = 1; id <= 10; ++id) assertEq(game.degeneretteBetInfo(IDX, id), 0, "hole forged");
-        assertFalse(game.boxIndexComplete(IDX), "the holes sit ahead of the cursor");
-        vm.recordLogs();
-        vm.prank(makeAddr("sweepCrank"));
-        game.mineFlip();
-        assertEq(_countResolved(vm.getRecordedLogs()), 0, "holes open nothing");
-        assertTrue(game.boxIndexComplete(IDX), "the walk stepped past every zeroed slot");
-        assertTrue(game.rngComplete(), "the cohort completed behind the walk");
+        bytes32 oldTail;
+        for (uint256 cycle; cycle < 3; ++cycle) {
+            uint48 buffer = cycle == 1 ? IDX ^ 1 : IDX;
+            uint64 count = cycle == 0 ? 10 : 3;
+            for (uint64 id = 1; id <= count; ++id) {
+                _place(alice, FLIP, 100, 1);
+                assertTrue(game.degeneretteBetInfo(buffer, id) != 0, "dense live prefix");
+            }
+            assertEq(game.degeneretteBetInfo(buffer, count + 1), 0, "tail is outside the count");
+            if (cycle == 0) oldTail = vm.load(address(game), bytes32(base + 4));
+            if (cycle == 2) assertEq(vm.load(address(game), bytes32(base + 4)), oldTail, "old tail retained");
+            _landWord(buffer, uint256(keccak256(abi.encode("dense reuse", cycle))));
+            vm.recordLogs();
+            _resolveCohort();
+            assertEq(_countResolved(vm.getRecordedLogs()), count, "only the new prefix resolves");
+            assertTrue(game.boxIndexComplete(buffer));
+            assertTrue(game.rngComplete());
+            for (uint64 id = 1; id <= count; ++id) assertEq(game.degeneretteBetInfo(buffer, id), 0);
+        }
     }
+
     function testResolutionNeverWritesBetStorage() public {
         for (uint256 i; i < 3; ++i) _place(alice, FLIP, 100, 1);
         _landWord(IDX, uint256(keccak256("immutable queued bets")));

@@ -1,0 +1,11 @@
+{
+  "module_count": 16,
+  "delegate_layout_mismatches": [],
+  "baseline_changed_contracts": [
+    "CrapsBattle",
+    "CrapsBattleStorage",
+    "CrapsViews",
+    "JackpotBattle",
+    "JackpotBattleViews"
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "module_count": 16,
+  "modules": [
+    "DegenerusGameAdvanceModule",
+    "DegenerusGameBingoModule",
+    "DegenerusGameBoonModule",
+    "DegenerusGameDecimatorModule",
+    "DegenerusGameDegeneretteModule",
+    "DegenerusGameFoilPackModule",
+    "DegenerusGameGameOverModule",
+    "DegenerusGameJackpotDrawModule",
+    "DegenerusGameJackpotModule",
+    "DegenerusGameLootboxModule",
+    "DegenerusGameMinerModule",
+    "DegenerusGameMintModule",
+    "DegenerusGameRngModule",
+    "DegenerusGameTicketModule",
+    "DegenerusGameWhaleModule",
+    "GameAfkingModule"
+  ],
+  "delegate_layout_mismatches": [],
+  "baseline_deltas": {
+    "CrapsBattle": {
+      "added": [],
+      "removed": [
+        "_rngPending"
+      ],
+      "changed": []
+    },
+    "CrapsBattleStorage": {
+      "added": [],
+      "removed": [
+        "_rngPending"
+      ],
+      "changed": []
+    },
+    "JackpotBattle": {
+      "added": [],
+      "removed": [
+        "_rngPending"
+      ],
+      "changed": []
+    },
+    "CrapsViews": {
+      "added": [],
+      "removed": [
+        "_rngPending"
+      ],
+      "changed": []
+    },
+    "JackpotBattleViews": {
+      "added": [],
+      "removed": [
+        "_rngPending"
+      ],
+      "changed": []
+    }
+  },
+  "full_report_sha256": "a3c60eb19468dd55d222f940efbafc2fb1ad4c38f990bf6ab46dbfc50859f4d5"
+}

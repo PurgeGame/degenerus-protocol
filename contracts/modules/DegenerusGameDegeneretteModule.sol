@@ -62,11 +62,6 @@ contract DegenerusGameDegeneretteModule is
 
     // error E() — inherited from DegenerusGameStorage
 
-    /// @notice Thrown when the bet index's RNG word is in the wrong state for the call:
-    ///         already landed at placement (a bet binds to a still-unrevealed index), or
-    ///         still absent at a manual resolution.
-    error RngNotReady();
-
     /// @notice Thrown when bet parameters are invalid (zero amount, below minimum, invalid spec, etc.).
     error InvalidBet();
 
@@ -233,7 +228,7 @@ contract DegenerusGameDegeneretteModule is
     // The claim is drawn from the pool at placement but paid as a FLIP spin chain,
     // not as flip credit: it waits in whole FLIP beside the queued bet
     // (degeneretteRecordBounty, flagged on the bet word) and spins when the bet resolves, off the same word the bet itself is bound
-    // to. Placement already refuses an index whose word is revealed, so the claim
+    // to. Placement always binds to the unrevealed write buffer, so the claim
     // is armed against an unknown word by construction — the same freeze the bet's
     // own spins rest on.
 
@@ -318,7 +313,6 @@ contract DegenerusGameDegeneretteModule is
     uint256 private constant BET_FLIP_BASE_GAS = GasBounds.DEGENERETTE_FLIP_BASE_GAS;
     uint256 private constant BET_FLIP_SPIN_GAS = GasBounds.DEGENERETTE_FLIP_SPIN_GAS;
     uint256 private constant BET_RECORD_GAS = GasBounds.DEGENERETTE_RECORD_GAS;
-    uint256 private constant BET_SKIP_GAS = GasBounds.DEGENERETTE_SKIP_GAS;
     uint256 private constant BET_TAIL_GAS = GasBounds.DEGENERETTE_TAIL_GAS;
 
     // Common masks
@@ -424,15 +418,12 @@ contract DegenerusGameDegeneretteModule is
         if (pos == qlen) { result.done = true; return result; }
         if (_rngConsumerStage() != 4) return result;
         uint256 rngWord = _lootboxWord(index);
-        if (rngWord == 0) return result;
         ResolveAcc memory acc;
         uint256 startPos = pos;
         _setActiveDegeneretteCursor(pos + 1);
         while (pos < qlen) {
             uint256 bet = _loadDegeneretteBet(index, pos);
-            bool skip = bet == 0;
-            if (!MineFlipGas.canRun(meter, skip ? BET_SKIP_GAS : _betGasMaximum(bet), BET_TAIL_GAS)) break;
-            if (skip) { ++pos; continue; }
+            if (!MineFlipGas.canRun(meter, _betGasMaximum(bet), BET_TAIL_GAS)) break;
             ++pos;
             _setActiveDegeneretteCursor(pos + 1);
             ++result.rewardBasis;
@@ -602,7 +593,7 @@ contract DegenerusGameDegeneretteModule is
             //
             // The claim does not pay out here. It waits beside the queued bet as whole FLIP
             // and resolves as its own FLIP spin chain off the very word THIS bet is
-            // already bound to — an index whose word the gate above proved unrevealed,
+            // already bound to — the unpublished write buffer,
             // so a claim can never be armed against a known word. Beating the
             // biggest-spin record therefore buys a spin, not flip credit.
             if (totalBet >= BIGGEST_SPIN_MIN_ETH) {
@@ -770,7 +761,7 @@ contract DegenerusGameDegeneretteModule is
         }
     }
 
-    /// @dev Resolves one queued bet the caller has already zeroed in the queue: decodes the
+    /// @dev Resolves one queued bet covered by the caller's active cursor: decodes the
     ///      word and materializes its spins against the index word. Per-currency payouts
     ///      accumulate into `acc` per owner (flushed by the caller or at the next owner);
     ///      lootbox-share is summed across this bet's spins and resolved ONCE here (one box
@@ -943,7 +934,8 @@ contract DegenerusGameDegeneretteModule is
         if (bet & BET_RECORD_FLAG != 0) {
             uint256 key = (uint256(index) << 64) | betId;
             uint256 recordBounty = degeneretteRecordBounty[key];
-            delete degeneretteRecordBounty[key];
+            // The cursor retires this claim. A later flagged bet overwrites the
+            // side slot; an unflagged bet never reads it when the buffer is reused.
             // The chain's FLIP joins the owner's batched mint, which pays the owner's payee.
             acc.flipMint += _flipSpinChain(
                 playerId,
@@ -982,7 +974,7 @@ contract DegenerusGameDegeneretteModule is
     /// @param betAmount The per-ticket bet amount (uint128) — the tier-threshold reference.
     /// @param payout The total payout amount (uint256).
     /// @param acc Cross-bet accumulator: ETH claimable + the running prize-pool
-    ///        local accumulate here (flushed once per sweepDegeneretteBets call); FLIP
+    ///        local accumulate here (flushed once per runDegeneretteWork call); FLIP
     ///        mint totals accumulate here too.
     /// @return lootboxShare The ETH lootbox-share for this spin (0 for FLIP),
     ///         summed by the caller into the per-bet box.
@@ -1017,7 +1009,7 @@ contract DegenerusGameDegeneretteModule is
             // read mirrors the live storage value the per-spin path would have
             // read; subsequent spins decrement the running local in memory, so
             // each spin's cap/solvency sees the same shrinking pool storage would
-            // have held — byte-identical to per-spin. Flushed once by sweepDegeneretteBets.
+            // have held — byte-identical to per-spin. Flushed once by runDegeneretteWork.
             if (!acc.poolLoaded) {
                 acc.poolLoaded = true;
                 acc.poolFrozen = prizePoolFrozen;

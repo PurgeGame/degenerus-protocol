@@ -243,8 +243,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     uint256 private constant ENTRIES_PER_TICKET = 4;
 
 
-    error JackpotWorkMismatch();
-
     uint256 private constant JACKPOT_SETUP_GAS = GasBounds.JACKPOT_SETUP_GAS;
     uint256 private constant JACKPOT_PLAN_GAS = GasBounds.JACKPOT_PLAN_GAS;
     uint256 private constant JACKPOT_FINAL_GAS = GasBounds.JACKPOT_FINAL_GAS;

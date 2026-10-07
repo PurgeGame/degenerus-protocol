@@ -1122,8 +1122,8 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     );
     uint64[4] internal _fundedCustomSlots;
     mapping(uint48 => uint64[]) internal _rngSlots;
+    /// @dev Next field in each physical FIFO; length minus cursor is its pending count.
     uint64[2] internal _rngSlotCursor;
-    uint64[2] internal _rngPending;
 
     /// @dev `who`'s address word with its wallet ID filled in. A missing ID is fetched once from
     ///      the Game: `allocate` registers a new wallet (a paying action); otherwise an

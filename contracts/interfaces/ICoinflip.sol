@@ -41,7 +41,6 @@ uint8 constant RECORD_KIND_SPIN = 1;
 uint8 constant RECORD_KIND_LUCKBOX = 2;
 uint8 constant RECORD_KIND_BUY = 3;
 uint8 constant RECORD_KIND_DICE_RUN = 4;
-uint8 constant RECORD_KINDS = 5;
 
 interface ICoinflip {
     function claimAcquiredCoinflips(uint32 id) external returns (uint256);

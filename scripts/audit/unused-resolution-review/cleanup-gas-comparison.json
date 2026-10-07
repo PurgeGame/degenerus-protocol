@@ -1,0 +1,72 @@
+[
+  {
+    "sample": "one-seat-arm-execution-gas",
+    "before": 536627,
+    "after": 500972,
+    "saved": 35655,
+    "percent": 6.64
+  },
+  {
+    "sample": "one-seat-mineFlip-execution-gas",
+    "before": 1989930,
+    "after": 1960076,
+    "saved": 29854,
+    "percent": 1.5
+  },
+  {
+    "sample": "three-seats-arm-execution-gas",
+    "before": 536627,
+    "after": 500972,
+    "saved": 35655,
+    "percent": 6.64
+  },
+  {
+    "sample": "three-seats-mineFlip-execution-gas",
+    "before": 2520956,
+    "after": 2490884,
+    "saved": 30072,
+    "percent": 1.19
+  },
+  {
+    "sample": "deg-one-fresh-resolve",
+    "before": 111972,
+    "after": 111686,
+    "saved": 286,
+    "percent": 0.26
+  },
+  {
+    "sample": "deg-one-reused-resolve",
+    "before": 111972,
+    "after": 111686,
+    "saved": 286,
+    "percent": 0.26
+  },
+  {
+    "sample": "deg-32-fresh-resolve",
+    "before": 392108,
+    "after": 384194,
+    "saved": 7914,
+    "percent": 2.02
+  },
+  {
+    "sample": "deg-32-reused-resolve",
+    "before": 392108,
+    "after": 384194,
+    "saved": 7914,
+    "percent": 2.02
+  },
+  {
+    "sample": "deg-three-fresh-resolve",
+    "before": 130088,
+    "after": 129310,
+    "saved": 778,
+    "percent": 0.6
+  },
+  {
+    "sample": "deg-three-reused-resolve",
+    "before": 130088,
+    "after": 129310,
+    "saved": 778,
+    "percent": 0.6
+  }
+]

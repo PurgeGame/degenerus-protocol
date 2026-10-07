@@ -1,0 +1,27 @@
+--- a/contracts/JackpotBattle.sol
++++ b/contracts/JackpotBattle.sol
+@@ -126,6 +126,7 @@
+         if (index > 1) revert BadJackpotField();
+         if (allowance == 0) return result;
+         MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
++        assert(_rngPending[index] == _rngSlots[index].length - _rngSlotCursor[index]);
+         if (_rngPending[index] == 0) { result.done = true; return result; }
+         if (_readCrapsStage() != 6 || _wordAt(index) == 0) return result;
+         uint64[] storage slots = _rngSlots[index];
+@@ -136,6 +137,7 @@
+             // Boards retain their logical keys. A completed slot may still be in
+             // the FIFO, but its pending count was already released at settlement.
+             uint256 board = _battles[_rngBattleKey(slot)];
++            assert(uint32(board >> _BG_RESOLVED_SHIFT) != uint32(board));
+             if (uint32(board >> _BG_RESOLVED_SHIFT) == uint32(board)) {
+                 ++pos;
+                 result.progressed = true;
+@@ -190,6 +192,8 @@
+     function _completeRngSlot(uint64 slot, uint48 index) private {
+         if (index > 1) revert BadJackpotField();
+         uint64 pos = _rngSlotCursor[index];
++        assert(pos < _rngSlots[index].length && _rngSlots[index][pos] == slot);
++        assert(_rngPending[index] == _rngSlots[index].length - pos);
+         if (pos < _rngSlots[index].length && _rngSlots[index][pos] == slot) _rngSlotCursor[index] = pos + 1;
+         if (--_rngPending[index] == 0) {
+             IGameCrapsPending(ContractAddresses.GAME).setCrapsRngPending(index, false);

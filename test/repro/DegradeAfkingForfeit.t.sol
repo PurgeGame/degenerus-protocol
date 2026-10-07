@@ -45,7 +45,7 @@ contract AfkingForfeitSeeder is DegenerusGame {
 
     function pendingBoxCount() external view returns (uint16) { return _pendingBoxCount; }
     function subscribersLength() external view returns (uint256) { return _subscribers.length; }
-    function subscriberAt(uint256 i) external view returns (address) { return _walletKey(_subscribers[i]); }
+    function subscriberAt(uint256 i) external view returns (address) { return address(uint160(_walletElement(_subscribers[i]))); }
     function markers(address who) external view returns (uint24 bought, uint24 opened) {
         Sub storage sub = _subOf[_walletIdOf(who)];
         return (sub.lastAutoBoughtDay, sub.lastOpenedDay);

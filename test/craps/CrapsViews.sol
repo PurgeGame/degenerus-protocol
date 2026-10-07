@@ -196,7 +196,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     }
 
     function rngCohortComplete(uint48 index) external view returns (bool) {
-        return index < 2 && _rngPending[index] == 0;
+        return index < 2 && _rngSlotCursor[index] == _rngSlots[index].length;
     }
 
     // ── Table / RNG ─────────────────────────────────────────────────────────

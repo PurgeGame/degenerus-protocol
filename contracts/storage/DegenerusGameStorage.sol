@@ -1616,14 +1616,6 @@ abstract contract DegenerusGameStorage {
         assembly ("memory-safe") { element := sload(slot) }
     }
 
-    /// @dev Account key for a stored, nonzero ID (queue and bucket lanes, deity lanes): no bounds
-    ///      check, since only allocated IDs are ever stored.
-    function _walletKey(uint32 id) internal view returns (address) {
-        return address(uint160(_walletElement(id)));
-    }
-
-
-
     /// @dev Payout recipient for a wallet-table element: its own key, or for a smurf account the
     ///      owner's key. Every ETH/stETH/token payout edge that holds an ID resolves through here.
     ///      At most two links: child -> acquired main -> reserved protocol buyer.
@@ -2451,9 +2443,7 @@ abstract contract DegenerusGameStorage {
     //   [251:254]  presaleTier     DGNRS tier frozen from the purchase's starting sold amount
     //   [254]      presaleClosing  this purchase closed the presale
     //   [255]      zero
-    uint256 internal constant LB_ID_MASK = 0xFFFFFFFF;
     uint256 internal constant LB_LEVEL_SHIFT = 32;
-    uint256 internal constant LB_LEVEL_MASK = 0xFFFFFF;
     uint256 internal constant LB_SCORE_SHIFT = 56;
     uint256 internal constant LB_SCORE_MASK = 0x7FFF;
     uint256 internal constant LB_BOOST_SHIFT = 71;
@@ -3341,16 +3331,6 @@ abstract contract DegenerusGameStorage {
         lootboxRngPacked = (lootboxRngPacked & ~(mask << shift)) | ((value & mask) << shift);
     }
 
-    /// @dev Add a delta to a field of the packed lootbox RNG slot in one load + store.
-    ///      The summed field re-masks before the merge — the same wrap-on-mask
-    ///      semantics as _lrWrite(shift, mask, _lrRead(shift, mask) + delta).
-    function _lrAdd(uint256 shift, uint256 mask, uint256 delta) internal {
-        uint256 packed = lootboxRngPacked;
-        lootboxRngPacked =
-            (packed & ~(mask << shift)) |
-            (((((packed >> shift) & mask) + delta) & mask) << shift);
-    }
-
     /// @dev Pack a wei amount to milli-ETH (divide by 1e15). 0.001 ETH resolution.
     function _packEthToMilliEth(uint256 wei_) internal pure returns (uint64) {
         return uint64(wei_ / LR_ETH_SCALE);
@@ -3431,7 +3411,7 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Biggest-spin record bounty in WHOLE FLIP for a queued bet, keyed
     ///      (index << 64) | betId. Written only when a placement arms the record (the bet word's
-    ///      record flag), read and cleared when that bet resolves.
+    ///      record flag), read only by that live bet and retained for the next flagged overwrite.
     mapping(uint256 => uint256) internal degeneretteRecordBounty;
 
     // =========================================================================
@@ -4660,7 +4640,7 @@ abstract contract DegenerusGameStorage {
         return _rngComplete();
     }
 
-    /// @dev One ordering authority for keeper and manual read consumers. The read
+    /// @dev One ordering authority for the keeper and its read-consumer workers. The read
     ///      cohort alone determines the stage; fresh write-side work cannot cut in.
     ///      0 blocked, 1 redemption, 2 AFKing, 3 human boxes, 4 Degenerette,
     ///      5 Decimator, 6 read-bound Craps, 7 drained. Timed claims are independent.

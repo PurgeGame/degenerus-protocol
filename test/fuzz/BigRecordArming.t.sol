@@ -169,7 +169,8 @@ contract BigRecordArmingTest is DeployProtocol {
         _placeEth(player, 10 ether, 1);
         _placeEth(rival, 12 ether, 1); // claims the floor share
         uint64 betId = DQ.lastBetId(vm, address(game), BET_INDEX);
-        assertGt(_recordBounty(betId), 0, "the rival armed a claim");
+        uint256 bounty = _recordBounty(betId);
+        assertGt(bounty, 0, "the rival armed a claim");
 
         _injectLootboxRngWord(1, uint256(keccak256("record-spin-word")));
         // The sweep only reaches a finalized index (active - 1); bump the active index past
@@ -181,7 +182,59 @@ contract BigRecordArmingTest is DeployProtocol {
         _finishReadConsumers();
 
         assertTrue(_sawRecordBoxSpin(), "the bounty spun as a type-3 BoxSpin");
-        assertEq(_recordBounty(betId), 0, "resolution clears the side slot");
+        assertEq(_recordBounty(betId), bounty, "cursor retires the retained bounty");
+        assertEq(game.degeneretteBetInfo(BET_INDEX, betId), 0, "bet retired");
+    }
+
+    function testRecordBountyRetainedAcrossFlaggedUnflaggedFlaggedReuse() public {
+        _placeEth(player, 10 ether, 1);
+        _placeEth(rival, 12 ether, 1);
+        uint64 betId = DQ.lastBetId(vm, address(game), BET_INDEX);
+        assertEq(betId, 2);
+        uint256 original = _recordBounty(betId);
+        assertGt(original, 0);
+        bytes32 sideSlot = keccak256(abi.encode((uint256(BET_INDEX) << 64) | betId, RECORD_BOUNTY_SLOT));
+        vm.record();
+        vm.recordLogs();
+        _settleBountyCohort(BET_INDEX, 0xB017);
+        assertTrue(_sawRecordBoxSpin());
+        (, bytes32[] memory writes) = vm.accesses(address(game));
+        for (uint256 i; i < writes.length; ++i) assertTrue(writes[i] != sideSlot, "resolution wrote bounty slot");
+        assertEq(_recordBounty(betId), original);
+
+        _settleBountyCohort(BET_INDEX ^ 1, 0xB018);
+        _placeEth(player, 0.01 ether, 1);
+        _placeEth(rival, 0.01 ether, 1);
+        assertEq(DQ.lastBetId(vm, address(game), BET_INDEX), betId);
+        assertEq(game.degeneretteBetInfo(BET_INDEX, betId) & BET_RECORD_FLAG, 0);
+        vm.recordLogs();
+        _settleBountyCohort(BET_INDEX, 0xB019);
+        assertFalse(_sawRecordBoxSpin(), "unflagged bet replayed the retained bounty");
+        assertEq(_recordBounty(betId), original);
+
+        _settleBountyCohort(BET_INDEX ^ 1, 0xB01A);
+        _placeEth(player, 0.01 ether, 1);
+        uint256 expected = coinflip.recordPool() * SHARE_FLOOR_BPS / 10_000;
+        _placeEth(rival, 20 ether, 1);
+        assertEq(DQ.lastBetId(vm, address(game), BET_INDEX), betId);
+        assertTrue(game.degeneretteBetInfo(BET_INDEX, betId) & BET_RECORD_FLAG != 0);
+        assertGt(expected, 0);
+        assertEq(_recordBounty(betId), expected, "new claim overwrites old bounty");
+        vm.recordLogs();
+        _settleBountyCohort(BET_INDEX, 0xB01B);
+        assertTrue(_sawRecordBoxSpin());
+        assertEq(_recordBounty(betId), expected);
+        assertEq(game.degeneretteBetInfo(BET_INDEX, betId), 0);
+    }
+
+    /// @dev Publish a mid-day cohort with the daily ticket leg already sealed.
+    function _settleBountyCohort(uint48 buffer, uint256 word) private {
+        _injectLootboxRngWord(buffer, word);
+        uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
+        slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192);
+        vm.store(address(game), bytes32(0), bytes32(slot0));
+        _finishReadConsumers();
+        assertTrue(game.rngComplete());
     }
 
     // ---------------------------------------------------------------------

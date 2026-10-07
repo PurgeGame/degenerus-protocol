@@ -1,0 +1,3 @@
+manifest classes: CRANK-TRY=9, CRANK-PINNED=103, OFF-CRANK=114, CRANK-SELF=46, CRANK-POLICY=1, CRANK-CAUGHT=6
+live call sites: 279   manifest rows: 279
+PASS advance-chain external-call registry matches source; every bare crank call is pinned

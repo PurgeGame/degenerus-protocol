@@ -93,7 +93,6 @@ library MineFlipGasBounds {
     uint256 internal constant DEGENERETTE_FLIP_SPIN_GAS = 5_000;
     // Record claim spin chain with a cold FLIP mint: 31.9k measured.
     uint256 internal constant DEGENERETTE_RECORD_GAS = 40_000;
-    uint256 internal constant DEGENERETTE_SKIP_GAS = 20_000;
     uint256 internal constant DEGENERETTE_TAIL_GAS = 120_000;
 
     // DEC

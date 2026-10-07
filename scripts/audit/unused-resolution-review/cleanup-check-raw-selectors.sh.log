@@ -1,0 +1,28 @@
+Raw selector & calldata check
+=============================
+scanning: contracts
+excluded paths: contracts/mocks contracts/interfaces
+
+JUST contracts/DegenerusRecordBounty.sol:153  abi.encodeWithSignature — justified by marker
+JUST contracts/DGNRS.sol:183  abi.encodeWithSignature — justified by marker
+JUST contracts/DegenerusParimutuel.sol:192  abi.encodeWithSignature — justified by marker
+JUST contracts/DegenerusDeityPass.sol:166  abi.encodeWithSignature — justified by marker
+JUST contracts/DegenerusQuests.sol:479  abi.encodeWithSignature — justified by marker
+JUST contracts/AFKingSubscriptionToken.sol:321  abi.encodeWithSignature — justified by marker
+JUST contracts/DegenerusJackpots.sol:228  abi.encodeWithSignature — justified by marker
+JUST contracts/CrapsBattle.sol:222  abi.encodeWithSignature — justified by marker
+JUST contracts/Coinflip.sol:423  abi.encodeWithSignature — justified by marker
+JUST contracts/DegenerusAdmin.sol:688  abi.encodeWithSignature — justified by marker
+JUST contracts/DegenerusAffiliate.sol:377  abi.encodeWithSignature — justified by marker
+JUST contracts/DegenerusGame.sol:223  abi.encodeWithSignature — justified by marker
+JUST contracts/DegenerusVault.sol:324  abi.encodeWithSignature — justified by marker
+JUST contracts/DegenerusVault.sol:609  abi.encodeWithSignature — justified by marker
+JUST contracts/FLIP.sol:257  abi.encodeWithSignature — justified by marker
+JUST contracts/GNRUS.sol:337  abi.encodeWithSignature — justified by marker
+JUST contracts/WWXRP.sol:501  abi.encodeWithSignature — justified by marker
+JUST contracts/sDGNRS.sol:790  abi.encodeWithSignature — justified by marker
+JUST contracts/DegenerusAdmin.sol:1203  abi.encode*(...) payload of low-level call — justified by allowlist
+JUST contracts/DegenerusAdmin.sol:1294  abi.encode*(...) payload of low-level call — justified by allowlist
+JUST contracts/DegenerusAdmin.sol:1341  abi.encode*(...) payload of low-level call — justified by allowlist
+
+PASS 21 justified site(s) acknowledged, no unjustified raw selectors or hand-rolled encoders

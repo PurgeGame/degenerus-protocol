@@ -11,7 +11,7 @@ import {Vm} from "forge-std/Vm.sol";
 
 contract SubscriptionUpdateSeeder is DegenerusGameStorage {
     function sourceOf(address player) external view returns (address) {
-        return _walletKey(_fundingSourceOf[_walletIdOf(player)]);
+        return address(uint160(_walletElement(_fundingSourceOf[_walletIdOf(player)])));
     }
     function flagsOf(address player) external view returns (uint8) { return _subOf[_walletIdOf(player)].flags; }
 

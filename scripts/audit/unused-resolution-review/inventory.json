@@ -1,0 +1,241 @@
+{
+  "method": "Conservative production Solidity declaration inventory; not a public-API pruner.\n\nRun from the repository root. Public/external functions, constructors, state\ninitializers, assembly references, and virtual overrides are retained. ABI-only\nerrors/events are candidates for manual inspection, not deletion instructions.",
+  "production_source_count": 83,
+  "unreachable_internal_functions": [
+    {
+      "file": "contracts/storage/DegenerusGameStorage.sol",
+      "line": 1618,
+      "name": "_walletKey",
+      "kind": "FunctionDefinition",
+      "visibility": "internal",
+      "contract": "DegenerusGameStorage",
+      "id": 135848,
+      "incoming": []
+    },
+    {
+      "file": "contracts/storage/DegenerusGameStorage.sol",
+      "line": 3342,
+      "name": "_lrAdd",
+      "kind": "FunctionDefinition",
+      "visibility": "internal",
+      "contract": "DegenerusGameStorage",
+      "id": 139480,
+      "incoming": []
+    }
+  ],
+  "unreferenced_nonpublic_constants": [
+    {
+      "file": "contracts/interfaces/ICoinflip.sol",
+      "line": 44,
+      "name": "RECORD_KINDS",
+      "kind": "VariableDeclaration",
+      "visibility": "internal",
+      "contract": "",
+      "id": 65252,
+      "incoming": []
+    },
+    {
+      "file": "contracts/storage/DegenerusGameStorage.sol",
+      "line": 2449,
+      "name": "LB_ID_MASK",
+      "kind": "VariableDeclaration",
+      "visibility": "internal",
+      "contract": "DegenerusGameStorage",
+      "id": 137452,
+      "incoming": []
+    },
+    {
+      "file": "contracts/storage/DegenerusGameStorage.sol",
+      "line": 2451,
+      "name": "LB_LEVEL_MASK",
+      "kind": "VariableDeclaration",
+      "visibility": "internal",
+      "contract": "DegenerusGameStorage",
+      "id": 137458,
+      "incoming": []
+    }
+  ],
+  "unreferenced_nonpublic_storage": [],
+  "unreferenced_errors_events": [
+    {
+      "file": "contracts/DegenerusGame.sol",
+      "line": 130,
+      "name": "NoWork",
+      "kind": "ErrorDefinition",
+      "visibility": "",
+      "contract": "DegenerusGame",
+      "id": 27353,
+      "incoming": []
+    },
+    {
+      "file": "contracts/DegenerusGame.sol",
+      "line": 132,
+      "name": "RngNotReady",
+      "kind": "ErrorDefinition",
+      "visibility": "",
+      "contract": "DegenerusGame",
+      "id": 27356,
+      "incoming": []
+    },
+    {
+      "file": "contracts/DegenerusGame.sol",
+      "line": 134,
+      "name": "InsufficientExecutionGas",
+      "kind": "ErrorDefinition",
+      "visibility": "",
+      "contract": "DegenerusGame",
+      "id": 27359,
+      "incoming": []
+    },
+    {
+      "file": "contracts/interfaces/ICoinflip.sol",
+      "line": 53,
+      "name": "CoinflipClaimState",
+      "kind": "EventDefinition",
+      "visibility": "",
+      "contract": "ICoinflip",
+      "id": 65263,
+      "incoming": []
+    },
+    {
+      "file": "contracts/interfaces/IDegenerusGameModules.sol",
+      "line": 48,
+      "name": "NoWork",
+      "kind": "ErrorDefinition",
+      "visibility": "",
+      "contract": "IDegenerusGameMinerModule",
+      "id": 66646,
+      "incoming": []
+    },
+    {
+      "file": "contracts/interfaces/IDegenerusGameModules.sol",
+      "line": 49,
+      "name": "RngNotReady",
+      "kind": "ErrorDefinition",
+      "visibility": "",
+      "contract": "IDegenerusGameMinerModule",
+      "id": 66648,
+      "incoming": []
+    },
+    {
+      "file": "contracts/modules/DegenerusGameDegeneretteModule.sol",
+      "line": 68,
+      "name": "RngNotReady",
+      "kind": "ErrorDefinition",
+      "visibility": "",
+      "contract": "DegenerusGameDegeneretteModule",
+      "id": 84113,
+      "incoming": []
+    },
+    {
+      "file": "contracts/modules/DegenerusGameJackpotModule.sol",
+      "line": 246,
+      "name": "JackpotWorkMismatch",
+      "kind": "ErrorDefinition",
+      "visibility": "",
+      "contract": "DegenerusGameJackpotModule",
+      "id": 97067,
+      "incoming": []
+    },
+    {
+      "file": "contracts/modules/DegenerusGameLootboxModule.sol",
+      "line": 91,
+      "name": "RngNotReady",
+      "kind": "ErrorDefinition",
+      "visibility": "",
+      "contract": "DegenerusGameLootboxModule",
+      "id": 101911,
+      "incoming": []
+    },
+    {
+      "file": "contracts/modules/DegenerusGameLootboxModule.sol",
+      "line": 129,
+      "name": "LootBoxWhalePassJackpot",
+      "kind": "EventDefinition",
+      "visibility": "",
+      "contract": "DegenerusGameLootboxModule",
+      "id": 101943,
+      "incoming": []
+    },
+    {
+      "file": "contracts/modules/DegenerusGameLootboxModule.sol",
+      "line": 186,
+      "name": "LootBoxReward",
+      "kind": "EventDefinition",
+      "visibility": "",
+      "contract": "DegenerusGameLootboxModule",
+      "id": 102002,
+      "incoming": []
+    },
+    {
+      "file": "contracts/modules/DegenerusGameLootboxModule.sol",
+      "line": 194,
+      "name": "BoonDiscarded",
+      "kind": "EventDefinition",
+      "visibility": "",
+      "contract": "DegenerusGameLootboxModule",
+      "id": 102009,
+      "incoming": []
+    },
+    {
+      "file": "contracts/modules/DegenerusGameLootboxModule.sol",
+      "line": 202,
+      "name": "DeityBoonIssued",
+      "kind": "EventDefinition",
+      "visibility": "",
+      "contract": "DegenerusGameLootboxModule",
+      "id": 102022,
+      "incoming": []
+    },
+    {
+      "file": "contracts/modules/DegenerusGameWhaleModule.sol",
+      "line": 111,
+      "name": "LootBoxBuy",
+      "kind": "EventDefinition",
+      "visibility": "",
+      "contract": "DegenerusGameWhaleModule",
+      "id": 119043,
+      "incoming": []
+    },
+    {
+      "file": "contracts/modules/GameAfkingModule.sol",
+      "line": 129,
+      "name": "NoWork",
+      "kind": "ErrorDefinition",
+      "visibility": "",
+      "contract": "GameAfkingModule",
+      "id": 122327,
+      "incoming": []
+    },
+    {
+      "file": "contracts/modules/GameAfkingModule.sol",
+      "line": 174,
+      "name": "LootBoxBuy",
+      "kind": "EventDefinition",
+      "visibility": "",
+      "contract": "GameAfkingModule",
+      "id": 122384,
+      "incoming": []
+    },
+    {
+      "file": "contracts/storage/CrapsBattleStorage.sol",
+      "line": 33,
+      "name": "BadBattleTerms",
+      "kind": "ErrorDefinition",
+      "visibility": "",
+      "contract": "CrapsBattleStorage",
+      "id": 130272,
+      "incoming": []
+    },
+    {
+      "file": "contracts/storage/DegenerusGameStorage.sol",
+      "line": 329,
+      "name": "Invariant",
+      "kind": "ErrorDefinition",
+      "visibility": "",
+      "contract": "DegenerusGameStorage",
+      "id": 132734,
+      "incoming": []
+    }
+  ]
+}
